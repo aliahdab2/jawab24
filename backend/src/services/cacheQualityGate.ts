@@ -16,6 +16,10 @@
  *     rotates on KB saves, so an early cache entry would keep serving the
  *     "I don't have that information" answer meanwhile.
  *   - `price_not_in_kb` — the reply mentions a price not grounded in the KB.
+ *   - `date_not_in_source` / `stale_date` — the reply quoted a calendar date that no
+ *     source supports, or one already in the past. Dates are the most perishable
+ *     content a reply can carry: a cached one is wrong later even when it was right
+ *     when generated.
  *   - `reply_not_grounded` — the grounding verifier found an unsupported claim.
  *     Never worth repeating.
  *   - `language_mismatch` — the reply came back in the wrong language.
@@ -34,6 +38,9 @@ export type CacheRejectReason =
     | 'low_confidence'
     | 'info_not_in_kb'
     | 'price_not_in_kb'
+    | 'date_not_in_source'
+    | 'stale_date'
+    | 'directive_ignored'
     | 'reply_not_grounded'
     | 'language_mismatch'
     | 'self_identification_stripped';
@@ -53,6 +60,17 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     'low_confidence',
     'info_not_in_kb',
     'price_not_in_kb',
+    // Checks 1c/1d: the reply quoted a calendar date that is in no source, or one
+    // that has already passed. A date is the most perishable thing a reply can
+    // contain — caching it for up to 30 days guarantees it is wrong later even if
+    // it was right when generated, which is why these gate the cache while
+    // remaining non-destructive to the reply itself.
+    'date_not_in_source',
+    'stale_date',
+    // Check 1e: a standing merchant instruction covered the question and the reply
+    // delivered none of it. Caching a reply that countermands the merchant would repeat
+    // his own rule being broken to every customer who asks the same thing.
+    'directive_ignored',
     // Post-send grounding audit found an assertion Business Info doesn't
     // support. Caching it would serve the same fabrication to every customer
     // who asks a similar question — the one failure mode worse than one bad reply.

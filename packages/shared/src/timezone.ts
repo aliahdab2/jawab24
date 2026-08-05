@@ -44,6 +44,25 @@ export function formatTimeInZone(timeZone: string, now: Date = new Date()): stri
     }
 }
 
+/**
+ * Today's calendar date in `timeZone` as ISO `YYYY-MM-DD`.
+ *
+ * The ONE definition of "the merchant's today". The reply prompt's "Today's date"
+ * line and the reply-path date guard must agree on it: if the prompt says a date has
+ * passed while the guard still thinks it is upcoming (or the reverse), the two
+ * disagree about the same reply for hours around midnight — and every date judgement
+ * in this product is relative to the MERCHANT's day, never the server's.
+ *
+ * `en-CA` is used because it formats as ISO. An unusable zone falls back through
+ * `safeTimezone`, matching the pipeline's posture: a corrupt timezone should skew a
+ * few hours, not disable date reasoning.
+ */
+export function todayIsoInZone(timeZone?: string | null, now: Date = new Date()): string {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: safeTimezone(timeZone), year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now);
+}
+
 /** `Africa/Tripoli` → `UTC+02:00`. Empty string when the zone can't be formatted. */
 export function formatUtcOffset(timeZone: string, now: Date = new Date()): string {
     try {

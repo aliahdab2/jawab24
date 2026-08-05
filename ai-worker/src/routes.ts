@@ -8,6 +8,7 @@ import { config } from './config';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { EcommerceToolResult } from '@jawab24/shared';
 import { serializeTypedAiError, AI_TYPED_ERROR_NAMES } from './lib/errors';
+import { directiveEnforcementEnabled } from './services/reply/replyValidator';
 
 /**
  * If the error is one of our typed AI errors, send a structured 500 the backend
@@ -43,6 +44,13 @@ async function routes(server: FastifyInstance) {
             status: 'ok',
             service: 'ai-worker',
             openaiConfigured: openaiService.isConfigured(),
+            // Experiment levers this process was STARTED with. Exposed because a
+            // measurement arm is defined partly by them, and the launch env is
+            // invisible from outside: a battery run labelled B1 while the worker
+            // still had enforcement on from a previous arm produced a mislabelled
+            // result on 2026-08-05. The arms runner now asserts this instead of
+            // printing a precondition and hoping (Rule 14: prevention).
+            directiveEnforcement: directiveEnforcementEnabled(),
             timestamp: new Date().toISOString(),
         };
     });

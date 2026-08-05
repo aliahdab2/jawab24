@@ -4,6 +4,10 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
+import {
+    normalizeArabicIndic, normalizeArabic, extractDateTokens, classifyDateTokens,
+    todayIsoInZone, matchDirective, type MerchantDirective,
+} from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
@@ -11,12 +15,15 @@ import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, Valid
 /** Map Arabic-Indic (U+0660–U+0669) and Eastern Arabic-Indic (U+06F0–U+06F9)
  *  digits to ASCII, so "٢٥٠٠٠" and "25000" compare equal. JS `\d` only
  *  matches [0-9], so without this Arabic-Indic prices are invisible to the guard —
- *  both a false-negative hole and a source of inconsistency vs Western digits. */
-function normalizeDigits(s: string): string {
-    return s
-        .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
-        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
-}
+ *  both a false-negative hole and a source of inconsistency vs Western digits.
+ *
+ *  This is `normalizeArabicIndic` from @jawab24/shared, not a local copy: the guard
+ *  and every other digit-sensitive path (kbContentClassifier, phone extraction, the
+ *  date scanner below) must agree on what a digit is, or one of them goes blind.
+ *  ⚠️ Two NARROWER copies still exist — `businessHours.ts` and the `normalizeArabic`
+ *  option — which fold U+0660–0669 only and are blind to Persian/Urdu digits. Widening
+ *  them changes a live hours parser, so it belongs in its own measured change, not here. */
+const normalizeDigits = normalizeArabicIndic;
 
 /** One number token (already digit-normalized) with optional grouping/decimal separators. */
 const NUM_TOKEN = '\\d[\\d,.\\u066B\\u066C]*';
@@ -264,6 +271,127 @@ export function flagHallucinatedPrice(reply: string, kbText: string, priceMath?:
     return false;
 }
 
+/**
+ * Check 1c — a calendar date the merchant's records do not support.
+ *
+ * WHY A DATE CHECK AT ALL, WHEN CHECK 1 ALREADY GUARDS NUMBERS
+ * -----------------------------------------------------------
+ * Check 1 deliberately STRIPS date-shaped tokens before comparing (a date is not a
+ * price), so dates have had no guard anywhere in the pipeline. Two measured prod
+ * defects live in that gap, both on الفريق الدمشقي:
+ *   • «دورة التصوير الفوتوغرافي تبدأ بتاريخ 7/5/2026» — a date in no source at all,
+ *     served as a start date, three months in the past.
+ *   • the stale-but-grounded class the grounding verifier is structurally blind to:
+ *     «تبدأ الأحد 26/7» said on 30/7. The date IS in the merchant's text, so the
+ *     verifier correctly calls it grounded — and the customer is still misinformed.
+ * Those are two different failures and they get two different flags, so the battery
+ * can score them separately.
+ *
+ * WHY IT CANNOT PRODUCE A FALSE DENIAL
+ * ------------------------------------
+ * This is additive: it appends a flag and (via the caller) keeps the reply out of the
+ * cache. It never removes a sentence and never suppresses an answer — the posture that
+ * `price_not_in_kb` already has. Two earlier designs for this defect class were
+ * abandoned precisely because they could refuse to answer something the merchant HAD
+ * written; this one structurally cannot.
+ *
+ * GATING — the false-positive surface
+ * -----------------------------------
+ * Skipped entirely when the grounding source contains NO date: a page with no dated
+ * data gives us no basis to judge one, and «12/8» in other prose should not be read as
+ * a schedule. Times («12-2»), phone numbers and prices carry no date shape and never
+ * match (see `extractDateTokens`).
+ */
+export function flagDateNotInSource(reply: string, kbText: string, todayIso: string): boolean {
+    const sourceDates = new Set(extractDateTokens(kbText, todayIso).map(t => t.iso));
+    if (sourceDates.size === 0) return false;
+    return extractDateTokens(reply, todayIso).some(d => !sourceDates.has(d.iso));
+}
+
+/**
+ * Check 1d — a date that IS in the merchant's records but has already passed.
+ *
+ * Grounded and wrong: the reply presents an expired cohort/offer date as if it were
+ * current. Independent of `flagDateNotInSource` on purpose — a reply can be stale
+ * without being ungrounded, and that is the case no judge we own could see before.
+ * Gated the same way (no dated source ⇒ no judgement).
+ */
+export function flagStaleDate(reply: string, kbText: string, todayIso: string): boolean {
+    if (extractDateTokens(kbText, todayIso).length === 0) return false;
+    return classifyDateTokens(reply, todayIso).stale.length > 0;
+}
+
+/**
+ * Check 1e — the reply ignored a standing instruction from the merchant.
+ *
+ * A directive is a decision the merchant already made about how a specific question gets
+ * answered («أسئلة المخبر والتحليلات ⇒ ارجو التواصل على أرقامنا»). Measured on الفريق
+ * الدمشقي (prod, 2026-08-04): the reply invented a lab-course curriculum instead — a
+ * whole answer where the business wanted a referral. Overriding an order the merchant
+ * wrote is worse than inventing a fact, because it countermands him rather than merely
+ * exceeding him.
+ *
+ * DETECTION IS DELIBERATELY WEAK, AND THAT IS THE POINT
+ * ----------------------------------------------------
+ * "Did the reply comply with the spirit of this instruction?" is a judgement, and asking
+ * the model to make it is the failure already recorded for the "is this the same place?"
+ * comparison. So the test is the cheapest defensible one: the directive matched the
+ * customer's question, and the reply carries NONE of the distinctive content the merchant
+ * asked for. That catches the measured defect (an invented curriculum shares nothing with
+ * «تواصل على أرقامنا») without pretending to grade tone.
+ *
+ * Flag-only, like the date checks: it never rewrites the reply. Enforcement — sending the
+ * merchant's own words instead of the model's — is a separate, opt-in behaviour so the
+ * battery can measure detection and enforcement as different arms.
+ */
+export function flagDirectiveIgnored(
+    reply: string,
+    customerText: string,
+    directives: MerchantDirective[] | undefined,
+): boolean {
+    const matched = matchDirective(customerText, directives ?? []);
+    if (!matched) return false;
+    const normalizedReply = normalizeArabic(reply);
+    // Content words of the instruction, minus short function words that would match
+    // anything. If the reply contains none of them, it did not deliver the instruction.
+    const signal = normalizeArabic(matched.response)
+        .split(/\s+/)
+        .filter(w => w.length >= 4);
+    if (signal.length === 0) return false;
+    return !signal.some(w => normalizedReply.includes(w));
+}
+
+/** The enforcement lever for Check 1e. OFF by default — the shipped behaviour is
+ *  detection only, and arm B3 of the battery is what earns the change. Same
+ *  posture as `FACT_LIST_MODE`: a rollback switch, not a per-merchant knob. */
+export function directiveEnforcementEnabled(): boolean {
+    return process.env.DIRECTIVE_ENFORCEMENT?.trim().toLowerCase() === 'on';
+}
+
+/**
+ * Enforcement half of Check 1e — send the merchant's OWN words instead of the
+ * model's, when his standing order covered the question and the reply ignored it.
+ *
+ * WHY THIS IS SAFE IN THE ONE WAY THAT MATTERS
+ * --------------------------------------------
+ * The substituted text is 100% merchant-authored, so enforcement can neither
+ * invent a fact nor deny one — the two failures every other design in this
+ * effort died on. Its ONLY failure mode is routing an ANSWERABLE question to the
+ * phone, and that is bounded by the trigger scope, which the merchant writes and
+ * which is pinned narrow by tests (never «مخبر», which would swallow the priced
+ * lab course).
+ *
+ * Separate from the flag on purpose: detection and enforcement are different
+ * arms, so the battery can measure "how often was an order ignored" apart from
+ * "what happens when we override it".
+ */
+export function enforceDirective(
+    customerText: string,
+    directives: MerchantDirective[] | undefined,
+): string | null {
+    return matchDirective(customerText, directives ?? [])?.response ?? null;
+}
+
 /** Check 2 — public comments should be brief. True when a comment exceeds 50 words. */
 export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): boolean {
     if (channel !== 'comment' || !reply) {
@@ -452,6 +580,38 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
         if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }
+        // Checks 1c/1d: dates. Same grounding source as the price check — Check 1
+        // strips date tokens by design, so without these a date has no guard at all.
+        // Flag-only: no sentence is removed, so neither can cause a false denial.
+        // `todayIso` is the MERCHANT's day (same helper as the prompt's "Today's date"
+        // line), so prompt and guard cannot disagree about staleness around midnight.
+        if (kbText) {
+            const todayIso = todayIsoInZone(request.context?.timezone);
+            if (flagDateNotInSource(reply, kbText, todayIso) && !flags.includes('date_not_in_source')) {
+                flags.push('date_not_in_source');
+            }
+            if (flagStaleDate(reply, kbText, todayIso) && !flags.includes('stale_date')) {
+                flags.push('stale_date');
+            }
+        }
+    }
+
+    // Check 1e: a standing merchant instruction covered this question and the reply
+    // delivered none of it. Runs outside the price/date block — it needs the customer's
+    // message, not the KB, and must still fire when skipPriceCheck is set.
+    let enforcedReply: string | null = null;
+    if (reply && flagDirectiveIgnored(reply, request.comment || '', request.context?.directives)
+        && !flags.includes('directive_ignored')) {
+        flags.push('directive_ignored');
+        // Enforcement is opt-in (arm B3). The substitution is the merchant's own
+        // text, so it can neither invent nor deny a fact; every swap is flagged,
+        // because Check 6 taught us that a silent rewrite hides for months (#236).
+        if (directiveEnforcementEnabled()) {
+            enforcedReply = enforceDirective(request.comment || '', request.context?.directives);
+            if (enforcedReply && !flags.includes('directive_enforced')) {
+                flags.push('directive_enforced');
+            }
+        }
     }
 
     // Check 2: Comment too long — public comments should be brief.
@@ -537,9 +697,12 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // AI vocabulary; lexically-decisive tokens strip regardless. Every swap is
     // recorded as a flag — Check 6 must never mutate a reply silently again
     // (the silence is how #236 hid for months).
+    // An enforced directive replaces the model's answer BEFORE the self-ID strip,
+    // so the merchant's own text goes through exactly the same final checks as any
+    // other reply rather than bypassing them.
     const selfReported = flags.includes('self_identified_as_automation');
     const { reply: finalReply, stripped } = stripSelfIdentification(
-        reply, selfReported,
+        enforcedReply ?? reply, selfReported,
         isOwnBrandPage(request.context?.pageName),
     );
     if (stripped && !flags.includes('self_identification_stripped')) {

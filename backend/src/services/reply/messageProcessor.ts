@@ -695,7 +695,7 @@ export class MessageProcessor {
                 })(),
             ]);
             lap('11b-12-preAiParallel');
-            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated } = enriched;
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated, directives } = enriched;
 
             const generated =
                 await replyGenerator.generateForMessage(
@@ -718,6 +718,7 @@ export class MessageProcessor {
                         businessInfoBlock,
                         factCollectionsBlock,
                         factCollectionsGated,
+                        directives,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
                         timezone: userSettings.timezone,

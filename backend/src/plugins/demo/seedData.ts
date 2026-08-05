@@ -17,9 +17,12 @@ import {
     DAMASCUS_ONLINE_KEY,
     DAMASCUS_SCHEDULES_LABEL,
     DAMASCUS_SCHEDULES_KEY,
+    damascusCollectionInputs,
     damascusPriceRowInputs,
     damascusScheduleRowInputs,
+    type DamascusFixtureShape,
 } from './damascusLists';
+import { DAMASCUS_DIRECTIVES, deriveSeparatedDamascusKb } from './damascusSeparated';
 
 // Re-export so offline harnesses (grounding-audit / probe scripts) keep one
 // import surface for demo fixtures, matching renderDemoDistributorLists.
@@ -901,33 +904,70 @@ async function seedDistributorFactCollections(pageId: string): Promise<void> {
 }
 
 /**
+ * Which shape of the damascus fixture to seed. Env-var selected, same posture as
+ * `resolveFactListMode` — an experiment lever, not a knob anyone is expected to
+ * touch. Default 'current' = exactly what shipped, so arm A and every existing
+ * eval case are byte-identical unless the battery asks otherwise.
+ */
+export function resolveDamascusFixtureShape(): DamascusFixtureShape {
+    return process.env.DEMO_DAMASCUS_FIXTURE?.trim().toLowerCase() === 'separated'
+        ? 'separated'
+        : 'current';
+}
+
+/**
+ * A demo page's effective seed values for the CURRENT fixture shape.
+ *
+ * The damascus page is the only one that varies: under 'separated' its prose
+ * loses the sentences that became rows/orders and its container gains the
+ * merchant's ORDERS. Centralised because the seeder writes pages at THREE call
+ * sites (refresh-update, refresh-insert, create-insert) — an arm applied at two
+ * of three would leave a returning demo user on a half-migrated fixture, which
+ * no test asserts and no log shows.
+ */
+export function effectiveDemoPageSeed(pageData: typeof DEMO_PAGES[number]): {
+    knowledgeBase: string;
+    businessProfile: Record<string, unknown> | undefined;
+} {
+    const base = {
+        knowledgeBase: pageData.suggestedKnowledgeBase,
+        businessProfile: (pageData as { businessProfile?: Record<string, unknown> }).businessProfile,
+    };
+    if (pageData.facebookPageId !== 'demo_page_damascus' || resolveDamascusFixtureShape() !== 'separated') {
+        return base;
+    }
+    return {
+        knowledgeBase: deriveSeparatedDamascusKb(),
+        // Directives live where contextEnricher reads them: businessProfile.merchant.directives.
+        // No provenance entry — the gate governs address/phones/hours, and an ORDER is the
+        // merchant's own instruction by construction, never Facebook-synced.
+        businessProfile: { ...(base.businessProfile ?? {}), merchant: { directives: DAMASCUS_DIRECTIVES } },
+    };
+}
+
+/**
  * Seed the damascus fixture's course lists (G1 schedules slice, D-052) — the
- * three-collection split whose rationale lives in damascusLists.ts: un-keyed
- * undated prices, keyed self-expiring cohort slots, and the closed online list.
+ * split whose rationale lives in damascusLists.ts: un-keyed undated prices,
+ * keyed self-expiring cohort slots, the closed online list, and (arm B1 only)
+ * the keyed محاور collection.
  * Same writer, same idempotency contract as the distributor seeder above.
  */
 async function seedDamascusFactCollections(pageId: string): Promise<void> {
     const { factCollectionsService } = await import('../../services/factCollections');
     const todayIso = new Date().toISOString().slice(0, 10);
     await db.delete(factCollections).where(eq(factCollections.pageId, pageId));
-    await factCollectionsService.createCollection(pageId, {
-        label: DAMASCUS_COURSE_PRICES.label,
-        keyAttr: null,
-        source: 'kb_extract',
-        rows: damascusPriceRowInputs(DAMASCUS_COURSE_PRICES),
-    });
-    await factCollectionsService.createCollection(pageId, {
-        label: DAMASCUS_SCHEDULES_LABEL,
-        keyAttr: DAMASCUS_SCHEDULES_KEY,
-        source: 'kb_extract',
-        rows: damascusScheduleRowInputs(todayIso),
-    });
-    await factCollectionsService.createCollection(pageId, {
-        label: DAMASCUS_ONLINE_COURSES.label,
-        keyAttr: DAMASCUS_ONLINE_KEY,
-        source: 'kb_extract',
-        rows: damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES),
-    });
+    // ONE definition of this fixture's collections, shared with the offline
+    // renderer the batteries judge against (damascusCollectionInputs) — two
+    // lists would drift silently and the judge would score replies against a
+    // collection set the generator never saw.
+    for (const c of damascusCollectionInputs(todayIso, { shape: resolveDamascusFixtureShape() })) {
+        await factCollectionsService.createCollection(pageId, {
+            label: c.label,
+            keyAttr: c.keyAttr,
+            source: 'kb_extract',
+            rows: c.rows,
+        });
+    }
 }
 
 /**
@@ -1990,16 +2030,17 @@ export async function seedDemoData(
         // Refresh page names/data in case seed data was updated.
         // Also ensure workspaceId is set — handles pages created before workspace migration.
         for (const pageData of DEMO_PAGES) {
+            const seed = effectiveDemoPageSeed(pageData);
             await db.update(pages)
                 .set({
                     workspaceId,
                     name: pageData.name,
-                    knowledgeBase: pageData.suggestedKnowledgeBase,
+                    knowledgeBase: seed.knowledgeBase,
                     autoReplyEnabled: pageData.autoReplyEnabled,
                     instagramUsername: pageData.instagramUsername,
                     // Stage 2.6: refresh business_profile container so re-seeding picks up
                     // any new structured fields. Falls through cleanly when undefined.
-                    ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                    ...(seed.businessProfile !== undefined && { businessProfile: seed.businessProfile }),
                 })
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
@@ -2009,6 +2050,7 @@ export async function seedDemoData(
         const existingFbIds = new Set(existingPages.map(p => p.facebookPageId));
         for (const pageData of DEMO_PAGES) {
             if (existingFbIds.has(pageData.facebookPageId)) continue;
+            const seed = effectiveDemoPageSeed(pageData);
             await db.insert(pages).values({
                 userId,
                 workspaceId,
@@ -2016,10 +2058,10 @@ export async function seedDemoData(
                 name: pageData.name,
                 accessToken: 'demo_access_token',
                 autoReplyEnabled: pageData.autoReplyEnabled,
-                knowledgeBase: pageData.suggestedKnowledgeBase,
+                knowledgeBase: seed.knowledgeBase,
                 instagramUsername: pageData.instagramUsername,
                 instagramAutoReplyEnabled: false,
-                ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                ...(seed.businessProfile !== undefined && { businessProfile: seed.businessProfile }),
             });
             logger.debug('[DemoData] Inserted newly-added demo page on refresh', { name: pageData.name });
         }
@@ -2190,6 +2232,7 @@ export async function seedDemoData(
     // Create demo pages (with suggestedKnowledgeBase for demo - user can confirm in onboarding)
     const createdPages: { id: string; facebookPageId: string | null }[] = [];
     for (const pageData of DEMO_PAGES) {
+        const seed = effectiveDemoPageSeed(pageData);
         const [created] = await db
             .insert(pages)
             .values({
@@ -2200,12 +2243,12 @@ export async function seedDemoData(
                 accessToken: 'demo_access_token',
                 autoReplyEnabled: pageData.autoReplyEnabled,
                 // For demo, we save the knowledge base directly since it's sample data
-                knowledgeBase: pageData.suggestedKnowledgeBase,
+                knowledgeBase: seed.knowledgeBase,
                 instagramUsername: pageData.instagramUsername,
                 instagramAutoReplyEnabled: false,
                 // Stage 2.6: seed the structured BUSINESS_INFO container when defined,
                 // letting eval cases drive the prompt-injection path with realistic data.
-                ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                ...(seed.businessProfile !== undefined && { businessProfile: seed.businessProfile }),
             })
             .returning({ id: pages.id, facebookPageId: pages.facebookPageId });
         createdPages.push(created);

@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
     flagHallucinatedPrice,
+    flagDateNotInSource,
+    flagStaleDate,
+    flagDirectiveIgnored,
+    directiveEnforcementEnabled,
+    enforceDirective,
     isCommentTooLong,
     stripSelfIdentification,
     isOwnBrandPage,
@@ -9,6 +14,171 @@ import {
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
 
 const req = (comment: string, ctx: GenerateRequest['context'] = {}): GenerateRequest => ({ comment, context: ctx });
+
+describe('flagDateNotInSource / flagStaleDate (Checks 1c/1d)', () => {
+    const TODAY = '2026-08-05';
+    // Shaped like a real <business_lists> block: one live cohort, dates as our rows store them.
+    const source = 'مواعيد الدورات المعلنة:\n- دورة العمل المخبري — الدورة: العمل المخبري — starts 2026-08-18';
+
+    describe('a date in no source at all', () => {
+        it('flags the measured prod defect — «دورة التصوير تبدأ 7/5/2026», in nothing', () => {
+            expect(flagDateNotInSource('دورة التصوير الفوتوغرافي تبدأ بتاريخ 7/5/2026', source, TODAY)).toBe(true);
+        });
+
+        it('does NOT flag a date the source actually carries', () => {
+            expect(flagDateNotInSource('دورة العمل المخبري تبدأ 18/8/2026', source, TODAY)).toBe(false);
+            expect(flagDateNotInSource('تبدأ 2026-08-18', source, TODAY)).toBe(false);
+        });
+
+        it('matches on the calendar date, not the spelling the model chose', () => {
+            // Row says 2026-08-18; the model wrote it the way it talks to customers.
+            expect(flagDateNotInSource('تبدأ 18 أغسطس 2026', source, TODAY)).toBe(false);
+            expect(flagDateNotInSource('تبدأ ١٨/٨/٢٠٢٦', source, TODAY)).toBe(false);
+        });
+
+        it('is skipped when the source has no dates — no basis to judge one', () => {
+            const dateless = 'أسعار الدورات:\n- دورة ICDL — ملاحظة: 8 جلسات لمدة شهر';
+            expect(flagDateNotInSource('تبدأ 7/5/2026', dateless, TODAY)).toBe(false);
+        });
+
+        it('does not fire on times, phones or prices', () => {
+            const reply = 'الدوام 12-2 و3-4:30، رقمنا 0935924472، والسعر 35000 ل.س';
+            expect(flagDateNotInSource(reply, source, TODAY)).toBe(false);
+        });
+    });
+
+    describe('a date that IS grounded but has already passed', () => {
+        it('flags the stale-but-grounded class the grounding verifier cannot see', () => {
+            // «تبدأ الأحد 26/7» said on 30/7 — the date is in the merchant's own text,
+            // so the verifier calls it grounded, and the customer is still misinformed.
+            const prose = 'دورة ICDL تبدأ الأحد 26/7/2026';
+            expect(flagStaleDate('الدورة تبدأ 26/7/2026', prose, '2026-07-30')).toBe(true);
+            expect(flagDateNotInSource('الدورة تبدأ 26/7/2026', prose, '2026-07-30')).toBe(false);
+        });
+
+        it('does not flag an upcoming date, nor today itself', () => {
+            expect(flagStaleDate('تبدأ 2026-08-18', source, TODAY)).toBe(false);
+            expect(flagStaleDate(`تبدأ ${TODAY}`, `starts ${TODAY}`, TODAY)).toBe(false);
+        });
+
+        it('is skipped when the source has no dates', () => {
+            expect(flagStaleDate('كانت 26/7/2026', 'لا تواريخ هنا', TODAY)).toBe(false);
+        });
+    });
+
+    describe('wiring through validateReply — additive, never destructive', () => {
+        const parsed = (reply: string): ParsedReply => ({ reply, confidence: 'high', flags: [] } as unknown as ParsedReply);
+
+        it('appends the flags and leaves the reply text untouched', () => {
+            const reply = 'دورة التصوير تبدأ 7/5/2026';
+            const out = validateReply(parsed(reply), req('ايمت تبدأ؟', {
+                knowledgeBase: source, timezone: 'Asia/Damascus',
+            }));
+            expect(out.flags).toContain('date_not_in_source');
+            expect(out.flags).toContain('stale_date');
+            // The whole point: no sentence removed, no answer suppressed.
+            expect(out.reply).toBe(reply);
+        });
+
+        it('stays silent on a grounded upcoming date', () => {
+            const out = validateReply(parsed('تبدأ 18/8/2026'), req('ايمت تبدأ؟', {
+                knowledgeBase: source, timezone: 'Asia/Damascus',
+            }));
+            expect(out.flags).not.toContain('date_not_in_source');
+            expect(out.flags).not.toContain('stale_date');
+        });
+    });
+});
+
+describe('flagDirectiveIgnored (Check 1e)', () => {
+    // The real directive from الفريق الدمشقي's own text, and the real question that
+    // overrode it in prod on 2026-08-04.
+    const LAB = { keywords: 'مخبر, تحاليل, سحب الدم', response: 'لهذا السؤال يرجى التواصل على أرقامنا.' };
+    const QUESTION = 'وبتعلمو تحليلات جوا بالمخبر ؟';
+
+    it('flags the measured defect — an invented curriculum where an order said to route', () => {
+        const invented = 'الدورة تشمل تعلم أساسيات العمل بالمخبر مثل استخدام الأدوات المختبرية وطرق التحليل وإجراءات السلامة.';
+        expect(flagDirectiveIgnored(invented, QUESTION, [LAB])).toBe(true);
+    });
+
+    it('stays silent when the reply actually delivered the instruction', () => {
+        expect(flagDirectiveIgnored('لهذا السؤال يرجى التواصل على أرقامنا.', QUESTION, [LAB])).toBe(false);
+        // Reworded but carrying the instruction's own content words.
+        expect(flagDirectiveIgnored('يرجى التواصل معنا على أرقامنا وسنجيبك.', QUESTION, [LAB])).toBe(false);
+    });
+
+    it('stays silent when no directive covers the question', () => {
+        const reply = 'دورة المكياج مدتها شهر.';
+        expect(flagDirectiveIgnored(reply, 'كم مدة دورة المكياج؟', [LAB])).toBe(false);
+    });
+
+    it('is inert when the page has no directives — the whole fleet today', () => {
+        expect(flagDirectiveIgnored('أي جواب', QUESTION, [])).toBe(false);
+        expect(flagDirectiveIgnored('أي جواب', QUESTION, undefined)).toBe(false);
+    });
+
+    it('wires into validateReply as a flag, leaving the reply untouched', () => {
+        const invented = 'الدورة تشمل استخدام الأدوات المختبرية وطرق التحليل.';
+        const parsed = { reply: invented, confidence: 'high', flags: [] } as unknown as ParsedReply;
+        const out = validateReply(parsed, req(QUESTION, { directives: [LAB] }));
+        expect(out.flags).toContain('directive_ignored');
+        expect(out.reply).toBe(invented);
+    });
+});
+
+describe('directive ENFORCEMENT (Check 1e, arm B3 — opt-in)', () => {
+    const LAB = { keywords: 'مخبر, تحاليل, سحب الدم', response: 'لهذا السؤال يرجى التواصل على أرقامنا.' };
+    const QUESTION = 'وبتعلمو تحليلات جوا بالمخبر ؟';
+    const invented = 'الدورة تشمل استخدام الأدوات المختبرية وطرق التحليل.';
+    const parsedInvented = () => ({ reply: invented, confidence: 'high', flags: [] } as unknown as ParsedReply);
+
+    afterEach(() => { delete process.env.DIRECTIVE_ENFORCEMENT; });
+
+    it('is OFF by default — the shipped behaviour stays detection-only', () => {
+        expect(directiveEnforcementEnabled()).toBe(false);
+        const out = validateReply(parsedInvented(), req(QUESTION, { directives: [LAB] }));
+        expect(out.reply).toBe(invented);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('substitutes the merchant\'s OWN words when enabled, and flags the swap', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const out = validateReply(parsedInvented(), req(QUESTION, { directives: [LAB] }));
+        expect(out.reply).toBe(LAB.response);
+        expect(out.flags).toContain('directive_ignored');
+        // Never a silent rewrite — that is how #236 hid for months.
+        expect(out.flags).toContain('directive_enforced');
+    });
+
+    it('leaves a COMPLIANT reply alone even when enabled', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const compliant = 'يرجى التواصل معنا على أرقامنا وسنجيبك.';
+        const out = validateReply(
+            { reply: compliant, confidence: 'high', flags: [] } as unknown as ParsedReply,
+            req(QUESTION, { directives: [LAB] }),
+        );
+        expect(out.reply).toBe(compliant);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('never fires on a question no directive covers — enforcement cannot deny a fact', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const answer = 'دورة المكياج مدتها شهر.';
+        const out = validateReply(
+            { reply: answer, confidence: 'high', flags: [] } as unknown as ParsedReply,
+            req('كم مدة دورة المكياج؟', { directives: [LAB] }),
+        );
+        expect(out.reply).toBe(answer);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('enforceDirective returns the merchant text, never invented text', () => {
+        expect(enforceDirective(QUESTION, [LAB])).toBe(LAB.response);
+        expect(enforceDirective('كم مدة دورة المكياج؟', [LAB])).toBeNull();
+        expect(enforceDirective(QUESTION, [])).toBeNull();
+        expect(enforceDirective(QUESTION, undefined)).toBeNull();
+    });
+});
 
 describe('flagHallucinatedPrice (Check 1)', () => {
     const kb = 'باقة الورد - 150 ريال\nالتوصيل مجاني';

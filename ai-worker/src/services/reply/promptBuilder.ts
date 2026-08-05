@@ -6,7 +6,7 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone, todayIsoInZone, isAnyImageMessage, renderDirectivesBlock } from '@jawab24/shared';
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
@@ -29,10 +29,10 @@ const BUSINESS_INFO_MAX_CHARS = parseInt(process.env.BUSINESS_INFO_MAX_CHARS || 
  * targets.
  */
 export function formatTodayForPrompt(timezone?: string, now: Date = new Date()): string {
-    const tz = safeTimezone(timezone);
-    // en-CA yields ISO YYYY-MM-DD
-    const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(now);
+    // The ISO half comes from the shared `todayIsoInZone` so the prompt's notion of
+    // "today" and the reply-path date guard's cannot drift apart around midnight.
+    const isoDate = todayIsoInZone(timezone, now);
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: safeTimezone(timezone), weekday: 'long' }).format(now);
     return `${weekday}, ${isoDate}`;
 }
 
@@ -140,6 +140,16 @@ function buildPoliciesBlock(request: GenerateRequest): string {
  */
 function buildStablePageBlock(request: GenerateRequest): string {
     const parts: string[] = [];
+
+    // The merchant's standing ORDERS, FIRST — above every fact block on purpose.
+    // These are decisions he already made about how specific questions get answered;
+    // a fact the model finds later must not be allowed to talk it out of following one.
+    // Stable per page (scope matching happens in code, not here), so this sits inside the
+    // cached prefix and costs nothing on repeat traffic.
+    const directivesBlock = renderDirectivesBlock(request.context?.directives ?? []);
+    if (directivesBlock) {
+        parts.push(`<merchant_instructions>\n${sanitizeForPrompt(directivesBlock)}\n</merchant_instructions>`);
+    }
 
     // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only. Placed ABOVE the
     // narrative <business_knowledge> so the model treats structured fields as authoritative and

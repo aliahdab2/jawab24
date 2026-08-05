@@ -53,15 +53,19 @@
  *   over-correction failure — a battery that only measures silence rewards a
  *   mute bot.
  */
+import { classifyDateTokens } from '@jawab24/shared';
 import { DEMO_PAGES } from '../backend/src/plugins/demo/seedData';
 // Direct import (not via seedData's re-export) so the script also loads on a
 // baseline checkout whose seedData predates the slice.
 import { renderDemoDamascusLists } from '../backend/src/plugins/demo/damascusLists';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-const RUNS = parseInt(process.env.RUNS || '4', 10);
-const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
+// Transport (fetch/retry/pool/types) is shared with every other battery — see
+// scripts/lib/probeHarness.ts. Only the experiment lives in this file.
+import {
+    ADMIN_TOKEN, RUNS, CONCURRENCY, mapPool, resolveDemoPageId, askPlayground,
+    unwrapPlayground, type Turn, type DatasetRow,
+} from './lib/probeHarness';
+
 const ARM = process.env.ARM === 'baseline' ? 'baseline' : 'slice';
 // UNKEYED=1: the A/B arm where the schedules collection was flipped un-keyed in
 // the DB (UPDATE fact_collections SET key_attr = NULL …) — the grounding render
@@ -79,8 +83,6 @@ if (!ADMIN_TOKEN && !RESCAN) {
     console.error('ADMIN_TOKEN required (JWT from POST /auth/demo)');
     process.exit(1);
 }
-
-interface Turn { q: string | null; a: string | null }
 
 interface Probe {
     id: string;
@@ -185,137 +187,28 @@ const PROBES: Probe[] = [
     },
 ];
 
-interface PlaygroundResponse {
-    success?: boolean;
-    data?: { reply: string | null; intent: string | null; flags: string[]; needsAttention: boolean };
-    reply?: string | null;
-    intent?: string | null;
-    flags?: string[];
-    needsAttention?: boolean;
-}
-
-interface DatasetRow {
-    id: string;
-    page_name: string | null;
-    page_replies_30d: number;
-    kb_source: 'exact' | 'reconstructed';
-    kb: string;
-    question: string;
-    reply: string;
-    intent: string | null;
-    flag_reason: string | null;
-    needs_attention: boolean | null;
-    created_at: string;
-    history: Turn[] | null;
-}
-
 /**
- * Deterministic stale-date scan. Finds date-shaped tokens — D/M or D/M/YYYY
- * (Arabic-Indic digits normalized first, day-first as the merchant writes),
- * ISO YYYY-MM-DD, and «D <month-name>» (the shape the model actually writes to
- * customers: «3 أغسطس 2026») — and buckets them against today. Month names are
- * calendar constants (both the Levantine and transliterated Gregorian systems),
- * not an open vocabulary. Times («12-2», «3-4:30») carry no slash and never
- * match; phone numbers carry no slash either.
+ * Deterministic stale-date judge — now `classifyDateTokens` from @jawab24/shared.
+ *
+ * This scan USED to live here as a private copy, with a hand-typed table of Arabic
+ * month names. It moved to the shared package for two reasons, in this order:
+ *   1. The reply-path guard needs the same scan. A judge with its own private notion
+ *      of "date" measures something other than what the guard enforces — so the
+ *      battery imports the production predicate rather than keeping a twin.
+ *   2. The month table was a hand-maintained linguistic list, including hamza-less
+ *      spelling variants (ابريل/أبريل, اب/آب). The shared version derives names from
+ *      `Intl` for `ar-SY` (Levantine) + `ar-EG` (transliterated) + `en`, and folds both
+ *      the calendar name and the input through `normalizeArabic` — so the variants
+ *      collapse with no list to maintain.
+ * Behaviour is preserved: day-first D/M(/YY(YY)), ISO, and «D <month-name>»; times
+ * («12-2») and phone numbers still never match. It additionally rejects impossible
+ * dates (31/2) instead of rolling them into the next month.
  */
-const ARABIC_MONTHS: Record<string, number> = {
-    'يناير': 1, 'كانون الثاني': 1,
-    'فبراير': 2, 'شباط': 2,
-    'مارس': 3, 'آذار': 3,
-    'أبريل': 4, 'ابريل': 4, 'نيسان': 4,
-    'مايو': 5, 'أيار': 5, 'ايار': 5,
-    'يونيو': 6, 'حزيران': 6,
-    'يوليو': 7, 'تموز': 7,
-    'أغسطس': 8, 'اغسطس': 8, 'آب': 8,
-    'سبتمبر': 9, 'أيلول': 9, 'ايلول': 9,
-    'أكتوبر': 10, 'اكتوبر': 10, 'تشرين الأول': 10, 'تشرين الاول': 10,
-    'نوفمبر': 11, 'تشرين الثاني': 11,
-    'ديسمبر': 12, 'كانون الأول': 12, 'كانون الاول': 12,
-};
-const MONTH_NAME_RE = new RegExp(
-    `(\\d{1,2})\\s+(${Object.keys(ARABIC_MONTHS).join('|')})(?:\\s+(\\d{4}))?`, 'g');
-
-function scanDates(reply: string, todayIso: string): { stale: string[]; upcoming: string[] } {
-    const normalized = reply.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
-    const today = new Date(`${todayIso}T00:00:00Z`).getTime();
-    const stale: string[] = [];
-    const upcoming: string[] = [];
-    const consider = (raw: string, y: number, m: number, d: number): void => {
-        if (m < 1 || m > 12 || d < 1 || d > 31) return;
-        const t = Date.UTC(y, m - 1, d);
-        (t < today ? stale : upcoming).push(raw);
-    };
-    for (const m of normalized.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
-        const year = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : Number(todayIso.slice(0, 4));
-        consider(m[0], year, Number(m[2]), Number(m[1]));
-    }
-    for (const m of normalized.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-        consider(m[0], Number(m[1]), Number(m[2]), Number(m[3]));
-    }
-    for (const m of normalized.matchAll(MONTH_NAME_RE)) {
-        const year = m[3] ? Number(m[3]) : Number(todayIso.slice(0, 4));
-        consider(m[0], year, ARABIC_MONTHS[m[2]], Number(m[1]));
-    }
-    return { stale, upcoming };
-}
-
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-    const out: R[] = new Array(items.length);
-    let next = 0;
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-        for (;;) {
-            const i = next++;
-            if (i >= items.length) return;
-            out[i] = await fn(items[i], i);
-        }
-    }));
-    return out;
-}
-
-async function resolveDamascusPageId(): Promise<string> {
-    const res = await fetch(`${BASE_URL}/admin/pages`, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
-    if (!res.ok) throw new Error(`GET /admin/pages failed: HTTP ${res.status}`);
-    const json = await res.json() as { success: boolean; data: { id: string; name: string }[] };
-    const wanted = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!.name;
-    const page = json.data?.find(p => p.name === wanted);
-    if (!page) throw new Error(`Demo page "${wanted}" not found — seed demo data first (POST /auth/demo)`);
-    return page.id;
-}
-
-async function ask(pageId: string, probe: Probe): Promise<PlaygroundResponse | null> {
-    const body: Record<string, unknown> = {
-        pageId,
-        question: probe.question,
-        channel: 'dm',
-        source: 'eval',
-    };
-    if (probe.history) {
-        body.conversationHistory = probe.history.flatMap(t => [
-            ...(t.q ? [{ role: 'user', content: t.q }] : []),
-            ...(t.a ? [{ role: 'assistant', content: t.a }] : []),
-        ]);
-    }
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
-            body: JSON.stringify(body),
-        });
-        if (res.ok) return await res.json() as PlaygroundResponse;
-        // 429/5xx are transient at this concurrency; a hard failure would be
-        // silently counted as "no fabrication" and flatter the result.
-        if (![429, 500, 502, 503, 504].includes(res.status)) {
-            console.error(`[${probe.id}] HTTP ${res.status}: ${await res.text()}`);
-            return null;
-        }
-        await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt]));
-    }
-    console.error(`[${probe.id}] gave up after retries`);
-    return null;
-}
 
 async function main(): Promise<void> {
-    const pageId = await resolveDamascusPageId();
+    const pageId = await resolveDemoPageId(
+        DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!.name,
+    );
     const todayIso = new Date().toISOString().slice(0, 10);
     // Exactly what buildGroundingSource assembles for this page in production —
     // per ARM: the baseline seed created no collections, so its judging source
@@ -330,10 +223,8 @@ async function main(): Promise<void> {
     console.error(`Probing ${PROBES.length} probes × ${RUNS} runs = ${jobs.length} replies (page ${pageId.slice(0, 8)}…)`);
 
     const rows = await mapPool(jobs, CONCURRENCY, async ({ probe, run }) => {
-        const resp = await ask(pageId, probe);
-        const reply = resp?.data?.reply ?? resp?.reply ?? null;
+        const { reply, intent, flags, needsAttention } = unwrapPlayground(await askPlayground(pageId, probe));
         if (!reply) return null;
-        const flags = resp?.data?.flags ?? resp?.flags ?? [];
         const row: DatasetRow = {
             id: `${probe.id}#${run + 1}`,
             page_name: `probe:${probe.kind}`,
@@ -342,9 +233,9 @@ async function main(): Promise<void> {
             kb,
             question: probe.question,
             reply,
-            intent: resp?.data?.intent ?? resp?.intent ?? null,
+            intent,
             flag_reason: flags.length ? flags.join(',') : null,
-            needs_attention: resp?.data?.needsAttention ?? resp?.needsAttention ?? null,
+            needs_attention: needsAttention,
             created_at: new Date().toISOString(),
             history: probe.history ?? null,
         };
@@ -373,7 +264,7 @@ function reportStale(kept: DatasetRow[], todayIso: string): void {
     }
     for (const probe of PROBES) {
         const runs = byProbe.get(probe.id) ?? [];
-        const scans = runs.map(r => scanDates(r.reply, todayIso));
+        const scans = runs.map(r => classifyDateTokens(r.reply, todayIso));
         const staleHits = scans.filter(s => s.stale.length > 0).length;
         const upcomingHits = scans.filter(s => s.upcoming.length > 0).length;
         if (probe.id === 'C1-upcoming-date') {

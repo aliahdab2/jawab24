@@ -8,7 +8,9 @@ import { detectLanguageCode } from '../../utils/language';
 import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
+    normalizeDirectives,
     type StoredBusinessProfile,
+    type MerchantDirective,
 } from '@jawab24/shared';
 
 export interface EnrichedContext {
@@ -50,6 +52,17 @@ export interface EnrichedContext {
      * unaffected: identical text matches identical rows.
      */
     factCollectionsGated: boolean;
+    /**
+     * The merchant's standing ORDERS — instructions, not facts. Empty for every page
+     * that has none, which is every page until one is authored, so the prompt stays
+     * byte-identical for the rest of the fleet.
+     *
+     * Kept separate from `businessInfoBlock` and the narrative because the difference is
+     * behavioural, not cosmetic: a fact informs an answer, an order REPLACES the model's
+     * judgement about how to answer. Buried in the free text it reads as background, and
+     * the model talks itself out of it.
+     */
+    directives: MerchantDirective[];
 }
 
 /**
@@ -179,10 +192,20 @@ export async function enrichPageContext(
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
+    // 3c. The merchant's standing ORDERS, read from the same page-level home as his other
+    //     page-wide facts. Kept apart from the narrative on purpose: mashed into the free
+    //     text an order reads as background, and the model talks itself out of following
+    //     it (prod, الفريق الدمشقي 2026-08-04 — invented a lab curriculum where his own
+    //     text said to route the question to the phone). `normalizeDirectives` is tolerant
+    //     because this is merchant-editable JSON: one bad row must never break replies.
+    const directives = normalizeDirectives(
+        (merchant as { directives?: unknown } | undefined)?.directives,
+    );
+
     // 4. Language-appropriate brand voice notes
     const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated, directives };
 }
 
 /**

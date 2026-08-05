@@ -1,3 +1,5 @@
+import type { MerchantDirective } from '@jawab24/shared';
+
 // Re-export from organized type files
 export * from './common';
 export * from './logger';
@@ -75,6 +77,13 @@ export interface AiGenerateRequest {
          * one area's outlets for another. The exact-text cache is unaffected.
          */
         factCollectionsGated?: boolean;
+        /**
+         * The merchant's standing ORDERS, separated from his FACTS. Scope is
+         * merchant-authored keywords (same format as a Post Reply trigger); the ai-worker
+         * renders them as instructions and flags a reply that ignores a matching one.
+         * Absent/empty for every page without them, so the prompt is unchanged fleet-wide.
+         */
+        directives?: MerchantDirective[];
         /** Customer's display name — used for personalization only, never affects cache keys. */
         senderName?: string;
         /** Substantive customer context (history, returning-customer summary, etc.) that changes the answer. */

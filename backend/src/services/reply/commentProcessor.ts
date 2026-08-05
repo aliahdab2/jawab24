@@ -618,6 +618,7 @@ export class CommentProcessor {
             generatorContext.businessInfoBlock = enriched.businessInfoBlock;
             generatorContext.factCollectionsBlock = enriched.factCollectionsBlock;
             generatorContext.factCollectionsGated = enriched.factCollectionsGated;
+            generatorContext.directives = enriched.directives;
             generatorContext.replyStyle = userSettings.replyStyle;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             generatorContext.timezone = userSettings.timezone;

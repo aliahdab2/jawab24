@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Questions taken VERBATIM from الفريق الدمشقي's production inbox — never invented.",
+    "Inventing them is the weakness this whole effort exists to avoid: the headline",
+    "35.4%→7% that steered the plan for weeks came from a fixture, not from production.",
+    "",
+    "`class` is the defect class from the plan's §1 table, so results are read per class",
+    "— a total flag rate mixes classes with different base rates and misled us once already.",
+    "Controls are REQUIRED: a battery that only measures silence rewards a mute bot.",
+    "",
+    "TO GROW THIS TO THE PLAN'S ~50: re-mine prod (412 of his messages matched these",
+    "classes) and append here. It is data, so the corpus grows without touching code."
+  ],
+  "questions": [
+    { "class": "date", "q": "ايمت تبدأ دورة التصوير الفوتوغرافي؟" },
+    { "class": "date", "q": "طيب ايمت بتبدأ دوره" },
+    { "class": "date", "q": "ايمت تبدأ لدورة" },
+    { "class": "sessions", "q": "كم عدد الجلسات" },
+    { "class": "sessions", "q": "ممكن اعرف كم جلسه دوره العمل المخبري" },
+    { "class": "duration", "q": "كم مدة الدورة" },
+    { "class": "duration", "q": "وكم يوم وبتخلص الدوره؟" },
+    { "class": "content", "q": "شو محتوى الدورة؟" },
+    { "class": "content", "q": "شو بتعلم فيها" },
+    { "class": "tools", "q": "دورة الميكاب لازم جيب ادواتي معي؟" },
+    { "class": "directive", "q": "وبتعلمو تحليلات جوا بالمخبر ؟" },
+    { "class": "directive", "q": "وفي تعليم لسحب الدم؟" },
+    { "class": "control_absent", "q": "هل يوجد دورة خياطة" },
+    { "class": "control_price", "q": "قديش سعر دورة التمريض؟" },
+    { "class": "control_lab_price", "q": "قديش سعر دورة العمل المخبري؟" },
+    { "class": "control_curriculum", "q": "شو محاور دورة العناية بالبشرة؟" }
+  ]
+}

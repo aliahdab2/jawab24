@@ -67,6 +67,7 @@ export {
     isValidTimezone,
     safeTimezone,
     formatTimeInZone,
+    todayIsoInZone,
     formatUtcOffset,
     detectTimezone,
     resolveStoredTimezone,
@@ -1717,3 +1718,26 @@ export type {
 // it; see factSchedule.ts for why the SQL copy needs a contract test. ---
 export { isRowLive } from './factSchedule';
 export type { FactRowSchedule } from './factSchedule';
+// --- Date tokens in prose — the ONE scanner. The reply-path guard and the
+// measurement battery must agree on "is there a date here and has it passed";
+// a judge with its own definition measures something the guard does not enforce. ---
+export { extractDateTokens, classifyDateTokens } from './dateTokens';
+export type { DateToken } from './dateTokens';
+// --- Merchant directives — the merchant's ORDERS, kept apart from his FACTS. Scope is
+// merchant-authored keywords matched with the same primitives Post Reply uses. ---
+export {
+    normalizeDirectives,
+    matchDirective,
+    renderDirectivesBlock,
+    MAX_DIRECTIVES_PER_PAGE,
+    DIRECTIVE_RESPONSE_MAX_LEN,
+} from './merchantDirectives';
+export type { MerchantDirective } from './merchantDirectives';
+
+// --- Vertical templates (proposed sector shapes, merchant-confirmed — data, never code) ---
+export { EDUCATION_TEMPLATE, VERTICAL_TEMPLATES } from './verticalTemplates';
+export type {
+    VerticalTemplate,
+    VerticalTemplateCollection,
+    VerticalTemplateDirective,
+} from './verticalTemplates';
