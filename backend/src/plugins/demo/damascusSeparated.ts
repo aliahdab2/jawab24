@@ -19,14 +19,14 @@
  *
  * WHAT MOVES, AND WHY EXACTLY THIS
  * --------------------------------
- * • THREE محاور blocks → the «المحاور» attribute on their price rows
- *   (damascusLists.ts DAMASCUS_ENRICHED_PRICE_ATTRS). The prose keeps a
+ * • THREE محاور blocks → the «محاور الدورات» collection, one محور per row. The prose keeps a
  *   LIST-ANCHORED line in each block's place — the عين زارة/جلسات lesson,
  *   twice measured: deleting prose that carries an answer's SHAPE produces a
  *   BORROWED wrong answer (12 جلسة from the solar row), not silence.
- * • The guitar Q&A → the «الأدوات» attribute on دورة الغيتار (entity fact).
- *   The laptop Q&A STAYS — it names no course; forcing a page-level fact onto
- *   entities is the attribute-boundary trap (§2-ب, ⛔ three designs died there).
+ * • The guitar AND laptop Q&As BOTH STAY in prose. The guitar one was moved to a
+ *   row attribute and measured WORSE (see the ⛔ block in the derivation below):
+ *   it states a page-level policy, and forcing a page fact onto one entity is
+ *   the attribute-boundary trap (§2-ب, ⛔ three designs died there).
  * • FOUR routing Q&As → two directives (below). «الشهادة من وين بتطلع» keeps
  *   its prose routing — a «شهادة» trigger would swallow the certificate-FEE
  *   questions the prose answers itself.
@@ -80,25 +80,32 @@ export function deriveSeparatedDamascusKb(): string {
     kb = replaceOnce(
         kb,
         'محاور دورة العناية بالبشرة:\nانواع البشرة\nانواع الماسكات\nاستخدام البخار\nتنظيف البشرة العميق\nحب الشباب\nالديرمابن وعلاج البشرة\nانواع الميزوثيرابي\nالروتين اليومي للعناية بالبشرة\nتطبيق عملي',
-        'محاور دورة العناية بالبشرة مفصّلة في قائمة أسعار الدورات.',
+        'محاور دورة العناية بالبشرة مفصّلة في قائمة محاور الدورات.',
     );
     kb = replaceOnce(
         kb,
         'محاور دورة رفع الرموش و الحواجب :\n النظري :\n\n١) مقدمة عن رفع الرموش والحواجب\n\n٢) فهم دورة نمو الرموش الطبيعية\n\n٣) معرفة المواد والادوات اللازمة لرفع الرموش وتثبيتها .\n\n العملي :\n\n١)تحضير الرموش قبل البدء بالعمل\n\n٢) تقنيات تطبيق مواد الرفع والتثبيت\n\n٣) اختيار احجام السيليكون\n\n٤) ازالة الرموش والتعامل مع المشكلات في حال حدوث اي خطأ .',
-        'محاور دورة رفع الرموش و الحواجب مفصّلة في قائمة أسعار الدورات.',
+        'محاور دورة رفع الرموش و الحواجب مفصّلة في قائمة محاور الدورات.',
     );
     kb = replaceOnce(
         kb,
         'محاور الدورة:\nـ مفهوم الجودة وإدارة الجودة\nـ رواد الجودة\nـ مفاهيم أساسية ضبط وتأكيد الجودة وإدارة الجودة الشاملة\nـ ادوات الجودة\n ـ مقاييس الجودة\nـ تكاليف  الجودة',
-        'محاور الدورة مفصّلة في قائمة أسعار الدورات.',
+        'محاور الدورة مفصّلة في قائمة محاور الدورات.',
     );
 
-    // — entity fact → «الأدوات» attribute on دورة الغيتار —
-    kb = replaceOnce(
-        kb,
-        'Q: لازم يكون موجود معي الغيتار\nA: لا يتوفر لدينا غيتارات , الطالب يحضر غيتاره الخاص\n\n',
-        '',
-    );
+    // ⛔ THE GUITAR Q&A STAYS IN PROSE — measured 2026-08-05, arm B1 vs A.
+    // It was moved to an «الأدوات» row attribute and DELETED from the prose. The
+    // result was a confident FABRICATION on a question it had previously handled
+    // honestly:
+    //   «دورة الميكاب لازم جيب ادواتي معي؟»
+    //     arm A  → «ما في ذكر محدد… يُفضل التواصل معنا»            (honest, flagged)
+    //     arm B1 → «لا، ما لازم تجيب أدواتك، المعهد يوفر الأدوات»  (invented, UNflagged)
+    // The sentence carries an answer SHAPE — "the institute does not supply the
+    // kit; the student brings their own" — that generalises across courses, and
+    // it is the third time deleting such prose produced a BORROWED/INVERTED
+    // answer rather than silence (عين زارة, the 12-جلسة solar row, now this).
+    // It is also a page-level policy, not an entity fact, so forcing it onto one
+    // row was the attribute-boundary trap in miniature.
 
     // — routing Q&As → DAMASCUS_DIRECTIVES. The certificate-origin question keeps
     //   its prose routing (see module header for why «شهادة» must not be a trigger).

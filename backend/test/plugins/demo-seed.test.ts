@@ -436,16 +436,15 @@ describe('damascus fixture — separated arm (B1)', () => {
         expect([...courses].sort()).toEqual(['اللاش ليفتينغ', 'العناية بالبشرة', 'إدارة الجودة'].sort());
     });
 
-    it('moves the محاور and the guitar tools OUT of the prose', () => {
+    it('moves the محاور OUT of the prose, leaving a list anchor', () => {
         const kb = deriveSeparatedDamascusKb();
         expect(kb).not.toContain('انواع الميزوثيرابي');       // skin-care curriculum → rows
         expect(kb).not.toContain('اختيار احجام السيليكون');   // lash curriculum → rows
         expect(kb).not.toContain('رواد الجودة');              // quality curriculum → rows
-        expect(kb).not.toContain('لا يتوفر لدينا غيتارات');   // entity fact → row attribute
         // …and leaves a list-anchored line where each block stood: deleting prose
         // that carries an answer's SHAPE produces a BORROWED wrong answer, not
         // silence (measured 2026-08-05 — «12 جلسة» from the solar row).
-        expect(kb).toContain('محاور دورة العناية بالبشرة مفصّلة في قائمة أسعار الدورات.');
+        expect(kb).toContain('محاور دورة العناية بالبشرة مفصّلة في قائمة محاور الدورات.');
     });
 
     it('moves the routing Q&As into directives, keeping the certificate one in prose', () => {
@@ -474,10 +473,12 @@ describe('damascus fixture — separated arm (B1)', () => {
 
     it('keeps page-level facts in prose — never forced onto entities', () => {
         const kb = deriveSeparatedDamascusKb();
-        // The laptop Q&A names NO course, so it is a page fact. Turning it into
-        // an entity attribute is the attribute-boundary trap that killed three
-        // designs (⛔ never ask "does this entity have this attribute?").
+        // The laptop and guitar Q&As name a course at most incidentally: both state
+        // a page-level TOOLS POLICY. Moving the guitar one to a row attribute was
+        // MEASURED worse (arm B1 invented «المعهد يوفر الأدوات» for makeup, where
+        // arm A had answered honestly) — so both stay, and this pins that.
         expect(kb).toContain('يتوفر لدينا كمبيوترات محمولة');
+        expect(kb).toContain('لا يتوفر لدينا غيتارات');
         expect(kb).toContain('برامكة سانا');
         expect(kb).toContain('كل 100 ليرة قديمة تساوي 1 ليرة جديدة');
         expect(kb).toContain('لا يوجد لدينا دورة ادارة أعمال');   // #501 anchor survives

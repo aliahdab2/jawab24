@@ -68,6 +68,20 @@ if [ "$FIXTURE" = "current" ] && [ "$CURRICULUM_ROWS" != "0" ]; then
   exit 1
 fi
 
+# Enforcement lives in the AI-WORKER's launch env, which is invisible from here —
+# so ASSERT it rather than trusting the precondition text above. A B1 run against a
+# worker still carrying B3's enforcement produced a mislabelled result once already.
+WORKER_ENFORCE=$(curl -s -m 5 localhost:3005/health | python3 -c \
+  "import json,sys; print(json.load(sys.stdin).get('directiveEnforcement'))" 2>/dev/null || echo "UNREACHABLE")
+echo "ai-worker enforcement=$WORKER_ENFORCE (arm needs $ENFORCE)"
+case "$WORKER_ENFORCE:$ENFORCE" in
+  True:on|False:off) ;;
+  UNREACHABLE:*) echo "❌ ai-worker on :3005 is not reachable — start it first." >&2; exit 1 ;;
+  None:*) echo "❌ ai-worker predates the enforcement health field — restart it from THIS worktree." >&2; exit 1 ;;
+  *) echo "❌ ai-worker enforcement=$WORKER_ENFORCE but ARM=$ARM needs $ENFORCE." >&2
+     echo "   Restart it: DIRECTIVE_ENFORCEMENT=$ENFORCE ./scripts/local/start-aiworker.sh" >&2; exit 1 ;;
+esac
+
 TOKEN=$(python3 -c "import json;print(json.load(open('/tmp/demo.json'))['token'])")
 PAGE=$(psql -h localhost -p 5432 -U "$(whoami)" -d "$DB" -tAc \
   "SELECT id FROM pages WHERE facebook_page_id='demo_page_damascus';")

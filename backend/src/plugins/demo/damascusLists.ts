@@ -130,26 +130,6 @@ export const DAMASCUS_COURSE_PRICES: { label: string; rows: PriceRowFixture[] } 
 
 export const DAMASCUS_ONLINE_KEY = 'الدورة';
 
-/**
- * Arm-B1 enrichment (plan §5 item 5): entity facts that lived in the KB prose,
- * verbatim, keyed by the price row's exact name. Applied only when the seeder
- * runs with DEMO_DAMASCUS_FIXTURE=separated — the shipped 'current' shape never
- * sees these, so arm A stays byte-identical.
- *
- * Only SHORT single-line facts belong here. A row attribute is capped at 100
- * chars by `CatalogAttributesInput` (backend/src/utils/validation.ts), which is
- * the merchant-facing write path: a fixture that exceeded it would seed a state
- * no merchant could ever author in the real editor — a measuring stick that
- * doesn't match production (Rule 19.2). Long lists get their own collection
- * instead; see DAMASCUS_CURRICULUM below.
- */
-export const DAMASCUS_ENRICHED_PRICE_ATTRS: Record<string, { label: string; value: string }[]> = {
-    'دورة الغيتار': [{
-        label: 'الأدوات',
-        value: 'لا يتوفر لدينا غيتارات , الطالب يحضر غيتاره الخاص',
-    }],
-};
-
 export const DAMASCUS_CURRICULUM_LABEL = 'محاور الدورات';
 export const DAMASCUS_CURRICULUM_KEY = 'الدورة';
 
@@ -370,30 +350,19 @@ function slotRowAttributes(s: DamascusSlotFixture): { label: string; value: stri
 /** Row inputs in the shape `factCollectionsService.createCollection` takes —
  *  shared by the seeder and the offline renderer so the DB rows and the
  *  scripts' grounding text can never drift apart.
- *
- *  `enriched` is the arm-B1 opt-in: it appends DAMASCUS_ENRICHED_PRICE_ATTRS to
- *  the rows whose entity facts moved out of the prose. Off by default, so the
- *  shipped fixture (arm A) is untouched and every existing caller keeps its
- *  exact bytes. */
-export function damascusPriceRowInputs(
-    fixture: { rows: PriceRowFixture[] },
-    opts?: { enriched?: boolean },
-): Array<{
+ */
+export function damascusPriceRowInputs(fixture: { rows: PriceRowFixture[] }): Array<{
     name: string;
     attributes: { label: string; value: string }[] | null;
     price: string;
     currency: string;
 }> {
-    return fixture.rows.map(r => {
-        const base = priceRowAttributes(r);
-        const extra = opts?.enriched ? DAMASCUS_ENRICHED_PRICE_ATTRS[r.name] : undefined;
-        return {
-            name: r.name,
-            attributes: extra ? [...(base ?? []), ...extra] : base,
-            price: r.price,
-            currency: r.currency ?? DAMASCUS_OLD_SYP,
-        };
-    });
+    return fixture.rows.map(r => ({
+        name: r.name,
+        attributes: priceRowAttributes(r),
+        price: r.price,
+        currency: r.currency ?? DAMASCUS_OLD_SYP,
+    }));
 }
 
 export function damascusScheduleRowInputs(todayIso: string): Array<{
@@ -456,7 +425,7 @@ export function damascusCollectionInputs(
 ): DamascusCollectionInput[] {
     const separated = opts?.shape === 'separated';
     return [
-        { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null, rows: damascusPriceRowInputs(DAMASCUS_COURSE_PRICES, { enriched: separated }) },
+        { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null, rows: damascusPriceRowInputs(DAMASCUS_COURSE_PRICES) },
         { label: DAMASCUS_SCHEDULES_LABEL, keyAttr: opts?.schedulesUnkeyed ? null : DAMASCUS_SCHEDULES_KEY, rows: damascusScheduleRowInputs(todayIso) },
         { label: DAMASCUS_ONLINE_COURSES.label, keyAttr: DAMASCUS_ONLINE_KEY, rows: damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES) },
         ...(separated

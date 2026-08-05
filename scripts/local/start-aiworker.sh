@@ -6,7 +6,10 @@
 # is where OPENAI_API_KEY lives (the /eval skill's documented approach: load it, never
 # print it, never ask for it).
 set -e
-cd "$(dirname "$0")"
+# Repo ROOT, not scripts/local — the exec path below is repo-relative. (`cd
+# "$(dirname "$0")"` alone made every start fail with ERR_MODULE_NOT_FOUND on
+# scripts/local/ai-worker/src/index.ts.)
+cd "$(dirname "$0")/../.."
 set -a
 # shellcheck disable=SC1091
 source /Users/aliahdab/Documents/AutoReply/ai-worker/.env
