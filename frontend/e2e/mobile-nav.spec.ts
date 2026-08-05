@@ -313,13 +313,18 @@ test.describe('Mobile Navigation', () => {
   /*  Badges                                                              */
   /* ------------------------------------------------------------------ */
 
+  // A badged tab's accessible NAME carries the count ("7 unread comments
+  // Comments") — the pill itself is aria-hidden, so the sr-only label is the only
+  // way the number reaches a screen reader. Badge assertions therefore match the
+  // name loosely and read the number off the pill.
   test('unread comments badge appears on Comments tab', async ({ page }) => {
     await setupAuth(page, { unreadComments: 7 });
     await mockAPIs(page);
     await gotoWithMobileNav(page);
 
-    const commentsBtn = mobileNav(page).getByRole('button', { name: t('nav.comments'), exact: true });
-    await expect(commentsBtn.locator('span').filter({ hasText: '7' })).toBeVisible({ timeout: 5000 });
+    const commentsBtn = mobileNav(page).getByRole('button', { name: t('nav.comments') });
+    await expect(commentsBtn.locator('span[aria-hidden="true"]')).toHaveText('7', { timeout: 5000 });
+    await expect(commentsBtn).toHaveAccessibleName(/7 unread comments/);
   });
 
   test('newLeads badge appears on "More" tab with brand color', async ({ page }) => {
@@ -327,10 +332,12 @@ test.describe('Mobile Navigation', () => {
     await mockAPIs(page, { newLeads: 3 });
     await gotoWithMobileNav(page);
 
-    const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true });
-    const badge = moreBtn.locator('span').filter({ hasText: '3' });
-    await expect(badge).toBeVisible({ timeout: 5000 });
+    const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more') });
+    const badge = moreBtn.locator('span[aria-hidden="true"]');
+    await expect(badge).toHaveText('3', { timeout: 5000 });
     await expect(badge).toHaveClass(/bg-brand-500/);
+    // The roll-up names its single contributor rather than a vague "3 items".
+    await expect(moreBtn).toHaveAccessibleName(/3 new leads/);
   });
 
   test('newLeads badge is absent when count is zero', async ({ page }) => {
@@ -340,6 +347,63 @@ test.describe('Mobile Navigation', () => {
 
     const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true });
     await expect(moreBtn.locator('span').filter({ hasText: /^\d+$/ })).not.toBeVisible();
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  Badges inside the "More" overlay                                    */
+  /* ------------------------------------------------------------------ */
+
+  // The defect this pins: "More" wore the new-leads count, but every tile behind
+  // it rendered icon + label only. A merchant who saw 29 and tapped it landed on
+  // a grid of identical tiles with nothing pointing at Leads — the badge was a
+  // dead end. A badge on a container is a promise that something inside needs
+  // attention; the item that owns the count must repeat it.
+  test('the Leads tile inside the overlay carries the same count as "More"', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { newLeads: 29 });
+    await gotoWithMobileNav(page);
+
+    const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more') });
+    await expect(moreBtn.locator('span[aria-hidden="true"]')).toHaveText('29', { timeout: 5000 });
+    await moreBtn.click();
+
+    const leadsTile = page.getByRole('dialog').getByRole('button', { name: t('nav.leads') });
+    const tileBadge = leadsTile.locator('span[aria-hidden="true"]');
+    await expect(tileBadge).toHaveText('29', { timeout: 5000 });
+    await expect(tileBadge).toHaveClass(/bg-brand-500/);
+    await expect(leadsTile).toHaveAccessibleName(/29 new leads/);
+  });
+
+  test('overlay tiles carry no badge when nothing is waiting', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { newLeads: 0 });
+    await gotoWithMobileNav(page);
+
+    await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    await expect(dialog.locator('span.bg-brand-500')).toHaveCount(0);
+    await expect(dialog.locator('span.bg-red-500')).toHaveCount(0);
+  });
+
+  // The sheet renders through two entirely separate branches — a grid in portrait,
+  // a wrapped row in landscape. A badge added to one only is a silent half-fix, so
+  // landscape gets its own assertion rather than trusting the portrait one.
+  test.describe('landscape', () => {
+    test.use({ viewport: { width: MOBILE_VIEWPORT.height, height: MOBILE_VIEWPORT.width } });
+
+    test('the Leads tile carries the count in the landscape sheet too', async ({ page }) => {
+      await setupAuth(page);
+      await mockAPIs(page, { newLeads: 29 });
+      await gotoWithMobileNav(page);
+
+      await mobileNav(page).getByRole('button', { name: t('nav.more') }).click();
+
+      const leadsTile = page.getByRole('dialog').getByRole('button', { name: t('nav.leads') });
+      await expect(leadsTile.locator('span[aria-hidden="true"]')).toHaveText('29', { timeout: 5000 });
+      await expect(leadsTile).toHaveAccessibleName(/29 new leads/);
+    });
   });
 
   // The badge is server-derived: a 200 that is NOT the summary shape (an older

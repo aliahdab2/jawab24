@@ -27,7 +27,7 @@ with no `pageId` (`{ count, latestName, latestAt }`):
 
 | Surface | Notes |
 |---|---|
-| Nav badge (sidebar + mobile "More") | `useNewLeadsSummary`. Server-derived, so it survives an app restart, and it clears when a lead's **status changes** — not when the merchant merely visits `/leads` |
+| Nav badge (sidebar link, mobile "More" button, **and the Leads tile inside the More sheet**) | `useNewLeadsSummary`, reached through `useNavBadgeCounts` — one map keyed by href that every nav surface reads, so a destination cannot be badged on one and bare on another. Server-derived, so it survives an app restart, and it clears when a lead's **status changes** — not when the merchant merely visits `/leads`. The "More" button's number is `aggregateNavBadge` rolling up the destinations it hides |
 | Dashboard attention banner | ONE aggregate leads row, never one row per lead, plus the count in the banner total |
 | Daily digest email | Volume **or** age — see [lead-digest-email.md](lead-digest-email.md) |
 
@@ -36,6 +36,12 @@ Why all three: before Aug 2026 the badge was a **session counter** that started 
 event, visiting `/leads` reset it without working a single lead, and the dashboard
 never mentioned leads at all. A paying merchant sat on 19 unworked leads with
 every surface showing nothing (2026-08-04).
+
+The badge on "More" was then a **dead end** for another day: it carried the count,
+but the sheet behind it drew icon + label only, so a merchant who tapped it faced a
+grid of identical tiles with nothing pointing at Leads (2026-08-05, 29 waiting). A
+badge on a container is a promise that something inside needs attention — the item
+that owns the count repeats it, in both the portrait grid and the landscape row.
 
 ## Data model (`leads` table, `backend/src/db/schema.ts`)
 

@@ -216,12 +216,16 @@ test.describe('Sidebar', () => {
   /*  Unread badges                                                       */
   /* ------------------------------------------------------------------ */
 
+  // The pill is aria-hidden and the count reaches a screen reader through an
+  // sr-only sibling, so the digits alone appear twice inside the link ("5" and
+  // "5 unread comments"). Match the pill exactly rather than by substring.
   test('should show unread badge count on comments link', async ({ page }) => {
     await setupAuth(page, { unreadComments: 5 });
     await mockAPIs(page);
     await gotoWithSidebar(page);
 
-    await expect(page.locator('aside').getByText('5')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('aside').getByText('5', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('aside').getByRole('link', { name: t('nav.comments') })).toHaveAccessibleName(/5 unread comments/);
   });
 
   test('should show unread badge count on messages link', async ({ page }) => {
@@ -229,7 +233,8 @@ test.describe('Sidebar', () => {
     await mockAPIs(page);
     await gotoWithSidebar(page);
 
-    await expect(page.locator('aside').getByText('12')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('aside').getByText('12', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('aside').getByRole('link', { name: t('nav.messages') })).toHaveAccessibleName(/12 unread messages/);
   });
 
   // The leads badge is the STANDING queue read from the server, not a session

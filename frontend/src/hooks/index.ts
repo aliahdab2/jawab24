@@ -50,3 +50,4 @@ export { useSaveKnowledgeBase } from './useSaveKnowledgeBase';
 export { useAiPipelineLabel } from './useAiPipelineLabel';
 export { useCopyToClipboard } from './useCopyToClipboard';
 export { useSubscriptionUsage } from './useSubscriptionUsage';
+export { useNavBadgeCounts, aggregateNavBadge, type NavBadge, type NavBadgeMap, type NavBadgeColor } from './useNavBadgeCounts';

@@ -20,11 +20,11 @@ import {
   Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useNewLeadsSummary } from '@/hooks';
+import { useWorkspaceRole, useNavBadgeCounts, type NavBadge } from '@/hooks';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
+import { BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -197,19 +197,15 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
 /*  UnreadBadge                                                         */
 /* ------------------------------------------------------------------ */
 
-function UnreadBadge({ count, sidebarOpen, color = 'red' }: { count: number; sidebarOpen: boolean; color?: 'red' | 'brand' }) {
-  // Positive assertion, not `count <= 0`: NaN/undefined slipping through a typed
-  // boundary compares false to every `<=`, so the old guard let a non-number fall
-  // through and render an EMPTY pill. Render only on a real positive count.
-  if (!(count > 0)) return null;
-  const bg = color === 'brand' ? 'bg-brand-500' : 'bg-red-500';
+function UnreadBadge({ badge, sidebarOpen }: { badge: NavBadge; sidebarOpen: boolean }) {
+  // Collapsed rail has no room for digits, so the count degrades to a dot — the
+  // sr-label still carries the number for anyone who can't see either.
   return (
-    <span className={clsx(
-      `flex items-center justify-center ${bg} text-white font-bold rounded-full flex-shrink-0`,
-      sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
-    )}>
-      {sidebarOpen ? (count > 99 ? '99+' : count) : ''}
-    </span>
+    <NavCountBadge
+      {...badge}
+      dot={!sidebarOpen}
+      className={sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5'}
+    />
   );
 }
 
@@ -342,12 +338,9 @@ export const Sidebar = memo(function Sidebar() {
   const { isAdmin: canManageTeam } = useWorkspaceRole();
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const unreadComments = useUIStore((s) => s.unreadComments);
-  const unreadMessages = useUIStore((s) => s.unreadMessages);
-  // Server-backed, workspace-wide standing queue — NOT the session counter
-  // (useUIStore.newLeads), which resets to 0 on every app load and so showed
-  // nothing over a real backlog. See useNewLeadsSummary.
-  const { count: newLeads } = useNewLeadsSummary();
+  // Counts keyed by href, shared with the mobile nav surfaces so a destination
+  // can't be badged here and bare there. See useNavBadgeCounts.
+  const badgeCounts = useNavBadgeCounts();
   const sseStatus = useUIStore((s) => s.sseStatus);
   const tNav = useTranslations('nav');
   const tSidebar = useTranslations('sidebar');
@@ -402,13 +395,6 @@ export const Sidebar = memo(function Sidebar() {
   const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || userPhone || undefined);
   // Phone-only: no name set, phone is the only identifier — needs LTR direction
   const isPhoneOnly = !isDemoUser && !user?.name && !!userPhone;
-
-  // Badge counts keyed by href for easy lookup in NavItem rendering
-  const badgeCounts: Record<string, { count: number; color: 'red' | 'brand' }> = {
-    '/comments': { count: unreadComments, color: 'red' },
-    '/messages': { count: unreadMessages, color: 'red' },
-    '/leads': { count: newLeads, color: 'brand' },
-  };
 
   return (
     <aside
@@ -507,7 +493,7 @@ export const Sidebar = memo(function Sidebar() {
                     label={resolveItemKey(item.key)}
                     isActive={router.pathname === item.href || router.pathname.startsWith(item.href + '/')}
                     sidebarOpen={sidebarOpen}
-                    badge={badge && <UnreadBadge count={badge.count} sidebarOpen={sidebarOpen} color={badge.color} />}
+                    badge={badge && <UnreadBadge badge={badge} sidebarOpen={sidebarOpen} />}
                   />
                 );
               })}
