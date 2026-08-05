@@ -190,8 +190,28 @@ export function buildGroundingSource(parts: {
      *  correctly quotes an outlet, zone, or coverage area read as invented —
      *  turning the fix into a source of false flags on the very pages it serves. */
     factCollectionsBlock?: string | null;
+    /** The BUSINESS_INFO block — the merchant's CONFIRMED fields (address, hours,
+     *  phone, delivery, payment), rendered by `formatBusinessInfoPrompt`.
+     *
+     *  It reaches the model on its own path (contextEnricher → generator →
+     *  promptBuilder), NOT inside `knowledgeBase`, so leaving it out here made the
+     *  verifier blind to every field the merchant confirmed. Measured on prod
+     *  2026-08-04: 17 of الفريق الدمشقي's 66 flags in 10 days were replies quoting
+     *  his own address — he had moved it out of the KB free text into the address
+     *  field the day before, and the verifier could no longer see it. The same
+     *  reasoning as `factCollectionsBlock` above: a block the generator reads and
+     *  the verifier does not is a false-flag factory, and it fires hardest on the
+     *  pages that adopted the feature. */
+    businessInfoBlock?: string | null;
 }): string {
-    return [parts.knowledgeBase, parts.postMessage, parts.storePolicies, parts.productCatalog, parts.factCollectionsBlock]
+    return [
+        parts.knowledgeBase,
+        parts.postMessage,
+        parts.storePolicies,
+        parts.productCatalog,
+        parts.factCollectionsBlock,
+        parts.businessInfoBlock,
+    ]
         .filter((p): p is string => !!p && p.trim().length > 0)
         .join('\n\n');
 }
