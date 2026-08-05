@@ -124,7 +124,7 @@ Zero errors AND zero warnings required: `npm run lint` / `npm run lint:fix`
 
 ### 8. Lighthouse CI
 
-Runs on every push. Audits `/landing`, `/pricing`, `/login`, `/blog`, `/what-is-jawab24`. **Hard failures:** accessibility < 90, CLS > 0.1. Config: `.lighthouserc.json`.
+Configured in `.lighthouserc.json` to audit `/landing`, `/pricing`, `/login`, `/blog`, `/what-is-jawab24`, with hard failures at accessibility < 90 and CLS > 0.1. ⚠️ It lives only in the GitHub CI path, which we do not use (see Testing Strategy) — so these thresholds are currently enforced by review, not by an automated gate. The rules below still apply to every change.
 
 Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elements, keep `<title>` and `<meta description>` on public pages.
 
@@ -456,7 +456,20 @@ Local-first — no CI required:
 
 ## Testing Strategy
 
-**Tier 1 (CI — must pass):** Backend/frontend/AI-worker unit tests, backend integration tests, E2E (Playwright), SEO regression, Lighthouse CI.
+> **⛔ We do NOT use the GitHub Actions CI path (owner ruling, reaffirmed 2026-08-05).**
+> The deploy gate is `./scripts/deploy-production.sh`, whose `scripts/pre-deploy-check.sh`
+> runs the same path as CI locally before any deploy: config/translations/sitemap checks,
+> lockfile sync, dependency audit, shared-package build, `tsc`, lint, schema-drift and
+> code-quality checks, unit tests ×3 packages (with coverage thresholds), backend
+> integration tests, and the full Playwright E2E suite (which includes the SEO regression
+> spec). A red GitHub check therefore says nothing about a PR — CI has been broken
+> fleet-wide repeatedly (billing outages; as of 2026-08-05, backend `tsc` heap OOM on
+> `main` itself). Never block a merge on it (`gh pr merge --admin`), never report red CI
+> as a blocker, and don't spend time fixing it unless the owner explicitly asks.
+> Known gap: Lighthouse runs only in CI, so today it runs nowhere — the §8 rules are
+> enforced by review, not by a gate.
+
+**Tier 1 (pre-deploy gate — must pass; run locally by `deploy-production.sh`):** Backend/frontend/AI-worker unit tests (coverage thresholds), backend integration tests, E2E (Playwright, incl. SEO regression), plus lint / `tsc` / schema-drift / dependency-audit checks.
 
 **Tier 2 (Deploy only):** Docker smoke tests, post-deploy health checks, content smoke test.
 
