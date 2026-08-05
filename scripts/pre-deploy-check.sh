@@ -355,6 +355,29 @@ else
 fi
 
 # =============================================
+# 0.97. Cross-file code duplication (Rule 10.8)
+# =============================================
+# Rule 10.8 was prose-only, so nothing enforced it. The April 2026 `maybeEncrypt`
+# extraction migrated four call sites but left a fifth copy behind in
+# AuthService, because a `private` member is invisible to a grep for the exported
+# name. Known findings live in scripts/duplication-baseline.json and are reported
+# without failing; anything new fails. Full scan is ~0.4s.
+echo ""
+echo "🧬 Checking for new cross-file duplication..."
+if node scripts/check-duplication.mjs > /tmp/dupcheck.$$ 2>&1; then
+    echo -e "${GREEN}   ✅ No new duplication${NC}"
+    grep -E "^Known duplication" /tmp/dupcheck.$$ || true
+else
+    echo -e "${RED}   ❌ New cross-file duplication introduced (Rule 10.8)${NC}"
+    cat /tmp/dupcheck.$$
+    echo -e "${RED}   Extract the shared logic into a module both sites import.${NC}"
+    echo -e "${YELLOW}   If it is duplication by design: npm run check:duplication:baseline${NC}"
+    rm -f /tmp/dupcheck.$$
+    exit 1
+fi
+rm -f /tmp/dupcheck.$$
+
+# =============================================
 # 1. Check for ESM-only packages
 # =============================================
 echo ""

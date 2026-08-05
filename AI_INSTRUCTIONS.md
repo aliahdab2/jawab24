@@ -146,7 +146,11 @@ Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elemen
 5. **Check `frontend/src/hooks/`** before writing inline hooks — reuse or create shared hooks
 6. **E2E tests import translation JSON** — never hardcode translated strings
 7. **`captureError()`** from `sentryHelpers.ts` for errors — never bare `console.error`
-8. **No duplication** — before writing a helper function, `grep` the codebase for existing implementations with similar logic. Reuse or extend existing code. If a utility is used in 2+ files, it must live in a shared module, not be copy-pasted
+8. **No duplication** — before writing a helper function, `grep` the codebase for existing implementations with similar logic. Reuse or extend existing code. If a utility is used in 2+ files, it must live in a shared module, not be copy-pasted.
+
+   **This is now a gate, not a promise: `npm run check:duplication`** (also runs in `pre-deploy`). It compares normalised declaration *bodies* across all four workspaces, so it catches renamed clones as well as same-named ones. Known findings are carried in `scripts/duplication-baseline.json` and reported without failing; anything new fails. If a finding is duplication by design, justify it and run `npm run check:duplication:baseline` — never silence it without a stated reason.
+
+   > **Why prose alone was not enough.** The April 2026 cleanup extracted `facebookCrypto.maybeEncryptToken` and migrated four call sites, but `AuthService.maybeEncrypt` survived with a byte-identical body — a `private` member is invisible both to a grep for the exported name and to reading the diff. The `Ai*Error` classes are still duplicated between `backend/src/utils/fbGraphErrors.ts` and `ai-worker/src/lib/errors.ts`, which is the same split §13c records as having shipped the timeout-classification bug **twice**. Grepping first is still the rule; the gate is the backstop for what grepping misses. Its floor is 3 body lines — shorter clones (including `maybeEncrypt` itself) are below it, so the habit still matters.
 9. **One file, one responsibility** — shared functions live in their own utility file
 10. **Run tests after ANY change** — `npm run test` + relevant E2E specs
 11. **Self-review before finishing** — after writing new code, re-read it and check: (a) no dead/unused code left behind, (b) no typos in variable names, (c) no columns/fields added to schema that are never read or written, (d) function signatures match actual usage (don't accept `string` if callers pass `undefined`)
