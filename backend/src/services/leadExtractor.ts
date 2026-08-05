@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { db } from '../db';
 import { leads, pages } from '../db/schema';
-import { eq, and, or, ilike, desc, count, min, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, desc, count, min, sql } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { redis } from '../lib/redis';
@@ -13,7 +13,8 @@ import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
 import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL } from '@jawab24/shared';
-import type { LeadExtractedData, LeadField, LeadStatus } from '@jawab24/shared';
+import { DEFAULT_LEAD_SORT_ORDER } from '@jawab24/shared';
+import type { LeadExtractedData, LeadField, LeadStatus, LeadSortOrder } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
 import { countryFromTimezone } from '../utils/phoneRegion';
@@ -1027,9 +1028,9 @@ class LeadExtractorService {
 
     async getLeadsByPage(
         pageId: string,
-        options: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; limit?: number; offset?: number },
+        options: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; sort?: LeadSortOrder; limit?: number; offset?: number },
     ): Promise<LeadsPage> {
-        const { status, needsFollowUp, search, limit = 50, offset = 0 } = options;
+        const { status, needsFollowUp, search, sort = DEFAULT_LEAD_SORT_ORDER, limit = 50, offset = 0 } = options;
 
         const conditions = [eq(leads.pageId, pageId)];
         if (status) conditions.push(eq(leads.status, status));
@@ -1066,7 +1067,15 @@ class LeadExtractorService {
                 .select()
                 .from(leads)
                 .where(whereClause)
-                .orderBy(desc(leads.createdAt))
+                // `id` is a tiebreaker, not decoration: this is OFFSET pagination
+                // feeding an infinite-scroll list, and leads captured in the same
+                // second (a burst of comments on one post) have equal created_at.
+                // Without a deterministic second key, Postgres may order ties
+                // differently between the page-1 and page-2 queries, which shows up
+                // as a lead appearing twice — or never — in the scrolled list.
+                .orderBy(...(sort === 'oldest'
+                    ? [asc(leads.createdAt), asc(leads.id)]
+                    : [desc(leads.createdAt), desc(leads.id)]))
                 .limit(limit)
                 .offset(offset),
             db

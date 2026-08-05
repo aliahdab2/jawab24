@@ -230,3 +230,201 @@ test.describe('Leads — RTL number rendering (dir="auto" guard)', () => {
     }
   });
 });
+
+/**
+ * Contacting a lead IS progress, so tapping Call / WhatsApp records it instead of
+ * leaving the merchant to file a status change by hand afterwards.
+ *
+ * Why this exists (prod, 2026-08-05): of 17 pages holding leads, only 3 had ever
+ * changed a lead's status — the other 14 sat at 100% `new`. Bookkeeping nobody
+ * performs has to become a by-product of work they already do.
+ *
+ * How the change is ANNOUNCED differs by surface, and that split is the subtle
+ * part these tests pin. Toasts deliberately sit at z-45, BELOW every modal tier
+ * (globals.css: sonner's default painted them over an open sheet's sticky footer
+ * and blocked Save/Cancel). So a toast fired while the detail panel is open would
+ * be invisible AND unclickable — verified, not assumed: the Undo button's centre
+ * hit-tested to the panel's scroll container. From the panel the StatusPicker is
+ * the feedback; from the list, where no picker is in view, it's the toast.
+ *
+ * `window.open` is stubbed so the WhatsApp hand-off doesn't spawn a real tab, and
+ * the recorded calls double as proof the added status write didn't break the
+ * primary action.
+ */
+test.describe('Leads — contact records progress', () => {
+  const CONTACTED_LEAD = { ...PHONE_FIELD_LEAD, id: 'l-contacted', status: 'contacted' };
+
+  /** Collect PATCH /leads/:id/status bodies, newest last. */
+  function recordStatusWrites(page: import('@playwright/test').Page) {
+    const writes: { url: string; body: unknown }[] = [];
+    page.on('request', (req) => {
+      if (req.method() === 'PATCH' && /\/leads\/[^/]+\/status/.test(req.url())) {
+        writes.push({ url: req.url(), body: req.postDataJSON() });
+      }
+    });
+    return writes;
+  }
+
+  function stubWindowOpen(page: import('@playwright/test').Page) {
+    return page.addInitScript(() => {
+      (window as unknown as { __opened: string[] }).__opened = [];
+      window.open = ((url?: string | URL) => {
+        (window as unknown as { __opened: string[] }).__opened.push(String(url));
+        return null;
+      }) as typeof window.open;
+    });
+  }
+
+  const openedCount = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.length);
+
+  const statusSegment = (page: import('@playwright/test').Page, key: string) =>
+    page.getByRole('dialog').getByRole('button', { name: t(key), exact: true });
+
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (err) => console.warn(`PAGE ERROR: ${err}`));
+  });
+
+  test('WhatsApp in the detail panel moves a new lead to contacted', async ({ page }) => {
+    await setupAuth(page);
+    await stubWindowOpen(page);
+    await mockAPIs(page, { leadsData: [PHONE_FIELD_LEAD] });
+    const writes = recordStatusWrites(page);
+
+    await page.goto(`/en/leads?lead=${PHONE_FIELD_LEAD.id}`);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+
+    // Precondition: the picker starts on "New", so the assertion below proves a
+    // transition rather than reading a state that was already there.
+    await expect(statusSegment(page, 'leads.filterNew')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: t('leads.whatsapp') }).click();
+
+    await expect.poll(() => writes.length, { timeout: 5000 }).toBe(1);
+    expect(writes[0].url).toContain(`/leads/${PHONE_FIELD_LEAD.id}/status`);
+    expect(writes[0].body).toMatchObject({ status: 'contacted' });
+
+    // The picker IS the feedback on this surface — and it's how the merchant
+    // undoes a mis-tap, so its state must be readable, not just coloured.
+    await expect(statusSegment(page, 'leads.filterContacted')).toHaveAttribute('aria-pressed', 'true');
+    await expect(statusSegment(page, 'leads.filterNew')).toHaveAttribute('aria-pressed', 'false');
+
+    // No toast here: at z-45 it would render behind the open panel.
+    await expect(page.getByRole('button', { name: t('common.undo') })).not.toBeVisible();
+
+    // WhatsApp still opened: recording progress must not cost the merchant the
+    // action they actually asked for.
+    const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+    expect(opened.some((u) => u.includes('wa.me'))).toBe(true);
+  });
+
+  test('calling from the list advances the lead and offers Undo', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { leadsData: [PHONE_FIELD_LEAD] });
+    const writes = recordStatusWrites(page);
+
+    await gotoLeads(page);
+
+    // Desktop viewport renders the table, so this is the row's call link — no
+    // panel open, which is exactly why the toast is the right affordance here.
+    await page.getByRole('link', { name: t('leads.call') }).first().click();
+
+    await expect.poll(() => writes.length, { timeout: 5000 }).toBe(1);
+    expect(writes[0].body).toMatchObject({ status: 'contacted' });
+
+    const undo = page.getByRole('button', { name: t('common.undo') });
+    await expect(undo).toBeVisible({ timeout: 5000 });
+
+    // Hit-test the centre of the Undo button: `toBeVisible` passes for an element
+    // buried under a portal, and that false pass is what hid the panel-side
+    // problem this whole split exists to solve.
+    await expect.poll(async () => undo.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return !!top && (top === el || el.contains(top) || top.contains(el));
+    }), { timeout: 5000 }).toBe(true);
+
+    await undo.click();
+    await expect.poll(() => writes.length, { timeout: 5000 }).toBe(2);
+    expect(writes[1].body).toMatchObject({ status: 'new' });
+  });
+
+  // The pipeline only moves forward: re-contacting someone the merchant already
+  // moved on must not drag them back to "contacted".
+  test('contacting an already-contacted lead writes nothing', async ({ page }) => {
+    await setupAuth(page);
+    await stubWindowOpen(page);
+    await mockAPIs(page, { leadsData: [CONTACTED_LEAD] });
+    const writes = recordStatusWrites(page);
+
+    await page.goto(`/en/leads?lead=${CONTACTED_LEAD.id}`);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+
+    await page.getByRole('button', { name: t('leads.whatsapp') }).click();
+
+    // WhatsApp opening is the observable proof the click landed, so an empty
+    // `writes` afterwards means "no status write" rather than "click missed".
+    await expect.poll(() => openedCount(page), { timeout: 5000 }).toBe(1);
+    expect(writes).toHaveLength(0);
+    await expect(statusSegment(page, 'leads.filterContacted')).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+/**
+ * Newest-first buries a neglected lead deeper with every new capture, which is how
+ * a backlog goes unnoticed (the oldest untouched lead in prod on 2026-08-05 was 97
+ * days old). The order is merchant-controlled, and it must be applied SERVER-side:
+ * the list paginates 50 rows at a time, so a client-side sort would only reorder
+ * the page already loaded.
+ */
+test.describe('Leads — sort order toggle', () => {
+  /**
+   * Only the LIST query carries a sort. The filter-tab counts hit the same
+   * endpoint with `limit=1` purely for their totals, where order is meaningless —
+   * so asserting over every /leads request would fail on those by design.
+   */
+  function recordListQueries(page: import('@playwright/test').Page) {
+    const urls: string[] = [];
+    page.on('request', (req) => {
+      if (req.method() === 'GET' && /\/leads\?/.test(req.url()) && req.url().includes('limit=50')) {
+        urls.push(req.url());
+      }
+    });
+    return urls;
+  }
+
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (err) => console.warn(`PAGE ERROR: ${err}`));
+  });
+
+  test('flipping the toggle re-requests the list with sort=oldest', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { leadsData: [PHONE_FIELD_LEAD] });
+    const listUrls = recordListQueries(page);
+
+    await gotoLeads(page);
+
+    // Default is unchanged: newest-first, and the label states the current order.
+    await expect.poll(() => listUrls.length, { timeout: 15000 }).toBeGreaterThan(0);
+    expect(listUrls.every((u) => u.includes('sort=newest'))).toBe(true);
+
+    const toggle = page.getByRole('button', { name: t('leads.sortNewestFirst') });
+    await expect(toggle).toBeVisible({ timeout: 5000 });
+    await toggle.click();
+
+    await expect.poll(() => listUrls.some((u) => u.includes('sort=oldest')), { timeout: 5000 }).toBe(true);
+    await expect(page.getByRole('button', { name: t('leads.sortOldestFirst') })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('the chosen order survives a reload', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { leadsData: [PHONE_FIELD_LEAD] });
+
+    await gotoLeads(page);
+    await page.getByRole('button', { name: t('leads.sortNewestFirst') }).click();
+    await expect(page.getByRole('button', { name: t('leads.sortOldestFirst') })).toBeVisible({ timeout: 5000 });
+
+    await page.reload();
+    await expect(page.getByRole('button', { name: t('leads.sortOldestFirst') })).toBeVisible({ timeout: 15000 });
+  });
+});

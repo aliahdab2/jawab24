@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, LeadSortOrder } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -1473,7 +1473,7 @@ export interface LeadsPaginatedResponse {
 }
 
 export const leadsApi = {
-  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; limit?: number; offset?: number }) =>
+  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; sort?: LeadSortOrder; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
   /** Fetch a single lead by id — used by the notification deep-link to open the exact lead. */
