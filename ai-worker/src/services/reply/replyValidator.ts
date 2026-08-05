@@ -4,6 +4,7 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
+import { normalizeArabicIndic } from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
@@ -11,12 +12,15 @@ import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, Valid
 /** Map Arabic-Indic (U+0660–U+0669) and Eastern Arabic-Indic (U+06F0–U+06F9)
  *  digits to ASCII, so "٢٥٠٠٠" and "25000" compare equal. JS `\d` only
  *  matches [0-9], so without this Arabic-Indic prices are invisible to the guard —
- *  both a false-negative hole and a source of inconsistency vs Western digits. */
-function normalizeDigits(s: string): string {
-    return s
-        .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
-        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
-}
+ *  both a false-negative hole and a source of inconsistency vs Western digits.
+ *
+ *  This is `normalizeArabicIndic` from @jawab24/shared, not a local copy: the guard
+ *  and every other digit-sensitive path (kbContentClassifier, phone extraction, the
+ *  date scanner below) must agree on what a digit is, or one of them goes blind.
+ *  ⚠️ Two NARROWER copies still exist — `businessHours.ts` and the `normalizeArabic`
+ *  option — which fold U+0660–0669 only and are blind to Persian/Urdu digits. Widening
+ *  them changes a live hours parser, so it belongs in its own measured change, not here. */
+const normalizeDigits = normalizeArabicIndic;
 
 /** One number token (already digit-normalized) with optional grouping/decimal separators. */
 const NUM_TOKEN = '\\d[\\d,.\\u066B\\u066C]*';

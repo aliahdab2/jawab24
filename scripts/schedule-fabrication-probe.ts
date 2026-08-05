@@ -53,6 +53,7 @@
  *   over-correction failure — a battery that only measures silence rewards a
  *   mute bot.
  */
+import { classifyDateTokens } from '@jawab24/shared';
 import { DEMO_PAGES } from '../backend/src/plugins/demo/seedData';
 // Direct import (not via seedData's re-export) so the script also loads on a
 // baseline checkout whose seedData predates the slice.
@@ -210,54 +211,22 @@ interface DatasetRow {
 }
 
 /**
- * Deterministic stale-date scan. Finds date-shaped tokens — D/M or D/M/YYYY
- * (Arabic-Indic digits normalized first, day-first as the merchant writes),
- * ISO YYYY-MM-DD, and «D <month-name>» (the shape the model actually writes to
- * customers: «3 أغسطس 2026») — and buckets them against today. Month names are
- * calendar constants (both the Levantine and transliterated Gregorian systems),
- * not an open vocabulary. Times («12-2», «3-4:30») carry no slash and never
- * match; phone numbers carry no slash either.
+ * Deterministic stale-date judge — now `classifyDateTokens` from @jawab24/shared.
+ *
+ * This scan USED to live here as a private copy, with a hand-typed table of Arabic
+ * month names. It moved to the shared package for two reasons, in this order:
+ *   1. The reply-path guard needs the same scan. A judge with its own private notion
+ *      of "date" measures something other than what the guard enforces — so the
+ *      battery imports the production predicate rather than keeping a twin.
+ *   2. The month table was a hand-maintained linguistic list, including hamza-less
+ *      spelling variants (ابريل/أبريل, اب/آب). The shared version derives names from
+ *      `Intl` for `ar-SY` (Levantine) + `ar-EG` (transliterated) + `en`, and folds both
+ *      the calendar name and the input through `normalizeArabic` — so the variants
+ *      collapse with no list to maintain.
+ * Behaviour is preserved: day-first D/M(/YY(YY)), ISO, and «D <month-name>»; times
+ * («12-2») and phone numbers still never match. It additionally rejects impossible
+ * dates (31/2) instead of rolling them into the next month.
  */
-const ARABIC_MONTHS: Record<string, number> = {
-    'يناير': 1, 'كانون الثاني': 1,
-    'فبراير': 2, 'شباط': 2,
-    'مارس': 3, 'آذار': 3,
-    'أبريل': 4, 'ابريل': 4, 'نيسان': 4,
-    'مايو': 5, 'أيار': 5, 'ايار': 5,
-    'يونيو': 6, 'حزيران': 6,
-    'يوليو': 7, 'تموز': 7,
-    'أغسطس': 8, 'اغسطس': 8, 'آب': 8,
-    'سبتمبر': 9, 'أيلول': 9, 'ايلول': 9,
-    'أكتوبر': 10, 'اكتوبر': 10, 'تشرين الأول': 10, 'تشرين الاول': 10,
-    'نوفمبر': 11, 'تشرين الثاني': 11,
-    'ديسمبر': 12, 'كانون الأول': 12, 'كانون الاول': 12,
-};
-const MONTH_NAME_RE = new RegExp(
-    `(\\d{1,2})\\s+(${Object.keys(ARABIC_MONTHS).join('|')})(?:\\s+(\\d{4}))?`, 'g');
-
-function scanDates(reply: string, todayIso: string): { stale: string[]; upcoming: string[] } {
-    const normalized = reply.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
-    const today = new Date(`${todayIso}T00:00:00Z`).getTime();
-    const stale: string[] = [];
-    const upcoming: string[] = [];
-    const consider = (raw: string, y: number, m: number, d: number): void => {
-        if (m < 1 || m > 12 || d < 1 || d > 31) return;
-        const t = Date.UTC(y, m - 1, d);
-        (t < today ? stale : upcoming).push(raw);
-    };
-    for (const m of normalized.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g)) {
-        const year = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : Number(todayIso.slice(0, 4));
-        consider(m[0], year, Number(m[2]), Number(m[1]));
-    }
-    for (const m of normalized.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-        consider(m[0], Number(m[1]), Number(m[2]), Number(m[3]));
-    }
-    for (const m of normalized.matchAll(MONTH_NAME_RE)) {
-        const year = m[3] ? Number(m[3]) : Number(todayIso.slice(0, 4));
-        consider(m[0], year, ARABIC_MONTHS[m[2]], Number(m[1]));
-    }
-    return { stale, upcoming };
-}
 
 async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
     const out: R[] = new Array(items.length);
@@ -373,7 +342,7 @@ function reportStale(kept: DatasetRow[], todayIso: string): void {
     }
     for (const probe of PROBES) {
         const runs = byProbe.get(probe.id) ?? [];
-        const scans = runs.map(r => scanDates(r.reply, todayIso));
+        const scans = runs.map(r => classifyDateTokens(r.reply, todayIso));
         const staleHits = scans.filter(s => s.stale.length > 0).length;
         const upcomingHits = scans.filter(s => s.upcoming.length > 0).length;
         if (probe.id === 'C1-upcoming-date') {

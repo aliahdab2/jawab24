@@ -1717,3 +1717,8 @@ export type {
 // it; see factSchedule.ts for why the SQL copy needs a contract test. ---
 export { isRowLive } from './factSchedule';
 export type { FactRowSchedule } from './factSchedule';
+// --- Date tokens in prose — the ONE scanner. The reply-path guard and the
+// measurement battery must agree on "is there a date here and has it passed";
+// a judge with its own definition measures something the guard does not enforce. ---
+export { extractDateTokens, classifyDateTokens } from './dateTokens';
+export type { DateToken } from './dateTokens';
