@@ -4,7 +4,10 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
-import { normalizeArabicIndic, extractDateTokens, classifyDateTokens, todayIsoInZone } from '@jawab24/shared';
+import {
+    normalizeArabicIndic, normalizeArabic, extractDateTokens, classifyDateTokens,
+    todayIsoInZone, matchDirective, type MerchantDirective,
+} from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
@@ -318,6 +321,46 @@ export function flagStaleDate(reply: string, kbText: string, todayIso: string): 
     return classifyDateTokens(reply, todayIso).stale.length > 0;
 }
 
+/**
+ * Check 1e — the reply ignored a standing instruction from the merchant.
+ *
+ * A directive is a decision the merchant already made about how a specific question gets
+ * answered («أسئلة المخبر والتحليلات ⇒ ارجو التواصل على أرقامنا»). Measured on الفريق
+ * الدمشقي (prod, 2026-08-04): the reply invented a lab-course curriculum instead — a
+ * whole answer where the business wanted a referral. Overriding an order the merchant
+ * wrote is worse than inventing a fact, because it countermands him rather than merely
+ * exceeding him.
+ *
+ * DETECTION IS DELIBERATELY WEAK, AND THAT IS THE POINT
+ * ----------------------------------------------------
+ * "Did the reply comply with the spirit of this instruction?" is a judgement, and asking
+ * the model to make it is the failure already recorded for the "is this the same place?"
+ * comparison. So the test is the cheapest defensible one: the directive matched the
+ * customer's question, and the reply carries NONE of the distinctive content the merchant
+ * asked for. That catches the measured defect (an invented curriculum shares nothing with
+ * «تواصل على أرقامنا») without pretending to grade tone.
+ *
+ * Flag-only, like the date checks: it never rewrites the reply. Enforcement — sending the
+ * merchant's own words instead of the model's — is a separate, opt-in behaviour so the
+ * battery can measure detection and enforcement as different arms.
+ */
+export function flagDirectiveIgnored(
+    reply: string,
+    customerText: string,
+    directives: MerchantDirective[] | undefined,
+): boolean {
+    const matched = matchDirective(customerText, directives ?? []);
+    if (!matched) return false;
+    const normalizedReply = normalizeArabic(reply);
+    // Content words of the instruction, minus short function words that would match
+    // anything. If the reply contains none of them, it did not deliver the instruction.
+    const signal = normalizeArabic(matched.response)
+        .split(/\s+/)
+        .filter(w => w.length >= 4);
+    if (signal.length === 0) return false;
+    return !signal.some(w => normalizedReply.includes(w));
+}
+
 /** Check 2 — public comments should be brief. True when a comment exceeds 50 words. */
 export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): boolean {
     if (channel !== 'comment' || !reply) {
@@ -520,6 +563,14 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
                 flags.push('stale_date');
             }
         }
+    }
+
+    // Check 1e: a standing merchant instruction covered this question and the reply
+    // delivered none of it. Runs outside the price/date block — it needs the customer's
+    // message, not the KB, and must still fire when skipPriceCheck is set.
+    if (reply && flagDirectiveIgnored(reply, request.comment || '', request.context?.directives)
+        && !flags.includes('directive_ignored')) {
+        flags.push('directive_ignored');
     }
 
     // Check 2: Comment too long — public comments should be brief.

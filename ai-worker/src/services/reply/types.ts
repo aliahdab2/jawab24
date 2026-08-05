@@ -6,6 +6,7 @@
  * openai.ts re-exports GenerateRequest / GenerateResponse for backward compat —
  * external callers keep importing them from '../openai'.
  */
+import type { MerchantDirective } from '@jawab24/shared';
 
 export interface ConversationMessage {
     role: 'user' | 'assistant';
@@ -73,6 +74,20 @@ export interface GenerateRequest {
          * no collections.
          */
         factCollectionsBlock?: string;
+        /**
+         * The merchant's standing ORDERS, separated from his FACTS.
+         *
+         * A business's free text carries both kinds of sentence, and mashed together the
+         * model reads an order as background. Measured on الفريق الدمشقي (prod,
+         * 2026-08-04): asked what the lab course teaches, the reply invented a curriculum
+         * while his own text said to route that question to the phone. Countermanding an
+         * instruction the merchant wrote is worse than inventing a fact.
+         *
+         * Scope is merchant-authored keywords (same format and matcher as a Post Reply
+         * trigger), never our judgement of "is this question in scope". Absent/empty → no
+         * block, and the prompt is byte-identical to a page with no directives.
+         */
+        directives?: MerchantDirective[];
         customerContext?: string;
         /**
          * Customer's display name from the platform profile (FB display name,

@@ -40,6 +40,7 @@ export type CacheRejectReason =
     | 'price_not_in_kb'
     | 'date_not_in_source'
     | 'stale_date'
+    | 'directive_ignored'
     | 'reply_not_grounded'
     | 'language_mismatch'
     | 'self_identification_stripped';
@@ -66,6 +67,10 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     // remaining non-destructive to the reply itself.
     'date_not_in_source',
     'stale_date',
+    // Check 1e: a standing merchant instruction covered the question and the reply
+    // delivered none of it. Caching a reply that countermands the merchant would repeat
+    // his own rule being broken to every customer who asks the same thing.
+    'directive_ignored',
     // Post-send grounding audit found an assertion Business Info doesn't
     // support. Caching it would serve the same fabrication to every customer
     // who asks a similar question — the one failure mode worse than one bad reply.

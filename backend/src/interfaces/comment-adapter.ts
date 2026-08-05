@@ -5,6 +5,7 @@
  * must implement to plug into the shared comment processing pipeline.
  */
 
+import type { MerchantDirective } from '@jawab24/shared';
 import type { Platform, PlatformPage } from './platform-adapter';
 
 /** Normalized stored comment returned by the adapter */
@@ -61,6 +62,8 @@ export interface CommentReplyContext {
     factCollectionsBlock?: string;
     /** See GenerateReplyContext.factCollectionsGated. */
     factCollectionsGated?: boolean;
+    /** See GenerateReplyContext.directives — the merchant's standing ORDERS. */
+    directives?: MerchantDirective[];
     senderName?: string;
     defaultReplyLanguage?: string;
     /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */

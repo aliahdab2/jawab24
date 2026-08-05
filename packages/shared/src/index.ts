@@ -1723,3 +1723,13 @@ export type { FactRowSchedule } from './factSchedule';
 // a judge with its own definition measures something the guard does not enforce. ---
 export { extractDateTokens, classifyDateTokens } from './dateTokens';
 export type { DateToken } from './dateTokens';
+// --- Merchant directives — the merchant's ORDERS, kept apart from his FACTS. Scope is
+// merchant-authored keywords matched with the same primitives Post Reply uses. ---
+export {
+    normalizeDirectives,
+    matchDirective,
+    renderDirectivesBlock,
+    MAX_DIRECTIVES_PER_PAGE,
+    DIRECTIVE_RESPONSE_MAX_LEN,
+} from './merchantDirectives';
+export type { MerchantDirective } from './merchantDirectives';

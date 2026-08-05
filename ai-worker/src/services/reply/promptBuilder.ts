@@ -6,7 +6,7 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH, safeTimezone, todayIsoInZone, isAnyImageMessage } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone, todayIsoInZone, isAnyImageMessage, renderDirectivesBlock } from '@jawab24/shared';
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
@@ -140,6 +140,16 @@ function buildPoliciesBlock(request: GenerateRequest): string {
  */
 function buildStablePageBlock(request: GenerateRequest): string {
     const parts: string[] = [];
+
+    // The merchant's standing ORDERS, FIRST — above every fact block on purpose.
+    // These are decisions he already made about how specific questions get answered;
+    // a fact the model finds later must not be allowed to talk it out of following one.
+    // Stable per page (scope matching happens in code, not here), so this sits inside the
+    // cached prefix and costs nothing on repeat traffic.
+    const directivesBlock = renderDirectivesBlock(request.context?.directives ?? []);
+    if (directivesBlock) {
+        parts.push(`<merchant_instructions>\n${sanitizeForPrompt(directivesBlock)}\n</merchant_instructions>`);
+    }
 
     // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only. Placed ABOVE the
     // narrative <business_knowledge> so the model treats structured fields as authoritative and

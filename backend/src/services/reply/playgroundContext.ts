@@ -13,6 +13,7 @@ import type { PlaygroundSource } from '../../types/aiPipeline';
 import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
+    normalizeDirectives,
     type StoredBusinessProfile,
 } from '@jawab24/shared';
 
@@ -152,6 +153,12 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
+    // 2c. The merchant's standing ORDERS — read from the SAME place contextEnricher reads
+    //     them, so the battery grades the block production sends rather than a copy of it.
+    const directives = normalizeDirectives(
+        (merchant as { directives?: unknown } | undefined)?.directives,
+    );
+
     // 3. When comment mode is dual or private, use DM channel for detailed reply
     const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
         ? 'dm'
@@ -176,6 +183,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         storePolicies,
         factCollectionsBlock,
         factCollectionsGated,
+        directives,
         // Forwarded for BOTH channels: the DM pipeline injects the origin post + the
         // merchant's Post Reply as [current_post] for comment-originated threads, so the
         // playground/eval must be able to exercise the dm+postMessage combination too.

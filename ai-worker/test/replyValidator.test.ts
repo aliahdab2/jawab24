@@ -3,6 +3,7 @@ import {
     flagHallucinatedPrice,
     flagDateNotInSource,
     flagStaleDate,
+    flagDirectiveIgnored,
     isCommentTooLong,
     stripSelfIdentification,
     isOwnBrandPage,
@@ -84,6 +85,42 @@ describe('flagDateNotInSource / flagStaleDate (Checks 1c/1d)', () => {
             expect(out.flags).not.toContain('date_not_in_source');
             expect(out.flags).not.toContain('stale_date');
         });
+    });
+});
+
+describe('flagDirectiveIgnored (Check 1e)', () => {
+    // The real directive from الفريق الدمشقي's own text, and the real question that
+    // overrode it in prod on 2026-08-04.
+    const LAB = { keywords: 'مخبر, تحاليل, سحب الدم', response: 'لهذا السؤال يرجى التواصل على أرقامنا.' };
+    const QUESTION = 'وبتعلمو تحليلات جوا بالمخبر ؟';
+
+    it('flags the measured defect — an invented curriculum where an order said to route', () => {
+        const invented = 'الدورة تشمل تعلم أساسيات العمل بالمخبر مثل استخدام الأدوات المختبرية وطرق التحليل وإجراءات السلامة.';
+        expect(flagDirectiveIgnored(invented, QUESTION, [LAB])).toBe(true);
+    });
+
+    it('stays silent when the reply actually delivered the instruction', () => {
+        expect(flagDirectiveIgnored('لهذا السؤال يرجى التواصل على أرقامنا.', QUESTION, [LAB])).toBe(false);
+        // Reworded but carrying the instruction's own content words.
+        expect(flagDirectiveIgnored('يرجى التواصل معنا على أرقامنا وسنجيبك.', QUESTION, [LAB])).toBe(false);
+    });
+
+    it('stays silent when no directive covers the question', () => {
+        const reply = 'دورة المكياج مدتها شهر.';
+        expect(flagDirectiveIgnored(reply, 'كم مدة دورة المكياج؟', [LAB])).toBe(false);
+    });
+
+    it('is inert when the page has no directives — the whole fleet today', () => {
+        expect(flagDirectiveIgnored('أي جواب', QUESTION, [])).toBe(false);
+        expect(flagDirectiveIgnored('أي جواب', QUESTION, undefined)).toBe(false);
+    });
+
+    it('wires into validateReply as a flag, leaving the reply untouched', () => {
+        const invented = 'الدورة تشمل استخدام الأدوات المختبرية وطرق التحليل.';
+        const parsed = { reply: invented, confidence: 'high', flags: [] } as unknown as ParsedReply;
+        const out = validateReply(parsed, req(QUESTION, { directives: [LAB] }));
+        expect(out.flags).toContain('directive_ignored');
+        expect(out.reply).toBe(invented);
     });
 });
 
