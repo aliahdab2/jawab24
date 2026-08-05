@@ -4,7 +4,7 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
-import { normalizeArabicIndic } from '@jawab24/shared';
+import { normalizeArabicIndic, extractDateTokens, classifyDateTokens, todayIsoInZone } from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
@@ -268,6 +268,56 @@ export function flagHallucinatedPrice(reply: string, kbText: string, priceMath?:
     return false;
 }
 
+/**
+ * Check 1c — a calendar date the merchant's records do not support.
+ *
+ * WHY A DATE CHECK AT ALL, WHEN CHECK 1 ALREADY GUARDS NUMBERS
+ * -----------------------------------------------------------
+ * Check 1 deliberately STRIPS date-shaped tokens before comparing (a date is not a
+ * price), so dates have had no guard anywhere in the pipeline. Two measured prod
+ * defects live in that gap, both on الفريق الدمشقي:
+ *   • «دورة التصوير الفوتوغرافي تبدأ بتاريخ 7/5/2026» — a date in no source at all,
+ *     served as a start date, three months in the past.
+ *   • the stale-but-grounded class the grounding verifier is structurally blind to:
+ *     «تبدأ الأحد 26/7» said on 30/7. The date IS in the merchant's text, so the
+ *     verifier correctly calls it grounded — and the customer is still misinformed.
+ * Those are two different failures and they get two different flags, so the battery
+ * can score them separately.
+ *
+ * WHY IT CANNOT PRODUCE A FALSE DENIAL
+ * ------------------------------------
+ * This is additive: it appends a flag and (via the caller) keeps the reply out of the
+ * cache. It never removes a sentence and never suppresses an answer — the posture that
+ * `price_not_in_kb` already has. Two earlier designs for this defect class were
+ * abandoned precisely because they could refuse to answer something the merchant HAD
+ * written; this one structurally cannot.
+ *
+ * GATING — the false-positive surface
+ * -----------------------------------
+ * Skipped entirely when the grounding source contains NO date: a page with no dated
+ * data gives us no basis to judge one, and «12/8» in other prose should not be read as
+ * a schedule. Times («12-2»), phone numbers and prices carry no date shape and never
+ * match (see `extractDateTokens`).
+ */
+export function flagDateNotInSource(reply: string, kbText: string, todayIso: string): boolean {
+    const sourceDates = new Set(extractDateTokens(kbText, todayIso).map(t => t.iso));
+    if (sourceDates.size === 0) return false;
+    return extractDateTokens(reply, todayIso).some(d => !sourceDates.has(d.iso));
+}
+
+/**
+ * Check 1d — a date that IS in the merchant's records but has already passed.
+ *
+ * Grounded and wrong: the reply presents an expired cohort/offer date as if it were
+ * current. Independent of `flagDateNotInSource` on purpose — a reply can be stale
+ * without being ungrounded, and that is the case no judge we own could see before.
+ * Gated the same way (no dated source ⇒ no judgement).
+ */
+export function flagStaleDate(reply: string, kbText: string, todayIso: string): boolean {
+    if (extractDateTokens(kbText, todayIso).length === 0) return false;
+    return classifyDateTokens(reply, todayIso).stale.length > 0;
+}
+
 /** Check 2 — public comments should be brief. True when a comment exceeds 50 words. */
 export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): boolean {
     if (channel !== 'comment' || !reply) {
@@ -455,6 +505,20 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
         const kbText = getKBText(request, { includeProductCatalog: true, includeFactCollections: true });
         if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
+        }
+        // Checks 1c/1d: dates. Same grounding source as the price check — Check 1
+        // strips date tokens by design, so without these a date has no guard at all.
+        // Flag-only: no sentence is removed, so neither can cause a false denial.
+        // `todayIso` is the MERCHANT's day (same helper as the prompt's "Today's date"
+        // line), so prompt and guard cannot disagree about staleness around midnight.
+        if (kbText) {
+            const todayIso = todayIsoInZone(request.context?.timezone);
+            if (flagDateNotInSource(reply, kbText, todayIso) && !flags.includes('date_not_in_source')) {
+                flags.push('date_not_in_source');
+            }
+            if (flagStaleDate(reply, kbText, todayIso) && !flags.includes('stale_date')) {
+                flags.push('stale_date');
+            }
         }
     }
 

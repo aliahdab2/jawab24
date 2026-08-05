@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     flagHallucinatedPrice,
+    flagDateNotInSource,
+    flagStaleDate,
     isCommentTooLong,
     stripSelfIdentification,
     isOwnBrandPage,
@@ -9,6 +11,81 @@ import {
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
 
 const req = (comment: string, ctx: GenerateRequest['context'] = {}): GenerateRequest => ({ comment, context: ctx });
+
+describe('flagDateNotInSource / flagStaleDate (Checks 1c/1d)', () => {
+    const TODAY = '2026-08-05';
+    // Shaped like a real <business_lists> block: one live cohort, dates as our rows store them.
+    const source = 'مواعيد الدورات المعلنة:\n- دورة العمل المخبري — الدورة: العمل المخبري — starts 2026-08-18';
+
+    describe('a date in no source at all', () => {
+        it('flags the measured prod defect — «دورة التصوير تبدأ 7/5/2026», in nothing', () => {
+            expect(flagDateNotInSource('دورة التصوير الفوتوغرافي تبدأ بتاريخ 7/5/2026', source, TODAY)).toBe(true);
+        });
+
+        it('does NOT flag a date the source actually carries', () => {
+            expect(flagDateNotInSource('دورة العمل المخبري تبدأ 18/8/2026', source, TODAY)).toBe(false);
+            expect(flagDateNotInSource('تبدأ 2026-08-18', source, TODAY)).toBe(false);
+        });
+
+        it('matches on the calendar date, not the spelling the model chose', () => {
+            // Row says 2026-08-18; the model wrote it the way it talks to customers.
+            expect(flagDateNotInSource('تبدأ 18 أغسطس 2026', source, TODAY)).toBe(false);
+            expect(flagDateNotInSource('تبدأ ١٨/٨/٢٠٢٦', source, TODAY)).toBe(false);
+        });
+
+        it('is skipped when the source has no dates — no basis to judge one', () => {
+            const dateless = 'أسعار الدورات:\n- دورة ICDL — ملاحظة: 8 جلسات لمدة شهر';
+            expect(flagDateNotInSource('تبدأ 7/5/2026', dateless, TODAY)).toBe(false);
+        });
+
+        it('does not fire on times, phones or prices', () => {
+            const reply = 'الدوام 12-2 و3-4:30، رقمنا 0935924472، والسعر 35000 ل.س';
+            expect(flagDateNotInSource(reply, source, TODAY)).toBe(false);
+        });
+    });
+
+    describe('a date that IS grounded but has already passed', () => {
+        it('flags the stale-but-grounded class the grounding verifier cannot see', () => {
+            // «تبدأ الأحد 26/7» said on 30/7 — the date is in the merchant's own text,
+            // so the verifier calls it grounded, and the customer is still misinformed.
+            const prose = 'دورة ICDL تبدأ الأحد 26/7/2026';
+            expect(flagStaleDate('الدورة تبدأ 26/7/2026', prose, '2026-07-30')).toBe(true);
+            expect(flagDateNotInSource('الدورة تبدأ 26/7/2026', prose, '2026-07-30')).toBe(false);
+        });
+
+        it('does not flag an upcoming date, nor today itself', () => {
+            expect(flagStaleDate('تبدأ 2026-08-18', source, TODAY)).toBe(false);
+            expect(flagStaleDate(`تبدأ ${TODAY}`, `starts ${TODAY}`, TODAY)).toBe(false);
+        });
+
+        it('is skipped when the source has no dates', () => {
+            expect(flagStaleDate('كانت 26/7/2026', 'لا تواريخ هنا', TODAY)).toBe(false);
+        });
+    });
+
+    describe('wiring through validateReply — additive, never destructive', () => {
+        const parsed = (reply: string): ParsedReply => ({ reply, confidence: 'high', flags: [] } as unknown as ParsedReply);
+
+        it('appends the flags and leaves the reply text untouched', () => {
+            const reply = 'دورة التصوير تبدأ 7/5/2026';
+            const out = validateReply(parsed(reply), req('ايمت تبدأ؟', {
+                knowledgeBase: source, timezone: 'Asia/Damascus',
+            }));
+            expect(out.flags).toContain('date_not_in_source');
+            expect(out.flags).toContain('stale_date');
+            // The whole point: no sentence removed, no answer suppressed.
+            expect(out.reply).toBe(reply);
+        });
+
+        it('stays silent on a grounded upcoming date', () => {
+            const out = validateReply(parsed('تبدأ 18/8/2026'), req('ايمت تبدأ؟', {
+                knowledgeBase: source, timezone: 'Asia/Damascus',
+            }));
+            expect(out.flags).not.toContain('date_not_in_source');
+            expect(out.flags).not.toContain('stale_date');
+        });
+    });
+});
 
 describe('flagHallucinatedPrice (Check 1)', () => {
     const kb = 'باقة الورد - 150 ريال\nالتوصيل مجاني';
