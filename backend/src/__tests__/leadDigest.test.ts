@@ -182,6 +182,34 @@ describe('runDailyLeadDigest', () => {
         expect(updateWhereMock).toHaveBeenCalledTimes(1);
     });
 
+    // The volume threshold used to bound daily send volume; the age trigger
+    // removed that bound, so age-only sends must be countable rather than
+    // inferred from logs (they ARE the delta in send volume).
+    it('counts an age-only send in result.ageFlushed', async () => {
+        const stale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS + 1) * 60 * 60 * 1000);
+        joinQueryRows.value = [makeLeadRow('ws-1', 0, { createdAt: stale })];
+        ownerSubQueue.value = [ownerSubActive];
+        recipientsQueue.value = [[ownerRecipient]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(result.ageFlushed).toBe(1);
+    });
+
+    it('does NOT count a volume-triggered send as an age flush', async () => {
+        // At/over threshold the digest would have fired anyway — not new volume.
+        const stale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS + 1) * 60 * 60 * 1000);
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) =>
+            makeLeadRow('ws-1', i, i === 0 ? { createdAt: stale } : {}));
+        ownerSubQueue.value = [ownerSubActive];
+        recipientsQueue.value = [[ownerRecipient]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(result.sent).toBe(1);
+        expect(result.ageFlushed).toBe(0);
+    });
+
     it('age flush does NOT fire for a lead younger than the max age', async () => {
         const nearlyStale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS - 1) * 60 * 60 * 1000);
         joinQueryRows.value = [makeLeadRow('ws-1', 0, { createdAt: nearlyStale })];

@@ -78,6 +78,11 @@ interface DigestResult {
     sent: number;      // recipients successfully emailed
     skipped: number;   // recipients skipped (per-recipient + below-threshold workspaces)
     errors: number;    // recipient send failures
+    // Workspaces that fired on AGE alone (below DIGEST_THRESHOLD). The volume
+    // threshold used to be the de-facto cap on daily send volume; the age
+    // trigger removed that, so this is how an operator sees what the new
+    // trigger actually costs against the Resend quota without reading logs.
+    ageFlushed: number;
 }
 
 interface Recipient {
@@ -209,7 +214,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
         byWorkspace.set(row.workspaceId, bucket);
     }
 
-    const result: DigestResult = { processed: 0, sent: 0, skipped: 0, errors: 0 };
+    const result: DigestResult = { processed: 0, sent: 0, skipped: 0, errors: 0, ageFlushed: 0 };
     const engagementCutoff = new Date(Date.now() - ENGAGEMENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     for (const [workspaceId, bucket] of byWorkspace) {
@@ -224,9 +229,22 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
             Infinity,
         );
         const ageFlush = oldestMs <= Date.now() - DIGEST_MAX_AGE_HOURS * 60 * 60 * 1000;
-        if (bucket.leadIds.length < DIGEST_THRESHOLD && !ageFlush) {
+        const belowVolume = bucket.leadIds.length < DIGEST_THRESHOLD;
+        if (belowVolume && !ageFlush) {
             result.skipped++;
             continue; // below both triggers — let leads accumulate, don't stamp, no audit
+        }
+
+        // Which trigger fired, recorded per workspace. Age-only sends are the
+        // ones the volume threshold used to suppress entirely, so they are the
+        // whole delta in send volume — countable here rather than inferred.
+        if (belowVolume && ageFlush) {
+            result.ageFlushed++;
+            logger.info('[LeadDigest] Age flush — below volume threshold', {
+                workspaceId,
+                waitingLeads: bucket.leadIds.length,
+                oldestAgeHours: Math.round((Date.now() - oldestMs) / 3_600_000),
+            });
         }
 
         try {

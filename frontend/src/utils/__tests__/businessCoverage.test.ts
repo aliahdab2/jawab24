@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Page } from '@jawab24/shared';
-import { computeFactCoverage, computeReadiness, READINESS_AREAS } from '../businessCoverage';
+import { computeFactCoverage, computeReadiness, shouldShowProductsSection, READINESS_AREAS } from '../businessCoverage';
 import { businessPage as pageWith } from './businessPageFixture';
 
 const FILLED_HOURS = { sat: ['09:00-19:00'] };
@@ -123,5 +123,38 @@ describe('computeReadiness — score', () => {
       3, 0,
     );
     expect(score).toEqual({ covered: 5, total: 5, percent: 100, missing: [] });
+  });
+});
+
+describe('shouldShowProductsSection — one home for products (owner ruling 2026-08-05)', () => {
+  const base = { hasStore: false, catalogError: false, importRequested: false };
+
+  it('hides the catalog when the products live in the lists — the «أضف ما تبيعه» pitch contradicted the readiness card above it', () => {
+    expect(shouldShowProductsSection({ ...base, productsCount: 0, factRowsCount: 245 })).toBe(false);
+  });
+
+  it('shows the catalog on a page with no lists, even when empty — it is the only home there', () => {
+    expect(shouldShowProductsSection({ ...base, productsCount: 0, factRowsCount: 0 })).toBe(true);
+  });
+
+  it('shows the catalog when it has items, lists or not', () => {
+    expect(shouldShowProductsSection({ ...base, productsCount: 3, factRowsCount: 245 })).toBe(true);
+  });
+
+  it('holds the section back until BOTH counts land — appearing then vanishing reads as a glitch', () => {
+    expect(shouldShowProductsSection({ ...base, productsCount: undefined, factRowsCount: 245 })).toBe(false);
+    expect(shouldShowProductsSection({ ...base, productsCount: 0, factRowsCount: undefined })).toBe(false);
+  });
+
+  it('a store-linked page always shows the section — the store box IS its content', () => {
+    expect(shouldShowProductsSection({ ...base, hasStore: true, productsCount: undefined, factRowsCount: 245 })).toBe(true);
+  });
+
+  it('a failed catalog fetch surfaces the retry state instead of disguising the outage as "no section"', () => {
+    expect(shouldShowProductsSection({ ...base, catalogError: true, productsCount: undefined, factRowsCount: 245 })).toBe(true);
+  });
+
+  it('the ?import=1 deep link still lands on the import sheet, lists or not', () => {
+    expect(shouldShowProductsSection({ ...base, importRequested: true, productsCount: 0, factRowsCount: 245 })).toBe(true);
   });
 });

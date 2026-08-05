@@ -257,15 +257,17 @@ describe('Leads Routes', () => {
         // would see one page's queue and miss the other's.
         it('returns the workspace-wide summary when pageId is omitted', async () => {
             const latestAt = new Date('2026-08-04T13:22:00Z');
+            const oldestAt = new Date('2026-07-25T09:21:00Z');
             vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
-                count: 19, latestName: 'عبدالخالق عامر', latestAt,
+                count: 19, latestName: 'عبدالخالق عامر', latestAt, oldestAt,
             });
 
             const res = await app.inject({ method: 'GET', url: '/leads/count' });
 
             expect(res.statusCode).toBe(200);
             expect(JSON.parse(res.body)).toEqual({
-                count: 19, latestName: 'عبدالخالق عامر', latestAt: latestAt.toISOString(),
+                count: 19, latestName: 'عبدالخالق عامر',
+                latestAt: latestAt.toISOString(), oldestAt: oldestAt.toISOString(),
             });
             // Must NOT fall back to the per-page path.
             expect(leadExtractorService.getNewLeadsCount).not.toHaveBeenCalled();
@@ -273,7 +275,7 @@ describe('Leads Routes', () => {
 
         it('workspace summary is scoped to the caller workspace', async () => {
             vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
-                count: 0, latestName: null, latestAt: null,
+                count: 0, latestName: null, latestAt: null, oldestAt: null,
             });
 
             await app.inject({ method: 'GET', url: '/leads/count' });

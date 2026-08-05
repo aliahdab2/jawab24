@@ -220,3 +220,33 @@ export function computeReadiness(
 
   return { values, covered, storeAnswered, score };
 }
+
+/**
+ * Should `/business` render the «المنتجات والخدمات» (catalog) section at all?
+ *
+ * When the page's products live in the fact lists (BAMBO: 245 rows across three
+ * lists; الدمشقي: the whole surface), the catalog is empty BY DESIGN — and its
+ * «أضف ما تبيعه» pitch rendered directly under a readiness card saying
+ * «منتجاتك — في قوائم النشاط ✓». Same data, opposite messages (owner ruling
+ * 2026-08-05: one home for products). Carve-outs, in order:
+ *  - a store-linked page always shows the section (the store box IS its content);
+ *  - a failed catalog fetch must surface CatalogManager's retry state — hiding
+ *    it would disguise an outage as "this page has no products section";
+ *  - the ?import=1 deep link (the Business Info price-list CTA) must still land
+ *    on the import sheet, lists or not;
+ *  - both counts hold the section back until they resolve: appearing and then
+ *    vanishing (or the reverse) reads as a glitch, the same rule `score` follows.
+ */
+export function shouldShowProductsSection(input: {
+  hasStore: boolean;
+  catalogError: boolean;
+  importRequested: boolean;
+  /** Catalog item count; undefined = still loading. */
+  productsCount: number | undefined;
+  /** Live fact-collection rows (G1b lists); undefined = still loading. */
+  factRowsCount: number | undefined;
+}): boolean {
+  if (input.hasStore || input.catalogError || input.importRequested) return true;
+  if (input.productsCount === undefined || input.factRowsCount === undefined) return false;
+  return input.productsCount > 0 || input.factRowsCount === 0;
+}

@@ -13,7 +13,7 @@
     "productsChipStore": "Products — from your store",
     "productsChipLists": "Your products — in your lists",
     "productsArea": "Products",
-    "percentLabel": "Your assistant is {percent}% ready",
+    "percentLabel": "Jawab is {percent}% ready",
     "coveredOf": "{covered} of {total}",
     "completeAll": "Add {items} to be fully ready.",
     "allCovered": "Jawab can answer all of these for your customers."
@@ -202,7 +202,9 @@
     "missingKeyGroup": "No {label}",
     "listTabsLabel": "Switch between lists",
     "searchPlaceholder": "Search this list — by name or area…",
+    "searchAllPlaceholder": "Search your lists — by name or details…",
     "searchCount": "Showing {shown, plural, one {# row} other {# rows}} of {total}",
+    "searchCountCards": "Showing {shown, plural, one {# item} other {# items}} of {total}",
     "searchNoResults": "No matches — try another word."
   }
 }

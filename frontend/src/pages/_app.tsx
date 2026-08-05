@@ -18,6 +18,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
+import { resolveBackAction, createNavDepthTracker } from '@/lib/nativeBackButton';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -62,6 +63,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
   // Use ref for listeners to handle cleanup
   const listenersRef = useRef<(() => void)[]>([]);
+
+  // In-app navigation depth for the Android back button. Must outlive the native
+  // init effect: a function-local counter is reset to 0 by any re-run of that
+  // effect, which makes back exit the app from every screen.
+  const navDepthRef = useRef(createNavDepthTracker());
 
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -218,31 +224,36 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
       // Handle hardware back button (Android) - Industry Standard
       // Priority: close open modal/overlay first, then navigate back, then exit.
-      const ROOT_SCREENS = ['/dashboard', '/login', '/'];
+      // The decision and the depth arithmetic live in @/lib/nativeBackButton so
+      // they are testable. beforePopState marks backward navigation: Next emits
+      // routeChangeComplete for pops as well, so without it a back press is
+      // counted as a forward one and the depth never decreases.
+      const navTracker = navDepthRef.current;
+      routerRef.current.beforePopState(() => { navTracker.markPop(); return true; });
+      listenersRef.current.push(() => routerRef.current.beforePopState(() => true));
 
-      // Track in-app navigation depth reliably.
-      // window.history.length is a cumulative session counter that never resets —
-      // deep-linking into the app can give length=15 with no real back destination.
-      // We maintain our own counter that only counts navigations within this session.
-      let navDepth = 0;
-      const onRouteChangeComplete = () => { navDepth++; };
+      const onRouteChangeComplete = () => { navTracker.settle(); };
+      const onRouteChangeError = () => { navTracker.abort(); };
       routerRef.current.events.on('routeChangeComplete', onRouteChangeComplete);
-      listenersRef.current.push(() => routerRef.current.events.off('routeChangeComplete', onRouteChangeComplete));
+      routerRef.current.events.on('routeChangeError', onRouteChangeError);
+      listenersRef.current.push(() => {
+        routerRef.current.events.off('routeChangeComplete', onRouteChangeComplete);
+        routerRef.current.events.off('routeChangeError', onRouteChangeError);
+      });
 
       const backListener = await App.addListener('backButton', () => {
         // 1. Dismiss topmost open modal/overlay first (Android user expectation)
         if (dismissTopModal()) return;
 
         const router = routerRef.current;
-        const currentPath = router.pathname;
-        const isRootScreen = ROOT_SCREENS.includes(currentPath);
 
-        // 2. Exit if on a root screen or no in-app navigation has happened
-        if (isRootScreen || navDepth === 0) {
+        // 2. Exit on a root screen, or when no in-app navigation has happened
+        if (resolveBackAction(router.pathname, navTracker.depth()) === 'exit') {
           App.exitApp();
         } else {
-          // 3. Navigate back within the app
-          navDepth = Math.max(0, navDepth - 1);
+          // 3. Navigate back within the app. The depth is decremented by the
+          //    popstate this triggers, not here — decrementing here as well
+          //    double-counts and leaves the depth unchanged.
           router.back();
         }
       });
@@ -268,11 +279,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Light }).catch(() => {});
       };
       
-      router.events.on('routeChangeComplete', handleRouteChange);
-      listenersRef.current.push(() => router.events.off('routeChangeComplete', handleRouteChange));
-      
+      routerRef.current.events.on('routeChangeComplete', handleRouteChange);
+      listenersRef.current.push(() => routerRef.current.events.off('routeChangeComplete', handleRouteChange));
+
       // Set initial style
-      handleRouteChange(router.asPath);
+      handleRouteChange(routerRef.current.asPath);
 
       // Handle app resume - refresh data
       const resumeListener = await App.addListener('appStateChange', ({ isActive }) => {
@@ -320,7 +331,18 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
     };
-  }, [hasHydrated, queryClient, router]);
+    // `router` is deliberately NOT a dependency. useRouter() has no stable identity
+    // in the pages router — next/dist/client/index.js renders the provider with
+    // `value={makePublicRouterInstance(router)}`, which builds a fresh object on
+    // every call, and AppContainer re-renders on every navigation. Listing it here
+    // re-ran this whole block per navigation: back/keyboard/app-state/network
+    // listeners were torn down and re-registered, SplashScreen.hide() and
+    // Network.getStatus() re-fired, navDepth reset to 0 (back then exited the app
+    // from any screen), and setupKeyboard() re-captured its baseline — mid-typing,
+    // that baseline is the shrunken viewport. Everything inside reads
+    // routerRef.current, which is refreshed on every render, so the live router is
+    // always in hand without re-running the effect.
+  }, [hasHydrated, queryClient]);
 
   // Push notifications: init listeners (no permission request) + deferred pre-prompt
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);

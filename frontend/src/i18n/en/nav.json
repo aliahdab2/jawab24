@@ -15,5 +15,9 @@
   "integrations": "Stores",
   "team": "Team",
   "theme": "Theme",
-  "workspace": "Workspace"
+  "workspace": "Workspace",
+  "badgeUnreadComments": "{count, plural, one {# unread comment} other {# unread comments}}",
+  "badgeUnreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
+  "badgeNewLeads": "{count, plural, one {# new lead} other {# new leads}}",
+  "badgeItems": "{count, plural, one {# item needs attention} other {# items need attention}}"
 }

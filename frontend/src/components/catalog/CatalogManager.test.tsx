@@ -56,11 +56,14 @@ beforeEach(() => {
 });
 
 describe('CatalogManager', () => {
-  it('shows the empty state: ONE primary scan action, manual paths as footnotes', async () => {
+  it('shows the empty state: ONE primary import action, scan and manual as footnotes', async () => {
     renderManager();
-    expect(await screen.findByRole('button', { name: /Extract your products from your page/ })).toBeInTheDocument();
+    // Paste-import leads (owner ruling 2026-08-05: the scan proposes name-only
+    // items — prices live off-post — while a pasted list comes back complete).
+    expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
+    expect(screen.getByText(/Paste your price list/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Extract your products from your page/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
     // No mocked-up "example" row — a fake listing with a real price read as
     // live data. The scan flow shows the real row shape during review instead.
     expect(screen.queryByText('Olive oil, 1 litre')).not.toBeInTheDocument();
@@ -142,18 +145,18 @@ describe('CatalogManager', () => {
       expect(screen.queryByText(/Reconnect this page to Facebook/)).not.toBeInTheDocument();
     });
 
-    it('WhatsApp-only page with no Post Reply: no scan action, import becomes the primary, reason given', async () => {
+    it('WhatsApp-only page with no Post Reply: no scan action anywhere, reason given', async () => {
       renderManager({ page: pageFixture({ facebookPageId: null, hasPostReplyTrigger: false }) });
       expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Extract your products from your page/ })).not.toBeInTheDocument();
       expect(screen.getByText('“Moto” isn’t a Facebook page — reading posts works on Facebook pages only.')).toBeInTheDocument();
-      // The one remaining path must still be reachable.
+      // The other remaining path must still be reachable.
       expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     });
 
-    it('stops promising the posts pitch in the body when nothing can be scanned', async () => {
+    it('the body pitches the paste import regardless of scan availability', async () => {
       renderManager({ page: pageFixture({ facebookPageId: null, hasPostReplyTrigger: false }) });
-      expect(await screen.findByText(/Add what you sell with its prices/)).toBeInTheDocument();
+      expect(await screen.findByText(/Paste your price list/)).toBeInTheDocument();
       expect(screen.queryByText(/Your posts already show what you sell/)).not.toBeInTheDocument();
     });
 
@@ -259,7 +262,7 @@ describe('CatalogManager', () => {
     });
   });
 
-  it('opens the scan review from the primary action', async () => {
+  it('opens the scan review from the empty-state footnote', async () => {
     scanPage.mockResolvedValue({ data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 0, repliesScanned: 0, upToDate: true, postsUnavailable: null } });
     renderManager();
     fireEvent.click(await screen.findByRole('button', { name: /Extract your products from your page/ }));
