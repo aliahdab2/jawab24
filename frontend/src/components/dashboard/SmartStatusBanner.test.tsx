@@ -187,7 +187,7 @@ describe('SmartStatusBanner', () => {
   // NOTHING on the dashboard mentioned them.
   describe('leads row', () => {
     const renderWithLeads = (
-      leads: { count: number; latestName: string | null; latestAt: string | null },
+      leads: { count: number; latestName: string | null; latestAt: string | null; oldestAt?: string | null },
       items: NeedsAttentionItem[] = [],
       counts?: { comments?: number; messages?: number },
     ) =>
@@ -224,6 +224,35 @@ describe('SmartStatusBanner', () => {
       // contact") and this assertion was left on the old wording, so the suite was
       // red on the branch. Keep the two in step.
       expect(screen.getByText(/19 customers waiting for contact/i)).toBeInTheDocument();
+    });
+
+    // The chip shows how long the queue's WORST case has waited. Showing the
+    // newest arrival instead reads "1 minute ago" over a ten-day backlog, which
+    // inverts the urgency this row exists to convey. Matches the sibling
+    // comment/message rows, which render `earliestAt` with the same label.
+    it('shows how long the OLDEST lead has waited, not the newest arrival', () => {
+      const now = Date.now();
+      renderWithLeads({
+        count: 19,
+        latestName: 'Feras',
+        latestAt: new Date(now - 5 * 60_000).toISOString(),        // 5 minutes ago
+        oldestAt: new Date(now - 10 * 24 * 3_600_000).toISOString(), // 10 days ago
+      });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+
+      expect(screen.getByText(/waiting 10 days ago/i)).toBeInTheDocument();
+      expect(screen.queryByText(/5 minutes ago/i)).not.toBeInTheDocument();
+    });
+
+    // A response cached before `oldestAt` existed must still render a time.
+    it('falls back to latestAt when oldestAt is absent', () => {
+      renderWithLeads({
+        count: 3,
+        latestName: null,
+        latestAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.getByText(/waiting 3 hours ago/i)).toBeInTheDocument();
     });
 
     it('names the most recent waiting lead when available', () => {

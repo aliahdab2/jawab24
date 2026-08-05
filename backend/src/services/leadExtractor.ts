@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { db } from '../db';
 import { leads, pages } from '../db/schema';
-import { eq, and, or, ilike, desc, count, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, count, min, sql } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { redis } from '../lib/redis';
@@ -1126,18 +1126,29 @@ class LeadExtractorService {
      * Workspace-wide `new` leads summary — feeds the dashboard attention row
      * and the nav badge (which must reflect the standing queue, not the
      * session; a merchant whose leads arrive while the app is closed would
-     * otherwise never see a signal). `latest*` lets the UI show who is
-     * waiting most recently.
+     * otherwise never see a signal).
+     *
+     * TWO timestamps, because they answer different questions:
+     *   - `oldestAt` — how long the queue's worst case has waited. This is the
+     *     URGENCY, and what the attention row shows: a merchant with 19 leads
+     *     needs "waiting 10 days", not "5 minutes ago" because one arrived
+     *     just now. It also matches the sibling comment/message rows, which
+     *     render `earliestAt` with the same "waiting {time}" label, and the
+     *     digest, which keys its age trigger on the oldest lead.
+     *   - `latestName` — who turned up most recently, a human hook for the row.
+     *
+     * `min(created_at)` rides the same aggregate as the count, so this is still
+     * two round trips, not three.
      */
     async getNewLeadsSummaryForWorkspace(
         workspaceId: string,
-    ): Promise<{ count: number; latestName: string | null; latestAt: Date | null }> {
+    ): Promise<{ count: number; latestName: string | null; latestAt: Date | null; oldestAt: Date | null }> {
         const newLeadsOfWorkspace = and(
             eq(pages.workspaceId, workspaceId),
             eq(leads.status, 'new'),
         );
-        const [[{ value }], [latest]] = await Promise.all([
-            db.select({ value: count() })
+        const [[totals], [latest]] = await Promise.all([
+            db.select({ value: count(), oldestAt: min(leads.createdAt) })
                 .from(leads)
                 .innerJoin(pages, eq(pages.id, leads.pageId))
                 .where(newLeadsOfWorkspace),
@@ -1149,9 +1160,13 @@ class LeadExtractorService {
                 .limit(1),
         ]);
         return {
-            count: value,
+            count: totals?.value ?? 0,
             latestName: latest?.senderName ?? null,
             latestAt: latest?.createdAt ?? null,
+            // `min()` is typed as string|null by drizzle for timestamp columns
+            // (raw driver reads bypass the Date parser — the 0.45 upgrade trap),
+            // so normalize to a Date here rather than at every call site.
+            oldestAt: totals?.oldestAt ? new Date(totals.oldestAt) : null,
         };
     }
 

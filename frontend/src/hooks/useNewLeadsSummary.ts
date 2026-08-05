@@ -8,9 +8,15 @@ export interface NewLeadsSummary {
   /** Name on the most recent waiting lead — the row shows who is waiting. */
   latestName: string | null;
   latestAt: string | null;
+  /**
+   * When the OLDEST waiting lead arrived — the queue's urgency, and what the
+   * attention row displays. `latestAt` would read "5 minutes ago" for a queue
+   * whose worst case has waited ten days.
+   */
+  oldestAt: string | null;
 }
 
-const EMPTY: NewLeadsSummary = { count: 0, latestName: null, latestAt: null };
+const EMPTY: NewLeadsSummary = { count: 0, latestName: null, latestAt: null, oldestAt: null };
 
 /**
  * Coerce whatever the endpoint actually returned into the declared shape.
@@ -37,6 +43,7 @@ function normalize(data: unknown): NewLeadsSummary {
     count,
     latestName: typeof raw.latestName === 'string' ? raw.latestName : null,
     latestAt: typeof raw.latestAt === 'string' ? raw.latestAt : null,
+    oldestAt: typeof raw.oldestAt === 'string' ? raw.oldestAt : null,
   };
 }
 
@@ -59,13 +66,24 @@ function normalize(data: unknown): NewLeadsSummary {
 export function useNewLeadsSummary(): NewLeadsSummary {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
 
   const { data } = useQuery<NewLeadsSummary>({
-    queryKey: ['leads-count'],
+    // Scoped to the active workspace: switching workspaces does not clear the
+    // query cache, so an unscoped key served the PREVIOUS workspace's count —
+    // and its customer's name — for the whole staleTime. The `['leads-count']`
+    // invalidations in useSSE / leads.tsx / dashboard.tsx still match this by
+    // prefix, so they keep working untouched.
+    queryKey: ['leads-count', activeWorkspaceId],
     queryFn: () => leadsApi.getNewSummary().then((r) => normalize(r.data)),
     enabled: hasHydrated && isAuthenticated,
     staleTime: 60_000,
-    retry: false,
+    // A dropped request must not read as "all clear". Falling back to 0 is the
+    // exact failure this feature exists to fix (a zero over a queue that is not
+    // empty), so retry a transient blip instead of instantly showing nothing.
+    // Once a value has been fetched, React Query keeps it across a failed
+    // refetch, so this only guards the first load.
+    retry: 2,
   });
 
   return data ?? EMPTY;

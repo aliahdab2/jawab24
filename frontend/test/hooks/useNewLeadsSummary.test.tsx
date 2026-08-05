@@ -19,9 +19,12 @@ vi.mock('@/lib/api', () => ({
     leadsApi: { getNewSummary: (...args: unknown[]) => getNewSummaryMock(...args) },
 }));
 
+let mockWorkspaceId: string | null = 'ws-1';
+
 vi.mock('@/lib/store', () => ({
-    useAuthStore: (selector: (s: { isAuthenticated: boolean; _hasHydrated: boolean }) => unknown) =>
-        selector({ isAuthenticated: true, _hasHydrated: true }),
+    useAuthStore: (
+        selector: (s: { isAuthenticated: boolean; _hasHydrated: boolean; activeWorkspaceId: string | null }) => unknown,
+    ) => selector({ isAuthenticated: true, _hasHydrated: true, activeWorkspaceId: mockWorkspaceId }),
 }));
 
 import { useNewLeadsSummary } from '@/hooks/useNewLeadsSummary';
@@ -36,6 +39,32 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe('useNewLeadsSummary', () => {
     beforeEach(() => {
         getNewSummaryMock.mockReset();
+        mockWorkspaceId = 'ws-1';
+    });
+
+    // Switching workspace does not clear the query cache, so an unscoped key
+    // served the PREVIOUS workspace's count — and its customer's name — until
+    // the 60s staleTime elapsed. The key must carry the workspace.
+    it('caches per workspace: switching workspaces does not reuse the old count', async () => {
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+        const scoped = ({ children }: { children: React.ReactNode }) =>
+            React.createElement(QueryClientProvider, { client }, children);
+
+        getNewSummaryMock.mockResolvedValue({
+            data: { count: 19, latestName: 'Feras', latestAt: null, oldestAt: null },
+        });
+        const first = renderHook(() => useNewLeadsSummary(), { wrapper: scoped });
+        await waitFor(() => expect(first.result.current.count).toBe(19));
+
+        // Same client, different workspace, endpoint now answers for ws-2.
+        mockWorkspaceId = 'ws-2';
+        getNewSummaryMock.mockResolvedValue({
+            data: { count: 0, latestName: null, latestAt: null, oldestAt: null },
+        });
+        const second = renderHook(() => useNewLeadsSummary(), { wrapper: scoped });
+
+        await waitFor(() => expect(second.result.current.count).toBe(0));
+        expect(second.result.current.latestName).toBeNull();
     });
 
     it('passes through a well-formed summary', async () => {
@@ -55,7 +84,7 @@ describe('useNewLeadsSummary', () => {
 
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
     });
 
     // A 200 carrying the WRONG body — an older/newer backend, a proxy, a test
@@ -80,7 +109,7 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
     });
 
     it('rejects a non-numeric count and a non-string latestName', async () => {
@@ -91,7 +120,7 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
     });
 
     it('clamps a negative or fractional count', async () => {
@@ -109,6 +138,6 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
     });
 });
