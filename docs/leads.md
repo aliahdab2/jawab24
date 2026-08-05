@@ -27,8 +27,8 @@ with no `pageId` (`{ count, latestName, latestAt }`):
 
 | Surface | Notes |
 |---|---|
-| Nav badge (sidebar + mobile "More") | `useNewLeadsSummary`. Server-derived, so it survives an app restart, and it clears when a lead's **status changes** — not when the merchant merely visits `/leads` |
-| Dashboard attention banner | ONE aggregate leads row, never one row per lead, plus the count in the banner total |
+| Nav badge (sidebar + mobile "More") | `useNewLeadsSummary`. Server-derived, so it survives an app restart, and it clears when a lead's **status changes** — not when the merchant merely visits `/leads`. Query key is scoped to the active workspace (switching does not clear the cache, so an unscoped key served the previous workspace's number) |
+| Dashboard attention banner | ONE aggregate leads row, never one row per lead, plus the count in the banner total. The time chip shows **`oldestAt`** — how long the queue's worst case has waited — matching the sibling comment/message rows (`earliestAt`) and the digest's age trigger. `latestAt` would read "5 minutes ago" over a ten-day backlog |
 | Daily digest email | Volume **or** age — see [lead-digest-email.md](lead-digest-email.md) |
 
 Why all three: before Aug 2026 the badge was a **session counter** that started at

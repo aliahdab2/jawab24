@@ -275,7 +275,13 @@ test.describe('Dashboard Page', () => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ count: 19, latestName: 'Feras', latestAt: new Date().toISOString() }),
+        body: JSON.stringify({
+          count: 19,
+          latestName: 'Feras',
+          latestAt: new Date().toISOString(),
+          // The row shows the OLDEST wait, so give it one to show.
+          oldestAt: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString(),
+        }),
       });
     });
 
