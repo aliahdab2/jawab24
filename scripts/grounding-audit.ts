@@ -502,7 +502,18 @@ function exportSql(): string {
 -- Two sources, labeled per row in kb_source, because they are not equally
 -- trustworthy and a silent mix would be unreadable:
 --   exact         — the reply ran on the page's CURRENT kb_active_version, so
---                   pages.knowledge_base is byte-for-byte what the model saw.
+--                   pages.knowledge_base is byte-for-byte the KB TEXT the model
+--                   saw. ⚠️ It is not the whole grounding source: the model also
+--                   reads the <business_lists> block (fact_collections) and the
+--                   BUSINESS_INFO block (the merchant's confirmed address/hours/
+--                   phone fields), and NEITHER is in this column. On a page that
+--                   adopted either feature, an export-mode run will flag correct
+--                   answers as invented — الفريق الدمشقي moved his address out of
+--                   the KB text into the field on 2026-08-03, and 17 of his next
+--                   66 live flags were replies quoting his own address. The live
+--                   shadow verifier composes all of it via buildGroundingSource;
+--                   this export does not. Read export-mode firings on adopting
+--                   pages as a FLOOR, and prefer the shadow verdicts.
 --   reconstructed — an older version, rebuilt by concatenating that version's
 --                   kb_chunks. Measured at 90-104% of the live KB's character
 --                   count across the fleet (chunk overlap explains >100%), so
