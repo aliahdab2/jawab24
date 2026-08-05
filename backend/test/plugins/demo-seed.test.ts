@@ -18,6 +18,7 @@ import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS, renderDemoDamas
 import {
     DAMASCUS_COURSE_PRICES,
     DAMASCUS_ONLINE_COURSES,
+    DAMASCUS_ONLINE_KEY,
     DAMASCUS_SCHEDULES_LABEL,
     DAMASCUS_SCHEDULES_KEY,
     DAMASCUS_SCHEDULE_SLOTS,
@@ -25,6 +26,7 @@ import {
     damascusScheduleRowInputs,
     resolveSlotDates,
 } from '../../src/plugins/demo/damascusLists';
+import { EDUCATION_TEMPLATE } from '@jawab24/shared';
 
 // Helper to build a chainable select mock
 function mockSelectChain(result: any[]) {
@@ -334,5 +336,47 @@ describe('damascus fact-collections fixture (schedules slice, D-052)', () => {
         expect(kb).toContain('برامكة سانا');                       // address
         expect(kb).toContain('شهادة دولية 250');                   // certificate fees stay prose
         expect(kb).toContain('كل 100 ليرة قديمة تساوي 1 ليرة جديدة'); // currency note
+    });
+});
+
+// The education template (packages/shared/verticalTemplates.ts) claims to BE the
+// shape measured on this fixture. Neither imports the other's collection labels
+// at runtime — the template must stand alone as data — so this pin is the only
+// thing keeping them from drifting apart.
+describe('education template ↔ damascus fixture (anti-drift pin)', () => {
+    it('the template\'s three collections are exactly the fixture\'s, in order', () => {
+        expect(EDUCATION_TEMPLATE.collections.map(c => ({ label: c.label, keyAttr: c.keyAttr }))).toEqual([
+            { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null },
+            { label: DAMASCUS_SCHEDULES_LABEL, keyAttr: DAMASCUS_SCHEDULES_KEY },
+            { label: DAMASCUS_ONLINE_COURSES.label, keyAttr: DAMASCUS_ONLINE_KEY },
+        ]);
+    });
+
+    it('every attribute label the fixture writes is one the template proposes', () => {
+        const proposed = new Map(EDUCATION_TEMPLATE.collections.map(c => [c.label, new Set(c.attributeLabels)]));
+        const TODAY = '2026-07-31';
+        for (const row of damascusScheduleRowInputs(TODAY)) {
+            for (const a of row.attributes) {
+                expect(proposed.get(DAMASCUS_SCHEDULES_LABEL)!.has(a.label),
+                    `slot attribute «${a.label}» is not in the template`).toBe(true);
+            }
+        }
+        for (const row of damascusPriceRowInputs(DAMASCUS_COURSE_PRICES)) {
+            for (const a of row.attributes ?? []) {
+                expect(proposed.get(DAMASCUS_COURSE_PRICES.label)!.has(a.label),
+                    `price attribute «${a.label}» is not in the template`).toBe(true);
+            }
+        }
+    });
+
+    it('self-expiry in the template matches where the fixture actually dates rows', () => {
+        const TODAY = '2026-07-31';
+        const datedSlots = damascusScheduleRowInputs(TODAY).some(r => r.startsAt !== null);
+        const datedPrices = damascusPriceRowInputs(DAMASCUS_COURSE_PRICES)
+            .some(r => (r as { startsAt?: string | null }).startsAt);
+        expect(datedSlots).toBe(true);
+        expect(datedPrices).toBe(false);
+        expect(EDUCATION_TEMPLATE.collections.find(c => c.label === DAMASCUS_SCHEDULES_LABEL)!.selfExpiring).toBe(true);
+        expect(EDUCATION_TEMPLATE.collections.find(c => c.label === DAMASCUS_COURSE_PRICES.label)!.selfExpiring).toBe(false);
     });
 });

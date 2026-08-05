@@ -1733,3 +1733,11 @@ export {
     DIRECTIVE_RESPONSE_MAX_LEN,
 } from './merchantDirectives';
 export type { MerchantDirective } from './merchantDirectives';
+
+// --- Vertical templates (proposed sector shapes, merchant-confirmed — data, never code) ---
+export { EDUCATION_TEMPLATE, VERTICAL_TEMPLATES } from './verticalTemplates';
+export type {
+    VerticalTemplate,
+    VerticalTemplateCollection,
+    VerticalTemplateDirective,
+} from './verticalTemplates';
