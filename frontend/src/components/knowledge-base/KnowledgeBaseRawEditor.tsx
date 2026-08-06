@@ -8,9 +8,11 @@ interface KnowledgeBaseRawEditorProps {
    *  maxLength truncates the paste BEFORE onChange fires, so the cut is
    *  invisible to the value — this is the only place it can be detected. */
   onPasteTruncated?: (info: { kept: number; total: number }) => void;
+  /** View-only (workspace `member`) — see SectionEditor. */
+  readOnly?: boolean;
 }
 
-export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel, onPasteTruncated }: KnowledgeBaseRawEditorProps) {
+export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel, onPasteTruncated, readOnly = false }: KnowledgeBaseRawEditorProps) {
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (!onPasteTruncated) return;
     const pasted = e.clipboardData.getData('text');
@@ -31,6 +33,7 @@ export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel, 
         onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
         onPaste={handlePaste}
         maxLength={maxLength}
+        readOnly={readOnly}
         dir="auto"
         aria-label={ariaLabel}
       />

@@ -14,6 +14,12 @@ interface SectionEditorProps {
   isExpanded: boolean;
   /** Characters remaining in the total KB budget. Used to truncate file extractions. */
   remainingChars?: number;
+  /**
+   * View-only (workspace `member`). The textarea stays focusable and
+   * selectable — `readOnly`, never `disabled` — so a member can still read and
+   * copy the Business Info; only the write affordances (file/voice insert) go.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -28,6 +34,7 @@ export function SectionEditor({
   ariaLabel,
   isExpanded,
   remainingChars,
+  readOnly = false,
 }: SectionEditorProps) {
   const locale = useLocale();
   const tKb = useTranslations('kb');
@@ -84,18 +91,20 @@ export function SectionEditor({
         <p className="text-xs text-muted-foreground min-w-0 sm:hidden truncate flex-1">
           {description}
         </p>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <FileUploadButton
-            onExtracted={handleTextInsert}
-            className="flex-shrink-0"
-          />
-          <VoiceRecordButton
-            variant="inline"
-            onTranscribed={handleTextInsert}
-            languageHint={locale}
-            className="flex-shrink-0"
-          />
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <FileUploadButton
+              onExtracted={handleTextInsert}
+              className="flex-shrink-0"
+            />
+            <VoiceRecordButton
+              variant="inline"
+              onTranscribed={handleTextInsert}
+              languageHint={locale}
+              className="flex-shrink-0"
+            />
+          </div>
+        )}
       </div>
       <textarea
         ref={textareaRef}
@@ -107,6 +116,7 @@ export function SectionEditor({
         value={content}
         onChange={(e) => onChange(e.target.value)}
         onInput={autoResize}
+        readOnly={readOnly}
         dir="auto"
       />
     </div>

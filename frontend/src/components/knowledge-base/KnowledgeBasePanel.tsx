@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { writeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useWorkspaceRole } from '@/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { detectCatalogLikePatterns } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
@@ -47,6 +48,16 @@ interface KnowledgeBasePanelProps {
  * catalog-detection warning, and the save footer — with no modal chrome.
  * Extracted from KnowledgeBaseModal (B1) so the same editor can live inline on
  * /business while the modal remains a thin wrapper for conversation deep-links.
+ *
+ * Permissions: Business Info follows the SAME rule as the rest of /pages and
+ * /settings — everyone in the workspace reads it, only owner/admin (مشرف) may
+ * write. Every write path here (`PUT /pages/:id`, `POST /pages/:id/kb-gaps/
+ * :gapId/dismiss`) is `requireRole('admin')` server-side, so this component is
+ * the single UI choke point that keeps the editor honest about it: it serves
+ * ALL four entry points (the /pages screen, /business, and the comment and
+ * message detail modals via InlineKbEditorModal). Gating here rather than in
+ * each host is what makes it impossible for a new host to reintroduce the
+ * type-then-403 dead end.
  */
 export function KnowledgeBasePanel({
   page,
@@ -63,9 +74,20 @@ export function KnowledgeBasePanel({
   const tPages = useTranslations('pages');
   const router = useRouter();
   const { user, workspaces } = useAuthStore();
+  // Workspace role gate: `member` (عضو) gets a read-only editor, owner/admin
+  // (مشرف) get the full one. Same `canEdit` flag Settings and Integrations
+  // already use, so all three surfaces answer "who may change this?" identically.
+  const { canEdit } = useWorkspaceRole();
   // Catalog canary gate (cosmetic — the catalog endpoints stay admin-gated
   // server-side). Outside the allowlist the banner keeps its pre-import shape.
   const canImportToCatalog = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id)) && !page.ecommerceStoreId;
+  // The CTA is a WRITE (it saves the KB before handing off to the import
+  // sheet), so it needs the role on top of the canary. Deliberately NOT folded
+  // into canImportToCatalog: that flag also drives the collections probe and
+  // `hasAlternativeHome`, which describe the WORKSPACE's price home and must
+  // read the same for a member as for an admin. Only the button and the copy
+  // that promises it move.
+  const showCatalogCta = canImportToCatalog && canEdit;
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);
@@ -308,6 +330,14 @@ export function KnowledgeBasePanel({
           </InfoPopover>
         </div>
 
+        {/* View-only banner for members — same slot, copy and styling Settings
+            uses, so "who may change this?" reads identically app-wide. */}
+        {!canEdit && (
+          <div className="mb-3 p-3 rounded-xl alert-info border text-sm text-center">
+            {tc('viewOnlyHint')}
+          </div>
+        )}
+
         {/* Facebook import banner */}
         {showFacebookBanner && (
           <div className="flex items-center gap-2 p-3 mb-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40">
@@ -324,8 +354,10 @@ export function KnowledgeBasePanel({
           </div>
         )}
 
-        {/* Unanswered questions — interactive gap cards */}
-        {gaps.length > 0 && (
+        {/* Unanswered questions — interactive gap cards. Hidden for members:
+            both actions (approve → edits the KB, skip → POSTs the dismiss)
+            are admin-gated, so the card has nothing a member can complete. */}
+        {canEdit && gaps.length > 0 && (
           <div className="mb-3 space-y-2">
             <div className="flex items-center gap-2 px-1">
               <MessageCircleQuestion className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
@@ -375,12 +407,12 @@ export function KnowledgeBasePanel({
               </p>
               <p>
                 {showLiveNotice
-                  ? tKb(canImportToCatalog ? 'catalogWarning.liveBodyWithCta' : 'catalogWarning.liveBody', {
+                  ? tKb(showCatalogCta ? 'catalogWarning.liveBodyWithCta' : 'catalogWarning.liveBody', {
                       priceCount: liveDetection.priceCount,
                     })
                   : tKb('catalogWarning.body', { priceCount: kbWarnings?.priceCount ?? 0 })}
               </p>
-              {showLiveNotice && canImportToCatalog && (
+              {showLiveNotice && showCatalogCta && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -415,6 +447,7 @@ export function KnowledgeBasePanel({
             maxLength={MAX_LENGTH}
             ariaLabel={tKb('title')}
             onPasteTruncated={({ kept }) => toast.warning(tKb('pasteTruncated', { kept }))}
+            readOnly={!canEdit}
           />
         ) : (
           <KnowledgeBaseSections
@@ -426,6 +459,7 @@ export function KnowledgeBasePanel({
             onDeleteCustomSection={handleDeleteCustomSection}
             onCustomTitleChange={handleCustomTitleChange}
             remainingChars={MAX_LENGTH - totalChars}
+            readOnly={!canEdit}
           />
         )}
       </div>
@@ -467,21 +501,30 @@ export function KnowledgeBasePanel({
             </div>
           )}
           {onClose && (
-            <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
-              {tc('cancel')}
+            // View-only makes this the ONLY way out of the modal, so it stops
+            // being the secondary action and stops hiding on small screens.
+            <Button
+              variant={canEdit ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={onClose}
+              className={canEdit ? 'max-sm:hidden' : undefined}
+            >
+              {canEdit ? tc('cancel') : tc('close')}
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            loading={saving}
-            disabled={isOverLimit}
-            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            variant={saved ? 'secondary' : 'primary'}
-            className="max-sm:h-10 max-sm:px-6"
-          >
-            {saved ? tPages('savedStatus') : tc('save')}
-          </Button>
+          {canEdit && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              loading={saving}
+              disabled={isOverLimit}
+              icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              variant={saved ? 'secondary' : 'primary'}
+              className="max-sm:h-10 max-sm:px-6"
+            >
+              {saved ? tPages('savedStatus') : tc('save')}
+            </Button>
+          )}
         </div>
       </div>
     </>

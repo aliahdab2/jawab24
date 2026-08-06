@@ -20,6 +20,8 @@ interface KnowledgeBaseCustomSectionProps {
   onDelete: (id: CustomSectionId) => void;
   /** Undefined when collapsed so memoized siblings skip re-renders triggered by the global budget changing. */
   remainingChars: number | undefined;
+  /** View-only (workspace `member`) — see SectionEditor. */
+  readOnly?: boolean;
 }
 
 function KnowledgeBaseCustomSectionImpl({
@@ -30,18 +32,21 @@ function KnowledgeBaseCustomSectionImpl({
   onTitleChange,
   onDelete,
   remainingChars,
+  readOnly = false,
 }: KnowledgeBaseCustomSectionProps) {
   const tKb = useTranslations('kb');
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
 
-  // Auto-focus title input when expanded (if no content yet)
+  // Auto-focus title input when expanded (if no content yet). Skipped when
+  // view-only: there is nothing to type, and stealing focus would pop the soft
+  // keyboard over a field the member cannot change.
   useEffect(() => {
-    if (isExpanded && titleRef.current && !section.content.trim()) {
+    if (!readOnly && isExpanded && titleRef.current && !section.content.trim()) {
       titleRef.current.focus();
       titleRef.current.select();
     }
-  }, [isExpanded, section.content]);
+  }, [readOnly, isExpanded, section.content]);
 
   // Preview: first line of content, truncated
   const preview = hasContent
@@ -90,6 +95,7 @@ function KnowledgeBaseCustomSectionImpl({
                   placeholder={tKb('customSection.titlePlaceholder')}
                   aria-label={tKb('customSection.titlePlaceholder')}
                   maxLength={40}
+                  readOnly={readOnly}
                   dir="auto"
                 />
               ) : (
@@ -106,14 +112,16 @@ function KnowledgeBaseCustomSectionImpl({
           </>
         }
         headerAction={
-          <button
-            type="button"
-            onClick={handleDelete}
-            aria-label={tKb('customSection.deleteTitle')}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          readOnly ? undefined : (
+            <button
+              type="button"
+              onClick={handleDelete}
+              aria-label={tKb('customSection.deleteTitle')}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )
         }
       >
         <SectionEditor
@@ -124,6 +132,7 @@ function KnowledgeBaseCustomSectionImpl({
           ariaLabel={tKb('customSection.placeholder')}
           isExpanded={isExpanded}
           remainingChars={remainingChars}
+          readOnly={readOnly}
         />
       </CollapsibleSectionCard>
 

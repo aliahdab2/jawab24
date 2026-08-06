@@ -49,8 +49,15 @@ export function useSaveKnowledgeBase(
       return { ok: true, kbWarnings: response.data.kbWarnings };
     } catch (error) {
       const apiError = error as ApiError;
-      if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
+      const code = apiError.response?.status === 403 ? apiError.response?.data?.code : undefined;
+      // Both 403 codes are AUTHORIZATION OUTCOMES, not defects: the member was
+      // removed from the workspace, or never had the admin role `PUT /pages/:id`
+      // requires. They get a specific message and — deliberately — no
+      // captureError, which previously filed every one of them as a Sentry bug.
+      if (code === 'WORKSPACE_ACCESS_DENIED') {
         toast.error(t('saveFailedAccessRevoked'));
+      } else if (code === 'INSUFFICIENT_ROLE') {
+        toast.error(t('saveFailedInsufficientRole'));
       } else {
         captureError(error, 'Failed to save knowledge base', { tags: { action: 'save-kb' } });
         toast.error(t('saveFailed'));

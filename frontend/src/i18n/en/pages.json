@@ -87,6 +87,7 @@
   "savedStatus": "Saved!",
   "saveFailed": "Failed to save. Please try again.",
   "saveFailedAccessRevoked": "Your access to this workspace was revoked. Please contact the workspace owner.",
+  "saveFailedInsufficientRole": "Only an owner or admin can change Business Info. Ask a workspace admin to update it.",
   "connectDialogTitle": "Connect a Page",
   "connectDialogBody": "You'll be redirected to Facebook. To add or change pages, click \"Edit previous settings\" on the Facebook screen.",
   "continueToFacebook": "Continue to Facebook",
