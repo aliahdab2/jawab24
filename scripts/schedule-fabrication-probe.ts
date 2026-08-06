@@ -159,6 +159,20 @@ const PROBES: Probe[] = [
         note: 'MEASURED 2026-08-06: 6/8 borrowed (strict scan — for a slot-less level ANY date, weekday or time is borrowed, since no row carries one). A derived record-integrity CLAUSE in renderCoverageStatement moved it to 5/8 = NEUTRAL and was reverted; see the rejected-clause note there. Open fix = generalized row gating (label → values), not prose. SUB-KEY borrowing (prod الدمشقي 2026-08-05 21:06, verbatim shape): the key value «انكليزي» IS covered and its sibling LEVELS (مبتدئ/متوسط 1/متوسط 2) have live slots, but the asked level «محادثة» has none — it is priced only. The coverage line is keyed on «الدورة», so it cannot scope a claim to a level, and the nearest sibling row is right there to copy. In prod the model returned متوسط 1\'s date+days+time for مبتدئ, all three verbatim. Any day-pattern or slot time here is borrowed.',
     },
 
+    // ⚠️ THE FLAGGED PROD MESSAGE («…بدورات المبتدئ لغة انكليزي») IS DELIBERATELY
+    // NOT A PROBE HERE, and that is a limit of the battery, not an oversight. On
+    // prod that day D-057 had retired BOTH مبتدئ cohorts while متوسط 1/2 stayed
+    // live; in this fixture مبتدئ has four upcoming cohorts, so the same words are
+    // a CONTROL (they must return real dates — that is C6), not a defect. S9 uses
+    // محادثة because it is the one English level the fixture prices without
+    // scheduling, which reproduces the prod SHAPE exactly.
+    //
+    // What that leaves unverified: sub-key gating can only constrain a value the
+    // merchant recorded somewhere LIVE, so the flagged conversation is fixed only
+    // while «مبتدئ» survives as a live priced level on the prod page. Confirm it
+    // there (it is priced at 35k in the fixture) — limit #3 is the whole reason
+    // this needs checking rather than assuming.
+
     // ── Controls: the answer IS in the data ────────────────────────────────
     {
         id: 'C7-conversational-level',
@@ -171,6 +185,18 @@ const PROBES: Probe[] = [
         kind: 'control',
         question: 'أنا مبتدئ بالانكليزي، ايمتا تبدأ الدورات؟',
         note: 'The same shape on a course whose rows DO carry levels: narrowing to the 4 مبتدئ English rows is correct and more helpful than showing all 9. The failure to watch for is a denial — the customer named a level that genuinely has live cohorts.',
+    },
+    {
+        id: 'C9-other-course-level',
+        kind: 'control',
+        question: 'ايمتا تبدأ دورات الانكليزي؟ أنا متقدم بالانكليزي',
+        note: 'FALSE-DENIAL GUARD for the CO-SCOPING half (external review 2026-08-06, a real bug it caught). «متقدم» is a stored «المستوى» value — of the BARBERING and الأمين price rows. It is not an English level at all. With the first, page-global version of the constraint vocabulary this withheld all NINE live انكليزي cohorts and the reply announced there were no dates: a false denial, which loses the registration outright and is strictly worse than the borrowing S9 fixes. Must give real English cohort dates/days. Deterministically pinned by createAttributeScope tests, which run against this same fixture for free — this probe measures what the MODEL then does with the rows.',
+    },
+    {
+        id: 'C10-phone-number-vs-slot-time',
+        kind: 'control',
+        question: 'ايمتا تبدأ دورة ICDL الجاية؟ رقمي 0932-4567',
+        note: 'FALSE-DENIAL GUARD for the token-boundary half. Slot times are stored as «2-4»/«1-2»/«5-6» — letter-free, three characters — and bare containment finds «2-4» inside the phone number «0932-4567», withholding every ICDL cohort at a different time. Worse than a one-off: composeFactMatchText feeds the matcher the conversation\'s earlier USER turns, so one phone number constrained every later question in the thread, and lead capture is a flow we actively push customers into. Must still give real ICDL dates.',
     },
     {
         id: 'C6-sibling-level-live',

@@ -200,38 +200,18 @@ export function renderCoverageStatement(
 
 /*
  * ❌ MEASURED AND REJECTED 2026-08-06 — a record-integrity CLAUSE for the attribute
- * axis. Do not re-add it as prose; the number is already known.
+ * axis. Do not re-add it as prose; the number is already known, and re-adding it
+ * would also bump PROMPT_VERSION and retire the whole semantic reply cache (Rule
+ * 17) for a change that does nothing.
  *
- * The defect it targeted is real and still open: the key index bounds MEMBERSHIP at
- * the key's granularity and says nothing about the attributes inside a row. Prod
- * الدمشقي (shadow-verifier flag 2026-08-05 21:06) asked for the انكليزي **مبتدئ**
- * cohort — whose slots D-057 had retired — and got متوسط 1's row verbatim (date +
- * days + time) with the level swapped. The scope line cannot prevent that: it
- * enumerates «الدورة», so it ASSERTS انكليزي is covered.
+ * One derived sentence naming the non-key labels and stating that a row is one
+ * record moved the defect 6/8 -> 5/8 = NEUTRAL, the same verdict as the near-name
+ * rule in factCollectionsMatcher (8/48 vs 8/48). "Is what the customer named the
+ * same as a value in this row" is a comparison the model is unreliable at.
  *
- * What was tried: one derived sentence appended here, naming the non-key labels
- * found on the rows («المستوى»، «الأيام»، «الساعة») and stating that a row is one
- * record, that values may not move between rows, and that a combination no single
- * row carries is not in the list. Attribute-agnostic on purpose — declaring which
- * attribute identifies a row is per-merchant configuration, and it cannot be derived
- * either, since «الأيام» and «الساعة» sub-partition «انكليزي» exactly as «المستوى»
- * does, so any inference would be guessing which axis identifies a cohort.
- *
- * Result, scripts/schedule-fabrication-probe.ts S9 at prod sampling, same rows both
- * arms, cache cleared between: **6/8 borrowed before → 5/8 after. NEUTRAL.** Control
- * C6 (a level that DOES have live rows) stayed 0/8 mute in both arms, so the clause
- * did no harm either — it simply did nothing. Same verdict, and for the same reason,
- * as the near-name rule in factCollectionsMatcher (8/48 vs 8/48): "is what the
- * customer named the same as a value in this row" is a comparison the model is
- * unreliable at, and instructing it grows the prompt without moving the number.
- *
- * The escalation is CODE, in the matcher's half: generalize row gating from key
- * values to (label → values) across the page's collections, apply a constraint only
- * to a collection that actually uses that label, and let an empty gate render the
- * coverage line with ZERO rows — which this renderer already supports deliberately.
- * A model never shown متوسط 2's row cannot relabel it, which is the property the
- * gate has and prose does not. Pinned red meanwhile by eval #755 (a ~62% sampled
- * defect — read the battery, not one run) and by probes S9/C6.
+ * The escalation was CODE, and it shipped: sub-key row gating in factCollections.ts
+ * plus createAttributeScope in the matcher. Full ruling, both measured negative
+ * results and the two false-denial guards that bound it: DECISIONS.md D-062.
  */
 
 /**

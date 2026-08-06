@@ -13,10 +13,17 @@ import { describe, it, expect } from 'vitest';
 import {
     matchCollections,
     matchAttributeValues,
+    createAttributeScope,
     composeFactMatchText,
     type AttributeCell,
     type MatcherCollection,
+    type ScopeRow,
 } from '../services/factCollectionsMatcher';
+import {
+    DAMASCUS_COURSE_PRICES,
+    damascusPriceRowInputs,
+    damascusScheduleRowInputs,
+} from '../plugins/demo/damascusLists';
 
 /** The fixture's real shape: a district-keyed outlet list + a city-keyed one. */
 const AREAS: MatcherCollection = {
@@ -165,6 +172,100 @@ describe('matchAttributeValues', () => {
             { label: '', value: 'انكليزي' },
             { label: 'الدورة', value: '   ' },
         ])]).toEqual([]);
+    });
+
+    /**
+     * A LETTER-FREE value needs a token boundary (2026-08-06, external review).
+     * Schedule rows store «الساعة» as «2-4»/«1-2»/«5-6» — three characters, no
+     * letters — and bare containment finds them inside any digit run. The matcher
+     * reads the conversation's earlier USER turns (composeFactMatchText), so a
+     * phone number typed once constrained every later question in that thread.
+     */
+    describe('letter-free values need a token boundary', () => {
+        const TIMES: AttributeCell[] = [
+            { label: 'الساعة', value: '2-4' },
+            { label: 'الساعة', value: '1-2' },
+        ];
+
+        it('does not match a time glued inside a phone number', () => {
+            // «0932-4567» contains «2-4». Before the boundary rule this withheld
+            // every ICDL cohort whose slot time was not 2-4 — five live cohorts.
+            expect([...matchAttributeValues('ايمتا تبدأ دورة ICDL؟ رقمي 0932-4567', TIMES)]).toEqual([]);
+        });
+
+        it('still matches a time the customer actually asked about', () => {
+            const hits = matchAttributeValues('عندكم شي الساعة 2-4؟', TIMES);
+            expect([...(hits.get('الساعة') ?? [])]).toEqual(['2-4']);
+        });
+
+        it('matches a time at the very end of the message', () => {
+            const hits = matchAttributeValues('بدي الدورة 1-2', TIMES);
+            expect([...(hits.get('الساعة') ?? [])]).toEqual(['1-2']);
+        });
+
+        it('keeps Arabic prefix-gluing working for values that DO have letters', () => {
+            // The boundary must NOT apply here: Arabic glues prefixes to the word,
+            // and «عين الدالية» inside «بعين الدالية» is the place mechanism's
+            // load-bearing match.
+            const hits = matchAttributeValues('نلقاكم بعين الدالية؟', [{ label: 'المنطقة', value: 'عين الدالية' }]);
+            expect([...(hits.get('المنطقة') ?? [])]).toEqual(['عين الدالية']);
+        });
+    });
+});
+
+/**
+ * CO-SCOPING (2026-08-06, external review) — pinned against the REAL الدمشقي
+ * fixture, not a hand-built one. The defect only exists because that page's level
+ * vocabulary («مبتدئ / متقدم / محترف / محادثة / متوسط 1…») is shared across
+ * unrelated courses, so a synthetic fixture would be free to be tidier than the
+ * data and prove nothing.
+ */
+describe('createAttributeScope', () => {
+    const TODAY = '2026-08-06';
+    const ROWS: ScopeRow[] = [
+        ...damascusPriceRowInputs(DAMASCUS_COURSE_PRICES),
+        ...damascusScheduleRowInputs(TODAY),
+    ].map(r => ({ name: r.name, attributes: r.attributes ?? null }));
+
+    /** What the schedules gate would apply for `message`, given its key match. */
+    const constraintsFor = (message: string, matchedKeys: string[]): Record<string, string[]> => {
+        const matches = matchAttributeValues(message, ROWS.flatMap(r => r.attributes ?? []));
+        const scoped = createAttributeScope(ROWS, matches)(matchedKeys);
+        return Object.fromEntries([...scoped].map(([k, v]) => [k, [...v]]));
+    };
+
+    it('keeps a level recorded against the course the customer named', () => {
+        // «محادثة» is priced under «اللغة الإنكليزية» and has no cohort — the whole
+        // S9 mechanism. The key match «انكليزي» reaches that price row's name.
+        expect(constraintsFor('ايمتا التسجيل بدورة المحادثة لغة انكليزي', ['انكليزي'])['المستوى'])
+            .toEqual(['محادثة']);
+    });
+
+    it('drops a level that belongs only to OTHER courses', () => {
+        // «متقدم» prices الحلاقة and الأمين; it is not an English level at all.
+        // Unscoped it withheld all nine live انكليزي cohorts and the reply said
+        // there were no announced dates.
+        // «الدورة» survives — it is the key itself, and the gate skips its own key
+        // label. What must NOT survive is a constraint on «المستوى».
+        expect(constraintsFor('ايمتا تبدأ دورات الانكليزي؟ أنا متقدم بالانكليزي', ['انكليزي'])['المستوى'])
+            .toBeUndefined();
+    });
+
+    it('drops «محترف» for the same reason', () => {
+        expect(constraintsFor('ايمتا تبدأ دورات الانكليزي؟ صراحة أنا محترف', ['انكليزي'])['المستوى'])
+            .toBeUndefined();
+    });
+
+    it('keeps a level the named course DOES record, even with no cohort for it', () => {
+        // الأمين is priced at مبتدئ/متقدم/محترف and only مبتدئ has slots. Naming
+        // متقدم here is in scope, so the gate may legitimately show no rows —
+        // that is the designed behaviour, not a false denial.
+        expect(constraintsFor('ايمتا تبدأ دورة الأمين للمحاسبة؟ أنا متقدم شوي', ['الأمين'])['المستوى'])
+            .toEqual(['متقدم']);
+    });
+
+    it('is empty when the customer named no key at all', () => {
+        expect(constraintsFor('أنا مبتدئ', [])).toEqual({});
     });
 });
 
