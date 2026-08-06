@@ -258,7 +258,35 @@ AUDIT_FAILED=false
 # backend ships on node:22-alpine — bundle the bump with the Node 24 platform
 # upgrade, do NOT override ip-address under geoip-lite 1.x (5.x→10.x is an
 # incompatible major inside the LEGAL sanctions path).
-IGNORED_GHSA="GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-fxqj-rqcc-2cmp|GHSA-v2v4-37r5-5v8g|GHSA-mwp4-54f8-5fhr"
+# GHSA-hq66-cqwq-w95j — pdfjs-dist arbitrary JS execution on opening a malicious
+# PDF (high, CVE-2026-16633; added 2026-08-07). Read the advisory body, not the
+# title: the CWE is 79 (XSS) and the documented mitigations are
+# `enableScripting: false` or a script-src CSP — this is the SCRIPTING engine,
+# NOT the older isEvalSupported RCE class. Unreachable here, verified against
+# the installed source rather than inferred:
+#   1. `enableScripting` is not a getDocument() option at all — it is absent
+#      from types/src/display/api.d.ts and is consumed by `class
+#      AnnotationElement`, i.e. the ANNOTATION LAYER.
+#   2. Neither PDF path renders annotations. backend/src/services/kb/
+#      file-extractor.ts does getDocument() → getTextContent() (text stream),
+#      and pdf-to-img does getDocument() → page.render({canvas, viewport}) →
+#      toBuffer("image/png"). AnnotationLayer.render() is never called.
+#   3. Nothing in backend/ai-worker/frontend imports a viewer surface — zero
+#      hits for pdfjs-dist/web, PDFViewer, PDFScriptingManager, enableScripting.
+#   4. Both call sites already pass isEvalSupported:false (ours explicitly,
+#      pdf-to-img internally) — belt-and-braces against the other class.
+#   5. Threat-model mismatch: CWE-79 executes in the hosting domain's origin.
+#      This runs server-side in Node with no DOM and no origin; the output is a
+#      PNG buffer or a string. Merchant PDFs ARE untrusted input, but the
+#      vulnerable path is never entered.
+# NO BUMP EXISTS: pdf-to-img@6.2.0 is the LATEST release and pins
+# pdfjs-dist "~5.6.205", so raising our direct pin to the patched 6.2.108 would
+# only add a SECOND, nested 5.6.x copy for pdf-to-img — still flagged, now
+# duplicated. `npm audit fix --force` does exactly that or breaks pdf-to-img.
+# PROPER RETIREMENT: when a pdf-to-img release moves to pdfjs-dist >=6.2.108,
+# bump both together and delete this entry. Re-check with
+# `npm view pdf-to-img dependencies`.
+IGNORED_GHSA="GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-fxqj-rqcc-2cmp|GHSA-v2v4-37r5-5v8g|GHSA-mwp4-54f8-5fhr|GHSA-hq66-cqwq-w95j"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
