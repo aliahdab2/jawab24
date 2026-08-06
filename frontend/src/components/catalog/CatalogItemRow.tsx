@@ -19,6 +19,13 @@ interface CatalogItemRowProps {
   /** Inline price save (trimmed string; '' = price on request). Server
    *  normalizes Arabic-Indic digits — pass the raw text through. */
   onSavePrice: (item: CatalogItem, price: string) => void;
+  /**
+   * View-only (workspace `member`). Every catalog write is `requireRole('admin')`
+   * server-side, so the row keeps its INFORMATION — name, dates, description,
+   * price, availability — and drops only the controls: reorder, the price
+   * button, the availability toggle, edit and delete.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -29,6 +36,7 @@ interface CatalogItemRowProps {
  */
 export function CatalogItemRow({
   item, isFirst, isLast, disabled, onEdit, onDelete, onMove, onToggleAvailability, onSavePrice,
+  readOnly = false,
 }: CatalogItemRowProps) {
   const t = useTranslations('catalog');
 
@@ -50,12 +58,28 @@ export function CatalogItemRow({
   // Dealers think "sold", shops think "out of stock" — same flag, honest words.
   const outLabel = item.type === 'vehicle' ? t('availability.sold') : t('availability.out');
 
+  // The price as the merchant reads it — identical whether it is a control or
+  // plain text, so a view-only row shows the same number in the same place.
+  const priceContent = item.price !== null ? (
+    <>
+      {formatPrice(item.price)}
+      {item.currency && <span className="text-xs font-medium text-muted-foreground ms-1">{item.currency}</span>}
+    </>
+  ) : readOnly ? (
+    // «أضف سعراً» is an invitation, and a member cannot accept it — state the
+    // fact instead: this item has no price, which is what the AI will say too.
+    <span className="text-xs font-medium text-muted-foreground">{t('inlinePrice.noPrice')}</span>
+  ) : (
+    <span className="text-xs font-medium text-muted-foreground underline decoration-dotted underline-offset-4">{t('inlinePrice.addPrice')}</span>
+  );
+
   return (
     // Mobile: TWO lines — the name owns the full first line (long Arabic
     // product names were strangled to one word per line by the fixed-width
     // controls), price/availability/actions sit beneath. From sm: one line.
     <li className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-card p-3">
       {/* Reorder controls */}
+      {!readOnly && (
       <div className="flex flex-col flex-shrink-0">
         <button type="button" onClick={() => onMove(item, 'up')} disabled={disabled || isFirst}
           aria-label={t('actions.moveUp')}
@@ -68,6 +92,7 @@ export function CatalogItemRow({
           <ChevronDown className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
+      )}
 
       {/* Name + dates + description */}
       <div className="min-w-0 flex-1">
@@ -96,13 +121,15 @@ export function CatalogItemRow({
       {/* Availability — one tap, on the NAME line at the end (owner: the
           toggle up top frees the second line for the information). */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Toggle
-          size="sm"
-          enabled={item.isAvailable}
-          disabled={disabled}
-          onChange={(enabled) => onToggleAvailability(item, enabled)}
-          aria-label={t('inlineAvailability.toggleLabel', { name: item.name })}
-        />
+        {!readOnly && (
+          <Toggle
+            size="sm"
+            enabled={item.isAvailable}
+            disabled={disabled}
+            onChange={(enabled) => onToggleAvailability(item, enabled)}
+            aria-label={t('inlineAvailability.toggleLabel', { name: item.name })}
+          />
+        )}
         <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap text-start">
           {item.isAvailable ? t('availability.in') : outLabel}
         </span>
@@ -110,9 +137,15 @@ export function CatalogItemRow({
 
       {/* Controls line: full-width second row on mobile (indented to align
           under the name, past the reorder arrows), inline from sm. */}
-      <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 ps-7 sm:ps-0 flex-shrink-0">
+      {/* ps-7 aligns the second line under the name, past the reorder arrows —
+          which a view-only row doesn't render, so it doesn't indent either. */}
+      <div className={`w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 ${readOnly ? '' : 'ps-7'} sm:ps-0 flex-shrink-0`}>
       {/* Price — tap to edit in place */}
-      {editingPrice ? (
+      {readOnly ? (
+        <span dir="auto" className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums text-end flex-shrink-0">
+          {priceContent}
+        </span>
+      ) : editingPrice ? (
         <input
           aria-label={t('fields.priceOptional')}
           dir="auto"
@@ -136,18 +169,12 @@ export function CatalogItemRow({
           dir="auto"
           className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums text-end px-2 py-1.5 -my-1.5 rounded-lg hover:bg-muted transition-colors disabled:cursor-not-allowed flex-shrink-0"
         >
-          {item.price !== null ? (
-            <>
-              {formatPrice(item.price)}
-              {item.currency && <span className="text-xs font-medium text-muted-foreground ms-1">{item.currency}</span>}
-            </>
-          ) : (
-            <span className="text-xs font-medium text-muted-foreground underline decoration-dotted underline-offset-4">{t('inlinePrice.addPrice')}</span>
-          )}
+          {priceContent}
         </button>
       )}
 
       {/* Edit / delete */}
+      {!readOnly && (
       <div className="flex gap-1 flex-shrink-0">
         <button type="button" onClick={() => onEdit(item)} disabled={disabled} aria-label={t('actions.edit')}
           className="w-8 h-8 grid place-items-center rounded-lg border border-border text-icon-muted hover:text-foreground hover:bg-muted disabled:opacity-40 transition-colors">
@@ -158,6 +185,7 @@ export function CatalogItemRow({
           <Trash2 className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
+      )}
       </div>
     </li>
   );

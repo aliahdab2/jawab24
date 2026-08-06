@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { useQuery } from '@tanstack/react-query';
 import { X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb, ClipboardPaste } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, InfoPopover } from '@/components/ui';
+import { Button, InfoPopover, ViewOnlyBanner } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { pagesApi, factCollectionsApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -179,7 +179,10 @@ export function KnowledgeBasePanel({
   // Owner ruling (2026-08-03): the live notice shows ONLY when the merchant
   // has somewhere better to put the prices. Everyone else keeps the existing
   // post-save "coming soon" banner untouched.
-  const showLiveNotice = liveDetection.hasCatalog && hasAlternativeHome && !liveNoticeDismissed;
+  // Never for a member: the notice asks the reader to MOVE the prices, which is
+  // a write they cannot make. (The post-save `kbWarnings` variant is already
+  // unreachable for them — it is only set by a successful save.)
+  const showLiveNotice = canEdit && liveDetection.hasCatalog && hasAlternativeHome && !liveNoticeDismissed;
 
   // One banner slot, one owner. A save that lands before the debounce or the
   // collections probe resolves sees hasAlternativeHome=false and sets the
@@ -330,13 +333,10 @@ export function KnowledgeBasePanel({
           </InfoPopover>
         </div>
 
-        {/* View-only banner for members — same slot, copy and styling Settings
-            uses, so "who may change this?" reads identically app-wide. */}
-        {!canEdit && (
-          <div className="mb-3 p-3 rounded-xl alert-info border text-sm text-center">
-            {tc('viewOnlyHint')}
-          </div>
-        )}
+        {/* View-only banner for members — the shared component Settings and the
+            /business sections use, so "who may change this?" reads identically
+            app-wide and a reword lands everywhere at once. */}
+        {!canEdit && <ViewOnlyBanner />}
 
         {/* Facebook import banner */}
         {showFacebookBanner && (
@@ -354,10 +354,13 @@ export function KnowledgeBasePanel({
           </div>
         )}
 
-        {/* Unanswered questions — interactive gap cards. Hidden for members:
-            both actions (approve → edits the KB, skip → POSTs the dismiss)
-            are admin-gated, so the card has nothing a member can complete. */}
-        {canEdit && gaps.length > 0 && (
+        {/* Unanswered questions — interactive gap cards. A member sees the
+            QUESTIONS but not the actions (approve edits the KB, skip POSTs the
+            dismiss — both admin-gated): what a customer asked and nobody could
+            answer is workspace information, and the member working the inbox is
+            often the one who knows the answer. Only the "tap to answer"
+            instruction changes. */}
+        {gaps.length > 0 && (
           <div className="mb-3 space-y-2">
             <div className="flex items-center gap-2 px-1">
               <MessageCircleQuestion className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
@@ -365,7 +368,7 @@ export function KnowledgeBasePanel({
                 {tKb('gaps.title')} ({gaps.length})
               </span>
             </div>
-            <p className="text-xs text-amber-700 px-1">{tKb('gaps.hint')}</p>
+            <p className="text-xs text-amber-700 px-1">{tKb(canEdit ? 'gaps.hint' : 'gaps.hintViewOnly')}</p>
             {gaps.map((gap) => (
               <GapCard
                 key={gap.id}
@@ -374,13 +377,15 @@ export function KnowledgeBasePanel({
                 onToggle={() => setExpandedGapId(prev => prev === gap.id ? null : gap.id)}
                 onApprove={(answer) => handleGapApproved(gap.id, answer)}
                 onSkip={() => handleGapSkipped(gap.id)}
+                readOnly={!canEdit}
               />
             ))}
           </div>
         )}
 
-        {/* Thin-KB tip — show when total content is under 100 chars */}
-        {!rawMode && totalChars < 100 && (
+        {/* Thin-KB tip — show when total content is under 100 chars. Not for a
+            member: "add more detail" is advice for whoever can add it. */}
+        {canEdit && !rawMode && totalChars < 100 && (
           <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
             <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-xs leading-relaxed">

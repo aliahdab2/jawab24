@@ -1,7 +1,8 @@
 import React from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import { FlagTag } from './FlagTag';
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import { isKbRelatedFlag, type FlagMetaShape } from '@/utils/flagReason';
 
 interface NeedsAttentionBannerProps {
@@ -30,6 +31,10 @@ interface NeedsAttentionBannerProps {
  */
 export function NeedsAttentionBanner({ flagReason, flagMeta, kbGapQuestion, onAddToKb }: NeedsAttentionBannerProps) {
   const t = useTranslations('comments');
+  // The editor this opens is read-only for a member (Business Info is
+  // admin-only), so the CTA says what it will actually do. It is NOT hidden:
+  // reading what the AI knows is exactly what someone answering by hand needs.
+  const { canEdit } = useWorkspaceRole();
   const isKbFlag = isKbRelatedFlag(flagReason);
   const question = kbGapQuestion?.trim();
 
@@ -45,8 +50,10 @@ export function NeedsAttentionBanner({ flagReason, flagMeta, kbGapQuestion, onAd
             onClick={onAddToKb}
             className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
           >
-            <Plus className="w-2.5 h-2.5" aria-hidden="true" />
-            <span>{t('addToBusinessInfo')}</span>
+            {canEdit
+              ? <Plus className="w-2.5 h-2.5" aria-hidden="true" />
+              : <BookOpen className="w-2.5 h-2.5" aria-hidden="true" />}
+            <span>{canEdit ? t('addToBusinessInfo') : t('viewBusinessInfo')}</span>
           </button>
         )}
       </div>

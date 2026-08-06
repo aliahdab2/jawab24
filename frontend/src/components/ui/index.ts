@@ -39,3 +39,4 @@ export { InfoPopover } from './InfoPopover';
 export { Sparkline } from './Sparkline';
 export { FeedSnippet } from './FeedSnippet';
 export { ArrowLink } from './ArrowLink';
+export { ViewOnlyBanner } from './ViewOnlyBanner';

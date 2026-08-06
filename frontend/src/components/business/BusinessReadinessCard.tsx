@@ -22,7 +22,13 @@ interface BusinessReadinessCardProps {
    * to scroll past the whole product list to reach the fact rows — measured at
    * 4–6 screens on a 390px viewport for a 27-item catalog.
    */
-  onFixChip: (key: FixableChipKey) => void;
+  /**
+   * Omit for a view-only member: every chip's destination is an admin-only
+   * editor, and the card's own rule below — "a tappable-looking chip that does
+   * nothing is worse than a plain one" — applies exactly as much to a chip that
+   * would land on a 403.
+   */
+  onFixChip?: (key: FixableChipKey) => void;
 }
 
 /** Chips the merchant can act on. The four facts open their editor;
@@ -260,7 +266,7 @@ export function BusinessReadinessCard({ page, productsCount, factRowsCount, onTr
           // chip that does nothing is worse than a plain one.
           return (
             <li key={chip.key}>
-              {!chip.covered && chip.fixKey ? (
+              {!chip.covered && chip.fixKey && onFixChip ? (
                 <button
                   type="button"
                   onClick={() => onFixChip(chip.fixKey!)}

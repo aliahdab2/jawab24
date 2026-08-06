@@ -14,12 +14,19 @@
  * modals via InlineKbEditorModal) — these tests drive the real
  * `useWorkspaceRole` against a mocked store rather than stubbing the hook, so
  * a change to the role→permission mapping cannot pass them silently.
+ *
+ * Every expected string is READ FROM THE i18n JSON, never retyped. A negative
+ * assertion against a hand-written label is the one kind of test that fails
+ * open: `queryByText(/add (a )?section/i)` passed happily against the real
+ * label "Add new section" whether the button rendered or not.
  */
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Page, WorkspaceRole } from '@jawab24/shared';
+import commonEn from '@/i18n/en/common.json';
+import kbEn from '@/i18n/en/kb.json';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 
 const { storeState, getKbGaps } = vi.hoisted(() => ({
@@ -84,7 +91,13 @@ async function renderPanel(p: Page = page()) {
   return { onSave, onClose };
 }
 
-const VIEW_ONLY = 'Only admins can make changes';
+const GAP_QUESTION = 'هل لديكم توصيل؟';
+
+function withGap() {
+  getKbGaps.mockResolvedValue({
+    data: { data: [{ id: 'gap-1', queryText: GAP_QUESTION, occurrenceCount: 2, createdAt: '2026-08-06T00:00:00.000Z' }] },
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -97,8 +110,8 @@ describe('KnowledgeBasePanel — who may edit Business Info', () => {
     asRole('member');
     await renderPanel();
 
-    expect(screen.getByText(VIEW_ONLY)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+    expect(screen.getByText(commonEn.viewOnlyHint)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: commonEn.save })).not.toBeInTheDocument();
 
     // readOnly, NOT disabled: a member must still be able to read, select and
     // copy the Business Info. A disabled textarea is unreachable by keyboard.
@@ -110,43 +123,94 @@ describe('KnowledgeBasePanel — who may edit Business Info', () => {
     }
   });
 
-  it('member: every write affordance is gone — add-section, file upload, voice', async () => {
+  it('member: every write affordance is gone — add-section and file upload', async () => {
     asRole('member');
     await renderPanel();
 
-    expect(screen.queryByText(/add (a )?section/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /upload|file/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /record|voice|mic/i })).not.toBeInTheDocument();
+    // The exact labels, from the JSON — the previous hand-typed regex could not
+    // match `addCustomSection` ("Add new section") and so proved nothing.
+    //
+    // The voice button is deliberately NOT asserted: `VoiceRecordButton` bails
+    // to `null` when `useVoiceRecorder` reports no support, and jsdom has no
+    // `navigator.mediaDevices` — so it is absent for EVERY role here and
+    // "member cannot see it" would be true no matter what the code did. The
+    // paired owner test below is what makes these two assertions mean anything.
+    expect(screen.queryByText(kbEn.addCustomSection)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: kbEn.uploadFile })).not.toBeInTheDocument();
   });
 
-  it('member: the modal still offers a way out, promoted to the primary action', async () => {
+  it('owner: those same affordances ARE present (so the assertions above can fail)', async () => {
+    await renderPanel();
+
+    expect(screen.getByText(kbEn.addCustomSection)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: kbEn.uploadFile })).toBeInTheDocument();
+  });
+
+  it('member: raw mode is read-only too — the whole KB in one textarea is the widest write surface', async () => {
+    asRole('member');
+    await renderPanel();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText(kbEn.showRawText));
+    });
+
+    const raw = screen.getByRole('textbox', { name: kbEn.title });
+    expect(raw).toHaveAttribute('readonly');
+    expect(raw).not.toBeDisabled();
+    // Raw mode shows the SERIALIZED sections, so the merchant's text is in
+    // there under its section heading — the point is that it is all readable.
+    expect((raw as HTMLTextAreaElement).value).toContain(page().knowledgeBase);
+  });
+
+  it('member: the modal still offers a way out, and it works', async () => {
     asRole('member');
     const { onClose } = await renderPanel();
 
-    // Cancel becomes Close — with Save gone it is the only exit, so it must
-    // not keep `max-sm:hidden`.
-    const close = screen.getByRole('button', { name: /close/i });
-    expect(close).toBeInTheDocument();
-    expect(close.className).not.toContain('max-sm:hidden');
-    expect(onClose).not.toHaveBeenCalled();
+    // Cancel becomes Close — with Save gone it is the only exit. Asserted by
+    // USING it, not by inspecting its class list.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: commonEn.close }));
+    });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('member: unanswered-question gap cards are hidden (both actions are admin-only)', async () => {
+  it('member: sees the unanswered questions, but none of their admin actions', async () => {
     asRole('member');
-    getKbGaps.mockResolvedValue({
-      data: { data: [{ id: 'gap-1', queryText: 'هل لديكم توصيل؟', createdAt: new Date().toISOString() }] },
-    });
+    withGap();
     await renderPanel();
 
-    expect(screen.queryByText('هل لديكم توصيل؟')).not.toBeInTheDocument();
+    // The QUESTION is information — the member working the inbox is often the
+    // one who knows the answer. Only approve/skip (both admin-only) go.
+    expect(screen.getByText(GAP_QUESTION)).toBeInTheDocument();
+    expect(screen.getByText(kbEn.gaps.hintViewOnly)).toBeInTheDocument();
+    expect(screen.queryByText(kbEn.gaps.hint)).not.toBeInTheDocument();
+
+    // The card cannot be opened, so neither action is reachable.
+    await act(async () => {
+      fireEvent.click(screen.getByText(GAP_QUESTION));
+    });
+    expect(screen.queryByRole('button', { name: kbEn.gaps.addToKb })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: kbEn.gaps.skip })).not.toBeInTheDocument();
+  });
+
+  it('admin: the same gap card opens onto its actions', async () => {
+    asRole('admin');
+    withGap();
+    await renderPanel();
+
+    expect(screen.getByText(kbEn.gaps.hint)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText(GAP_QUESTION));
+    });
+    expect(screen.getByRole('button', { name: kbEn.gaps.skip })).toBeInTheDocument();
   });
 
   it.each(['owner', 'admin'] as const)('%s: full editor — Save present, no banner, nothing read-only', async (role) => {
     asRole(role);
     await renderPanel();
 
-    expect(screen.queryByText(VIEW_ONLY)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+    expect(screen.queryByText(commonEn.viewOnlyHint)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: commonEn.save })).toBeInTheDocument();
     for (const el of screen.getAllByRole('textbox')) {
       expect(el).not.toHaveAttribute('readonly');
     }

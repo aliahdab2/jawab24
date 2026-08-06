@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Store, ChevronDown } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
+import { Button, PageHeader, EmptyState, Select, Skeleton, ViewOnlyBanner } from '@/components/ui';
 import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
@@ -29,6 +29,8 @@ import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
+import { useWorkspaceRole } from '@/hooks';
+import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 import type { Page, CatalogItem } from '@jawab24/shared';
@@ -49,12 +51,19 @@ const PRODUCTS_SECTION_ID = 'business-products-section';
  */
 function BusinessPageInner() {
   const t = useTranslations('business');
+  const tc = useTranslations('common');
   const tPages = useTranslations('pages');
   const tCatalog = useTranslations('catalog');
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, user, _hasHydrated, workspaces } = useAuthStore();
   const canSee = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id));
+  // Every write on this page — catalog items, fact rows, fact lists, and the
+  // Business Info text — is `requireRole('admin')` server-side. One flag feeds
+  // all four sections so the page can never end up half-gated: a banner saying
+  // "view only" over sections that still look editable is worse than either
+  // state on its own.
+  const { canEdit } = useWorkspaceRole();
 
   // Platform-admin canary (same guard as /catalog): deep links fail closed —
   // anyone outside the allowlist is bounced to the dashboard. Wait for store
@@ -253,8 +262,18 @@ function BusinessPageInner() {
         });
       }
     } catch (error) {
-      captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
-      setSaveError(tPages('saveFailed'));
+      // A refused write is an authorization OUTCOME, not a defect — same
+      // shared verdict the Business Info save and the fact lists use, so no
+      // Sentry event and a message that says who can do it. Reachable even
+      // with the gate above: a member demoted mid-session still holds an open
+      // sheet, and the persisted role is a snapshot.
+      const outcome = authorizationOutcome(error);
+      if (outcome) {
+        setSaveError(tc(AUTHORIZATION_MESSAGE_KEY[outcome]));
+      } else {
+        captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
+        setSaveError(tPages('saveFailed'));
+      }
     } finally {
       setSavingFact(false);
     }
@@ -375,6 +394,14 @@ function BusinessPageInner() {
         // actually make Jawab fail. Desktop keeps the approved mock order.
         // CSS order only — one DOM, never duplicated markup.
         <div className="mt-4 flex flex-col gap-4">
+          {/* One banner for the WHOLE page — every section below it is view-only
+              for a member, so the answer to "why can't I change this?" is given
+              once, at the top, instead of per section. */}
+          {/* order-first, not order-0: Tailwind v3 ships no `order-0` utility,
+              so that class would be dead CSS and the banner would only land
+              first by DOM luck. */}
+          {!canEdit && <ViewOnlyBanner className="order-first" />}
+
           {/* 1 — Readiness */}
           <div className="order-1">
             <BusinessReadinessCard
@@ -382,7 +409,7 @@ function BusinessPageInner() {
               productsCount={productsCount}
               factRowsCount={factRowsCount}
               onTryReply={() => setTestReplyOpen(true)}
-              onFixChip={handleFixChip}
+              onFixChip={canEdit ? handleFixChip : undefined}
             />
           </div>
 
@@ -420,6 +447,7 @@ function BusinessPageInner() {
                 page={selectedPage}
                 importRequested={importRequest?.pageId === selectedPage.id}
                 importInitialText={importRequest?.pageId === selectedPage.id ? importRequest.text : undefined}
+                readOnly={!canEdit}
               />
             )}
           </section>
@@ -431,6 +459,7 @@ function BusinessPageInner() {
               page={selectedPage}
               onEditFact={setEditingFact}
               onEditHours={() => setEditingHours(true)}
+              readOnly={!canEdit}
             />
           </div>
 
@@ -439,7 +468,7 @@ function BusinessPageInner() {
               gate, so most pages see nothing here. Mobile keeps it beside the
               other structured data, above the big catalog block. */}
           <div className="order-2 md:order-3">
-            <BusinessListsSection pageId={selectedPage.id} />
+            <BusinessListsSection pageId={selectedPage.id} readOnly={!canEdit} />
           </div>
 
           {/* 4 — Free-text Business Info (collapsed once structured data exists) */}

@@ -5,7 +5,8 @@ import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clo
 import { toast } from 'sonner';
 import { isRowLive, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
-import { captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
+import { addErrorBreadcrumb, captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
+import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { todayISODate, formatPlainDateParts } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
@@ -20,6 +21,14 @@ import { FactEntitySheet } from './FactEntitySheet';
 
 interface BusinessListsSectionProps {
   pageId: string;
+  /**
+   * View-only (workspace `member`). Every row write — add, edit, delete,
+   * completeness — is `requireRole('admin')` server-side
+   * (`routes/factCollections.ts`), so a member reads the lists and gets none of
+   * the affordances. The rows themselves stay legible: what the AI answers from
+   * is information the whole workspace needs.
+   */
+  readOnly?: boolean;
 }
 
 interface EditingState {
@@ -52,7 +61,7 @@ interface EditingState {
  * prompt where they are excluded: the merchant re-announcing a cohort edits
  * last month's row and changes one date. The AI never sees them.
  */
-export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
+export function BusinessListsSection({ pageId, readOnly = false }: BusinessListsSectionProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
   const { intlLocale } = useLanguage();
@@ -160,6 +169,19 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
    */
   const reportWriteFailure = async (error: unknown, action: string) => {
     const backendCode = getBackendErrorCode(error);
+    // A 403 from the role guard is an AUTHORIZATION OUTCOME, not a defect —
+    // same verdict the Business Info save reaches, from the same shared
+    // classifier so the two cannot drift. It must not reach Sentry: filing an
+    // ordinary refusal made every one of them look like a bug in the tracker.
+    const outcome = authorizationOutcome(error);
+    if (outcome) {
+      addErrorBreadcrumb('authorization', `Fact-list write refused (${action})`, {
+        code: outcome,
+        pageId,
+      });
+      toast.error(tc(AUTHORIZATION_MESSAGE_KEY[outcome]));
+      return;
+    }
     captureError(error, `Failed to ${action}`, {
       tags: { action, backendCode: backendCode ?? 'none' },
       extra: { pageId, statusCode: getStatusCode(error), backendCode },
@@ -307,13 +329,33 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   );
 
   /** «تعديل» as a visible chip — helper-text-weight edit affordances were the
-   *  expert's point 4; the chip reads as the row's action, not as a caption. */
-  const editChip = (
+   *  expert's point 4; the chip reads as the row's action, not as a caption.
+   *  Absent when view-only: there is no action for it to name. */
+  const editChip = readOnly ? null : (
     <span className="inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-1 text-[11px] font-semibold text-brand-700 dark:text-brand-300 whitespace-nowrap">
       <Pencil className="w-3 h-3" aria-hidden="true" />
       {t('lists.edit')}
     </span>
   );
+
+  /**
+   * The shell every tappable row shares: a real <button> for someone who can
+   * edit, plain markup for a member. One helper rather than a `readOnly &&` at
+   * each of the four row shapes — a row that forgot the check would be exactly
+   * the tap-then-403 dead end this gate exists to close.
+   */
+  const rowShell = (base: string, expired: boolean, onClick: () => void, children: React.ReactNode) =>
+    readOnly ? (
+      <div className={`${base} ${expired ? 'opacity-60' : ''}`}>{children}</div>
+    ) : (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${base} hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+      >
+        {children}
+      </button>
+    );
 
   /** A TIER line (Shopify-variant / ticket-type pattern): a PROMINENT title —
    *  the tier value when one exists, else the row name — with the price and
@@ -338,11 +380,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     const priceInLine = !title && pairs.length === 0 && !!row.price;
     return (
       <li key={row.id} className="list-none">
-        <button
-          type="button"
-          onClick={() => openEntity(group, { collection: section.collection, row })}
-          className={`w-full min-h-[52px] flex items-center gap-3 px-4 py-3 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
-        >
+        {rowShell(
+          'w-full min-h-[52px] flex items-center gap-3 px-4 py-3 text-start',
+          expired,
+          () => openEntity(group, { collection: section.collection, row }),
+          <>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2 flex-wrap">
               {title ? (
@@ -374,7 +416,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             {!priceInLine && priceTag(row, { prominent: true })}
             {editChip}
           </span>
-        </button>
+          </>,
+        )}
       </li>
     );
   };
@@ -439,7 +482,16 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
    *  a card header or a block row. The ASK text is the caller's job — this is
    *  only the answer/state affordance. */
   const completenessControl = (collection: FactCollectionWithRows) =>
-    collection.isComplete === null ? (
+    // View-only: the ANSWER is information (it changes what the AI claims about
+    // this list), the ASK and the reset are writes. An unanswered list simply
+    // shows nothing rather than a question a member cannot answer.
+    readOnly ? (
+      collection.isComplete === null ? null : (
+        <span className="text-xs text-muted-foreground">
+          {collection.isComplete ? t('lists.completenessConfirmed') : t('lists.completenessPartial')}
+        </span>
+      )
+    ) : collection.isComplete === null ? (
       <span className="flex items-center gap-2 flex-shrink-0">
         <button
           type="button"
@@ -479,11 +531,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     );
     return (
       <li key={row.id} className="list-none">
-        <button
-          type="button"
-          onClick={() => openEntity(group, { collection: section.collection, row })}
-          className={`w-full min-h-[44px] flex items-center gap-3 px-4 py-2 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
-        >
+        {rowShell(
+          'w-full min-h-[44px] flex items-center gap-3 px-4 py-2 text-start',
+          expired,
+          () => openEntity(group, { collection: section.collection, row }),
+          <>
           {/* ONE flowing line — name then muted detail; wraps only when it must.
               The two-line row cost 13 size rows twice the height they need. */}
           <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
@@ -497,7 +549,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           </span>
           {priceTag(row)}
           {editChip}
-        </button>
+          </>,
+        )}
       </li>
     );
   };
@@ -681,7 +734,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             {kg.display ?? t('lists.missingKeyGroup', { label: partitionLabel ?? '' })}
                           </span>
                           <span className="min-w-[24px] text-center rounded-full bg-card border border-theme-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">{kg.rows.length}</span>
-                          {kg.display && partitionLabel && (
+                          {!readOnly && kg.display && partitionLabel && (
                             <button
                               type="button"
                               onClick={() => setEditing({
@@ -711,15 +764,24 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                           <ul className="grid grid-cols-2 gap-2 px-4 py-3 sm:flex sm:flex-wrap">
                             {kg.rows.map((entry) => (
                               <li key={entry.row.id} className="list-none min-w-0">
-                                <button
-                                  type="button"
-                                  onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
-                                  title={entry.row.name}
-                                  className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
-                                >
-                                  <span dir="auto" className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:whitespace-normal sm:break-words text-start">{entry.row.name}</span>
-                                  <Pencil className="w-3 h-3 text-icon-muted flex-shrink-0" aria-hidden="true" />
-                                </button>
+                                {readOnly ? (
+                                  <span
+                                    title={entry.row.name}
+                                    className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground"
+                                  >
+                                    <span dir="auto" className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:whitespace-normal sm:break-words text-start">{entry.row.name}</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
+                                    title={entry.row.name}
+                                    className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
+                                  >
+                                    <span dir="auto" className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:whitespace-normal sm:break-words text-start">{entry.row.name}</span>
+                                    <Pencil className="w-3 h-3 text-icon-muted flex-shrink-0" aria-hidden="true" />
+                                  </button>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -739,14 +801,16 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 );
               })()}
               <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
-                <button
-                  type="button"
-                  onClick={() => setEditing({ collection, row: null })}
-                  className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
-                >
-                  <Plus className="w-3 h-3" aria-hidden="true" />
-                  {t('lists.addItem')}
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing({ collection, row: null })}
+                    className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                  >
+                    <Plus className="w-3 h-3" aria-hidden="true" />
+                    {t('lists.addItem')}
+                  </button>
+                )}
                 {expiredRows.length > 0 && (
                   <button
                     type="button"
@@ -1012,7 +1076,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   {/* Progressive disclosure: one quiet «+» per card; the
                       per-list choices appear only while adding. With a single
                       list there is nothing to choose — go straight to the sheet. */}
-                  {(() => {
+                  {!readOnly && (() => {
                     const base = collections.find((c) => !isDatedCollection(c)) ?? collections[0];
                     const label = faceLabel
                       ? t('lists.addNamed', { thing: faceLabel })
