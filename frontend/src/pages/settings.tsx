@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, detectTimezone, resolveStoredTimezone } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, PageHeader, PageSkeleton } from '@/components/ui';
+import { Button, PageHeader, PageSkeleton, ViewOnlyBanner } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
@@ -554,11 +554,7 @@ const SettingsPage: NextPageWithLayout = () => {
       )}
 
       {/* View-only banner for members */}
-      {!canEdit && (
-        <div className="mb-4 p-3 rounded-xl alert-info border text-sm text-center">
-          {tc('viewOnlyHint')}
-        </div>
-      )}
+      {!canEdit && <ViewOnlyBanner className="mb-4" />}
 
       {/* Fixed Save Button — above bottom nav on mobile, bottom of viewport on desktop */}
       {canEdit && <div className={clsx(

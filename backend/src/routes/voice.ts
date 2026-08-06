@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
+import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { transcriptionService, MAX_AUDIO_BYTES } from '../services/transcription';
 import { auth } from '../utils/swagger';
 
@@ -15,10 +16,18 @@ interface TranscribeBody {
 
 /**
  * Voice Routes — KB voice input transcription
- * All routes require authentication (any logged-in user, not admin-only)
+ *
+ * admin+ only. Every caller is an admin-only authoring surface (the Business
+ * Info section editor, a KB gap card, the single-fact sheet), each write behind
+ * them is `requireRole('admin')`, and a transcription costs ~$0.01 of OpenAI
+ * budget per call — so leaving this at "any logged-in user" let a workspace
+ * `member` spend the merchant's AI budget on text nobody could ever save.
+ * Least privilege: the guard belongs on the endpoint, not on the button.
  */
 export default async function voiceRoutes(fastify: FastifyInstance) {
     fastify.addHook('onRequest', authenticate);
+    fastify.addHook('preHandler', resolveWorkspace);
+    fastify.addHook('preHandler', requireRole('admin'));
 
     /**
      * POST /voice/transcribe - Transcribe audio for KB voice input

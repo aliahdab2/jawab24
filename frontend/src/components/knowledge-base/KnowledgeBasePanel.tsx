@@ -3,13 +3,14 @@ import { useRouter } from 'next/router';
 import { useQuery } from '@tanstack/react-query';
 import { X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb, ClipboardPaste } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, InfoPopover } from '@/components/ui';
+import { Button, InfoPopover, ViewOnlyBanner } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { pagesApi, factCollectionsApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { writeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useWorkspaceRole } from '@/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { detectCatalogLikePatterns } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
@@ -47,6 +48,16 @@ interface KnowledgeBasePanelProps {
  * catalog-detection warning, and the save footer — with no modal chrome.
  * Extracted from KnowledgeBaseModal (B1) so the same editor can live inline on
  * /business while the modal remains a thin wrapper for conversation deep-links.
+ *
+ * Permissions: Business Info follows the SAME rule as the rest of /pages and
+ * /settings — everyone in the workspace reads it, only owner/admin (مشرف) may
+ * write. Every write path here (`PUT /pages/:id`, `POST /pages/:id/kb-gaps/
+ * :gapId/dismiss`) is `requireRole('admin')` server-side, so this component is
+ * the single UI choke point that keeps the editor honest about it: it serves
+ * ALL four entry points (the /pages screen, /business, and the comment and
+ * message detail modals via InlineKbEditorModal). Gating here rather than in
+ * each host is what makes it impossible for a new host to reintroduce the
+ * type-then-403 dead end.
  */
 export function KnowledgeBasePanel({
   page,
@@ -63,9 +74,20 @@ export function KnowledgeBasePanel({
   const tPages = useTranslations('pages');
   const router = useRouter();
   const { user, workspaces } = useAuthStore();
+  // Workspace role gate: `member` (عضو) gets a read-only editor, owner/admin
+  // (مشرف) get the full one. Same `canEdit` flag Settings and Integrations
+  // already use, so all three surfaces answer "who may change this?" identically.
+  const { canEdit } = useWorkspaceRole();
   // Catalog canary gate (cosmetic — the catalog endpoints stay admin-gated
   // server-side). Outside the allowlist the banner keeps its pre-import shape.
   const canImportToCatalog = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id)) && !page.ecommerceStoreId;
+  // The CTA is a WRITE (it saves the KB before handing off to the import
+  // sheet), so it needs the role on top of the canary. Deliberately NOT folded
+  // into canImportToCatalog: that flag also drives the collections probe and
+  // `hasAlternativeHome`, which describe the WORKSPACE's price home and must
+  // read the same for a member as for an admin. Only the button and the copy
+  // that promises it move.
+  const showCatalogCta = canImportToCatalog && canEdit;
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);
@@ -157,7 +179,10 @@ export function KnowledgeBasePanel({
   // Owner ruling (2026-08-03): the live notice shows ONLY when the merchant
   // has somewhere better to put the prices. Everyone else keeps the existing
   // post-save "coming soon" banner untouched.
-  const showLiveNotice = liveDetection.hasCatalog && hasAlternativeHome && !liveNoticeDismissed;
+  // Never for a member: the notice asks the reader to MOVE the prices, which is
+  // a write they cannot make. (The post-save `kbWarnings` variant is already
+  // unreachable for them — it is only set by a successful save.)
+  const showLiveNotice = canEdit && liveDetection.hasCatalog && hasAlternativeHome && !liveNoticeDismissed;
 
   // One banner slot, one owner. A save that lands before the debounce or the
   // collections probe resolves sees hasAlternativeHome=false and sets the
@@ -308,6 +333,11 @@ export function KnowledgeBasePanel({
           </InfoPopover>
         </div>
 
+        {/* View-only banner for members — the shared component Settings and the
+            /business sections use, so "who may change this?" reads identically
+            app-wide and a reword lands everywhere at once. */}
+        {!canEdit && <ViewOnlyBanner />}
+
         {/* Facebook import banner */}
         {showFacebookBanner && (
           <div className="flex items-center gap-2 p-3 mb-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40">
@@ -324,7 +354,12 @@ export function KnowledgeBasePanel({
           </div>
         )}
 
-        {/* Unanswered questions — interactive gap cards */}
+        {/* Unanswered questions — interactive gap cards. A member sees the
+            QUESTIONS but not the actions (approve edits the KB, skip POSTs the
+            dismiss — both admin-gated): what a customer asked and nobody could
+            answer is workspace information, and the member working the inbox is
+            often the one who knows the answer. Only the "tap to answer"
+            instruction changes. */}
         {gaps.length > 0 && (
           <div className="mb-3 space-y-2">
             <div className="flex items-center gap-2 px-1">
@@ -333,7 +368,7 @@ export function KnowledgeBasePanel({
                 {tKb('gaps.title')} ({gaps.length})
               </span>
             </div>
-            <p className="text-xs text-amber-700 px-1">{tKb('gaps.hint')}</p>
+            <p className="text-xs text-amber-700 px-1">{tKb(canEdit ? 'gaps.hint' : 'gaps.hintViewOnly')}</p>
             {gaps.map((gap) => (
               <GapCard
                 key={gap.id}
@@ -342,13 +377,15 @@ export function KnowledgeBasePanel({
                 onToggle={() => setExpandedGapId(prev => prev === gap.id ? null : gap.id)}
                 onApprove={(answer) => handleGapApproved(gap.id, answer)}
                 onSkip={() => handleGapSkipped(gap.id)}
+                readOnly={!canEdit}
               />
             ))}
           </div>
         )}
 
-        {/* Thin-KB tip — show when total content is under 100 chars */}
-        {!rawMode && totalChars < 100 && (
+        {/* Thin-KB tip — show when total content is under 100 chars. Not for a
+            member: "add more detail" is advice for whoever can add it. */}
+        {canEdit && !rawMode && totalChars < 100 && (
           <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
             <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-xs leading-relaxed">
@@ -375,12 +412,12 @@ export function KnowledgeBasePanel({
               </p>
               <p>
                 {showLiveNotice
-                  ? tKb(canImportToCatalog ? 'catalogWarning.liveBodyWithCta' : 'catalogWarning.liveBody', {
+                  ? tKb(showCatalogCta ? 'catalogWarning.liveBodyWithCta' : 'catalogWarning.liveBody', {
                       priceCount: liveDetection.priceCount,
                     })
                   : tKb('catalogWarning.body', { priceCount: kbWarnings?.priceCount ?? 0 })}
               </p>
-              {showLiveNotice && canImportToCatalog && (
+              {showLiveNotice && showCatalogCta && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -415,6 +452,7 @@ export function KnowledgeBasePanel({
             maxLength={MAX_LENGTH}
             ariaLabel={tKb('title')}
             onPasteTruncated={({ kept }) => toast.warning(tKb('pasteTruncated', { kept }))}
+            readOnly={!canEdit}
           />
         ) : (
           <KnowledgeBaseSections
@@ -426,6 +464,7 @@ export function KnowledgeBasePanel({
             onDeleteCustomSection={handleDeleteCustomSection}
             onCustomTitleChange={handleCustomTitleChange}
             remainingChars={MAX_LENGTH - totalChars}
+            readOnly={!canEdit}
           />
         )}
       </div>
@@ -467,21 +506,30 @@ export function KnowledgeBasePanel({
             </div>
           )}
           {onClose && (
-            <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
-              {tc('cancel')}
+            // View-only makes this the ONLY way out of the modal, so it stops
+            // being the secondary action and stops hiding on small screens.
+            <Button
+              variant={canEdit ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={onClose}
+              className={canEdit ? 'max-sm:hidden' : undefined}
+            >
+              {canEdit ? tc('cancel') : tc('close')}
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            loading={saving}
-            disabled={isOverLimit}
-            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            variant={saved ? 'secondary' : 'primary'}
-            className="max-sm:h-10 max-sm:px-6"
-          >
-            {saved ? tPages('savedStatus') : tc('save')}
-          </Button>
+          {canEdit && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              loading={saving}
+              disabled={isOverLimit}
+              icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              variant={saved ? 'secondary' : 'primary'}
+              className="max-sm:h-10 max-sm:px-6"
+            >
+              {saved ? tPages('savedStatus') : tc('save')}
+            </Button>
+          )}
         </div>
       </div>
     </>

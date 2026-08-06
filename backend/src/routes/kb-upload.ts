@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
+import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { subscriptionsService } from '../services/subscriptions';
 import {
     extractFromPDF,
@@ -37,10 +38,18 @@ interface ExtractTextBody {
 
 /**
  * KB File Upload Routes — extract text from PDF, Word, and images
- * All routes require authentication (any logged-in user)
+ *
+ * admin+ only. Both callers are admin-only authoring surfaces (the Business
+ * Info section editor and the catalog import sheet) and the image/scanned-PDF
+ * path spends GPT Vision budget against the workspace's daily quota — so "any
+ * logged-in user" let a `member` burn that quota extracting text they could
+ * never save. Least privilege: the guard belongs on the endpoint, not on the
+ * button that happens to be hidden today.
  */
 export default async function kbUploadRoutes(fastify: FastifyInstance) {
     fastify.addHook('onRequest', authenticate);
+    fastify.addHook('preHandler', resolveWorkspace);
+    fastify.addHook('preHandler', requireRole('admin'));
 
     /**
      * POST /kb/extract-text — Extract text from an uploaded file

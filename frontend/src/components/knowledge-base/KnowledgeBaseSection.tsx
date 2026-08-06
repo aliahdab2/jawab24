@@ -14,6 +14,8 @@ interface KnowledgeBaseSectionProps {
   onChange: (id: SectionId, content: string) => void;
   /** Undefined when collapsed so memoized siblings skip re-renders triggered by the global budget changing. */
   remainingChars: number | undefined;
+  /** View-only (workspace `member`) — see SectionEditor. */
+  readOnly?: boolean;
 }
 
 function KnowledgeBaseSectionImpl({
@@ -23,6 +25,7 @@ function KnowledgeBaseSectionImpl({
   onToggle,
   onChange,
   remainingChars,
+  readOnly = false,
 }: KnowledgeBaseSectionProps) {
   const tKb = useTranslations('kb');
   const hasContent = section.content.trim().length > 0;
@@ -66,6 +69,7 @@ function KnowledgeBaseSectionImpl({
         ariaLabel={tKb(config.titleKey)}
         isExpanded={isExpanded}
         remainingChars={remainingChars}
+        readOnly={readOnly}
       />
     </CollapsibleSectionCard>
   );

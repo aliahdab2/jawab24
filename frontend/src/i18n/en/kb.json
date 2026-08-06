@@ -20,6 +20,7 @@
   "gaps": {
     "title": "Unanswered Questions",
     "hint": "Customers asked these but your KB couldn't answer. Tap to add an answer.",
+    "hintViewOnly": "Customers asked these but your Business Info couldn't answer them. Ask an admin to add the answers.",
     "times": "{count}x",
     "answerPlaceholder": "Type your answer...",
     "addToKb": "Add to KB",

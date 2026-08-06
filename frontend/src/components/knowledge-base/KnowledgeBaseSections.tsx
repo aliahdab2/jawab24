@@ -16,6 +16,8 @@ interface KnowledgeBaseSectionsProps {
   onDeleteCustomSection: (sectionId: CustomSectionId) => void;
   onCustomTitleChange: (sectionId: CustomSectionId, title: string) => void;
   remainingChars: number;
+  /** View-only (workspace `member`) — see SectionEditor. */
+  readOnly?: boolean;
 }
 
 export function KnowledgeBaseSections({
@@ -27,6 +29,7 @@ export function KnowledgeBaseSections({
   onDeleteCustomSection,
   onCustomTitleChange,
   remainingChars,
+  readOnly = false,
 }: KnowledgeBaseSectionsProps) {
   const tKb = useTranslations('kb');
   const { filled, total } = calculateProgress(sections);
@@ -98,6 +101,7 @@ export function KnowledgeBaseSections({
                 onTitleChange={onCustomTitleChange}
                 onDelete={onDeleteCustomSection}
                 remainingChars={sectionRemaining}
+                readOnly={readOnly}
               />
             </div>
           );
@@ -114,13 +118,14 @@ export function KnowledgeBaseSections({
               onToggle={handleToggle}
               onChange={onSectionChange}
               remainingChars={sectionRemaining}
+              readOnly={readOnly}
             />
           </div>
         );
       })}
 
       {/* Add custom section button */}
-      {customCount < MAX_CUSTOM_SECTIONS && (
+      {!readOnly && customCount < MAX_CUSTOM_SECTIONS && (
         <button
           type="button"
           onClick={onAddCustomSection}

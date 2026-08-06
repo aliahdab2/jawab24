@@ -40,11 +40,19 @@ interface CatalogManagerProps {
   importRequested?: boolean;
   /** Pre-fill for the import paste box when importRequested is set. */
   importInitialText?: string;
+  /**
+   * View-only (workspace `member`). Every catalog write — create, update,
+   * delete, batch import, posts scan, vertical — is `requireRole('admin')`
+   * server-side (`routes/catalog.ts`), so a member gets the list and none of
+   * the affordances. Without this the whole section was a type-then-403 dead
+   * end sitting directly above the Business Info panel's "view only" banner.
+   */
+  readOnly?: boolean;
 }
 
 /** The catalog editor for one page. Host-agnostic (takes pageId via props) so it
  *  can live on the dedicated /catalog page or inside the Business Info modal. */
-export function CatalogManager({ pageId, page, importRequested, importInitialText }: CatalogManagerProps) {
+export function CatalogManager({ pageId, page, importRequested, importInitialText, readOnly = false }: CatalogManagerProps) {
   const t = useTranslations('catalog');
   const queryClient = useQueryClient();
   const queryKey = ['catalog', pageId];
@@ -73,9 +81,11 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   // Deep-link entry: open the import sheet once when the page asks for it —
   // after the catalog list resolves, so the sheet's reconcile step never
   // classifies against a still-loading (empty) catalog (#492 review).
+  // Never for a member: `?import=1` is a URL, so it is reachable by anyone who
+  // was sent the link, and the sheet's every write would 403.
   useEffect(() => {
-    if (importRequested && !isLoading) setSheetMode('paste');
-  }, [importRequested, isLoading]);
+    if (importRequested && !isLoading && !readOnly) setSheetMode('paste');
+  }, [importRequested, isLoading, readOnly]);
   const items = useMemo(() => listData?.data ?? [], [listData]);
   const vertical = listData?.vertical;
   // Fresh items default to the vertical's natural type (dealer → vehicle,
@@ -202,7 +212,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   // prefilled dropdown is one more control to parse, and a wrong default costs
   // nothing (the type chips in the form fix it). It shows when we're guessing
   // ('default') and stays for merchants who have used it ('merchant').
-  const verticalControl = vertical && vertical.source !== 'facebook' && (
+  const verticalControl = !readOnly && vertical && vertical.source !== 'facebook' && (
     <div className="flex items-center gap-2">
       <span className="text-sm text-muted-foreground whitespace-nowrap">{t('vertical.label')}</span>
       <Select
@@ -247,7 +257,11 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
 
   return (
     <div>
-      {items.length === 0 ? (
+      {items.length === 0 && readOnly ? (
+        // A member cannot paste, scan or add — so the pitch for those paths is
+        // noise. State the fact and stop.
+        <p className="text-sm text-muted-foreground">{t('empty.viewOnly')}</p>
+      ) : items.length === 0 ? (
         <div>
           {/* Compact empty state: one line of mental model + ONE primary action.
               The big dashed hero («أضف ما تبيعه» + a scan pitch) is gone — the
@@ -293,6 +307,12 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               </span>
               {verticalControl}
             </div>
+            {/* Every button here is a write. Removed for a member rather than
+                disabled: "disabled with a reason" is the right shape when the
+                action is temporarily blocked (reconnect the page and it works);
+                a role they do not have is not a reason they can act on, and the
+                banner above the section already explains it. */}
+            {!readOnly && (
             <div className="flex flex-wrap gap-2">
               {/* Blocked → DISABLED with the reason, never removed. A button that
                   silently disappears reads as "the feature was deleted" (owner
@@ -317,10 +337,12 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 {t('add')}
               </Button>
             </div>
+            )}
           </div>
           {/* The toolbar's disabled scan button needs its reason VISIBLE — a title
-              attribute alone is invisible on touch, where most merchants are. */}
-          {scanBlockedReason && (
+              attribute alone is invisible on touch, where most merchants are.
+              With no scan button there is no reason to explain. */}
+          {!readOnly && scanBlockedReason && (
             <p className="text-xs text-muted-foreground mb-3">{scanBlockedReason}</p>
           )}
           <ul className="space-y-2">
@@ -336,6 +358,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 onMove={handleMove}
                 onToggleAvailability={handleToggleAvailability}
                 onSavePrice={handleSavePrice}
+                readOnly={readOnly}
               />
             ))}
           </ul>

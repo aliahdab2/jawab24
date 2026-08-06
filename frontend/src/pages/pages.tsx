@@ -1327,16 +1327,23 @@ const PagesPage: NextPageWithLayout = () => {
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <div className="text-start">
+                        {/* A member opens the same editor read-only, so the CTA
+                            must not promise a write: «أضف معلومات» and «اضغط
+                            للتعديل» are both instructions they cannot follow. */}
                         <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
-                          {page.knowledgeBase
-                            ? t('businessInfoActive')
-                            : t('addBusinessInfo')
+                          {!canEdit
+                            ? t('viewBusinessInfo')
+                            : page.knowledgeBase
+                              ? t('businessInfoActive')
+                              : t('addBusinessInfo')
                           }
                         </p>
                         <p className="text-xs font-medium text-muted-foreground mt-0.5">
-                          {page.knowledgeBase
-                            ? t('clickToEdit')
-                            : t('improveAIQuality')
+                          {!canEdit
+                            ? tc('viewOnlyHint')
+                            : page.knowledgeBase
+                              ? t('clickToEdit')
+                              : t('improveAIQuality')
                           }
                         </p>
                       </div>

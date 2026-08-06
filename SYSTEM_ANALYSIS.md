@@ -2334,19 +2334,46 @@ Jawab24 supports **multi-tenant workspaces** with role-based access control (RBA
 ```
 Protected routes use requireRole('admin') middleware:
   POST/PUT/DELETE on /pages, /rules, /templates, /settings → admin+
-  GET on /pages, /rules, /templates, /messages → member+
+  POST/PATCH/DELETE on /pages/:id/catalog, /pages/:id/fact-collections → admin+
+  POST /kb/extract-text, POST /voice/transcribe → admin+
+    (AI-cost endpoints; every caller is an admin-only authoring surface)
+  GET on /pages, /rules, /templates, /messages, /pages/:id/kb-gaps → member+
+  GET on /pages/:id/catalog, /pages/:id/fact-collections → member+
   POST /workspace/invite, DELETE /workspace/members → admin+
   DELETE /workspace → owner only
 ```
 
+Refusals answer `403` with `code: 'INSUFFICIENT_ROLE'` (in the workspace, wrong
+role) or `code: 'WORKSPACE_ACCESS_DENIED'` (no longer a member). The frontend
+classifies both through `utils/authorizationOutcome.ts` — one place, because
+three surfaces must agree that a refusal is an OUTCOME, not a defect: they
+explain it to the merchant, leave a Sentry breadcrumb, and file **no** error.
+`WORKSPACE_REQUIRED` is deliberately excluded — that one IS a client bug.
+
 ### Frontend RBAC UX
 
 - **Route guards**: Protected pages check user role before rendering
-- **Read-only mode**: Members see the dashboard but interactive elements are disabled
-- **Permission tooltips**: Disabled buttons show "You need admin access" on hover
-- **403 toast**: Unauthorized API calls show a toast notification
+- **Read-only mode**: a `member` gets the same screens with the write
+  affordances removed, never a blank page or a disabled text box — reading is
+  the whole point of their role. Gated surfaces: /settings, /integrations,
+  /pages, and every section of /business (products catalog, fact rows, fact
+  lists, and the Business Info editor, which also serves the /pages screen and
+  the inbox's in-conversation editor via `KnowledgeBasePanel`).
+  Editors go `readOnly`, never `disabled`, so the text stays selectable and
+  reachable by keyboard.
+- **Permission banner**: view-only surfaces render the shared
+  `<ViewOnlyBanner />` — "Only admins can make changes" / «المشرفون فقط يمكنهم
+  إجراء تعديلات» (`common.viewOnlyHint`)
+- **403 toast**: a refused write names who *can* do it, rather than "try again"
 - **Team management UI**: Admins can invite members, assign roles, revoke access
 - **Workspace context**: Set via `X-Workspace-Id` header; auto-selected if user has only 1 workspace
+
+> Invites carry no role picker (`createInvite` takes none) — everyone joins as
+> `member` and is promoted from /team. Until 2026-08-06 the Business Info editor
+> and the /business sections ignored the role entirely: a member could fill in a
+> whole document and only learn on Save, via a generic failure that also filed a
+> Sentry error. Fixed by gating at `KnowledgeBasePanel` (the single choke point
+> behind all four entry points) and threading one `canEdit` through /business.
 
 ### Database Tables (Migration 0034+)
 

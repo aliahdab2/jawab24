@@ -14,6 +14,13 @@ interface BusinessFactRowsProps {
   onEditFact: (key: EditableFactKey) => void;
   /** Open the structured day/range hours sheet. */
   onEditHours: () => void;
+  /**
+   * View-only (workspace `member`). Writing a fact is `PUT /pages/:id`, which is
+   * `requireRole('admin')` — so the rows keep their value and their coverage
+   * badge (the answer to "does Jawab know this?" is the same for everyone) and
+   * stop being tap targets.
+   */
+  readOnly?: boolean;
 }
 
 interface FactRow {
@@ -52,7 +59,7 @@ interface FactRow {
  * CONFIRMED merchant half only, the same authority the reply pipeline uses
  * (suggestions never count as set).
  */
-export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFactRowsProps) {
+export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = false }: BusinessFactRowsProps) {
   const t = useTranslations('business');
 
   const rows: FactRow[] = useMemo(() => {
@@ -129,18 +136,10 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
             : isScoredFactKey(row.key)
               ? { className: 'status-warning', label: t('state.missing') }
               : { className: 'bg-muted text-muted-foreground border-theme-border', label: t('state.optional') };
-          return (
-            <li key={row.key}>
-              <button
-                type="button"
-                onClick={() => (row.key === 'hours' ? onEditHours() : onEditFact(row.key))}
-                // 56px row: the WHOLE thing is the tap target (was a 19×16px
-                // link). The mock draws the action as a ~70px button at the row
-                // end; that button is rendered below as a plain <span> — a real
-                // nested <button> is invalid HTML and would shrink a full-width
-                // target down to 70px on the viewport where it matters most.
-                className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors"
-              >
+          // Identical content whether the row is a control or plain text — a
+          // view-only row must read the same, minus the action pill.
+          const rowContent = (
+            <>
                 <Icon
                   className={`w-5 h-5 flex-shrink-0 ${row.covered ? 'text-brand-600' : 'text-icon-muted'}`}
                   aria-hidden="true"
@@ -174,7 +173,11 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                       ? (row.valueNode ?? (row.value || t('facts.isSet')))
                       : row.storeAnswered
                         ? t('facts.storeAnswered')
-                        : t(`facts.add_${row.key}`)}
+                        : readOnly
+                          // «أضف عنوانك» is an instruction to the person who
+                          // can. A member gets the state, not the errand.
+                          ? t('facts.notSet')
+                          : t(`facts.add_${row.key}`)}
                   </span>
                 </span>
                 {/* Visual affordance only — see the row's className note. It is
@@ -185,14 +188,37 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                     the highlighted call-to-action, yet «إضافة» is still the honest
                     label — there is no merchant text to edit, only one to add as
                     a deliberate override. */}
-                <span
-                  className={`flex-shrink-0 inline-flex items-center justify-center min-w-[64px] rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-                    row.covered ? 'border-theme-border text-muted-foreground' : 'status-brand'
-                  }`}
+                {!readOnly && (
+                  <span
+                    className={`flex-shrink-0 inline-flex items-center justify-center min-w-[64px] rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                      row.covered ? 'border-theme-border text-muted-foreground' : 'status-brand'
+                    }`}
+                  >
+                    {isSet ? t('facts.edit') : t('facts.add')}
+                  </span>
+                )}
+            </>
+          );
+          return (
+            <li key={row.key}>
+              {readOnly ? (
+                <div className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start">
+                  {rowContent}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => (row.key === 'hours' ? onEditHours() : onEditFact(row.key))}
+                  // 56px row: the WHOLE thing is the tap target (was a 19×16px
+                  // link). The mock draws the action as a ~70px button at the row
+                  // end; that button is rendered above as a plain <span> — a real
+                  // nested <button> is invalid HTML and would shrink a full-width
+                  // target down to 70px on the viewport where it matters most.
+                  className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors"
                 >
-                  {isSet ? t('facts.edit') : t('facts.add')}
-                </span>
-              </button>
+                  {rowContent}
+                </button>
+              )}
             </li>
           );
         })}

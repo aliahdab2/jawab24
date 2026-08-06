@@ -2,8 +2,8 @@ import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import type { ApiError } from '@/lib/api-utils';
-import { captureError } from '@/lib/sentryHelpers';
+import { addErrorBreadcrumb, captureError } from '@/lib/sentryHelpers';
+import { authorizationOutcome } from '@/utils/authorizationOutcome';
 import type { KbWarnings, SaveKbOutcome } from '@/components/knowledge-base/types';
 
 interface UseSaveKnowledgeBaseResult {
@@ -48,9 +48,27 @@ export function useSaveKnowledgeBase(
       setTimeout(() => setSaved(false), 3000);
       return { ok: true, kbWarnings: response.data.kbWarnings };
     } catch (error) {
-      const apiError = error as ApiError;
-      if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
-        toast.error(t('saveFailedAccessRevoked'));
+      // Both 403 codes are AUTHORIZATION OUTCOMES, not defects: the member was
+      // removed from the workspace, or never had the admin role `PUT /pages/:id`
+      // requires. They get a specific message and — deliberately — no
+      // captureError, which previously filed every one of them as a Sentry bug.
+      // Classification is shared (`authorizationOutcome`) because the fact-list
+      // and single-fact saves must reach the same verdict; only the COPY is
+      // per-surface, so this one can name Business Info.
+      const outcome = authorizationOutcome(error);
+      if (outcome) {
+        // Not an error, but not nothing either: a refusal here means a UI that
+        // offered a write it could not complete. Suppressing the Sentry event
+        // without leaving a trail would make the next such mismatch invisible —
+        // which is exactly how this bug survived. A breadcrumb keeps the signal
+        // attached to whatever the session does report, at zero noise.
+        addErrorBreadcrumb('authorization', 'Business Info save refused', {
+          code: outcome,
+          pageId,
+        });
+        toast.error(outcome === 'WORKSPACE_ACCESS_DENIED'
+          ? t('saveFailedAccessRevoked')
+          : t('saveFailedInsufficientRole'));
       } else {
         captureError(error, 'Failed to save knowledge base', { tags: { action: 'save-kb' } });
         toast.error(t('saveFailed'));
