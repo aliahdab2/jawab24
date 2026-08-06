@@ -295,6 +295,33 @@ describe('damascus fact-collections fixture (schedules slice, D-052)', () => {
         expect(scheduleBlock).toContain('starts 2026-08-03');
     });
 
+    // Eval #755 premise (prod الدمشقي 2026-08-05): the SUB-KEY hole. «محادثة» is a
+    // real priced English level with NO cohort slot, while its sibling levels under
+    // the SAME key value («انكليزي») do have live ones. That asymmetry is the whole
+    // reproduction — the row gate admits the siblings and the coverage index, being
+    // keyed on «الدورة», still asserts انكليزي is covered. If this premise ever
+    // drifts (a محادثة slot gets added, or the English siblings all expire), #755
+    // stops measuring anything and must be re-authored, not re-baselined.
+    it('#755 premise: محادثة is priced but slot-less while sibling انكليزي levels are live', () => {
+        const levelOf = (r: { attributes: { label: string; value: string }[] | null }) =>
+            r.attributes?.find(a => a.label === 'المستوى')?.value;
+        const pricedLevels = damascusPriceRowInputs(DAMASCUS_COURSE_PRICES)
+            .filter(r => r.name === 'اللغة الإنكليزية')
+            .map(levelOf);
+        expect(pricedLevels).toContain('محادثة');
+
+        const englishSlots = DAMASCUS_SCHEDULE_SLOTS.filter(s => s.course === 'انكليزي');
+        expect(englishSlots.map(s => s.level)).not.toContain('محادثة');
+        // The siblings must be genuinely borrowable — upcoming, not expired.
+        const liveSiblings = englishSlots.filter(s => {
+            const { startsAt } = resolveSlotDates(s.start, TODAY);
+            return startsAt === null || startsAt >= TODAY;
+        });
+        expect(liveSiblings.length).toBeGreaterThan(0);
+        // …and the boundary the model reads names the KEY, never the level.
+        expect(DAMASCUS_SCHEDULES_KEY).toBe('الدورة');
+    });
+
     // #503/#511 anchor: the closed online list is exactly the merchant's three,
     // so «دورة X أونلاين؟» for anything else hits the absence directive.
     it('keeps the online list closed: ICDL / الإكسل / محاسبة الأمين only', () => {

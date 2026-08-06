@@ -913,3 +913,59 @@ days (`trial_ends_at` → `current_period_end` ≈ 1 day, then + 3 days grace).
    to top-up balance after a status block; the auto-reply gate (`canAutoReply`) never
    consulted top-ups for any expired state, and this change keeps that boundary unchanged
    for trials rather than widening it.
+
+## D-062 · Row gating narrows below the key, and a value may only constrain the rows its own key match reaches
+
+**Date:** 2026-08-06 · **Context:** الدمشقي, shadow-verifier flag 2026-08-05 21:06 UTC —
+the customer asked for the انكليزي **مبتدئ** cohort, whose slots D-057 had retired, and
+got متوسط 1's row verbatim (start date + days + time, all three) with the level swapped
+
+D-051 settled that facts the model must not judge are decided in code and enforced by what
+it is SHOWN. This extends the same mechanism one granularity down, and records the two
+measured negative results that bound it — both of which cost a real measurement to learn
+and would otherwise be re-proposed.
+
+1. **The key gate bounds MEMBERSHIP, not identity.** The coverage statement is keyed on
+   «الدورة», so it *asserts* انكليزي is covered; what the customer asked for was missing one
+   attribute below the key. Row gating therefore also narrows by non-key attribute values
+   («المستوى»), derived from the merchant's own rows — no new column, nothing to declare.
+
+2. **Prose for this was measured and REJECTED.** A derived record-integrity clause (each
+   row is one record, values may not move between rows, a combination no row carries is
+   not in this list) moved the defect 6/8 → 5/8 = NEUTRAL — the same verdict as the
+   near-name rule (8/48 vs 8/48). Do not re-propose it, and in particular do not bump
+   `PROMPT_VERSION` for it: that retires the entire semantic reply cache (Rule 17) for a
+   change that does nothing.
+
+3. **The constraint is evaluated PER ROW, never per collection.** "Does this list use
+   «المستوى»?" is true for the schedules list because its English rows carry levels, so
+   «بدي ICDL وأنا مبتدئ» filtered out every ICDL row — none of which carries a level at
+   all — and denied five real upcoming cohorts (0/6 vs 8/8 on probe C7). A row that does
+   not carry the constrained label is UNCONSTRAINED on that axis, never withheld.
+
+4. **A value may only constrain rows its own key match REACHES** (added 2026-08-06 after
+   external review, before merge). The constraint vocabulary is built page-wide on
+   purpose — «محادثة» is priced but never scheduled, and that asymmetry is what makes "no
+   announced cohort for this level" derivable — but applying it page-wide is a
+   false-denial machine. «متقدم» and «محترف» are levels of the BARBERING and accounting
+   price rows and of nothing English, yet «ايمتا تبدأ دورات الانكليزي؟ أنا متقدم» withheld
+   all **nine** live انكليزي cohorts and answered that there were no announced dates. A
+   matched value now survives only if some row that stores it is reached by the customer's
+   key match (its name + values contain a matched key value) — decided per VALUE by where
+   it is stored, never per list, so §3 stands unchanged.
+
+5. **Letter-free values need a token boundary.** Slot times are stored as «2-4»/«1-2», and
+   bare containment finds them inside any digit run: «رقمي 0932-4567» matched «2-4» and
+   withheld every differently-timed cohort. Because `composeFactMatchText` feeds the
+   matcher the conversation's earlier USER turns, one phone number poisoned every later
+   question in that thread. The boundary applies ONLY to needles with no letters — Arabic
+   glues its prefixes, so «عين الدالية» must keep matching inside «بعين الدالية».
+
+**The standing lesson, from §4 and §3 together:** a narrowing constraint fails in the
+expensive direction. Borrowing produces a wrong answer the merchant can see; a false
+denial produces a *plausible* answer and loses the registration silently. Any change here
+must be measured against a control that has live rows, not only against the defect.
+
+**Not in scope, deliberately:** detection. The illegal-join validator — for every pair of
+stored values appearing in one reply under different labels, assert some single row holds
+both — needs no model call and is the natural next step.

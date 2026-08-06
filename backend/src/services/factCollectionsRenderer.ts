@@ -198,6 +198,22 @@ export function renderCoverageStatement(
     return `${scopeLine} ${absence} ${retraction}`;
 }
 
+/*
+ * ❌ MEASURED AND REJECTED 2026-08-06 — a record-integrity CLAUSE for the attribute
+ * axis. Do not re-add it as prose; the number is already known, and re-adding it
+ * would also bump PROMPT_VERSION and retire the whole semantic reply cache (Rule
+ * 17) for a change that does nothing.
+ *
+ * One derived sentence naming the non-key labels and stating that a row is one
+ * record moved the defect 6/8 -> 5/8 = NEUTRAL, the same verdict as the near-name
+ * rule in factCollectionsMatcher (8/48 vs 8/48). "Is what the customer named the
+ * same as a value in this row" is a comparison the model is unreliable at.
+ *
+ * The escalation was CODE, and it shipped: sub-key row gating in factCollections.ts
+ * plus createAttributeScope in the matcher. Full ruling, both measured negative
+ * results and the two false-denial guards that bound it: DECISIONS.md D-062.
+ */
+
 /**
  * Distinct key values across the rows, plus how many rows carry NO key value —
  * the number that decides whether the index may be presented as a boundary.
