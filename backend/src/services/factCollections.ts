@@ -24,7 +24,7 @@ import {
     type FactCollectionForPrompt,
     type FactRowForPrompt,
 } from './factCollectionsRenderer';
-import { matchCollections } from './factCollectionsMatcher';
+import { matchCollections, matchAttributeValues } from './factCollectionsMatcher';
 
 /** Bound per page so an import can't balloon the prompt or the UI. Defined in
  *  @jawab24/shared because the editor must name the cap it just hit; re-exported
@@ -212,6 +212,21 @@ class FactCollectionsService {
             else rowsByCollection.set(r.collectionId, [r]);
         }
 
+        // ── Sub-key constraints, computed ONCE for the whole page ───────────────
+        // Which stored attribute values the customer named, grouped by their label.
+        // Built over EVERY live row on the page, not per collection, because that is
+        // what makes the sub-key derivable with no configuration: «محادثة» is a
+        // stored «المستوى» value in the PRICE list and appears nowhere in the
+        // schedules list, and that asymmetry IS the fact "this level has no announced
+        // cohort". Computed here rather than in the loop so the reply path pays for
+        // one normalization pass per distinct (label, value), not one per collection.
+        const attributeMatches = mode === 'gated' && messageText && messageText.trim().length > 0
+            ? matchAttributeValues(
+                messageText,
+                allRows.flatMap(r => r.attributes ?? []),
+            )
+            : new Map<string, Set<string>>();
+
         const blocks: string[] = [];
         let gated = false;
 
@@ -283,6 +298,55 @@ class FactCollectionsService {
                 // one. A normalizer miss («الرمال» vs «حي الرمال») lands here, and
                 // the customer still sees their area named in that statement.
                 displayRows = wanted.size === 0 ? [] : promptRows.filter(carriesMatchedKey);
+
+                // ── Sub-key narrowing (2026-08-06) ──────────────────────────────
+                // STRICTLY NARROWING, by construction: it filters the key-gated set
+                // and can never add a row. That property is what makes it safe to
+                // ship next to the measured 28%→0% place mechanism — a collection
+                // whose rows carry nothing but the key has no other label to
+                // constrain, so its behaviour is byte-identical to before.
+                //
+                // THE CONSTRAINT IS EVALUATED PER ROW, NOT PER COLLECTION — and the
+                // difference is a false-denial bug found in external review before this
+                // shipped. A per-collection test ("does this list use «المستوى»?") is
+                // true for the schedules list because its English rows carry levels, so
+                // «بدي ICDL وأنا مبتدئ» would have filtered out every ICDL row — none of
+                // them carries a level at all — and denied five real upcoming cohorts.
+                //
+                // A row that does not carry the constrained label is UNCONSTRAINED on
+                // that axis, never excluded: the constraint narrows only among rows the
+                // data can actually distinguish. (This is deliberately NOT SQL's
+                // `WHERE level = 'x'`, which drops NULLs — dropping them here hides
+                // facts on the strength of an attribute the merchant never recorded.)
+                // A list with no such label anywhere — the outlet directory — is
+                // therefore untouched by construction, not by a special case.
+                //
+                // The AND across labels is the point: «انكليزي» + «محادثة» leaves zero
+                // rows, so the model is shown the boundary statement with NO cohort
+                // rows and cannot relabel متوسط 2's slot as a محادثة slot. Prose
+                // telling it the same thing measured neutral (6/8 → 5/8); this
+                // removes the material instead of asking for restraint.
+                let subKeyNarrowed = false;
+                for (const [label, values] of attributeMatches) {
+                    const norm = normalizeLabel(label);
+                    if (norm === wantedLabel) continue; // the key is already gated above
+                    const before = displayRows.length;
+                    displayRows = displayRows.filter(r => {
+                        const cell = r.attributes?.find(a => normalizeLabel(a.label) === norm);
+                        // No such attribute on THIS row ⇒ the constraint cannot judge it
+                        // ⇒ keep it. Only a row that carries the label and disagrees is
+                        // withheld.
+                        return !cell || values.has(cell.value.trim());
+                    });
+                    if (displayRows.length !== before) subKeyNarrowed = true;
+                }
+                if (subKeyNarrowed) {
+                    // Separate counter from rows_gated: this is the new axis, and
+                    // "did the sub-key pass ever fire in production?" must be
+                    // answerable without reading debug logs.
+                    redis.incr('metrics:facts:rows_gated_subkey').catch(() => {});
+                }
+
                 if (displayRows.length !== promptRows.length) {
                     gated = true;
                     // M3: the merchant-facing symptom of gating is "the AI stopped

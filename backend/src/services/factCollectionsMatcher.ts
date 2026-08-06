@@ -90,6 +90,73 @@ export function matchCollections(messageText: string, collections: MatcherCollec
     return out;
 }
 
+/** One stored attribute cell, as it appears on a row. */
+export interface AttributeCell {
+    label: string;
+    value: string;
+}
+
+/**
+ * Which stored ATTRIBUTE values occur in the customer's message, grouped by the
+ * label they were found under — the sub-key half of row gating.
+ *
+ * WHY THIS EXISTS (measured, 2026-08-06). The key gate bounds membership at the
+ * key's granularity, and that is where the residual defect lives: asked for the
+ * انكليزي **مبتدئ** cohort — retired by D-057 while متوسط 1/2 stayed live — the
+ * model returned متوسط 1's row verbatim with the level swapped, 6 of 8 runs at
+ * prod sampling. A prose clause telling it not to do that measured NEUTRAL
+ * (6/8 → 5/8) and was reverted, for the same reason the near-name rule above was:
+ * the model is not missing information, it is holding a row it can relabel. It
+ * cannot relabel a row it was never shown.
+ *
+ * GROUPED BY LABEL, NEVER A FLAT VALUE SET. A matched value constrains only the
+ * label it was stored under, so «سوق الجمعة» read from «المدينة» can never gate on
+ * «ملاحظة». That is the same attribution discipline the key gate already enforces
+ * in factCollections.ts, applied one level down.
+ *
+ * The label→values map is built across ALL of the page's collections on purpose:
+ * «محادثة» is a stored «المستوى» value in the PRICE list and appears nowhere in the
+ * schedules list, which is precisely what makes "no announced cohort for this
+ * level" derivable with zero configuration. The merchant's own data supplies the
+ * vocabulary — nothing here is hand-maintained, and no merchant declares anything.
+ *
+ * Same containment + normalization + minimum length as matchCollections, because
+ * two notions of "the customer said this value" would drift apart.
+ */
+export function matchAttributeValues(
+    messageText: string,
+    cells: AttributeCell[],
+): Map<string, Set<string>> {
+    const out = new Map<string, Set<string>>();
+    const haystack = normalizeForMatch(messageText);
+    if (!haystack) return out;
+
+    // Values are deduped per label before matching: a page's rows repeat the same
+    // level or city many times, and normalizing each copy is wasted work on the
+    // reply path (Rule 17 — this runs per message).
+    const byLabel = new Map<string, Set<string>>();
+    for (const cell of cells) {
+        const label = cell.label.trim().replace(/\s+/g, ' ');
+        const value = cell.value.trim();
+        if (!label || !value) continue;
+        const set = byLabel.get(label) ?? new Set<string>();
+        set.add(value);
+        byLabel.set(label, set);
+    }
+
+    for (const [label, values] of byLabel) {
+        for (const value of values) {
+            const needle = normalizeForMatch(value);
+            if (needle.length < 2) continue;
+            if (!haystack.includes(needle)) continue;
+            const hits = out.get(label) ?? new Set<string>();
+            hits.add(value);
+            out.set(label, hits);
+        }
+    }
+    return out;
+}
+
 /**
  * Compose the text the matcher reads for a DM: the customer's recent USER turns
  * plus the current consolidated burst.

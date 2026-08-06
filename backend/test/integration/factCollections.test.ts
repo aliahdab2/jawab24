@@ -631,6 +631,109 @@ describe('fact collections — deterministic row gating', () => {
         expect(ctx.block).toContain('صيدلية بلا منطقة');
     });
 
+    // ── SUB-KEY narrowing (2026-08-06) ───────────────────────────────────────
+    // Both of today's fixes were measured only by the probe battery and the eval,
+    // which sample a RATE and cost money per run. These pin them for free, and the
+    // second one is the more important of the two: a false denial loses a real
+    // registration, and without a deterministic test, "simplifying" the predicate
+    // back to per-collection leaves the whole unit suite green.
+    describe('sub-key narrowing', () => {
+        /** A cohort list keyed on «الدورة»: انكليزي has levels, ICDL has none at all. */
+        const COHORTS = [
+            { name: 'دورة اللغة الإنكليزية', attributes: [
+                { label: 'الدورة', value: 'انكليزي' }, { label: 'المستوى', value: 'مبتدئ' },
+                { label: 'الأيام', value: 'السبت والأربعاء' }] },
+            { name: 'دورة اللغة الإنكليزية', attributes: [
+                { label: 'الدورة', value: 'انكليزي' }, { label: 'المستوى', value: 'متوسط 2' },
+                { label: 'الأيام', value: 'الأحد والثلاثاء' }] },
+            { name: 'دورة ICDL', attributes: [{ label: 'الدورة', value: 'ICDL' }] },
+        ];
+        /** The PRICE list — where «محادثة» is recorded, and it is recorded NOWHERE
+         *  else. That asymmetry is the whole mechanism: the constraint exists because
+         *  the merchant priced a level they have not scheduled, so "this level has no
+         *  announced cohort" is derivable from their own data with no configuration.
+         *  Mirrors the real page, where محادثة is priced at 75k and has no slot. */
+        const PRICES = [
+            { name: 'اللغة الإنكليزية', attributes: [{ label: 'المستوى', value: 'مبتدئ' }], price: '35000' },
+            { name: 'اللغة الإنكليزية', attributes: [{ label: 'المستوى', value: 'متوسط 2' }], price: '50000' },
+            { name: 'اللغة الإنكليزية', attributes: [{ label: 'المستوى', value: 'محادثة' }], price: '75000' },
+        ];
+        let cohortPage: string;
+
+        beforeEach(async () => {
+            const user = await createTestUser();
+            const page = await createTestPage(user.id, { name: 'Institute', knowledgeBase: 'معهد تدريب' });
+            cohortPage = page.id;
+            await factCollectionsService.createCollection(cohortPage, {
+                label: 'أسعار الدورات', keyAttr: null, rows: PRICES,
+            });
+            await factCollectionsService.createCollection(cohortPage, {
+                label: 'مواعيد الدورات المعلنة', keyAttr: 'الدورة', rows: COHORTS,
+            });
+        });
+
+        // The prod defect (الدمشقي 2026-08-05): the key gate admits «انكليزي», the
+        // coverage line asserts انكليزي is covered, and the model relabels a sibling
+        // level's row. «محادثة» is a level that no row carries.
+        it('withholds every sibling row when the named level has none, keeping the boundary', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                cohortPage, 'ايمتا تبدأ دورة المحادثة انكليزي؟', '2026-07-28');
+            expect(ctx.gated).toBe(true);
+            // Nothing borrowable is in front of the model…
+            expect(ctx.block).not.toContain('السبت والأربعاء');
+            expect(ctx.block).not.toContain('الأحد والثلاثاء');
+            // …and the list's boundary still renders.
+            expect(ctx.block).toContain('انكليزي');
+            expect(ctx.block).toContain('غير مسجّل لدينا');
+        });
+
+        // THE FALSE-DENIAL REGRESSION PIN. ICDL carries no «المستوى» at all, so a
+        // per-COLLECTION test ("does this list use that label?" — true, because the
+        // English rows do) filtered every ICDL row out and denied a real cohort:
+        // measured 0/6 vs 8/8 on probe C7. A row the constraint cannot judge is kept.
+        it('keeps rows that do not carry the constrained label at all', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                cohortPage, 'ايمتا تبدأ دورة ICDL؟ أنا مبتدئ تماماً', '2026-07-28');
+            expect(ctx.block).toContain('دورة ICDL');
+        });
+
+        it('narrows to the named level when rows DO carry it', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                cohortPage, 'أنا مبتدئ بالانكليزي، ايمتا تبدأ الدورات؟', '2026-07-28');
+            expect(ctx.block).toContain('السبت والأربعاء');       // the مبتدئ row
+            expect(ctx.block).not.toContain('الأحد والثلاثاء');   // the متوسط 2 row
+        });
+
+        // THE LIMIT OF THE MECHANISM, pinned so it is not mistaken for coverage it
+        // does not have: a value the merchant recorded NOWHERE produces no constraint,
+        // so the sibling rows are still shown and only the coverage statement guards
+        // the answer. Found by this very test failing before the price list was added.
+        // The practical consequence: promoting a level into ANY list (even just a
+        // price) is what buys it deterministic protection.
+        it('cannot constrain a value the merchant never recorded anywhere', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                cohortPage, 'ايمتا تبدأ دورة الترجمة الفورية انكليزي؟', '2026-07-28');
+            // «الترجمة الفورية» is in no list ⇒ no constraint ⇒ siblings stay visible.
+            expect(ctx.block).toContain('السبت والأربعاء');
+        });
+
+        it('is inert when the message names only the key', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                cohortPage, 'شو مواعيد دورات انكليزي؟', '2026-07-28');
+            expect(ctx.block).toContain('السبت والأربعاء');
+            expect(ctx.block).toContain('الأحد والثلاثاء');
+        });
+
+        // The measured 28%→0% place mechanism must be untouched: outlet rows carry
+        // nothing but the key, so there is no second axis to constrain. A level word
+        // in the message may not empty a pharmacy directory.
+        it('leaves a key-only list untouched even when the message names another list\'s value', async () => {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                pageId, 'أنا مبتدئ وساكن في تلة الريح، وين نلقى منتجاتكم؟', '2026-07-28');
+            expect(ctx.block).toContain('صيدلية الفيروز');
+        });
+    });
+
     it('does not gate with no message text (cache-warm / block-only callers)', async () => {
         const ctx = await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28');
         expect(ctx.gated).toBe(false);

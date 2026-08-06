@@ -10,7 +10,13 @@
  * what the reply model is allowed to see.
  */
 import { describe, it, expect } from 'vitest';
-import { matchCollections, composeFactMatchText, type MatcherCollection } from '../services/factCollectionsMatcher';
+import {
+    matchCollections,
+    matchAttributeValues,
+    composeFactMatchText,
+    type AttributeCell,
+    type MatcherCollection,
+} from '../services/factCollectionsMatcher';
 
 /** The fixture's real shape: a district-keyed outlet list + a city-keyed one. */
 const AREAS: MatcherCollection = {
@@ -98,6 +104,70 @@ describe('matchCollections', () => {
  * the rows stay withheld for the rest of the conversation and no follow-up can
  * ever surface an outlet name.
  */
+/**
+ * The sub-key half (2026-08-06). Cells are taken from the page's rows exactly as
+ * factCollections.ts passes them: every live row's attributes, across every
+ * collection — which is what lets «محادثة», a level stored only in the PRICE list,
+ * constrain the SCHEDULES list where it has no row.
+ */
+describe('matchAttributeValues', () => {
+    const CELLS: AttributeCell[] = [
+        // schedules rows
+        { label: 'الدورة', value: 'انكليزي' }, { label: 'المستوى', value: 'مبتدئ' },
+        { label: 'الأيام', value: 'السبت والأربعاء' }, { label: 'الساعة', value: '12-1' },
+        { label: 'الدورة', value: 'انكليزي' }, { label: 'المستوى', value: 'متوسط 2' },
+        { label: 'الأيام', value: 'الأحد والثلاثاء' }, { label: 'الساعة', value: '11-12' },
+        // price rows — where «محادثة» lives, and nowhere else
+        { label: 'المستوى', value: 'محادثة' },
+    ];
+    const hits = (message: string): Record<string, string[]> =>
+        Object.fromEntries([...matchAttributeValues(message, CELLS)].map(([k, v]) => [k, [...v]]));
+
+    it('finds a level the customer named, under its own label', () => {
+        expect(hits('ايمتا التسجيل بدورة المحادثة لغة انكليزي')).toEqual({
+            'الدورة': ['انكليزي'],
+            'المستوى': ['محادثة'],
+        });
+    });
+
+    it('groups by label — a value can never constrain a label it was not stored under', () => {
+        // The whole attribution discipline in one assertion: «مبتدئ» is a level, so
+        // it may narrow «المستوى» and must never appear under «الدورة».
+        const h = hits('بدي انكليزي مبتدئ');
+        expect(h['المستوى']).toEqual(['مبتدئ']);
+        expect(h['الدورة']).toEqual(['انكليزي']);
+    });
+
+    it('returns nothing when the customer named no stored value', () => {
+        expect(hits('مرحبا شو الأخبار')).toEqual({});
+    });
+
+    it('returns nothing for an empty message', () => {
+        expect(hits('   ')).toEqual({});
+    });
+
+    it('dedupes repeated values and reports them AS STORED', () => {
+        // The row set repeats «انكليزي» on every English row; the constraint is a set.
+        expect(hits('انكليزي انكليزي')['الدورة']).toEqual(['انكليزي']);
+    });
+
+    it('uses the shared normalizer (alef/taa-marbuta variants still match)', () => {
+        expect(hits('بدي دورة المحادثه')['المستوى']).toEqual(['محادثة']);
+    });
+
+    it('refuses a value shorter than two characters', () => {
+        // A one-letter value occurs in almost any message — unmatchable, not a hit.
+        expect([...matchAttributeValues('عندي سؤال', [{ label: 'المقاس', value: 'س' }])]).toEqual([]);
+    });
+
+    it('ignores cells with an empty label or value', () => {
+        expect([...matchAttributeValues('انكليزي', [
+            { label: '', value: 'انكليزي' },
+            { label: 'الدورة', value: '   ' },
+        ])]).toEqual([]);
+    });
+});
+
 describe('composeFactMatchText', () => {
     const history = [
         { role: 'user' as const, content: 'أنا ساكن في عين الدالية، وين نلقى منتجاتكم؟' },
