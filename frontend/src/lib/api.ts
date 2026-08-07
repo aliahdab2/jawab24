@@ -342,6 +342,8 @@ export const postsApi = {
     triggerImage?: { base64: string; mimeType: string } | null;
     // Like the customer's comment on send (Facebook only — backend coerces to false for Instagram).
     likeComment?: boolean;
+    // Mention the commenter in the public comment (Facebook only — backend coerces for Instagram).
+    tagCommenter?: boolean;
     // Veto keywords: undefined = leave as-is; '' = clear; string = set.
     triggerExcludeKeyword?: string;
     // CTA button (Facebook only): '' clears, a value sets; both fields sent together.
@@ -354,6 +356,7 @@ export const postsApi = {
     triggerType: opts.triggerType ?? 'keyword',
     ...(opts.triggerImage !== undefined ? { triggerImage: opts.triggerImage } : {}),
     ...(opts.likeComment !== undefined ? { likeComment: opts.likeComment } : {}),
+    ...(opts.tagCommenter !== undefined ? { tagCommenter: opts.tagCommenter } : {}),
     ...(opts.triggerExcludeKeyword !== undefined ? { triggerExcludeKeyword: opts.triggerExcludeKeyword } : {}),
     ...(opts.triggerButtonLabel !== undefined ? { triggerButtonLabel: opts.triggerButtonLabel } : {}),
     ...(opts.triggerButtonUrl !== undefined ? { triggerButtonUrl: opts.triggerButtonUrl } : {}),

@@ -70,7 +70,9 @@ export class ReplyService {
         message: string,
         accessToken: string
     ): Promise<boolean> {
-        return replySender.postPublicReply(commentId, message, accessToken);
+        // postPublicReply now returns the created comment id (needed by the mention
+        // verification path); this legacy wrapper keeps its boolean contract.
+        return (await replySender.postPublicReply(commentId, message, accessToken)) !== null;
     }
 
     /**

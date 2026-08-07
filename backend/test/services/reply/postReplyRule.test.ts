@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, tagCommenter: false, cta: null });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, tagCommenter: false, cta: null });
     });
 
     it('returns null when the content has no rule', () => {
@@ -221,6 +221,18 @@ describe('resolvePostReplyRule — CTA button', () => {
     });
     it('defaults cta to null when absent', () => {
         expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' })?.cta).toBeNull();
+    });
+});
+
+describe('resolvePostReplyRule — tagCommenter', () => {
+    it('carries tagCommenter through when set', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', tagCommenter: true });
+        expect(rule?.tagCommenter).toBe(true);
+    });
+    // Instagram media rows have no such column, and a legacy post row predates it.
+    it('defaults tagCommenter to false when absent', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: null, triggerReply: 'hi', triggerType: 'all' });
+        expect(rule?.tagCommenter).toBe(false);
     });
 });
 

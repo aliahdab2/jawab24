@@ -30,6 +30,7 @@ interface PostReplyTarget {
   buttonUrl: string | null;
   imageUrl: string | null;
   likeComment: boolean;
+  tagCommenter: boolean;
   /** True when the post is not live yet, so the modal can say the reply is waiting for
    *  the post rather than implying it's already active. Server-verified on the ensure
    *  path; on the comment path it reflects a marker the publish webhook never cleared. */
@@ -50,6 +51,7 @@ interface ApiTriggerState {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
+  tagCommenter?: boolean;
   /** Both paths return this: `ensurePost` computes it from Graph, and `getById` returns
    *  the whole `posts` row, so a marker the publish webhook never cleared shows up here
    *  too. Optional only because the field is nullable. */
@@ -58,7 +60,7 @@ interface ApiTriggerState {
 
 /** Normalize API trigger state into the modal-facing target fields (single place
  *  that owns the `?? null` / `?? false` defaults for both open paths). */
-function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostReplyTarget, 'keyword' | 'reply' | 'type' | 'excludeKeyword' | 'buttonLabel' | 'buttonUrl' | 'imageUrl' | 'likeComment'> {
+function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostReplyTarget, 'keyword' | 'reply' | 'type' | 'excludeKeyword' | 'buttonLabel' | 'buttonUrl' | 'imageUrl' | 'likeComment' | 'tagCommenter'> {
   return {
     keyword: post?.triggerKeyword ?? null,
     reply: post?.triggerReply ?? null,
@@ -68,6 +70,7 @@ function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostRep
     buttonUrl: post?.triggerButtonUrl ?? null,
     imageUrl: post?.triggerImageUrl ?? null,
     likeComment: post?.likeComment ?? false,
+    tagCommenter: post?.tagCommenter ?? false,
   };
 }
 
@@ -194,6 +197,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerButtonUrl={target.buttonUrl}
           triggerImageUrl={target.imageUrl}
           likeComment={target.likeComment}
+          tagCommenter={target.tagCommenter}
           isScheduled={target.isScheduled}
           scheduledPublishTime={target.scheduledPublishTime}
           isOpen

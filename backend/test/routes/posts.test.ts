@@ -197,6 +197,53 @@ describe('Posts Routes', () => {
             }));
         });
 
+        it('passes an explicit tagCommenter through for a facebook post', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', tagCommenter: true },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerReply: 'Details', tagCommenter: true,
+            }));
+        });
+
+        // Instagram mentions need `@username`, a mechanism this column does not describe —
+        // an IG client asking for it must not end up with a true flag on a post row.
+        it('coerces tagCommenter to false for an instagram post', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'instagram', triggerKeyword: '.', triggerReply: 'Details', tagCommenter: true },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                source: 'instagram', tagCommenter: false,
+            }));
+        });
+
+        it('leaves tagCommenter untouched (undefined) when the field is absent — no lost update for stale clients', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', likeComment: true },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                tagCommenter: undefined,
+            }));
+        });
+
         it('leaves likeComment untouched (undefined) when the field is absent — no lost update for stale clients', async () => {
             vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 

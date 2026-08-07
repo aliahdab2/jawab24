@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "tag_commenter" boolean DEFAULT false NOT NULL;

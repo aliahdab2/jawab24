@@ -62,6 +62,7 @@ interface PostTriggerModalProps {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
+  tagCommenter?: boolean;
   /** True when the post is still scheduled on Facebook: the trigger saves normally and
    *  simply waits for the post to go live. Drives the notice so "saved" doesn't read as
    *  "already replying" — independent of whether Graph gave us a publish time. */
@@ -85,6 +86,7 @@ export function PostTriggerModal({
   triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
+  tagCommenter: initialTagCommenter,
   isScheduled,
   scheduledPublishTime,
   isOpen,
@@ -118,6 +120,10 @@ export function PostTriggerModal({
   // Like-the-comment option (ManyChat parity). Facebook only — the Instagram API
   // has no like-comment endpoint, so the row is hidden entirely for IG posts.
   const [likeEnabled, setLikeEnabled] = useState(initialLikeComment ?? false);
+  // Mention-the-commenter option. Facebook only: Instagram mentions are `@username`, a
+  // different mechanism we don't implement, so the row is hidden for IG posts exactly as
+  // the like row is.
+  const [tagEnabled, setTagEnabled] = useState(initialTagCommenter ?? false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   // «خيارات إضافية» disclosure — holds the POWER features only (exclude keywords +
   // CTA button: both need typing/validation). The image and like options stay at the
@@ -177,12 +183,13 @@ export function PostTriggerModal({
       setWhatsappPhone(waDigits ? `+${waDigits}` : '');
       setReply(initialReply ?? '');
       setLikeEnabled(initialLikeComment ?? false);
+      setTagEnabled(initialTagCommenter ?? false);
       setAdvancedOpen(!!(initialExcludeKeyword || initialButtonLabel || initialButtonUrl));
       setImageFile(null);
       setImageObjectUrl(null);
       setImageRemoved(false);
     }
-  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialExcludeKeyword, initialButtonLabel, initialButtonUrl]);
+  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialTagCommenter, initialExcludeKeyword, initialButtonLabel, initialButtonUrl]);
 
   // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
   useEffect(() => {
@@ -296,6 +303,7 @@ export function PostTriggerModal({
         triggerImage: imageArg,
         // Only Facebook posts carry the like option (the row is hidden for Instagram).
         likeComment: source === 'facebook' ? likeEnabled : undefined,
+        tagCommenter: source === 'facebook' ? tagEnabled : undefined,
         // Always send exclude keywords (empty string clears them) — both platforms.
         triggerExcludeKeyword: excludeKeywords.join(', '),
         // CTA button (FB + DM only). Send the pair (empty clears) only when the UI is shown;
@@ -572,6 +580,26 @@ export function PostTriggerModal({
               onChange={setLikeEnabled}
               size="sm"
               aria-label={t('postTriggerLikeComment')}
+            />
+          </div>
+        )}
+
+        {/* Mention-the-commenter option — Facebook only, same reasoning as the like row
+            above (Instagram needs `@username`, a different mechanism). Sits next to it:
+            both are one-tap, zero-config options on the public comment. */}
+        {source === 'facebook' && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              {t('postTriggerTagCommenter')}
+              <InfoPopover label={t('postTriggerTagCommenter')}>
+                {t('postTriggerTagCommenterDesc')}
+              </InfoPopover>
+            </span>
+            <Toggle
+              enabled={tagEnabled}
+              onChange={setTagEnabled}
+              size="sm"
+              aria-label={t('postTriggerTagCommenter')}
             />
           </div>
         )}

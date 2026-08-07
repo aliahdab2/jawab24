@@ -375,6 +375,32 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
      — identical to the AI's language, so they never disagree.
 ```
 
+**Mentioning the commenter (Post Reply only, Facebook only).** With `posts.tag_commenter`
+armed on a post, whatever we post in the PUBLIC column above is prefixed with `@[PSID]`
+(the commenter's `from.id`), so Facebook also sends them a "you were mentioned"
+notification. The DM is never touched — the customer is already its recipient.
+
+The prefix is applied AFTER the nudge's `NUDGE_MAX_LENGTH` truncation. A well-formed
+`@[id]` Meta cannot resolve is stripped silently, but a token sliced in half (`@[1784`, no
+closing bracket) is not a mention at all and DOES survive as literal text — so the ordering
+is what keeps raw markup off the merchant's page.
+
+Meta only renders the tag when the page has «Others Tagging this Page» enabled, and **no
+API exposes that setting** — measured 2026-08-07 on a live page: `/{page-id}/settings`
+returns 13 settings and none is this one, `are_tagging_others_allowed` is not a field, and
+`?metadata=1` introspection is disabled on v23.0. So the capability can only be learned by
+attempting: `commentMentionGuard` reads the comment we just posted back via `message_tags`,
+rewrites it to the untagged text if the mention did not render, and remembers the page in
+Redis for 30 days so the next comment skips the attempt. Blast radius is one briefly-wrong
+comment per page, and it self-heals when the merchant enables the setting.
+
+What "did not render" looks like, measured live 2026-08-07: posting `@[<unresolvable-id>] x`
+returns HTTP 200 and reads back as `" x"` — the token is **stripped**, with no error and no
+`message_tags`. The customer-visible defect is therefore a stray leading space, not raw
+markup; the guard's rewrite removes even that. The repair call is verified against real
+Graph (`POST /{comment-id}` with a new `message` → `{"success":true}`). Deleting a comment,
+if ever needed, requires the token as a QUERY PARAM — Graph ignores a JSON body on DELETE.
+
 `SILENT SKIP` = `commentProcessor` resolves the comment in the DB and returns
 success. No Facebook API call, no notification, no DB row for a reply.
 

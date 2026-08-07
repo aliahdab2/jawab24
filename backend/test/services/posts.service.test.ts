@@ -476,7 +476,7 @@ describe('PostsService', () => {
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
             // samplePost mock omits like_comment; ensureContent defaults it to false (matches the DB NOT NULL DEFAULT).
-            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, tagCommenter: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
         });
 
         it('routes instagram through findOrCreateInstagramMedia (image URL null when absent)', async () => {
@@ -484,7 +484,7 @@ describe('PostsService', () => {
 
             const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
 
-            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, tagCommenter: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
             // No Instagram scheduled-media edge exists — never probe Graph for one.
             expect(facebookService.getPostSchedule).not.toHaveBeenCalled();
         });

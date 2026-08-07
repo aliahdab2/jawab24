@@ -148,6 +148,8 @@
   "postTriggerImageDmOnly": "Sent in the private message with your reply",
   "postTriggerLikeComment": "Like the customer's comment",
   "postTriggerLikeCommentDesc": "Your page likes the comment when the reply is sent. Facebook only.",
+  "postTriggerTagCommenter": "Mention the customer",
+  "postTriggerTagCommenterDesc": "The public comment starts with a mention of the customer, so they also get a \"you were mentioned\" notification. Requires «Others Tagging this Page» to be enabled in your Facebook Page settings; if it is off, we post the reply without the mention.",
   "postTriggerReadMore": "Read more",
   "postTriggerReadMoreNote": "After the customer taps «Read more», your full reply arrives in the chat.",
   "postTriggerImageTapHint": "The customer can tap the image to open it full-size.",

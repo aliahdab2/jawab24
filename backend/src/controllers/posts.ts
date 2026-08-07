@@ -252,6 +252,9 @@ export class PostsController {
                 // (like triggerImage's keep semantics) so a client that doesn't know the
                 // field can't wipe it. Facebook-only — coerced to false for Instagram.
                 likeComment?: boolean;
+                // Mention the commenter in the public comment. Same keep semantics as
+                // likeComment. Facebook-only — coerced to false for Instagram.
+                tagCommenter?: boolean;
                 // Veto keywords: absent = leave as-is (keep); null/'' = clear; string = set.
                 triggerExcludeKeyword?: string | null;
                 // CTA button (Facebook-only): absent = keep; null/'' = clear; string = set.
@@ -265,7 +268,7 @@ export class PostsController {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment, triggerExcludeKeyword, triggerButtonLabel, triggerButtonUrl } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment, tagCommenter, triggerExcludeKeyword, triggerButtonLabel, triggerButtonUrl } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
@@ -282,6 +285,10 @@ export class PostsController {
         // carry the like option, so any set is coerced to false for Instagram.
         const likeCommentIntent: boolean | undefined =
             likeComment === undefined ? undefined : (source === 'facebook' && likeComment === true);
+        // Same keep/coerce rules as likeComment: absent = keep, and Instagram can't carry it
+        // (IG mentions need `@username`, a mechanism this column does not describe).
+        const tagCommenterIntent: boolean | undefined =
+            tagCommenter === undefined ? undefined : (source === 'facebook' && tagCommenter === true);
         // Absent = keep (undefined); empty string = clear (null); otherwise trim + set.
         const excludeIntent: string | null | undefined =
             triggerExcludeKeyword === undefined ? undefined : (triggerExcludeKeyword?.trim() || null);
@@ -311,7 +318,7 @@ export class PostsController {
                 const cleared = await postsService.updateTrigger({
                     contentId: id, source, workspaceId: req.workspaceId,
                     triggerKeyword: null, triggerReply: null, triggerType: 'keyword',
-                    image: { action: 'remove' }, likeComment: false, triggerExcludeKeyword: null,
+                    image: { action: 'remove' }, likeComment: false, tagCommenter: false, triggerExcludeKeyword: null,
                     triggerButtonLabel: null, triggerButtonUrl: null,
                 });
                 if (!cleared.ok) return reply.status(404).send({ error: 'Post not found' });
@@ -378,7 +385,8 @@ export class PostsController {
             const result = await postsService.updateTrigger({
                 contentId: id, source, workspaceId: req.workspaceId,
                 triggerKeyword: storedKeyword, triggerReply: replyText, triggerType: type,
-                image: imageIntent, likeComment: likeCommentIntent, triggerExcludeKeyword: excludeIntent,
+                image: imageIntent, likeComment: likeCommentIntent, tagCommenter: tagCommenterIntent,
+                triggerExcludeKeyword: excludeIntent,
                 triggerButtonLabel: buttonLabelIntent, triggerButtonUrl: buttonUrlIntent,
             });
             if (!result.ok) {

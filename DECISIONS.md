@@ -969,3 +969,70 @@ must be measured against a control that has live rows, not only against the defe
 **Not in scope, deliberately:** detection. The illegal-join validator — for every pair of
 stored values appearing in one reply under different labels, assert some single row holds
 both — needs no model call and is the natural next step.
+
+---
+
+## D-063 · The commenter may be @-mentioned in the public comment — per post, Facebook-only, and verified after every first attempt
+
+**2026-08-07.** Post Reply gains a per-post «الإشارة إلى العميل» toggle next to «الإعجاب
+بتعليق العميل», default off, shipped fleet-wide on a paying merchant's formal request.
+
+This REVERSES the 2026-07-19 ruling that skipped tagging. That ruling rested on three
+reasons; one was simply wrong and is corrected here:
+
+- ❌ *"the FB API restricts page→user mentions"* — it does not. `POST /{comment-id}/comments`
+  with `message: "text@[PSID]"` is documented, needs `pages_manage_engagement` +
+  `pages_read_engagement` (both already held), and the PSID is the comment's `from.id`,
+  which the webhook already gives us. No new hop, no new permission, no cache impact.
+- ✅ *redundant with the reply notification* — still true, and now quantified (below).
+- ✅ *automated mentions read as spam at volume* — still true; bounded by per-post opt-in
+  plus the existing any-comment cap.
+
+**The measurement that argued against it, kept on the record.** Over 120 days of production
+Post Reply DMs (`reply_method='post_reply'`, ≥48h maturity, "answered" = any inbound within
+7 days): cold recipients — no prior inbound, so the DM lands in Message Requests — answered
+**15.7%** (n=10,940) against **24.6%** for warm ones (n=1,285). The intended dual-vs-private
+comparison does not exist: 10,693 of 10,940 cold sends are `dual`, none `private`. So a
+public pointer to the DM is ALREADY present on virtually every send, on top of the reply
+notification Facebook itself fires — and 84.5% still never answer. A mention is a fourth
+signal of the same kind, not a missing channel. It was shipped as a merchant-requested
+option, not as a conversion lever, and must not be presented as one.
+
+**Privacy is explicitly NOT a reason against it** (raised in review, withdrawn): the
+commenter's name and profile link are already on their own comment in the same thread, our
+reply already sits under it, and a comment mention creates no timeline story. It adds a
+notification, not a disclosure.
+
+**The engineering constraint that shaped the design.** Meta requires the page's «Others
+Tagging this Page» setting for the tag to render, and exposes NO way to read it. Measured
+on a live page: `/{page-id}/settings` returns 13 settings (`USERS_CAN_TAG_PHOTOS` is about
+tagging people in the page's photos, not this), `are_tagging_others_allowed` is not a field,
+`?metadata=1` introspection is disabled on v23.0, and page history yields nothing — 0
+page-authored mentions across 902 comments on 3 live pages. Therefore:
+
+1. The capability is **learned by attempting**, never read. `commentMentionGuard` reads the
+   posted comment back (`message_tags`), rewrites it to the untagged text when the mention
+   did not render, and memoizes the page as unsupported in Redis for 30 days.
+2. Redis, not a column: this caches someone else's mutable setting, so it must expire and
+   self-heal when the merchant flips the switch — a column would need manual repair.
+3. The token is prefixed AFTER the nudge truncation, so `NUDGE_MAX_LENGTH` can never slice
+   `@[1784…]` in half and publish the fragment.
+4. Facebook only. Instagram mentions are `@username` — different syntax, different id space,
+   unverified here; the column and the toggle simply do not exist for IG, exactly as with
+   the like option.
+
+**Verified live on our own page before merge (2026-08-07).** An `@[id]` Meta cannot resolve
+is **stripped silently** — `@[<page-id>] probe1` and `@[999999999999999] probe2` both
+returned HTTP 200 and read back as `" probe1"` / `" probe2"`, with no `message_tags`, no
+error, and no literal `@[…]`. The risk this design was built around — raw markup published
+in front of customers — therefore does not occur; the residual defect is a stray leading
+space, which the guard's rewrite removes. The repair path was exercised against real Graph
+(`POST /{comment-id}` → `{"success":true}`, text changed) and both probe comments were
+deleted (DELETE needs the token as a query param; a JSON body is ignored). Reach is
+confirmed too: 100% of 75,584 Facebook comments in the last 30 days carry a `from_id`, and
+99.97% are PSID-shaped.
+
+**Still unverified at merge:** no mention of a REAL commenter has been observed rendering,
+because our own page has no comment from a non-admin account to test against. So "does a
+tag actually appear" is answered by the first armed post on a live page — which is safe to
+run, given the failure mode above.

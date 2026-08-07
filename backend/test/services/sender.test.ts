@@ -9,6 +9,9 @@ vi.mock('../../src/lib/fbAxios');
 vi.mock('../../src/services/facebook');
 vi.mock('../../src/services/metaMessaging');
 vi.mock('../../src/utils/language');
+vi.mock('../../src/services/reply/commentMentionGuard', () => ({
+    commentMentionGuard: { shouldTag: vi.fn(), verifyAndRepair: vi.fn(), setLogger: vi.fn() },
+}));
 vi.mock('../../src/config', () => ({
     config: {
         facebook: { graphApiVersion: 'v18.0' },
@@ -26,6 +29,7 @@ vi.mock('../../src/lib/redis', () => ({
 
 // Import after mocks are set up
 import { ReplySender } from '../../src/services/reply/sender';
+import { commentMentionGuard } from '../../src/services/reply/commentMentionGuard';
 
 // Helpers: build DmSendErrors that classify into each bucket.
 const makeCustomerRefusedError = () => new DmSendError('blocked', { code: 10, subcode: 2534014 });
@@ -481,7 +485,9 @@ describe('ReplySender', () => {
                 'token_abc'
             );
 
-            expect(result).toBe(true);
+            // Returns the created comment's id — the mention path needs it to read the
+            // result back; callers that only want success check it against null.
+            expect(result).toBe('reply_id');
         });
 
         it('should return false and log error on failure', async () => {
@@ -493,10 +499,102 @@ describe('ReplySender', () => {
                 'token_abc'
             );
 
-            expect(result).toBe(false);
+            expect(result).toBeNull();
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'Failed to post reply to Facebook',
                 expect.objectContaining({ commentId: 'comment_123' })
+            );
+        });
+    });
+
+    // ─── Post Reply "mention the commenter" (tagCommenter) ────────────────────────
+    // The mention rides the PUBLIC comment only — the DM already reaches the customer.
+    // Meta renders `@[PSID]` for someone who commented on the post; when the page forbids
+    // tagging it stays literal, which is what the guard repairs.
+    describe('Mention the commenter', () => {
+        const taggedOptions = {
+            ...baseOptions,
+            fromId: '1784123456789',
+            platformPageId: '878802365317875',
+            tagCommenter: true,
+        };
+
+        beforeEach(() => {
+            vi.mocked(commentMentionGuard.shouldTag).mockResolvedValue(true);
+            vi.mocked(commentMentionGuard.verifyAndRepair).mockResolvedValue({ rendered: true });
+        });
+
+        it('prefixes the public reply with the mention token', async () => {
+            await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: '@[1784123456789] Thank you for your feedback!' },
+                expect.anything(),
+            );
+        });
+
+        it('tags the dual-mode nudge, not the DM', async () => {
+            await sender.sendCommentReply({
+                ...taggedOptions, replyMode: 'dual', dualReplyNudge: 'شيّك الخاص',
+            });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: '@[1784123456789] شيّك الخاص' },
+                expect.anything(),
+            );
+            // The private reply text is untouched — no mention syntax inside a DM.
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', undefined,
+            );
+        });
+
+        it('verifies the posted comment against the UNTAGGED text (the repair text)', async () => {
+            await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
+
+            expect(commentMentionGuard.verifyAndRepair).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    postedCommentId: 'reply_id',
+                    pageId: '878802365317875',
+                    psid: '1784123456789',
+                    plainText: 'Thank you for your feedback!',
+                }),
+            );
+        });
+
+        it('posts untagged on a page already known to reject mentions', async () => {
+            vi.mocked(commentMentionGuard.shouldTag).mockResolvedValue(false);
+
+            await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: 'Thank you for your feedback!' },
+                expect.anything(),
+            );
+            expect(commentMentionGuard.verifyAndRepair).not.toHaveBeenCalled();
+        });
+
+        it('posts untagged when the option is off (every non-Post-Reply comment)', async () => {
+            await sender.sendCommentReply({ ...taggedOptions, tagCommenter: false, replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: 'Thank you for your feedback!' },
+                expect.anything(),
+            );
+            expect(commentMentionGuard.shouldTag).not.toHaveBeenCalled();
+        });
+
+        // An unusable id must degrade to a normal reply — never to raw text in public.
+        it('posts untagged when the commenter id is not a PSID', async () => {
+            await sender.sendCommentReply({ ...taggedOptions, fromId: 'user_456', replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: 'Thank you for your feedback!' },
+                expect.anything(),
             );
         });
     });
