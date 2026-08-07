@@ -31,7 +31,11 @@ export const BRAND_ASSETS = {
         channel-coverage test can assert it — an image cannot be grepped. */
     socialCardTagline: {
         en: 'Smart AI Auto-Replies for WhatsApp, Facebook & Instagram',
-        ar: 'الجيل الجديد من الردود التلقائية لواتساب وفيسبوك وإنستغرام',
+        // Deliberately tighter than the English: Cairo sets wider than Outfit, and naming
+        // three channels has to fit the same column. Also drops the old art's «الجيل الجديد
+        // من الردود التلقائية» ("the new generation of automatic replies") for a direct
+        // rendering of the English line.
+        ar: 'ردود تلقائية ذكية لواتساب وفيسبوك وإنستغرام',
     },
     urls: {
         base: SITE_URL,
