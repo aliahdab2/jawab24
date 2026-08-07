@@ -220,6 +220,7 @@ export default function WhatIsJawab24() {
                 t('platforms.whatsapp'),
                 t('platforms.shopify'),
                 t('platforms.salla'),
+                t('platforms.zid'),
               ]}
             />
 

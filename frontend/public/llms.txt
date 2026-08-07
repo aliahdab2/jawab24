@@ -1,58 +1,74 @@
 # Jawab24
 
-> Arabic-first AI auto-reply platform for Facebook, Instagram, Shopify, and Salla businesses.
+> Arabic-first AI auto-reply platform for WhatsApp Business, Facebook, Instagram, Shopify, Salla, and Zid businesses.
 
-Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to Facebook comments, Instagram DMs, and Messenger messages in Arabic and English, 24/7.
+Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to WhatsApp Business messages, Facebook comments and Messenger messages, and Instagram comments and DMs — in Arabic and English, 24/7.
 
 ## Key Facts
 
 - Website: https://jawab24.com
-- Platforms: Facebook Pages, Instagram Business, Shopify, Salla
-- Languages: Arabic (6 dialect families) + English, full RTL interface
-- Reply system: 3-layer (Template Replies + AI Smart Replies + Away Messages)
-- AI accuracy: 99.6% across 125 real-world evaluation scenarios
-- E-commerce: Syncs product catalogs from Shopify and Salla with automatic price verification
-- Pricing: Free trial (no credit card) → Starter → Business → Pro plans
-- Mobile: Android app with push notifications (iOS coming soon)
+- Channels: WhatsApp Business, Facebook Pages (comments + Messenger), Instagram Business (comments + DMs)
+- E-commerce integrations: Shopify, Salla, Zid
+- Languages: Arabic (Gulf, Egyptian, Levantine, Maghrebi, Iraqi dialects, plus Franco-Arabic) and English, full RTL interface
+- Reply system: 3-layer (Template Replies + Smart Replies + Away Messages), plus per-post keyword triggers (Post Replies)
+- Media: understands customer voice notes and photos, not just text
+- Quality controls: confidence scoring with human review, two-tier price verification, and replies grounded in the merchant's own Business Info
+- Pricing: 30-day free trial (no credit card) → Starter $15/mo → Business $39/mo → Pro $79/mo
+- Mobile: Android app on Google Play with push notifications
 
 ## What Makes Jawab24 Different
 
-1. Arabic-first: Understands Gulf, Egyptian, Levantine, Maghrebi, Iraqi dialects and Franco-Arabic
-2. Salla integration: Only auto-reply tool with native Salla e-commerce support
-3. Price hallucination detection: 2-tier verification ensures AI never invents prices
-4. Confidence scoring: Low-confidence replies are held for human review
-5. Knowledge Base with RAG: AI answers only from your verified business information
-6. Template replies at zero AI cost: Keyword-based rules with no per-message charges
+1. Arabic-first: understands Gulf, Egyptian, Levantine, Maghrebi and Iraqi dialects plus Franco-Arabic, and replies in the dialect the customer used
+2. WhatsApp, Facebook and Instagram in one place: one Business Info source answers across every connected channel
+3. Salla and Zid integration: native support for the Arabic e-commerce platforms most tools ignore
+4. Price hallucination detection: two-tier verification so prices are never invented
+5. Confidence scoring: low-confidence replies are held for human review instead of sent
+6. Business Info grounding: replies come from the merchant's own verified business information, retrieved per message (RAG)
+7. Post Replies: a comment matching a configured keyword triggers a reply sent by DM, per post
+8. Template Replies at zero AI cost: keyword-based rules with no per-message charges
+
+## Channels
+
+- WhatsApp Business: replies to customer messages, including voice notes, on the merchant's own WhatsApp Business number
+- Facebook Pages: replies to post comments and to Messenger conversations
+- Instagram Business: replies to post comments and to direct messages
+- Post Replies: per-post keyword triggers — a matching comment receives a configured reply via DM
 
 ## Target Audience
 
-- E-commerce store owners on Shopify or Salla
-- Facebook Page managers with high comment/message volume
+- E-commerce store owners on Shopify, Salla, or Zid
+- Businesses selling through WhatsApp Business
+- Facebook and Instagram Page managers with high comment and message volume
 - Small businesses needing 24/7 customer support without hiring staff
 - Arabic-speaking businesses that need tools built for their language
 - Social media managers handling multiple pages
 
 ## Blog
 
-Jawab24 publishes guides, comparisons, and data-driven articles about auto-reply, social commerce, and AI customer support. All articles are available in English and Arabic.
+Jawab24 publishes guides, comparisons, case studies, and data-driven articles about auto-reply, social commerce, and AI customer support. Every article is available in English and Arabic (Arabic at /blog/<slug>, English at /en/blog/<slug>).
 
 - Blog index: https://jawab24.com/blog
+- WhatsApp Is Now Live on Jawab24: https://jawab24.com/blog/whatsapp-auto-reply-jawab24
 - How to Set Up Facebook Auto Reply: https://jawab24.com/blog/auto-reply-facebook-setup-guide
 - Instagram Auto Reply Guide: https://jawab24.com/blog/instagram-auto-reply-guide
 - Best Auto Reply Tools 2026: https://jawab24.com/blog/best-auto-reply-tools-2026
 - Jawab24 Setup Tutorial: https://jawab24.com/blog/jawab24-setup-tutorial
+- AI Sales Agent for Facebook & Instagram: https://jawab24.com/blog/turn-comments-into-sales
 - Connect Salla Store to Facebook Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
+- Connect Zid Store to Facebook Auto Reply: https://jawab24.com/blog/zid-store-facebook-auto-reply
 - Shopify Facebook Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
+- When a Customer Sends a Photo Instead of Typing: https://jawab24.com/blog/ai-auto-reply-customer-photos
 - Reduce Facebook Response Time: https://jawab24.com/blog/reduce-facebook-response-time
 - Salla vs Shopify for Arabic Sellers: https://jawab24.com/blog/salla-vs-shopify-arabic-sellers
 - AI Auto Reply for Angry Customers: https://jawab24.com/blog/ai-auto-reply-angry-customers
 - Common Facebook Auto Reply Mistakes: https://jawab24.com/blog/common-facebook-auto-reply-mistakes
+- Case Study — 90 Days at Al-Fariq Al-Dimashqi: https://jawab24.com/blog/case-study-damascus-training-institute
 - 40+ Social Commerce & AI Customer Service Statistics 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
-- Instagram & Facebook DM Selling Statistics 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
+- 30+ Instagram & Facebook DM Selling Statistics 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
 
 ## Comparisons
 
-How Jawab24 compares to other auto-reply and chatbot tools — Arabic-first, native Salla/Shopify integration, dialect detection, and price verification:
+How Jawab24 compares to other auto-reply and chatbot tools — Arabic-first, native Salla/Shopify/Zid integration, dialect detection, and price verification:
 
 - All comparisons: https://jawab24.com/compare
 - Jawab24 vs ManyChat: https://jawab24.com/compare/manychat
@@ -63,7 +79,7 @@ How Jawab24 compares to other auto-reply and chatbot tools — Arabic-first, nat
 
 ## Integrations
 
-Native e-commerce integrations that sync product catalogs and verify prices so AI replies stay accurate:
+Native e-commerce integrations that sync product catalogs and verify prices so replies stay accurate:
 
 - Shopify integration: https://jawab24.com/integrations/shopify
 - Salla integration: https://jawab24.com/integrations/salla

@@ -398,4 +398,61 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     expect(body).toContain('/blog');
     expect(body).toContain('/integrations');
   });
+
+  test('every AI crawler group repeats the auth-gated Disallow set', async ({ page }) => {
+    // Regression guard (2026-08-07). robots.txt groups do NOT merge: a named
+    // `User-agent` group FULLY REPLACES `User-agent: *` for that crawler. The
+    // AI-crawler blocks each carried only `Allow: /`, so GPTBot/ClaudeBot/etc.
+    // inherited none of the dashboard exclusions and were invited to crawl app
+    // routes that can only render a login wall.
+    //
+    // The assertion above cannot catch this — `toContain('Disallow: /dashboard')`
+    // is satisfied by the `*` group alone. This one parses per group.
+    const response = await page.goto('/robots.txt');
+    const body = await response!.text();
+
+    // Parse into { agents[], directives[] } groups. Consecutive User-agent lines
+    // share the directive block that follows them (per the robots.txt spec).
+    const groups: { agents: string[]; directives: string[] }[] = [];
+    let current: { agents: string[]; directives: string[] } | null = null;
+    let lastWasAgent = false;
+
+    for (const raw of body.split('\n')) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const agentMatch = line.match(/^User-agent:\s*(.+)$/i);
+      if (agentMatch) {
+        if (!current || !lastWasAgent) {
+          current = { agents: [], directives: [] };
+          groups.push(current);
+        }
+        current.agents.push(agentMatch[1].trim());
+        lastWasAgent = true;
+      } else if (current) {
+        current.directives.push(line);
+        lastWasAgent = false;
+      }
+    }
+
+    const REQUIRED_DISALLOWS = [
+      'Disallow: /dashboard',
+      'Disallow: /settings',
+      'Disallow: /messages',
+      'Disallow: /comments',
+      'Disallow: /auth/',
+    ];
+
+    const aiAgents = ['GPTBot', 'ChatGPT-User', 'OAI-SearchBot', 'PerplexityBot', 'ClaudeBot'];
+
+    for (const agent of aiAgents) {
+      const group = groups.find(g => g.agents.some(a => a.toLowerCase() === agent.toLowerCase()));
+      expect(group, `robots.txt has no group for ${agent}`).toBeTruthy();
+      for (const rule of REQUIRED_DISALLOWS) {
+        expect(
+          group!.directives,
+          `${agent}'s group is missing "${rule}" — a named group replaces "User-agent: *" entirely, so it must repeat the auth-gated Disallow set`,
+        ).toContain(rule);
+      }
+    }
+  });
 });

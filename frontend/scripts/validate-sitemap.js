@@ -19,6 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { slugsFromDataFile } = require('./lib/dataSlugs');
 
 const PROD_ORIGIN = 'https://jawab24.com';
 const SITEMAP_PATH = path.join(__dirname, '..', 'public', 'sitemap.xml');
@@ -94,14 +95,6 @@ function walkRoutes(dir, prefix = '') {
     }
   }
   return out;
-}
-
-/** Extract quoted `slug: '...'` literals from a data module (no TS import needed). */
-function slugsFromDataFile(dataDir, fileName) {
-  const p = path.join(dataDir, fileName);
-  if (!fs.existsSync(p)) return null;
-  const src = fs.readFileSync(p, 'utf-8');
-  return [...src.matchAll(/slug:\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
 }
 
 /**

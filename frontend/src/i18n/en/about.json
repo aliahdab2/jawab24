@@ -5,7 +5,7 @@
   "backToHome": "Back to Home",
   "intro": {
     "title": "What is Jawab24?",
-    "text": "Jawab24 is an AI-powered auto-reply platform built specifically for Arabic-speaking and bilingual businesses. It connects to Facebook Pages, Instagram business accounts, WhatsApp Business numbers, and e-commerce stores on Shopify and Salla, reads incoming comments and direct messages, and automatically replies to customers in their language — 24 hours a day, 7 days a week.",
+    "text": "Jawab24 is an AI-powered auto-reply platform built specifically for Arabic-speaking and bilingual businesses. It connects to Facebook Pages, Instagram business accounts, WhatsApp Business numbers, and e-commerce stores on Shopify, Salla, and Zid, reads incoming comments and direct messages, and automatically replies to customers in their language — 24 hours a day, 7 days a week.",
     "text2": "Jawab24 is not a chatbot — it is an intelligent auto-reply system designed for Arabic-first businesses. Unlike chatbots that follow rigid decision trees, Jawab24 understands context, recognizes Arabic dialect groups, integrates natively with Salla, and uses a built-in safety system to prevent the AI from inventing prices or unsupported facts. Every AI-generated reply passes through 6 automated post-validation checks before it is sent."
   },
   "subtitle": "Jawab24 is an AI auto-reply tool that helps businesses automatically reply to Facebook comments, Instagram and WhatsApp messages, and customer questions using artificial intelligence.",
@@ -26,7 +26,8 @@
     "instagram": "Instagram Business Accounts — auto-reply to comments and DMs",
     "whatsapp": "WhatsApp Business numbers — auto-reply to customer messages, voice notes included (Business plan and up)",
     "shopify": "Shopify — sync your product catalog so the AI can answer product questions with accurate prices, descriptions, and availability",
-    "salla": "Salla — sync your product catalog from Salla stores, the leading Arabic e-commerce platform"
+    "salla": "Salla — sync your product catalog from Salla stores, the leading Arabic e-commerce platform",
+    "zid": "Zid — sync your product catalog from Zid stores so replies quote real products and prices"
   },
   "knowledgeBase": {
     "title": "Business Info",

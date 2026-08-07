@@ -120,6 +120,36 @@ else
 fi
 
 # =============================================
+# 0.57. Validate llms.txt / llms-full.txt (the AI-assistant-facing surface)
+# =============================================
+echo ""
+echo "🤖 Validating llms.txt files..."
+# Distinguish an environmental problem from a content problem. The validator
+# resolves integrations.ts, competitors.ts and the blog content dir relative to
+# its own location; if a checkout is trimmed or partial, it exits 1 for a reason
+# that has nothing to do with llms.txt being stale. Both still block the deploy —
+# but the operator reading this log needs to know which one they are looking at.
+if [ ! -d "frontend/src/content/blog/ar" ] || [ ! -f "frontend/src/data/integrations.ts" ]; then
+    echo -e "${RED}   ❌ Cannot validate llms.txt — the checkout is missing files it reads${NC}"
+    echo "      Expected frontend/src/content/blog/ar/ and frontend/src/data/integrations.ts."
+    echo "      This is an incomplete checkout, not a stale llms.txt."
+    exit 1
+fi
+# The gate itself must work before it is trusted to gate anything.
+if ! (cd frontend && node --test scripts/__tests__/validate-llms.test.mjs) > /dev/null 2>&1; then
+    echo -e "${RED}   ❌ llms.txt validator's own tests failed — the gate is broken${NC}"
+    (cd frontend && node --test scripts/__tests__/validate-llms.test.mjs)
+    exit 1
+fi
+if node frontend/scripts/validate-llms.js > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ llms files current (validator self-tests pass)${NC}"
+else
+    echo -e "${RED}   ❌ llms.txt validation failed!${NC}"
+    node frontend/scripts/validate-llms.js
+    exit 1
+fi
+
+# =============================================
 # 0.6. Lock file sync check
 # =============================================
 echo ""

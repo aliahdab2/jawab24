@@ -598,6 +598,23 @@ post_deploy_check() {
             echo "   ⚠️  Response is missing Next.js __next container"
         else
             echo "   ✅ Live site returns valid HTML with Next.js content"
+
+            # IndexNow ownership key must be served. Checked here rather than left
+            # to the ping's own guard: that guard prints a warning and exits 0, so
+            # if the key were ever stripped from the frontend image every future
+            # ping would skip silently and Bing — the retrieval index behind
+            # ChatGPT search — would stop being told about new content, with no
+            # signal anyone reads. Non-fatal (a missing key must not roll back a
+            # good deploy) but it says so once, loudly, in the deploy log.
+            local KEY_URL="https://jawab24.com/7af41c595343ef134170a2de37da0079.txt"
+            local KEY_CODE
+            KEY_CODE=$(curl -sL --max-time 10 -o /dev/null -w '%{http_code}' "$KEY_URL" 2>/dev/null || echo "000")
+            if [ "$KEY_CODE" = "200" ]; then
+                echo "   ✅ IndexNow key file is served"
+            else
+                echo "   ⚠️  IndexNow key file returned HTTP ${KEY_CODE} — URL submission to Bing is DISABLED"
+                echo "      Expected 200 from ${KEY_URL} (ships in frontend/public/)."
+            fi
             return 0
         fi
 
@@ -698,6 +715,13 @@ if ! post_deploy_check; then
 fi
 
 cleanup
+
+# Tell Bing the site changed (Bing is the retrieval index behind ChatGPT search
+# and Copilot). Non-fatal: the script always exits 0, and a missed ping only
+# means Bing recrawls on its own schedule.
+if [ -x ./scripts/indexnow-ping.sh ]; then
+    ./scripts/indexnow-ping.sh || true
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 DEPLOYMENT SUCCESSFUL"
