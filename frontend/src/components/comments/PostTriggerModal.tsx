@@ -754,6 +754,14 @@ export function PostTriggerModal({
                 // together: an inline image card for short replies, or the full text plus a
                 // "view image" button for long ones (see the note below the preview).
                 const showImage = row.channel === 'private' && hasImage && imagePreviewSrc;
+                // The mention rides the PUBLIC comment only (the DM already reaches the
+                // customer), so the preview must show it there — otherwise the panel whose
+                // whole job is "this is what gets posted" contradicts what gets posted.
+                // Rendered as a chip, not literal `@[id]`: that token is what we SEND, while
+                // what the reader sees is the customer's name.
+                const mentionChip = row.channel === 'public' && tagEnabled && source === 'facebook' ? (
+                  <span className="font-semibold text-brand-600 me-1" dir="auto">{t('postTriggerOutcomeMention')}</span>
+                ) : null;
                 return (
                   <div
                     key={row.channel}
@@ -822,11 +830,13 @@ export function PostTriggerModal({
                         </div>
                       ) : (
                         <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                          {mentionChip}
                           {t('postTriggerOutcomeAsWritten')}
                         </span>
                       )
                     ) : (
                       <span className="text-sm leading-relaxed whitespace-pre-wrap break-words text-foreground" dir="auto">
+                        {mentionChip}
                         {row.text}
                         {row.fromSettings && (
                           <Link
