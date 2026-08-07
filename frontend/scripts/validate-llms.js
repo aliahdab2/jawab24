@@ -29,6 +29,12 @@
  *                             live for months; an AI repeating an unbacked number
  *                             is worse than it having no number at all. Describe
  *                             the quality CONTROLS, which are verifiable, instead.
+ *  7. Self-consistency      — a labelled fact must read identically everywhere it
+ *                             appears, within a file and across both. The 125-vs-98
+ *                             eval-size split was this bug, and the first cut of
+ *                             this validator shipped another one (iOS "in progress"
+ *                             vs "coming soon" in the same file) precisely because
+ *                             it banned bad metrics without checking agreement.
  *
  * Usage:  node scripts/validate-llms.js
  * Exit:   0 = pass, 1 = errors found
@@ -59,6 +65,34 @@ const REQUIRED_TOPICS = new Map([
   ['Business Info', 'the merchant knowledge surface (§6 terminology)'],
   ['voice note', 'media — voice notes are transcribed and answered'],
 ]);
+
+// ── Facts that must not contradict themselves ────────────────────────────────
+// The defect that started this: the two files disagreed on the eval suite size
+// (125 vs 98). The first version of this validator only banned unverifiable
+// metrics and did NOT check agreement — and promptly shipped a fresh instance of
+// the same bug, with llms-full.txt saying "(iOS in progress)" on one line and
+// "(iOS coming soon)" 138 lines later.
+//
+// So: for each labelled pattern, every match across BOTH files must normalise to
+// the same string. This catches contradictions within a single file as well as
+// between them. Patterns are deliberately narrow — a fact worth stating twice is
+// a fact worth stating identically.
+// A pattern may use ONE capture group to isolate the fact from its phrasing —
+// "6 Arabic dialect families" and "6 dialect families" state the same fact and
+// must not be flagged, whereas "iOS in progress" vs "iOS coming soon" differ in
+// the fact itself, so that pattern captures nothing and the whole match is
+// compared.
+const CONSISTENT_CLAIMS = new Map([
+  ['iOS availability', /iOS[^.)\n]*/g],
+  ['AI model', /gpt-[\w.-]+/gi],
+  ['free-trial length', /(\d+)-day free trial/gi],
+  ['dialect family count', /(\d+) (?:Arabic )?dialect families/gi],
+]);
+
+/** Normalise a claim for comparison: case-insensitive, whitespace-collapsed. */
+function normaliseClaim(s) {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 // ── Unverifiable metric claims ───────────────────────────────────────────────
 // Accuracy percentages and scenario counts must not be asserted here unless they
@@ -96,8 +130,23 @@ function validateLlms(opts = {}) {
     integrations: new Set(integrationSlugs),
   };
 
+  // An empty slug source means the data module could not be read or its shape
+  // changed — treat that as a failure rather than silently skipping the checks
+  // that depend on it, which would report "clean" while validating nothing.
+  for (const [name, set] of Object.entries(knownSlugs)) {
+    if (set.size === 0) {
+      errors.push(`no ${name} slugs available — the data source is empty or unreadable, so ${name} coverage and link integrity could not be checked`);
+    }
+  }
+
   for (const [fileName, text] of Object.entries(contents)) {
     const haystack = text.toLowerCase();
+    // Required topics are checked against PROSE only. A slug that happens to
+    // contain the word (/blog/whatsapp-auto-reply-jawab24) is a link, not a
+    // description — counting it would let the check report a topic as "covered"
+    // while the file says nothing about it, which is precisely the state this
+    // gate exists to detect.
+    const prose = haystack.replace(/https?:\/\/\S+/g, ' ');
 
     // ── Check 1 & 2: integration and competitor coverage ────────────────────
     for (const slug of integrationSlugs) {
@@ -119,9 +168,12 @@ function validateLlms(opts = {}) {
     }
 
     // ── Check 4: link integrity (no dead links) ─────────────────────────────
-    const linked = [...text.matchAll(/jawab24\.com\/(?:en\/)?(blog|compare|integrations)\/([a-z0-9-]+)/gi)];
+    // Case-SENSITIVE by design: slugs are lowercase, and an `i` flag here would
+    // match /Blog/Foo and then report it as a dead link — a false positive on
+    // what is really a casing bug.
+    const linked = [...text.matchAll(/jawab24\.com\/(?:en\/)?(blog|compare|integrations)\/([a-z0-9-]+)/g)];
     for (const [, section, slug] of linked) {
-      const key = section.toLowerCase();
+      const key = section;
       if (knownSlugs[key] && knownSlugs[key].size > 0 && !knownSlugs[key].has(slug)) {
         errors.push(`${fileName}: links /${key}/${slug}, which does not exist — an assistant following it gets a 404`);
       }
@@ -129,7 +181,7 @@ function validateLlms(opts = {}) {
 
     // ── Check 5: required topics ────────────────────────────────────────────
     for (const [topic, reason] of requiredTopics) {
-      if (!haystack.includes(topic.toLowerCase())) {
+      if (!prose.includes(topic.toLowerCase())) {
         errors.push(`${fileName}: missing required topic "${topic}" (${reason}) — describe it, or remove the row from REQUIRED_TOPICS in validate-llms.js with a reason`);
       }
     }
@@ -142,10 +194,33 @@ function validateLlms(opts = {}) {
     }
   }
 
+  // ── Check 7: labelled facts must not contradict themselves ────────────────
+  // Runs across all files at once, so it catches a contradiction inside a single
+  // file as well as one between them.
+  const consistentClaims = opts.consistentClaims || CONSISTENT_CLAIMS;
+  for (const [label, pattern] of consistentClaims) {
+    /** @type {Map<string, string[]>} normalised value -> where it was seen */
+    const variants = new Map();
+    for (const [fileName, text] of Object.entries(contents)) {
+      for (const m of text.matchAll(pattern)) {
+        // Capture group isolates the fact; without one, the phrasing IS the fact.
+        const value = normaliseClaim(m[1] !== undefined ? m[1] : m[0]);
+        if (!variants.has(value)) variants.set(value, []);
+        if (!variants.get(value).includes(fileName)) variants.get(value).push(fileName);
+      }
+    }
+    if (variants.size > 1) {
+      const rendered = [...variants.entries()]
+        .map(([value, files]) => `"${value}" (${files.join(', ')})`)
+        .join(' vs ');
+      errors.push(`contradictory "${label}": ${rendered} — one fact, stated more than one way. Assistants quote whichever they hit first`);
+    }
+  }
+
   return { errors, fileCount: Object.keys(contents).length };
 }
 
-module.exports = { validateLlms, REQUIRED_TOPICS, METRIC_PATTERNS };
+module.exports = { validateLlms, REQUIRED_TOPICS, METRIC_PATTERNS, CONSISTENT_CLAIMS };
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -185,7 +260,8 @@ if (require.main === module) {
     `llms files clean — ${fileCount} files, ` +
     `${blogSlugs.length} blog posts, ${competitorSlugs.length} comparisons, ` +
     `${integrationSlugs.length} integrations all covered; ` +
-    `${REQUIRED_TOPICS.size} required topics present; no unverifiable metric claims.`
+    `${REQUIRED_TOPICS.size} required topics present; ` +
+    `${CONSISTENT_CLAIMS.size} tracked facts self-consistent; no unverifiable metric claims.`
   );
   process.exit(0);
 }

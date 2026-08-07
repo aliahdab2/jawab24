@@ -30,6 +30,7 @@
     "translation:validate": "node scripts/validate-translations.js",
     "sitemap:validate": "node scripts/validate-sitemap.js",
     "llms:validate": "node scripts/validate-llms.js",
+    "llms:validate:test": "node --test scripts/__tests__/validate-llms.test.mjs",
     "social:generate": "npx tsx scripts/generate-social-images.ts",
     "analyze": "ANALYZE=true next build"
   },
