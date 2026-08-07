@@ -23,8 +23,24 @@ export const BRAND_ASSETS = {
     },
     meta: {
         appName: 'Jawab24',
-        appTitle: 'Jawab24 جواب | AI Auto-Reply for Facebook & Instagram',
+        // 56 chars. This is the <title> and og:title default for every page that does not
+        // override them (/help, /contact, /team, app routes), and login.tsx appends to it —
+        // so it has to stay inside Google's ~60-char / ~600px display budget with room to
+        // spare. Naming three channels cost the "AI " that used to sit before "Auto-Reply";
+        // channels lead because that is what the phrase is actually searched by.
+        appTitle: 'Jawab24 جواب | WhatsApp, Facebook & Instagram Auto-Reply',
         themeColor: '#18181b',
+    },
+    /** Bilingual tagline burned into the generated social card and Play feature graphic
+        by `scripts/generate-social-images.ts`. Kept here (not in the script) so the
+        channel-coverage test can assert it — an image cannot be grepped. */
+    socialCardTagline: {
+        en: 'Smart AI Auto-Replies for WhatsApp, Facebook & Instagram',
+        // Deliberately tighter than the English: Cairo sets wider than Outfit, and naming
+        // three channels has to fit the same column. Also drops the old art's «الجيل الجديد
+        // من الردود التلقائية» ("the new generation of automatic replies") for a direct
+        // rendering of the English line.
+        ar: 'ردود تلقائية ذكية لواتساب وفيسبوك وإنستغرام',
     },
     urls: {
         base: SITE_URL,

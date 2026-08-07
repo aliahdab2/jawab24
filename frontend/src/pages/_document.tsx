@@ -107,8 +107,8 @@ export default function MyDocument({ locale }: DocProps) {
               "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب 24", "نظام جواب", "جواب للرد التلقائي", "Jawab Auto-Reply"],
               "url": "https://jawab24.com",
               "logo": "https://jawab24.com/brand/apple-touch-icon.png",
-              "description": "Arabic-first AI auto-reply platform for businesses on Facebook, Instagram, Shopify, and Salla. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
-              "slogan": "جواب — نظام الرد التلقائي الذكي بالذكاء الاصطناعي لفيسبوك وإنستغرام",
+              "description": "Arabic-first AI auto-reply platform for businesses on WhatsApp, Facebook, Instagram, Shopify, and Salla. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
+              "slogan": "جواب — نظام الرد التلقائي الذكي بالذكاء الاصطناعي لواتساب وفيسبوك وإنستغرام",
               "knowsLanguage": ["ar", "en"],
               "areaServed": [
                 { "@type": "GeoShape", "name": "Middle East and North Africa" },
@@ -169,7 +169,7 @@ export default function MyDocument({ locale }: DocProps) {
               "name": "Jawab24",
               "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب 24", "جواب", "Jawab", "نظام جواب", "جواب للرد التلقائي"],
               "url": "https://jawab24.com",
-              "description": "جواب24 — أول نظام عربي متخصص في الرد الذكي على تعليقات ورسائل فيسبوك وإنستغرام بالذكاء الاصطناعي",
+              "description": "جواب24 — أول نظام عربي متخصص في الرد الذكي على رسائل واتساب وتعليقات ورسائل فيسبوك وإنستغرام بالذكاء الاصطناعي",
               "inLanguage": ["ar", "en"],
               "publisher": {
                 "@id": "https://jawab24.com/#organization"
@@ -215,9 +215,10 @@ export default function MyDocument({ locale }: DocProps) {
                 "worstRating": "1",
                 "ratingCount": "50"
               },
-              "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
+              "description": "AI-powered auto-reply platform for WhatsApp Business numbers and Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
               "featureList": [
                 "AI-powered automatic replies — رد تلقائي ذكي بالذكاء الاصطناعي",
+                "WhatsApp Business integration — تكامل مع واتساب للأعمال",
                 "Facebook & Instagram integration — تكامل مع فيسبوك وإنستغرام",
                 "Shopify store integration — تكامل مع شوبيفاي",
                 "Salla store integration — تكامل مع سلة",

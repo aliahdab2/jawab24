@@ -1,0 +1,13 @@
+{
+  "inputHash": "4b43f82d8fb5cd202b54d692c94c55a5f5d2ffbaf13aa10a17665507bf38ff8b",
+  "outputs": {
+    "public/brand/og-social.png": "beee4d2899e3c5f174005cfb161b44f937f7f522dee5617843ad71470a4f7de5",
+    "android/app/src/main/play/listings/en-US/graphics/feature-graphic/main.png": "e22bad0d1134d14bb123a929c78d7199649ca3d582256c7ef6baf62dfafd78ef",
+    "android/app/src/main/play/listings/ar/graphics/feature-graphic/main.png": "e22bad0d1134d14bb123a929c78d7199649ca3d582256c7ef6baf62dfafd78ef"
+  },
+  "channels": [
+    "whatsapp",
+    "facebook",
+    "instagram"
+  ]
+}
