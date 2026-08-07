@@ -144,6 +144,11 @@ export function StatusPicker({ status, subStage, stages, onSelect, t, disabled }
               type="button"
               onClick={() => onSelect(s)}
               disabled={disabled}
+              // The selected segment was distinguished by colour alone, so its
+              // state reached sighted users only (WCAG 4.1.2). It carries real
+              // weight now that contacting a lead advances the status behind the
+              // merchant's tap — this control is where they read the result.
+              aria-pressed={isSelected}
               className={clsx(
                 'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap',
                 isSelected

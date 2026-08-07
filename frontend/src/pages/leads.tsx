@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
-import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
+import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce, usePersistedBoolean } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import * as Popover from '@radix-ui/react-popover';
@@ -11,8 +11,8 @@ import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
-import type { Page } from '@jawab24/shared';
-import { resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
+import type { Page, LeadSortOrder } from '@jawab24/shared';
+import { resolveEffectiveLeadStages, resolveEffectiveLeadFields, shouldAdvanceOnContact } from '@jawab24/shared';
 import {
   Users,
   Phone,
@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Check,
+  ArrowUpDown,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
@@ -119,6 +120,8 @@ interface LeadItemProps {
   language: string;
   stages?: LeadStagesConfig;
   onStatusChange: (lead: Lead, next: LeadStatus, subStage?: string | null) => void;
+  /** Merchant tapped this item's call link. See handleContactInitiated. */
+  onContact: (lead: Lead) => void;
   onDelete: (lead: Lead) => void;
   onSelect: (lead: Lead) => void;
   isPending: boolean;
@@ -128,7 +131,7 @@ interface LeadItemProps {
 // Width of the action panel revealed by swiping left
 const SWIPE_ACTION_WIDTH = 160;
 
-function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
+function LeadCard({ lead, language, stages, onStatusChange, onContact, onDelete, onSelect, isPending, t }: LeadItemProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startX = useRef(0);
@@ -258,7 +261,7 @@ function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, 
           </span>
           <a
             href={`tel:${lead.phone}`}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onContact(lead); }}
             className="text-brand-400 hover:text-brand-500 transition-colors flex-shrink-0 p-1"
             aria-label={t('call')}
           >
@@ -302,6 +305,8 @@ interface LeadDetailModalProps {
   fieldDefs: LeadCustomFieldDef[];
   onClose: () => void;
   onStatusChange: (next: LeadStatus, subStage?: string | null) => void;
+  /** Merchant tapped Call / WhatsApp here. See handleContactInitiated. */
+  onContact: () => void;
   onFieldsSaved: (updated: Lead) => void;
   onViewConversation: () => void;
   isPending: boolean;
@@ -310,7 +315,7 @@ interface LeadDetailModalProps {
   tc: ReturnType<typeof useTranslations>;
 }
 
-function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChange, onFieldsSaved, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
+function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChange, onContact, onFieldsSaved, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
   const pageName = pages.find((p) => p.id === lead.pageId)?.name ?? '—';
   const fields = lead.extractedData?.fields ?? [];
   const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
@@ -355,6 +360,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
           <div className="flex gap-3">
             <a
               href={`tel:${lead.phone}`}
+              onClick={onContact}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-sm transition-colors"
               aria-label={t('call')}
             >
@@ -363,7 +369,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
             </a>
             <button
               type="button"
-              onClick={() => openExternalUrl(`https://wa.me/${lead.phone.replace(/\D/g, '')}`)}
+              onClick={() => { onContact(); openExternalUrl(`https://wa.me/${lead.phone.replace(/\D/g, '')}`); }}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
               aria-label={t('whatsapp')}
             >
@@ -422,7 +428,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
 
 // ── Lead row (desktop table) ──────────────────────────────────────────────────
 
-function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
+function LeadRow({ lead, language, stages, onStatusChange, onContact, onDelete, onSelect, isPending, t }: LeadItemProps) {
   return (
     <tr
       className="group border-b border-theme-border hover:bg-muted/40 transition-colors cursor-pointer"
@@ -439,6 +445,7 @@ function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, i
           <span className="font-mono text-sm text-foreground select-all cursor-text">{lead.phone}</span>
           <a
             href={`tel:${lead.phone}`}
+            onClick={() => onContact(lead)}
             className="text-icon-muted hover:text-brand-500 transition-colors flex-shrink-0"
             aria-label={t('call')}
           >
@@ -501,6 +508,16 @@ const LeadsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageModalOpen, setStageModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // List order, merchant-controlled and persisted. Default stays newest-first
+  // (what the list has always done — flipping it for everyone would silently
+  // reorder every merchant's queue), but a merchant who works oldest-first sets
+  // it once and it sticks. Oldest-first is the triage view: newest-first keeps
+  // pushing an untouched lead further down every time a new one arrives, which
+  // is how a backlog goes unnoticed (17 pages had leads on 2026-08-05; the
+  // oldest untouched one was 97 days old).
+  const [oldestFirst, setOldestFirst] = usePersistedBoolean('leads-sort-oldest-first', false);
+  const sortOrder: LeadSortOrder = oldestFirst ? 'oldest' : 'newest';
 
   // Workspace lead config — merchant-defined sub-stages (settings.leadStages)
   // and custom data fields (settings.leadFields). Drives badges, the picker,
@@ -613,7 +630,10 @@ const LeadsPage: NextPageWithLayout = () => {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['leads', selectedPageId, statusFilter, debouncedSearch.trim()],
+    // sortOrder is part of the key: the server does the ordering (the list
+    // paginates), so flipping it must refetch from offset 0 rather than
+    // reshuffle the cached pages.
+    queryKey: ['leads', selectedPageId, statusFilter, debouncedSearch.trim(), sortOrder],
     queryFn: ({ pageParam }) =>
       leadsApi.getByPage(selectedPageId, {
         // 'returning' filters by the follow-up flag (any status); 'all' = no filter.
@@ -626,6 +646,7 @@ const LeadsPage: NextPageWithLayout = () => {
         // so filtering only the loaded rows made older leads unfindable — a lead
         // beyond the first page returned nothing for its own name (2026-07-02).
         ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+        sort: sortOrder,
         limit: LEADS_PER_PAGE,
         offset: pageParam,
       }).then((r) => r.data),
@@ -720,9 +741,19 @@ const LeadsPage: NextPageWithLayout = () => {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ lead, status, subStage }: { lead: Lead; status: LeadStatus; subStage?: string | null }) =>
+    mutationFn: ({ lead, status, subStage }: { lead: Lead; status: LeadStatus; subStage?: string | null; viaContact?: boolean }) =>
       leadsApi.updateStatus(lead.id, lead.pageId, status, subStage),
-    onSuccess: (_, { status }) => {
+    onSuccess: (_, { status, viaContact }) => {
+      // The contact-initiated advance announces itself optimistically at click
+      // time (see handleContactInitiated) — the merchant is on their way out to
+      // the dialer/WhatsApp, so a toast that waits for this round-trip can land
+      // after the app backgrounds. Skip the generic one; keep the invalidations.
+      if (viaContact) {
+        invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
+        queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
+        queryClient.invalidateQueries({ queryKey: ['leads-count'] });
+        return;
+      }
       if (status === 'converted') {
         toast.success(`🎉 ${t('statusConvertedCelebration')}`, { id: 'lead-status', duration: 4000 });
       } else {
@@ -756,6 +787,51 @@ const LeadsPage: NextPageWithLayout = () => {
       toast.error(t('deleteFailed'));
     },
   });
+
+  // ── Contact = progress ──────────────────────────────────────────────────────
+  // Tapping Call or WhatsApp IS the act of contacting, so record it instead of
+  // asking the merchant to come back afterwards and file a status change by hand.
+  // Evidence for building this (prod, 2026-08-05): of 17 pages holding leads,
+  // only 3 had ever changed a lead's status — the other 14 sat at 100% `new`.
+  // Those merchants aren't slow at bookkeeping, they simply never do it, so the
+  // status has to fall out of work they already perform.
+  //
+  // Only advances OUT of `new`: never regress a lead the merchant has already
+  // moved to contacted/converted (CRM rule — the pipeline only goes forward).
+  // A `new` lead can never carry needsFollowUp (guarded in leadExtractor's
+  // upsert), so clearing that flag server-side costs nothing here.
+  // `source` decides how the change is ANNOUNCED, never whether it happens.
+  // Toasts deliberately sit at z-45, below every modal tier (globals.css) —
+  // sonner's default painted them over an open sheet's sticky footer and blocked
+  // its Save/Cancel. So a toast fired while the detail panel is open is both
+  // invisible and unclickable, which makes it a dishonest place to put Undo.
+  // From the panel the StatusPicker two sections down IS the feedback: the
+  // optimistic echo moves it to "Contacted" instantly and the merchant can tap
+  // it back with no timer to race. From the list there's no such affordance in
+  // view, so the toast (with Undo) is the right one.
+  const handleContactInitiated = useCallback((lead: Lead, source: 'list' | 'panel') => {
+    if (!shouldAdvanceOnContact(lead.status)) return;
+
+    statusMutation.mutate({ lead, status: 'contacted', subStage: null, viaContact: true });
+    // Optimistic echo for the detail panel — no-op when it's closed or showing
+    // a different lead.
+    setSelectedLead((prev) => (prev && prev.id === lead.id ? { ...prev, status: 'contacted', subStage: null } : prev));
+    if (source === 'panel') return;
+
+    // Shared toast id with the status mutation, so a failed write replaces this
+    // line with the error instead of leaving a false "moved" claim on screen.
+    toast.success(t('autoContacted', { name: lead.senderName ?? tc('unknown') }), {
+      id: 'lead-status',
+      duration: 6000,
+      action: {
+        label: tc('undo'),
+        onClick: () => {
+          statusMutation.mutate({ lead, status: 'new', subStage: null });
+          setSelectedLead((prev) => (prev && prev.id === lead.id ? { ...prev, status: 'new', subStage: null } : prev));
+        },
+      },
+    });
+  }, [statusMutation, setSelectedLead, t, tc]);
 
   const handleExport = async () => {
     if (!total || exporting) return;
@@ -1048,6 +1124,21 @@ const LeadsPage: NextPageWithLayout = () => {
           )}
         </div>
 
+        {/* Sort toggle — one press flips the queue between newest-first (default)
+            and oldest-first (triage: the lead waiting longest comes first). The
+            label states the CURRENT order, so the control reads as a status, not
+            as a promise about what pressing it does. */}
+        <button
+          type="button"
+          onClick={() => setOldestFirst(!oldestFirst)}
+          aria-pressed={oldestFirst}
+          title={oldestFirst ? t('sortOldestFirst') : t('sortNewestFirst')}
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors flex-shrink-0"
+        >
+          <ArrowUpDown className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+          {oldestFirst ? t('sortOldestFirst') : t('sortNewestFirst')}
+        </button>
+
         <span className={clsx('text-sm text-muted-foreground', total === 0 && 'invisible')}>
           {t('leadCount', { count: total })}
         </span>
@@ -1104,6 +1195,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 language={language}
                 stages={stages}
                 onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
+                onContact={(l) => handleContactInitiated(l, 'list')}
                 onDelete={(l) => setLeadToDelete(l)}
                 onSelect={openLead}
                 isPending={isPending}
@@ -1133,6 +1225,7 @@ const LeadsPage: NextPageWithLayout = () => {
                     language={language}
                     stages={stages}
                     onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
+                    onContact={(l) => handleContactInitiated(l, 'list')}
                     onDelete={(l) => setLeadToDelete(l)}
                     onSelect={openLead}
                     isPending={isPending}
@@ -1169,6 +1262,7 @@ const LeadsPage: NextPageWithLayout = () => {
             // sub-stage (matches server behavior).
             setSelectedLead((prev) => prev ? { ...prev, status, subStage: subStage ?? null } : null);
           }}
+          onContact={() => handleContactInitiated(selectedLead, 'panel')}
           onFieldsSaved={(updated) => {
             setSelectedLead((prev) => (prev && prev.id === updated.id ? { ...prev, customFields: updated.customFields } : prev));
             invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);

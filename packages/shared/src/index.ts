@@ -1500,6 +1500,41 @@ export type LeadStatus = 'new' | 'contacted' | 'converted';
 export type LeadSourceType = 'message' | 'comment';
 export type LeadExtractionStatus = 'completed' | 'pending' | 'failed';
 
+// --- Lead list sort order ---
+// Newest-first is the default (it's what the list has always done), but it
+// structurally buries neglected leads: every new capture pushes an untouched
+// one further down. `oldest` is the triage view — the lead waiting longest
+// comes first. Sorting MUST happen server-side: the list paginates 50 rows at
+// a time, so reordering in the browser would only reorder the loaded page.
+export type LeadSortOrder = 'newest' | 'oldest';
+export const LEAD_SORT_ORDERS = ['newest', 'oldest'] as const;
+export const DEFAULT_LEAD_SORT_ORDER: LeadSortOrder = 'newest';
+
+/**
+ * Narrow an untrusted value (HTTP query param, localStorage) to a sort order,
+ * falling back to the default. Shared so the backend's validation and the
+ * frontend's persisted-preference read can never disagree about what's valid.
+ */
+export function parseLeadSortOrder(value: unknown): LeadSortOrder {
+  return (LEAD_SORT_ORDERS as readonly string[]).includes(value as string)
+    ? (value as LeadSortOrder)
+    : DEFAULT_LEAD_SORT_ORDER;
+}
+
+/**
+ * Whether tapping a contact affordance (call / WhatsApp) should advance the
+ * lead's status. Contacting a customer IS progress, so it's recorded rather
+ * than left as manual bookkeeping the merchant has to file afterwards — but
+ * only OUT of `new`: the pipeline never regresses a lead the merchant already
+ * moved to contacted/converted (standard CRM behaviour).
+ *
+ * Named and exported so the UI and its test assert the same rule instead of
+ * each inlining `status === 'new'`.
+ */
+export function shouldAdvanceOnContact(status: LeadStatus): boolean {
+  return status === 'new';
+}
+
 // --- Lead Stages (customizable sub-stages) ---
 // The three main stages above are fixed (the pipeline, counters, and AI
 // extraction depend on 'new'). Merchants customize by defining SUB-STAGES

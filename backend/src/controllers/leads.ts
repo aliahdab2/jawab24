@@ -4,20 +4,20 @@ import { pagesService } from '../services/pages';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import type { LeadStatus } from '@jawab24/shared';
-import { MAX_LEAD_FIELD_VALUE_LENGTH } from '@jawab24/shared';
+import { MAX_LEAD_FIELD_VALUE_LENGTH, parseLeadSortOrder } from '@jawab24/shared';
 
 const VALID_STATUSES: LeadStatus[] = ['new', 'contacted', 'converted'];
 
 export class LeadsController {
-    /** GET /leads?pageId=&status=&needsFollowUp=&search=&limit=&offset= */
+    /** GET /leads?pageId=&status=&needsFollowUp=&search=&sort=&limit=&offset= */
     async getLeads(
         request: FastifyRequest<{
-            Querystring: { pageId: string; status?: string; needsFollowUp?: string; search?: string; limit?: string; offset?: string };
+            Querystring: { pageId: string; status?: string; needsFollowUp?: string; search?: string; sort?: string; limit?: string; offset?: string };
         }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
-        const { pageId, status, needsFollowUp: needsFollowUpStr, search: searchStr, limit: limitStr, offset: offsetStr } = request.query;
+        const { pageId, status, needsFollowUp: needsFollowUpStr, search: searchStr, sort: sortStr, limit: limitStr, offset: offsetStr } = request.query;
 
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
 
@@ -38,10 +38,15 @@ export class LeadsController {
             ? searchStr.trim().slice(0, 100)
             : undefined;
 
+        // Merchant-chosen list order. Anything unrecognised falls back to the
+        // default rather than 400ing — an unknown sort is a stale client, not a
+        // reason to fail the whole list.
+        const sort = parseLeadSortOrder(sortStr);
+
         const limit = Math.min(Number(limitStr) || 50, 200);
         const offset = Math.max(Number(offsetStr) || 0, 0);
 
-        const result = await leadExtractorService.getLeadsByPage(pageId, { status: validStatus, needsFollowUp, search, limit, offset });
+        const result = await leadExtractorService.getLeadsByPage(pageId, { status: validStatus, needsFollowUp, search, sort, limit, offset });
         return reply.send(result);
     }
 
