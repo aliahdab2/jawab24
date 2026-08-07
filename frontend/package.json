@@ -29,6 +29,7 @@
     "test:e2e:report": "playwright show-report",
     "translation:validate": "node scripts/validate-translations.js",
     "sitemap:validate": "node scripts/validate-sitemap.js",
+    "llms:validate": "node scripts/validate-llms.js",
     "social:generate": "npx tsx scripts/generate-social-images.ts",
     "analyze": "ANALYZE=true next build"
   },

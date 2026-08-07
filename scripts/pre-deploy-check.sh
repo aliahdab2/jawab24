@@ -120,6 +120,19 @@ else
 fi
 
 # =============================================
+# 0.57. Validate llms.txt / llms-full.txt (the AI-assistant-facing surface)
+# =============================================
+echo ""
+echo "🤖 Validating llms.txt files..."
+if node frontend/scripts/validate-llms.js > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ llms files current${NC}"
+else
+    echo -e "${RED}   ❌ llms.txt validation failed!${NC}"
+    node frontend/scripts/validate-llms.js
+    exit 1
+fi
+
+# =============================================
 # 0.6. Lock file sync check
 # =============================================
 echo ""
