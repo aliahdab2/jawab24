@@ -184,8 +184,6 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
       </Head>
 
       <div className="dashboard-scroll-root flex-1 overflow-y-auto overflow-x-hidden bg-surface-50 bg-gradient-mesh">
-        {/* Offline indicator — shown on native when network is lost */}
-        <OfflineBanner />
         {/* Dark mode decorative background — teal/blue glows + cubes pattern */}
         <div className="hidden dark:block fixed inset-0 pointer-events-none z-0" aria-hidden="true">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.15),transparent_60%)]" />
@@ -276,6 +274,15 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             !isCleanLayout && !isEmbedded && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
+          {/* Offline indicator — shown on native when network is lost.
+              Inside <main> on purpose: `pt-header` has already cleared the fixed
+              header here, so the banner is both visible and still in flow, and it
+              pushes the content down the way it always did. As a sibling in the
+              scroll root it sat *under* the fixed header — a `position: static`
+              element whose `z-50` was inert — so the only thing a merchant losing
+              signal ever saw was the content shifting down with no explanation.
+              Guarded by test/mobile/offlineBannerPlacement.test.ts. */}
+          <OfflineBanner />
           <div
             className={clsx(
               'px-4 pt-3 px-safe-landscape max-lg:landscape:pt-2 sm:pt-5 md:px-8 md:pt-8 lg:px-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
