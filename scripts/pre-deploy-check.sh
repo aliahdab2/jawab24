@@ -507,8 +507,22 @@ rm -rf frontend/.next frontend/node_modules/.cache
 # use their own .env with the real API URL.
 # A retry is kept as belt-and-braces for genuinely transient flakes, but the
 # common cause (concurrent dev server) is blocked by the guard above.
+# The WhatsApp vars are pinned HERE, not only in build_e2e_frontend() further down.
+# That function pins them so "the E2E build is deterministic instead of inheriting
+# whatever .env.local holds" — but it only runs when no standalone build exists, and
+# THIS build always produces one first, so its pins never actually took effect. E2E
+# determinism therefore rested on .env.local carrying the vars, which is exactly what
+# the pins were introduced to avoid: in a checkout without .env.local (a fresh
+# worktree) the bundle bakes WhatsApp OFF, the nav renders "My Pages" instead of
+# "Channels", and six specs across pages/sidebar/mobile-nav fail with nothing wrong
+# in the code. Verified 2026-08-07: those specs go 6 red → 44/44 green when the same
+# build carries these two values.
 build_frontend() {
-    CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend "$@"
+    CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api \
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} \
+        NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-e2e-dummy-fb-app-id} \
+        NEXT_PUBLIC_WHATSAPP_CONFIG_ID=${NEXT_PUBLIC_WHATSAPP_CONFIG_ID:-e2e-dummy-whatsapp-config} \
+        npm run build --workspace=jawab24-frontend "$@"
 }
 
 # Each attempt's output is captured, so the log of the attempt that actually
