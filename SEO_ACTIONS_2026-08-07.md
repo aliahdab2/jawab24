@@ -95,8 +95,34 @@ Prose instructions had five months to keep those files current and did not
 Checks: integration coverage · competitor coverage · blog-post coverage · link integrity
 (no dead `/blog|/compare|/integrations` links for an assistant to follow) · a
 `REQUIRED_TOPICS` map (channels/features that must be described — shipping a channel forces
-a decision here) · and an **unverifiable-metric guard** that fails on `N% accuracy` /
-`N real-world scenarios`, so the exact claim removed in §3 cannot be reintroduced.
+a decision here) · an **unverifiable-metric guard** that fails on `N% accuracy` /
+`N real-world scenarios`, so the exact claim removed in §3 cannot be reintroduced · and a
+**self-consistency check** requiring each tracked fact to read identically everywhere it
+appears, within a file and across both.
+
+**The self-consistency check was added after review, and it was needed.** The first cut of
+this validator banned unverifiable metrics but never checked *agreement* — and shipped a
+fresh instance of the original bug: `llms-full.txt` said "(iOS in progress)" on line 16 and
+"(iOS coming soon)" on line 154. The check caught it immediately on being written. Writing
+it also surfaced a false positive worth recording: "6 Arabic dialect families" and
+"6 dialect families" state the same fact, so patterns may use a capture group to isolate the
+fact from its phrasing. A gate that cries wolf gets switched off.
+
+Both iOS claims were then removed rather than reconciled — iOS has not shipped, and a
+forward-looking availability claim in a file assistants quote verbatim is the same defect
+class as the accuracy metric removed in §3.
+
+**The validator has its own tests** — `frontend/scripts/__tests__/validate-llms.test.mjs`,
+16 cases run by `npm run llms:validate:test` (`node --test`, following the existing
+`scripts/__tests__/check-duplication.test.mjs` precedent). Every check is pinned in *both*
+directions: passing on good input and failing on the specific defect it exists to catch. A
+check that only ever passes is indistinguishable from one that does nothing. `pre-deploy`
+runs these tests before trusting the gate.
+
+Writing the tests also exposed a real weakness: `REQUIRED_TOPICS` was matching against the
+raw file, so a topic could be reported as "covered" purely because a blog *slug* contained
+the word (`/blog/whatsapp-auto-reply-jawab24`). It now matches against prose with URLs
+stripped — a link is not a description.
 
 Wired into `frontend/package.json` as `llms:validate` and into
 `scripts/pre-deploy-check.sh` (step 0.57) so it gates deploys like the sitemap check.
@@ -132,10 +158,20 @@ standard, no-account way to push URLs at that index on deploy.
 
 - Public key file: `frontend/public/7af41c595343ef134170a2de37da0079.txt`
   (public by protocol design — it *is* the ownership proof; not a secret)
-- `scripts/indexnow-ping.sh` — reads the live sitemap, verifies the key file resolves before
-  submitting, POSTs the URL list, and maps each IndexNow status code to a specific message.
-  **Always exits 0** — a failed ping must never fail a deploy.
+- `scripts/indexnow-ping.sh` — reads the live sitemap, filters to URLs whose `<lastmod>`
+  falls inside a window (default 30 days, `INDEXNOW_WINDOW_DAYS`; `--all` forces a full
+  submission for the very first ping), keeps only on-host URLs, verifies the key file
+  resolves before submitting, POSTs the URL list, and maps each IndexNow status code to a
+  specific message. **Always exits 0** — a failed ping must never fail a deploy.
 - Called from `scripts/deploy-on-server.sh` after `post_deploy_check` succeeds.
+- `post_deploy_check` also asserts the key file returns 200 and says so loudly if not.
+  Without that, a key stripped from the frontend image would disable Bing submission
+  permanently while the ping's own guard warned quietly into a log nobody reads.
+
+Change-scoped by design: IndexNow is specified for URLs that *changed*, and resubmitting the
+whole sitemap on every deploy — including deploys touching no public content — is what the
+429 response exists to punish. Verified: a 1-day window reports nothing to submit, a 15-day
+window picks up the late-July pages.
 
 Verified locally: 72 URLs extracted, payload parses as valid JSON, all URLs on-host, and the
 key-file guard correctly skipped submission while the key is undeployed. One portability bug
