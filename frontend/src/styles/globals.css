@@ -590,6 +590,17 @@
     color: rgb(196, 181, 253);
   }
 
+  /* --- Connectivity bar (native only; full-bleed, not a badge) ---
+     A dark bar with white text in BOTH themes. It cannot use a bare
+     `bg-surface-800`: the surface scale INVERTS in dark mode
+     (light 33 44 43 → dark 210 218 230), which put white text on a near-white
+     bar at 1.41:1 — under the 4.5:1 floor and effectively unreadable. The bug
+     survived unnoticed only because the banner was covered by the header and
+     nobody had ever seen it in either theme. */
+  .offline-banner {
+    @apply bg-surface-800 text-white dark:bg-surface-500;
+  }
+
   /* --- Danger zone (destructive action sections) --- */
   .danger-zone {
     @apply bg-red-50/30 dark:bg-red-900/20;

@@ -19,7 +19,7 @@ The single most useful thing in this document. Update it whenever a finding move
 |----|----------|-------|--------|
 | M1 | Critical | Native shell re-initializes on every navigation; Android back exits the app from any screen | ✅ **Fixed** — PR #641, plus #642 for the counter it exposed. ⏰ **Unverified on a device** (MOB-11) |
 | M2 | High | Push breaks silently after a re-login, and can register to the wrong account | 🔴 Open |
-| M3 | High | Offline banner is painted over by the fixed header — nobody ever sees it | 🔴 Open |
+| M3 | High | Offline banner is painted over by the fixed header — nobody ever sees it | ✅ **Fixed** — moved inside `<main>`; verified in a browser across 24 cells |
 | M4 | High | Notification language pinned to Arabic in-app regardless of the user | 🔴 Open |
 | M5 | Medium | Reply-mode selector clipped off-screen on 360 px phones | 🔴 Open |
 | M6 | Medium | Bare `landscape:` also matches desktop — 8 descriptions hidden from most users | 🔴 Open — **has already cost a blocked deploy**, see below |
@@ -34,6 +34,11 @@ The single most useful thing in this document. Update it whenever a finding move
 | M15 | Low | `min-h-screen` on the three store-onboarding pages | 🔴 Open |
 | M16 | Low | iOS: no `NSCameraUsageDescription` despite image-upload fields | 🔴 Open — **blocker before iOS launch** |
 | M17 | Low | No background session validation in-app | 🔴 Open |
+| M18 | Low | Landscape wastes 40 px: content starts at 80 px under a 40 px header | 🔴 Open — raised 2026-08-07 while measuring M3 |
+| M19 | Low | Losing connectivity leaves no Sentry breadcrumb | 🔴 Open — raised 2026-08-07 during the M3 review |
+
+> M18 and M19 are **not** part of the original 17. They were found while fixing and reviewing M3
+> and are recorded here so they are not lost; neither has been investigated beyond the observation.
 
 ### What happened after the review (2026-08-05)
 
@@ -51,7 +56,95 @@ The single most useful thing in this document. Update it whenever a finding move
   Playwright locator resolve to. Result: a red `main` that blocked production deploy until PR #643.
   M6 is no longer only a UX cost.
 - **Android 2.0.26 (20026)** shipped to the internal track carrying #641 + #642 — the first build
-  in which the back button can actually be tested.
+  in which the back button can actually be tested. *(Probed 2026-08-07: 2.0.26 is now live in
+  **production**, status `completed`. It was promoted before MOB-11 ran — run it anyway.)*
+
+### 2026-08-07 — M3 fixed, and native-only findings became browser-measurable
+
+**M3 is fixed.** The banner now renders inside `<main>`, which already carries `pt-header`. That
+puts it below the fixed header while keeping it in normal flow, so it is visible *and* still pushes
+the content down the way it always did. One render site covers both chrome variants. Guard:
+`frontend/test/mobile/offlineBannerPlacement.test.ts` (5 assertions, all confirmed red against the
+pre-fix source before being kept).
+
+**A first attempt shipped a second bug, and the browser caught it.** Lifting the banner into the
+fixed header layer made it visible and passed the occlusion check — while covering the page
+heading. Only the screenshot showed it. *An occlusion assertion alone is not enough; also assert
+that the thing you made visible does not hide something else.* The matrix now measures both.
+
+🔴 **The review of the fix found a THIRD bug — the banner was unreadable in dark mode.** It carried
+`bg-surface-800 text-white`, and the surface scale **inverts** between themes: `--surface-800` is
+`33 44 43` (near-black) in light and `210 218 230` (near-white) in dark. Measured in the browser:
+background `rgb(210,218,230)` under white text = **1.41:1**, against a 4.5:1 WCAG AA floor.
+
+This is the deeper lesson of M3, and it generalises to every remaining finding:
+
+> **Code nobody can see is code nobody has checked.** The banner had been invisible since it was
+> written, so its own styling had never been looked at in either theme. Making it visible did not
+> finish the job — it *exposed* a second defect that had been riding along undetected. Expect the
+> same when M2, M4, M7 and M10 start actually executing: assume the newly-reachable code is
+> unverified, and check it rather than the diff.
+
+Fixed with a semantic `.offline-banner` class in `globals.css` (Rule 11 — never a raw surface token
+for anything that must survive a theme flip): `rgb(60,75,100)` in dark, **8.81:1**. The guard now
+asserts the component carries no bare `bg-surface-*` and that the class defines a `dark:` variant;
+confirmed red against the raw-token shape.
+
+**Two more defects came out of the same review, both in the fix itself.**
+
+🔊 **The live region would not have announced.** `role="status"` was put on the element that mounts
+*with* its text already present. Assistive technology announces *changes* to a region already in the
+accessibility tree; one that appears already populated is routinely dropped by TalkBack and
+VoiceOver. So the accessibility improvement the fix claimed would mostly never have fired — the same
+class of defect as the visual one, one layer down. The live region is now the outer element and
+stays mounted on native whether or not the device is offline; only its contents come and go, and all
+colour and spacing sit on the inner element so an empty region reserves no space. Measured: online
+`height: 0`, text empty; offline the **same node** carries the message at `height: 32`, and the page
+heading moves 76 → 108 — exactly the banner height, i.e. it pushes rather than covers.
+
+🕳 **The first guard had a hole that would have let the bug straight back in.** It asserted only that
+the banner appears *after* `<main` in the file. Moving it below `</main>` — an entirely plausible
+refactor — kept it green while putting the banner back outside the header-cleared area. Now bounded
+on both sides, and confirmed red against exactly that move. *A one-sided bound is not a guard.*
+
+Also: the guard scanned raw source, so the file's own prose (`Inside <main> on purpose`) counted as
+a second `<main>`. Comments are stripped before scanning — otherwise a commented-out
+`<OfflineBanner />` would have counted as a render site too.
+
+⭐ **The technique that unblocks the other eight native-only findings.** Nine of the 17 sit behind
+`isNativePlatform()`, which reads `window.Capacitor`. Stubbing that global does **not** work —
+`@capacitor/core` overwrites it on import. Two things must both be true instead:
+
+1. open the app's own gate in `lib/capacitor.ts`, and
+2. keep `getPersistStorage()` on `localStorage` — on native it switches to `SecureStoragePlugin`,
+   which has no usable web implementation, so a seeded session is silently ignored and every route
+   redirects to `/login`. *That one cost most of the debugging.*
+
+With both, the **entire native path runs in desktop Chrome**: real React, real component, real
+`@capacitor/network` web implementation, and `context.setOffline(true)` drives the store through
+the production code path. Capacitor's own runtime still reports `platform=web`, so plugins keep
+their web implementations rather than hanging on an absent native bridge.
+
+This was done with a temporary patch, reverted before commit. **The permanent form belongs in the
+Part A work and needs no production change:** install a `defineProperty` trap on `window.Capacitor`
+from `addInitScript`, so when `@capacitor/core` assigns the real object the trap returns a proxy
+with `isNativePlatform()` overridden. Storage still needs an answer — probably resolving
+`getPersistStorage` lazily per call rather than caching at first use.
+
+**M3 measured, 24 cells** — 4 viewports × 2 locales × 3 routes, all `found · visible · clears-h1`:
+
+```
+360x800p / 390x844p / 414x896p portrait   banner y = 64..96
+844x390l landscape                        banner y = 80..112
+before the fix, 390x844 /en/settings      banner y = 0..32, elementFromPoint → the header DIV
+```
+
+**Two things the matrix turned up for free.** First, **M5 reproduced independently**: `/settings`
+overflows 32 px at 360 and 2 px at 390 — matching the original measurement exactly — and it is
+**English-only** (Arabic reads 0 at every width), which the review did not record. Second, in
+landscape the content column starts at 80 px while the landscape header is 40 px tall; the banner
+just follows the flow, so this is pre-existing `main` padding, not something M3 introduced. Worth a
+look, not yet a finding.
 
 ---
 
@@ -164,7 +257,7 @@ token from the store at call time rather than holding the value it was created w
 
 ### M3 — Offline banner is covered by the fixed header — nobody ever sees it
 
-**Severity:** High · **MEASURED**
+**Severity:** High · **MEASURED** · **Status: fixed 2026-08-07, verified in a browser**
 
 **Location:** `frontend/src/components/layout/DashboardLayout.tsx:188` renders `<OfflineBanner />` as
 the first in-flow element inside `.dashboard-scroll-root` (line 186), while the mobile header at line
@@ -187,9 +280,18 @@ elementFromPoint(banner centre)
 covered → true
 ```
 
-**Fix.** Render the banner inside the fixed header layer, or make it `fixed` with `pt-safe` above the
-header and offset `--header-height` while it is shown — so it occupies space the header does not
-already own.
+**Fix (shipped).** Neither of the two options first proposed here. Rendering it inside the fixed
+header layer *was* tried and made it visible — and covered the page heading, because a fixed layer
+reserves no space. Offsetting a `fixed` banner by `--header-height` needs geometry kept in sync with
+a header whose real height (`h-14` + safe area) does not match that variable anyway.
+
+What shipped instead: move it inside `<main>`, which already carries `pt-header`. The header is
+cleared for free, the banner stays in normal flow and keeps pushing content down exactly as before,
+one render site serves both chrome variants, and there is no arithmetic to drift.
+
+**Update the placement contract, not just the class list.** The banner deliberately carries no
+positioning of its own, so *where it is rendered* is the whole fix — hence a source-level guard
+rather than a style assertion.
 
 ### M4 — Notification language is pinned to Arabic in-app, whatever the user's language
 
@@ -689,8 +791,10 @@ MOB-64 and MOB-97). Then **M3 and M5**: small, measured, and independently verif
 M4 together**, since both live in `notifications.ts` and share one fix — *read the state at call time,
 not at registration time*. The low findings ride along with any change that touches their files.
 
-> **Progress:** step 1 of this order is done (#641 + #642) but **not yet device-verified**. M3 and M5
-> are next.
+> **Progress:** step 1 is done (#641 + #642) but **not yet device-verified** — and 2.0.26 reached
+> production anyway, so MOB-11 is now overdue rather than pending. **M3 is done and verified in a
+> browser** (2026-08-07). **M5 is next**, and it is already measured: 32 px at 360, 2 px at 390,
+> English only. Then M2 + M4 together.
 
 ---
 
