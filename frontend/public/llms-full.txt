@@ -13,7 +13,7 @@ The platform is built for the Middle East and North Africa (MENA) region, with p
 
 Website: https://jawab24.com
 Category: Business SaaS, Customer Support Automation, AI Auto-Reply Platform
-Operating Systems: Web, Android (iOS in progress)
+Operating Systems: Web, Android
 
 ## Channels
 
@@ -151,7 +151,7 @@ Both caches are scoped by page and Business Info version to prevent cross-contam
 
 ## Mobile App
 
-Available on Android (iOS coming soon). Features:
+Available on Android via Google Play. Features:
 - Full dashboard access
 - Real-time push notifications
 - Alerts for angry customers, low-confidence replies, and unanswerable questions
