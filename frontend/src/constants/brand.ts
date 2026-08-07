@@ -23,8 +23,15 @@ export const BRAND_ASSETS = {
     },
     meta: {
         appName: 'Jawab24',
-        appTitle: 'Jawab24 جواب | AI Auto-Reply for Facebook & Instagram',
+        appTitle: 'Jawab24 جواب | AI Auto-Reply for WhatsApp, Facebook & Instagram',
         themeColor: '#18181b',
+    },
+    /** Bilingual tagline burned into the generated social card and Play feature graphic
+        by `scripts/generate-social-images.ts`. Kept here (not in the script) so the
+        channel-coverage test can assert it — an image cannot be grepped. */
+    socialCardTagline: {
+        en: 'Smart AI Auto-Replies for WhatsApp, Facebook & Instagram',
+        ar: 'الجيل الجديد من الردود التلقائية لواتساب وفيسبوك وإنستغرام',
     },
     urls: {
         base: SITE_URL,
