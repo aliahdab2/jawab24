@@ -8,6 +8,12 @@
 > keeps Zid's `coming_soon` badge (`frontend/src/pages/integrations.tsx`) until a real
 > dev-store round-trip passes — that gate is D-020's and it still stands.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
+>
+> **Exception, deliberate:** as of 2026-08-07 four *public* surfaces already describe Zid
+> as a live integration (llms.txt, llms-full.txt, the `SoftwareApplication` schema, and the
+> `about` namespace). Owner decision, taken because the Partner application is submitted
+> and approval is expected imminently. See the ⚠️ note in the live-validation checklist
+> below before changing anything on either side of that disagreement.
 
 ## Verified API contract (docs.zid.sa, fetched 2026-08-01)
 
@@ -132,10 +138,25 @@ needed: Zid's agreement approval + ngrok (the Salla Phase-4.2 capture method).
    Dashboard scope groups selected: Account R, Account Identity R, Store Core Details R,
    Orders R, Products R, Webhooks RW. Lifecycle webhook configured:
    `app.market.application.uninstall` → `https://jawab24.com/zid/webhooks?e=app.market.application.uninstall`.
-   ⚠️ Still from captures: the OAuth **scope strings** for the authorize URL (fix
+   ⚠️ Still needed: the OAuth **scope strings** for the authorize URL (fix
    `config.zid.scopes` — dashboard shows groups, not strings), whether `ZID_APP_ID`
    (webhook `original_id`) is the app id 7367 or the Client ID 7192, and what auth the
    `app.market.*` lifecycle deliveries carry.
+
+   🔴 **The scope strings are the one unknown that CANNOT be resolved by capture, and
+   they gate everything else.** Every other `[provisional]` item is answered by issuing a
+   request and reading the response — but the authorize URL is the first request, and it
+   needs correct scopes to succeed at all. A wrong guess fails OAuth with an opaque error
+   and blocks steps 2–5 entirely. `config.zid.scopes` is currently
+   `'offline_access products.read orders.read webhooks.manage'`, explicitly marked
+   provisional in `backend/src/config/index.ts`.
+
+   **Get them before approval, not after.** The config comment says they come from the
+   Partner app-creation screen — and app 7367 already exists, so the real list should be
+   visible in the Partner dashboard now (app 7367 → scopes), without waiting on the
+   agreement. Doing this pre-approval removes the highest-risk unknown from the critical
+   path. Two other prereqs are also doable now: take dev store 3195980 out of maintenance
+   mode, and pre-stage ngrok.
 2. Capture raw responses: token exchange (form-urlencoded accepted? `Authorization` field
    on both grants?), profile, products (+ multilingual name shape), orders, and full
    webhook deliveries (headers + envelope + order payload).
@@ -149,6 +170,25 @@ needed: Zid's agreement approval + ngrok (the Salla Phase-4.2 capture method).
 6. Only then: remove the `coming_soon` badge (`frontend/src/pages/integrations.tsx`),
    flip the status tables in `INTEGRATIONS.md` / `SYSTEM_ANALYSIS.md`, and append the
    D-NNN closing D-020's gate.
+
+   ⚠️ **Several public surfaces were already flipped ahead of this gate, deliberately,
+   on 2026-08-07 (PR #663).** Owner decision: the Zid Partner application was submitted
+   2026-08-01 and approval could land at any time, so reverting and re-adding the copy
+   was judged churn. These now describe Zid as a live integration **while the badge still
+   says `coming_soon`** — that disagreement is known and intended, not a bug to "fix":
+
+   - `frontend/public/llms.txt` — listed under "E-commerce integrations"
+   - `frontend/public/llms-full.txt` — its own "### Zid" section under E-Commerce Integration
+   - `frontend/src/pages/_document.tsx` — `SoftwareApplication` `featureList` entry,
+     `description` ("Shopify, Salla, and Zid"), and `keywords`
+   - `frontend/src/i18n/{en,ar}/about.json` — `platforms.zid` + Zid named in `intro.text`,
+     rendered by `frontend/src/pages/what-is-jawab24.tsx`
+
+   So at step 6 there is **nothing to add** on those four surfaces — only the badge and
+   the status tables remain. Conversely, if the D-020 gate ever fails and Zid is parked
+   again, these four MUST be reverted: they are public, and `llms.txt` in particular is
+   read verbatim by AI assistants (AI_INSTRUCTIONS §15 — never claim a feature exists
+   when it does not).
 
 ## Shared infrastructure Zid reuses (unchanged)
 
