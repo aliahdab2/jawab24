@@ -699,6 +699,13 @@ fi
 
 cleanup
 
+# Tell Bing the site changed (Bing is the retrieval index behind ChatGPT search
+# and Copilot). Non-fatal: the script always exits 0, and a missed ping only
+# means Bing recrawls on its own schedule.
+if [ -x ./scripts/indexnow-ping.sh ]; then
+    ./scripts/indexnow-ping.sh || true
+fi
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 DEPLOYMENT SUCCESSFUL"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
