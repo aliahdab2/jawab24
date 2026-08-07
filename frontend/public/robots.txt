@@ -55,26 +55,167 @@ Disallow: /en/auth/
 # See: https://developers.google.com/search/docs/crawling-indexing/remove-information
 
 # AI Crawlers - Explicit Allow
+#
+# IMPORTANT: a named User-agent group FULLY REPLACES the `User-agent: *` group for
+# that crawler — directives are not merged. So every block below must repeat the
+# auth-gated Disallow set, or these crawlers would be invited to spend their crawl
+# budget on app routes that can only ever render a login wall. (Not a disclosure
+# risk — those routes are auth-gated server-side — but a wasteful and misleading
+# signal.) Keep the Disallow list here in sync with the `*` group above.
+#
+# Crawlers not named here inherit `User-agent: *`, which already allows the public
+# site — naming them changes nothing functionally, it just makes this file
+# auditable at a glance.
+
 User-agent: GPTBot
 Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
 
 User-agent: ChatGPT-User
 Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
 
 User-agent: OAI-SearchBot
 Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
+
+User-agent: meta-externalagent
+Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
+
+User-agent: CCBot
+Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
 
 User-agent: Bytespider
 Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
 
 User-agent: cohere-ai
 Allow: /
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /settings
+Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/settings
+Disallow: /en/auth/
 
 # Sitemap
 Sitemap: https://jawab24.com/sitemap.xml
