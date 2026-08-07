@@ -6,6 +6,7 @@ import { factCollectionsService } from '../factCollections';
 import { composeFactMatchText } from '../factCollectionsMatcher';
 import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
+import { resolveBrandVoiceNotes } from './contextEnricher';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
 import type { FacebookMessageTag } from '../../utils/commentText';
@@ -40,10 +41,28 @@ interface PlaygroundContextOptions {
     /** Our own Facebook page ID — required to distinguish page-tags pointing at us
      *  (reply) from page-tags pointing elsewhere (skip). */
     ourFacebookPageId?: string;
-    /** Admin-only overrides (not available in customer-facing test) */
+    /** Prior turns of the thread (DM only). Supplied by BOTH the admin playground
+     *  and the customer-facing test reply. */
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+    /**
+     * Merchant persona — OPTIONAL overrides, NOT admin-only inputs.
+     *
+     * When a caller omits them (the customer-facing test reply always does), they
+     * fall back to the merchant's STORED workspace settings, resolved exactly the
+     * way production resolves them. They were originally modelled as admin
+     * experiment inputs with no fallback, which made the merchant's own
+     * "اختبار الرد الذكي" demo a reply their customers would never receive: the
+     * stored persona carries instructions like "ask for the customer's name and
+     * WhatsApp number", production applied them, the test did not.
+     *
+     * An explicitly supplied value always wins, so the admin playground can still
+     * experiment with a persona the merchant has not saved.
+     */
     replyStyle?: string;
     brandVoiceNotes?: string;
+    /** Admin-only experiment input: a synthetic returning-customer summary. The
+     *  production DM pipeline derives its own from conversation history inside the
+     *  generator, so there is no stored merchant value to fall back to. */
     customerContext?: string;
     /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
     senderName?: string;
@@ -88,11 +107,32 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         }
     }
     let timezone: string | undefined;
+    // Merchant persona defaults. Production reads BOTH from the WORKSPACE settings
+    // store — messageProcessor/commentProcessor call
+    // workspaceSettingsService.getSettings(workspaceId) and then pass
+    // `userSettings.replyStyle` + `resolveBrandVoiceNotes(userSettings, message)`
+    // — so the test reply must read the same object or it demos a reply no
+    // customer would receive.
+    //
+    // `ownerSettings` above is NOT a substitute: settingsService overlays the
+    // pipeline fields via resolveWorkspaceId(userId), which picks an arbitrary
+    // membership (`limit(1)`, no ordering), so for a user who belongs to more
+    // than one workspace it can serve a DIFFERENT workspace's persona than the
+    // one this page belongs to.
+    let resolvedReplyStyle = replyStyle;
+    let resolvedBrandVoiceNotes = brandVoiceNotes;
     if (page.workspaceId) {
         try {
             const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
             defaultReplyLanguage = wsSettings.defaultReplyLanguage;
             timezone = wsSettings.timezone;
+            // `??=` — an explicitly supplied value wins (admin experimentation);
+            // only an ABSENT option falls back to what the merchant stored.
+            // Brand voice goes through the shared choke point, never a local copy
+            // of the language-pick rule: it is also a reply-cache key segment
+            // (`bv:`), so any divergence silently strands warmed entries.
+            resolvedReplyStyle ??= wsSettings.replyStyle;
+            resolvedBrandVoiceNotes ??= resolveBrandVoiceNotes(wsSettings, question);
         } catch {
             // Non-critical — fall back to default
         }
@@ -183,8 +223,8 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         conversationHistory: channel === 'dm' ? conversationHistory : undefined,
         senderName: channel === 'dm' ? senderName : undefined,
         minutesSinceLastMessage: channel === 'dm' ? minutesSinceLastMessage : undefined,
-        replyStyle,
-        brandVoiceNotes,
+        replyStyle: resolvedReplyStyle,
+        brandVoiceNotes: resolvedBrandVoiceNotes,
         businessInfoBlock,
         customerContext,
         model,

@@ -12,8 +12,10 @@
  * Comments only, and only public-comment-mode pages: DM cache keys are
  * name/gender-bucketed and history-dependent, and dual/private pages flatten
  * comments into DM keys — neither can be warmed from here without producing
- * keys production never reads. Reply style and brand voice are resolved from
- * the owner's settings exactly like production (both are cache-key segments).
+ * keys production never reads. Reply style and brand voice are cache-key
+ * segments; buildPlaygroundContext resolves both from the page's WORKSPACE
+ * settings — the same store production reads — so this script must NOT pass its
+ * own values, or it writes keys under a persona production never resolves.
  *
  * Budget guards (env-tunable):
  *   WARM_CACHE_TOP_N          candidates to consider (default 300)
@@ -39,7 +41,6 @@ import { redis } from '../lib/redis';
 import { settingsService } from '../services/settings';
 import { buildPlaygroundContext, type PlaygroundPageData } from '../services/reply/playgroundContext';
 import { replyGenerator } from '../services/reply/generator';
-import { resolveBrandVoiceNotes } from '../services/reply/contextEnricher';
 import { rankWarmCandidates, type WarmCandidateRow } from '../services/cacheWarming';
 
 const TOP_N = parseInt(process.env.WARM_CACHE_TOP_N || '300', 10);
@@ -51,7 +52,6 @@ const SCAN_LIMIT = 20000;
 
 interface PageWarmContext {
     page: PlaygroundPageData & { facebookPageId: string | null };
-    ownerSettings: Awaited<ReturnType<typeof settingsService.getSettings>>;
 }
 
 async function loadCandidateRows(since: Date): Promise<WarmCandidateRow[]> {
@@ -133,7 +133,7 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
                 contexts.set(page.id, null);
                 continue;
             }
-            contexts.set(page.id, { page, ownerSettings });
+            contexts.set(page.id, { page });
         } catch {
             contexts.set(page.id, null);
         }
@@ -196,8 +196,9 @@ async function run() {
                     postMessage: candidate.postMessage ?? undefined,
                     messageTags: candidate.messageTags ?? undefined,
                     ourFacebookPageId: ctx.page.facebookPageId ?? undefined,
-                    replyStyle: ctx.ownerSettings.replyStyle,
-                    brandVoiceNotes: resolveBrandVoiceNotes(ctx.ownerSettings, candidate.message),
+                    // replyStyle / brandVoiceNotes deliberately NOT passed — see the
+                    // file header: buildPlaygroundContext resolves both from the
+                    // page's workspace settings, which is what production reads.
                 });
                 // Tag the usage rows so warm cost is queryable and never blends
                 // into prod reply pipelines (REPLY_PIPELINES excludes cache_warm).
