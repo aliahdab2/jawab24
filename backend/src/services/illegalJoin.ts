@@ -38,6 +38,30 @@
  * the reply also states the unit price it multiplied. And a page with no
  * collections yields nothing at all — which is the state of every page whose
  * defect motivated this, until it is migrated.
+ *
+ * MEASURED COVERAGE ON REAL TRAFFIC (2026-08-07, first run, MES page right after
+ * its rows were seeded). Against a genuine prod reply that enumerates all five
+ * showrooms correctly: `violations=0` — no false positive, which is the result
+ * that matters most. But also `anchorsFound=1, valuesFound=0`, and that second
+ * pair is the honest verdict: the validator was SILENT BECAUSE IT COULD NOT
+ * ANALYSE THE REPLY, not because it checked it. Two causes, both real:
+ *
+ *   - ANCHOR RECALL IS POOR. Row names are stored with a generic prefix the
+ *     model drops when it writes — stored «صالة الجميلية», written «الجميلية».
+ *     Stored-name containment misses every branch except the one the reply
+ *     happened to spell in full.
+ *   - THE LIST SHAPE DEFEATS PER-LINE SEGMENTATION. That reply puts each phone
+ *     number on its OWN line, with the name on the line above. A value alone on
+ *     its line has no anchor in its segment, so it is skipped by the fail-open
+ *     rule — the same rule that makes enumerations safe.
+ *
+ * So coverage on this shape is near zero today. Both fixes (match on the
+ * distinctive token rather than the stored name; group a name line with the
+ * lines that follow it) BUY COVERAGE WITH FALSE-POSITIVE RISK, which is the
+ * expensive direction — neither may be adopted on reasoning. Measure each
+ * against replies known to be correct before changing either. `anchorsFound` and
+ * `valuesFound` exist to keep this distinction visible in any run: a report that
+ * counts unanalysable replies as passes is measuring nothing.
  */
 import { normalizeFactValue, findValueOccurrences } from './factCollectionsMatcher';
 
