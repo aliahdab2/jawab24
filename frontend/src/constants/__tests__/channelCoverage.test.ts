@@ -69,6 +69,13 @@ describe('channel coverage on product-description surfaces', () => {
         }
     });
 
+    it('keeps the default title inside the search-result display budget', () => {
+        // appTitle is the <title> and og:title for every page that does not override them,
+        // and login.tsx appends to it. Google truncates around 60 chars / 600px. Naming a
+        // fourth channel here means shortening something else, not letting it grow.
+        expect(BRAND_ASSETS.meta.appTitle.length).toBeLessThanOrEqual(60);
+    });
+
     it('lists WhatsApp first, matching CHANNEL_ORDER', () => {
         // The canonical order is a product decision (newest + highest intent leads).
         // Pinned so the surfaces stay consistent with each other.

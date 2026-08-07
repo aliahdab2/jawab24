@@ -99,13 +99,14 @@ const PLATFORM_STYLES = {
 } as const;
 
 // Official brand colors (theme-independent) — used by the channel ribbon on inbox rows.
-// These MUST stay literal strings: Tailwind's JIT scans source text, so an interpolated
-// `bg-[${...}]` would never be generated. CHANNEL_BRAND_HEX holds the same values for
-// non-Tailwind consumers (the social-image generator); keep the two in sync by hand.
+// `channel.*` is a real theme color in tailwind.config.js, so these are ordinary utility
+// classes rather than arbitrary values carrying a duplicated hex. The config and
+// CHANNEL_BRAND_HEX (which non-Tailwind consumers like the social-image generator read)
+// are held together by test/constants/channelBrandColors.test.ts.
 const SOLID_CLASSES = {
-  instagram: 'bg-[#E4405F] text-white',
-  facebook: 'bg-[#1877F2] text-white',
-  whatsapp: 'bg-[#25D366] text-white',
+  instagram: 'bg-channel-instagram text-white',
+  facebook: 'bg-channel-facebook text-white',
+  whatsapp: 'bg-channel-whatsapp text-white',
 } as const;
 
 /** i18n keys (`comments` namespace) for localized platform names — the

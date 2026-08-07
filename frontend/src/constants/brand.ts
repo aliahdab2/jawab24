@@ -23,7 +23,12 @@ export const BRAND_ASSETS = {
     },
     meta: {
         appName: 'Jawab24',
-        appTitle: 'Jawab24 جواب | AI Auto-Reply for WhatsApp, Facebook & Instagram',
+        // 56 chars. This is the <title> and og:title default for every page that does not
+        // override them (/help, /contact, /team, app routes), and login.tsx appends to it —
+        // so it has to stay inside Google's ~60-char / ~600px display budget with room to
+        // spare. Naming three channels cost the "AI " that used to sit before "Auto-Reply";
+        // channels lead because that is what the phrase is actually searched by.
+        appTitle: 'Jawab24 جواب | WhatsApp, Facebook & Instagram Auto-Reply',
         themeColor: '#18181b',
     },
     /** Bilingual tagline burned into the generated social card and Play feature graphic

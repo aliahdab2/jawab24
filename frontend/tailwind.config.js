@@ -78,6 +78,17 @@ module.exports = {
           900: 'rgb(var(--surface-900) / <alpha-value>)',
           950: 'rgb(var(--surface-950) / <alpha-value>)',
         },
+        // Official channel brand colors, theme-independent. Declared here so components use
+        // `bg-channel-whatsapp` instead of an arbitrary `bg-[#25D366]` — an arbitrary value
+        // cannot be built from a variable (Tailwind's JIT scans source text), which is how
+        // these hex codes previously ended up duplicated between the config-free component
+        // and CHANNEL_BRAND_HEX with a "keep in sync by hand" comment.
+        // Kept honest by test/constants/channelBrandColors.test.ts.
+        channel: {
+          whatsapp: '#25D366',
+          facebook: '#1877F2',
+          instagram: '#E4405F',
+        },
       },
       fontFamily: {
         sans: ['var(--font-cairo)', 'var(--font-tajawal)', 'var(--font-dm-sans)', 'system-ui', 'sans-serif'],

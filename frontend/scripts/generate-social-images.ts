@@ -1,6 +1,6 @@
 /**
- * Generates the brand social images so the channel lineup can never drift from the
- * channels we actually support.
+ * Generates the brand social images so the channel lineup can never drift from the channels
+ * we actually support.
  *
  * Why this exists: the shipped `og-social.png` was hand-made art reading "Smart AI
  * Auto-Replies for Facebook & Instagram" with only two channel glyphs. It stayed that way
@@ -8,16 +8,16 @@
  * product. It was also a JPEG named `.png` at 1024x1024 while `_app.tsx` declared
  * `og:image:width=1200` / `height=630`, so scrapers cropped it.
  *
- * Design split, deliberately: the ARTWORK is a designed asset and stays untouched —
- * `assets/social-base.png` is the original brand card with its circuit-board background,
- * dimensional app icon and wordmark, with only the old tagline painted out. Everything
- * that depends on which channels we support (the bilingual tagline, the channel glyph row)
- * is drawn here from CHANNEL_ORDER. Redesigning the artwork is a design job; keeping it
- * truthful is a code job, and only the second half belongs in this script.
+ * Design split, deliberately: the ARTWORK is a designed asset and stays untouched.
+ * `assets/social-base-source.png` is the original brand card exactly as the designer made
+ * it, tagline and all. This script strips that tagline in code (see INPAINT) and draws back
+ * the parts that depend on which channels we support — the bilingual tagline and the channel
+ * glyph row, both from CHANNEL_ORDER. Redesigning the artwork is a design job; keeping it
+ * truthful is a code job, and only the second half lives here.
  *
  * Run: npm run social:generate  (from frontend/)
- * Commit the emitted files — they are served as static assets, so nothing is rendered at
- * request time and no crawler depends on a font CDN being reachable.
+ * Commit the emitted files AND `assets/social-images.lock.json` — a test fails if the lock
+ * and the sources disagree, which is what catches "edited the tagline, forgot to regenerate".
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -26,46 +26,25 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { BRAND_ASSETS } from '../src/constants/brand';
 import { CHANNEL_BRAND_HEX, CHANNEL_GLYPH_PATHS, CHANNEL_ORDER } from '../src/constants/brandGlyphs';
+import {
+    BASE_H,
+    BASE_W,
+    INPAINT,
+    LAYOUT,
+    LOCK_PATH,
+    TARGETS,
+    computeInputHash,
+    hashBytes,
+    rtlLine,
+    verticalPadding,
+} from './lib/socialCard';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND = path.resolve(HERE, '..');
-const BASE_ART = path.join(HERE, 'assets/social-base.png');
-
-/** Natural size of the base artwork. All layout below is expressed in these coordinates. */
-const BASE_W = 1024;
-const BASE_H = 500;
-
-/**
- * Output specs. Open Graph wants 1200x630; Play's feature graphic is exactly 1024x500.
- *
- * The Play graphics sit in the Gradle Play Publisher listing layout
- * (`app/src/main/play/listings/<locale>/graphics/feature-graphic/`). That is GPP's
- * documented convention, and it is inert for the current release path — the release script
- * runs `publishReleaseBundle`, which publishes the bundle only and never touches listings.
- * Both locales get the same card because the card is bilingual; `ar` previously had no
- * feature graphic at all and silently fell back to the English one.
- */
-const TARGETS = [
-    { out: 'public/brand/og-social.png', width: 1200, height: 630 },
-    { out: 'android/app/src/main/play/listings/en-US/graphics/feature-graphic/main.png', width: 1024, height: 500 },
-    { out: 'android/app/src/main/play/listings/ar/graphics/feature-graphic/main.png', width: 1024, height: 500 },
-] as const;
+const SOURCE_ART = path.join(HERE, 'assets/social-base-source.png');
 
 const TAGLINE_EN = BRAND_ASSETS.socialCardTagline.en;
 const TAGLINE_AR = BRAND_ASSETS.socialCardTagline.ar;
-
-/** Layout in base coordinates — measured against the original artwork's tagline block. */
-const LAYOUT = {
-    textLeft: 415,
-    taglineTop: 256,
-    // 21px, not the original art's ~26px: naming three channels makes the line ~20% longer
-    // and it has to clear the right edge at x=1024 from a left edge of 415.
-    fontSize: 21,
-    lineGap: 7,
-    glyphSize: 34,
-    glyphGap: 13,
-    glyphTopGap: 18,
-};
 
 /**
  * Satori only parses TTF/OTF/WOFF, and `public/fonts/` holds woff2 only — so the fonts come
@@ -97,34 +76,37 @@ async function loadFonts() {
 }
 
 /**
- * Lays out an Arabic line right-to-left.
- *
- * Satori (0.25) does NOT implement the Unicode bidirectional algorithm: it splits text
- * inside a flex container into one item per word and emits them in source order, so an
- * Arabic string renders left-to-right. Per-word glyph shaping IS correct, so reversing the
- * word sequence and laying it out as a normal row produces the right result.
- *
- * That trick is only valid for a pure-Arabic, single-line string — a Latin word, a digit, or
- * a wrap would each be misplaced by the reversal. The guard below makes that a loud failure
- * at generation time instead of a subtly scrambled shipped image.
+ * Paints out the tagline baked into the source artwork by interpolating each column between
+ * the clean row above the text and the clean row below it. See INPAINT for why this works.
  */
-function rtlLine(text: string, fontSize: number) {
-    if (/[A-Za-z0-9]/.test(text)) {
+async function inpaintSource(): Promise<Buffer> {
+    const meta = await sharp(SOURCE_ART).metadata();
+    if (meta.width !== BASE_W || meta.height !== BASE_H) {
         throw new Error(
-            `rtlLine() got "${text}", which contains Latin characters or digits. Word reversal ` +
-            `cannot place those correctly. Split the line, or render that part separately.`,
+            `social-base-source.png is ${meta.width}x${meta.height}, expected ${BASE_W}x${BASE_H}. ` +
+            `LAYOUT and INPAINT are pixel coordinates against that size — re-measure them before ` +
+            `swapping the artwork.`,
         );
     }
-    return {
-        type: 'div',
-        props: {
-            style: { display: 'flex', flexDirection: 'row', gap: fontSize * 0.16, fontFamily: 'Cairo' },
-            children: text
-                .split(' ')
-                .reverse()
-                .map((word) => ({ type: 'div', props: { style: { display: 'flex' }, children: word } })),
-        },
-    };
+
+    const { data, info } = await sharp(SOURCE_ART).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+    const out = Buffer.from(data);
+    const idx = (x: number, y: number) => (y * width + x) * channels;
+
+    const above = INPAINT.Y_TOP - 2;
+    const below = INPAINT.Y_BOT + 2;
+    for (let x = INPAINT.X0; x < width; x++) {
+        const a = idx(x, above);
+        const b = idx(x, below);
+        for (let y = INPAINT.Y_TOP; y <= INPAINT.Y_BOT; y++) {
+            const t = (y - above) / (below - above);
+            const o = idx(x, y);
+            for (let c = 0; c < 3; c++) out[o + c] = Math.round(data[a + c] * (1 - t) + data[b + c] * t);
+        }
+    }
+
+    return sharp(out, { raw: { width, height, channels } }).png().toBuffer();
 }
 
 /** A channel glyph on its brand-colored disc, matching the app's PlatformIcon. */
@@ -155,32 +137,31 @@ function channelBadge(channel: (typeof CHANNEL_ORDER)[number], size: number) {
     };
 }
 
-/** Transparent overlay: bilingual tagline + channel row, positioned over the base artwork. */
-function overlay(width: number, height: number, scale: number) {
-    const L = LAYOUT;
-    const font = L.fontSize * scale;
+/**
+ * Transparent overlay covering the whole target canvas.
+ *
+ * `padTop` is folded into the coordinates here and the caller composites at top:0. The
+ * earlier version positioned the layer with a composite offset instead, which pushed the
+ * bottom of the layer off the canvas — and sharp CLIPS that silently rather than throwing,
+ * so content moved below the fold would have vanished with no error.
+ */
+function overlay(width: number, height: number, scale: number, padTop: number) {
+    const font = LAYOUT.fontSize * scale;
     return {
         type: 'div',
         props: {
-            style: {
-                width,
-                height,
-                display: 'flex',
-                flexDirection: 'column',
-                position: 'relative',
-                fontFamily: 'Outfit',
-            },
+            style: { width, height, display: 'flex', position: 'relative', fontFamily: 'Outfit' },
             children: [
                 {
                     type: 'div',
                     props: {
                         style: {
                             position: 'absolute',
-                            left: L.textLeft * scale,
-                            top: L.taglineTop * scale,
+                            left: LAYOUT.textLeft * scale,
+                            top: (LAYOUT.taglineTop + padTop) * scale,
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: L.lineGap * scale,
+                            gap: LAYOUT.lineGap * scale,
                             color: 'rgba(255,255,255,0.95)',
                             fontSize: font,
                             fontWeight: 700,
@@ -194,10 +175,10 @@ function overlay(width: number, height: number, scale: number) {
                                     style: {
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: L.glyphGap * scale,
-                                        marginTop: L.glyphTopGap * scale,
+                                        gap: LAYOUT.glyphGap * scale,
+                                        marginTop: LAYOUT.glyphTopGap * scale,
                                     },
-                                    children: CHANNEL_ORDER.map((c) => channelBadge(c, L.glyphSize * scale)),
+                                    children: CHANNEL_ORDER.map((c) => channelBadge(c, LAYOUT.glyphSize * scale)),
                                 },
                             },
                         ],
@@ -208,49 +189,39 @@ function overlay(width: number, height: number, scale: number) {
     };
 }
 
-/**
- * Fits the base artwork to a target aspect by EXTENDING it vertically rather than cropping,
- * so the icon and wordmark keep their position relative to the frame. The added strips are
- * copies of the edge rows, which works because the artwork's gradient runs horizontally.
- */
-async function fitBase(targetW: number, targetH: number): Promise<{ buf: Buffer; scale: number; padTop: number }> {
-    const neededH = Math.round((BASE_W * targetH) / targetW);
-    const pad = Math.max(0, neededH - BASE_H);
-    const padTop = Math.floor(pad / 2);
-    const padBottom = pad - padTop;
+/** Extends the base to a target aspect with copies of its edge rows, then scales to size. */
+async function fitBase(base: Buffer, targetW: number, targetH: number): Promise<Buffer> {
+    const { neededH, total, top, bottom } = verticalPadding(targetW, targetH);
 
-    let canvas = sharp(BASE_ART);
-    if (pad > 0) {
+    let canvas = base;
+    if (total > 0) {
         const [topStrip, bottomStrip] = await Promise.all([
-            sharp(BASE_ART).extract({ left: 0, top: 0, width: BASE_W, height: 1 }).resize(BASE_W, padTop, { fit: 'fill' }).png().toBuffer(),
-            sharp(BASE_ART).extract({ left: 0, top: BASE_H - 1, width: BASE_W, height: 1 }).resize(BASE_W, padBottom, { fit: 'fill' }).png().toBuffer(),
+            sharp(base).extract({ left: 0, top: 0, width: BASE_W, height: 1 }).resize(BASE_W, top, { fit: 'fill' }).png().toBuffer(),
+            sharp(base).extract({ left: 0, top: BASE_H - 1, width: BASE_W, height: 1 }).resize(BASE_W, bottom, { fit: 'fill' }).png().toBuffer(),
         ]);
-        const extended = await sharp({
-            create: { width: BASE_W, height: neededH, channels: 3, background: '#000000' },
-        })
+        canvas = await sharp({ create: { width: BASE_W, height: neededH, channels: 3, background: '#000000' } })
             .composite([
                 { input: topStrip, left: 0, top: 0 },
-                { input: await sharp(BASE_ART).png().toBuffer(), left: 0, top: padTop },
-                { input: bottomStrip, left: 0, top: padTop + BASE_H },
+                { input: base, left: 0, top },
+                { input: bottomStrip, left: 0, top: top + BASE_H },
             ])
             .png()
             .toBuffer();
-        canvas = sharp(extended);
     }
 
-    const buf = await canvas.resize(targetW, targetH, { fit: 'fill', kernel: 'lanczos3' }).png().toBuffer();
-    return { buf, scale: targetW / BASE_W, padTop };
+    return sharp(canvas).resize(targetW, targetH, { fit: 'fill', kernel: 'lanczos3' }).png().toBuffer();
 }
 
 async function main() {
-    const fonts = await loadFonts();
+    const [fonts, base] = await Promise.all([loadFonts(), inpaintSource()]);
+    const outputs: Record<string, string> = {};
 
     for (const target of TARGETS) {
-        const { buf: base, scale, padTop } = await fitBase(target.width, target.height);
+        const fitted = await fitBase(base, target.width, target.height);
+        const scale = target.width / BASE_W;
+        const { top: padTop } = verticalPadding(target.width, target.height);
 
-        // The overlay is drawn in target pixels, with base-space coordinates scaled up and
-        // shifted by whatever vertical padding fitBase added.
-        const svg = await satori(overlay(target.width, target.height, scale) as never, {
+        const svg = await satori(overlay(target.width, target.height, scale, padTop) as never, {
             width: target.width,
             height: target.height,
             fonts,
@@ -258,10 +229,9 @@ async function main() {
         const textLayer = await sharp(Buffer.from(svg)).png().toBuffer();
 
         // Palette quantization, matching the optimization pass the original artwork had
-        // (docs/poor-connection-optimizations.md): ~370KB truecolor down to well under
-        // 100KB, with no visible banding on this artwork's gradients.
-        const png = await sharp(base)
-            .composite([{ input: textLayer, left: 0, top: Math.round(padTop * scale) }])
+        // (docs/poor-connection-optimizations.md), with no visible banding on these gradients.
+        const png = await sharp(fitted)
+            .composite([{ input: textLayer, left: 0, top: 0 }])
             .png({ compressionLevel: 9, palette: true, quality: 90, effort: 10 })
             .toBuffer();
 
@@ -275,8 +245,23 @@ async function main() {
         const out = path.join(FRONTEND, target.out);
         await fs.mkdir(path.dirname(out), { recursive: true });
         await fs.writeFile(out, png);
+        outputs[target.out] = hashBytes(png);
         console.log(`✓ ${target.out} — ${meta.width}x${meta.height}, ${(png.length / 1024).toFixed(0)} KB`);
     }
+
+    const inputHash = computeInputHash({
+        sourceArt: await fs.readFile(SOURCE_ART),
+        taglineEn: TAGLINE_EN,
+        taglineAr: TAGLINE_AR,
+        channelOrder: CHANNEL_ORDER,
+        channelHex: CHANNEL_BRAND_HEX,
+        channelPaths: CHANNEL_GLYPH_PATHS,
+    });
+    await fs.writeFile(
+        path.join(FRONTEND, LOCK_PATH),
+        `${JSON.stringify({ inputHash, outputs, channels: CHANNEL_ORDER }, null, 2)}\n`,
+    );
+    console.log(`✓ ${LOCK_PATH} — channels: ${CHANNEL_ORDER.join(', ')}`);
 }
 
 main().catch((err) => {
