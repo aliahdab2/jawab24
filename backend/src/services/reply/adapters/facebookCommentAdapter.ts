@@ -51,6 +51,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             triggerButtonUrl: post.triggerButtonUrl ?? null,
             triggerImageUrl: post.triggerImageUrl ?? null,
             likeComment: post.likeComment,
+            tagCommenter: post.tagCommenter,
         };
     }
 
@@ -86,6 +87,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         postId?: string;
         /** Post Reply CTA link button (DM channel only): label + URL, or null when none. */
         replyCta?: { label: string; url: string } | null;
+        /** Post Reply option: mention (@-tag) the commenter in the public comment. */
+        tagCommenter?: boolean;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = isDemoPlatformId(opts.platformPageId);
@@ -123,6 +126,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             imageViewUrl: opts.replyImageUrl && opts.postId ? buildPostReplyImageUrl('facebook', opts.postId) : undefined,
             // CTA link button — DM channel only (sender gates by mode). Both fields present or absent.
             cta: opts.replyCta ? { label: opts.replyCta.label, url: opts.replyCta.url } : undefined,
+            // Mention the commenter in the PUBLIC comment (never the DM). The sender resolves
+            // it against fromId and verifies the result — see commentMentionGuard.ts.
+            platformPageId: opts.platformPageId,
+            tagCommenter: opts.tagCommenter,
         });
     }
 

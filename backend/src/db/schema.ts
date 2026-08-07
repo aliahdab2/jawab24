@@ -383,6 +383,20 @@ export const posts = pgTable('posts', {
      *  Facebook-only — the Instagram API has no like-comment endpoint, so instagram_media
      *  has no counterpart column. */
     likeComment: boolean('like_comment').default(false).notNull(),
+    /** Post Reply option: the public comment we post mentions (@-tags) the commenter, so they
+     *  get a "you were mentioned" notification on top of the reply notification Facebook already
+     *  sends. Facebook-only — Instagram mentions use a different mechanism (`@username`), so
+     *  instagram_media has no counterpart column.
+     *
+     *  Meta only renders the tag when the PAGE's «Others Tagging this Page» setting is on, and
+     *  that setting is NOT readable through any API (measured 2026-08-07: `/{page}/settings`
+     *  exposes 13 settings, none of them this one; `?metadata=1` is disabled on v23.0), so an
+     *  armed post cannot know in advance whether its mentions will render. Measured on a live
+     *  page the same day: an unresolvable `@[id]` is STRIPPED silently — no error, no tag, and
+     *  the token does not survive as literal text. The send path still verifies and repairs, so
+     *  the reply never keeps the leftover leading space — see
+     *  services/reply/commentMentionGuard.ts. */
+    tagCommenter: boolean('tag_commenter').default(false).notNull(),
     /** Post Reply CTA button (DM-modes only, Facebook-only): a tappable link under the private
      *  reply. Label + URL are stored/cleared together (both set = button shown, both null = none).
      *  instagram_media has no counterpart column (button-template support unverified on IG). */

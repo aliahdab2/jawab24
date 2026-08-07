@@ -38,6 +38,9 @@ export interface UpdateTriggerOptions {
     /** undefined = leave the column untouched (keep); a boolean = explicit set.
      *  Facebook-only column, so it's ignored on the instagram branch. */
     likeComment?: boolean;
+    /** Mention the commenter in the public comment. Same keep/set semantics and the same
+     *  Facebook-only scoping as likeComment. */
+    tagCommenter?: boolean;
     /** Veto keywords: undefined = keep; null = clear; string = set. Both platforms. */
     triggerExcludeKeyword?: string | null;
     /** CTA button label + URL (Facebook-only). undefined = keep; null = clear. Set together
@@ -282,6 +285,7 @@ export class PostsService {
             triggerType = 'keyword',
             image = { action: 'keep' } as TriggerImageInput,
             likeComment,
+            tagCommenter,
             triggerExcludeKeyword,
             triggerButtonLabel,
             triggerButtonUrl,
@@ -375,14 +379,15 @@ export class PostsService {
             updatedAt: new Date(),
         };
         if (source === 'facebook') {
-            // likeComment + the CTA button live only on posts (Facebook-only), so the
-            // facebook branch writes them and the instagram branch has no column. Only
+            // likeComment, tagCommenter + the CTA button live only on posts (Facebook-only),
+            // so the facebook branch writes them and the instagram branch has no column. Only
             // write when the caller expressed intent — absent leaves it untouched.
             await db
                 .update(posts)
                 .set({
                     ...triggerColumns,
                     ...(likeComment !== undefined ? { likeComment } : {}),
+                    ...(tagCommenter !== undefined ? { tagCommenter } : {}),
                     ...(triggerButtonLabel !== undefined ? { triggerButtonLabel } : {}),
                     ...(triggerButtonUrl !== undefined ? { triggerButtonUrl } : {}),
                 })
@@ -529,7 +534,7 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean; triggerButtonLabel: string | null; triggerButtonUrl: string | null; scheduledPublishTime: string | null }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean; tagCommenter: boolean; triggerButtonLabel: string | null; triggerButtonUrl: string | null; scheduledPublishTime: string | null }> {
         if (source === 'facebook') {
             // Two independent Graph reads (post content inside find-or-create, publish
             // state here) — issue them together rather than stacking two round-trips on
@@ -559,6 +564,7 @@ export class PostsService {
                 triggerExcludeKeyword: post.triggerExcludeKeyword ?? null,
                 triggerImageUrl: post.triggerImageUrl ?? null,
                 likeComment: post.likeComment ?? false,
+                tagCommenter: post.tagCommenter ?? false,
                 triggerButtonLabel: post.triggerButtonLabel ?? null,
                 triggerButtonUrl: post.triggerButtonUrl ?? null,
                 scheduledPublishTime: scheduledPublishTime?.toISOString() ?? null,
@@ -573,6 +579,8 @@ export class PostsService {
             triggerExcludeKeyword: media.triggerExcludeKeyword ?? null,
             triggerImageUrl: media.triggerImageUrl ?? null,
             likeComment: false,
+            // IG mentions use `@username`, a different mechanism — no column, always false.
+            tagCommenter: false,
             // IG has no button columns (button-template support unverified on IG).
             triggerButtonLabel: null,
             triggerButtonUrl: null,

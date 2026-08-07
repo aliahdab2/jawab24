@@ -218,6 +218,7 @@ export class CommentProcessor {
                 triggerButtonUrl: content.triggerButtonUrl ?? null,
                 triggerImageUrl: content.triggerImageUrl ?? null,
                 likeComment: content.likeComment,
+                tagCommenter: content.tagCommenter,
             });
             // Rule check first: most comments land on posts with no trigger, so the
             // business-hours evaluation (an Intl.DateTimeFormat construction) only
@@ -488,6 +489,7 @@ export class CommentProcessor {
                             triggerType: rule.triggerType,
                             replyImageUrl: rule.triggerImageUrl,
                             likeComment: rule.likeComment,
+                            tagCommenter: rule.tagCommenter,
                             replyCta: rule.cta,
                         });
                         // Keep the debounce slot only if the reply actually went out
@@ -983,6 +985,10 @@ export class CommentProcessor {
          *  Only ever set on the post_reply path; effective only on adapters that
          *  implement likeComment (Facebook — the Instagram API can't like). */
         likeComment?: boolean;
+        /** Post Reply option: mention (@-tag) the commenter in the public comment we post.
+         *  Only ever set on the post_reply path; Facebook only (the sender resolves it against
+         *  `fromId`, and Instagram's adapter ignores it — IG mentions use `@username`). */
+        tagCommenter?: boolean;
         /** Post Reply CTA link button (DM channel only). Only ever set on the post_reply path. */
         replyCta?: { label: string; url: string } | null;
     }): Promise<CommentResult> {
@@ -1006,6 +1012,7 @@ export class CommentProcessor {
             replyImageUrl: opts.replyImageUrl,
             postId: contentId,
             replyCta: opts.replyCta,
+            tagCommenter: opts.tagCommenter,
         });
 
         if (!sendResult.success) {

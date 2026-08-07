@@ -375,6 +375,41 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
      — identical to the AI's language, so they never disagree.
 ```
 
+**Mentioning the commenter (Post Reply only, Facebook only).** With `posts.tag_commenter`
+armed on a post, whatever we post in the PUBLIC column above is prefixed with `@[PSID]`
+(the commenter's `from.id`), so Facebook also sends them a "you were mentioned"
+notification. The DM is never touched — the customer is already its recipient.
+
+The prefix is applied AFTER the nudge's `NUDGE_MAX_LENGTH` truncation. A well-formed
+`@[id]` Meta cannot resolve is stripped silently, but a token sliced in half (`@[1784`, no
+closing bracket) is not a mention at all and DOES survive as literal text — so the ordering
+is what keeps raw markup off the merchant's page.
+
+Meta only renders the tag when the page has «Others Tagging this Page» enabled, and **no
+API exposes that setting** — measured 2026-08-07 on a live page: `/{page-id}/settings`
+returns 13 settings and none is this one, `are_tagging_others_allowed` is not a field, and
+`?metadata=1` introspection is disabled on v23.0. So the capability can only be learned by
+attempting. `commentMentionGuard.mentionPlan` returns one of three answers per page:
+`skip` (proven to reject mentions — post untagged), `trust` (rendered one within 7 days —
+tag without the read-back), or `verify` (unproven — tag, then read `message_tags` back).
+On failure it rewrites the comment to the untagged text and memoizes the page for 30 days;
+on success it memoizes for 7, so verification costs one Graph read per page per week rather
+than one per reply — the difference matters against Meta's ~4,800 calls/page/day ceiling.
+Blast radius is one briefly-wrong comment per page, and it self-heals either way.
+
+A rendered mention is detected by the PRESENCE of a `type: 'user'` tag, not by matching the
+id we sent: we add exactly one mention to a comment we just created, so any user tag is
+ours, and requiring id equality would strip working mentions if Graph ever echoes a
+differently-scoped id. `metrics:mention:{rendered|stripped|skipped|unverified}` counts the
+outcomes.
+
+What "did not render" looks like, measured live 2026-08-07: posting `@[<unresolvable-id>] x`
+returns HTTP 200 and reads back as `" x"` — the token is **stripped**, with no error and no
+`message_tags`. The customer-visible defect is therefore a stray leading space, not raw
+markup; the guard's rewrite removes even that. The repair call is verified against real
+Graph (`POST /{comment-id}` with a new `message` → `{"success":true}`). Deleting a comment,
+if ever needed, requires the token as a QUERY PARAM — Graph ignores a JSON body on DELETE.
+
 `SILENT SKIP` = `commentProcessor` resolves the comment in the DB and returns
 success. No Facebook API call, no notification, no DB row for a reply.
 

@@ -41,6 +41,9 @@ export interface ContentTriggerFields {
     /** Like the customer's comment after a successful send. Facebook-only column —
      *  instagramMedia rows never carry it. */
     likeComment?: boolean;
+    /** Mention (@-tag) the commenter in the public comment we post. Facebook-only column —
+     *  instagramMedia rows never carry it. */
+    tagCommenter?: boolean;
     /** CTA link button (DM-modes only, Facebook-only): label + URL, stored together. */
     triggerButtonLabel?: string | null;
     triggerButtonUrl?: string | null;
@@ -56,6 +59,8 @@ export interface EffectivePostReplyRule {
     triggerImageUrl: string | null;
     /** Page likes the customer's comment after the reply is sent (Facebook only). */
     likeComment: boolean;
+    /** Public comment mentions (@-tags) the commenter (Facebook only). */
+    tagCommenter: boolean;
     /** CTA link button (DM channel, Facebook only): { label, url } when both are set, else null. */
     cta: { label: string; url: string } | null;
 }
@@ -79,6 +84,7 @@ export function resolvePostReplyRule(content: ContentTriggerFields): EffectivePo
         triggerExcludeKeyword: content.triggerExcludeKeyword ?? null,
         triggerImageUrl: content.triggerImageUrl ?? null,
         likeComment: content.likeComment ?? false,
+        tagCommenter: content.tagCommenter ?? false,
         // Button is delivered only when BOTH label and URL are present (they're stored together).
         cta: content.triggerButtonLabel && content.triggerButtonUrl
             ? { label: content.triggerButtonLabel, url: content.triggerButtonUrl }

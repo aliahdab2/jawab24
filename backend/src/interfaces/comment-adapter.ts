@@ -36,6 +36,9 @@ export interface ContentEntity {
     /** Post Reply option: like the customer's comment after a successful send.
      *  Facebook-only column — Instagram content never carries it. */
     likeComment?: boolean;
+    /** Post Reply option: mention (@-tag) the commenter in the public comment.
+     *  Facebook-only column — Instagram content never carries it. */
+    tagCommenter?: boolean;
 }
 
 /** Context passed to replyGenerator.generateForComment */
@@ -131,6 +134,10 @@ export interface CommentPlatformAdapter {
         /** Post Reply CTA link button (DM channel only, Facebook only): label + URL. Only set on
          *  the post_reply path; the adapter delivers it in the private/dual branch, never public. */
         replyCta?: { label: string; url: string } | null;
+        /** Post Reply option: mention (@-tag) the commenter in the PUBLIC comment (never in the
+         *  DM — a DM already goes to them). Only set on the post_reply path. Facebook resolves it
+         *  against `fromId`; the Instagram adapter ignores it (IG mentions need `@username`). */
+        tagCommenter?: boolean;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

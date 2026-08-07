@@ -235,6 +235,10 @@ describe('FacebookCommentAdapter', () => {
                 isDemo: false,
                 replyImageUrl: undefined,
                 readMore: null,
+                // Mention plumbing: the page id keys the per-page capability memo, and the
+                // flag is undefined for every non-Post-Reply comment.
+                platformPageId: 'fb_page_123',
+                tagCommenter: undefined,
             });
         });
 

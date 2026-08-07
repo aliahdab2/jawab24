@@ -5,6 +5,8 @@ import { config } from '../../config';
 import { t } from '../../utils/i18n';
 import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
 import { captureError } from '../../utils/sentryHelpers';
+import { buildFacebookMentionToken, prefixMention } from '../../utils/commentMention';
+import { commentMentionGuard } from './commentMentionGuard';
 import type { CtaButton } from '../metaMessaging';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
@@ -16,7 +18,14 @@ export interface SendCommentReplyOptions {
     replyText: string;
     commentMessage: string;
     accessToken: string;
+    /** Commenter's PSID (the comment's `from.id`). Also the mention target when `tagCommenter`
+     *  is on — Meta accepts exactly this id in `@[…]` for someone who commented on the post. */
     fromId?: string;
+    /** Facebook page id — keys the per-page "this page rejects mentions" memo. */
+    platformPageId?: string;
+    /** Post Reply option: mention the commenter in the PUBLIC comment. Never affects the DM
+     *  (the customer is already the recipient there). Requires `fromId` + `platformPageId`. */
+    tagCommenter?: boolean;
     replyMode: ReplyMode;
     dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
@@ -72,6 +81,10 @@ export class ReplySender {
 
     setLogger(logger: Logger): void {
         this.logger = logger;
+        // The guard is only ever reached through this class, so it inherits our logger —
+        // otherwise its "page rejects mentions" warnings would go to the noop logger and
+        // the one failure mode it exists to surface would be invisible in production.
+        commentMentionGuard.setLogger(logger);
     }
 
     /**
@@ -161,7 +174,7 @@ export class ReplySender {
 
         // Public send (public mode, or dual-mode nudge when DM succeeded/window_expired)
         if (replyMode === 'public') {
-            const ok = await this.postPublicReply(facebookCommentId, replyText, accessToken);
+            const ok = await this.postPublicReplyMaybeTagged(options, replyText);
             return ok
                 ? { success: true }
                 : { success: false, error: 'Failed to post public reply to Facebook' };
@@ -180,7 +193,7 @@ export class ReplySender {
         if (!dmFailure) {
             // DM succeeded → post the nudge publicly
             const publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
-            const ok = await this.postPublicReply(facebookCommentId, publicText, accessToken);
+            const ok = await this.postPublicReplyMaybeTagged(options, publicText);
             if (!ok) this.logger.warn('[Sender] Dual mode: nudge post failed', { facebookCommentId });
             return { success: true, dmRecipientId, imageDelivered };
         }
@@ -188,7 +201,7 @@ export class ReplySender {
         // DM failed in dual mode — only window_expired gets a short nudge.
         // All other buckets (customer_refused / our_fault / unknown): post nothing.
         if (dmFailure.bucket === 'window_expired' && dualReplyNudge) {
-            const ok = await this.postPublicReply(facebookCommentId, dualReplyNudge, accessToken);
+            const ok = await this.postPublicReplyMaybeTagged(options, dualReplyNudge);
             if (!ok) this.logger.warn('[Sender] Dual mode: window_expired nudge post failed', { facebookCommentId });
             return { success: false, dmFailure, error: `DM failed: ${dmFailure.bucket}` };
         }
@@ -213,27 +226,68 @@ export class ReplySender {
     }
 
     /**
-     * Post a reply to a Facebook comment
+     * Post a reply to a Facebook comment. Returns the created comment's id, or null when the
+     * post failed — callers that only care about success can treat it as a boolean, while the
+     * mention path needs the id to read the result back.
      */
     async postPublicReply(
         commentId: string,
         message: string,
         accessToken: string
-    ): Promise<boolean> {
+    ): Promise<string | null> {
         try {
-            await fbAxios.post(
+            const res = await fbAxios.post<{ id?: string }>(
                 `${FACEBOOK_GRAPH_API}/${commentId}/comments`,
                 { message },
                 { params: { access_token: accessToken } }
             );
-            return true;
+            // Graph returns the new comment id; fall back to a sentinel so a successful post
+            // with an unexpected body still reads as success (it just can't be verified).
+            return res.data?.id ?? '';
         } catch (error) {
             this.logger.error('Failed to post reply to Facebook', {
                 commentId,
                 error: error instanceof Error ? error.message : String(error)
             });
-            return false;
+            return null;
         }
+    }
+
+    /**
+     * Post the public comment, mentioning the commenter when the merchant armed that option.
+     *
+     * The mention is prefixed AFTER the caller's own truncation (the nudge is capped at
+     * NUDGE_MAX_LENGTH) so the token can never be sliced into a literal `@[1784`. When Meta
+     * declines to render it — the page's «Others Tagging this Page» setting is off, which no
+     * API exposes — the guard rewrites this comment to the untagged text and stops tagging on
+     * this page. See commentMentionGuard.ts for why that is the only available strategy.
+     */
+    private async postPublicReplyMaybeTagged(
+        options: SendCommentReplyOptions,
+        message: string,
+    ): Promise<boolean> {
+        const { facebookCommentId, accessToken, fromId, platformPageId, tagCommenter } = options;
+
+        const token = tagCommenter && platformPageId ? buildFacebookMentionToken(fromId) : null;
+        const plan = token ? await commentMentionGuard.mentionPlan(platformPageId as string) : 'skip';
+        if (!token || plan === 'skip') {
+            return (await this.postPublicReply(facebookCommentId, message, accessToken)) !== null;
+        }
+
+        const postedId = await this.postPublicReply(facebookCommentId, prefixMention(token, message), accessToken);
+        if (postedId === null) return false;
+        // 'trust' = this page rendered a mention recently, so skip the read-back entirely.
+        // Empty id = posted but unverifiable (no id in the response); nothing to read back.
+        if (plan === 'verify' && postedId) {
+            await commentMentionGuard.verifyAndRepair({
+                postedCommentId: postedId,
+                pageId: platformPageId as string,
+                psid: (fromId as string).trim(),
+                plainText: message,
+                accessToken,
+            });
+        }
+        return true;
     }
 }
 
