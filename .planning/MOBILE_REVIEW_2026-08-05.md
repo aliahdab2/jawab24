@@ -67,6 +67,24 @@ fixed header layer made it visible and passed the occlusion check — while cove
 heading. Only the screenshot showed it. *An occlusion assertion alone is not enough; also assert
 that the thing you made visible does not hide something else.* The matrix now measures both.
 
+🔴 **The review of the fix found a THIRD bug — the banner was unreadable in dark mode.** It carried
+`bg-surface-800 text-white`, and the surface scale **inverts** between themes: `--surface-800` is
+`33 44 43` (near-black) in light and `210 218 230` (near-white) in dark. Measured in the browser:
+background `rgb(210,218,230)` under white text = **1.41:1**, against a 4.5:1 WCAG AA floor.
+
+This is the deeper lesson of M3, and it generalises to every remaining finding:
+
+> **Code nobody can see is code nobody has checked.** The banner had been invisible since it was
+> written, so its own styling had never been looked at in either theme. Making it visible did not
+> finish the job — it *exposed* a second defect that had been riding along undetected. Expect the
+> same when M2, M4, M7 and M10 start actually executing: assume the newly-reachable code is
+> unverified, and check it rather than the diff.
+
+Fixed with a semantic `.offline-banner` class in `globals.css` (Rule 11 — never a raw surface token
+for anything that must survive a theme flip): `rgb(60,75,100)` in dark, **8.81:1**. The guard now
+asserts the component carries no bare `bg-surface-*` and that the class defines a `dark:` variant;
+confirmed red against the raw-token shape.
+
 ⭐ **The technique that unblocks the other eight native-only findings.** Nine of the 17 sit behind
 `isNativePlatform()`, which reads `window.Capacitor`. Stubbing that global does **not** work —
 `@capacitor/core` overwrites it on import. Two things must both be true instead:

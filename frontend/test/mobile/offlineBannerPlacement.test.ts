@@ -77,6 +77,24 @@ describe('OfflineBanner placement in DashboardLayout', () => {
     expect(mainOpenTag, '<main> no longer clears the fixed header').toContain('pt-header');
   });
 
+  it('colours the banner through a theme-aware class, not a raw surface token', () => {
+    // The surface scale INVERTS in dark mode (--surface-800 goes from 33 44 43
+    // to 210 218 230), so `bg-surface-800 text-white` measured 1.41:1 in dark —
+    // under the 4.5:1 floor, and unreadable. Nobody caught it for as long as the
+    // banner was hidden behind the header.
+    expect(banner).toContain('offline-banner');
+    expect(banner, 'raw surface token on the banner inverts in dark mode')
+      .not.toMatch(/bg-surface-\d/);
+
+    const css = readFileSync(
+      path.resolve(__dirname, '../../src/styles/globals.css'),
+      'utf-8',
+    );
+    const rule = /\.offline-banner\s*\{([^}]*)\}/.exec(css);
+    expect(rule, '.offline-banner is not defined in globals.css').not.toBeNull();
+    expect(rule![1], 'the banner must stay dark in dark mode too').toMatch(/dark:bg-/);
+  });
+
   it('gives the banner no z-index of its own', () => {
     // A z-index without positioning is inert, and carrying one implies a
     // stacking guarantee the element cannot honour.
