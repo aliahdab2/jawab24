@@ -206,34 +206,34 @@ export default function MyDocument({ locale }: DocProps) {
                 "offerCount": "3",
                 "description": "30-day free trial — plans from $15 to $79/month"
               },
-              // Matches the rating displayed on /pricing ("4.8/5 · 50+ businesses").
-              // Keep in sync with pricing.json socialProofRating/socialProofReviews.
-              "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "bestRating": "5",
-                "worstRating": "1",
-                "ratingCount": "50"
-              },
-              "description": "AI-powered auto-reply platform for WhatsApp Business numbers and Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
+              // NOTE: no aggregateRating here, deliberately. It previously mirrored
+              // /pricing's "4.8/5 · 50+ businesses", but socialProofReviews is a
+              // CUSTOMER count — there is no corpus of 50 collected user reviews behind
+              // it. Google requires aggregate ratings to come from real user reviews, so
+              // the markup was unsupported and liable to be dropped or penalised.
+              // Re-add only when sourced from a genuine review corpus (Play Store / G2 /
+              // Capterra) that is also displayed on the page.
+              "description": "AI-powered auto-reply platform for WhatsApp Business numbers and Facebook and Instagram business pages. Integrates with Shopify, Salla, and Zid e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
               "featureList": [
                 "AI-powered automatic replies — رد تلقائي ذكي بالذكاء الاصطناعي",
                 "WhatsApp Business integration — تكامل مع واتساب للأعمال",
                 "Facebook & Instagram integration — تكامل مع فيسبوك وإنستغرام",
                 "Shopify store integration — تكامل مع شوبيفاي",
                 "Salla store integration — تكامل مع سلة",
+                "Zid store integration — تكامل مع زد",
                 "E-commerce product catalog sync — مزامنة كتالوج المنتجات",
                 "Arabic dialect support (6 families) — دعم 6 عائلات لهجات عربية",
                 "24/7 automated responses — رد تلقائي على مدار الساعة",
                 "Per-post keyword replies (Post Replies) — رد فوري على البوست بكلمات مفتاحية",
-                "Business knowledge base — قاعدة معرفة ذكية"
+                "Voice note and photo understanding — فهم الرسائل الصوتية والصور",
+                "Business Info knowledge with RAG retrieval — معلومات نشاطك التجاري مع استرجاع ذكي"
               ],
               "screenshot": "https://jawab24.com/brand/og-social.png",
               "softwareVersion": "1.0",
               "creator": {
                 "@id": "https://jawab24.com/#organization"
               },
-              "keywords": "جواب, jawab, رد تلقائي, auto reply, فيسبوك, إنستغرام, شوبيفاي, سلة, ذكاء اصطناعي, AI chatbot"
+              "keywords": "جواب, jawab, رد تلقائي, auto reply, واتساب, فيسبوك, إنستغرام, شوبيفاي, سلة, زد, ذكاء اصطناعي, AI chatbot"
             })
           }}
         />
