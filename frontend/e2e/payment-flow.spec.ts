@@ -696,11 +696,24 @@ test.describe('Payment Flow — Plan Change Errors', () => {
 
     const upgradeBtn = page.locator('button').filter({ hasText: t('pricing.upgrade') }).first();
     await expect(upgradeBtn).toBeVisible({ timeout: 10000 });
-    await upgradeBtn.click();
 
-    await expect(
-      page.getByText(t('pricing.planChangeError')).first()
-    ).toBeVisible({ timeout: 10000 });
+    // Click until the app responds, rather than once and hope.
+    //
+    // `toBeVisible()` is satisfied by SERVER-RENDERED html, which exists before React has
+    // hydrated and attached this button's onClick. A single click in that window lands on
+    // inert markup: no request, no toast, and a 10s wait on an element that will never
+    // appear. Reproduced at ~1 in 25 runs under load (`--repeat-each=25 --workers=6`) — it
+    // is what made this spec the repeat offender in full-suite runs while passing in
+    // isolation, where hydration wins the race every time.
+    //
+    // This is not a retry-until-green wrapper: the assertion inside is the real one, and a
+    // genuinely broken plan-change still fails after the retry window. It encodes what a
+    // user does when a button does nothing — press it again. Safe here because the route is
+    // mocked to 500, so a repeated click cannot double-submit anything real.
+    await expect(async () => {
+      await upgradeBtn.click();
+      await expect(page.getByText(t('pricing.planChangeError')).first()).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 15000 });
   });
 
   test.skip('downgrade confirmation calls billing portal', async ({ page }) => {
