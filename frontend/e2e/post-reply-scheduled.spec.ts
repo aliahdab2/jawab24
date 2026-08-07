@@ -62,6 +62,7 @@ const ENSURE_SCHEDULED = {
   triggerExcludeKeyword: null,
   triggerImageUrl: null,
   likeComment: false,
+  tagCommenter: false,
   triggerButtonLabel: null,
   triggerButtonUrl: null,
   scheduledPublishTime: SCHEDULED_ISO,

@@ -389,10 +389,19 @@ Meta only renders the tag when the page has «Others Tagging this Page» enabled
 API exposes that setting** — measured 2026-08-07 on a live page: `/{page-id}/settings`
 returns 13 settings and none is this one, `are_tagging_others_allowed` is not a field, and
 `?metadata=1` introspection is disabled on v23.0. So the capability can only be learned by
-attempting: `commentMentionGuard` reads the comment we just posted back via `message_tags`,
-rewrites it to the untagged text if the mention did not render, and remembers the page in
-Redis for 30 days so the next comment skips the attempt. Blast radius is one briefly-wrong
-comment per page, and it self-heals when the merchant enables the setting.
+attempting. `commentMentionGuard.mentionPlan` returns one of three answers per page:
+`skip` (proven to reject mentions — post untagged), `trust` (rendered one within 7 days —
+tag without the read-back), or `verify` (unproven — tag, then read `message_tags` back).
+On failure it rewrites the comment to the untagged text and memoizes the page for 30 days;
+on success it memoizes for 7, so verification costs one Graph read per page per week rather
+than one per reply — the difference matters against Meta's ~4,800 calls/page/day ceiling.
+Blast radius is one briefly-wrong comment per page, and it self-heals either way.
+
+A rendered mention is detected by the PRESENCE of a `type: 'user'` tag, not by matching the
+id we sent: we add exactly one mention to a comment we just created, so any user tag is
+ours, and requiring id equality would strip working mentions if Graph ever echoes a
+differently-scoped id. `metrics:mention:{rendered|stripped|skipped|unverified}` counts the
+outcomes.
 
 What "did not render" looks like, measured live 2026-08-07: posting `@[<unresolvable-id>] x`
 returns HTTP 200 and reads back as `" x"` — the token is **stripped**, with no error and no

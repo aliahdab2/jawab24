@@ -1012,7 +1012,14 @@ page-authored mentions across 902 comments on 3 live pages. Therefore:
 
 1. The capability is **learned by attempting**, never read. `commentMentionGuard` reads the
    posted comment back (`message_tags`), rewrites it to the untagged text when the mention
-   did not render, and memoizes the page as unsupported in Redis for 30 days.
+   did not render, and memoizes the page as unsupported in Redis for 30 days — and as
+   supported for 7, so a proven page skips the read-back instead of paying a Graph call on
+   every reply.
+1b. Detection is by PRESENCE of a user tag, never by `tag.id === psid`. We add one mention to
+   a comment we just created, so any user tag is ours; requiring id equality would, if Graph
+   echoes a differently-scoped id, strip every working mention and mark every page
+   unsupported. The two errors are not symmetric. The id we sent vs the id echoed is logged
+   (not acted on) so production answers that question for us.
 2. Redis, not a column: this caches someone else's mutable setting, so it must expire and
    self-heal when the merchant flips the switch — a column would need manual repair.
 3. The token is prefixed AFTER the nudge truncation, so `NUDGE_MAX_LENGTH` can never slice

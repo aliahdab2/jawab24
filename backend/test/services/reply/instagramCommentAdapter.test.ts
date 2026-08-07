@@ -259,6 +259,28 @@ describe('InstagramCommentAdapter', () => {
             );
         });
 
+        // Instagram mentions are `@username` — a different syntax and a different id space —
+        // so the Facebook-only flag must be inert here. If it ever leaked through, we would
+        // post `@[<psid>]` as literal text on an IG comment, in front of customers.
+        it('ignores tagCommenter entirely — the reply text is untouched', async () => {
+            mockReplyToComment.mockResolvedValue('reply_id_123');
+
+            await adapter.sendReply({
+                platformCommentId: 'ig_comment_123',
+                platformPageId: 'ig_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Nice product!',
+                accessToken: 'ig_token_abc',
+                fromId: '1784123456789',
+                tagCommenter: true,
+                userSettings: {},
+            });
+
+            expect(mockReplyToComment).toHaveBeenCalledWith(
+                'ig_comment_123', 'Thank you!', 'ig_token_abc',
+            );
+        });
+
         it('should return error on Instagram API failure', async () => {
             mockReplyToComment.mockRejectedValue(new Error('Instagram API rate limit'));
 

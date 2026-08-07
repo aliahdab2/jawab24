@@ -10,7 +10,7 @@ vi.mock('../../src/services/facebook');
 vi.mock('../../src/services/metaMessaging');
 vi.mock('../../src/utils/language');
 vi.mock('../../src/services/reply/commentMentionGuard', () => ({
-    commentMentionGuard: { shouldTag: vi.fn(), verifyAndRepair: vi.fn(), setLogger: vi.fn() },
+    commentMentionGuard: { mentionPlan: vi.fn(), verifyAndRepair: vi.fn(), setLogger: vi.fn() },
 }));
 vi.mock('../../src/config', () => ({
     config: {
@@ -520,7 +520,7 @@ describe('ReplySender', () => {
         };
 
         beforeEach(() => {
-            vi.mocked(commentMentionGuard.shouldTag).mockResolvedValue(true);
+            vi.mocked(commentMentionGuard.mentionPlan).mockResolvedValue('verify');
             vi.mocked(commentMentionGuard.verifyAndRepair).mockResolvedValue({ rendered: true });
         });
 
@@ -564,7 +564,7 @@ describe('ReplySender', () => {
         });
 
         it('posts untagged on a page already known to reject mentions', async () => {
-            vi.mocked(commentMentionGuard.shouldTag).mockResolvedValue(false);
+            vi.mocked(commentMentionGuard.mentionPlan).mockResolvedValue('skip');
 
             await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
 
@@ -584,7 +584,44 @@ describe('ReplySender', () => {
                 { message: 'Thank you for your feedback!' },
                 expect.anything(),
             );
-            expect(commentMentionGuard.shouldTag).not.toHaveBeenCalled();
+            expect(commentMentionGuard.mentionPlan).not.toHaveBeenCalled();
+        });
+
+        // The efficiency fix: a page proven to render mentions skips the read-back entirely.
+        it('tags WITHOUT verifying on a page already proven to render mentions', async () => {
+            vi.mocked(commentMentionGuard.mentionPlan).mockResolvedValue('trust');
+
+            await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: '@[1784123456789] Thank you for your feedback!' },
+                expect.anything(),
+            );
+            expect(commentMentionGuard.verifyAndRepair).not.toHaveBeenCalled();
+        });
+
+        // Without a page id there is no memo to key and no page to blame — degrade quietly.
+        it('posts untagged when the page id is missing', async () => {
+            await sender.sendCommentReply({ ...taggedOptions, platformPageId: undefined, replyMode: 'public' });
+
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: 'Thank you for your feedback!' },
+                expect.anything(),
+            );
+            expect(commentMentionGuard.mentionPlan).not.toHaveBeenCalled();
+        });
+
+        // Graph answered 200 but without an id: the comment IS posted, so this must read as
+        // success — not a failed send that BullMQ would retry into a duplicate comment.
+        it('counts as success when Graph returns no comment id (nothing to verify)', async () => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: {} });
+
+            const result = await sender.sendCommentReply({ ...taggedOptions, replyMode: 'public' });
+
+            expect(result.success).toBe(true);
+            expect(commentMentionGuard.verifyAndRepair).not.toHaveBeenCalled();
         });
 
         // An unusable id must degrade to a normal reply — never to raw text in public.

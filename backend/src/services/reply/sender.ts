@@ -269,15 +269,16 @@ export class ReplySender {
         const { facebookCommentId, accessToken, fromId, platformPageId, tagCommenter } = options;
 
         const token = tagCommenter && platformPageId ? buildFacebookMentionToken(fromId) : null;
-        const mayTag = token ? await commentMentionGuard.shouldTag(platformPageId as string) : false;
-        if (!token || !mayTag) {
+        const plan = token ? await commentMentionGuard.mentionPlan(platformPageId as string) : 'skip';
+        if (!token || plan === 'skip') {
             return (await this.postPublicReply(facebookCommentId, message, accessToken)) !== null;
         }
 
         const postedId = await this.postPublicReply(facebookCommentId, prefixMention(token, message), accessToken);
         if (postedId === null) return false;
+        // 'trust' = this page rendered a mention recently, so skip the read-back entirely.
         // Empty id = posted but unverifiable (no id in the response); nothing to read back.
-        if (postedId) {
+        if (plan === 'verify' && postedId) {
             await commentMentionGuard.verifyAndRepair({
                 postedCommentId: postedId,
                 pageId: platformPageId as string,

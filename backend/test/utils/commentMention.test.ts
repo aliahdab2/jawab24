@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFacebookMentionToken, prefixMention, mentionRendered } from '../../src/utils/commentMention';
+import { buildFacebookMentionToken, prefixMention, mentionRendered, renderedTagIdMismatch } from '../../src/utils/commentMention';
 import { pickNudgeVariation, NUDGE_MAX_LENGTH } from '../../src/services/reply/nudge';
 
 describe('commentMention', () => {
@@ -56,22 +56,41 @@ describe('commentMention', () => {
     describe('mentionRendered', () => {
         const psid = '1784123456789';
 
-        it('is true when Facebook returned a user tag for that person', () => {
-            expect(mentionRendered([{ id: psid, type: 'user' }], psid)).toBe(true);
+        it('is true when Facebook returned a user tag', () => {
+            expect(mentionRendered([{ id: psid, type: 'user' }])).toBe(true);
         });
 
-        it('is false when the page rendered nothing (the literal-text failure)', () => {
-            expect(mentionRendered([], psid)).toBe(false);
-            expect(mentionRendered(null, psid)).toBe(false);
-            expect(mentionRendered(undefined, psid)).toBe(false);
+        it('is false when nothing rendered (the stripped-token failure)', () => {
+            expect(mentionRendered([])).toBe(false);
+            expect(mentionRendered(null)).toBe(false);
+            expect(mentionRendered(undefined)).toBe(false);
         });
 
-        it('is false when the only tag is a page, not this person', () => {
-            expect(mentionRendered([{ id: '878802365317875', type: 'page' }], psid)).toBe(false);
+        it('is false when the only tag is a page, not a person', () => {
+            expect(mentionRendered([{ id: '878802365317875', type: 'page' }])).toBe(false);
         });
 
-        it('is false when a DIFFERENT user was tagged', () => {
-            expect(mentionRendered([{ id: '999999999999', type: 'user' }], psid)).toBe(false);
+        // The asymmetry that drove this design: requiring `tag.id === psid` would read a
+        // differently-scoped echo as failure, and the caller would then STRIP a mention that
+        // worked — on every reply, on every page. Presence is the safe side.
+        it('is true even when Facebook echoes a different id for the tagged person', () => {
+            expect(mentionRendered([{ id: '999999999999', type: 'user' }])).toBe(true);
+        });
+    });
+
+    describe('renderedTagIdMismatch', () => {
+        const psid = '1784123456789';
+
+        it('reports the echoed id when it differs from the one we sent', () => {
+            expect(renderedTagIdMismatch([{ id: '999999999999', type: 'user' }], psid)).toBe('999999999999');
+        });
+
+        it('is null when the ids agree', () => {
+            expect(renderedTagIdMismatch([{ id: psid, type: 'user' }], psid)).toBeNull();
+        });
+
+        it('is null when nothing rendered', () => {
+            expect(renderedTagIdMismatch([], psid)).toBeNull();
         });
     });
 });
