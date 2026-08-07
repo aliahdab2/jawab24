@@ -969,3 +969,34 @@ must be measured against a control that has live rows, not only against the defe
 **Not in scope, deliberately:** detection. The illegal-join validator — for every pair of
 stored values appearing in one reply under different labels, assert some single row holds
 both — needs no model call and is the natural next step.
+
+## D-063 · Structured ingestion is deferred behind the merchant migrations; hand-finishing 12 pages is cheaper than building a pipeline for a scale that does not exist
+
+Owner ruling 2026-08-05: «خلينا ناجل فكرة صيانة الاستخراج لبعد ما نخلص نقل التجار
+المهمين». The Excel/file → structured-rows pipeline — ONE proposed-table contract fed by
+deterministic producers (xlsx/csv, where the columns ARE the attributes and no model call
+is needed) and probabilistic ones (text/posts/Vision), one review grid, one writer into
+`fact_collections` — is PARKED. Do not build it before the five-page finish line is
+seeded and cleaned.
+
+**Why, measured the same day (prod, read-only).** The whole migration universe is **12
+active pages with a real KB (≥2,000 chars)** out of 118 pages / 36 active in 30 days.
+Building ingestion machinery for that is more expensive than finishing the twelve by hand.
+Two structural findings came out of the same read and are the durable part of this entry:
+the **catalog is dead in prod — one item fleet-wide**, so `fact_collections` is the only
+live structured home (D-052 confirmed by adoption rather than by argument); and **43% of
+message volume sits on thin-KB news/media pages** with nothing to structure, so they are
+not migration candidates and must be counted out of the milestone rather than counted as
+a gap.
+
+Excluded from the finish line by the same ruling: **Nourva** — the fleet's largest page,
+stays on free text.
+
+**The sequencing unlock, recorded so it is not rediscovered:** a NEW user's free text is
+empty, so there is no dual-home problem, so the ingestion path can ship for thin-KB pages
+*before* the guard-on-save work completes. G6 gates the MIGRATION path only.
+
+**Numbering note:** this ruling was authored as «D-062» in `.planning/BUSINESS_SURFACE_PLAN.md`
+on 2026-08-05, while `main` independently took D-062 for row gating on 2026-08-06 (#650).
+Renumbered to D-063 on first commit; the ruling itself is unchanged. Older references to
+"D-062 deferral" in `.planning/` mean this entry.
