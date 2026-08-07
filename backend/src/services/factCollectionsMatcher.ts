@@ -315,17 +315,39 @@ const WORDISH_RE = /[\p{L}\p{N}]/u;
  * visible), which is the safe direction for a narrowing constraint.
  */
 function valueOccursIn(haystack: string, needle: string): boolean {
+    return findValueOccurrences(haystack, needle).length > 0;
+}
+
+/**
+ * WHERE a stored value occurs in the (already normalized) text — every hit, in
+ * order. `valueOccursIn` is the boolean projection of this, so the two can never
+ * disagree about what counts as an occurrence.
+ *
+ * Positions exist for the illegal-join validator (`illegalJoin.ts`), which binds
+ * each matched value to the nearest row NAME in the reply. Co-occurrence alone
+ * cannot decide attribution: a reply that correctly enumerates five showrooms
+ * contains all five names and all five phone numbers, so every cross-pair looks
+ * like a join. Distance is what separates "listed one after another" from "this
+ * row's number welded to that row's name".
+ */
+export function findValueOccurrences(haystack: string, needle: string): number[] {
     // A single character (or an empty value after normalization) would match
     // almost any message; treat it as unmatchable rather than as a hit.
-    if (needle.length < 2) return false;
-    if (HAS_LETTER_RE.test(needle)) return haystack.includes(needle);
+    if (needle.length < 2) return [];
 
+    const hits: number[] = [];
+    const bounded = !HAS_LETTER_RE.test(needle);
     for (let from = 0; ; ) {
         const at = haystack.indexOf(needle, from);
-        if (at === -1) return false;
-        const before = at > 0 ? haystack[at - 1] : ' ';
-        const after = at + needle.length < haystack.length ? haystack[at + needle.length] : ' ';
-        if (!WORDISH_RE.test(before) && !WORDISH_RE.test(after)) return true;
+        if (at === -1) return hits;
+        if (!bounded) {
+            hits.push(at);
+        } else {
+            // Letter-free needles need a token boundary — see the note above.
+            const before = at > 0 ? haystack[at - 1] : ' ';
+            const after = at + needle.length < haystack.length ? haystack[at + needle.length] : ' ';
+            if (!WORDISH_RE.test(before) && !WORDISH_RE.test(after)) hits.push(at);
+        }
         from = at + 1;
     }
 }
