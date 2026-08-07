@@ -31,13 +31,19 @@ describe('OfflineBanner placement in DashboardLayout', () => {
   let banner: string;
   let scrollRootIdx: number;
   let mainIdx: number;
+  let mainCloseIdx: number;
   let bannerUses: number[];
 
   beforeAll(() => {
+    // Comments are stripped first: this file documents its own JSX, so prose
+    // like "Inside <main> on purpose" would otherwise register as a second
+    // <main> and a commented-out <OfflineBanner /> would count as a render site.
     layout = readFileSync(
       path.resolve(__dirname, '../../src/components/layout/DashboardLayout.tsx'),
       'utf-8'
-    );
+    )
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
     banner = readFileSync(
       path.resolve(__dirname, '../../src/components/ui/OfflineBanner.tsx'),
       'utf-8'
@@ -50,6 +56,11 @@ describe('OfflineBanner placement in DashboardLayout', () => {
     mainIdx = layout.indexOf('<main');
     expect(mainIdx, '<main> not found — did the layout get restructured?').toBeGreaterThan(-1);
 
+    mainCloseIdx = layout.indexOf('</main>', mainIdx);
+    expect(mainCloseIdx, '</main> not found').toBeGreaterThan(-1);
+    expect(layout.indexOf('<main', mainIdx + 1), 'a second <main> would make these offsets meaningless')
+      .toBe(-1);
+
     bannerUses = [];
     for (let i = layout.indexOf('<OfflineBanner'); i !== -1; i = layout.indexOf('<OfflineBanner', i + 1)) {
       bannerUses.push(i);
@@ -61,13 +72,22 @@ describe('OfflineBanner placement in DashboardLayout', () => {
     expect(bannerUses).toHaveLength(1);
   });
 
-  it('never renders the banner as a bare child of the scroll root', () => {
-    // This is the regression itself: out there it is a static element under a
-    // fixed header, and no z-index can rescue it.
+  it('renders the banner inside <main>, not merely somewhere after it', () => {
+    // This is the regression itself: outside <main> it is a static element under
+    // a fixed header, and no z-index can rescue it.
+    //
+    // Both bounds matter. An earlier version of this guard only checked the
+    // lower one, so moving the banner *below* `</main>` — a plausible refactor —
+    // left it green while putting the banner straight back outside the
+    // header-cleared area.
     expect(
       bannerUses[0],
       'the banner is back above <main> — the fixed header will paint over it again'
     ).toBeGreaterThan(mainIdx);
+    expect(
+      bannerUses[0],
+      'the banner has escaped below </main> and is no longer header-cleared'
+    ).toBeLessThan(mainCloseIdx);
   });
 
   it('renders it inside the area <main> has already cleared of the header', () => {
@@ -97,16 +117,20 @@ describe('OfflineBanner placement in DashboardLayout', () => {
 
   it('gives the banner no z-index of its own', () => {
     // A z-index without positioning is inert, and carrying one implies a
-    // stacking guarantee the element cannot honour.
-    const root = /<div\s+([^>]*?)>/.exec(banner);
-    expect(root, 'could not find the banner root element').not.toBeNull();
-    expect(root![1]).not.toMatch(/\bz-\d/);
+    // stacking guarantee the element cannot honour. Stacking is the layout's job.
+    expect(banner, 'z-index on an unpositioned element does nothing')
+      .not.toMatch(/\bz-\d/);
   });
 
   it('announces itself to assistive technology', () => {
     // The banner appears without user action; without a live region a screen
-    // reader user is told nothing at all.
+    // reader user is told nothing at all. That the region OUTLIVES the message —
+    // rather than appearing already populated, which TalkBack and VoiceOver
+    // routinely drop — is asserted at runtime in OfflineBanner.test.tsx, which
+    // can compare node identity across a state change.
     expect(banner).toMatch(/role="status"/);
     expect(banner).toMatch(/aria-live="polite"/);
+    expect(banner, 'the live region must not be gated on isOffline')
+      .not.toMatch(/if\s*\(\s*!isOffline/);
   });
 });

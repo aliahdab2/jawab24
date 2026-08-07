@@ -34,6 +34,11 @@ The single most useful thing in this document. Update it whenever a finding move
 | M15 | Low | `min-h-screen` on the three store-onboarding pages | 🔴 Open |
 | M16 | Low | iOS: no `NSCameraUsageDescription` despite image-upload fields | 🔴 Open — **blocker before iOS launch** |
 | M17 | Low | No background session validation in-app | 🔴 Open |
+| M18 | Low | Landscape wastes 40 px: content starts at 80 px under a 40 px header | 🔴 Open — raised 2026-08-07 while measuring M3 |
+| M19 | Low | Losing connectivity leaves no Sentry breadcrumb | 🔴 Open — raised 2026-08-07 during the M3 review |
+
+> M18 and M19 are **not** part of the original 17. They were found while fixing and reviewing M3
+> and are recorded here so they are not lost; neither has been investigated beyond the observation.
 
 ### What happened after the review (2026-08-05)
 
@@ -84,6 +89,27 @@ Fixed with a semantic `.offline-banner` class in `globals.css` (Rule 11 — neve
 for anything that must survive a theme flip): `rgb(60,75,100)` in dark, **8.81:1**. The guard now
 asserts the component carries no bare `bg-surface-*` and that the class defines a `dark:` variant;
 confirmed red against the raw-token shape.
+
+**Two more defects came out of the same review, both in the fix itself.**
+
+🔊 **The live region would not have announced.** `role="status"` was put on the element that mounts
+*with* its text already present. Assistive technology announces *changes* to a region already in the
+accessibility tree; one that appears already populated is routinely dropped by TalkBack and
+VoiceOver. So the accessibility improvement the fix claimed would mostly never have fired — the same
+class of defect as the visual one, one layer down. The live region is now the outer element and
+stays mounted on native whether or not the device is offline; only its contents come and go, and all
+colour and spacing sit on the inner element so an empty region reserves no space. Measured: online
+`height: 0`, text empty; offline the **same node** carries the message at `height: 32`, and the page
+heading moves 76 → 108 — exactly the banner height, i.e. it pushes rather than covers.
+
+🕳 **The first guard had a hole that would have let the bug straight back in.** It asserted only that
+the banner appears *after* `<main` in the file. Moving it below `</main>` — an entirely plausible
+refactor — kept it green while putting the banner back outside the header-cleared area. Now bounded
+on both sides, and confirmed red against exactly that move. *A one-sided bound is not a guard.*
+
+Also: the guard scanned raw source, so the file's own prose (`Inside <main> on purpose`) counted as
+a second `<main>`. Comments are stripped before scanning — otherwise a commented-out
+`<OfflineBanner />` would have counted as a render site too.
 
 ⭐ **The technique that unblocks the other eight native-only findings.** Nine of the 17 sit behind
 `isNativePlatform()`, which reads `window.Capacitor`. Stubbing that global does **not** work —
