@@ -175,6 +175,39 @@ describe('catalogExtractor', () => {
             expect(prompt).toContain('"price": null');
         });
 
+        // The pseudo-product traps shipped after the 2026-08-08 specimen: a page
+        // scan on a marketing-heavy page emitted the brand itself as a $15 item
+        // and a pricing headline («الباقات تبدأ من») as an item name.
+        it('page source injects the pseudo-product traps, naming the page when known', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('POST (2026-07-01):\nباقاتنا تبدأ من 15$', { ...CTX, source: 'page', pageName: 'جواب24' });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain('The page/brand itself is never an offering');
+            expect(prompt).toContain('(«جواب24»)');
+            expect(prompt).toContain('A pricing headline is not an offering name');
+            expect(prompt).toContain('باقاتنا تبدأ من 15$');
+            expect(prompt).toContain('ONE entry — never one item per post');
+        });
+
+        it('page source without a page name keeps the traps but omits the name clause', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('POST (2026-07-01):\nx', { ...CTX, source: 'page' });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain('The page/brand itself is never an offering');
+            expect(prompt).not.toContain('(«');
+        });
+
+        it('a page name containing $-sequences must not corrupt the prompt (replace() expansion)', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('POST (2026-07-01):\nx', { ...CTX, source: 'page', pageName: "Shop $& weird $' name" });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain("«Shop $& weird $' name»");
+            expect(prompt).toContain('Input:\nPOST');
+        });
+
         it('adds NO hint lines for the default paste flow or the "other" vertical', async () => {
             mockReply({ items: [] });
             await catalogExtractor.extract('plain list', { ...CTX, vertical: 'other' });
@@ -289,6 +322,7 @@ describe('catalogExtractor', () => {
             mockReply({ items: [] });
             await catalogExtractor.extract('x', CTX);
             expect(promptSent()).not.toContain('configured Post Reply auto-replies');
+            expect(promptSent()).not.toContain('The page/brand itself is never an offering');
         });
     });
 });

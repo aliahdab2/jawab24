@@ -1061,7 +1061,13 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > input raises `truncated`). UI entry: «استخراج منتجاتك من صفحتك» — the
 > «استورد من ردود منشوراتك» button is REMOVED, merged into this scan;
 > `/catalog/scan-post-replies` remains as a deprecated ALIAS of the same
-> unified scan because app builds ≤2.0.23 still ship that button),
+> unified scan because app builds ≤2.0.23 still ship that button. The
+> extractor's page framing also names the pseudo-product traps a
+> marketing-heavy page produces — the brand itself, a «prices start from»
+> headline as an item name, one item per promoting post — and receives the
+> page's own name so the model knows what must NOT become an item; the
+> 2026-08-08 specimen was the Jawab24 dogfood page scan proposing «جواب24»
+> and «الباقات تبدأ من» as $15 products),
 > **bulk import** (paste a price list / upload a file →
 > extract proposals), and manual add. Entry PRIORITY flipped 2026-08-05
 > (owner ruling: the scan under-delivers — prices deliberately live off-post,
