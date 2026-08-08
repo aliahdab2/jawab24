@@ -246,6 +246,10 @@ export interface FactRowBody {
   currency?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  /** The entity save replaces the row WHOLESALE server-side (absent = true),
+   *  so an updater must carry the row's current value or it silently flips
+   *  unavailable rows back to available. */
+  isAvailable?: boolean;
 }
 
 // Fact-collections list editor (G1b) — the enumerable lists the AI quotes
