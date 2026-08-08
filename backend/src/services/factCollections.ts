@@ -828,6 +828,13 @@ class FactCollectionsService {
             collections: touchedIds.length,
             upserts: input.upserts.length,
             deletes: input.deletes.length,
+            // Which keys each upsert carried — under merge semantics this is
+            // the first diagnostic question of any "field disappeared" report:
+            // a sparse patch and a complete row are indistinguishable from
+            // counts alone (finding L2). Bounded: ≤40 upserts × 8 keys.
+            upsertKeys: input.upserts.map(u =>
+                Object.keys(u).filter(k => k !== 'collectionId' && k !== 'rowId').join(','),
+            ),
         });
         return result;
     }
@@ -844,9 +851,10 @@ function assertRowDateRange(startsAt: string | null | undefined, endsAt: string 
 
 /** Sparse patch → drizzle set object: only the provided keys change, an
  *  explicit `null` clears. Shared by the row PATCH and the entity save's
- *  update case so the two merge paths cannot drift (issue #671). */
-function sparseRowSet(patch: Partial<FactRowInput>): Record<string, unknown> {
-    const set: Record<string, unknown> = { updatedAt: new Date() };
+ *  update case so the two merge paths cannot drift (issue #671). Typed against
+ *  the table's insert shape so a typo'd column fails to compile (finding L1). */
+function sparseRowSet(patch: Partial<FactRowInput>): Partial<typeof factRows.$inferInsert> {
+    const set: Partial<typeof factRows.$inferInsert> = { updatedAt: new Date() };
     if (patch.name !== undefined) set.name = patch.name;
     if (patch.attributes !== undefined) set.attributes = patch.attributes;
     if (patch.structured !== undefined) set.structured = patch.structured;
@@ -861,11 +869,18 @@ function sparseRowSet(patch: Partial<FactRowInput>): Record<string, unknown> {
 /**
  * The per-field Zod schema cannot see the OTHER date on a partial patch, so an
  * update touching one side could leave endsAt < startsAt — a row that is
- * expired the moment it saves and silently vanishes from the prompt. Validate
- * the MERGED row, inside the caller's transaction so the read can't race a
- * concurrent patch. Returns false when the row does not exist — the caller
- * chooses its own not-found answer (null for the PATCH, STALE_ROW for the
- * atomic entity save).
+ * expired the moment it saves and silently vanishes from the prompt.
+ *
+ * A patch carrying BOTH dates is validated directly — the stored values are
+ * irrelevant to the merged pair, so no read happens (the complete-row client
+ * always lands here; review finding M3). A single-sided touch validates the
+ * merged row against the stored side, read with FOR UPDATE so a concurrent
+ * patch to the OTHER side serializes behind this transaction instead of
+ * racing it — without the lock, two single-sided writers under READ COMMITTED
+ * can each validate against the stale counterpart and commit a born-expired
+ * pair (review finding M1). Returns false when the row does not exist — the
+ * caller chooses its own not-found answer (null for the PATCH, STALE_ROW for
+ * the atomic entity save).
  */
 async function mergedDateRangeOk(
     tx: Pick<typeof db, 'select'>,
@@ -874,11 +889,16 @@ async function mergedDateRangeOk(
     patch: Pick<Partial<FactRowInput>, 'startsAt' | 'endsAt'>,
 ): Promise<boolean> {
     if (patch.startsAt === undefined && patch.endsAt === undefined) return true;
+    if (patch.startsAt !== undefined && patch.endsAt !== undefined) {
+        assertRowDateRange(patch.startsAt, patch.endsAt);
+        return true;
+    }
     const [existing] = await tx
         .select({ startsAt: factRows.startsAt, endsAt: factRows.endsAt })
         .from(factRows)
         .where(and(eq(factRows.id, rowId), eq(factRows.collectionId, collectionId)))
-        .limit(1);
+        .limit(1)
+        .for('update');
     if (!existing) return false;
     assertRowDateRange(
         patch.startsAt !== undefined ? patch.startsAt : existing.startsAt,
