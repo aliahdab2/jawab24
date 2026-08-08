@@ -98,6 +98,12 @@ const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
   // (incl. the literal-translation الوصف rows). Server-side stays
   // workspace-admin gated; he is the workspace owner.
   'c54202c9-139e-4b6f-9984-c19d0e8757a4',
+  // Ahmad (a.tbbaa@mes-me.com, «ام. اي. اس») — second seeded external merchant
+  // (owner ruling 2026-08-08): his showroom + department-phone fact collections
+  // went live 08-07, and /business is the only surface where he can review/edit
+  // them — a prerequisite for the KB prose cleanup, which removes their free-text
+  // duplicates (.planning/MES_CLEANUP_REVIEW.md).
+  '9b6ba279-b569-4b45-b020-55b542dad5b6',
 ]);
 
 export function isCatalogVisible(
