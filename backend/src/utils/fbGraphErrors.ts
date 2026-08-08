@@ -8,6 +8,11 @@ import axios from 'axios';
  * - window_expired:   outside 24h messaging window. Nudge only (never full reply).
  * - transient:        rate limit, network, 5xx. Retry, never leak full reply.
  * - our_fault:        bad token / missing permission. Page-level integration alert.
+ * - thread_owned_elsewhere: another app owns the conversation via Meta's Handover
+ *                     Protocol — our sends are rejected while its session lasts.
+ *                     Channel-level conflict, NOT page-level: pausing the page
+ *                     would kill the healthy channels too (the MES case: IG dead,
+ *                     FB fine). Fix is merchant-side (disconnect the other tool).
  * - unknown:          unmatched. Safe default = no public post, log for triage.
  */
 export type DmFailureBucket =
@@ -15,6 +20,7 @@ export type DmFailureBucket =
     | 'window_expired'
     | 'transient'
     | 'our_fault'
+    | 'thread_owned_elsewhere'
     | 'unknown';
 
 export type FbPlatform = 'facebook' | 'instagram';
@@ -215,6 +221,15 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     'facebook|10|2018065':  'our_fault',         // cannot message users not on the page (config)
     'facebook|2500':        'our_fault',         // "An active access token must be used" — token missing/revoked
     'instagram|2500':       'our_fault',
+
+    // thread_owned_elsewhere — Handover Protocol conflict: another app holds the
+    // conversation, every send bounces until its ownership session expires or the
+    // merchant disconnects the tool. Diagnosed live on MES 2026-08-08: a competing
+    // IG-Login app seized each thread at creation (+24h per incoming message) and
+    // 100% of IG replies died with this exact pair while Facebook kept working.
+    // "(#100) The action is invalid since it's not the thread owner."
+    'instagram|100|2534037': 'thread_owned_elsewhere',
+    'facebook|100|2534037':  'thread_owned_elsewhere',
 };
 
 function lookupBucket(platform: FbPlatform, code: number | undefined, subcode: number | undefined): DmFailureBucket | undefined {
@@ -242,6 +257,23 @@ function isTransientAxiosStatus(status: number | undefined): boolean {
 export function isTransientFbError(err: unknown, platform: string): boolean {
     const fbPlatform: FbPlatform = platform === 'instagram' ? 'instagram' : 'facebook';
     return classifyDmError(err, fbPlatform).bucket === 'transient';
+}
+
+/**
+ * Build the `dm_failed` flag_meta payload from a classified DM failure —
+ * the single shape both reply pipelines persist (comments AND messages), so
+ * a send failure is always diagnosable from the flagged row alone. Undefined
+ * fields are omitted, matching the historical comment-path shape byte-for-byte.
+ */
+export function buildDmFailedFlagMeta(f: DmFailure): import('@jawab24/shared').FlagMeta {
+    return {
+        dm_failed: {
+            bucket: f.bucket,
+            ...(f.code !== undefined ? { code: f.code } : {}),
+            ...(f.subcode !== undefined ? { subcode: f.subcode } : {}),
+            ...(f.fbMessage ? { fbMessage: f.fbMessage } : {}),
+        },
+    };
 }
 
 /**

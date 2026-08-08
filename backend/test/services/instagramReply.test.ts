@@ -499,13 +499,16 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toContain('Failed to send reply');
-            // Message should still be marked as replied with delivery_failed flag
+            // Message should still be marked as replied with delivery_failed flag,
+            // and the classified failure persisted in flag_meta — the row alone
+            // must answer "failed WHY" (a plain Error classifies as 'unknown').
             expect(messagesService.markAsReplied).toHaveBeenCalledWith(
                 'msg-uuid', expect.any(String), expect.any(String),
                 true, 'delivery_failed',
                 expect.toBeOneOf([expect.any(String), undefined]),
                 undefined,
                 expect.toBeOneOf([expect.any(String), undefined]),
+                { dm_failed: { bucket: 'unknown' } },
             );
         });
 

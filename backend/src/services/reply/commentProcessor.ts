@@ -31,6 +31,7 @@ import {
     isTransientAiError,
     needsImmediateAttention,
     AiRefusalError,
+    buildDmFailedFlagMeta,
 } from '../../utils/fbGraphErrors';
 import { PostNotOwnedError } from '../postErrors';
 import { captureError } from '../../utils/sentryHelpers';
@@ -1057,16 +1058,7 @@ export class CommentProcessor {
             // (FB error code, bucket) lives in flag_meta for debugging + localization.
             const dmf = sendResult.dmFailure;
             const flagKey = dmf ? 'dm_failed' : 'send_failed';
-            const flagMeta = dmf
-                ? {
-                    dm_failed: {
-                        bucket: dmf.bucket,
-                        ...(dmf.code !== undefined ? { code: dmf.code } : {}),
-                        ...(dmf.subcode !== undefined ? { subcode: dmf.subcode } : {}),
-                        ...(dmf.fbMessage ? { fbMessage: dmf.fbMessage } : {}),
-                    },
-                }
-                : null;
+            const flagMeta = dmf ? buildDmFailedFlagMeta(dmf) : null;
             // customer_refused = the customer's account blocks page DMs (FB error 10903 etc).
             // No manual intervention can succeed (the page owner would hit the same restriction),
             // so auto-resolve instead of flagging — keeps the inbox actionable. Detail still

@@ -33,6 +33,7 @@ import {
     needsImmediateAttention,
     AiRefusalError,
     classifyDmError,
+    buildDmFailedFlagMeta,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
 import { groundingVerifierService, buildGroundingSource, shouldVerifyGrounding } from '../groundingVerifier';
@@ -896,10 +897,10 @@ export class MessageProcessor {
                 // Transient errors already re-thrown above never reach here.
                 // classifyDmError is Facebook/Instagram-only; for other platforms we
                 // pass no bucket (treated as page-level `unknown` by the helper).
-                const dmBucket = (platform === 'facebook' || platform === 'instagram')
-                    ? classifyDmError(error, platform).bucket
+                const dmFailure = (platform === 'facebook' || platform === 'instagram')
+                    ? classifyDmError(error, platform)
                     : undefined;
-                void recordSendFailure(page.id, dmBucket);
+                void recordSendFailure(page.id, dmFailure?.bucket, platform);
                 // SSE: notify merchant of failed reply
                 publishSSEEvent(userId, 'message:reply_failed', {
                     messageId: platformMessageId,
@@ -907,10 +908,15 @@ export class MessageProcessor {
                     error: 'Failed to send reply',
                 });
                 // Still mark message as replied with delivery_failed flag so it doesn't
-                // stay in "Needs Action" forever. The AI did its job — delivery is a platform issue.
+                // stay in "Needs Action" forever. The AI did its job — delivery is a
+                // platform issue. The classified failure (bucket/code/subcode/fbMessage)
+                // is persisted in flag_meta so the row alone answers "failed WHY" — the
+                // comment path always stored this; the DM path discarding it cost a full
+                // evening of live probing to rediscover one error code (MES, 2026-08-08).
                 await messagesService.markAsReplied(
                     storedMessage.id, replyText, replyMethod,
                     true, 'delivery_failed', aiIntent, undefined, aiOriginalReply,
+                    dmFailure ? buildDmFailedFlagMeta(dmFailure) : null,
                 );
                 return { success: false, messageId: platformMessageId, replyText, replyMethod, error: 'Failed to send reply' };
             }
@@ -976,8 +982,10 @@ export class MessageProcessor {
                 this.logger.info(`[${platform}] Marked older debounced messages as replied`, { count: markedOlder, senderId });
             }
 
-            // Defensive auto-pause: any successful send resets the failure streak.
-            void recordSendSuccess(page.id);
+            // Defensive auto-pause: any successful send resets the failure streak —
+            // the page-level one, and this platform's channel streak (only this
+            // platform's: a Facebook success must not hide a dead Instagram).
+            void recordSendSuccess(page.id, platform);
 
             // 17. Notify if flagged — use enriched reason for high-stakes flags
             if (needsAttention && page.userId) {

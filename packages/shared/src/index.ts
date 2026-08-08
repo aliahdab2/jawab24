@@ -23,7 +23,7 @@ export { default as flagReasonAr } from './i18n/ar/flagReason.json';
  */
 export interface FlagMeta {
     dm_failed?: {
-        bucket: 'customer_refused' | 'window_expired' | 'transient' | 'our_fault' | 'unknown';
+        bucket: 'customer_refused' | 'window_expired' | 'transient' | 'our_fault' | 'thread_owned_elsewhere' | 'unknown';
         code?: number;
         subcode?: number;
         fbMessage?: string;
