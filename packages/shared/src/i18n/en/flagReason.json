@@ -30,6 +30,7 @@
   "dm_failed_window_expired": "DM failed — 24-hour window expired",
   "dm_failed_transient": "DM failed — temporary error",
   "dm_failed_our_fault": "DM failed — permission issue",
+  "dm_failed_thread_owned_elsewhere": "DM failed — another connected app is handling this conversation",
   "dm_failed_unknown": "DM failed",
   "no_reply_generated": "Needs manual reply",
   "AI flagged this reply": "Flagged for review",

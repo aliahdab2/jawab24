@@ -74,11 +74,15 @@ export function isChannelLevelFailure(bucket: DmFailureBucket | undefined): bool
  * That is exactly how MES's Instagram stayed silently broken for 6 days while
  * its Facebook traffic kept the page counter at zero (2026-08-08 trace).
  *
- * The streak alerts to Sentry once per streak, at the moment it crosses the
- * threshold; a successful send on that platform deletes the key. Purely a
+ * The streak alerts to Sentry at escalating marks (5, 50, 500) rather than
+ * once: a single missed alert on a permanently-dead channel would otherwise
+ * restore exactly the blindness this exists to fix — continuing failures keep
+ * refreshing the TTL, so the key never expires and a one-shot alert never
+ * re-fires. A successful send on that platform deletes the key. Purely a
  * detection signal — it never gates, pauses, or retries anything.
  */
 export const PLATFORM_FAILURE_ALERT_THRESHOLD = 5;
+const PLATFORM_FAILURE_ALERT_MARKS: ReadonlySet<number> = new Set([PLATFORM_FAILURE_ALERT_THRESHOLD, 50, 500]);
 const PLATFORM_FAILURE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export function platformSendFailureKey(pageId: string, platform: string): string {
@@ -93,7 +97,7 @@ function trackPlatformFailure(pageId: string, platform: string, bucket: DmFailur
         redis.incr(key)
             .then(async (streak) => {
                 await redis.expire(key, PLATFORM_FAILURE_TTL_SECONDS).catch(() => {});
-                if (streak === PLATFORM_FAILURE_ALERT_THRESHOLD) {
+                if (PLATFORM_FAILURE_ALERT_MARKS.has(streak)) {
                     captureError(
                         new Error(`${platform} sends have failed ${streak}× consecutively for page ${pageId} (bucket: ${bucket ?? 'no_bucket'})`),
                         'pageAutoPause.platformChannelDown',

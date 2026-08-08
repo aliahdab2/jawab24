@@ -51,11 +51,13 @@ Facebook traffic kept the counter at zero (MES, 2026-08-08).
 The DM pipeline therefore also keeps a per-`(page, platform)` consecutive-failure
 streak in Redis (`sendfail:<pageId>:<platform>`, 7-day TTL). Channel-level buckets
 (`our_fault`, `unknown`, no bucket, `thread_owned_elsewhere`) increment it; a
-successful send on **that platform** deletes it; at
-`PLATFORM_FAILURE_ALERT_THRESHOLD` (5) consecutive failures it raises one Sentry
-alert (`pageAutoPause.platformChannelDown`) per streak. It is purely a detection
-signal — it never gates, pauses, or retries anything, and it never blocks the reply
-path (fire-and-forget, same discipline as the AI lifecycle counters).
+successful send on **that platform** deletes it; it raises a Sentry alert
+(`pageAutoPause.platformChannelDown`) at escalating marks — 5, 50, and 500
+consecutive failures — so a permanently-dead channel re-surfaces even if the first
+alert is missed (continuing failures refresh the TTL, so the key never expires on
+its own). It is purely a detection signal — it never gates, pauses, or retries
+anything, and it never blocks the reply path (fire-and-forget, same discipline as
+the AI lifecycle counters).
 
 ### Threshold and what happens at it
 

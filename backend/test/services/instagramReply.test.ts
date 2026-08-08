@@ -208,6 +208,7 @@ import { messagesService } from '../../src/services/messages';
 import { notificationService } from '../../src/services/notifications';
 import { db } from '../../src/db';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
+import { redis } from '../../src/lib/redis';
 
 describe('InstagramReplyService', () => {
     let service: InstagramReplyService;
@@ -556,6 +557,9 @@ describe('InstagramReplyService', () => {
             expect(result.replyMethod).toBe('ai');
             expect(messagesService.markAsReplied).toHaveBeenCalled();
             expect(messagesService.storeOutgoingMessage).toHaveBeenCalled();
+            // The success must clear THIS platform's send-failure streak (and only
+            // this platform's) — the reset half of the FB-masks-dead-IG pin.
+            expect(redis.del).toHaveBeenCalledWith('sendfail:page-uuid:instagram');
         });
 
         it('should skip when newer message is pending (debounce)', async () => {

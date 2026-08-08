@@ -71,6 +71,12 @@ function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppErro
             // 409 keeps these out of Sentry's 5xx error bucket — merchants need to reconnect,
             // not the engineering team to fix code.
             return new AppError(detail, 409, 'DM_PLATFORM_AUTH');
+        case 'thread_owned_elsewhere':
+            // Another app owns this conversation via Meta's Handover Protocol
+            // (Graph 100/2534037) — the merchant must disconnect the competing
+            // tool; there is nothing for engineering to fix, so 409 like the
+            // other merchant-action buckets, never a Sentry-visible 502.
+            return new AppError(detail, 409, 'DM_THREAD_OWNED');
         default:
             return new AppError(detail, 502, 'DM_UNKNOWN', false);
     }

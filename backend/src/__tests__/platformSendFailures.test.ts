@@ -67,7 +67,7 @@ describe('per-platform consecutive send-failure streak', () => {
         expect(mockUpdate).toHaveBeenCalled(); // page-level accounting still runs
     });
 
-    it('alerts exactly once, at the moment the streak crosses the threshold', async () => {
+    it('alerts at the threshold, stays quiet between marks, and re-alerts at the escalating marks (5, 50, 500)', async () => {
         mockIncr.mockResolvedValueOnce(PLATFORM_FAILURE_ALERT_THRESHOLD - 1);
         await recordSendFailure(PAGE, 'thread_owned_elsewhere', 'instagram');
         await flush();
@@ -81,7 +81,24 @@ describe('per-platform consecutive send-failure streak', () => {
         mockIncr.mockResolvedValueOnce(PLATFORM_FAILURE_ALERT_THRESHOLD + 1);
         await recordSendFailure(PAGE, 'thread_owned_elsewhere', 'instagram');
         await flush();
-        expect(mockCaptureError).toHaveBeenCalledTimes(1); // no re-alert mid-streak
+        expect(mockCaptureError).toHaveBeenCalledTimes(1); // quiet between marks
+
+        // A permanently-dead channel must re-surface: one missed Sentry event
+        // would otherwise restore the exact blindness this streak exists to fix.
+        mockIncr.mockResolvedValueOnce(50);
+        await recordSendFailure(PAGE, 'thread_owned_elsewhere', 'instagram');
+        await flush();
+        expect(mockCaptureError).toHaveBeenCalledTimes(2);
+
+        mockIncr.mockResolvedValueOnce(499);
+        await recordSendFailure(PAGE, 'thread_owned_elsewhere', 'instagram');
+        await flush();
+        expect(mockCaptureError).toHaveBeenCalledTimes(2);
+
+        mockIncr.mockResolvedValueOnce(500);
+        await recordSendFailure(PAGE, 'thread_owned_elsewhere', 'instagram');
+        await flush();
+        expect(mockCaptureError).toHaveBeenCalledTimes(3);
     });
 
     it('a success resets ONLY its own platform\'s streak — a Facebook success must not hide a dead Instagram (the MES failure mode)', async () => {
