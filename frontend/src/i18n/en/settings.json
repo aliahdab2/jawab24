@@ -210,6 +210,8 @@
     "followsReplyHours": "Follows reply hours",
     "manage": "Manage",
     "modeQuestion": "Where does the comment reply appear?",
-    "modeScopeNote": "Applies to Smart Replies and Post Reply"
+    "modeScopeNote": "Applies to Smart Replies and Post Reply",
+    "likeComments": "Like customers' comments",
+    "likeCommentsSub": "Your page likes the comment when the smart reply is sent — skipped for complaints. Facebook only."
   }
 }

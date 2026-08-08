@@ -35,6 +35,15 @@ import {
 import { PostNotOwnedError } from '../postErrors';
 import { captureError } from '../../utils/sentryHelpers';
 
+/** Backstop for the smart-reply auto-like (workspace `likeComments` setting): never
+ *  like a complaint, abuse, or spam comment — a page liking «طلبي ما وصل» reads as
+ *  mockery. On the AI path this set is nearly redundant: computeNeedsAttention already
+ *  forces needsAttention=true for every COMPLAINT/OFFENSIVE, and the like's
+ *  !needsAttention clause suppresses those. It exists to pin the invariant
+ *  independently of that function's future shape. Post Reply's per-post toggle needs
+ *  no such guard: keyword-triggered commenters are self-selected interested buyers. */
+const NO_AUTO_LIKE_INTENTS: ReadonlySet<string> = new Set(['COMPLAINT', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+
 /**
  * Unified Comment Processor
  *
@@ -809,12 +818,28 @@ export class CommentProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
+            // Workspace-level "like customers' comments" (the Smart Reply counterpart
+            // of the per-post Post Reply toggle). AI replies ONLY: the generator's
+            // template/fallback branches (AI quota exhausted → limitFallback, aiEnabled
+            // off) classify no intent and set needsAttention=false, so without the
+            // replyMethod gate every suppression clause below passes vacuously and the
+            // page would like complaints while sending a canned message. A canned
+            // fallback is also not a Smart Reply, which is what the toggle's copy
+            // promises the like for. Of the two suppression clauses, !needsAttention is
+            // the primary complaint defense (computeNeedsAttention forces it true for
+            // COMPLAINT/OFFENSIVE); the intent set is its backstop — see its doc.
+            const likeComment = (userSettings.likeComments ?? false)
+                && replyMethod === 'ai'
+                && !needsAttention
+                && !NO_AUTO_LIKE_INTENTS.has(aiIntent ?? '');
+
             const finalizeResult = await this.sendAndFinalize({
                 adapter, platform, pipeline,
                 pageId: page.id, userId, workspaceId,
                 comment, replyText, replyMethod, commentMessage,
                 platformCommentId, platformPageId,
                 accessToken: page.accessToken, fromId, fromName,
+                likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
                 contentId: content.id,
@@ -981,9 +1006,11 @@ export class CommentProcessor {
         /** Post Reply image URL — delivered only on the DM channel (adapter gates by mode).
          *  Only ever set on the post_reply path. */
         replyImageUrl?: string | null;
-        /** Post Reply option: like the customer's comment after a successful send.
-         *  Only ever set on the post_reply path; effective only on adapters that
-         *  implement likeComment (Facebook — the Instagram API can't like). */
+        /** Like the customer's comment after a successful send. Set by the post_reply
+         *  path (per-post `posts.like_comment` toggle) and the smart-reply path (the
+         *  workspace `likeComments` setting, complaint-guarded at the call site).
+         *  Effective only on adapters that implement likeComment (Facebook — the
+         *  Instagram API can't like). */
         likeComment?: boolean;
         /** Post Reply option: mention (@-tag) the commenter in the public comment we post.
          *  Only ever set on the post_reply path; Facebook only (the sender resolves it against

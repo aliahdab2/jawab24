@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "like_comments" boolean DEFAULT false;

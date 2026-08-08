@@ -14,6 +14,8 @@ export interface UserSettings {
     aiEnabled: boolean;
     aiModel: string;
     commentReplyMode: 'public' | 'private' | 'dual';
+    /** Smart Reply comments: like the customer's comment after replying (Facebook only). */
+    likeComments: boolean;
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
     dualReplyNudge: string | null;
@@ -56,6 +58,7 @@ export interface UpdateSettingsDTO {
     aiEnabled?: boolean;
     aiModel?: string;
     commentReplyMode?: 'public' | 'private' | 'dual';
+    likeComments?: boolean;
     commentsAutoReply?: boolean;
     messagesAutoReply?: boolean;
     dualReplyNudge?: string;
