@@ -246,9 +246,9 @@ export interface FactRowBody {
   currency?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
-  /** The entity save replaces the row WHOLESALE server-side (absent = true),
-   *  so an updater must carry the row's current value or it silently flips
-   *  unavailable rows back to available. */
+  /** Updates MERGE server-side (rowId upserts and the row PATCH alike):
+   *  absent = unchanged, so an updater may omit it. On inserts, absent
+   *  defaults to true. */
   isAvailable?: boolean;
 }
 

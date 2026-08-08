@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FactEntitySaveSchema } from '../utils/validation';
+import { FactEntitySaveSchema, FactRowUpdateSchema } from '../utils/validation';
 
 /** Round-7 structured shadows: the zod boundary is the only guard between the
  *  editor and the jsonb column, so shape violations must die here. */
@@ -46,5 +46,25 @@ describe('FactEntitySaveSchema — structured shadow validation', () => {
             Array.from({ length: 13 }, (_, i) => [`field-${i}`, { kind: 'weekdays', days: [0] }]),
         );
         expect(FactEntitySaveSchema.safeParse(upsert(big)).success).toBe(false);
+    });
+});
+
+/**
+ * The row PATCH is built from the SAME sparse field map as the entity save,
+ * so it gained the {}→null normalization with PR #673 (review finding M2).
+ * Pinned here so a "simplification" of the shared map cannot silently
+ * regress the PATCH side while the entity tests stay green.
+ */
+describe('FactRowUpdateSchema — structured shadow through the shared sparse map', () => {
+    it('normalizes an EMPTY shadow object to null, same as the entity save', () => {
+        const parsed = FactRowUpdateSchema.safeParse({ structured: {} });
+        expect(parsed.success).toBe(true);
+        if (parsed.success) expect(parsed.data.structured).toBeNull();
+    });
+
+    it('absence stays ABSENT — the normalization must never turn "not sent" into a write', () => {
+        const parsed = FactRowUpdateSchema.safeParse({ name: 'دورة' });
+        expect(parsed.success).toBe(true);
+        if (parsed.success) expect('structured' in parsed.data).toBe(false);
     });
 });

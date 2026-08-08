@@ -296,7 +296,7 @@ const FactRowFields = {
     isAvailable: z.boolean().default(true),
 };
 const factRowDateOrder = {
-    check: (row: { startsAt: string | null; endsAt: string | null }) =>
+    check: (row: { startsAt?: string | null; endsAt?: string | null }) =>
         !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
     opts: { message: 'End date must not be before the start date', path: ['endsAt'] as (string | number)[] },
 };
@@ -305,19 +305,55 @@ export const FactRowSchema = z.object(FactRowFields)
     .refine(factRowDateOrder.check, factRowDateOrder.opts);
 
 /**
+ * Sparse row fields — the merge vocabulary shared by the row PATCH and the
+ * entity save's update case: an omitted key = unchanged, an explicit `null` =
+ * clear. No defaults and no `?? null` transforms on purpose: either would turn
+ * "not sent" into a write, which is exactly how the entity save used to wipe
+ * fields the editor did not display (issue #671, the #670 data loss).
+ */
+const FactRowSparseFields = {
+    name: z.string().trim().min(1).max(200).optional(),
+    attributes: CatalogAttributesInput.optional(),
+    /** An EMPTY shadow map means "no shadow" — normalize {} to an explicit
+     *  clear so jsonb never stores a meaningless {} (absence still passes
+     *  through untouched). */
+    structured: FactStructuredValuesInput.nullable().optional()
+        .transform(v => (v && Object.keys(v).length === 0 ? null : v)),
+    price: PriceInput.optional(),
+    currency: CurrencyInput.optional(),
+    startsAt: CatalogDateInput.optional(),
+    endsAt: CatalogDateInput.optional(),
+    isAvailable: z.boolean().optional(),
+};
+const SPARSE_ROW_KEYS = Object.keys(FactRowSparseFields) as (keyof typeof FactRowSparseFields)[];
+
+/**
  * One atomic save for a whole ENTITY (the single-form editor): row upserts and
  * deletes across a page's collections, applied in one transaction so a failed
  * session write can never strand a half-saved course. Caps sized to the form
  * (an entity is one base row + a handful of sessions), far below the
  * per-collection row cap the service enforces on top.
+ *
+ * Upserts MERGE, they do not replace (issue #671): with a `rowId`, an omitted
+ * field is UNCHANGED and an explicit `null` clears — the row PATCH contract —
+ * so no caller can wipe fields it did not display. Without a `rowId` the
+ * upsert is an insert: a name is required, and the service fills the insert
+ * defaults (omitted nullables → null, isAvailable → true).
  */
 export const FactEntitySaveSchema = z.object({
     upserts: z.array(
         z.object({
             collectionId: z.string().uuid(),
-            /** present = update that row; absent = insert a new one. */
+            /** present = sparse update of that row; absent = insert a new one. */
             rowId: z.string().uuid().optional(),
-            ...FactRowFields,
+            ...FactRowSparseFields,
+        }).superRefine((u, ctx) => {
+            if (!u.rowId && u.name === undefined) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'Name is required' });
+            }
+            if (u.rowId && !SPARSE_ROW_KEYS.some((k) => u[k] !== undefined)) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one field is required' });
+            }
         }).refine(factRowDateOrder.check, factRowDateOrder.opts),
     ).max(40).default([]),
     deletes: z.array(z.object({
@@ -329,17 +365,11 @@ export const FactEntitySaveSchema = z.object({
     { message: 'At least one operation is required' },
 );
 
-/** PATCH body: any subset; explicit null clears a nullable field. */
-export const FactRowUpdateSchema = z.object({
-    name: z.string().trim().min(1).max(200).optional(),
-    attributes: CatalogAttributesInput.optional(),
-    structured: FactStructuredValuesInput.nullable().optional(),
-    price: PriceInput.optional(),
-    currency: CurrencyInput.optional(),
-    startsAt: CatalogDateInput.optional(),
-    endsAt: CatalogDateInput.optional(),
-    isAvailable: z.boolean().optional(),
-}).refine(body => Object.keys(body).length > 0, { message: 'At least one field is required' });
+/** PATCH body: any subset; explicit null clears a nullable field. Built from
+ *  the same sparse field map as the entity save's update case so the two merge
+ *  contracts cannot drift apart. */
+export const FactRowUpdateSchema = z.object(FactRowSparseFields)
+    .refine(body => Object.keys(body).length > 0, { message: 'At least one field is required' });
 
 /** PATCH completeness body — the merchant's word, tri-state (D-038):
  *  true = exhaustive (confident absence), false = declared partial,

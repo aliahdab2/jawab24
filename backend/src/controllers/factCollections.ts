@@ -193,7 +193,9 @@ class FactCollectionsController {
     }
 
     /** PUT /fact-entity — one atomic save for the single-form editor:
-     *  upserts + deletes across the page's collections, all-or-nothing. */
+     *  upserts + deletes across the page's collections, all-or-nothing.
+     *  rowId upserts MERGE (omitted = unchanged, null = clear — issue #671),
+     *  so `price` must stay ABSENT when it was not sent. */
     async saveEntity(
         request: FastifyRequest<{ Params: { pageId: string }; Body: unknown }>,
         reply: FastifyReply,
@@ -209,7 +211,10 @@ class FactCollectionsController {
         }
         try {
             const result = await factCollectionsService.saveEntityRows(request.params.pageId, {
-                upserts: parsed.data.upserts.map(u => ({ ...u, price: toPrice(u.price) })),
+                upserts: parsed.data.upserts.map(({ price, ...u }) => ({
+                    ...u,
+                    ...(price !== undefined ? { price: toPrice(price) } : {}),
+                })),
                 deletes: parsed.data.deletes,
             });
             if (!result) return reply.status(404).send({ error: 'Collection not found', code: 'COLLECTION_NOT_FOUND' });

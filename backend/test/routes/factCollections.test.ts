@@ -286,6 +286,59 @@ describe('Fact-collections routes — security + contract wiring', () => {
             expect(Array.isArray(body.details)).toBe(true);
         });
 
+        // Merge semantics (issue #671): what the CONTROLLER hands the service
+        // is the contract — the #670 wipe was exactly absence materializing as
+        // null/true between the schema and the UPDATE statement.
+        it('PUT entity: a sparse rowId upsert reaches the service with ONLY the sent keys (merge, not replace)', async () => {
+            vi.mocked(factCollectionsService.saveEntityRows).mockResolvedValue({ upserted: [], deletedIds: [] } as any);
+            const res = await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [{ collectionId: COLL, rowId: ROW, price: 40000 }], deletes: [] },
+            });
+            expect(res.statusCode).toBe(200);
+            const sent = vi.mocked(factCollectionsService.saveEntityRows).mock.calls[0][1].upserts[0];
+            expect(sent.price).toBe('40000.00');
+            expect('name' in sent).toBe(false);
+            expect('attributes' in sent).toBe(false);
+            expect('structured' in sent).toBe(false);
+            expect('isAvailable' in sent).toBe(false);
+        });
+
+        it('PUT entity: an explicit null passes through as null (clear) while unsent price stays absent', async () => {
+            vi.mocked(factCollectionsService.saveEntityRows).mockResolvedValue({ upserted: [], deletedIds: [] } as any);
+            await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [{ collectionId: COLL, rowId: ROW, attributes: null }], deletes: [] },
+            });
+            const sent = vi.mocked(factCollectionsService.saveEntityRows).mock.calls[0][1].upserts[0];
+            expect(sent.attributes).toBeNull();
+            expect('price' in sent).toBe(false);
+        });
+
+        it('PUT entity: an insert (no rowId) without a name is a 400 naming the field', async () => {
+            const res = await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [{ collectionId: COLL, price: 10 }], deletes: [] },
+            });
+            expect(res.statusCode).toBe(400);
+            const body = JSON.parse(res.payload);
+            expect(body.code).toBe('VALIDATION');
+            expect(JSON.stringify(body.details)).toContain('name');
+        });
+
+        it('PUT entity: a rowId upsert carrying no fields at all is a 400', async () => {
+            const res = await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [{ collectionId: COLL, rowId: ROW }], deletes: [] },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.payload).code).toBe('VALIDATION');
+        });
+
         it('a 400 body keeps `error` a STRING and puts field errors in `details`', async () => {
             // This controller was the only one in the backend putting an ARRAY in
             // `error`; every generic consumer assumes a string and would render

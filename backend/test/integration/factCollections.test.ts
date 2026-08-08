@@ -523,6 +523,91 @@ describe('fact collections — atomic entity save (single-form editor)', () => {
         const prices = await rowsOf(pricesId);
         expect(prices.find(r => r.id === priceRow.id)?.price).toBe('35000.00');
     });
+
+    /**
+     * Merge semantics (issue #671): rowId upserts are sparse — omitted field =
+     * unchanged, explicit null = clear, exactly like the row PATCH. The old
+     * replace-wholesale contract meant any caller that did not echo
+     * undisplayed fields silently wiped them (the #670 data loss).
+     */
+    describe('merge semantics — updates are sparse, never wholesale', () => {
+        it('an omitted field is UNCHANGED: a price-only upsert touches nothing else', async () => {
+            const [slotRow] = await rowsOf(slotsId);
+            // Give the row every kind of state the wholesale save used to wipe.
+            await factCollectionsService.updateRow(pageId, slotsId, slotRow.id, {
+                structured: { 'الأيام': { kind: 'weekdays', days: [6] } },
+                isAvailable: false,
+            });
+
+            await factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: slotsId, rowId: slotRow.id, price: '5000.00' }],
+                deletes: [],
+            });
+
+            const [saved] = await rowsOf(slotsId);
+            expect(saved.price).toBe('5000.00');
+            expect(saved.name).toBe('دورة الأمين');
+            expect(saved.attributes).toEqual(slotRow.attributes);
+            expect(saved.structured).toEqual({ 'الأيام': { kind: 'weekdays', days: [6] } });
+            expect(saved.startsAt).toBe('2027-08-04');
+            // The #670 wipe reset this to true through the schema default.
+            expect(saved.isAvailable).toBe(false);
+        });
+
+        it('an explicit null CLEARS the sent field and leaves its neighbours alone', async () => {
+            const [priceRow] = await rowsOf(pricesId);
+            await factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: pricesId, rowId: priceRow.id, attributes: null }],
+                deletes: [],
+            });
+            const saved = (await rowsOf(pricesId)).find(r => r.id === priceRow.id);
+            expect(saved?.attributes).toBeNull();
+            expect(saved?.price).toBe('35000.00');
+            expect(saved?.name).toBe('دورة الأمين');
+        });
+
+        it('a rename-only upsert cannot wipe what it does not carry (the #670 wound, pinned at the contract)', async () => {
+            const [priceRow] = await rowsOf(pricesId);
+            await factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: pricesId, rowId: priceRow.id, name: 'دورة الأمين المتقدمة' }],
+                deletes: [],
+            });
+            const saved = (await rowsOf(pricesId)).find(r => r.id === priceRow.id);
+            expect(saved?.name).toBe('دورة الأمين المتقدمة');
+            expect(saved?.attributes).toEqual([{ label: 'المستوى', value: 'مبتدئ' }]);
+            expect(saved?.price).toBe('35000.00');
+            expect(saved?.isAvailable).toBe(true);
+        });
+
+        it('validates the MERGED date pair when a sparse touch moves one side', async () => {
+            const [slotRow] = await rowsOf(slotsId);
+            await factCollectionsService.updateRow(pageId, slotsId, slotRow.id, { endsAt: '2027-08-20' });
+            await expect(factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: slotsId, rowId: slotRow.id, startsAt: '2027-09-01' }],
+                deletes: [],
+            })).rejects.toThrow('End date must not be before the start date');
+            const [saved] = await rowsOf(slotsId);
+            expect(saved.startsAt).toBe('2027-08-04');
+        });
+
+        it('inserts still get the insert defaults — omitted nullables null, isAvailable true', async () => {
+            const result = await factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: slotsId, name: 'دورة الريزن' }],
+                deletes: [],
+            });
+            const created = result?.upserted[0];
+            expect(created?.attributes).toBeNull();
+            expect(created?.price).toBeNull();
+            expect(created?.isAvailable).toBe(true);
+        });
+
+        it('a rowId-less upsert without a name fails loudly, not with a DB error', async () => {
+            await expect(factCollectionsService.saveEntityRows(pageId, {
+                upserts: [{ collectionId: slotsId, price: '10.00' }],
+                deletes: [],
+            })).rejects.toThrow('fact-entity insert requires a name');
+        });
+    });
 });
 
 async function readKbVersion(pageId: string): Promise<number> {
