@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -383,5 +383,66 @@ describe('unitHasSchedules', () => {
     const [group] = groupFactCollections([slots]);
     const unit = buildEntityUnit(group, [slots], null, { collection: slots, row: datedRow } as never);
     expect(unitHasSchedules(unit)).toBe(true);
+  });
+});
+
+describe('isDatedCollection — majority rule (the 08-06 «cannot edit» regression)', () => {
+  it('ONE dated promo row in a large price list does NOT reclassify it as a schedule', () => {
+    const rows = Array.from({ length: 49 }, (_, i) => row(`دورة ${i}`, { price: '100.00' }));
+    rows.push(row('دورة المكياج', { price: '50000.00', startsAt: '2026-08-13' }));
+    expect(isDatedCollection(coll('أسعار الدورات', null, rows))).toBe(false);
+  });
+
+  it('a predominantly dated list IS a schedule even with undated drafts', () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => row(`دورة ${i}`, { startsAt: '2026-08-10' })),
+      row('مسودة بلا تاريخ'),
+      row('مسودة ثانية'),
+    ];
+    expect(isDatedCollection(coll('مواعيد الدورات المعلنة', 'الدورة', rows))).toBe(true);
+  });
+
+  it('a single dated row alone is a schedule; an all-undated list is not', () => {
+    expect(isDatedCollection(coll('مواعيد', 'الدورة', [row('أ', { startsAt: '2026-08-10' })]))).toBe(true);
+    expect(isDatedCollection(coll('أسعار', null, [row('أ'), row('ب')]))).toBe(false);
+  });
+
+  it('a TIE leans schedule — a two-row list with one date is a schedule mid-authoring', () => {
+    expect(isDatedCollection(coll('مواعيد', 'الدورة', [row('أ', { startsAt: '2026-08-10' }), row('ب')]))).toBe(true);
+  });
+});
+
+describe('buildTierBlocks — every card keeps its edit door', () => {
+  it('a price list carrying one dated promo row still yields BASE blocks (tier rows render)', () => {
+    // The Damascus shape: 3 price rows, ONE carries a start date; schedules
+    // fully dated. Under the old any-row rule the prices collection counted
+    // as dated, bases came back empty, and no card rendered a tier row —
+    // the entity sheet's only entry point.
+    const prices = coll('أسعار الدورات', null, [
+      row('دورة ICDL', { price: '35000.00', attributes: [{ label: 'ملاحظة', value: '8 جلسات' }] }),
+      row('دورة المكياج', { price: '35000.00', attributes: [{ label: 'المستوى', value: 'مبتدئ' }] }),
+      row('دورة المكياج', { price: '50000.00', attributes: [{ label: 'المستوى', value: 'مكياج متقدم مستوى ثاني' }], startsAt: '2026-08-13' }),
+    ]);
+    const slots = coll('مواعيد الدورات المعلنة', 'الدورة', [
+      row('دورة ICDL', { attributes: [{ label: 'الدورة', value: 'ICDL' }, { label: 'الساعة', value: '9-10' }], startsAt: '2026-08-10' }),
+    ]);
+    const groups = groupFactCollections([prices, slots]);
+    const icdl = groups.find((g) => g.title === 'دورة ICDL');
+    const { blocks } = buildTierBlocks(icdl!, [prices, slots], null);
+    expect(blocks.some((b) => b.base !== null)).toBe(true);
+    expect(blocks.find((b) => b.base)?.base?.row.price).toBe('35000.00');
+  });
+
+  it('a session-only entity yields a base-less block (the UI must still offer a door)', () => {
+    const prices = coll('أسعار الدورات', null, [row('دورة أخرى', { price: '10.00' })]);
+    const slots = coll('مواعيد الدورات المعلنة', 'الدورة', [
+      row('دورة الإسعافات الأولية', { attributes: [{ label: 'الدورة', value: 'اسعافات' }], startsAt: '2026-08-20' }),
+    ]);
+    const groups = groupFactCollections([prices, slots]);
+    const firstAid = groups.find((g) => g.title === 'دورة الإسعافات الأولية');
+    const { blocks } = buildTierBlocks(firstAid!, [prices, slots], null);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].base).toBeNull();
+    expect(blocks[0].sessions).toHaveLength(1);
   });
 });
