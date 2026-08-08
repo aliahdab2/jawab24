@@ -11,6 +11,7 @@ import {
   timeOptions, generationLocale, type ScheduleFieldKind,
 } from '@/utils/factScheduleFields';
 import { useLanguage } from '@/i18n/hooks';
+import { normalizeForGrouping } from '@/utils/factListGrouping';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
 import { collectionAttributeLabels, sessionValueKind, unitHasSchedules, type FactEntityUnit } from '@/utils/factListLayout';
 
@@ -128,7 +129,11 @@ export function FactEntitySheet({
     return { structured: null, freeText: false, guessed: false };
   };
 
-  const [name, setName] = useState(baseRow?.name ?? unit.sessions[0]?.row.name ?? unit.title);
+  /** The entity's name as loaded — the reference for detecting a real rename,
+   *  so an untouched save never rewrites session names (they may be shared
+   *  with sibling tiers that carry a different name). */
+  const originalName = baseRow?.name ?? unit.sessions[0]?.row.name ?? unit.title;
+  const [name, setName] = useState(originalName);
   const [faceValue, setFaceValue] = useState(unit.faceValue ?? '');
   const [price, setPrice] = useState(baseRow?.price ? formatCatalogPrice(baseRow.price) : '');
   const [currency, setCurrency] = useState(baseRow?.currency ?? '');
@@ -285,13 +290,41 @@ export function FactEntitySheet({
 
   const buildBody = (): FactEntitySaveBody => {
     const body: FactEntitySaveBody = { upserts: [], deletes: [] };
+    const trimmedName = name.trim();
+    const nameEdited = trimmedName !== originalName;
 
     if (baseCollection) {
+      // The server replaces the row WHOLESALE, so this must reconstruct the
+      // COMPLETE attribute list. Labels this form gives dedicated treatment or
+      // does not display — the collection's key attribute above all (المنطقة
+      // on an outlet directory, الدورة on an online-courses list) — are
+      // carried through from the original row in their original position;
+      // dropping them detaches the row from its group and from reply-time
+      // gating (shipped that way once: a no-op save wiped the key).
+      const managed = new Set<string>([...(unit.faceLabel ? [unit.faceLabel] : []), ...baseLabels]);
+      const managedValue = (label: string): string =>
+        label === unit.faceLabel ? faceValue.trim() : (baseValues[label] ?? '').trim();
       const attrs: { label: string; value: string }[] = [];
-      if (unit.faceLabel && faceValue.trim()) attrs.push({ label: unit.faceLabel, value: faceValue.trim() });
-      for (const l of baseLabels) {
-        const v = (baseValues[l] ?? '').trim();
-        if (v) attrs.push({ label: l, value: v });
+      const originalAttrs = baseRow?.attributes ?? [];
+      for (const a of originalAttrs) {
+        if (!managed.has(a.label)) {
+          attrs.push({ label: a.label, value: a.value });
+          continue;
+        }
+        const v = managedValue(a.label);
+        if (v) attrs.push({ label: a.label, value: v });
+      }
+      for (const label of managed) {
+        if (originalAttrs.some((a) => a.label === label)) continue;
+        const v = managedValue(label);
+        if (v) attrs.push({ label, value: v });
+      }
+      // A NEW base row in a keyed collection gets its key from the sessions
+      // when both collections share the key label — the only value known to
+      // keep the entity joined.
+      if (!baseRow && baseCollection.keyAttr && !attrs.some((a) => a.label === baseCollection.keyAttr)) {
+        const kv = sessionCollection?.keyAttr === baseCollection.keyAttr ? sessionKeyValue() : null;
+        if (kv) attrs.unshift({ label: baseCollection.keyAttr, value: kv });
       }
       // An untouched, still-empty base for a session-only entity is not created.
       const baseHasContent = !!(price.trim() || currency.trim() || attrs.length);
@@ -299,12 +332,14 @@ export function FactEntitySheet({
         body.upserts.push({
           collectionId: baseCollection.id,
           ...(baseRow ? { rowId: baseRow.id } : {}),
-          name: name.trim(),
+          name: trimmedName,
           attributes: attrs.length ? attrs : null,
+          structured: baseRow?.structured ?? null,
           price: price.trim() || null,
           currency: currency.trim() || null,
           startsAt: baseRow?.startsAt ?? null,
           endsAt: baseRow?.endsAt ?? null,
+          isAvailable: baseRow?.isAvailable ?? true,
         });
       }
     }
@@ -312,6 +347,7 @@ export function FactEntitySheet({
     if (sessionCollection) {
       const keyValue = sessionKeyValue();
       for (const s of sessions) {
+        const original = s.rowId ? unit.sessions.find((u) => u.row.id === s.rowId)?.row : undefined;
         const attrs: { label: string; value: string }[] = [];
         const shadows: FactStructuredValues = {};
         if (sessionCollection.keyAttr && keyValue) attrs.push({ label: sessionCollection.keyAttr, value: keyValue });
@@ -324,13 +360,25 @@ export function FactEntitySheet({
         body.upserts.push({
           collectionId: sessionCollection.id,
           ...(s.rowId ? { rowId: s.rowId } : {}),
-          name: name.trim(),
+          // Sessions can be SHARED with sibling tiers under a different name
+          // (the form edits one tier). An existing session keeps its own name;
+          // it follows a rename only when it carried the entity's original
+          // name — so opening tier B and saving never renames tier A's rows.
+          // Compared with the SAME folding the card is grouped by: an exact
+          // match would leave a variant-spelled session («دوره» vs «دورة»)
+          // behind on rename, splitting the entity it visibly belongs to.
+          name: original
+            ? (nameEdited && normalizeForGrouping(original.name) === normalizeForGrouping(originalName)
+              ? trimmedName
+              : original.name)
+            : trimmedName,
           attributes: attrs.length ? attrs : null,
           structured: Object.keys(shadows).length ? shadows : null,
-          price: null,
-          currency: null,
+          price: original?.price ?? null,
+          currency: original?.currency ?? null,
           startsAt: s.startsAt || null,
           endsAt: s.endsAt || null,
+          isAvailable: original?.isAvailable ?? true,
         });
       }
       body.deletes.push(
