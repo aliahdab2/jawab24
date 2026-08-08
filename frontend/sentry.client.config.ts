@@ -32,6 +32,12 @@ Sentry.init({
         // visitor's browser, not our code. JAWAB24-FRONTEND-2B..2H + -2G.
         /__firefox__/,
         /DarkReader/,
+        // Instagram in-app browser's injected navigation_performance_logger
+        // script racing its own WebView bridge teardown on beforeunload.
+        // Deliberately scoped to this one bridge method — a bare "Java object
+        // is gone" filter could mask a real Capacitor bridge failure of ours.
+        // JAWAB24-FRONTEND-2X.
+        /Error invoking enableDidUserTypeOnKeyboardLogging/,
     ],
 
     // Drop errors whose stack frame originates from a browser extension — never
