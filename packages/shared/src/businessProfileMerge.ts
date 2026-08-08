@@ -146,45 +146,94 @@ export function applyFbSyncToMerchant(
 }
 
 /**
+ * Order-insensitive deep equality for BusinessProfile field values (strings,
+ * arrays like `phones`, nested objects like `hours`/`policies`/`channels`).
+ * Array ORDER is significant (phones are "in the merchant's order"); object
+ * key order is not — the hours sheet may rebuild an identical week with a
+ * different key sequence, and that must not read as an edit.
+ */
+function valueEquals(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (Array.isArray(a) || Array.isArray(b)) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        return a.every((v, i) => valueEquals(v, b[i]));
+    }
+    if (typeof a === 'object' && typeof b === 'object') {
+        const ak = Object.keys(a as object).filter(k => (a as Record<string, unknown>)[k] !== undefined).sort();
+        const bk = Object.keys(b as object).filter(k => (b as Record<string, unknown>)[k] !== undefined).sort();
+        if (ak.length !== bk.length || ak.some((k, i) => k !== bk[i])) return false;
+        return ak.every(k => valueEquals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+    }
+    return false;
+}
+
+/**
  * Apply a merchant editor save (full-replace PATCH semantics). The PATCH
- * represents the merchant's full intent for the `merchant` half; every
- * tracked field that has ever been seen becomes editor-owned after the
- * save. Pure function.
+ * represents the merchant's full intent for the `merchant` half. Pure function.
  *
- * Semantics:
- *   - Field present in PATCH         → editor-set, confirmedAt = now
- *   - Field absent from PATCH but present in existing provenance
+ * Semantics (per tracked field):
+ *   - Present in PATCH with a DIFFERENT value than `existingMerchant`
+ *                                    → editor-set, confirmedAt = now
+ *   - Present in PATCH, value UNCHANGED, field listed in `confirmFields`
+ *                                    → editor-confirmed, confirmedAt = now
+ *                                      (the merchant explicitly reviewed it —
+ *                                      e.g. opened that field's sheet and saved)
+ *   - Present in PATCH, value UNCHANGED, NOT in `confirmFields`
+ *                                    → existing provenance carried forward
+ *                                      UNTOUCHED (no entry stays no entry)
+ *   - Absent from PATCH but `existingMerchant` had a value
  *                                    → editor-cleared, confirmedAt = now
  *                                      (the "cleared" tombstone — Rule 2
  *                                      in applyFbSyncToMerchant will see
  *                                      source='editor' and skip)
- *   - Field absent from both         → still never-seen, no provenance entry
+ *   - Absent from both               → existing provenance carried forward
+ *                                      (a prior tombstone stays; never-seen
+ *                                      stays absent)
  *
- * `confirmedAt` is bumped on EVERY save, including for fields the merchant
- * didn't actively change. Rationale: a save action means "I reviewed this
- * and it's correct" — saving IS confirming. The dashboard "review &
- * confirm" UI consumes confirmedAt as the source-of-truth for which
- * fb_sync fields still need merchant attention.
+ * WHY the unchanged-value rule exists (2026-08-08, MES «+971556087128»): the
+ * /business editor must echo the WHOLE merchant half on every single-field
+ * save (full-replace semantics — a partial patch would tombstone the other
+ * fields). The previous "saving IS confirming" rule stamped every echoed
+ * field editor+confirmedAt, which LAUNDERED unconfirmed fb_sync values into
+ * merchant-confirmed data: one unrelated fact edit promoted a stale
+ * Facebook-synced UAE phone past the businessInfoPrompt authority gate and
+ * into customer replies. Saving is confirming ONLY for what the merchant
+ * actually changed or explicitly reviewed — never for fields that merely
+ * rode along in the echo.
+ *
+ * `existingMerchant === undefined` (legacy caller that cannot supply the
+ * stored half) degrades safely: every present field counts as changed, i.e.
+ * the pre-fix behavior.
  */
 export function applyMerchantEdit(
     patch: BusinessProfile,
     existingProvenance: MerchantProvenanceMap | undefined,
     now: Date = new Date(),
+    existingMerchant?: BusinessProfile,
+    confirmFields?: ReadonlyArray<keyof BusinessProfile>,
 ): { merchant: BusinessProfile; merchantProvenance: MerchantProvenanceMap } {
     const provenance: MerchantProvenanceMap = { ...(existingProvenance ?? {}) };
     const nowIso = now.toISOString();
 
     for (const field of TRACKED_FIELDS) {
         if (patch[field] !== undefined) {
-            // Field present in PATCH → merchant set/confirmed.
-            provenance[field] = { source: 'editor', confirmedAt: nowIso };
-        } else if (provenance[field]) {
-            // Field absent from PATCH but provenance has a record → merchant cleared.
-            // Bump confirmedAt so the cleared state has a fresh "merchant
-            // intentionally chose this" timestamp.
+            const unchanged = existingMerchant !== undefined
+                && valueEquals(patch[field], existingMerchant[field]);
+            if (!unchanged || confirmFields?.includes(field)) {
+                provenance[field] = { source: 'editor', confirmedAt: nowIso };
+            }
+            // Unchanged and not explicitly confirmed → the field only rode
+            // along in the full-replace echo; its provenance stays as-is.
+        } else if (existingMerchant?.[field] !== undefined
+            || (existingMerchant === undefined && provenance[field])) {
+            // A value existed and the PATCH dropped it → merchant cleared.
+            // (Legacy no-existingMerchant callers keep the old rule: any
+            // provenance record + absent field reads as a clear.)
             provenance[field] = { source: 'editor', confirmedAt: nowIso };
         }
-        // else: never-seen + still-not-set → leave absent from provenance.
+        // else: never-seen + still-not-set, or an existing tombstone the
+        // PATCH still omits → leave provenance as it stands.
     }
 
     return { merchant: { ...patch }, merchantProvenance: provenance };

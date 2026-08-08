@@ -93,6 +93,11 @@ interface BusinessFactSheetProps {
   initialWhatsapp?: string | string[];
   /** A connected store already answers this fact — writing here is an override. */
   storeAnswered?: boolean;
+  /** The prefilled value is an UNCONFIRMED Facebook-synced copy: the sheet says
+   *  so above the input, and Save stays enabled even with no edit — saving an
+   *  unchanged value here is the explicit confirmation the reply pipeline
+   *  requires before it will use the value. */
+  fbSuggested?: boolean;
   saving: boolean;
   /** Save failure, rendered INSIDE the sheet: toasts are capped below the
    *  modal tier (z-45 < z-50) so they can never block a footer again — which
@@ -123,6 +128,7 @@ export function BusinessFactSheet({
   initialValue,
   initialWhatsapp,
   storeAnswered = false,
+  fbSuggested = false,
   saving,
   saveError = null,
   onSave,
@@ -352,6 +358,15 @@ export function BusinessFactSheet({
         {storeAnswered && !value.trim() && (
           <p className="mb-3 rounded-xl bg-muted border border-theme-border px-3 py-2 text-xs text-muted-foreground">
             {t('facts.storeAnsweredHint')}
+          </p>
+        )}
+
+        {/* The prefill is a Facebook copy the merchant never typed — say so,
+            or saving it unseen re-creates the laundering this sheet's
+            confirm-flow exists to prevent (MES «+971556087128», 2026-08-08). */}
+        {fbSuggested && (
+          <p className="mb-3 rounded-xl alert-warning border px-3 py-2 text-xs">
+            {t('facts.fromFacebookHint')}
           </p>
         )}
 
@@ -673,7 +688,9 @@ export function BusinessFactSheet({
           size="sm"
           onClick={submit}
           loading={saving}
-          disabled={!dirty || hasDuplicates}
+          // An fb-suggested prefill may be saved UNCHANGED — that save is the
+          // merchant's explicit confirmation, which is the whole point.
+          disabled={(!dirty && !fbSuggested) || hasDuplicates}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >

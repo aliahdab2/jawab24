@@ -286,7 +286,10 @@ describe('applyMerchantEdit', () => {
         });
     });
 
-    describe('case M3: save bumps confirmedAt even on unchanged fields (saving = confirming)', () => {
+    describe('case M3: LEGACY caller (no existingMerchant) still stamps every present field', () => {
+        // Without the stored merchant half the function cannot tell changed
+        // from ride-along, so it degrades to the pre-fix behavior. Every
+        // production caller passes existingMerchant (see M6+).
         it('refreshes confirmedAt on fields kept in the patch', () => {
             const existingProvenance: MerchantProvenanceMap = {
                 address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
@@ -326,6 +329,121 @@ describe('applyMerchantEdit', () => {
 
             expect(merchant.phones).toBeUndefined();
             expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+        });
+    });
+
+    describe('case M6: THE MES laundering regression (2026-08-08, «+971556087128»)', () => {
+        // Prod page c75b6f33: FB sync promoted a stale UAE phone into merchant
+        // as fb_sync/unconfirmed. The /business editor echoes the WHOLE
+        // merchant half on every single-fact save; the old rule stamped the
+        // echoed phone editor+confirmed, promoting it past the BUSINESS_INFO
+        // authority gate and into customer replies. With existingMerchant
+        // supplied, an unchanged ride-along field must keep its provenance.
+        const existingMerchant: BusinessProfile = {
+            address: 'Damascus Mazzah, Mazzah, Syria',
+            phones: ['+971556087128'],
+        };
+        const existingProvenance: MerchantProvenanceMap = {
+            address: { source: 'fb_sync', confirmedAt: null },
+            phones: { source: 'fb_sync', confirmedAt: null },
+        };
+
+        it('does NOT confirm an unchanged fb_sync field that merely rode along in the echo', () => {
+            // Merchant edits ONLY the address; phones echoed verbatim.
+            const patch: BusinessProfile = {
+                address: 'دمشق — أبو رمانة، مقابل موقف نورا',
+                phones: ['+971556087128'],
+            };
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, ['address'],
+            );
+
+            expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            // The load-bearing assertion: the phone is STILL unconfirmed fb_sync.
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+
+        it('keeps the un-laundered phone OUT of the authoritative BUSINESS_INFO block', () => {
+            const patch: BusinessProfile = {
+                address: 'دمشق — أبو رمانة، مقابل موقف نورا',
+                phones: ['+971556087128'],
+            };
+            const { merchant, merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, ['address'],
+            );
+            const block = formatBusinessInfoPrompt(merchant, merchantProvenance);
+            expect(block).not.toContain('+971556087128');
+        });
+
+        it('confirms the phone when the merchant explicitly reviews it (confirmFields)', () => {
+            // Same echo, but the merchant opened the PHONE sheet and saved.
+            const patch: BusinessProfile = { ...existingMerchant };
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, ['phones'],
+            );
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            // Address still rode along unconfirmed.
+            expect(merchantProvenance.address).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+
+        it('confirms a field whose value actually CHANGED, without confirmFields', () => {
+            const patch: BusinessProfile = {
+                ...existingMerchant,
+                phones: ['0955545600'],
+            };
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, [],
+            );
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+        });
+    });
+
+    describe('case M7: value equality is structural, not referential or key-ordered', () => {
+        it('treats a re-built hours object with identical content as unchanged', () => {
+            const existingMerchant: BusinessProfile = {
+                hours: { mon: ['09:00-21:00'], fri: ['10:00-21:00'] },
+            };
+            const existingProvenance: MerchantProvenanceMap = {
+                hours: { source: 'fb_sync', confirmedAt: null },
+            };
+            // Same week, different key order and fresh objects.
+            const patch: BusinessProfile = {
+                hours: { fri: ['10:00-21:00'], mon: ['09:00-21:00'] },
+            };
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, [],
+            );
+            expect(merchantProvenance.hours).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+
+    describe('case M8: clears with existingMerchant supplied', () => {
+        it('tombstones a field the merchant dropped from the patch', () => {
+            const existingMerchant: BusinessProfile = { phones: ['+999'], address: 'X' };
+            const existingProvenance: MerchantProvenanceMap = {
+                phones: { source: 'fb_sync', confirmedAt: null },
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+            const patch: BusinessProfile = { address: 'X' };
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, [],
+            );
+            // Dropping a value IS a change → tombstone.
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            // Unchanged ride-along keeps its old confirmation timestamp.
+            expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' });
+        });
+
+        it('does NOT re-bump an existing tombstone the patch still omits', () => {
+            const existingMerchant: BusinessProfile = {};
+            const existingProvenance: MerchantProvenanceMap = {
+                phones: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+            const patch: BusinessProfile = {};
+            const { merchantProvenance } = applyMerchantEdit(
+                patch, existingProvenance, NOW, existingMerchant, [],
+            );
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' });
         });
     });
 

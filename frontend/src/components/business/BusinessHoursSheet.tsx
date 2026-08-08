@@ -24,6 +24,10 @@ import {
 interface BusinessHoursSheetProps {
   /** Existing hours (any accepted day-key form). */
   initialHours: Record<string, string[]> | undefined;
+  /** `initialHours` is an UNCONFIRMED Facebook-synced copy: the sheet says so
+   *  above the editor, and Save works with no edit — saving unchanged is the
+   *  explicit confirmation the reply pipeline requires. */
+  fbSuggested?: boolean;
   saving: boolean;
   /** Save failure, rendered INSIDE the sheet — toasts sit under the modal
    *  tier (z-45 < z-50), so a toast can't carry this message. */
@@ -60,7 +64,7 @@ interface BusinessHoursSheetProps {
  * so the merchant sees what the AI will tell customers without scrolling, and
  * pays the extra tap only on the day they actually change.
  */
-export function BusinessHoursSheet({ initialHours, saving, saveError = null, onSave, onClose }: BusinessHoursSheetProps) {
+export function BusinessHoursSheet({ initialHours, fbSuggested = false, saving, saveError = null, onSave, onClose }: BusinessHoursSheetProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
   const timezone = useMerchantTimezone();
@@ -171,7 +175,12 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
   //    its seed, and warning «لديك تغييرات غير محفوظة» with zero edits made
   //    is false — it trains merchants to dismiss the warning.
   const hasStoredHours = !!initialHours && Object.keys(initialHours).length > 0;
-  const dirty = hasStoredHours ? changed : (changed || touched);
+  // fb-suggested prefill: saving UNCHANGED is the merchant's explicit
+  // confirmation of the Facebook copy — the save must not be gated on an edit.
+  // This does NOT reopen the blind-tap seed problem the `touched` gate exists
+  // for: that gate covers the EMPTY-hours seeded default; here real (synced)
+  // hours are on screen and the sheet labels their origin.
+  const dirty = fbSuggested ? true : hasStoredHours ? changed : (changed || touched);
 
   // Typed-but-unsaved edits never vanish on a stray tap.
   const [confirmClose, setConfirmClose] = useState(false);
@@ -222,6 +231,14 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
 
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5">
         <p className="text-sm text-muted-foreground mb-3">{t('facts.hint_hours')}</p>
+
+        {/* The prefilled week is a Facebook copy the merchant never typed —
+            say so before they confirm it (the fb_sync laundering lesson). */}
+        {fbSuggested && (
+          <p className="mb-3 rounded-xl alert-warning border px-3 py-2 text-xs">
+            {t('facts.fromFacebookHint')}
+          </p>
+        )}
 
         <ul className="divide-y divide-theme-border">
           {DAY_KEYS.map((day) => {

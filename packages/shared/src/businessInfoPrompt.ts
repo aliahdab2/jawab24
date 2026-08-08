@@ -60,15 +60,16 @@ const ADDRESS_FIELDS: ReadonlyArray<keyof BusinessProfile> = ['address', 'city',
  * It is DEMOTED (flows only via the lower-authority narrative fallback) when:
  *   - source 'fb_sync'              → unconfirmed Facebook auto-sync
  *   - source 'editor' AND confirmedAt == null → NOT a real edit. A real editor
- *     save always stamps confirmedAt (applyMerchantEdit: "saving IS confirming"),
- *     so this state is only ever produced by normalizeLegacyProvenance, which
+ *     save stamps confirmedAt on every field it touches (applyMerchantEdit:
+ *     changed or explicitly-confirmed fields only, since the 2026-08-08
+ *     laundering fix), so this state is only ever produced by normalizeLegacyProvenance, which
  *     optimistically assumed pre-split merchant data was editor-typed. On pages
  *     whose flat `business_profile` was Facebook-synced before the merchant/
  *     suggestions split, that data is actually FB-derived (prod page 39aeab89:
  *     `merchant` === `suggestions`, Friday "00:00-23:45" = FB "open all day"),
  *     so it must not be allowed to override the KB hours/phone the merchant typed.
  */
-function isAuthoritative(
+export function isFieldAuthoritative(
     provenance: MerchantProvenanceMap | undefined,
     field: keyof BusinessProfile,
 ): boolean {
@@ -93,7 +94,7 @@ function joinAddress(
         .map(f => p[f])
         .filter(isNonEmptyStr);
     const authoritative = ADDRESS_FIELDS
-        .filter(f => isAuthoritative(provenance, f))
+        .filter(f => isFieldAuthoritative(provenance, f))
         .map(f => p[f])
         .filter(isNonEmptyStr);
     return {
@@ -194,7 +195,7 @@ export function formatBusinessInfoPrompt(
     // address/phone/hours" for a merchant who simply hasn't confirmed a
     // suggestion yet.
     const whatsappRaw = formatWhatsapp(profile);
-    const whatsappValue = whatsappRaw && isAuthoritative(provenance, 'channels') ? whatsappRaw : null;
+    const whatsappValue = whatsappRaw && isFieldAuthoritative(provenance, 'channels') ? whatsappRaw : null;
 
     // A truly-empty profile (no field has a value anywhere) → no block, as
     // before: nothing to assert and nothing to guard, and skipping saves
@@ -220,7 +221,7 @@ export function formatBusinessInfoPrompt(
     } // else: FB-only → omit.
 
     // Phones. Legacy singular `phone` is not provenance-tracked → authoritative.
-    const phonesAuthoritative = isAuthoritative(provenance, 'phones');
+    const phonesAuthoritative = isFieldAuthoritative(provenance, 'phones');
     if (phonesValue && phonesAuthoritative) {
         fieldLines.push(`- Phones / الهاتف / الأرقام: ${phonesValue}`);
     } else if (!phonesValue) {
@@ -228,7 +229,7 @@ export function formatBusinessInfoPrompt(
     } // else: FB-only → omit.
 
     // Hours.
-    if (hoursValue && isAuthoritative(provenance, 'hours')) {
+    if (hoursValue && isFieldAuthoritative(provenance, 'hours')) {
         fieldLines.push('- Hours / أوقات الدوام (24h, "closed" if shut, "all day" if 24/7):');
         fieldLines.push(hoursValue);
     } else if (!hoursValue) {
@@ -248,7 +249,7 @@ export function formatBusinessInfoPrompt(
     }
 
     // Policies.
-    if (policiesValue && isAuthoritative(provenance, 'policies')) {
+    if (policiesValue && isFieldAuthoritative(provenance, 'policies')) {
         fieldLines.push('- Policies / السياسات:');
         fieldLines.push(policiesValue);
     } else if (!policiesValue) {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Page } from '@jawab24/shared';
 import { computeFactCoverage, computeReadiness, shouldShowProductsSection, READINESS_AREAS } from '../businessCoverage';
-import { businessPage as pageWith } from './businessPageFixture';
+import { businessPage as pageWith, businessPageFbSynced } from './businessPageFixture';
 
 const FILLED_HOURS = { sat: ['09:00-19:00'] };
 
@@ -40,6 +40,54 @@ describe('computeFactCoverage — values', () => {
     expect(covered.address).toBe(values.address !== null);
     expect(covered.delivery).toBe(values.delivery !== null);
     expect(covered.website).toBe(values.website !== null);
+  });
+});
+
+describe('computeFactCoverage — unconfirmed fb_sync values (the MES «+971556087128» rule)', () => {
+  it('never counts an unconfirmed fb_sync value as covered — the reply pipeline will not use it', () => {
+    const { covered, values } = computeFactCoverage(
+      businessPageFbSynced({ phones: ['+971556087128'], hours: FILLED_HOURS, address: 'Damascus Mazzah', website: 'mes-me.com' }),
+    );
+    expect(values.phones).toEqual([]);
+    expect(covered.phone).toBe(false);
+    expect(covered.hours).toBe(false);
+    expect(covered.address).toBe(false);
+    expect(covered.website).toBe(false);
+  });
+
+  it('surfaces the unconfirmed value as a suggestion instead of hiding it', () => {
+    const { suggested } = computeFactCoverage(
+      businessPageFbSynced({ phones: ['+971556087128'], hours: FILLED_HOURS, address: 'Damascus Mazzah', website: 'mes-me.com' }),
+    );
+    expect(suggested.phones).toEqual(['+971556087128']);
+    expect(suggested.hours).toEqual(FILLED_HOURS);
+    expect(suggested.address).toBe('Damascus Mazzah');
+    expect(suggested.website).toBe('mes-me.com');
+  });
+
+  it('a confirmed value wins the row — no lingering suggestion beside it', () => {
+    // phones confirmed by the merchant, hours still fb_sync.
+    const page = {
+      id: 'p1', name: 'Shop',
+      businessProfile: {
+        merchant: { phones: ['0955545600'], hours: FILLED_HOURS },
+        merchantProvenance: {
+          phones: { source: 'editor', confirmedAt: '2026-08-08T13:14:59.276Z' },
+          hours: { source: 'fb_sync', confirmedAt: null },
+        },
+      },
+    } as unknown as Page;
+    const { values, suggested, covered } = computeFactCoverage(page);
+    expect(values.phones).toEqual(['0955545600']);
+    expect(covered.phone).toBe(true);
+    expect(suggested.phones).toBeUndefined();
+    expect(suggested.hours).toEqual(FILLED_HOURS);
+  });
+
+  it('a page with NO provenance map keeps the legacy behavior — merchant values count', () => {
+    const { covered, suggested } = computeFactCoverage(pageWith({ phones: ['0912'] }));
+    expect(covered.phone).toBe(true);
+    expect(suggested.phones).toBeUndefined();
   });
 });
 
