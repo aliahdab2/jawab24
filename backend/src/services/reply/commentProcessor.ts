@@ -35,10 +35,13 @@ import {
 import { PostNotOwnedError } from '../postErrors';
 import { captureError } from '../../utils/sentryHelpers';
 
-/** Intents the smart-reply auto-like (workspace `likeComments` setting) must never
- *  fire on — a page liking a complaint, abuse, or spam comment reads as mockery.
- *  Post Reply's per-post toggle needs no such guard: keyword-triggered commenters
- *  are self-selected interested buyers. */
+/** Backstop for the smart-reply auto-like (workspace `likeComments` setting): never
+ *  like a complaint, abuse, or spam comment — a page liking «طلبي ما وصل» reads as
+ *  mockery. On the AI path this set is nearly redundant: computeNeedsAttention already
+ *  forces needsAttention=true for every COMPLAINT/OFFENSIVE, and the like's
+ *  !needsAttention clause suppresses those. It exists to pin the invariant
+ *  independently of that function's future shape. Post Reply's per-post toggle needs
+ *  no such guard: keyword-triggered commenters are self-selected interested buyers. */
 const NO_AUTO_LIKE_INTENTS: ReadonlySet<string> = new Set(['COMPLAINT', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
 
 /**
@@ -816,10 +819,17 @@ export class CommentProcessor {
             }
 
             // Workspace-level "like customers' comments" (the Smart Reply counterpart
-            // of the per-post Post Reply toggle). Suppressed when the reply was flagged
-            // for review or the comment's intent is negative (NO_AUTO_LIKE_INTENTS) —
-            // never auto-like a customer who is upset.
+            // of the per-post Post Reply toggle). AI replies ONLY: the generator's
+            // template/fallback branches (AI quota exhausted → limitFallback, aiEnabled
+            // off) classify no intent and set needsAttention=false, so without the
+            // replyMethod gate every suppression clause below passes vacuously and the
+            // page would like complaints while sending a canned message. A canned
+            // fallback is also not a Smart Reply, which is what the toggle's copy
+            // promises the like for. Of the two suppression clauses, !needsAttention is
+            // the primary complaint defense (computeNeedsAttention forces it true for
+            // COMPLAINT/OFFENSIVE); the intent set is its backstop — see its doc.
             const likeComment = (userSettings.likeComments ?? false)
+                && replyMethod === 'ai'
                 && !needsAttention
                 && !NO_AUTO_LIKE_INTENTS.has(aiIntent ?? '');
 

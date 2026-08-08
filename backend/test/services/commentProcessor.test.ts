@@ -2330,7 +2330,36 @@ describe('CommentProcessor — template reply mode behavior', () => {
         it('never likes a COMPLAINT — the reply still sends, the like is suppressed', async () => {
             vi.mocked(workspaceSettingsService.getSettings)
                 .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            // Deliberately synthetic: production's computeNeedsAttention forces
+            // needsAttention=true for every COMPLAINT (the flagged test above covers
+            // that path). Leaving it false here pins the NO_AUTO_LIKE_INTENTS BACKSTOP
+            // in isolation, so a future computeNeedsAttention change can't silently
+            // start liking angry comments.
             mockGenerated({ aiIntent: 'COMPLAINT' });
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({ likeComment });
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('never likes on the template/fallback path — no intent is classified there', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            // The quota-exhausted limitFallback shape (generator.ts non-AI branches):
+            // canned text, replyMethod 'template', NO aiIntent, needsAttention false.
+            // Without the replyMethod === 'ai' gate, both intent-based suppression
+            // clauses pass vacuously and the page likes complaints it can't recognize.
+            mockGenerated({
+                replyText: 'وصلنا للحد الشهري من الردود الذكية — راسلنا برسالة خاصة وسنرد عليك.',
+                replyMethod: 'template',
+                aiIntent: undefined,
+                needsAttention: false,
+            });
             const likeComment = vi.fn().mockResolvedValue(true);
             const adapter = createMockAdapter({ likeComment });
 
