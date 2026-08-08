@@ -392,6 +392,7 @@ export class SettingsService {
             aiEnabled: record.aiEnabled ?? true,
             aiModel: record.aiModel || DEFAULT_AI_MODEL,
             commentReplyMode: (record.commentReplyMode as 'public' | 'private' | 'dual') || 'public',
+            likeComments: record.likeComments ?? false,
             commentsAutoReply: record.commentsAutoReply ?? true,
             messagesAutoReply: record.messagesAutoReply ?? true,
             dualReplyNudge: record.dualReplyNudge || '',

@@ -57,6 +57,7 @@ export const UpdateSettingsSchema = z.object({
     limitFallbackEnabled: z.boolean().optional(),
     limitFallbackMessageMulti: z.record(z.string()).optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
+    likeComments: z.boolean().optional(),
     dualReplyNudge: z.string().max(80).optional(),
     dualReplyNudgeMulti: z.record(z.string()).optional(),
     dualReplyNudgeVariations: z.record(z.array(z.string().max(80))).optional(),

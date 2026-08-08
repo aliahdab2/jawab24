@@ -2264,6 +2264,98 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
     });
 
+    describe('Smart Reply — workspace likeComments option', () => {
+        /** The like is fire-and-forget — flush the microtask queue before asserting. */
+        const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+        // No trigger keyword on the default mockContent, so 'كم سعر الدورة؟' falls
+        // through Post Reply and exercises the smart-reply path.
+        const askPrice = (adapter: CommentPlatformAdapter) => commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1', 'Ali',
+        );
+
+        function mockGenerated(overrides: Record<string, unknown> = {}) {
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: 'أهلاً! تجد الأسعار كاملة لدينا.',
+                replyMethod: 'ai',
+                needsAttention: false,
+                aiIntent: 'QUESTION',
+                ...overrides,
+            } as any);
+        }
+
+        it('likes the comment when the setting is on and the reply is clean', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            mockGenerated();
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({ likeComment });
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).toHaveBeenCalledWith('comment-1', 'token-123');
+        });
+
+        it('does not like when the setting is off (and when absent — default off)', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue(settingsWithMode('public')); // no likeComments key at all
+            mockGenerated();
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({ likeComment });
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('never likes a reply flagged needs-attention, though the reply itself still sends', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            mockGenerated({ needsAttention: true, flagReason: 'info_not_in_kb' });
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({ likeComment });
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('never likes a COMPLAINT — the reply still sends, the like is suppressed', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            mockGenerated({ aiIntent: 'COMPLAINT' });
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({ likeComment });
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('an adapter without likeComment (Instagram) is a no-op, not a crash', async () => {
+            vi.mocked(workspaceSettingsService.getSettings)
+                .mockResolvedValue({ ...settingsWithMode('public'), likeComments: true });
+            mockGenerated();
+            const adapter = createMockAdapter({ platform: 'instagram' });
+            expect(adapter.likeComment).toBeUndefined();
+
+            const result = await askPrice(adapter);
+            await flush();
+
+            expect(result.success).toBe(true);
+        });
+    });
+
     describe('Post Reply — CTA button', () => {
         it('passes the resolved cta (label + url) to the adapter sendReply', async () => {
             const adapter = createMockAdapter({

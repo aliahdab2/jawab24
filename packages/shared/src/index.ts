@@ -1651,6 +1651,8 @@ export interface WorkspaceSettings {
   aiModel: string;
   commentReplyMode: string;
   dualReplyNudge: string | null;
+  /** Smart Reply comments: the page likes the customer's comment after replying (Facebook only; suppressed for flagged/negative comments). */
+  likeComments: boolean;
   commentsAutoReply: boolean;
   messagesAutoReply: boolean;
   businessHoursOnly: boolean;

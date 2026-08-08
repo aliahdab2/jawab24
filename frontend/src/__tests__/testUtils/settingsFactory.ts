@@ -36,6 +36,7 @@ export function makeSettings(overrides: Partial<SettingsState> = {}): SettingsSt
     replyStyle: 'professional',
     brandVoiceNotes: '',
     holdLowConfidence: false,
+    likeComments: false,
     commentEscalationMinutes: 30,
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: 60,

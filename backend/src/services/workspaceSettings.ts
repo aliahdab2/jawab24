@@ -22,6 +22,7 @@ export const DEFAULTS: WorkspaceSettings = {
     aiEnabled: true,
     aiModel: DEFAULT_AI_MODEL,
     commentReplyMode: 'public',
+    likeComments: false,
     dualReplyNudge: '',
     commentsAutoReply: true,
     messagesAutoReply: true,

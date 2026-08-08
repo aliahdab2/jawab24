@@ -258,6 +258,21 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
             </div>
           </div>
         )}
+
+        {/* Auto-like — Smart Reply comments only (Post Reply carries its own per-post
+            toggle, so this row's copy names the smart reply explicitly). Dims with the
+            Comments channel like the rows above: no smart comment replies → no likes. */}
+        <div className="mt-4 pt-4 border-t border-theme-border flex items-center gap-3">
+          <div className={clsx('flex-1 min-w-0 text-start transition-opacity', !settings.commentsAutoReply && 'opacity-60')}>
+            <h4 className="text-sm font-bold text-foreground">{t('autoReplyBoard.likeComments')}</h4>
+            <p className="text-xs text-muted-foreground">{t('autoReplyBoard.likeCommentsSub')}</p>
+          </div>
+          <Toggle
+            enabled={settings.likeComments}
+            onChange={(enabled) => setSettings({ ...settings, likeComments: enabled })}
+            aria-label={t('autoReplyBoard.likeComments')}
+          />
+        </div>
       </div>
     </Card>
   );

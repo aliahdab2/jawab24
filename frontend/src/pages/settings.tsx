@@ -74,6 +74,7 @@ const INITIAL_SETTINGS: SettingsState = {
   replyStyle: 'professional',
   brandVoiceNotes: '',
   holdLowConfidence: false,
+  likeComments: false,
 };
 
 /**
@@ -84,7 +85,7 @@ const INITIAL_SETTINGS: SettingsState = {
  */
 const SECTION_FIELD_KEYS: Record<'general' | 'autoReply' | 'aiPersonality', (keyof SettingsState)[]> = {
   general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage', 'timezone'],
-  autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'dualReplyNudgeMulti'],
+  autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'dualReplyNudgeMulti', 'likeComments'],
   aiPersonality: ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
 };
 
@@ -210,6 +211,7 @@ const SettingsPage: NextPageWithLayout = () => {
         replyStyle: data.replyStyle || 'professional',
         brandVoiceNotes: data.brandVoiceNotes || '',
         holdLowConfidence: data.holdLowConfidence ?? false,
+        likeComments: data.likeComments ?? false,
       };
       setSettings(newSettings);
       // Baseline keeps the RAW stored zone. When the placeholder above was

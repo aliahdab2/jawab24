@@ -559,6 +559,10 @@ export const settings = pgTable('settings', {
     aiModel: varchar('ai_model', { length: 100 }).default(DEFAULT_AI_MODEL),
     // Auto-reply settings
     commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public', 'private', or 'dual'
+    // Smart Reply comments: like the customer's comment after replying (Facebook only —
+    // the IG Graph API has no like-comment endpoint). Post Reply has its own per-post
+    // toggle (posts.like_comment); this one governs the smart-reply path.
+    likeComments: boolean('like_comments').default(false),
     dualReplyNudge: text('dual_reply_nudge').default(''),
     commentsAutoReply: boolean('comments_auto_reply').default(true),
     messagesAutoReply: boolean('messages_auto_reply').default(true),

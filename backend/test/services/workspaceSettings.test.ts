@@ -95,6 +95,7 @@ const FULL_JSONB = {
     aiEnabled: true,
     aiModel: 'gpt-4o-mini',
     commentReplyMode: 'public',
+    likeComments: false,
     dualReplyNudge: '',
     dualReplyNudgeMulti: {},
     dualReplyNudgeVariations: {},

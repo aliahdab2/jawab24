@@ -35,6 +35,12 @@ import {
 import { PostNotOwnedError } from '../postErrors';
 import { captureError } from '../../utils/sentryHelpers';
 
+/** Intents the smart-reply auto-like (workspace `likeComments` setting) must never
+ *  fire on — a page liking a complaint, abuse, or spam comment reads as mockery.
+ *  Post Reply's per-post toggle needs no such guard: keyword-triggered commenters
+ *  are self-selected interested buyers. */
+const NO_AUTO_LIKE_INTENTS: ReadonlySet<string> = new Set(['COMPLAINT', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+
 /**
  * Unified Comment Processor
  *
@@ -809,12 +815,21 @@ export class CommentProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
+            // Workspace-level "like customers' comments" (the Smart Reply counterpart
+            // of the per-post Post Reply toggle). Suppressed when the reply was flagged
+            // for review or the comment's intent is negative (NO_AUTO_LIKE_INTENTS) —
+            // never auto-like a customer who is upset.
+            const likeComment = (userSettings.likeComments ?? false)
+                && !needsAttention
+                && !NO_AUTO_LIKE_INTENTS.has(aiIntent ?? '');
+
             const finalizeResult = await this.sendAndFinalize({
                 adapter, platform, pipeline,
                 pageId: page.id, userId, workspaceId,
                 comment, replyText, replyMethod, commentMessage,
                 platformCommentId, platformPageId,
                 accessToken: page.accessToken, fromId, fromName,
+                likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
                 contentId: content.id,
@@ -981,9 +996,11 @@ export class CommentProcessor {
         /** Post Reply image URL — delivered only on the DM channel (adapter gates by mode).
          *  Only ever set on the post_reply path. */
         replyImageUrl?: string | null;
-        /** Post Reply option: like the customer's comment after a successful send.
-         *  Only ever set on the post_reply path; effective only on adapters that
-         *  implement likeComment (Facebook — the Instagram API can't like). */
+        /** Like the customer's comment after a successful send. Set by the post_reply
+         *  path (per-post `posts.like_comment` toggle) and the smart-reply path (the
+         *  workspace `likeComments` setting, complaint-guarded at the call site).
+         *  Effective only on adapters that implement likeComment (Facebook — the
+         *  Instagram API can't like). */
         likeComment?: boolean;
         /** Post Reply option: mention (@-tag) the commenter in the public comment we post.
          *  Only ever set on the post_reply path; Facebook only (the sender resolves it against

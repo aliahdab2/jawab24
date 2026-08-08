@@ -45,6 +45,12 @@ describe('UpdateSettingsSchema', () => {
             expect(UpdateSettingsSchema.safeParse({ notificationsEnabled: 'true' }).success).toBe(false);
             expect(UpdateSettingsSchema.safeParse({ notificationsEnabled: 1 }).success).toBe(false);
         });
+
+        it('accepts true/false for likeComments and rejects non-boolean', () => {
+            expect(UpdateSettingsSchema.safeParse({ likeComments: true }).success).toBe(true);
+            expect(UpdateSettingsSchema.safeParse({ likeComments: false }).success).toBe(true);
+            expect(UpdateSettingsSchema.safeParse({ likeComments: 'true' }).success).toBe(false);
+        });
     });
 
     describe('timezone', () => {

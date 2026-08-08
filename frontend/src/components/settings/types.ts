@@ -8,6 +8,8 @@ export interface SettingsState {
   newLeadAlertsEnabled: boolean;
   pushNotifications: boolean;
   commentReplyMode: string;
+  /** Smart Reply comments: the page likes the customer's comment after replying (Facebook only). */
+  likeComments: boolean;
   commentsAutoReply: boolean;
   messagesAutoReply: boolean;
   businessHoursOnly: boolean;

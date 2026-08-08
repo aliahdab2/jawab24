@@ -132,6 +132,38 @@ describe('AutoReplyBoardCard — the three-row board', () => {
   });
 });
 
+// Workspace auto-like for Smart Reply comments (the Post Reply per-post toggle's
+// sibling). The row carries its own scope disclosure — smart replies, complaints
+// skipped, Facebook only — so the merchant knows exactly what they're enabling.
+describe('AutoReplyBoardCard — like customers\' comments', () => {
+  it('renders the toggle with its scope disclosure and writes likeComments on change', () => {
+    const setSettings = vi.fn();
+    render(
+      <AutoReplyBoardCard
+        settings={makeSettings({ dashboardLanguage: 'en', likeComments: false })}
+        setSettings={setSettings}
+      />,
+    );
+
+    expect(screen.getByText(/skipped for complaints\. Facebook only\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: "Like customers' comments" }));
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ likeComments: true }));
+  });
+
+  it('stays operable when the comments channel is off (dimmed, like the rows)', () => {
+    const setSettings = vi.fn();
+    render(
+      <AutoReplyBoardCard
+        settings={makeSettings({ dashboardLanguage: 'en', commentsAutoReply: false, likeComments: true })}
+        setSettings={setSettings}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: "Like customers' comments" }));
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ likeComments: false }));
+  });
+});
+
 // Regression for #92 (carried over from CommentsAutoReplyCard): when the dual-reply
 // nudge entry is auto-translated, the input's value is blanked (the stored text
 // becomes the placeholder). `dir` must come from the rendered value, not the stored
