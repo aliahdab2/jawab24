@@ -14,7 +14,7 @@ The problem is familiar to anyone running an active page: every new course annou
 
 ## What did they do?
 
-On April 4, 2026, the institute activated Jawab24 on its page: it entered its [Business Info](/what-is-jawab24) — courses, fees, schedules, and registration details — and enabled [Smart Replies](/blog/auto-reply-facebook-setup-guide) on both comments and direct messages. From that moment, customer questions were answered automatically from the institute's actual information, around the clock.
+On April 4, 2026, the institute activated Jawab24 on its page: it entered its [Business Info](/en/what-is-jawab24) — courses, fees, schedules, and registration details — and enabled [Smart Replies](/en/blog/auto-reply-facebook-setup-guide) on both comments and direct messages. From that moment, customer questions were answered automatically from the institute's actual information, around the clock.
 
 ## The numbers after 90 days — from two separate sources
 

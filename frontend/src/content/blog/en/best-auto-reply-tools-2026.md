@@ -40,7 +40,7 @@ The downside? You need to build those flows. Setting up ManyChat properly takes 
 
 Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla and Zid integration doesn't exist. Comment replies are basic compared to DM flows.
 
-Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/compare/manychat)
+Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/en/compare/manychat)
 
 ### Chatfuel
 
@@ -48,7 +48,7 @@ Simple, template-based chatbot builder. Chatfuel is the "easy entry point" — g
 
 However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla or Zid integration.
 
-Free tier available, paid starts at $14.99/month. [See our full Jawab24 vs Chatfuel comparison →](/compare/chatfuel)
+Free tier available, paid starts at $14.99/month. [See our full Jawab24 vs Chatfuel comparison →](/en/compare/chatfuel)
 
 ### Tidio
 
@@ -56,7 +56,7 @@ Live chat + chatbot platform. Better known for website chat widgets than social 
 
 If your primary need is a website chat widget with chatbot fallback, Tidio is solid. For social media auto-reply — especially in multiple languages — it's not the right fit. No Arabic dialect support, no Salla or Zid integration.
 
-Starts at $29/month. [See our full Jawab24 vs Tidio comparison →](/compare/tidio)
+Starts at $29/month. [See our full Jawab24 vs Tidio comparison →](/en/compare/tidio)
 
 ### Botpress
 
@@ -64,7 +64,7 @@ Developer-focused platform for building custom chatbots. Very flexible but requi
 
 Can support Arabic through custom NLP training, but there's no out-of-the-box dialect detection. No direct Shopify/Salla/Zid integration without custom development. The conversation context capabilities are powerful but require configuration. No price verification system.
 
-Free tier with usage limits. [See our full Jawab24 vs Botpress comparison →](/compare/botpress)
+Free tier with usage limits. [See our full Jawab24 vs Botpress comparison →](/en/compare/botpress)
 
 ### Jawab24
 
@@ -82,7 +82,7 @@ The AI loads the **last 12 messages** in each conversation, so it understands co
 
 **Dual reply mode** for comments: the AI can post a short public reply on the comment and simultaneously send a detailed private DM with full product information. Nudge message variations rotate automatically to avoid spam detection by Facebook.
 
-Native Shopify, Salla, and [Zid integration](/blog/zid-store-facebook-auto-reply) with automatic product sync. Currently supports English and Arabic (with 6 dialect families) — Turkish, Swedish, and German are coming soon. Confidence scoring with human review queue.
+Native Shopify, Salla, and [Zid integration](/en/blog/zid-store-facebook-auto-reply) with automatic product sync. Currently supports English and Arabic (with 6 dialect families) — Turkish, Swedish, and German are coming soon. Confidence scoring with human review queue.
 
 Starts at $15/month.
 

@@ -22,13 +22,13 @@ WhatsApp conversations appear in the same Messages inbox you already know, right
 
 ### Smart Replies Grounded in Your Store
 
-The same [Smart Replies](/blog/auto-reply-facebook-setup-guide) that work on Facebook and Instagram answer on WhatsApp: the AI replies from your Business Info — your products, prices, hours, and policies — in the language your customer writes in, whether that's English, Arabic, or a mix of both. If your store is connected (Shopify or Salla), answers reference your actual product names and prices, not generic chatbot filler.
+The same [Smart Replies](/en/blog/auto-reply-facebook-setup-guide) that work on Facebook and Instagram answer on WhatsApp: the AI replies from your Business Info — your products, prices, hours, and policies — in the language your customer writes in, whether that's English, Arabic, or a mix of both. If your store is connected (Shopify, Salla, or Zid), answers reference your actual product names and prices, not generic chatbot filler.
 
 You don't write anything twice. Everything you've already set up for Facebook and Instagram answers on WhatsApp from the first minute.
 
 ### Voice Notes and Photos, Understood
 
-WhatsApp customers love voice notes more than any other channel. Jawab24 transcribes the voice message and answers it like any typed question. Same for [photos](/blog/ai-auto-reply-customer-photos) — a product screenshot with no caption? The AI reads it and answers.
+WhatsApp customers love voice notes more than any other channel. Jawab24 transcribes the voice message and answers it like any typed question. Same for [photos](/en/blog/ai-auto-reply-customer-photos) — a product screenshot with no caption? The AI reads it and answers.
 
 ## An Official Connection, Not a Workaround
 
@@ -53,6 +53,6 @@ Connecting takes minutes:
 2. Sign in with your Meta account and pick your WhatsApp Business number.
 3. Add your Business Info if you haven't yet — Smart Replies start answering immediately.
 
-WhatsApp is available on the **Business plan and up** — details on the [pricing page](/pricing).
+WhatsApp is available on the **Business plan and up** — details on the [pricing page](/en/pricing).
 
 The customer messaging you on WhatsApp at 11 PM no longer waits for morning.
