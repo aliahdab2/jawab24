@@ -90,7 +90,10 @@ export function rowKeyValue(collection: FactCollectionWithRows, row: FactRowDto)
 }
 
 /** Same folding as the reply-time matcher (`normalizeForMatch`): shared Arabic
- *  normalization with taa-marbuta folding, then case folding. */
-function normalizeForGrouping(text: string): string {
+ *  normalization with taa-marbuta folding, then case folding. Exported because
+ *  every equality decision about entity identity (grouping, face matching,
+ *  rename propagation) must use the SAME folding — an exact-match comparison
+ *  next to a normalized join silently splits entities on variant spellings. */
+export function normalizeForGrouping(text: string): string {
   return normalizeArabic(text, { normalizeTaaMarbuta: true }).toLowerCase().trim();
 }

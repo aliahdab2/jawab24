@@ -11,6 +11,7 @@ import {
   timeOptions, generationLocale, type ScheduleFieldKind,
 } from '@/utils/factScheduleFields';
 import { useLanguage } from '@/i18n/hooks';
+import { normalizeForGrouping } from '@/utils/factListGrouping';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
 import { collectionAttributeLabels, sessionValueKind, unitHasSchedules, type FactEntityUnit } from '@/utils/factListLayout';
 
@@ -363,8 +364,13 @@ export function FactEntitySheet({
           // (the form edits one tier). An existing session keeps its own name;
           // it follows a rename only when it carried the entity's original
           // name — so opening tier B and saving never renames tier A's rows.
+          // Compared with the SAME folding the card is grouped by: an exact
+          // match would leave a variant-spelled session («دوره» vs «دورة»)
+          // behind on rename, splitting the entity it visibly belongs to.
           name: original
-            ? (nameEdited && original.name === originalName ? trimmedName : original.name)
+            ? (nameEdited && normalizeForGrouping(original.name) === normalizeForGrouping(originalName)
+              ? trimmedName
+              : original.name)
             : trimmedName,
           attributes: attrs.length ? attrs : null,
           structured: Object.keys(shadows).length ? shadows : null,

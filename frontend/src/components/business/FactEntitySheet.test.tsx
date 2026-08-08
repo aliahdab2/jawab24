@@ -147,6 +147,124 @@ describe('FactEntitySheet — save preserves what the form does not display', ()
     expect(body.upserts[0].attributes).toEqual([{ label: 'المنطقة', value: 'أبو سليم' }]);
   });
 
+  it('round-trips base structured and session price/currency on a no-op save', () => {
+    const baseRow = row({
+      id: 'row-base',
+      name: 'دورة X',
+      price: '50000.00',
+      currency: 'ل.س',
+      structured: { 'الساعة': { kind: 'timeRange', start: '14:00', end: '15:00' } },
+    });
+    const prices = collection({ id: 'col-prices', label: 'أسعار الدورات', rows: [baseRow] });
+    const pricedSession = row({
+      id: 'row-sess',
+      name: 'دورة X',
+      attributes: [{ label: 'الدورة', value: 'X' }],
+      price: '5000.00',
+      currency: 'ل.س',
+      startsAt: '2026-09-01',
+    });
+    const schedules = collection({
+      id: 'col-sched', label: 'مواعيد الدورات المعلنة', keyAttr: 'الدورة', rows: [pricedSession],
+    });
+    const unit: FactEntityUnit = {
+      title: 'دورة X',
+      faceLabel: null,
+      faceValue: null,
+      base: { row: baseRow, collection: prices },
+      sessions: [{ row: pricedSession, collection: schedules }],
+      sessionCollection: schedules,
+    };
+    const onSave = vi.fn();
+    render(
+      <FactEntitySheet unit={unit} baseCollection={prices} saving={false} onSave={onSave} onClose={vi.fn()} />,
+    );
+    fireEvent.click(saveButton());
+
+    const body = onSave.mock.calls[0][0] as FactEntitySaveBody;
+    const base = body.upserts.find((u) => u.rowId === 'row-base');
+    expect(base?.structured).toEqual({ 'الساعة': { kind: 'timeRange', start: '14:00', end: '15:00' } });
+    const session = body.upserts.find((u) => u.rowId === 'row-sess');
+    expect(session?.price).toBe('5000.00');
+    expect(session?.currency).toBe('ل.س');
+  });
+
+  it('a NEW base row in a keyed collection is seeded with the sessions’ key value', () => {
+    const otherCourseRow = row({
+      id: 'row-other',
+      name: 'دورة أخرى',
+      attributes: [{ label: 'الدورة', value: 'أخرى' }],
+      price: '20.00',
+    });
+    const online = collection({
+      id: 'col-online', label: 'الدورات الأونلاين المتوفرة', keyAttr: 'الدورة', rows: [otherCourseRow],
+    });
+    const session = row({
+      id: 'row-sess',
+      name: 'دورة الإكسل المتقدم',
+      attributes: [{ label: 'الدورة', value: 'الإكسل' }],
+    });
+    const schedules = collection({
+      id: 'col-sched', label: 'مواعيد الدورات المعلنة', keyAttr: 'الدورة', rows: [session],
+    });
+    const unit: FactEntityUnit = {
+      title: 'دورة الإكسل المتقدم',
+      faceLabel: null,
+      faceValue: null,
+      base: null,
+      sessions: [{ row: session, collection: schedules }],
+      sessionCollection: schedules,
+    };
+    const onSave = vi.fn();
+    const { container } = render(
+      <FactEntitySheet unit={unit} baseCollection={online} saving={false} onSave={onSave} onClose={vi.fn()} />,
+    );
+    // Give the new base content (a price) so it is created at all.
+    fireEvent.click(screen.getByRole('button', { name: /^Price/ }));
+    fireEvent.change(container.querySelector('#entity-price') as HTMLInputElement, { target: { value: '10' } });
+    fireEvent.click(saveButton());
+
+    const body = onSave.mock.calls[0][0] as FactEntitySaveBody;
+    const base = body.upserts.find((u) => u.collectionId === 'col-online');
+    expect(base).toBeDefined();
+    expect(base?.rowId).toBeUndefined();
+    // The key that joins the new tier to its entity — without it the row is
+    // orphaned into «بدون الدورة» the moment it is born.
+    expect(base?.attributes).toEqual(expect.arrayContaining([{ label: 'الدورة', value: 'الإكسل' }]));
+  });
+
+  it('a rename follows a session whose name differs only by normalization', () => {
+    const baseRow = row({ id: 'row-base', name: 'دورة الحلاقة', price: '50000.00' });
+    const prices = collection({ id: 'col-prices', label: 'أسعار الدورات', rows: [baseRow] });
+    // Taa-marbuta variant of the same entity name — grouped into the same
+    // card by normalizeForGrouping, so it must follow the rename too.
+    const variantSession = row({
+      id: 'row-variant',
+      name: 'دوره الحلاقه',
+      attributes: [{ label: 'الدورة', value: 'حلاقة' }],
+    });
+    const schedules = collection({
+      id: 'col-sched', label: 'مواعيد الدورات المعلنة', keyAttr: 'الدورة', rows: [variantSession],
+    });
+    const unit: FactEntityUnit = {
+      title: 'دورة الحلاقة',
+      faceLabel: null,
+      faceValue: null,
+      base: { row: baseRow, collection: prices },
+      sessions: [{ row: variantSession, collection: schedules }],
+      sessionCollection: schedules,
+    };
+    const onSave = vi.fn();
+    render(
+      <FactEntitySheet unit={unit} baseCollection={prices} saving={false} onSave={onSave} onClose={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByDisplayValue('دورة الحلاقة'), { target: { value: 'دورة الحلاقة النسائية' } });
+    fireEvent.click(saveButton());
+
+    const body = onSave.mock.calls[0][0] as FactEntitySaveBody;
+    expect(body.upserts.find((u) => u.rowId === 'row-variant')?.name).toBe('دورة الحلاقة النسائية');
+  });
+
   it('a rename follows only sessions that carried the original name', () => {
     const baseRow = row({ id: 'row-base', name: 'دورة X', price: '50000.00', currency: 'ل.س' });
     const prices = collection({ id: 'col-prices', label: 'أسعار الدورات', rows: [baseRow] });
