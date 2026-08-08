@@ -1,14 +1,14 @@
 ---
 seoTitle: "Is Your Data Safe with Jawab24? Security & Privacy, Explained"
 seoDescription: "How Jawab24 protects your page and your customers' data: official Facebook login with no password sharing, encryption at rest and in transit, limited revocable permissions, and full data deletion on request."
-seoKeywords: "Jawab24 security, is Jawab24 safe, Facebook page data protection, auto reply security, customer data privacy, connect Facebook page safely, Facebook app permissions, data deletion, GDPR auto reply"
+seoKeywords: "Jawab24 security, is Jawab24 safe, Facebook page data protection, auto reply security, customer data privacy, connect Facebook page safely, WhatsApp Business security, connect WhatsApp safely, Facebook app permissions, data deletion, GDPR auto reply"
 title: "Is Your Data Safe with Jawab24? Here's Exactly What Happens to It"
-excerpt: "Connecting your page to any third-party tool is a decision worth scrutinizing. This article explains transparently how Jawab24 accesses your page, which permissions it requests and why, and how we protect your conversations and your customers' data."
+excerpt: "Connecting your page or WhatsApp number to any third-party tool is a decision worth scrutinizing. This article explains transparently how Jawab24 accesses your channels, which permissions it requests and why, and how we protect your conversations and your customers' data."
 ---
 
 ## A Fair Question — Answered in Detail
 
-Your Facebook or Instagram page isn't just an account; it's your business's main sales channel, holding your customers' conversations, phone numbers, and orders. So when you consider connecting it to a third-party tool, you have every right to ask: who can access what? And what happens to my data?
+Your Facebook page, Instagram account, and WhatsApp number aren't just accounts; they're your business's main sales channels, holding your customers' conversations, phone numbers, and orders. So when you consider connecting it to a third-party tool, you have every right to ask: who can access what? And what happens to my data?
 
 This article answers those questions precisely and transparently — not with vague reassurances like "your data is safe with us," but with concrete details you can verify yourself.
 
@@ -17,6 +17,8 @@ This article answers those questions precisely and transparently — not with va
 When you connect your page to Jawab24, you never type your password on our site. The entire connection runs through Meta's official login system: we send you to Facebook itself, you sign in there, and you choose which pages to connect. Your password stays between you and Facebook — Jawab24 doesn't see it, doesn't store it, and technically cannot.
 
 This isn't just our choice — it's the only method Meta allows for approved apps. Jawab24 has passed Meta's official App Review, an audit in which Meta examines the app, its permissions, and the justification for each one before allowing it to work with pages.
+
+The same applies to **WhatsApp**: connecting your WhatsApp Business number runs through Meta's official signup flow for the WhatsApp Business Platform, on Meta's own site, following the steps Meta defines — not us.
 
 ## Limited Permissions — And You Stay in Control
 
@@ -35,13 +37,15 @@ Just as important is what we **don't** request:
 - **We have no access to your personal profile**, your friends, or any page you didn't explicitly select.
 - **We don't change your page settings** or delete its content.
 
-You can revoke Jawab24's access entirely at any moment from Facebook's settings (Settings → Business Integrations) — no permission from us needed, no notice required.
+For WhatsApp, access is confined to the WhatsApp Business account you connect yourself: receiving and answering your customers' messages on that number — nothing more. And nothing changes in your daily use: your number stays yours and keeps working on your phone as usual.
+
+You can revoke Jawab24's access entirely at any moment — from Facebook's settings (Settings → Business Integrations) for pages, and from Meta Business settings for WhatsApp — no permission from us needed, no notice required.
 
 ## How We Protect Data Technically
 
 - **Encryption in transit:** every connection between your browser and our servers, and between our servers and Meta, runs over encrypted channels (HTTPS/TLS).
-- **Encryption at rest:** page access keys — the most sensitive thing we hold — are stored encrypted with AES-256, unreadable even inside the database itself.
-- **Every incoming notification is verified:** each event Meta sends us carries a digital signature we validate before processing, so no third party can impersonate Facebook and inject fake data.
+- **Encryption at rest:** access keys for pages and WhatsApp accounts — the most sensitive thing we hold — are stored encrypted with AES-256, unreadable even inside the database itself.
+- **Every incoming notification is verified:** each event Meta sends us — whether from Facebook, Instagram, or WhatsApp — carries a digital signature we validate before processing, so no third party can impersonate Meta and inject fake data.
 - **Account isolation:** every Jawab24 account sees only its own data. Your pages, conversations, and Business Info are fully isolated from other accounts.
 
 ## Who Can Read Your Customers' Conversations?
@@ -82,6 +86,10 @@ No. Login happens on Facebook's own site, and your password never passes through
 ### Are my customers' conversations used to train AI models?
 
 No. Replies are processed through the business API, and data submitted through it is not used to train general models.
+
+### Does all of this apply to WhatsApp too?
+
+Yes. WhatsApp connects through Meta's official system as well, access is confined to the WhatsApp Business account you connect, access keys are encrypted with the same standard, and every incoming notification goes through the same signature verification. And your number keeps working on your phone as usual.
 
 ### What happens to my data if I cancel my subscription?
 
