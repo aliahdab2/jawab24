@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { Card, Toggle, InputFieldWrapper, CharCounter } from '@/components/ui';
+import { Card, Toggle, InputFieldWrapper, CharCounter, InfoPopover } from '@/components/ui';
 import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import { ArrowLeft } from 'lucide-react';
@@ -260,16 +260,24 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
         )}
 
         {/* Auto-like — Smart Reply comments only (Post Reply carries its own per-post
-            toggle, so this row's copy names the smart reply explicitly). Dims with the
-            Comments channel like the rows above: no smart comment replies → no likes. */}
-        <div className="mt-4 pt-4 border-t border-theme-border flex items-center gap-3">
-          <div className={clsx('flex-1 min-w-0 text-start transition-opacity', !settings.commentsAutoReply && 'opacity-60')}>
-            <h4 className="text-sm font-bold text-foreground">{t('autoReplyBoard.likeComments')}</h4>
-            <p className="text-xs text-muted-foreground">{t('autoReplyBoard.likeCommentsSub')}</p>
-          </div>
+            toggle). One compact line, mirroring PostTriggerModal's like row: the scope
+            note (smart replies, complaints skipped, FB only) lives in the InfoPopover
+            so the crowded settings page pays for a single row. Dims with the Comments
+            channel like the rows above: no smart comment replies → no likes. */}
+        <div className="mt-3 pt-3 border-t border-theme-border flex items-center justify-between gap-3">
+          <span className={clsx(
+            'flex items-center gap-1.5 text-sm font-medium text-foreground text-start transition-opacity',
+            !settings.commentsAutoReply && 'opacity-60',
+          )}>
+            {t('autoReplyBoard.likeComments')}
+            <InfoPopover label={t('autoReplyBoard.likeComments')}>
+              {t('autoReplyBoard.likeCommentsSub')}
+            </InfoPopover>
+          </span>
           <Toggle
             enabled={settings.likeComments}
             onChange={(enabled) => setSettings({ ...settings, likeComments: enabled })}
+            size="sm"
             aria-label={t('autoReplyBoard.likeComments')}
           />
         </div>
