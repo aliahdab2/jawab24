@@ -1047,6 +1047,26 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                           {block.base && baseSection && (
                             <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row), { soleBase })}</ul>
                           )}
+                          {/* A session-only block has no tier row — and the tier
+                              row is the entity sheet's ONLY door. Without this
+                              fallback, an entity whose rows are all schedule
+                              rows (or whose base row is missing) renders with
+                              nothing tappable: the exact «cannot edit the
+                              course» dead end. The chip carries the accessible
+                              name; the sessions themselves stay non-interactive
+                              as everywhere else. */}
+                          {!readOnly && !block.base && block.sessions.length > 0 && (
+                            <ul>
+                              <li className="list-none">
+                                {rowShell(
+                                  'w-full min-h-[44px] flex items-center justify-end px-4 py-2 text-start',
+                                  false,
+                                  () => openEntity(group, block.sessions[0]),
+                                  editChip,
+                                )}
+                              </li>
+                            </ul>
+                          )}
                           {showSessions && sessionZone(block.sessions, `${group.key}:${block.base?.row.id ?? `tier-${bi}`}`)}
                           {showGapHint && (
                             <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2">

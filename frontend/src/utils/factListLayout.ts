@@ -213,11 +213,23 @@ export function collectionAttributeLabels(collection: FactCollectionWithRows): s
 const norm = (text: string): string =>
   normalizeArabic(text, { normalizeTaaMarbuta: true }).toLowerCase().trim();
 
-/** A collection is "dated" when any of its rows carries a start date — that is
+/** A collection is "dated" when its rows are PREDOMINANTLY dated — that is
  *  what makes it a schedule-like list whose rows self-expire. Derived from the
- *  merchant's own data, never from vocabulary. */
+ *  merchant's own data, never from vocabulary.
+ *
+ *  Majority, not `some`: under the old any-row rule, ONE dated promo tier in a
+ *  50-row price list reclassified the whole list as a schedule — every price
+ *  row became a "session", no card rendered a tier row, and the tier row is
+ *  the entity sheet's only door. One row silently removed the edit surface
+ *  from an entire page (الدمشقي, 2026-08-06). A real schedule keeps counting
+ *  as one even while a few of its rows are still undated drafts — a TIE leans
+ *  schedule (a two-row list with one date is a schedule mid-authoring, not a
+ *  price list with a promo), and the base-less fallback door in the card
+ *  layout guarantees an edit entry either way. */
 export function isDatedCollection(collection: FactCollectionWithRows): boolean {
-  return collection.rows.some((r) => r.startsAt !== null);
+  let dated = 0;
+  for (const r of collection.rows) if (r.startsAt !== null) dated++;
+  return dated > 0 && dated * 2 >= collection.rows.length;
 }
 
 /**
