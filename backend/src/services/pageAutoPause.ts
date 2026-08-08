@@ -4,6 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { DmFailureBucket } from '../utils/fbGraphErrors';
 import { captureError } from '../utils/sentryHelpers';
 import { logAutoReplyToggle } from './auditLog';
+import { redis } from '../lib/redis';
 
 /**
  * Auto-pause defense for "dead pages" — pages where Facebook persistently
@@ -49,6 +50,71 @@ export function isPageLevelFailure(bucket: DmFailureBucket | undefined): boolean
 }
 
 /**
+ * Buckets that indicate the CHANNEL is broken (as opposed to one customer
+ * refusing / one expired window). Superset of the page-level set:
+ * `thread_owned_elsewhere` breaks every send on its platform but must NOT
+ * pause the page — the other platforms keep working (MES 2026-08: IG 100%
+ * dead behind a handover conflict while Facebook served hundreds of replies).
+ */
+const CHANNEL_LEVEL_BUCKETS: ReadonlySet<DmFailureBucket | 'no_bucket'> = new Set([
+    ...PAGE_LEVEL_BUCKETS,
+    'thread_owned_elsewhere',
+]);
+
+export function isChannelLevelFailure(bucket: DmFailureBucket | undefined): boolean {
+    return CHANNEL_LEVEL_BUCKETS.has(bucket ?? 'no_bucket');
+}
+
+/**
+ * Per-(page, platform) consecutive send-failure streak, in Redis.
+ *
+ * Why this exists when `consecutive_send_failures` already does: that counter
+ * is per-PAGE and resets on ANY successful send — so a page healthy on one
+ * platform can mask a channel that is 100% dead on another, indefinitely.
+ * That is exactly how MES's Instagram stayed silently broken for 6 days while
+ * its Facebook traffic kept the page counter at zero (2026-08-08 trace).
+ *
+ * The streak alerts to Sentry at escalating marks (5, 50, 500) rather than
+ * once: a single missed alert on a permanently-dead channel would otherwise
+ * restore exactly the blindness this exists to fix — continuing failures keep
+ * refreshing the TTL, so the key never expires and a one-shot alert never
+ * re-fires. A successful send on that platform deletes the key. Purely a
+ * detection signal — it never gates, pauses, or retries anything.
+ */
+export const PLATFORM_FAILURE_ALERT_THRESHOLD = 5;
+const PLATFORM_FAILURE_ALERT_MARKS: ReadonlySet<number> = new Set([PLATFORM_FAILURE_ALERT_THRESHOLD, 50, 500]);
+const PLATFORM_FAILURE_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export function platformSendFailureKey(pageId: string, platform: string): string {
+    return `sendfail:${pageId}:${platform}`;
+}
+
+function trackPlatformFailure(pageId: string, platform: string, bucket: DmFailureBucket | undefined): void {
+    // Diagnostics only — must never throw into the reply path, even with a
+    // half-initialized redis client (same discipline as the §13c AI counters).
+    try {
+        const key = platformSendFailureKey(pageId, platform);
+        redis.incr(key)
+            .then(async (streak) => {
+                await redis.expire(key, PLATFORM_FAILURE_TTL_SECONDS).catch(() => {});
+                if (PLATFORM_FAILURE_ALERT_MARKS.has(streak)) {
+                    captureError(
+                        new Error(`${platform} sends have failed ${streak}× consecutively for page ${pageId} (bucket: ${bucket ?? 'no_bucket'})`),
+                        'pageAutoPause.platformChannelDown',
+                        {
+                            tags: { component: 'pageAutoPause', platform },
+                            extra: { pageId, bucket: bucket ?? 'no_bucket', consecutiveFailures: streak },
+                        },
+                    );
+                }
+            })
+            .catch(() => {});
+    } catch {
+        // never let a metrics emit break a send-failure handler
+    }
+}
+
+/**
  * Bump the failure counter; auto-pause the page if the threshold is crossed.
  * Fire-and-forget — never blocks the reply path. Errors logged to Sentry only.
  *
@@ -57,7 +123,15 @@ export function isPageLevelFailure(bucket: DmFailureBucket | undefined): boolean
 export async function recordSendFailure(
     pageId: string,
     bucket: DmFailureBucket | undefined,
+    platform?: string,
 ): Promise<void> {
+    // Per-platform streak first: it covers channel-level buckets the page-level
+    // counter deliberately ignores (thread_owned_elsewhere), and fire-and-forget
+    // so it can never block or fail the caller.
+    if (platform && isChannelLevelFailure(bucket)) {
+        trackPlatformFailure(pageId, platform, bucket);
+    }
+
     if (!isPageLevelFailure(bucket)) return;
 
     try {
@@ -119,7 +193,17 @@ export async function recordSendFailure(
  *
  * Cheap guard: only writes if counter is non-zero, to avoid hot-path UPDATEs.
  */
-export async function recordSendSuccess(pageId: string): Promise<void> {
+export async function recordSendSuccess(pageId: string, platform?: string): Promise<void> {
+    // A success on THIS platform ends this platform's streak — and only this
+    // platform's. A Facebook success saying nothing about Instagram is the whole
+    // point of the per-platform key (see PLATFORM_FAILURE_ALERT_THRESHOLD docs).
+    if (platform) {
+        try {
+            redis.del(platformSendFailureKey(pageId, platform)).catch(() => {});
+        } catch {
+            // diagnostics only — never throw into the success path
+        }
+    }
     try {
         await db
             .update(pages)

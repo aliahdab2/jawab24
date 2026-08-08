@@ -36,6 +36,29 @@ Per-customer / per-conversation failures explicitly do **not** count:
 - `window_expired` — outside the 24h messaging window for one conversation.
 - `transient` — rate limit, network blip, 5xx. The send will be retried; we don't punish the page.
 
+`thread_owned_elsewhere` (another app owns the conversation via Meta's Handover
+Protocol — Graph error 100/2534037) is **channel-level, not page-level**: it breaks
+every send on its platform but the page's other platforms keep working, so it never
+counts toward the pause. It feeds the per-platform streak below instead.
+
+### Per-platform failure streak (detection only)
+
+The page counter above resets on **any** successful send — so a page healthy on one
+platform can mask a channel that is 100% dead on another, indefinitely. That is
+exactly how a merchant's Instagram stayed silently broken for 6 days while their
+Facebook traffic kept the counter at zero (MES, 2026-08-08).
+
+The DM pipeline therefore also keeps a per-`(page, platform)` consecutive-failure
+streak in Redis (`sendfail:<pageId>:<platform>`, 7-day TTL). Channel-level buckets
+(`our_fault`, `unknown`, no bucket, `thread_owned_elsewhere`) increment it; a
+successful send on **that platform** deletes it; it raises a Sentry alert
+(`pageAutoPause.platformChannelDown`) at escalating marks — 5, 50, and 500
+consecutive failures — so a permanently-dead channel re-surfaces even if the first
+alert is missed (continuing failures refresh the TTL, so the key never expires on
+its own). It is purely a detection signal — it never gates, pauses, or retries
+anything, and it never blocks the reply path (fire-and-forget, same discipline as
+the AI lifecycle counters).
+
 ### Threshold and what happens at it
 
 Default `PAUSE_THRESHOLD = 10` ([backend/src/services/pageAutoPause.ts](../backend/src/services/pageAutoPause.ts)).

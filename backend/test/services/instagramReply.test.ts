@@ -208,6 +208,7 @@ import { messagesService } from '../../src/services/messages';
 import { notificationService } from '../../src/services/notifications';
 import { db } from '../../src/db';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
+import { redis } from '../../src/lib/redis';
 
 describe('InstagramReplyService', () => {
     let service: InstagramReplyService;
@@ -499,13 +500,16 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toContain('Failed to send reply');
-            // Message should still be marked as replied with delivery_failed flag
+            // Message should still be marked as replied with delivery_failed flag,
+            // and the classified failure persisted in flag_meta — the row alone
+            // must answer "failed WHY" (a plain Error classifies as 'unknown').
             expect(messagesService.markAsReplied).toHaveBeenCalledWith(
                 'msg-uuid', expect.any(String), expect.any(String),
                 true, 'delivery_failed',
                 expect.toBeOneOf([expect.any(String), undefined]),
                 undefined,
                 expect.toBeOneOf([expect.any(String), undefined]),
+                { dm_failed: { bucket: 'unknown' } },
             );
         });
 
@@ -553,6 +557,9 @@ describe('InstagramReplyService', () => {
             expect(result.replyMethod).toBe('ai');
             expect(messagesService.markAsReplied).toHaveBeenCalled();
             expect(messagesService.storeOutgoingMessage).toHaveBeenCalled();
+            // The success must clear THIS platform's send-failure streak (and only
+            // this platform's) — the reset half of the FB-masks-dead-IG pin.
+            expect(redis.del).toHaveBeenCalledWith('sendfail:page-uuid:instagram');
         });
 
         it('should skip when newer message is pending (debounce)', async () => {
