@@ -49,6 +49,10 @@ export interface CatalogExtractionCtx {
      *  merchant's own configured Post Reply auto-replies — the highest-intent,
      *  merchant-authored answers, and the place the withheld price actually lives. */
     source?: 'paste' | 'page';
+    /** The page's display name — only meaningful with source 'page'. Lets the
+     *  prompt name the brand that must NOT become an item (see the pseudo-product
+     *  hint in buildPrompt). */
+    pageName?: string;
 }
 
 /** Raw JSON shape the model is asked to return (pre-validation). */
@@ -110,9 +114,17 @@ export class CatalogExtractor {
         }
         if (ctx.source === 'page') {
             hints.push('- The input is read from the merchant\'s own Facebook page: recent posts (each may include text read from its images), and the merchant\'s configured Post Reply auto-replies — the private message they send to a customer who comments on a specific post. A reply appears either inline in its post\'s block (a "CONFIGURED REPLY:" line) or as a standalone "POST REPLY" block paired with the post it belongs to. Contest announcements, greetings, and engagement bait ("comment/DM for the price") are NOT offerings — but the specific product/course/vehicle a post promotes IS one. The configured reply is the merchant\'s authoritative answer and usually states the price the post withholds: extract the offering with the exact price(s) stated there. Prices in replies are frequently limited-time offers ("سعر العرض", "فترة العرض"): extract the price exactly as written, do not annotate it as an offer and do not invent an expiry. A post with no reply often withholds the price on purpose: emit such items with "price": null, never invent one. A reply that is only a greeting, a phone number, an address, or "visit us to register" with NO offering is NOT an item — skip it.');
+            // Marketing-heavy pages advertise ONE offering across many posts, which
+            // manufactured pseudo-products in production (2026-08-08: the brand as a
+            // $15 item, and «الباقات تبدأ من» — a headline minus its price — as an
+            // item name). The traps are named explicitly, with a demonstration.
+            const pageName = ctx.pageName?.trim().slice(0, 100);
+            hints.push(`- The page's posts advertise the merchant's OWN offerings — three traps follow. The page/brand itself is never an offering: do not emit the page's name${pageName ? ` («${pageName}»)` : ''} or a description of what the business does as an item — only the distinct products/services/plans it sells. A pricing headline is not an offering name: a post like «باقاتنا تبدأ من 15$» ("our plans start from $15") names nothing buyable — emit NO item for the headline itself; when the same text also names the actual offering, attach that price to the offering instead. Several posts promoting the SAME offering at the same price are ONE entry — never one item per post.`);
         }
         if (hints.length === 0) return CATALOG_EXTRACTION_PROMPT;
-        return CATALOG_EXTRACTION_PROMPT.replace('\nInput:\n', `${hints.join('\n')}\n\nInput:\n`);
+        // Function replacement for the same reason as <TEXT>: a page name may
+        // contain `$` sequences that the string form of replace() would expand.
+        return CATALOG_EXTRACTION_PROMPT.replace('\nInput:\n', () => `${hints.join('\n')}\n\nInput:\n`);
     }
 
     /**

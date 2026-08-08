@@ -152,6 +152,7 @@ export class CatalogScanService {
         const [page] = await db
             .select({
                 id: pages.id,
+                name: pages.name,
                 facebookPageId: pages.facebookPageId,
                 // Named for what the column actually holds: AES ciphertext (the
                 // Graph API cannot use it). Decrypted below before any use — the
@@ -320,6 +321,7 @@ export class CatalogScanService {
             pageId,
             vertical: vertical.effective,
             source: 'page',
+            pageName: page.name ?? undefined,
         });
 
         // A failed AI call must not advance the bookmark — the merchant retries

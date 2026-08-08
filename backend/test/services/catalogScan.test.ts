@@ -83,6 +83,7 @@ const CTX = { userId: 'user-1' };
 
 const dealerPage = (overrides: Record<string, unknown> = {}) => ({
     id: PAGE,
+    name: 'معرض الأحمد',
     facebookPageId: 'fb-dealer',
     encryptedAccessToken: CIPHERTEXT,
     ecommerceStoreId: null,
@@ -176,7 +177,7 @@ describe('catalogScanService.scanPage', () => {
 
         expect(extractorInput()).toContain('كيا ريو 2018');
         expect(vi.mocked(catalogExtractor.extract).mock.calls[0][1]).toMatchObject({
-            userId: 'user-1', pageId: PAGE, vertical: 'vehicles', source: 'page',
+            userId: 'user-1', pageId: PAGE, vertical: 'vehicles', source: 'page', pageName: 'معرض الأحمد',
         });
         expect(result).toMatchObject({
             postsScanned: 1, repliesScanned: 0, upToDate: false, postsUnavailable: null, paidCall: true, items: okExtraction.items,
