@@ -69,4 +69,4 @@ Jawab24 handles conversations in English and Arabic — including **6 Arabic dia
 
 **Don't forget about greeting messages.** Set up a greeting for first-time customers who message you on Facebook/Instagram. A warm welcome in their language sets the tone for the entire relationship.
 
-Not on Shopify? Jawab24 also integrates with [Salla](/blog/salla-store-facebook-auto-reply) and [Zid](/blog/zid-store-facebook-auto-reply) — the same product sync and price verification works across all three platforms.
+Not on Shopify? Jawab24 also integrates with [Salla](/en/blog/salla-store-facebook-auto-reply) and [Zid](/en/blog/zid-store-facebook-auto-reply) — the same product sync and price verification works across all three platforms.

@@ -193,7 +193,7 @@ If you sell on Shopify, Salla, or Zid, connecting your store is the single most 
 3. Authorize on Zid's OAuth page
 4. Your entire Zid catalog — products, prices, descriptions, and availability — syncs automatically
 
-For a detailed walkthrough of the Zid integration, see our [Zid store setup guide](/blog/zid-store-facebook-auto-reply).
+For a detailed walkthrough of the Zid integration, see our [Zid store setup guide](/en/blog/zid-store-facebook-auto-reply).
 
 After the initial sync, updates happen in real-time through webhooks. When you change a price or mark something out of stock, the AI knows immediately.
 

@@ -58,7 +58,7 @@ This simple step ensures no customer ever feels ignored, even when you're sleepi
 
 ## Strategy 5: Connect Your E-Commerce Store
 
-If you sell products online, many customer questions are about specific items: pricing, availability, sizes, colors, delivery options. If your auto-reply tool connects to your store (Shopify, Salla, or [Zid](/blog/zid-store-facebook-auto-reply)), it can answer these questions using real-time data from your catalog.
+If you sell products online, many customer questions are about specific items: pricing, availability, sizes, colors, delivery options. If your auto-reply tool connects to your store (Shopify, Salla, or [Zid](/en/blog/zid-store-facebook-auto-reply)), it can answer these questions using real-time data from your catalog.
 
 Instead of a generic "check our website" response, the AI can say: "Yes, the black leather bag is available in medium and large. It's $49.99 with free delivery. Would you like to order?"
 

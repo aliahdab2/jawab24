@@ -775,4 +775,24 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- Blog: Jawab24 Data Security & Privacy - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/jawab24-data-security</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/jawab24-data-security"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-data-security"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-data-security"/>
+    <lastmod>2026-08-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Blog: Jawab24 Data Security & Privacy - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/jawab24-data-security</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/jawab24-data-security"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-data-security"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-data-security"/>
+    <lastmod>2026-08-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

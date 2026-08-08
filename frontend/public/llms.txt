@@ -48,6 +48,7 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 Jawab24 publishes guides, comparisons, case studies, and data-driven articles about auto-reply, social commerce, and AI customer support. Every article is available in English and Arabic (Arabic at /blog/<slug>, English at /en/blog/<slug>).
 
 - Blog index: https://jawab24.com/blog
+- Is Your Data Safe with Jawab24? Security & Privacy, Explained: https://jawab24.com/blog/jawab24-data-security
 - WhatsApp Is Now Live on Jawab24: https://jawab24.com/blog/whatsapp-auto-reply-jawab24
 - How to Set Up Facebook Auto Reply: https://jawab24.com/blog/auto-reply-facebook-setup-guide
 - Instagram Auto Reply Guide: https://jawab24.com/blog/instagram-auto-reply-guide

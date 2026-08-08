@@ -69,4 +69,4 @@ Reply: "We deliver to all cities in the Kingdom. Delivery to Riyadh takes 2-3 bu
 
 Jawab24 handles conversations in both English and Arabic — including 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). So whether your customers write in English or in their local dialect, the AI replies naturally in the same language.
 
-Not on Zid? Jawab24 also integrates with [Salla](/blog/salla-store-facebook-auto-reply) and [Shopify](/blog/shopify-facebook-auto-reply-arabic) — the same product sync and price verification works across all three platforms.
+Not on Zid? Jawab24 also integrates with [Salla](/en/blog/salla-store-facebook-auto-reply) and [Shopify](/en/blog/shopify-facebook-auto-reply-arabic) — the same product sync and price verification works across all three platforms.

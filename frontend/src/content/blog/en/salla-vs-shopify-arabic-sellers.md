@@ -90,4 +90,4 @@ There's no universally "better" platform. Salla wins on Arabic experience, local
 
 The most important thing is to start. Whichever platform you choose, you can always migrate later. Both Salla and Shopify make it relatively easy to export your product catalog and customer data.
 
-And whichever platform you choose, don't forget to automate your social media replies. Whether your store is on Salla, Shopify, or [Zid](/blog/zid-store-facebook-auto-reply), tools like Jawab24 can connect to your product catalog and handle customer questions automatically — in your customers' language, 24/7. Jawab24 currently supports English and Arabic (with 6 dialect families), and Turkish, Swedish, and German are coming soon.
+And whichever platform you choose, don't forget to automate your social media replies. Whether your store is on Salla, Shopify, or [Zid](/en/blog/zid-store-facebook-auto-reply), tools like Jawab24 can connect to your product catalog and handle customer questions automatically — in your customers' language, 24/7. Jawab24 currently supports English and Arabic (with 6 dialect families), and Turkish, Swedish, and German are coming soon.

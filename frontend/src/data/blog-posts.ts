@@ -10,6 +10,12 @@ export interface BlogPost {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: 'jawab24-data-security',
+    date: '2026-08-08',
+    category: 'guides',
+    readingTime: 7,
+  },
+  {
     slug: 'case-study-damascus-training-institute',
     date: '2026-07-10',
     category: 'caseStudies',

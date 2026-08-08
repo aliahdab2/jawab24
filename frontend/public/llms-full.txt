@@ -220,6 +220,7 @@ Blog index: https://jawab24.com/blog
 - When a Customer Sends a Photo Instead of Typing: https://jawab24.com/blog/ai-auto-reply-customer-photos
 
 ### Guides
+- Is Your Data Safe with Jawab24? Security & Privacy, Explained: https://jawab24.com/blog/jawab24-data-security
 - How to Set Up Facebook Auto Reply for Your Business Page in 2026: https://jawab24.com/blog/auto-reply-facebook-setup-guide
 - How to Set Up Instagram Auto Reply for Business in 2026: https://jawab24.com/blog/instagram-auto-reply-guide
 - Jawab24 Setup Tutorial — Complete Guide: https://jawab24.com/blog/jawab24-setup-tutorial
