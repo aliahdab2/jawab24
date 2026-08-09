@@ -220,8 +220,9 @@ export const postSuggestionsApi = {
   getToday: (pageId: string) =>
     api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
   // Text + image generation — the long-timeout override every AI endpoint uses.
-  generate: (pageId: string) =>
-    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
+  // includeContact: merchant toggle for the server-composed contact footer.
+  generate: (pageId: string, includeContact = true) =>
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact }, { timeout: LONG_RUNNING_TIMEOUT }),
   markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
     api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
 };

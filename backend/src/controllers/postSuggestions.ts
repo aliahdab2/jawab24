@@ -30,13 +30,15 @@ class PostSuggestionsController {
 
     /** POST /pages/:pageId/post-suggestions — generate or regenerate today's post. */
     async generate(
-        request: FastifyRequest<{ Params: { pageId: string } }>,
+        request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean } | null }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.params;
+        // Merchant toggle for the code-composed contact footer; default ON.
+        const includeContact = request.body?.includeContact !== false;
 
-        const result = await postSuggestionsService.generateSuggestion(req.workspaceId, pageId, 'manual');
+        const result = await postSuggestionsService.generateSuggestion(req.workspaceId, pageId, 'manual', { includeContact });
         if (result.ok) {
             return reply.send({
                 suggestion: result.suggestion,

@@ -87,6 +87,7 @@ import {
     isPostSuggestionsEnabledForPage,
     isCronEligiblePage,
     pickPostType,
+    buildContactSuffix,
 } from '../services/postSuggestions';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -155,6 +156,25 @@ describe('pickPostType — deterministic, varies day to day', () => {
 
     it('falls back to general on an empty page', () => {
         expect(pickPostType({ hasLiveDatedRow: false, hasCatalog: false, hasHours: false, knowledgeBase: undefined }, null)).toBe('general');
+    });
+});
+
+describe('buildContactSuffix — code-composed, never model-written (a mangled digit = a lost sale)', () => {
+    it('composes address + phone + distinct whatsapp in order', () => {
+        expect(buildContactSuffix({
+            address: 'شارع الجمهورية', city: 'طرابلس',
+            phones: ['0912345678'], channels: { whatsapp: '0919999999' },
+        })).toBe('📍 شارع الجمهورية، طرابلس\n📞 0912345678\n💬 واتساب: 0919999999');
+    });
+
+    it('collapses whatsapp when it equals the phone, and skips absent fields', () => {
+        expect(buildContactSuffix({ phones: ['0912345678'], channels: { whatsapp: '0912345678' } }))
+            .toBe('📞 0912345678');
+    });
+
+    it('empty or missing profile → no footer at all', () => {
+        expect(buildContactSuffix(null)).toBeUndefined();
+        expect(buildContactSuffix({})).toBeUndefined();
     });
 });
 

@@ -44,6 +44,9 @@ export function PostSuggestionSheet({
   const [degraded, setDegraded] = useState<boolean>(Boolean(initial?.imageDegraded));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
+  // Default ON; applies to the NEXT generation (the server composes the footer).
+  const [includeContact, setIncludeContact] = useState(true);
   const stampedOpen = useRef(false);
   // Auto-generate must fire ONCE per sheet open: StrictMode double-mounts
   // effects in dev, and each paid call consumes a daily-cap slot — caught
@@ -58,7 +61,7 @@ export function PostSuggestionSheet({
     setLoading(true);
     setError(null);
     try {
-      const res = await postSuggestionsApi.generate(pageId);
+      const res = await postSuggestionsApi.generate(pageId, includeContact);
       setSuggestion(res.data.suggestion);
       setRemaining(res.data.remainingToday);
       setDegraded(Boolean(res.data.imageDegraded));
@@ -76,7 +79,7 @@ export function PostSuggestionSheet({
     } finally {
       setLoading(false);
     }
-  }, [pageId, onChanged, t]);
+  }, [pageId, onChanged, t, includeContact]);
 
   // Opened with a suggestion → stamp `opened` once. Opened empty (CTA path) →
   // generate immediately, if this member is allowed to.
@@ -184,6 +187,18 @@ export function PostSuggestionSheet({
                 </Button>
               )}
             </div>
+
+            {canGenerate && remaining > 0 && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeContact}
+                  onChange={(e) => setIncludeContact(e.target.checked)}
+                  className="rounded border-theme-border accent-brand-500"
+                />
+                {t('includeContactToggle')}
+              </label>
+            )}
 
             <p className="text-xs text-subtle">
               {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}

@@ -23,8 +23,10 @@ import { randomUUID } from 'crypto';
 import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
+    whatsappNumbers,
     isRowLive,
     DEFAULT_AI_MODEL,
+    type BusinessProfile,
     type StoredBusinessProfile,
     type PostSuggestionDto,
     type PostSuggestionEvent,
@@ -37,6 +39,7 @@ import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { dailyCapKey, checkDailyCap, incrementDailyCap, type DailyCapStatus } from '../lib/dailyCap';
 import { imageStorage } from './imageStorage';
+import { overlayPageLogo } from './imageCompose';
 import { settingsService } from './settings';
 import { getStoreContextForAI } from './ecommerce';
 import { catalogService } from './catalog';
@@ -90,6 +93,27 @@ export function isCronEligiblePage(pageId: string): boolean {
     return allowed.length > 0 && allowed.includes(pageId);
 }
 
+/**
+ * Deterministic contact footer (address / phone / WhatsApp) from the
+ * merchant-confirmed profile half. Pure and exported for direct testing —
+ * a model must never write these (a mangled digit is a lost sale), so the
+ * suffix is composed here and appended after generation (D-047 posture).
+ */
+export function buildContactSuffix(merchant: BusinessProfile | null | undefined): string | undefined {
+    if (!merchant) return undefined;
+    const lines: string[] = [];
+    const address = [merchant.address, merchant.city].filter(Boolean).join('، ');
+    if (address) lines.push(`📍 ${address}`);
+    const phone = merchant.phones?.[0] || merchant.phone;
+    if (phone) lines.push(`📞 ${phone}`);
+    // whatsappNumbers is THE reader of the field's legacy string|array dual shape.
+    const whatsapp = whatsappNumbers(merchant)[0];
+    if (whatsapp && whatsapp !== phone) {
+        lines.push(`💬 واتساب: ${whatsapp}`);
+    }
+    return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
 export type GenerateFailure =
     | { ok: false; reason: 'gated' }
     | { ok: false; reason: 'daily_cap'; cap: DailyCapStatus }
@@ -106,6 +130,14 @@ interface PageBundle {
     userId: string;
     workspaceId: string;
     pageName: string;
+    /** Page avatar for the corner logo badge (best-effort branding). */
+    logoUrl?: string;
+    /**
+     * Deterministic contact footer (address / phone / WhatsApp) composed in
+     * CODE from the merchant-confirmed profile — never model-written, so a
+     * digit can never be mangled (D-047 posture: decidable by code → code).
+     */
+    contactSuffix?: string;
     businessInfoBlock?: string;
     knowledgeBase?: string;
     productCatalog?: string;
@@ -135,6 +167,8 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
         knowledgeBase: pages.knowledgeBase,
         businessProfile: pages.businessProfile,
         ecommerceStoreId: pages.ecommerceStoreId,
+        instagramProfilePicUrl: pages.instagramProfilePicUrl,
+        facebookPageId: pages.facebookPageId,
     }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
     if (!page || !page.userId || !page.workspaceId) return null;
 
@@ -142,6 +176,8 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance) || undefined;
     const hasHours = Boolean(merchant?.hours && Object.keys(merchant.hours).length > 0);
     const category = merchant?.category || undefined;
+
+    const contactSuffix = buildContactSuffix(merchant);
 
     let productCatalog: string | undefined;
     if (page.ecommerceStoreId) {
@@ -178,17 +214,25 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
     const hasCatalog = Boolean(productCatalog && productCatalog.trim().length > 0);
     const hasLiveDatedRow = await pageHasLiveDatedRow(pageId, today);
 
+    // Logo for the corner badge: the stored IG avatar when present, else the
+    // public Graph picture redirect (works tokenless for most pages; the
+    // overlay is best-effort either way).
+    const logoUrl = page.instagramProfilePicUrl
+        || (page.facebookPageId ? `https://graph.facebook.com/${page.facebookPageId}/picture?type=large&width=200&height=200` : undefined);
+
     return {
         pageId,
         userId: page.userId,
         workspaceId: page.workspaceId,
         pageName: page.name || '',
+        logoUrl,
         businessInfoBlock,
         knowledgeBase: page.knowledgeBase?.slice(0, KB_PROMPT_MAX_CHARS) || undefined,
         productCatalog,
         factCollectionsBlock,
         brandVoiceNotes,
         category,
+        contactSuffix,
         hasHours,
         hasCatalog,
         hasLiveDatedRow,
@@ -266,7 +310,8 @@ Post type for today: ${postType} — ${POST_TYPE_INSTRUCTIONS[postType]}
 
 Rules:
 - Write in Arabic, in the business's own voice and register as evidenced by <brand_voice> and the business's own text. This is the MERCHANT speaking to their customers, not a corporate announcement.
-- Use ONLY facts present in the blocks above. NEVER invent prices, dates, discounts, phone numbers, addresses, or claims. If a detail is not in the blocks, leave it out.
+- Use ONLY facts present in the blocks above. NEVER invent prices, dates, discounts, or claims. If a detail is not in the blocks, leave it out.
+- Do NOT write phone numbers or addresses yourself — the system appends the business's verified contact lines automatically after your text.
 - 2–6 short lines, at most 500 characters. Light emoji use. End with a clear call to action (message us / order / visit). Add 2–4 relevant Arabic hashtags on the last line.
 - Also produce an IMAGE BRIEF in English: one sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers appearing in the image, and WITHOUT people or faces — products, places, and atmosphere only.
 
@@ -377,8 +422,11 @@ async function generatePostImage(bundle: PageBundle, imageBrief: string): Promis
     }
 
     try {
+        // Brand the image with the page's logo (deterministic sharp composite,
+        // zero AI cost, best-effort — failure ships the unbranded image).
+        const branded = await overlayPageLogo(Buffer.from(b64, 'base64'), bundle.logoUrl);
         const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.png`;
-        return await imageStorage.put(key, Buffer.from(b64, 'base64'), 'image/png');
+        return await imageStorage.put(key, branded, 'image/png');
     } catch (err) {
         captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
         return null;
@@ -426,8 +474,11 @@ class PostSuggestionsService {
      * Generate (or regenerate) today's suggestion. `source: 'manual'` comes from
      * the endpoint; the cron passes 'cron'. Both consume the SAME absolute daily
      * cap — owner ruling: 3/day, cron included.
+     * `includeContact` (default true): whether to append the code-composed
+     * contact footer — merchant-controlled per request (owner ruling 08-09:
+     * «خيار يقدر التاجر يضيفه أو لا»).
      */
-    async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual'): Promise<GenerateResult> {
+    async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean }): Promise<GenerateResult> {
         if (!isPostSuggestionsEnabledForPage(pageId)) return { ok: false, reason: 'gated' };
 
         const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId);
@@ -456,6 +507,11 @@ class PostSuggestionsService {
 
         const generated = await generatePostText(bundle, postType);
         if (!generated) return { ok: false, reason: 'generation_failed' };
+        // Deterministic contact footer — appended in code, never model-written.
+        const includeContact = opts?.includeContact !== false;
+        const finalText = includeContact && bundle.contactSuffix
+            ? `${generated.text}\n\n${bundle.contactSuffix}`
+            : generated.text;
 
         const image = await generatePostImage(bundle, generated.imageBrief);
         const imageDegraded: 'image_failed' | 'storage_off' | undefined = image
@@ -485,7 +541,7 @@ class PostSuggestionsService {
             suggestedFor: today,
             source,
             postType,
-            text: generated.text,
+            text: finalText,
             imageUrl: image?.url ?? null,
             imageKey: image?.key ?? null,
             status: 'ready',

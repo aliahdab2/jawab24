@@ -12,6 +12,7 @@
   "imageSavedToFiles": "Image saved to Files",
   "imageDownloadStarted": "Image download started",
   "regenerate": "Suggest another",
+  "includeContactToggle": "Add your contact info to the next post (address / phone / WhatsApp)",
   "remaining": "{count, plural, one {# attempt left today} other {# attempts left today}}",
   "noRemaining": "You've used today's attempts. A fresh post arrives tomorrow.",
   "textOnlyNotice": "The image couldn't be generated this time — the text is ready to use.",
