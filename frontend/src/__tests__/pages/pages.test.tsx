@@ -44,16 +44,17 @@ vi.mock('@/lib/store', () => ({
         selector({ sidebarOpen: false }),
 }));
 
-// Local router mock with mutable query + spy-able replace — the global setup
+// Local router mock with mutable query + spy-able replace/push — the global setup
 // mock returns a fresh static object per call, unusable for deep-link asserts.
 let mockRouterQuery: Record<string, string> = {};
 const mockRouterReplace = vi.fn();
+const mockRouterPush = vi.fn();
 vi.mock('next/router', () => ({
     useRouter: () => ({
         isReady: true,
         query: mockRouterQuery,
         pathname: '/pages',
-        push: vi.fn(),
+        push: mockRouterPush,
         replace: mockRouterReplace,
         prefetch: vi.fn(),
         locale: 'en',
@@ -1464,6 +1465,34 @@ describe('PagesPage — Business Info deep-links', () => {
         await waitFor(() => {
             expect(screen.getByTestId('kb-modal')).toHaveTextContent('Dormant Empty Page');
         });
+    });
+
+    it('Business-Surface workspace: ?openKb routes to /business instead of the free-text modal', async () => {
+        // isCatalogVisible is exercised for REAL via its admin path (a platform
+        // admin passes the gate; allowlisted merchant workspaces take the same
+        // branch through the workspace-id Set). The contract: every Business
+        // Info entry point funnels through openKbEditorFor, and for gated users
+        // that funnel must land on /business with the target page preselected —
+        // never on the legacy modal.
+        mockIsAdmin = true;
+        mockRouterQuery = { openKb: 'true' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page_dormant');
+        });
+        expect(screen.queryByTestId('kb-modal')).toBeNull();
+        mockIsAdmin = false;
+    });
+
+    it('non-gated workspace: ?openKb keeps the legacy free-text modal (no redirect)', async () => {
+        mockRouterQuery = { openKb: 'true' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Dormant Empty Page');
+        });
+        expect(mockRouterPush).not.toHaveBeenCalledWith(expect.stringContaining('/business'));
     });
 
     it('REGRESSION (RQ v5): a disabled pages query must NOT consume the param', async () => {

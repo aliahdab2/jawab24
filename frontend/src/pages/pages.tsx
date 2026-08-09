@@ -38,7 +38,7 @@ const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/Kno
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
-import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect, isCatalogVisible } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -63,7 +63,7 @@ const PagesPage: NextPageWithLayout = () => {
   const tTest = useTranslations('testSmartReply');
   const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
-  const { isAuthenticated, fbToken, user } = useAuthStore();
+  const { isAuthenticated, fbToken, user, workspaces } = useAuthStore();
   // Canary: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is on, the WhatsApp
   // surface shows only to platform admins (the founder). Otherwise governed by
   // the master switch. Actionable surfaces (picker, connect, add-card) gate on
@@ -351,9 +351,20 @@ const PagesPage: NextPageWithLayout = () => {
 
   const openKbEditorFor = useCallback((target: Page | undefined) => {
     if (!target) return;
+    // Business-Surface workspaces get the structured /business page as their
+    // canonical Business Info surface instead of the legacy free-text modal
+    // (owner ruling 2026-08-09: new merchants work directly on the new surface).
+    // This callback is the single funnel for EVERY entry point — the page-card
+    // button, the ?openKb / ?openKbActive deep links from emails, nudges and the
+    // setup checklist, and the KB-nudge toast — so one branch here moves all of
+    // them at once and none can drift to the old editor.
+    if (isCatalogVisible(user, (workspaces ?? []).map((w) => w.id))) {
+      void router.push(`/business?page=${target.id}`);
+      return;
+    }
     setEditingPage(target);
     resetSaved();
-  }, [resetSaved]);
+  }, [resetSaved, user, workspaces, router]);
 
   // ?openKb=true → the first page that NEEDS Business Info (same canonical
   // predicate as the dashboard nudge, checklist, and "Add info" chip — their
