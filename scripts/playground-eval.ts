@@ -3022,6 +3022,40 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Prod replay Shahin World 2026-08-08: accent-free French must be mirrored in French even though the detector reads it as uncertain English and the thread anchor is English. Guard for the VISIBLY_FOREIGN_MIRROR demonstration.',
     },
+    // Case 758 (XGAP): DEGRADED accent-free French — the boundary the demonstration
+    // does NOT clear. Shahin World's real French conversation (Joelle, 2026-08-08
+    // 21:09–21:25) was telegraphic, accent-free, apostrophe-free French with English
+    // loan-spellings («Donne moi hotel a tartous», «S il vous plait…», «23aout
+    // jusqua 25»). Replayed 2026-08-09 against the FIXED branch with the page's
+    // real KB: 6/6 still English; this fixture shape: 6/6 English. Contrast #757:
+    // CLEAN French on the same fixture passes 5/5 runs. So the working boundary is
+    // message quality — clean French mirrors, degraded French does not. Detector
+    // work is off the table (accent-free French ≡ Arabizi at the character level,
+    // five approaches measured and rejected 2026-07-29); wording iterations were
+    // measured and made other cases WORSE (label softening flipped the thread to
+    // Arabic). Real fix candidates, in order: an explicit reply-language override
+    // (industry rule #1, parked 2026-07-29 — now backed by a paying merchant
+    // complaint), or escalating the language decision off gpt-4.1-mini.
+    {
+        id: 758, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'Donne moi cours a distance',
+        page: 'training',
+        senderName: 'Joelle Frangieh',
+        conversationHistory: [
+            { role: 'user', content: 'Bonsoir' },
+            { role: 'assistant', content: 'Bonsoir!' },
+            { role: 'user', content: 'S il vous plait je voudrais savoir si je veux etudier chez vous' },
+            { role: 'assistant', content: 'We are a training institute offering courses including ICDL, first aid, and English. You can reach us for details about registration and schedules.' },
+            { role: 'user', content: 'Je voudrais cours in your center' },
+            { role: 'assistant', content: 'We offer several courses at our center. Let me know which subject interests you so I can share the details.' },
+        ],
+        expected: {
+            replyContainsAny: ['Nous', 'nous', 'notre', 'proposons', 'Voici', 'voici', 'les cours'],
+            replyNotContains: ['We offer', 'we offer', 'You can', 'you can', 'Here are', 'Currently'],
+        },
+        expectedFail: true,
+        notes: 'KNOWN OPEN GAP: degraded telegraphic accent-free French is answered in the thread\'s English. Documented by this running case instead of rotting in a memo; flipping it green is the acceptance bar for the reply-language-override (or model-escalation) follow-up.',
+    },
 
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)
