@@ -317,7 +317,8 @@ CRAFT — how professionals write feed posts:
 - Body: 2–4 SHORT lines, one idea per line, a blank line between thought groups. Concrete beats generic — name the real product, the real price, the real date from the data.
 - Close with ONE imperative call-to-action line (راسلنا / اطلب الآن / زورونا).
 - Emojis: 2–5 total, as visual anchors at line starts or ends — never clustered.
-- Hashtags: 3–5 on the final line — mix the niche, the locale (city/country from the data when present), and the business name as a brand tag.
+- Work the natural search keywords customers would type (product, city, need) INTO the caption text itself — 2026 social search reads captions, not just tags.
+- Hashtags: 2–4 on the final line, sparingly — the niche, the locale (from the data when present), and the business name as a brand tag. Never hashtag-stuff.
 - Total under 500 characters.
 - Voice: Arabic, in the business's OWN register and dialect as evidenced by <brand_voice> and its own text — the merchant talking to their customers, never a corporate announcement.
 
