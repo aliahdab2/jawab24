@@ -15,6 +15,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     ...actual,
     factCollectionsApi: {
       list: vi.fn(),
+      createCollection: vi.fn(),
       addRow: vi.fn(),
       updateRow: vi.fn(),
       deleteRow: vi.fn(),
@@ -77,11 +78,11 @@ const slotCollection = (over: Partial<FactCollectionWithRows> = {}): FactCollect
 
 const bothCollections = () => [priceCollection(), slotCollection()];
 
-function renderSection() {
+function renderSection(props: { readOnly?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <BusinessListsSection pageId={PAGE} />
+      <BusinessListsSection pageId={PAGE} {...props} />
     </QueryClientProvider>,
   );
 }
@@ -95,9 +96,20 @@ async function openCard(title: string) {
 describe('BusinessListsSection', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders NOTHING for a page without collections — absence is the rollout gate', async () => {
+  // The old rollout gate (absence = nothing rendered, for everyone) split with
+  // the G1b creation UI: an ADMIN now gets the «add list» door instead of a
+  // dead end, while a plain member still sees nothing — every affordance in
+  // the empty state is a write a member may not perform.
+  it('a page without collections offers an admin the «add list» empty state', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
-    const { container } = renderSection();
+    renderSection();
+    expect(await screen.findByRole('button', { name: en.lists.addList })).toBeInTheDocument();
+    expect(screen.getByText(en.lists.emptyHint)).toBeInTheDocument();
+  });
+
+  it('renders NOTHING for a member on a page without collections', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
+    const { container } = renderSection({ readOnly: true });
     await waitFor(() => expect(factCollectionsApi.list).toHaveBeenCalled());
     expect(container.querySelector('section')).toBeNull();
   });
@@ -579,6 +591,66 @@ describe('BusinessListsSection', () => {
       // The dollar tier is neither an endpoint of the lira span nor relabelled.
       expect(header.textContent).not.toContain('10–');
       expect(header.textContent).not.toContain('10 ل.س');
+    });
+  });
+
+  describe('«add list» creation flow (G1b creation UI)', () => {
+    it('names the list, collects the FIRST item, and creates both in one atomic POST', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
+      vi.mocked(factCollectionsApi.createCollection).mockResolvedValue({ data: { data: { id: 'new' } } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: en.lists.addList }));
+      fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: ' مناطق التوصيل ' } });
+      fireEvent.click(screen.getByRole('button', { name: common.continue }));
+
+      // Step 2 is the EXISTING row sheet, subtitled with the (trimmed) new label.
+      expect(await screen.findByText('مناطق التوصيل')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(en.lists.rowName), { target: { value: 'وسط المدينة' } });
+      fireEvent.click(screen.getByRole('button', { name: common.save }));
+
+      await waitFor(() => expect(factCollectionsApi.createCollection).toHaveBeenCalledWith(PAGE, {
+        label: 'مناطق التوصيل',
+        rows: [{
+          name: 'وسط المدينة',
+          attributes: null, price: null, currency: null, startsAt: null, endsAt: null,
+        }],
+      }));
+    });
+
+    it('refuses a name the page already uses, inline, before any request', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: en.lists.addList }));
+      fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: 'أسعار الدورات' } });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(en.lists.errDuplicateLabel);
+      expect(screen.getByRole('button', { name: common.continue })).toBeDisabled();
+      expect(factCollectionsApi.createCollection).not.toHaveBeenCalled();
+    });
+
+    it('an empty or whitespace name cannot continue', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: en.lists.addList }));
+      expect(screen.getByRole('button', { name: common.continue })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: '   ' } });
+      expect(screen.getByRole('button', { name: common.continue })).toBeDisabled();
+    });
+
+    it('the «add list» door also exists on a page WITH lists — and never for a member', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+      expect(await screen.findByRole('button', { name: en.lists.addList })).toBeInTheDocument();
+    });
+
+    it('a member gets no «add list» door on a populated page', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection({ readOnly: true });
+      await screen.findByText('أسعار الدورات');
+      expect(screen.queryByRole('button', { name: en.lists.addList })).toBeNull();
     });
   });
 });

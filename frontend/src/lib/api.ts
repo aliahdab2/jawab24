@@ -254,8 +254,7 @@ export interface FactRowBody {
 
 // Fact-collections list editor (G1b) — the enumerable lists the AI quotes
 // exactly (course schedules, price tables, outlet directories). Read-only for
-// members; writes need workspace admin. There is deliberately no create-
-// collection call: collections are born from reviewed extraction (D-038).
+// members; writes need workspace admin.
 /** One atomic entity save: row upserts and deletes that may span several
  *  collections (the price row in one list, its sessions in another) — the
  *  backend applies them in a single transaction. */
@@ -264,9 +263,23 @@ export interface FactEntitySaveBody {
   deletes: { collectionId: string; rowId: string }[];
 }
 
+/** Body for the merchant's «add list» (G1b creation UI). Deliberately narrower
+ *  than the seeder's service input: no keyAttr (reply-time row gating stays an
+ *  admin/seeder concern) and the backend pins source to 'editor'. A collection
+ *  is created WITH its first row — born-empty lists are refused server-side. */
+export interface FactCollectionCreateBody {
+  label: string;
+  rows: (FactRowBody & { name: string })[];
+}
+
 export const factCollectionsApi = {
   list: (pageId: string) =>
     api.get<{ data: FactCollectionWithRows[] }>(`/pages/${pageId}/fact-collections`),
+  /** 201 returns the bare collection (no rows attached) — refetch `list` for
+   *  the full shape. 409 DUPLICATE_LABEL / COLLECTION_LIMIT are expected
+   *  refusals, mapped to copy in the section's failure handler. */
+  createCollection: (pageId: string, body: FactCollectionCreateBody) =>
+    api.post<{ data: { id: string; label: string } }>(`/pages/${pageId}/fact-collections`, body),
   saveEntity: (pageId: string, body: FactEntitySaveBody) =>
     api.put<{ data: { upserted: FactRowDto[]; deletedIds: string[] } }>(`/pages/${pageId}/fact-entity`, body),
   addRow: (pageId: string, collectionId: string, data: FactRowBody & { name: string }) =>

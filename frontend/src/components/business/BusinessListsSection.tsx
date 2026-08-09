@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { isRowLive, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
+import { isRowLive, MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { addErrorBreadcrumb, captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
 import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
@@ -18,6 +18,7 @@ import {
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
 import { FactEntitySheet } from './FactEntitySheet';
+import { NewListSheet } from './NewListSheet';
 
 interface BusinessListsSectionProps {
   pageId: string;
@@ -40,12 +41,14 @@ interface EditingState {
 }
 
 /**
- * «قوائم النشاط» — the fact-list editor (G1b slices 1–3).
+ * «قوائم النشاط» — the fact-list editor (G1b slices 1–4).
  *
- * Renders ONLY when the page has fact collections, which is the rollout gate:
- * collections are born from reviewed extraction (D-038), so a page that was
- * never through that process simply doesn't show the section — no feature
- * flag, no canary widening. Today that is the pilot merchant.
+ * Visibility: a page with collections renders them for every workspace role.
+ * A page WITHOUT collections shows an admin the empty state with the «add
+ * list» door (slice 4 — before it, collections were born only from reviewed
+ * extraction/seeding and this section rendered nothing); a plain member still
+ * sees nothing — there is no affordance a member may use here, and an empty
+ * pitch card would be noise on every page.
  *
  * Presentation is ONE CARD PER ENTITY (a course's prices AND its cohort dates
  * together, joined by `groupFactCollections`), and inside a card the rows are
@@ -102,6 +105,12 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   /** Prefix for the cards' `aria-controls` IDREFs — see `panelId` below. */
   const cardsIdBase = useId();
+  /** The «add list» flow (G1b creation UI): 'naming' shows the label sheet;
+   *  an object is the confirmed label, for which the row sheet collects the
+   *  FIRST item — the collection is created WITH that row in one atomic POST
+   *  (a born-empty list renders no prompt block and no card, so it must not
+   *  exist). */
+  const [newList, setNewList] = useState<'naming' | { label: string } | null>(null);
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
@@ -154,8 +163,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   // without collections".
   if (isLoading) return null;
 
-  if (collections.length === 0) return null;
-
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['fact-collections', pageId] });
 
   /**
@@ -207,6 +214,16 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       case 'DATE_ORDER':
         toast.error(t('lists.errDateOrder'));
         break;
+      case 'COLLECTION_LIMIT':
+        toast.error(t('lists.errCollectionLimit', { max: MAX_COLLECTIONS_PER_PAGE }));
+        break;
+      case 'DUPLICATE_LABEL':
+        // The naming sheet pre-checks against the LOADED labels, so reaching
+        // here means another admin created the rival concurrently — refetch so
+        // it appears, and keep the sheet open for a rename.
+        toast.error(t('lists.errDuplicateLabel'));
+        await refresh();
+        break;
       default:
         toast.error(t('lists.saveFailed'));
     }
@@ -226,6 +243,23 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       toast.success(t('lists.saved'));
     } catch (error) {
       await reportWriteFailure(error, 'save-fact-row');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Create the named list WITH its first item — one atomic POST; the server
+   *  pins source='editor' and never takes a keyAttr from this door. */
+  const createList = async (body: Parameters<React.ComponentProps<typeof ListRowSheet>['onSave']>[0]) => {
+    if (!newList || newList === 'naming') return;
+    setSaving(true);
+    try {
+      await factCollectionsApi.createCollection(pageId, { label: newList.label, rows: [body] });
+      await refresh();
+      setNewList(null);
+      toast.success(t('lists.createdList'));
+    } catch (error) {
+      await reportWriteFailure(error, 'create-fact-collection');
     } finally {
       setSaving(false);
     }
@@ -294,6 +328,65 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       },
     });
   };
+
+  /** Both creation sheets, shared by the empty state and the populated
+   *  section — the flow is identical, only the surrounding chrome differs. */
+  const createSheets = (
+    <>
+      {newList === 'naming' && (
+        <NewListSheet
+          existingLabels={collections.map((c) => c.label)}
+          onContinue={(label) => setNewList({ label })}
+          onClose={() => setNewList(null)}
+        />
+      )}
+      {newList !== null && newList !== 'naming' && (
+        <ListRowSheet
+          row={null}
+          collectionLabel={newList.label}
+          keyAttr={null}
+          attributeLabels={[]}
+          canDelete={false}
+          saving={saving}
+          onSave={createList}
+          onDelete={() => {}}
+          onClose={() => setNewList(null)}
+        />
+      )}
+    </>
+  );
+
+  /** The «add list» door — dashed, like every add affordance in this section.
+   *  Not gated on the collection cap: the 409 copy names the limit, same
+   *  stance as «إضافة عنصر» versus the row cap. */
+  const addListButton = readOnly ? null : (
+    <button
+      type="button"
+      onClick={() => setNewList('naming')}
+      className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+    >
+      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+      {t('lists.addList')}
+    </button>
+  );
+
+  if (collections.length === 0) {
+    // A plain member still sees nothing here — the only affordance is a write.
+    if (readOnly) return null;
+    return (
+      <section aria-label={t('lists.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
+        <div className="flex items-start gap-2">
+          <ListChecks className="w-5 h-5 text-brand-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('lists.title')}</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{t('lists.emptyHint')}</p>
+          </div>
+        </div>
+        <div className="mt-3">{addListButton}</div>
+        {createSheets}
+      </section>
+    );
+  }
 
   // DISPLAY grouping only — the authoritative exclusion happens server-side at
   // prompt-build time. `isRowLive` (@jawab24/shared) is the SAME predicate the
@@ -1132,6 +1225,10 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           );
         })()}
       </div>
+
+      {addListButton && <div className="mt-3">{addListButton}</div>}
+
+      {createSheets}
 
       {entityEditing && (
         <FactEntitySheet

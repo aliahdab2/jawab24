@@ -191,15 +191,47 @@ describe('fact collections — the engine end to end', () => {
     });
 
     // M2: two collections sharing a label would emit two contradictory coverage
-    // statements for the same list; the DB now refuses it outright.
-    it('refuses a second collection with the same label on the same page', async () => {
+    // statements for the same list; the DB refuses it, and — now that merchants
+    // create lists themselves (G1b creation UI) — the service names the refusal
+    // DUPLICATE_LABEL instead of letting a raw unique-violation 500 escape.
+    it('refuses a second collection with the same label on the same page, by name', async () => {
         await factCollectionsService.createCollection(pageId, {
             label: 'الصيدليات', keyAttr: 'المدينة', rows: OUTLETS,
         });
         await expect(factCollectionsService.createCollection(pageId, {
             label: 'الصيدليات', keyAttr: 'الحي', rows: OUTLETS,
-        })).rejects.toThrow();
+        })).rejects.toMatchObject({ name: 'FactCollectionLimitError', code: 'DUPLICATE_LABEL' });
         expect(await factCollectionsService.listCollections(pageId)).toHaveLength(1);
+    });
+
+    // CONCURRENT duplicate creates — the race the pre-check cannot close. The
+    // contract: exactly one wins, the loser gets the SAME named refusal
+    // (whether from the pre-check or the translated 23505), and the DB holds
+    // one collection. A raw PostgresError reaching the caller fails this.
+    it('one of two concurrent same-label creates wins; the other gets DUPLICATE_LABEL', async () => {
+        const attempt = () => factCollectionsService.createCollection(pageId, {
+            label: 'مناطق التوصيل', keyAttr: null, rows: [{ name: 'وسط المدينة' }],
+        });
+        const results = await Promise.allSettled([attempt(), attempt()]);
+        const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect(rejected[0].reason).toMatchObject({ name: 'FactCollectionLimitError', code: 'DUPLICATE_LABEL' });
+        expect(await factCollectionsService.listCollections(pageId)).toHaveLength(1);
+    });
+
+    it('creation persists the structured shadow on its rows (same contract as addRow)', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'مواعيد الدوام', keyAttr: null, source: 'editor',
+            rows: [{
+                name: 'الفترة الصباحية',
+                attributes: [{ label: 'الأيام', value: 'الأحد والثلاثاء' }],
+                structured: { 'الأيام': { kind: 'weekdays', days: [0, 2] } },
+            }],
+        });
+        const rows = await factCollectionsService.getRows(c.id);
+        expect(rows[0].structured).toEqual({ 'الأيام': { kind: 'weekdays', days: [0, 2] } });
+        expect(c.source).toBe('editor');
     });
 
     // M1: 'source' is a trust label the wording depends on — only merchant

@@ -210,6 +210,15 @@
     "searchAllPlaceholder": "Search your lists — by name or details…",
     "searchCount": "Showing {shown, plural, one {# row} other {# rows}} of {total}",
     "searchCountCards": "Showing {shown, plural, one {# item} other {# items}} of {total}",
-    "searchNoResults": "No matches — try another word."
+    "searchNoResults": "No matches — try another word.",
+    "addList": "Add list",
+    "newListTitle": "New list",
+    "newListNameLabel": "List name",
+    "newListNamePlaceholder": "e.g. Course prices, Branches, Delivery areas",
+    "newListNameHint": "Next, add the first item — a list is created together with its first item.",
+    "createdList": "List created",
+    "emptyHint": "Organize what customers ask about — prices, schedules, branches — into lists that Jawab quotes exactly as written.",
+    "errCollectionLimit": "This page has reached the maximum of {max} lists.",
+    "errDuplicateLabel": "A list with this name already exists on this page."
   }
 }
