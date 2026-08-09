@@ -215,6 +215,8 @@ export interface PostSuggestionResponse {
   suggestion: PostSuggestionDto | null;
   remainingToday: number;
   imageDegraded?: 'image_failed' | 'storage_off';
+  /** Angles this page's data can deliver (getToday only) — chips outside it are disabled. */
+  availableTypes?: PostSuggestionPostType[];
 }
 export const postSuggestionsApi = {
   getToday: (pageId: string) =>

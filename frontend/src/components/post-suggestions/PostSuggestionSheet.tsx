@@ -207,26 +207,38 @@ export function PostSuggestionSheet({
 
             {canGenerate && remaining > 0 && (
               <>
-                {/* Angle chooser — regenerate with a specific type (consumes a slot). */}
+                {/* Angle chooser — regenerate with a specific type (consumes a slot).
+                    An angle the page's DATA can't deliver is disabled, never hidden:
+                    the merchant sees what exists and what filling their Business
+                    Info would unlock (complete-your-profile pattern). */}
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1.5">{t('tryAngle')}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {(['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'] as const).map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => void generate(type)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-                          suggestion.postType === type
-                            ? 'bg-brand-500 text-white border-brand-500'
-                            : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
-                        )}
-                      >
-                        {t(`type_${type}`)}
-                      </button>
-                    ))}
+                    {(['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'] as const).map((type) => {
+                      const enabled = !initial?.availableTypes || initial.availableTypes.includes(type);
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          disabled={!enabled}
+                          title={enabled ? undefined : t('angleNeedsData')}
+                          onClick={() => void generate(type)}
+                          className={clsx(
+                            'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                            !enabled && 'opacity-40 cursor-not-allowed',
+                            suggestion.postType === type
+                              ? 'bg-brand-500 text-white border-brand-500'
+                              : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
+                          )}
+                        >
+                          {t(`type_${type}`)}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {initial?.availableTypes && initial.availableTypes.length < 5 && (
+                    <p className="text-[11px] text-subtle mt-1.5">{t('angleNeedsDataHint')}</p>
+                  )}
                 </div>
 
                 <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">

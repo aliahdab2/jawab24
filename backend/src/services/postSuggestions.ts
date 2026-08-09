@@ -465,9 +465,38 @@ function toDto(row: typeof postSuggestions.$inferSelect): PostSuggestionDto {
     };
 }
 
+/**
+ * Which angles this page's DATA can actually deliver — the same availability
+ * logic the automatic picker applies, exposed so the UI never offers a chip
+ * that would burn a capped attempt on an angle with nothing behind it
+ * (best-practice: don't render undeliverable options; dogfood 08-09 — an
+ * empty-profile page made «الدوام» produce an off-target post).
+ */
+async function computeAvailableTypes(workspaceId: string, pageId: string): Promise<PostSuggestionPostType[]> {
+    const [page] = await db.select({
+        knowledgeBase: pages.knowledgeBase,
+        businessProfile: pages.businessProfile,
+        ecommerceStoreId: pages.ecommerceStoreId,
+    }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
+    if (!page) return ['general'];
+
+    const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
+    const available: PostSuggestionPostType[] = ['general'];
+
+    const hasCatalog = page.ecommerceStoreId
+        ? true
+        : (await db.select({ id: catalogItems.id }).from(catalogItems)
+            .where(and(eq(catalogItems.pageId, pageId), eq(catalogItems.isAvailable, true))).limit(1)).length > 0;
+    if (hasCatalog) available.push('product_spotlight');
+    if (await pageHasLiveDatedRow(pageId, todayIso())) available.push('promo');
+    if (page.knowledgeBase && page.knowledgeBase.trim().length > 0) available.push('faq_tip');
+    if (merchant?.hours && Object.keys(merchant.hours).length > 0) available.push('hours_reminder');
+    return available;
+}
+
 class PostSuggestionsService {
     /** Today's ready suggestion (latest wins — a manual regenerate supersedes older rows). */
-    async getToday(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; remainingToday: number }> {
+    async getToday(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; remainingToday: number; availableTypes: PostSuggestionPostType[] }> {
         const today = todayIso();
         const [row] = await db.select().from(postSuggestions)
             .innerJoin(pages, eq(pages.id, postSuggestions.pageId))
@@ -487,7 +516,8 @@ class PostSuggestionsService {
         } catch {
             // Redis down: report 0 remaining — the generate path fails closed anyway.
         }
-        return { suggestion: row ? toDto(row.post_suggestions) : null, remainingToday };
+        const availableTypes = await computeAvailableTypes(workspaceId, pageId);
+        return { suggestion: row ? toDto(row.post_suggestions) : null, remainingToday, availableTypes };
     }
 
     /**
