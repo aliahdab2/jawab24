@@ -39,7 +39,7 @@ import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { dailyCapKey, checkDailyCap, incrementDailyCap, type DailyCapStatus } from '../lib/dailyCap';
 import { imageStorage } from './imageStorage';
-import { overlayPageLogo } from './imageCompose';
+import { composePostCard } from './imageCompose';
 import { settingsService } from './settings';
 import { getStoreContextForAI } from './ecommerce';
 import { catalogService } from './catalog';
@@ -281,17 +281,21 @@ export function pickPostType(
     return (varied.length > 0 ? varied : candidates)[0];
 }
 
+// Per-type CRAFT direction — what a senior copywriter would do differently
+// for each angle, not just what to talk about.
 const POST_TYPE_INSTRUCTIONS: Record<PostSuggestionPostType, string> = {
-    promo: 'Highlight ONE currently-running dated offer from the facts above (its real dates and price only).',
-    product_spotlight: 'Spotlight ONE product/service from the catalog above — what it is, its real price, why customers love it.',
-    faq_tip: 'Answer ONE question customers actually ask, using the business knowledge above.',
-    hours_reminder: 'Remind followers of the opening hours / how to reach the business, from the facts above.',
-    general: 'Write a warm engagement post inviting followers to message the page with their questions or orders.',
+    promo: 'ONE currently-running dated offer from the facts above. Lead with the concrete gain, make its REAL end/start date the urgency (never an invented deadline), name the real price.',
+    product_spotlight: 'ONE product/service from the catalog above. Open on the customer problem or craving it answers, add one sensory or concrete detail, then its real price.',
+    faq_tip: 'ONE question customers genuinely ask (visible in the knowledge above). Hook with the question itself, answer it crisply — position the business as the expert neighbor, not a salesman.',
+    hours_reminder: 'When and how to reach the business, framed as helpfulness ("we are here when you need us"), from the facts above only.',
+    general: 'A warm engagement post: one relatable line about what the business does for its customers, then invite them to message with their questions or orders.',
 };
 
 interface GeneratedText {
     text: string;
     imageBrief: string;
+    /** 2–5 Arabic words the compositor typesets ON the image (we render it — never the image model). */
+    headline: string;
 }
 
 function buildTextPrompt(bundle: PageBundle, postType: PostSuggestionPostType, today: string): string {
@@ -302,20 +306,30 @@ function buildTextPrompt(bundle: PageBundle, postType: PostSuggestionPostType, t
     if (bundle.knowledgeBase) blocks.push(`<business_knowledge>\n${bundle.knowledgeBase}\n</business_knowledge>`);
     if (bundle.brandVoiceNotes) blocks.push(`<brand_voice>\n${bundle.brandVoiceNotes}\n</brand_voice>`);
 
-    return `You write ONE social media post for the business "${bundle.pageName}", to be published on its Facebook/Instagram page today (${today}).
+    return `You are the senior Arabic social-media copywriter at a top marketing agency. Write ONE organic post for the business "${bundle.pageName}" to publish on its Facebook/Instagram page today (${today}).
 
 ${blocks.join('\n\n')}
 
-Post type for today: ${postType} — ${POST_TYPE_INSTRUCTIONS[postType]}
+Today's angle: ${postType} — ${POST_TYPE_INSTRUCTIONS[postType]}
 
-Rules:
-- Write in Arabic, in the business's own voice and register as evidenced by <brand_voice> and the business's own text. This is the MERCHANT speaking to their customers, not a corporate announcement.
-- Use ONLY facts present in the blocks above. NEVER invent prices, dates, discounts, or claims. If a detail is not in the blocks, leave it out.
-- Do NOT write phone numbers or addresses yourself — the system appends the business's verified contact lines automatically after your text.
-- 2–6 short lines, at most 500 characters. Light emoji use. End with a clear call to action (message us / order / visit). Add 2–4 relevant Arabic hashtags on the last line.
-- Also produce an IMAGE BRIEF in English: one sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers appearing in the image, and WITHOUT people or faces — products, places, and atmosphere only.
+CRAFT — how professionals write feed posts:
+- Line 1 is the HOOK: a question, a bold benefit, or a striking concrete detail that stops the scroll. Never open with the business name, a greeting, or "نقدم لكم".
+- Body: 2–4 SHORT lines, one idea per line, a blank line between thought groups. Concrete beats generic — name the real product, the real price, the real date from the data.
+- Close with ONE imperative call-to-action line (راسلنا / اطلب الآن / زورونا).
+- Emojis: 2–5 total, as visual anchors at line starts or ends — never clustered.
+- Hashtags: 3–5 on the final line — mix the niche, the locale (city/country from the data when present), and the business name as a brand tag.
+- Total under 500 characters.
+- Voice: Arabic, in the business's OWN register and dialect as evidenced by <brand_voice> and its own text — the merchant talking to their customers, never a corporate announcement.
 
-Return JSON: {"text": string, "imageBrief": string}`;
+TRUTH — non-negotiable:
+- Every fact (price, date, product, place, claim) must exist in the blocks above. Not there → not said.
+- Do NOT write phone numbers or addresses — the platform appends the verified contact block automatically after your text.
+
+Also return:
+- "headline": 2–5 Arabic words the platform will typeset ON the image — the post's core idea as a poster line (e.g. «تشكيلة العطور وصلت»). No emojis, no punctuation except «!».
+- "imageBrief": one English sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers, and WITHOUT people or faces — products, places, and atmosphere only.
+
+Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
 }
 
 /** JSON-mode text call. Null on any failure — the caller maps to generation_failed. */
@@ -360,6 +374,7 @@ async function generatePostText(bundle: PageBundle, postType: PostSuggestionPost
         return {
             text: parsed.text.trim(),
             imageBrief: typeof parsed.imageBrief === 'string' ? parsed.imageBrief.trim() : '',
+            headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
         };
     } catch {
         recordAiFailedBeforeLog('post_generation', POST_TEXT_MODEL, 'Other');
@@ -388,7 +403,7 @@ interface GeneratedImage {
  * Image call + storage. Null = degrade to text-only (never fails the whole
  * suggestion): storage unconfigured, model refusal, timeout, or upload error.
  */
-async function generatePostImage(bundle: PageBundle, imageBrief: string): Promise<GeneratedImage | null> {
+async function generatePostImage(bundle: PageBundle, imageBrief: string, headline: string): Promise<GeneratedImage | null> {
     if (!config.openai?.apiKey || !imageBrief || !imageStorage.isConfigured()) return null;
     const client = makeTrackedOpenAI(config.openai.apiKey, {
         userId: bundle.userId,
@@ -422,11 +437,15 @@ async function generatePostImage(bundle: PageBundle, imageBrief: string): Promis
     }
 
     try {
-        // Brand the image with the page's logo (deterministic sharp composite,
-        // zero AI cost, best-effort — failure ships the unbranded image).
-        const branded = await overlayPageLogo(Buffer.from(b64, 'base64'), bundle.logoUrl);
+        // Compose the DESIGNED card: brand scrim + typeset Arabic headline +
+        // logo badge (deterministic sharp layers, zero AI cost, best-effort —
+        // any layer failure ships whatever composed cleanly).
+        const designed = await composePostCard(Buffer.from(b64, 'base64'), {
+            headline,
+            logoUrl: bundle.logoUrl,
+        });
         const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.png`;
-        return await imageStorage.put(key, branded, 'image/png');
+        return await imageStorage.put(key, designed, 'image/png');
     } catch (err) {
         captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
         return null;
@@ -513,7 +532,7 @@ class PostSuggestionsService {
             ? `${generated.text}\n\n${bundle.contactSuffix}`
             : generated.text;
 
-        const image = await generatePostImage(bundle, generated.imageBrief);
+        const image = await generatePostImage(bundle, generated.imageBrief, generated.headline);
         const imageDegraded: 'image_failed' | 'storage_off' | undefined = image
             ? undefined
             : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
