@@ -153,9 +153,8 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
         }
         recordAiReturn(ctx.pipeline, requestedModel);
         // gpt-image models report token usage (input_tokens = prompt text,
-        // output_tokens = image tokens); a streamed response or a model without
-        // usage is skipped, same posture as chat. ImagesResponse carries no
-        // `model` field, so the requested model is what gets logged.
+        // output_tokens = image tokens). ImagesResponse carries no `model`
+        // field, so the requested model is what gets logged.
         if (response && typeof response === 'object' && 'usage' in response) {
             const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
             logAiUsage({
@@ -169,6 +168,14 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
                 pipeline: ctx.pipeline,
                 intent: ctx.intent ?? null,
             }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+        } else {
+            // Unlike chat, images have NO streaming path — a resolved response
+            // without `usage` is always an anomaly: the call was billed but no
+            // ai_usage_log row will follow. Book it (§13c: every logAiUsage
+            // bypass emits failed_before_log) so the gap analysis can name the
+            // miss instead of showing an unexplained R−L gap on the most
+            // expensive call in the codebase.
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'ZeroTokens');
         }
         return response;
     }) as typeof imagesGenerate;

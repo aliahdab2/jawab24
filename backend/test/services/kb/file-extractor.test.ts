@@ -37,16 +37,15 @@ vi.mock('mammoth', () => ({
     extractRawText: mockExtractRawText,
 }));
 
-const mockOpenAICreate = vi.fn();
-vi.mock('openai', () => ({
-    default: vi.fn().mockImplementation(() => ({
-        chat: { completions: { create: mockOpenAICreate } },
-        embeddings: { create: vi.fn() },
-        // makeTrackedOpenAI binds images.generate at construction, so every
-        // mock of the SDK must carry it even when the test never calls it.
-        images: { generate: vi.fn() },
-    })),
-}));
+// The shared factory carries the FULL surface makeTrackedOpenAI binds at
+// construction (chat/embeddings/images) — see helpers/openaiSdkMock.ts.
+// vi.hoisted: the mock factory dereferences the spy the moment 'openai' is
+// first imported, which is before plain module-level consts initialize.
+const { mockOpenAICreate } = vi.hoisted(() => ({ mockOpenAICreate: vi.fn() }));
+vi.mock('openai', async () => {
+    const { makeOpenAiSdkMock } = await import('../../helpers/openaiSdkMock');
+    return makeOpenAiSdkMock({ chatCreate: mockOpenAICreate }).module;
+});
 
 // pdf-to-img yields Buffers via an async iterable; mock a tiny 2-page doc
 const mockPdfPages = vi.fn<() => Buffer[]>(() => [Buffer.from('png-1'), Buffer.from('png-2')]);

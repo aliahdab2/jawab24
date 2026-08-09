@@ -1,15 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui';
-import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
+import { postSuggestionsApi } from '@/lib/api';
 import { isPostSuggestionsVisible } from '@/lib/featureFlags';
 import { useAuthStore } from '@/lib/store';
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
-import { PostSuggestionSheet } from '@/components/post-suggestions/PostSuggestionSheet';
 import type { Page } from '@jawab24/shared';
+
+// Lazy: the sheet is founder-only during the pilot and renders only when
+// opened — the fleet-wide dashboard chunk must not carry it (ssr off: the
+// dashboard is auth-gated, nothing here is server-rendered).
+const PostSuggestionSheet = dynamic(
+  () => import('@/components/post-suggestions/PostSuggestionSheet').then((m) => ({ default: m.PostSuggestionSheet })),
+  { ssr: false },
+);
 
 /**
  * «بوست اليوم» dashboard card (pilot). Self-gating like PostReplyNudgeBanner:
@@ -25,8 +33,8 @@ import type { Page } from '@jawab24/shared';
 export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const t = useTranslations('postSuggestions');
   const { isAdmin } = useWorkspaceRole();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [latestByPage, setLatestByPage] = useState<Record<string, PostSuggestionResponse>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
@@ -51,7 +59,10 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
 
   if (!pageId || isError) return null;
 
-  const current = latestByPage[pageId] ?? data ?? null;
+  // React-query cache is the SINGLE source of truth: generation results are
+  // written through to it (below), so day rollover and other admins' refetches
+  // win naturally — no shadow copy that outlives the server state.
+  const current = data ?? null;
   const hasPost = Boolean(current?.suggestion);
   // Nothing to show and nothing this member may do about it → no card.
   if (!hasPost && !isAdmin) return null;
@@ -105,7 +116,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           initial={current}
           canGenerate={isAdmin}
           onClose={() => setOpen(false)}
-          onChanged={(latest) => setLatestByPage((prev) => ({ ...prev, [pageId]: latest }))}
+          onChanged={(latest) => queryClient.setQueryData(['post-suggestion-today', pageId], latest)}
         />
       )}
     </>

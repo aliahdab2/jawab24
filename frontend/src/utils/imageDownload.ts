@@ -1,33 +1,14 @@
 /**
  * Shared image download/share utility («بوست اليوم» image, first consumer).
  *
- * Same platform strategy as csvExport.downloadCSV — the ONE proven pattern for
- * getting a file out of this app (do not hand-roll another):
- *   Native (Capacitor): fetch → base64 → Cache dir + native share sheet.
- *     Directory.Documents fails under Android 10+ scoped storage; Cache needs
- *     no permission, and the share sheet saves to Files/Gallery or sends onward.
- *   iOS Safari (web): Web Share API with File — <a download> opens a tab on iOS.
- *   Desktop + Android Chrome: programmatic <a> click with a blob URL.
+ * Content acquisition only — the platform delivery (native share sheet / iOS
+ * Web Share / desktop anchor) is the shared `deliverFile` tail in
+ * fileDelivery.ts, the ONE proven pattern for getting a file out of this app.
  *
- * The source is a URL (our media CDN), so every branch starts with a fetch —
+ * The source is a URL (our media CDN), so delivery starts with a fetch —
  * a cross-origin <a download> would silently navigate instead of downloading.
  */
-import { isNativePlatform } from '@/lib/capacitor';
-
-/** Strip non-ASCII characters so all platforms accept the filename. */
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^\w.\-]/g, '_');
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    // result = "data:<mime>;base64,<payload>" — Filesystem wants the payload only.
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
+import { deliverFile } from './fileDelivery';
 
 /**
  * Download or share an image by URL.
@@ -42,58 +23,12 @@ export async function downloadImage(
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
   const blob = await response.blob();
-  const mime = blob.type || 'image/png';
-
-  // ── Native (Capacitor WKWebView / Android WebView) ────────────────────
-  if (isNativePlatform()) {
-    const { Filesystem, Directory } = await import('@capacitor/filesystem');
-    const { Share } = await import('@capacitor/share');
-    const safeName = sanitizeFilename(filename);
-    await Filesystem.writeFile({
-      path: safeName,
-      // No `encoding` → data is written as base64-decoded binary.
-      data: await blobToBase64(blob),
-      directory: Directory.Cache,
-    });
-    const { uri } = await Filesystem.getUri({ path: safeName, directory: Directory.Cache });
-    try {
-      await Share.share({ title: filename, files: [uri] });
-      return { savedToFiles: true };
-    } catch (err) {
-      // User dismissed the share sheet — not a real failure.
-      if (err instanceof Error && /cancel/i.test(err.message)) {
-        return { savedToFiles: false };
-      }
-      throw err;
-    }
-  }
-
-  // ── iOS Safari (web, not Capacitor) ───────────────────────────────────
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  if (isIOS && typeof navigator.canShare === 'function') {
-    const file = new File([blob], filename, { type: mime });
-    if (navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: filename });
-      } catch (err) {
-        // AbortError = user dismissed the share sheet — not a real failure
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return { savedToFiles: false };
-        }
-        throw err;
-      }
-      return { savedToFiles: false };
-    }
-  }
-
-  // ── Desktop + Android Chrome: programmatic download ────────────────────
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = sanitizeFilename(filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(objectUrl);
-  return { savedToFiles: false };
+  return deliverFile({
+    blob,
+    filename,
+    mime: blob.type || 'image/png',
+    // Binary payload: base64 with NO encoding key (the corruption trap
+    // deliverFile owns and documents).
+    native: { format: 'base64FromBlob' },
+  });
 }

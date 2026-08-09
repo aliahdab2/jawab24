@@ -10,7 +10,10 @@
  * Spend is bounded three ways, outermost first:
  *   1. config.postSuggestions env gate + page allowlist (default OFF),
  *   2. an ABSOLUTE dailyCap of `dailyCapPerPage` generations/day/page
- *      (owner: 3, «ليس أكثر») — the daily cron generation consumes 1 of them,
+ *      (owner: 3, «ليس أكثر») — the daily cron generation consumes 1 of them.
+ *      Enforced as an atomic Redis claim (INCR-as-arbiter) FLOORED by the
+ *      durable count of today's rows, so neither a concurrency race nor a
+ *      lost Redis key can re-open spend,
  *   3. the route's rate limit (2/min).
  *
  * The business bundle is assembled with the SAME service calls the
@@ -18,7 +21,7 @@
  * buildFactCollectionsContext (ungated: no messageText → full live rows),
  * formatBusinessInfoPrompt — never a re-derivation of the reply pipeline.
  */
-import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import {
     formatBusinessInfoPrompt,
@@ -30,6 +33,7 @@ import {
     type StoredBusinessProfile,
     type PostSuggestionDto,
     type PostSuggestionEvent,
+    type PostSuggestionImageDegraded,
     type PostSuggestionPostType,
 } from '@jawab24/shared';
 import { db } from '../db';
@@ -37,9 +41,9 @@ import { pages, catalogItems, factCollections, factRows, postSuggestions } from 
 import { config } from '../config';
 import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
-import { dailyCapKey, checkDailyCap, incrementDailyCap, type DailyCapStatus } from '../lib/dailyCap';
+import { dailyCapKey, checkDailyCap, claimDailyCapSlot, type DailyCapStatus } from '../lib/dailyCap';
 import { imageStorage } from './imageStorage';
-import { composePostCard } from './imageCompose';
+import { composePostCard, fetchRoundedLogo } from './imageCompose';
 import { settingsService } from './settings';
 import { getStoreContextForAI } from './ecommerce';
 import { catalogService } from './catalog';
@@ -112,7 +116,15 @@ export type GenerateFailure =
     | { ok: false; reason: 'generation_failed' };
 
 export type GenerateResult =
-    | { ok: true; suggestion: PostSuggestionDto; remainingToday: number; imageDegraded?: 'image_failed' | 'storage_off' }
+    | {
+        ok: true;
+        suggestion: PostSuggestionDto;
+        /** null only on the suppressed-insert fallback when the cap store is unreachable. */
+        remainingToday: number | null;
+        imageDegraded?: PostSuggestionImageDegraded;
+        /** Post-generation availability — the response mirrors getToday's envelope (one shape). */
+        availableTypes: PostSuggestionPostType[];
+    }
     | GenerateFailure;
 
 interface PageBundle {
@@ -144,11 +156,12 @@ function todayIso(): string {
 }
 
 /**
- * Assemble everything the text prompt needs, using the same building blocks
- * as playgroundContext.ts. Returns null when the page doesn't exist in this
- * workspace (caller 404s) or has no owner to bill.
+ * The workspace-scoped page read every entry point starts with. Ownership is
+ * resolved from THIS read, BEFORE any cap read or spend: the cap key is
+ * pageId-scoped, so a pre-ownership cap write would let any enabled workspace
+ * burn another tenant's daily slots (and a 404 would burn a real one).
  */
-async function buildPageBundle(workspaceId: string, pageId: string): Promise<PageBundle | null> {
+async function fetchOwnedPage(workspaceId: string, pageId: string) {
     const [page] = await db.select({
         id: pages.id,
         name: pages.name,
@@ -160,11 +173,22 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
         instagramProfilePicUrl: pages.instagramProfilePicUrl,
         facebookPageId: pages.facebookPageId,
     }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
-    if (!page || !page.userId || !page.workspaceId) return null;
+    return page ?? null;
+}
 
+type OwnedPage = NonNullable<Awaited<ReturnType<typeof fetchOwnedPage>>>;
+
+/**
+ * Assemble everything the text prompt needs from an already-ownership-checked
+ * page row, using the same building blocks as playgroundContext.ts. `userId`
+ * and `workspaceId` are passed pre-narrowed — the caller has already refused
+ * pages with no owner to bill.
+ */
+async function buildPageBundle(page: OwnedPage, userId: string, workspaceId: string, today: string): Promise<PageBundle> {
+    const pageId = page.id;
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance) || undefined;
-    const hasHours = Boolean(merchant?.hours && Object.keys(merchant.hours).length > 0);
+    const hasHours = hasBusinessHours(merchant);
     const category = merchant?.category || undefined;
 
     const contactSuffix = buildContactSuffix(merchant);
@@ -195,12 +219,11 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
 
     let brandVoiceNotes: string | undefined;
     try {
-        brandVoiceNotes = (await settingsService.getSettings(page.userId)).brandVoiceNotes || undefined;
+        brandVoiceNotes = (await settingsService.getSettings(userId)).brandVoiceNotes || undefined;
     } catch {
         // Non-critical — the post falls back to a neutral merchant voice.
     }
 
-    const today = todayIso();
     const hasCatalog = Boolean(productCatalog && productCatalog.trim().length > 0);
     const hasLiveDatedRow = await pageHasLiveDatedRow(pageId, today);
 
@@ -212,8 +235,8 @@ async function buildPageBundle(workspaceId: string, pageId: string): Promise<Pag
 
     return {
         pageId,
-        userId: page.userId,
-        workspaceId: page.workspaceId,
+        userId,
+        workspaceId,
         pageName: page.name || '',
         logoUrl,
         businessInfoBlock,
@@ -252,20 +275,78 @@ async function pageHasLiveDatedRow(pageId: string, today: string): Promise<boole
     return rows.some(r => (r.startsAt || r.endsAt) && isRowLive(r, today));
 }
 
+// ---------------------------------------------------------------------------
+// Post-angle availability — ONE derivation, one home (Rule 10.8). Consumed by
+// the variety picker, the merchant-override validation in generateSuggestion,
+// AND the advertised `availableTypes` list, so the three answers can never
+// drift apart again. The two data sources hold different evidence, and each
+// passes what it honestly knows:
+//   - buildPageBundle has the FETCHED catalog text, so its `hasCatalog` is
+//     the truth: "the prompt will actually carry a <product_catalog> block".
+//   - computeAvailableTypes runs on every dashboard card read from the page
+//     row alone — for an ecommerce page it advertises product_spotlight from
+//     `ecommerceStoreId` WITHOUT the store-context fetch (too expensive per
+//     card render). That cheap advertisement is honest ONLY because
+//     generateSuggestion re-validates the requested angle against the
+//     bundle's fetched-catalog flags and downgrades to the picker when the
+//     fetch yields nothing — both halves of that boundary are stated here
+//     and nowhere else.
+// ---------------------------------------------------------------------------
+
+/** Which data-backed angles a page can deliver. `general` needs no data and is always available. */
+export interface PostAngleFlags {
+    hasLiveDatedRow: boolean;
+    hasCatalog: boolean;
+    hasHours: boolean;
+    hasFaqTip: boolean;
+}
+
+/**
+ * The predicate set behind every availability answer. The KB predicate is
+ * normalized HERE: a whitespace-only KB is NO KB (the stricter of the two
+ * readings that used to coexist — raw truthiness on the picker path once
+ * advertised faq_tip for a blank-but-truthy string).
+ */
+export function computeAvailabilityFlags(signals: {
+    hasLiveDatedRow: boolean;
+    hasCatalog: boolean;
+    hasHours: boolean;
+    knowledgeBase?: string | null;
+}): PostAngleFlags {
+    return {
+        hasLiveDatedRow: signals.hasLiveDatedRow,
+        hasCatalog: signals.hasCatalog,
+        hasHours: signals.hasHours,
+        hasFaqTip: Boolean(signals.knowledgeBase?.trim()),
+    };
+}
+
+/** Hours predicate — shared by the bundle and the availability list (one home). */
+function hasBusinessHours(merchant: BusinessProfile | null | undefined): boolean {
+    return Boolean(merchant?.hours && Object.keys(merchant.hours).length > 0);
+}
+
+/** Deliverable angles in picker-preference order. Empty ⇒ only `general` remains. */
+function candidateTypes(flags: PostAngleFlags): PostSuggestionPostType[] {
+    const candidates: PostSuggestionPostType[] = [];
+    if (flags.hasLiveDatedRow) candidates.push('promo');
+    if (flags.hasCatalog) candidates.push('product_spotlight');
+    if (flags.hasFaqTip) candidates.push('faq_tip');
+    if (flags.hasHours) candidates.push('hours_reminder');
+    return candidates;
+}
+
 /**
  * Deterministic post-type picker — no AI call. Candidates come from what the
- * page actually has; the previous suggestion's type is excluded when there is
- * a choice, so consecutive days vary.
+ * page actually has (the shared availability flags); the previous
+ * suggestion's type is excluded when there is a choice, so consecutive days
+ * vary.
  */
 export function pickPostType(
     bundle: Pick<PageBundle, 'hasLiveDatedRow' | 'hasCatalog' | 'hasHours' | 'knowledgeBase'>,
     previousType: string | null,
 ): PostSuggestionPostType {
-    const candidates: PostSuggestionPostType[] = [];
-    if (bundle.hasLiveDatedRow) candidates.push('promo');
-    if (bundle.hasCatalog) candidates.push('product_spotlight');
-    if (bundle.knowledgeBase) candidates.push('faq_tip');
-    if (bundle.hasHours) candidates.push('hours_reminder');
+    const candidates = candidateTypes(computeAvailabilityFlags(bundle));
     if (candidates.length === 0) return 'general';
     const varied = candidates.filter(c => c !== previousType);
     return (varied.length > 0 ? varied : candidates)[0];
@@ -324,7 +405,7 @@ Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
 }
 
 /** JSON-mode text call. Null on any failure — the caller maps to generation_failed. */
-async function generatePostText(bundle: PageBundle, postType: PostSuggestionPostType): Promise<GeneratedText | null> {
+async function generatePostText(bundle: PageBundle, postType: PostSuggestionPostType, today: string): Promise<GeneratedText | null> {
     if (!config.openai?.apiKey) return null;
     const client = makeTrackedOpenAI(config.openai.apiKey, {
         userId: bundle.userId,
@@ -338,7 +419,7 @@ async function generatePostText(bundle: PageBundle, postType: PostSuggestionPost
     try {
         response = await client.chat.completions.create({
             model: POST_TEXT_MODEL,
-            messages: [{ role: 'user', content: buildTextPrompt(bundle, postType, todayIso()) }],
+            messages: [{ role: 'user', content: buildTextPrompt(bundle, postType, today) }],
             temperature: 0.8, // creative variety day to day — unlike extraction pipelines
             max_tokens: 1000,
             response_format: { type: 'json_object' },
@@ -392,7 +473,8 @@ interface GeneratedImage {
 
 /**
  * Image call + storage. Null = degrade to text-only (never fails the whole
- * suggestion): storage unconfigured, model refusal, timeout, or upload error.
+ * suggestion): storage unconfigured, model refusal, timeout, undecodable
+ * model output, or upload error.
  */
 async function generatePostImage(bundle: PageBundle, imageBrief: string, headline: string): Promise<GeneratedImage | null> {
     if (!config.openai?.apiKey || !imageBrief || !imageStorage.isConfigured()) return null;
@@ -401,6 +483,16 @@ async function generatePostImage(bundle: PageBundle, imageBrief: string, headlin
         pageId: bundle.pageId,
         pipeline: 'post_image_generation',
     });
+
+    // The logo depends only on the bundle, so its fetch (up to 5s at
+    // graph.facebook.com) starts NOW and runs concurrently with the image
+    // call instead of adding sequential tail on a path the merchant watches
+    // (Rule 17.3). A logo failure must never fail the generation: the fetch
+    // resolves null on its own errors, and the extra catch pins that even if
+    // its contract ever changes.
+    const logoPromise: Promise<Buffer | null> = bundle.logoUrl
+        ? fetchRoundedLogo(bundle.logoUrl).catch(() => null)
+        : Promise.resolve(null);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
@@ -427,18 +519,22 @@ async function generatePostImage(bundle: PageBundle, imageBrief: string, headlin
         return null;
     }
 
+    // JPEG, not PNG: photographic card with no transparency — ~10× smaller on
+    // the market's mobile networks, and FB/IG accept JPEG for posts.
+    const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
     try {
         // Compose the DESIGNED card: brand scrim + typeset Arabic headline +
         // logo badge (deterministic sharp layers, zero AI cost, best-effort —
-        // any layer failure ships whatever composed cleanly).
+        // any LAYER failure ships whatever composed cleanly; an undecodable
+        // BASE returns null and the suggestion degrades to text-only).
         const designed = await composePostCard(Buffer.from(b64, 'base64'), {
             headline,
-            logoUrl: bundle.logoUrl,
+            logo: await logoPromise,
         });
-        const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.png`;
-        return await imageStorage.put(key, designed, 'image/png');
+        if (!designed) return null;
+        return await imageStorage.put(key, designed, 'image/jpeg');
     } catch (err) {
-        captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
+        captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId, key } });
         return null;
     }
 }
@@ -456,58 +552,76 @@ function toDto(row: typeof postSuggestions.$inferSelect): PostSuggestionDto {
 }
 
 /**
- * Which angles this page's DATA can actually deliver — the same availability
- * logic the automatic picker applies, exposed so the UI never offers a chip
- * that would burn a capped attempt on an angle with nothing behind it
+ * Which angles this page's DATA can actually deliver — the SAME flag
+ * derivation the picker and the generate-time validation consume
+ * (computeAvailabilityFlags), fed from the page row, so the UI never offers
+ * a chip that would burn a capped attempt on an angle with nothing behind it
  * (best-practice: don't render undeliverable options; dogfood 08-09 — an
  * empty-profile page made «الدوام» produce an off-target post).
+ *
+ * `hasCatalog` here is the CHEAP answer (ecommerceStoreId / a catalog_items
+ * probe, no store-context fetch) — see the availability block's boundary
+ * note: generateSuggestion re-validates against the actually-fetched catalog.
  */
-async function computeAvailableTypes(workspaceId: string, pageId: string): Promise<PostSuggestionPostType[]> {
-    const [page] = await db.select({
-        knowledgeBase: pages.knowledgeBase,
-        businessProfile: pages.businessProfile,
-        ecommerceStoreId: pages.ecommerceStoreId,
-    }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
-    if (!page) return ['general'];
-
+async function computeAvailableTypes(page: OwnedPage, today: string): Promise<PostSuggestionPostType[]> {
     const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
-    const available: PostSuggestionPostType[] = ['general'];
 
     const hasCatalog = page.ecommerceStoreId
         ? true
         : (await db.select({ id: catalogItems.id }).from(catalogItems)
-            .where(and(eq(catalogItems.pageId, pageId), eq(catalogItems.isAvailable, true))).limit(1)).length > 0;
-    if (hasCatalog) available.push('product_spotlight');
-    if (await pageHasLiveDatedRow(pageId, todayIso())) available.push('promo');
-    if (page.knowledgeBase && page.knowledgeBase.trim().length > 0) available.push('faq_tip');
-    if (merchant?.hours && Object.keys(merchant.hours).length > 0) available.push('hours_reminder');
-    return available;
+            .where(and(eq(catalogItems.pageId, page.id), eq(catalogItems.isAvailable, true))).limit(1)).length > 0;
+    const flags = computeAvailabilityFlags({
+        hasLiveDatedRow: await pageHasLiveDatedRow(page.id, today),
+        hasCatalog,
+        hasHours: hasBusinessHours(merchant),
+        knowledgeBase: page.knowledgeBase,
+    });
+    return ['general', ...candidateTypes(flags)];
 }
 
 class PostSuggestionsService {
-    /** Today's ready suggestion (latest wins — a manual regenerate supersedes older rows). */
-    async getToday(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; remainingToday: number; availableTypes: PostSuggestionPostType[] }> {
+    /**
+     * Today's ready suggestion (latest wins — a manual regenerate supersedes
+     * older rows). Null when the page doesn't belong to this workspace — the
+     * caller 404s, and ownership resolves BEFORE the cap read so a foreign
+     * page never even leaks its counter. The same page row feeds
+     * computeAvailableTypes, so KB/profile are fetched exactly once.
+     */
+    async getToday(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; remainingToday: number | null; availableTypes: PostSuggestionPostType[] } | null> {
         const today = todayIso();
+        const page = await fetchOwnedPage(workspaceId, pageId);
+        if (!page) return null;
+
+        // Ownership is established above, so no pages join — and no
+        // materializing the full pages row (KB text, accessToken) per card fetch.
         const [row] = await db.select().from(postSuggestions)
-            .innerJoin(pages, eq(pages.id, postSuggestions.pageId))
             .where(and(
                 eq(postSuggestions.pageId, pageId),
-                eq(pages.workspaceId, workspaceId),
                 eq(postSuggestions.suggestedFor, today),
                 eq(postSuggestions.status, 'ready'),
             ))
             .orderBy(desc(postSuggestions.createdAt))
             .limit(1);
 
-        let remainingToday = 0;
+        let remainingToday: number | null = null;
         try {
-            const cap = await checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId), config.postSuggestions.dailyCapPerPage);
+            const cap = await checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), config.postSuggestions.dailyCapPerPage);
             remainingToday = Math.max(0, cap.limit - cap.used);
-        } catch {
-            // Redis down: report 0 remaining — the generate path fails closed anyway.
+        } catch (err) {
+            // Redis down: remaining stays NULL (= unknown) — never report a
+            // false "exhausted" that hides the regenerate UI for the incident's
+            // duration; the generate path fails closed on its own. Captured
+            // (fingerprinted) so a Redis incident on the highest-frequency cap
+            // read is visible, not silently degraded.
+            captureError(err, 'Post suggestion: getToday cap read failed', {
+                level: 'warning',
+                tags: { service: 'post-suggestions' },
+                fingerprint: ['post-suggestions-cap-read'],
+                extra: { pageId },
+            });
         }
-        const availableTypes = await computeAvailableTypes(workspaceId, pageId);
-        return { suggestion: row ? toDto(row.post_suggestions) : null, remainingToday, availableTypes };
+        const availableTypes = await computeAvailableTypes(page, today);
+        return { suggestion: row ? toDto(row) : null, remainingToday, availableTypes };
     }
 
     /**
@@ -519,37 +633,97 @@ class PostSuggestionsService {
      * «خيار يقدر التاجر يضيفه أو لا»).
      * `postType`: merchant-chosen angle for THIS generation (owner ruling
      * 08-09: «ما عطينا التاجر مجال يغير أو يجرب») — overrides the automatic
-     * variety picker; still consumes a normal cap slot.
+     * variety picker WHEN the page's data can deliver it (otherwise the
+     * picker runs and the row records the type actually used); still
+     * consumes a normal cap slot.
      */
     async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
         if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return { ok: false, reason: 'gated' };
 
-        const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId);
+        // ONE day for the whole call: cap key, DB count, supersede, and insert
+        // all cut the same boundary even when the call straddles UTC midnight.
+        const today = todayIso();
+
+        // Ownership BEFORE the cap (guard order: gate → ownership → cap →
+        // claim → paid calls). A foreign/unknown page must cost nothing: the
+        // cap key is pageId-scoped, so a pre-ownership cap write would let any
+        // enabled workspace burn another tenant's daily slots.
+        const page = await fetchOwnedPage(workspaceId, pageId);
+        const ownerId = page?.userId;
+        const pageWorkspaceId = page?.workspaceId;
+        if (!page || !ownerId || !pageWorkspaceId) return { ok: false, reason: 'page_not_found' };
+
+        const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId, today);
+        const limit = config.postSuggestions.dailyCapPerPage;
         let cap: DailyCapStatus;
+        let dbUsed: number;
         try {
-            cap = await checkDailyCap(capKey, config.postSuggestions.dailyCapPerPage);
+            // The Redis counter bounds ATTEMPTS (a failed generation burns its
+            // slot by design); the DB row count grounds the cap in durable
+            // truth, so a lost Redis key (eviction/failover — observed in the
+            // 08-09 dogfood) can never silently re-open spend. Either read
+            // failing → fail closed (dailyCap contract).
+            const [capStatus, countRows] = await Promise.all([
+                checkDailyCap(capKey, limit),
+                db.select({ value: sql<number>`count(*)::int` }).from(postSuggestions)
+                    .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today))),
+            ]);
+            cap = capStatus;
+            dbUsed = Number(countRows[0]?.value ?? 0);
         } catch (err) {
-            // Fail closed: the cap is the only bound on real spend (dailyCap contract).
             captureError(err, 'Post suggestion: cap check unavailable', { tags: { service: 'post-suggestions' }, extra: { pageId } });
             return { ok: false, reason: 'cap_check_unavailable' };
         }
-        if (!cap.allowed) return { ok: false, reason: 'daily_cap', cap };
-        // Increment BEFORE the paid calls: if they fail, one slot is burned —
-        // bounding spend beats refunding a slot on every error path.
-        await incrementDailyCap(capKey);
+        if (dbUsed > cap.used) {
+            // The dogfood 08-09 counter-loss signal: durable rows exceed the
+            // Redis counter, i.e. the counter was lost/reset. The DB floor
+            // below keeps the cap honest regardless.
+            logger.warn('[PostSuggestions] Daily-cap counter behind DB rows', { pageId, dbUsed, redisUsed: cap.used });
+        }
+        if (!cap.allowed || dbUsed >= limit) {
+            return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: Math.max(cap.used, dbUsed), limit } };
+        }
+        // Atomic claim BEFORE the paid calls: the INCR itself is the arbiter,
+        // so two requests racing the last slot can never both pass (the
+        // check-then-increment TOCTOU). If the paid calls then fail, the slot
+        // stays burned — bounding spend beats refunding on every error path.
+        let claimed: boolean;
+        try {
+            claimed = await claimDailyCapSlot(capKey, limit);
+        } catch (err) {
+            captureError(err, 'Post suggestion: cap claim unavailable', { tags: { service: 'post-suggestions' }, extra: { pageId } });
+            return { ok: false, reason: 'cap_check_unavailable' };
+        }
+        if (!claimed) return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: limit, limit } };
 
-        const bundle = await buildPageBundle(workspaceId, pageId);
-        if (!bundle) return { ok: false, reason: 'page_not_found' };
+        const bundle = await buildPageBundle(page, ownerId, pageWorkspaceId, today);
 
-        const today = todayIso();
+        // Latest suggestion from ANY day: the variety picker must see
+        // yesterday's angle, or the cron (always the first row of its day)
+        // would open on the same first candidate every single morning.
         const [previous] = await db.select({ postType: postSuggestions.postType }).from(postSuggestions)
-            .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today)))
+            .where(eq(postSuggestions.pageId, pageId))
             .orderBy(desc(postSuggestions.createdAt))
             .limit(1);
-        // Merchant-chosen angle wins; otherwise the variety picker rotates.
-        const postType = opts?.postType ?? pickPostType(bundle, previous?.postType ?? null);
+        // Merchant-chosen angle wins ONLY when the page's data can actually
+        // deliver it — validated against the SAME flags the picker consumes
+        // (fetched-catalog truth, not the cheap advertisement; see the
+        // availability block's boundary note). The chips are already
+        // fail-closed, so an unavailable request here means chip/data drift
+        // or a raw API caller. Unavailable ⇒ DOWNGRADE to the variety picker
+        // rather than hard-fail: the cap slot is already claimed, and a
+        // generated post beats burning it on an error. The inserted row (and
+        // thereby the response DTO) carries the type actually used.
+        const requested = opts?.postType;
+        const deliverable = candidateTypes(computeAvailabilityFlags(bundle));
+        const postType = requested && (requested === 'general' || deliverable.includes(requested))
+            ? requested
+            : pickPostType(bundle, previous?.postType ?? null);
+        if (requested && postType !== requested) {
+            logger.info('[PostSuggestions] Requested angle unavailable — downgraded to variety picker', { pageId, requested, used: postType });
+        }
 
-        const generated = await generatePostText(bundle, postType);
+        const generated = await generatePostText(bundle, postType, today);
         if (!generated) return { ok: false, reason: 'generation_failed' };
         // Deterministic contact footer — appended in code, never model-written.
         const includeContact = opts?.includeContact !== false;
@@ -558,54 +732,78 @@ class PostSuggestionsService {
             : generated.text;
 
         const image = await generatePostImage(bundle, generated.imageBrief, generated.headline);
-        const imageDegraded: 'image_failed' | 'storage_off' | undefined = image
+        const imageDegraded: PostSuggestionImageDegraded | undefined = image
             ? undefined
             : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
 
-        // Supersede today's previous ready rows and clean their images —
-        // ONE post per day, a regenerate REPLACES (owner ruling 2026-08-09).
-        const stale = await db.select({ id: postSuggestions.id, imageKey: postSuggestions.imageKey })
-            .from(postSuggestions)
-            .where(and(
-                eq(postSuggestions.pageId, pageId),
-                eq(postSuggestions.suggestedFor, today),
-                eq(postSuggestions.status, 'ready'),
-            ));
-        if (stale.length > 0) {
-            await db.update(postSuggestions)
-                .set({ status: 'superseded', imageUrl: null, imageKey: null })
-                .where(inArray(postSuggestions.id, stale.map(s => s.id)));
-            for (const s of stale) {
-                if (s.imageKey) void imageStorage.remove(s.imageKey); // best-effort; audit script sweeps leftovers
-            }
-        }
+        // ONE post per day, a regenerate REPLACES (owner ruling 2026-08-09) —
+        // and "replace" means the old row dies only when the new one exists.
+        // Insert FIRST, then supersede, in ONE transaction: a suppressed cron
+        // insert (blue/green race on the partial unique index) supersedes
+        // NOTHING, and a crash between the two statements rolls both back.
+        // Old images are removed only AFTER commit, per OBJECT_STORAGE.md's
+        // safe order (upload new → commit DB → delete old).
+        const staleKeys: string[] = [];
+        const row = await db.transaction(async (tx) => {
+            const [inserted] = await tx.insert(postSuggestions).values({
+                pageId,
+                suggestedFor: today,
+                source,
+                postType,
+                text: finalText,
+                imageUrl: image?.url ?? null,
+                imageKey: image?.key ?? null,
+                status: 'ready',
+            }).onConflictDoNothing({
+                target: [postSuggestions.pageId, postSuggestions.suggestedFor],
+                // Matches uq_post_suggestions_cron_once's predicate so Postgres
+                // infers the partial unique index as the arbiter.
+                where: sql`source = 'cron'`,
+            }).returning();
+            if (!inserted) return undefined;
 
-        const [row] = await db.insert(postSuggestions).values({
-            pageId,
-            suggestedFor: today,
-            source,
-            postType,
-            text: finalText,
-            imageUrl: image?.url ?? null,
-            imageKey: image?.key ?? null,
-            status: 'ready',
-        }).onConflictDoNothing({
-            target: [postSuggestions.pageId, postSuggestions.suggestedFor],
-            // Matches uq_post_suggestions_cron_once's predicate so Postgres
-            // infers the partial unique index as the arbiter.
-            where: sql`source = 'cron'`,
-        }).returning();
+            const stale = await tx.select({ id: postSuggestions.id, imageKey: postSuggestions.imageKey })
+                .from(postSuggestions)
+                .where(and(
+                    eq(postSuggestions.pageId, pageId),
+                    eq(postSuggestions.suggestedFor, today),
+                    eq(postSuggestions.status, 'ready'),
+                    ne(postSuggestions.id, inserted.id),
+                ));
+            if (stale.length > 0) {
+                await tx.update(postSuggestions)
+                    .set({ status: 'superseded', imageUrl: null, imageKey: null })
+                    .where(inArray(postSuggestions.id, stale.map(s => s.id)));
+                for (const s of stale) {
+                    if (s.imageKey) staleKeys.push(s.imageKey);
+                }
+            }
+            return inserted;
+        });
+        for (const staleKey of staleKeys) {
+            void imageStorage.remove(staleKey); // best-effort; audit script sweeps leftovers
+        }
 
         // onConflictDoNothing only ever suppresses the CRON insert (partial unique
         // index): the sibling deploy already generated today's row. Treat as done.
         if (!row) {
             const existing = await this.getToday(workspaceId, pageId);
-            if (existing.suggestion) return { ok: true, suggestion: existing.suggestion, remainingToday: existing.remainingToday };
+            if (existing?.suggestion) {
+                return { ok: true, suggestion: existing.suggestion, remainingToday: existing.remainingToday, availableTypes: existing.availableTypes };
+            }
             return { ok: false, reason: 'generation_failed' };
         }
 
-        const remaining = Math.max(0, cap.limit - cap.used - 1);
-        return { ok: true, suggestion: toDto(row), remainingToday: remaining, ...(imageDegraded ? { imageDegraded } : {}) };
+        // One envelope across routes: the generate response carries the SAME
+        // availability list getToday serves, computed AFTER generation so the
+        // chips track post-generation reality. Cheap — reuses the page row
+        // this request already fetched (indexed probes only).
+        const availableTypes = await computeAvailableTypes(page, today);
+
+        // Remaining slots from the stricter of the two views, counting the
+        // slot this generation just consumed.
+        const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
+        return { ok: true, suggestion: toDto(row), remainingToday: remaining, availableTypes, ...(imageDegraded ? { imageDegraded } : {}) };
     }
 
     /** First-write-wins market-signal stamps. Returns false when the row isn't visible to this workspace. */
@@ -637,15 +835,23 @@ class PostSuggestionsService {
      * allowlisted workspaces. STRICTER than the endpoint gate on purpose —
      * pre-generation is spend no user asked for, so an EMPTY workspace
      * allowlist means the cron does nothing even when the feature is enabled
-     * fleet-wide. Skips a page when today's cron row already exists
-     * (restart/blue-green safe — the partial unique index backstops the race)
-     * or when the last CRON_UNOPENED_STREAK cron suggestions were never
-     * opened (waste guard: a forgotten pilot must not drip spend).
+     * fleet-wide. Skips a page when ANY of today's rows already exist —
+     * manual included, because pre-generating then would SUPERSEDE the
+     * merchant's chosen post, not fill a gap — or when the unopened-streak
+     * waste guard trips (a forgotten pilot must not drip spend). The guard is
+     * self-healing: only cron rows created after the page's latest engagement
+     * stamp count, so a merchant coming back re-enables pre-generation.
      */
-    async runDailyPostSuggestions(): Promise<{ generated: number; skipped: number }> {
-        const result = { generated: 0, skipped: 0 };
+    async runDailyPostSuggestions(): Promise<{ eligible: number; generated: number; skippedExisting: number; skippedWasteGuard: number; failed: number }> {
+        const startedAt = Date.now();
+        const result = { eligible: 0, generated: 0, skippedExisting: 0, skippedWasteGuard: 0, failed: 0 };
         const workspaceIds = config.postSuggestions.workspaceIds;
-        if (!config.postSuggestions.enabled || workspaceIds.length === 0) return result;
+        if (!config.postSuggestions.enabled || workspaceIds.length === 0) {
+            // The most common healthy state must still leave a trace — an
+            // empty allowlist is otherwise log-identical to "cron never fired".
+            logger.info('[PostSuggestions] Daily run skipped — feature disabled or workspace allowlist empty');
+            return result;
+        }
 
         // Connected pages only — a page without a token can't be posted to,
         // so pre-generating for it is guaranteed waste.
@@ -655,27 +861,41 @@ class PostSuggestionsService {
                 isNotNull(pages.accessToken),
                 ne(pages.accessToken, ''),
             ));
+        result.eligible = eligiblePages.length;
 
         for (const page of eligiblePages) {
             const pageId = page.id;
-            if (!page.workspaceId) { result.skipped++; continue; }
+            if (!page.workspaceId) { result.failed++; continue; }
             try {
                 const today = todayIso();
+                // Source-blind on purpose: a manual row counts as "the
+                // merchant already has today's post".
                 const [existing] = await db.select({ id: postSuggestions.id }).from(postSuggestions)
                     .where(and(
                         eq(postSuggestions.pageId, pageId),
                         eq(postSuggestions.suggestedFor, today),
-                        eq(postSuggestions.source, 'cron'),
                     )).limit(1);
-                if (existing) { result.skipped++; continue; }
+                if (existing) { result.skippedExisting++; continue; }
 
+                // Waste guard: count only cron rows created AFTER the page's
+                // most recent engagement stamp (any source, any of the three
+                // stamps) — engagement resets the streak instead of the guard
+                // latching off forever once three cron rows go unopened.
+                const [engagement] = await db.select({
+                    lastEngagedAt: sql<string | Date | null>`max(greatest(${postSuggestions.openedAt}, ${postSuggestions.copiedAt}, ${postSuggestions.downloadedAt}))`,
+                }).from(postSuggestions).where(eq(postSuggestions.pageId, pageId));
+                const lastEngagedAt = engagement?.lastEngagedAt ? new Date(engagement.lastEngagedAt) : null;
                 const recentCron = await db.select({ openedAt: postSuggestions.openedAt }).from(postSuggestions)
-                    .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.source, 'cron')))
+                    .where(and(
+                        eq(postSuggestions.pageId, pageId),
+                        eq(postSuggestions.source, 'cron'),
+                        ...(lastEngagedAt ? [gt(postSuggestions.createdAt, lastEngagedAt)] : []),
+                    ))
                     .orderBy(desc(postSuggestions.createdAt))
                     .limit(CRON_UNOPENED_STREAK);
                 if (recentCron.length === CRON_UNOPENED_STREAK && recentCron.every(r => !r.openedAt)) {
-                    logger.info('[PostSuggestions] Skipping page — last cron suggestions unopened', { pageId });
-                    result.skipped++;
+                    logger.warn('[PostSuggestions] Waste guard tripped — skipping pre-generation', { pageId });
+                    result.skippedWasteGuard++;
                     continue;
                 }
 
@@ -684,14 +904,19 @@ class PostSuggestionsService {
                     result.generated++;
                     logger.info('[PostSuggestions] Cron generated', { pageId, postType: generated.suggestion.postType });
                 } else {
-                    result.skipped++;
+                    result.failed++;
                     logger.warn('[PostSuggestions] Cron generation failed', { pageId, reason: generated.reason });
                 }
             } catch (err) {
-                result.skipped++;
+                result.failed++;
                 captureError(err, 'Post suggestion cron failed for page', { tags: { service: 'post-suggestions' }, extra: { pageId } });
             }
         }
+
+        // Positive heartbeat + split counters (mirrors [LeadDigest]): "ran,
+        // nothing to do" must be distinguishable from "never ran" and from
+        // "ran and failed" in the production log.
+        logger.info('[PostSuggestions] Daily run complete', { ...result, durationMs: Date.now() - startedAt });
         return result;
     }
 }

@@ -44,6 +44,10 @@ const DIRECT_CALL_PIPELINES = new Set([
     'lead_extraction', 'kb_file_extraction', 'operational_facts_extraction',
     'embedding_rag', 'embedding_cache', 'embedding_ingestion',
     'transcription',
+    // «بوست اليوم» — both are direct backend makeTrackedOpenAI calls
+    // (services/postSuggestions.ts), so an A−R gap here means SDK retries or
+    // our own 20s/35s timeouts, never an ai-worker hop.
+    'post_generation', 'post_image_generation',
 ]);
 
 /**

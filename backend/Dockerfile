@@ -31,7 +31,12 @@ RUN npm prune --omit=dev
 # Production Stage
 FROM node:22-alpine AS production
 WORKDIR /app
-RUN apk add --no-cache dumb-init wget
+# fontconfig + font-noto-arabic: sharp/librsvg typesets the Arabic post-card
+# headline via fontconfig at RUNTIME (services/imageCompose.ts) — a bare
+# alpine has ZERO fonts, so without these every generated card ships its
+# text layer as tofu/blank. Fonts only, no doc packages; the builder stage
+# does not need them (nothing renders at build time).
+RUN apk add --no-cache dumb-init wget fontconfig font-noto-arabic
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Get GIT_COMMIT from builder stage

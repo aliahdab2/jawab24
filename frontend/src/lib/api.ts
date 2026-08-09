@@ -15,8 +15,8 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType } from '@jawab24/shared';
-export type { OrderNotificationType, NotificationTemplate, NotificationStats };
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -210,14 +210,9 @@ export const catalogApi = {
 };
 
 /** «بوست اليوم» pilot. Server 404s every route for non-allowlisted pages
- *  (dark feature) — callers treat 404 as "pilot off", never as an error. */
-export interface PostSuggestionResponse {
-  suggestion: PostSuggestionDto | null;
-  remainingToday: number;
-  imageDegraded?: 'image_failed' | 'storage_off';
-  /** Angles this page's data can deliver (getToday only) — chips outside it are disabled. */
-  availableTypes?: PostSuggestionPostType[];
-}
+ *  (dark feature) — callers treat 404 as "pilot off", never as an error.
+ *  Response envelope: the shared `PostSuggestionResponse` (one shape for
+ *  getToday AND generate — re-exported above for component imports). */
 export const postSuggestionsApi = {
   getToday: (pageId: string) =>
     api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),

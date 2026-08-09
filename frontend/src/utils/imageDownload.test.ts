@@ -12,6 +12,9 @@ const { writeFile, getUri, share } = vi.hoisted(() => ({
 vi.mock('@capacitor/filesystem', () => ({
   Filesystem: { writeFile, getUri },
   Directory: { Cache: 'CACHE', Documents: 'DOCUMENTS' },
+  // Present in the module (the shared delivery tail imports it for text
+  // payloads) — the binary path must still never SEND it (asserted below).
+  Encoding: { UTF8: 'utf8' },
 }));
 
 vi.mock('@capacitor/share', () => ({

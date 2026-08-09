@@ -62,6 +62,7 @@ import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } fr
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
+import { imageStorage } from "./services/imageStorage";
 import { setTrialRemindersLogger, runTrialEndingReminders, runTrialEndedNotices } from "./services/trialReminders";
 import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
@@ -422,6 +423,13 @@ const start = async () => {
     // makes a blue/green double-tick a no-op, and each generation consumes the
     // same absolute 3/day cap as the merchant's button.
     setPostSuggestionsLogger(workerLogger);
+    if (config.postSuggestions.enabled && !imageStorage.isConfigured()) {
+      // Without object storage every generation silently ships TEXT-ONLY
+      // (`storage_off` degrade). The response tells the merchant; this boot
+      // line tells ops — otherwise an env drift is invisible until a human
+      // complains about imageless cards.
+      workerLogger.warn('[PostSuggestions] Enabled but object storage is NOT configured — all generations will be text-only (storage_off)');
+    }
     scheduleRecurringJob({
       label: '[PostSuggestions]',
       tag: 'post_suggestions',

@@ -1510,6 +1510,31 @@ export interface PostSuggestionDto {
   createdAt: string; // ISO timestamp
 }
 
+/** Why a suggestion shipped text-only: the image call failed vs. object storage is off. */
+export type PostSuggestionImageDegraded = 'image_failed' | 'storage_off';
+
+/**
+ * The ONE response envelope both GET /today and POST (generate) return — the
+ * backend controller and the frontend api client type against THIS, so the two
+ * hand-assembled shapes can never drift apart silently.
+ */
+export interface PostSuggestionResponse {
+  suggestion: PostSuggestionDto | null;
+  /**
+   * Slots left today. `null` = unknown (the read path's cap store was
+   * unreachable) — clients keep regenerate enabled and let the generate path
+   * fail closed server-side; never conflate "unknown" with "exhausted".
+   */
+  remainingToday: number | null;
+  /** Present only on generate responses that shipped text-only. */
+  imageDegraded?: PostSuggestionImageDegraded;
+  /**
+   * Angles this page's data can deliver. Sent by BOTH routes; clients treat an
+   * absent list as UNKNOWN and fail closed (only 'general' offered).
+   */
+  availableTypes?: PostSuggestionPostType[];
+}
+
 // --- Leads Types ---
 export type LeadStatus = 'new' | 'contacted' | 'converted';
 export type LeadSourceType = 'message' | 'comment';

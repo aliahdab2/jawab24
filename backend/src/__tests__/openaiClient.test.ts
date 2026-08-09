@@ -16,16 +16,14 @@ const { mockChatCreate, mockEmbedCreate, mockImagesGenerate } = vi.hoisted(() =>
     mockImagesGenerate: vi.fn(),
 }));
 
-vi.mock('openai', () => ({
-    default: class {
-        chat = { completions: { create: mockChatCreate } };
-        embeddings = { create: mockEmbedCreate };
-        images = { generate: mockImagesGenerate };
-    },
-    APIError: class APIErrorMock extends Error {},
-    BadRequestError: class BadRequestErrorMock extends Error {},
-    RateLimitError: class RateLimitErrorMock extends Error {},
-}));
+vi.mock('openai', async () => {
+    const { makeOpenAiSdkMock } = await import('./helpers/openaiSdkMock');
+    return makeOpenAiSdkMock({
+        chatCreate: mockChatCreate,
+        embedCreate: mockEmbedCreate,
+        imagesGenerate: mockImagesGenerate,
+    }).module;
+});
 vi.mock('../services/aiUsageLog', () => ({ logAiUsage: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../lib/aiMetrics', () => ({
     recordAiAttempt: vi.fn(),
@@ -135,7 +133,10 @@ describe('makeTrackedOpenAI — images.generate usage logging', () => {
         }));
     });
 
-    it('skips logging when the response has no usage (streamed / non-token models)', async () => {
+    it('books ZeroTokens when a billed image response carries no usage', async () => {
+        // Images have no streaming path, so a usage-less resolved response is
+        // always an anomaly: spend incurred, no ai_usage_log row will follow.
+        // §13c: every path that bypasses logAiUsage must emit failed_before_log.
         mockImagesGenerate.mockResolvedValue({ created: 1, data: [{ url: 'https://x' }] });
         const client = makeTrackedOpenAI('k', { ...CTX, pipeline: 'post_image_generation' });
 
@@ -143,5 +144,6 @@ describe('makeTrackedOpenAI — images.generate usage logging', () => {
 
         expect(recordAiReturn).toHaveBeenCalled();
         expect(logAiUsage).not.toHaveBeenCalled();
+        expect(recordAiFailedBeforeLog).toHaveBeenCalledWith('post_image_generation', 'gpt-image-2', 'ZeroTokens');
     });
 });

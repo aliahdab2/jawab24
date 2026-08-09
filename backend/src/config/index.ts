@@ -148,8 +148,9 @@ export const config = {
 
     // «بوست اليوم» pilot — AI-suggested daily post (text + image) from Business
     // Info. No publishing; the merchant copies/downloads manually. OFF by
-    // default: every generation is real OpenAI spend (~$0.05/image at
-    // gpt-image-2 medium), so it is enabled deliberately and the switch
+    // default: every generation is real OpenAI spend (~$0.006/image at
+    // gpt-image-2 LOW, the owner-ruled quality; 'medium' at ~$0.05 is the
+    // documented upgrade lever), so it is enabled deliberately and the switch
     // doubles as the instant rollback.
     postSuggestions: {
         enabled: process.env.POST_SUGGESTIONS_ENABLED === 'true',

@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import type { PostSuggestionEvent, PostSuggestionPostType } from '@jawab24/shared';
+import type { PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
 import { postSuggestionsService, isPostSuggestionsEnabledForWorkspace } from '../services/postSuggestions';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
@@ -26,7 +26,11 @@ class PostSuggestionsController {
         if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const result = await postSuggestionsService.getToday(req.workspaceId, pageId);
-        return reply.send(result);
+        // Null = the page isn't in this workspace — same 404 the sibling
+        // routes return (never leak a foreign page's cap counter).
+        if (!result) return reply.status(404).send({ error: 'Not found' });
+        const body: PostSuggestionResponse = result;
+        return reply.send(body);
     }
 
     /** POST /pages/:pageId/post-suggestions — generate or regenerate today's post. */
@@ -49,11 +53,15 @@ class PostSuggestionsController {
             ...(rawType ? { postType: rawType as PostSuggestionPostType } : {}),
         });
         if (result.ok) {
-            return reply.send({
+            // Same envelope as getToday — typed against the shared shape so the
+            // two routes can never drift apart silently.
+            const body: PostSuggestionResponse = {
                 suggestion: result.suggestion,
                 remainingToday: result.remainingToday,
+                availableTypes: result.availableTypes,
                 ...(result.imageDegraded ? { imageDegraded: result.imageDegraded } : {}),
-            });
+            };
+            return reply.send(body);
         }
         switch (result.reason) {
             case 'gated':
