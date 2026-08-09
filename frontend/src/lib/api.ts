@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -221,8 +221,9 @@ export const postSuggestionsApi = {
     api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
   // Text + image generation — the long-timeout override every AI endpoint uses.
   // includeContact: merchant toggle for the server-composed contact footer.
-  generate: (pageId: string, includeContact = true) =>
-    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact }, { timeout: LONG_RUNNING_TIMEOUT }),
+  // postType: merchant-chosen angle; omitted = the server's variety picker.
+  generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }, { timeout: LONG_RUNNING_TIMEOUT }),
   markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
     api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
 };

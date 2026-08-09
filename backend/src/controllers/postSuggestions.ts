@@ -1,9 +1,10 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import type { PostSuggestionEvent } from '@jawab24/shared';
+import type { PostSuggestionEvent, PostSuggestionPostType } from '@jawab24/shared';
 import { postSuggestionsService, isPostSuggestionsEnabledForPage } from '../services/postSuggestions';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 const EVENTS: readonly PostSuggestionEvent[] = ['opened', 'copied', 'downloaded'];
+const POST_TYPES: readonly PostSuggestionPostType[] = ['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'];
 
 /**
  * «بوست اليوم» pilot — /pages/:pageId/post-suggestions.
@@ -30,15 +31,23 @@ class PostSuggestionsController {
 
     /** POST /pages/:pageId/post-suggestions — generate or regenerate today's post. */
     async generate(
-        request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean } | null }>,
+        request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean; postType?: string } | null }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.params;
         // Merchant toggle for the code-composed contact footer; default ON.
         const includeContact = request.body?.includeContact !== false;
+        // Merchant-chosen angle — unknown values rejected, absent = variety picker.
+        const rawType = request.body?.postType;
+        if (rawType !== undefined && !(POST_TYPES as readonly string[]).includes(rawType)) {
+            return reply.status(400).send({ error: `postType must be one of: ${POST_TYPES.join(', ')}` });
+        }
 
-        const result = await postSuggestionsService.generateSuggestion(req.workspaceId, pageId, 'manual', { includeContact });
+        const result = await postSuggestionsService.generateSuggestion(req.workspaceId, pageId, 'manual', {
+            includeContact,
+            ...(rawType ? { postType: rawType as PostSuggestionPostType } : {}),
+        });
         if (result.ok) {
             return reply.send({
                 suggestion: result.suggestion,

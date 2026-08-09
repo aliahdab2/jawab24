@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles } from 'lucide-react';
+import clsx from 'clsx';
 import { toast } from 'sonner';
-import type { PostSuggestionDto } from '@jawab24/shared';
+import type { PostSuggestionDto, PostSuggestionPostType } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -47,6 +48,8 @@ export function PostSuggestionSheet({
   // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
   // Default ON; applies to the NEXT generation (the server composes the footer).
   const [includeContact, setIncludeContact] = useState(true);
+  // Merchant's local edits to the post text — what Copy copies. Reset per suggestion.
+  const [editedText, setEditedText] = useState('');
   const stampedOpen = useRef(false);
   // Auto-generate must fire ONCE per sheet open: StrictMode double-mounts
   // effects in dev, and each paid call consumes a daily-cap slot — caught
@@ -57,11 +60,11 @@ export function PostSuggestionSheet({
     postSuggestionsApi.markEvent(pageId, id, event).catch(() => { /* signal only — never user-visible */ });
   }, [pageId]);
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (postType?: PostSuggestionPostType) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await postSuggestionsApi.generate(pageId, includeContact);
+      const res = await postSuggestionsApi.generate(pageId, includeContact, postType);
       setSuggestion(res.data.suggestion);
       setRemaining(res.data.remainingToday);
       setDegraded(Boolean(res.data.imageDegraded));
@@ -82,8 +85,10 @@ export function PostSuggestionSheet({
   }, [pageId, onChanged, t, includeContact]);
 
   // Opened with a suggestion → stamp `opened` once. Opened empty (CTA path) →
-  // generate immediately, if this member is allowed to.
+  // generate immediately, if this member is allowed to. Every new suggestion
+  // resets the editable copy to the fresh text.
   useEffect(() => {
+    setEditedText(suggestion?.text ?? '');
     if (suggestion && !stampedOpen.current) {
       stampedOpen.current = true;
       stamp(suggestion.id, 'opened');
@@ -96,7 +101,7 @@ export function PostSuggestionSheet({
 
   const handleCopy = () => {
     if (!suggestion) return;
-    copy(suggestion.text);
+    copy(editedText || suggestion.text);
     stamp(suggestion.id, 'copied');
   };
 
@@ -163,9 +168,15 @@ export function PostSuggestionSheet({
               degraded && <p className="text-xs text-muted-foreground">{t('textOnlyNotice')}</p>
             )}
 
-            <p dir="auto" className="whitespace-pre-wrap text-sm text-foreground text-start leading-relaxed">
-              {suggestion.text}
-            </p>
+            {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version. */}
+            <textarea
+              dir="auto"
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              aria-label={t('editTextLabel')}
+              rows={Math.min(10, Math.max(4, editedText.split('\n').length + 1))}
+              className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-brand-300"
+            />
 
             <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
 
@@ -189,15 +200,39 @@ export function PostSuggestionSheet({
             </div>
 
             {canGenerate && remaining > 0 && (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeContact}
-                  onChange={(e) => setIncludeContact(e.target.checked)}
-                  className="rounded border-theme-border accent-brand-500"
-                />
-                {t('includeContactToggle')}
-              </label>
+              <>
+                {/* Angle chooser — regenerate with a specific type (consumes a slot). */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">{t('tryAngle')}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'] as const).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => void generate(type)}
+                        className={clsx(
+                          'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                          suggestion.postType === type
+                            ? 'bg-brand-500 text-white border-brand-500'
+                            : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
+                        )}
+                      >
+                        {t(`type_${type}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeContact}
+                    onChange={(e) => setIncludeContact(e.target.checked)}
+                    className="rounded border-theme-border accent-brand-500"
+                  />
+                  {t('includeContactToggle')}
+                </label>
+              </>
             )}
 
             <p className="text-xs text-subtle">

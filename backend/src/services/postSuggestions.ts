@@ -496,8 +496,11 @@ class PostSuggestionsService {
      * `includeContact` (default true): whether to append the code-composed
      * contact footer — merchant-controlled per request (owner ruling 08-09:
      * «خيار يقدر التاجر يضيفه أو لا»).
+     * `postType`: merchant-chosen angle for THIS generation (owner ruling
+     * 08-09: «ما عطينا التاجر مجال يغير أو يجرب») — overrides the automatic
+     * variety picker; still consumes a normal cap slot.
      */
-    async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean }): Promise<GenerateResult> {
+    async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
         if (!isPostSuggestionsEnabledForPage(pageId)) return { ok: false, reason: 'gated' };
 
         const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId);
@@ -522,7 +525,8 @@ class PostSuggestionsService {
             .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today)))
             .orderBy(desc(postSuggestions.createdAt))
             .limit(1);
-        const postType = pickPostType(bundle, previous?.postType ?? null);
+        // Merchant-chosen angle wins; otherwise the variety picker rotates.
+        const postType = opts?.postType ?? pickPostType(bundle, previous?.postType ?? null);
 
         const generated = await generatePostText(bundle, postType);
         if (!generated) return { ok: false, reason: 'generation_failed' };
