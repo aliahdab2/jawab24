@@ -174,13 +174,18 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(capturedSetData.businessProfile.suggestions).toEqual({ name: 'FB Name' });
         });
 
-        // Stage 2.6.1 (Option B) — editor-provenance integration test.
-        // Locks in the wiring at pages.ts:updatePage that the shared-package
-        // unit tests can't reach: every field in the PATCH gets
-        // {source: 'editor', confirmedAt: <ISO>}, and a field previously
-        // present in merchantProvenance but absent from the PATCH is
-        // recorded as cleared (still editor + fresh timestamp).
-        it('records editor provenance for every field in the PATCH and tombstones cleared fields', async () => {
+        // Stage 2.6.1 (Option B) — editor-provenance integration test, updated
+        // for PR #675 (the fb_sync-laundering fix). Locks in the wiring at
+        // pages.ts:updatePage that the shared-package unit tests can't reach.
+        // The arrange below — fb_sync-owned phones echoed back VERBATIM by the
+        // full-replace save — is the exact laundering shape that promoted a
+        // stale Facebook-synced UAE phone into MES's customer replies on
+        // 2026-08-08. The old contract here ("every field in the PATCH gets
+        // editor+confirmedAt") was that bug stated as an expectation; the new
+        // contract: an unchanged echoed field KEEPS its provenance, a field
+        // named in businessProfileConfirmFields is confirmed even when
+        // unchanged, and a field absent from the PATCH is still tombstoned.
+        it('carries fb_sync provenance through an unchanged echo, confirms confirmFields, tombstones cleared fields', async () => {
             // Existing container: phones is fb_sync-owned and present; address is
             // editor-owned from a prior save. Merchant currently has both fields.
             const priorEditorTime = '2026-05-01T10:00:00.000Z';
@@ -215,7 +220,9 @@ describe('PR2: KB Versioning + Business Profile', () => {
                 }),
             } as any);
 
-            // Merchant edits: keeps phones (unchanged), CLEARS address (omitted from PATCH).
+            // Merchant edits ONE unrelated thing: phones ride along UNCHANGED
+            // in the echo (no businessProfileConfirmFields), address is CLEARED
+            // (omitted from PATCH).
             await pagesService.updatePage('user-1', 'page-1', {
                 businessProfile: { phones: ['+1'] },
             });
@@ -223,10 +230,10 @@ describe('PR2: KB Versioning + Business Profile', () => {
             const prov = capturedSetData.businessProfile.merchantProvenance;
             expect(prov).toBeDefined();
 
-            // phones: present in PATCH → editor + fresh timestamp (saving = confirming)
-            expect(prov.phones.source).toBe('editor');
-            expect(prov.phones.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-            expect(prov.phones.confirmedAt).not.toBe(null);
+            // phones: unchanged echo, not explicitly confirmed → provenance
+            // carried forward UNTOUCHED. Stamping 'editor' here is the MES bug.
+            expect(prov.phones.source).toBe('fb_sync');
+            expect(prov.phones.confirmedAt).toBe(null);
 
             // address: absent from PATCH but present in prior provenance → cleared
             // tombstone (still editor, fresh timestamp, value gone from merchant)
@@ -237,6 +244,17 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             // Existing suggestions survive untouched (FB-sync half is editor-write-immune)
             expect(capturedSetData.businessProfile.suggestions).toEqual({ phones: ['+1'] });
+
+            // Same unchanged echo, but the merchant OPENED the phone sheet and
+            // saved: businessProfileConfirmFields names it → explicit
+            // confirmation, editor + fresh timestamp.
+            await pagesService.updatePage('user-1', 'page-1', {
+                businessProfile: { phones: ['+1'] },
+                businessProfileConfirmFields: ['phones'],
+            });
+            const prov2 = capturedSetData.businessProfile.merchantProvenance;
+            expect(prov2.phones.source).toBe('editor');
+            expect(prov2.phones.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         });
     });
 
