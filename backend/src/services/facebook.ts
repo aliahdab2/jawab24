@@ -168,13 +168,18 @@ export class FacebookService {
      *
      * Primary path: GET /me/accounts. For most users this returns all pages they admin.
      *
-     * Fallback path: For pages owned by a Meta Business Portfolio, /me/accounts may return
-     * empty even when the user has "Facebook access with Full control". In that case we
-     * inspect `granular_scopes` from /debug_token to discover the page IDs the user
-     * authorized, then fetch each page individually via GET /{page-id}.
+     * Reconciliation path: `/me/accounts` is NOT authoritative for what the user
+     * authorized. For pages owned by a Meta Business Portfolio it can omit pages the
+     * user granted with "Facebook access with Full control" — returning an empty list,
+     * or (the case that cost us a full support night on 2026-08-09) a PARTIAL one: the
+     * merchant authorized two pages, `/me/accounts` listed only the older one, and the
+     * newly-granted page was invisible to every sync. The authorization truth lives in
+     * `granular_scopes` on the token, so we always diff the two and fetch whatever the
+     * primary path missed via GET /{page-id}. Treating this as a "fallback" that only
+     * ran when the primary list was EMPTY is exactly what hid the partial case.
      *
      * The `tasks` field is only requestable on /me/accounts — Graph API rejects it on
-     * /{page-id} — so fallback pages have `tasks` undefined. Downstream code already
+     * /{page-id} — so reconciled pages have `tasks` undefined. Downstream code already
      * treats that field as optional.
      */
     async getUserPages(accessToken: string): Promise<FacebookPagesResponse> {
@@ -202,75 +207,98 @@ export class FacebookService {
         }
 
         const primaryPages = primaryResponse.data ?? [];
+        this.logger.info('[Facebook] /me/accounts returned pages', { count: primaryPages.length });
         if (primaryPages.length > 0) {
-            this.logger.info('[Facebook] /me/accounts returned pages', { count: primaryPages.length });
             this.logger.debug('[Facebook] Page names', { pages: primaryPages.map(p => p.name) });
-            this.breadcrumb('getUserPages: primary /me/accounts path', 'info', { count: primaryPages.length });
+        }
+
+        // --- Reconciliation: granular_scopes from /debug_token ---
+        // The token's granular_scopes are the authorization truth. Fetch anything the
+        // user authorized that /me/accounts did not return — whether it omitted ALL
+        // pages or just SOME of them.
+        // Best-effort when /me/accounts already returned pages: a /debug_token hiccup
+        // must never turn a partially-successful sync into a total failure (the revoke
+        // step would read that as "user revoked everything").
+        let authorizedPageIds: string[];
+        try {
+            authorizedPageIds = await this.extractAuthorizedPageIds(accessToken);
+        } catch (error) {
+            if (primaryPages.length > 0) {
+                this.logger.warn('[Facebook] granular_scopes lookup failed — returning /me/accounts result as-is', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                this.breadcrumb('getUserPages: granular_scopes lookup failed, primary-only result', 'warning');
+                return primaryResponse;
+            }
+            throw error;
+        }
+        const primaryPageIds = new Set(primaryPages.map(p => p.id));
+        const missingPageIds = authorizedPageIds.filter(id => !primaryPageIds.has(id));
+
+        if (missingPageIds.length === 0) {
+            this.breadcrumb('getUserPages: primary /me/accounts path complete', 'info', { count: primaryPages.length });
             return primaryResponse;
         }
 
-        // --- Fallback path: granular_scopes from /debug_token ---
-        // /me/accounts is empty but the user may still have Business-Portfolio-owned pages
-        // authorized via Facebook's per-page granular permission model.
-        this.logger.info('[Facebook] /me/accounts empty, entering granular_scopes fallback');
-        this.breadcrumb('getUserPages: /me/accounts empty, entering fallback', 'info');
+        this.logger.info('[Facebook] granular_scopes lists pages missing from /me/accounts', {
+            primaryCount: primaryPages.length,
+            missingCount: missingPageIds.length,
+            missingPageIds,
+        });
+        this.breadcrumb('getUserPages: reconciling pages missing from /me/accounts', 'info', {
+            primaryCount: primaryPages.length,
+            missingCount: missingPageIds.length,
+        });
 
-        const pageIds = await this.extractAuthorizedPageIds(accessToken);
-        if (pageIds.length === 0) {
-            this.logger.info('[Facebook] No page IDs in granular_scopes — user authorized 0 pages');
-            this.breadcrumb('getUserPages: fallback found no granular_scopes target_ids', 'info');
-            return { data: [] };
-        }
-
-        this.logger.info('[Facebook] Found page IDs in granular_scopes', { count: pageIds.length, pageIds });
-
-        // Fetch each page individually in parallel. Per-page failures are isolated so a
-        // single bad page doesn't block the rest of the sync.
+        // Fetch each missing page individually in parallel. Per-page failures are isolated
+        // so a single bad page doesn't block the rest of the sync.
         const results = await Promise.allSettled(
-            pageIds.map(pageId => this.fetchPageById(pageId, accessToken)),
+            missingPageIds.map(pageId => this.fetchPageById(pageId, accessToken)),
         );
 
         const recoveredPages: FacebookPage[] = [];
         for (let i = 0; i < results.length; i++) {
             const result = results[i];
-            const pageId = pageIds[i];
+            const pageId = missingPageIds[i];
             if (result.status === 'fulfilled' && result.value) {
                 // Guard: Graph API sometimes returns a page object without access_token
                 // (e.g., user lacks pages_read_engagement on that specific page). Such pages
                 // are unusable for our purposes — skip them rather than storing a broken row.
                 if (!result.value.access_token) {
-                    this.logger.warn('[Facebook] Fallback page missing access_token — skipping', {
+                    this.logger.warn('[Facebook] Reconciled page missing access_token — skipping', {
                         pageId,
                         name: result.value.name,
                     });
-                    this.breadcrumb(`getUserPages: fallback page ${pageId} missing access_token`, 'warning');
+                    this.breadcrumb(`getUserPages: reconciled page ${pageId} missing access_token`, 'warning');
                     continue;
                 }
                 recoveredPages.push(result.value);
-                this.logger.info('[Facebook] Recovered page via fallback', {
+                this.logger.info('[Facebook] Recovered page missing from /me/accounts', {
                     pageId,
                     name: result.value.name,
                 });
             } else if (result.status === 'rejected') {
-                this.logger.warn('[Facebook] Failed to fetch page via fallback', {
+                this.logger.warn('[Facebook] Failed to fetch page missing from /me/accounts', {
                     pageId,
                     error: result.reason instanceof Error ? result.reason.message : String(result.reason),
                 });
-                this.breadcrumb(`getUserPages: fallback failed for page ${pageId}`, 'warning');
+                this.breadcrumb(`getUserPages: reconciliation failed for page ${pageId}`, 'warning');
             }
         }
 
         if (recoveredPages.length > 0) {
-            this.logger.info('[Facebook] Recovered pages via granular_scopes fallback', {
+            this.logger.info('[Facebook] Recovered pages via granular_scopes reconciliation', {
                 count: recoveredPages.length,
             });
-            this.breadcrumb('getUserPages: fallback success', 'info', { count: recoveredPages.length });
+            this.breadcrumb('getUserPages: reconciliation success', 'info', { count: recoveredPages.length });
         } else {
-            this.logger.warn('[Facebook] granular_scopes had page IDs but all fetches failed');
-            this.breadcrumb('getUserPages: fallback could not recover any page', 'warning');
+            this.logger.warn('[Facebook] granular_scopes listed missing page IDs but none could be fetched');
+            this.breadcrumb('getUserPages: reconciliation could not recover any page', 'warning');
         }
 
-        return { data: recoveredPages };
+        // Union, never replacement: dropping the primary pages here would make the
+        // sync's revoke step disconnect every page /me/accounts DID return.
+        return { ...primaryResponse, data: [...primaryPages, ...recoveredPages] };
     }
 
     /** Shared Sentry breadcrumb helper for Facebook service events. */

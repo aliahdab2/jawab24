@@ -1924,13 +1924,25 @@ Two consequences that are easy to get wrong:
   production data. Do not diagnose from it.
 
 The revoke path (`services/pages.ts`, "disable pages that the user revoked access to in
-Facebook") computes its victim list purely from Facebook's `/me/accounts` response — not
-from our UI selection and not from the plan — then clears the token and **deliberately
+Facebook") computes its victim list from what `facebookService.getUserPages` returns —
+not from our UI selection and not from the plan — then clears the token and **deliberately
 nulls the reason** so a stale system reason can't misdescribe the page. That is why
 "revoked by Facebook" and "off with no reason recorded" are indistinguishable in the DB.
 Since 2026-08-09 it runs **before** the plan-slot check in the same sync, so slots freed
 by deselected pages are immediately usable by pages granted in the same Meta grant edit
 (the one-shot swap: drop N pages, add one — previously refused on the first attempt).
+
+**`/me/accounts` is not the grant truth — `getUserPages` reconciles it against
+`granular_scopes` (2026-08-09).** For New-Pages-Experience / Business-Portfolio pages,
+`/me/accounts` can omit *some* granted pages while listing others (InMedia case: the
+token's `granular_scopes` carried two page ids, `/me/accounts` returned one — the newly
+granted page was invisible to every sync, and had the omission pattern been inverted, the
+revoke path would have wrongly disconnected a granted page). `getUserPages` therefore
+always diffs `/me/accounts` against the token's `granular_scopes` (`/debug_token`) and
+fetches every omitted page individually via `GET /{page-id}`, returning the union. The
+reconciliation is best-effort when `/me/accounts` returned pages: a `/debug_token` failure
+degrades to the primary list rather than failing the sync (a thrown sync would read as
+"user revoked everything").
 
 **Known gaps (both open):** the revoke path writes no distinguishing reason (e.g.
 `fb_revoked`), and the merchant is never notified — a `page_disconnected` notification type
