@@ -1893,6 +1893,93 @@ describe('CommentProcessor — template reply mode behavior', () => {
         expect(markCall[markCall.length - 1]).toEqual({ reply_image: {} });
     });
 
+    it('dual mode — a delivered Post Reply CTA button stamps reply_cta (label + url) on both outgoing rows', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: 'content-uuid',
+                autoReplyEnabled: true,
+                message: 'Post body',
+                triggerKeyword: 'رابط',
+                triggerReply: 'تفضل الرابط 👇',
+                triggerType: 'keyword',
+                triggerButtonLabel: 'رابط التسجيل',
+                triggerButtonUrl: 'https://jawab24.com/login',
+            }),
+            // dmRecipientId present = the DM (which carries the button on every FB shape)
+            // actually went out — the marker is delivery-driven, like reply_image.
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-cta' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'رابط', 'from-id-9', 'Noor',
+        );
+
+        // The stored DM (message thread) carries the button's label + URL...
+        const storeCall = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(storeCall[9]).toEqual({ reply_cta: { label: 'رابط التسجيل', url: 'https://jawab24.com/login' } });
+        // ...and so does the comment reply (markAsReplied's final flagMeta arg).
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toEqual({ reply_cta: { label: 'رابط التسجيل', url: 'https://jawab24.com/login' } });
+    });
+
+    it('dual mode — CTA button + delivered image stamp BOTH markers on both outgoing rows', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: 'content-uuid',
+                autoReplyEnabled: true,
+                message: 'Post body',
+                triggerKeyword: 'رابط',
+                triggerReply: 'تفضل الرابط 👇',
+                triggerType: 'keyword',
+                triggerImageUrl: 'https://cdn/promo.jpg',
+                triggerButtonLabel: 'رابط التسجيل',
+                triggerButtonUrl: 'https://jawab24.com/login',
+            }),
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-cta-img', imageDelivered: true }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'رابط', 'from-id-9', 'Noor',
+        );
+
+        const expected = { reply_image: {}, reply_cta: { label: 'رابط التسجيل', url: 'https://jawab24.com/login' } };
+        const storeCall = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(storeCall[9]).toEqual(expected);
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toEqual(expected);
+    });
+
+    it('public mode — a CTA configured but never DM-delivered (no dmRecipientId) records NO reply_cta marker', async () => {
+        // Delivery honesty: the button rides only the DM channel. In public reply mode no
+        // DM goes out (sendReply succeeds without a dmRecipientId), so neither row may
+        // claim the customer received a button.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('public'));
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: 'content-uuid',
+                autoReplyEnabled: true,
+                message: 'Post body',
+                triggerKeyword: 'رابط',
+                triggerReply: 'تفضل الرابط 👇',
+                triggerType: 'keyword',
+                triggerButtonLabel: 'رابط التسجيل',
+                triggerButtonUrl: 'https://jawab24.com/login',
+            }),
+            sendReply: vi.fn().mockResolvedValue({ success: true }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'رابط', 'from-id-9', 'Noor',
+        );
+
+        // No DM recipient → no stored DM row at all, and the comment row carries no marker.
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toBeUndefined();
+    });
+
     it('dual mode — an image whose send FAILED (imageDelivered=false) records NO reply_image marker', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
         const adapter = createMockAdapter({

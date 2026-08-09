@@ -2,7 +2,8 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { factCollectionsService, FactCollectionLimitError, type FactCollectionErrorCode } from '../services/factCollections';
 import { pagesService } from '../services/pages';
 import {
-    FactRowSchema, FactRowUpdateSchema, FactCompletenessSchema, FactEntitySaveSchema, formatValidationErrors,
+    FactRowSchema, FactRowUpdateSchema, FactCompletenessSchema, FactEntitySaveSchema,
+    FactCollectionCreateSchema, formatValidationErrors,
 } from '../utils/validation';
 import { createRequestLogger } from '../types';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -16,9 +17,10 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
  * can never authorize a cross-page write. Writes require workspace admin
  * (route-level requireRole), mirroring who may edit the KB.
  *
- * Deliberately NOT here (slice 1): creating collections. Collections are born
- * from reviewed extraction (D-038) — the editor maintains rows of lists that
- * already exist. A page without collections simply doesn't render the section.
+ * Creating collections (the merchant's «add list», G1b) POSTs here too — but
+ * through a deliberately narrower schema than the seeder's service input:
+ * no keyAttr (reply-time gating stays an admin/seeder concern) and the source
+ * is pinned to 'editor'. Completeness still starts un-asked (D-038).
  *
  * PriceInput yields number|null; the service's numeric column takes a string —
  * same toFixed(2) boundary conversion the catalog controller uses.
@@ -58,6 +60,7 @@ const STATUS_BY_CODE: Record<FactCollectionErrorCode, number> = {
     COLLECTION_LIMIT: 409,
     LAST_ROW: 409,
     DATE_ORDER: 400,
+    DUPLICATE_LABEL: 409,
 };
 
 const statusForCode = (code: FactCollectionErrorCode): number => STATUS_BY_CODE[code];
@@ -74,6 +77,38 @@ class FactCollectionsController {
 
         const withRows = await factCollectionsService.listCollectionsWithRows(request.params.pageId);
         return reply.send({ data: withRows });
+    }
+
+    /** POST /fact-collections — create a collection with its first rows in one
+     *  transaction (a half-written collection would assert a wrong coverage
+     *  boundary — worse than none). 201 with the bare collection; the client
+     *  refetches the list for the rows. */
+    async createCollection(
+        request: FastifyRequest<{ Params: { pageId: string }; Body: unknown }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
+        if (!page) return reply.status(404).send({ error: 'Page not found', code: 'PAGE_NOT_FOUND' });
+
+        wireLogger(request);
+        const parsed = FactCollectionCreateSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION', details: formatValidationErrors(parsed.error) });
+        }
+        try {
+            const collection = await factCollectionsService.createCollection(request.params.pageId, {
+                label: parsed.data.label,
+                source: 'editor',
+                rows: parsed.data.rows.map(({ price, ...r }) => ({ ...r, price: toPrice(price) })),
+            });
+            return reply.status(201).send({ data: collection });
+        } catch (err) {
+            if (err instanceof FactCollectionLimitError) {
+                return reply.status(statusForCode(err.code)).send({ error: err.message, code: err.code });
+            }
+            throw err;
+        }
     }
 
     async addRow(

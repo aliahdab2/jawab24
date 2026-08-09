@@ -29,6 +29,7 @@ export { FlagTag } from './FlagTag';
 export { ReplySourceBadge } from './ReplySourceBadge';
 export type { ReplyMethod, ReplySourceVariant } from './ReplySourceBadge';
 export { ImageAttachedBadge } from './ImageAttachedBadge';
+export { CtaButtonPill } from './CtaButtonPill';
 export { NeedsAttentionBanner } from './NeedsAttentionBanner';
 export { PauseToggle } from './PauseToggle';
 export { PauseBanner } from './PauseBanner';

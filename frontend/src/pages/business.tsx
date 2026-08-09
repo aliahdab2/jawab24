@@ -498,10 +498,10 @@ function BusinessPageInner() {
             />
           </div>
 
-          {/* 3b — Fact lists (G1b): renders ONLY when the page has collections
-              (born from reviewed extraction) — that absence IS the rollout
-              gate, so most pages see nothing here. Mobile keeps it beside the
-              other structured data, above the big catalog block. */}
+          {/* 3b — Fact lists (G1b): pages with collections render them; a page
+              without any shows an ADMIN the «add list» empty state (creation
+              UI, slice 4) while a plain member sees nothing. Mobile keeps it
+              beside the other structured data, above the big catalog block. */}
           <div className="order-2 md:order-3">
             <BusinessListsSection pageId={selectedPage.id} readOnly={!canEdit} />
           </div>

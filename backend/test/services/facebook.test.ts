@@ -407,6 +407,146 @@ describe('Facebook Service', () => {
             expect(fbAxios.get).toHaveBeenCalledTimes(2);
         });
 
+        // Regression guard for the InMedia case (2026-08-09): /me/accounts is NOT
+        // authoritative — it can omit SOME granted pages (NPE/Business-Portfolio
+        // pages) while listing others. The merchant granted two pages, granular_scopes
+        // carried both ids, /me/accounts returned only one, and the old code's
+        // "fallback only when /me/accounts is EMPTY" early-return made the second
+        // page permanently invisible to every sync.
+        it('unions granular_scopes pages that /me/accounts omitted (partial omission)', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({
+                    // /me/accounts — lists only the classic page
+                    data: { data: [{ id: 'page_world', name: 'Shahin World', access_token: 'tok_world' }] },
+                })
+                .mockResolvedValueOnce({
+                    // /debug_token — the grant truth: BOTH pages
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list', 'pages_messaging'],
+                            granular_scopes: [
+                                { scope: 'pages_show_list', target_ids: ['page_world', 'page_resort'] },
+                                { scope: 'pages_messaging', target_ids: ['page_world', 'page_resort'] },
+                            ],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    // GET /page_resort — only the MISSING page is fetched individually
+                    data: { id: 'page_resort', name: 'Shahin Resort', access_token: 'tok_resort' },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(2);
+            expect(pages.data.map(p => p.id)).toEqual(['page_world', 'page_resort']);
+            expect(pages.data[1].access_token).toBe('tok_resort');
+            // 1 (/me/accounts) + 1 (/debug_token) + 1 (/page_resort) — the page
+            // already present in /me/accounts must NOT be refetched
+            expect(fbAxios.get).toHaveBeenCalledTimes(3);
+        });
+
+        it('returns the primary response untouched when granular_scopes adds nothing new', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({
+                    data: { data: [{ id: 'page_world', name: 'Shahin World', access_token: 'tok_world' }] },
+                })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list'],
+                            granular_scopes: [{ scope: 'pages_show_list', target_ids: ['page_world'] }],
+                        },
+                    },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_world');
+            // No per-page fetches beyond /me/accounts + /debug_token
+            expect(fbAxios.get).toHaveBeenCalledTimes(2);
+        });
+
+        it('keeps the primary pages when fetching an omitted page fails', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({
+                    data: { data: [{ id: 'page_world', name: 'Shahin World', access_token: 'tok_world' }] },
+                })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list'],
+                            granular_scopes: [{ scope: 'pages_show_list', target_ids: ['page_world', 'page_gone'] }],
+                        },
+                    },
+                })
+                .mockRejectedValueOnce(new Error('403 Forbidden')); // GET /page_gone
+
+            const pages = await service.getUserPages('access_token_123');
+
+            // The union degrades to the primary result — never worse than before
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_world');
+        });
+
+        it('returns the primary result as-is when /debug_token itself fails', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({
+                    data: { data: [{ id: 'page_world', name: 'Shahin World', access_token: 'tok_world' }] },
+                })
+                .mockRejectedValueOnce(new Error('debug_token unavailable'));
+
+            const pages = await service.getUserPages('access_token_123');
+
+            // Reconciliation is best-effort: a /debug_token hiccup must never turn a
+            // successful /me/accounts sync into a failure (the revoke step would read
+            // a thrown sync as "user revoked everything")
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_world');
+        });
+
+        it('skips an omitted page whose individual fetch returns no access_token', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({
+                    data: { data: [{ id: 'page_world', name: 'Shahin World', access_token: 'tok_world' }] },
+                })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list'],
+                            granular_scopes: [{ scope: 'pages_show_list', target_ids: ['page_world', 'page_naked'] }],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    // GET /page_naked — page object WITHOUT access_token (user lacks
+                    // pages_read_engagement on that page) — unusable, must be skipped
+                    data: { id: 'page_naked', name: 'No Token Page' },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_world');
+        });
+
         it('handles partial page fetch failures gracefully', async () => {
             vi.mocked(fbAxios.get)
                 .mockResolvedValueOnce({ data: { data: [] } }) // /me/accounts

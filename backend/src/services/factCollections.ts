@@ -13,6 +13,7 @@
  */
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db';
+import { isUniqueViolation } from '../utils/dbErrors';
 import { redis } from '../lib/redis';
 import { factCollections, factRows } from '../db/schema';
 import { pagesService } from './pages';
@@ -105,7 +106,11 @@ export type FactCollectionErrorCode =
      *  coverage boundary from the prompt — refused. */
     | 'LAST_ROW'
     /** endsAt < startsAt — a row born expired. Client input error, not a conflict. */
-    | 'DATE_ORDER';
+    | 'DATE_ORDER'
+    /** A collection with this label already exists on the page — two would emit
+     *  two contradictory coverage statements (the uq_fact_collections_page_label
+     *  rule, surfaced as a conflict instead of a raw DB error). */
+    | 'DUPLICATE_LABEL';
 
 export class FactCollectionLimitError extends Error {
     /** Set at every throw site so the controller never has to guess from the
@@ -514,40 +519,59 @@ class FactCollectionsService {
         }
 
         const existing = await db
-            .select({ id: factCollections.id })
+            .select({ id: factCollections.id, label: factCollections.label })
             .from(factCollections)
             .where(eq(factCollections.pageId, pageId));
         if (existing.length >= MAX_COLLECTIONS_PER_PAGE) {
             throw new FactCollectionLimitError(`At most ${MAX_COLLECTIONS_PER_PAGE} collections per page`, 'COLLECTION_LIMIT');
         }
+        // Same rule as uq_fact_collections_page_label, answered as a conflict
+        // the client can name instead of a unique-violation 500. The DB index
+        // stays the authority; this is the readable first answer.
+        if (existing.some(c => c.label === input.label)) {
+            throw new FactCollectionLimitError('A collection with this label already exists on this page', 'DUPLICATE_LABEL');
+        }
 
-        const created = await db.transaction(async (tx) => {
-            const [collection] = await tx
-                .insert(factCollections)
-                .values({
-                    pageId,
-                    label: input.label,
-                    keyAttr: input.keyAttr ?? null,
-                    source: input.source ?? 'kb_extract',
-                    sortOrder: existing.length,
-                })
-                .returning();
+        let created: typeof factCollections.$inferSelect;
+        try {
+            created = await db.transaction(async (tx) => {
+                const [collection] = await tx
+                    .insert(factCollections)
+                    .values({
+                        pageId,
+                        label: input.label,
+                        keyAttr: input.keyAttr ?? null,
+                        source: input.source ?? 'kb_extract',
+                        sortOrder: existing.length,
+                    })
+                    .returning();
 
-            await tx.insert(factRows).values(input.rows.map((r, i) => ({
-                collectionId: collection.id,
-                name: r.name,
-                attributes: r.attributes ?? null,
-                price: r.price ?? null,
-                currency: r.currency ?? null,
-                startsAt: r.startsAt ?? null,
-                endsAt: r.endsAt ?? null,
-                isAvailable: r.isAvailable ?? true,
-                sortOrder: i,
-            })));
+                await tx.insert(factRows).values(input.rows.map((r, i) => ({
+                    collectionId: collection.id,
+                    name: r.name,
+                    attributes: r.attributes ?? null,
+                    structured: r.structured ?? null,
+                    price: r.price ?? null,
+                    currency: r.currency ?? null,
+                    startsAt: r.startsAt ?? null,
+                    endsAt: r.endsAt ?? null,
+                    isAvailable: r.isAvailable ?? true,
+                    sortOrder: i,
+                })));
 
-            await pagesService.invalidatePageCaches(pageId, tx);
-            return collection;
-        });
+                await pagesService.invalidatePageCaches(pageId, tx);
+                return collection;
+            });
+        } catch (err) {
+            // The race the pre-check can't close: two concurrent creates with
+            // one label both pass it, and uq_fact_collections_page_label stops
+            // the second here. Same answer as the pre-check — never a raw 500.
+            // The only unique index this transaction can trip is that one.
+            if (isUniqueViolation(err)) {
+                throw new FactCollectionLimitError('A collection with this label already exists on this page', 'DUPLICATE_LABEL');
+            }
+            throw err;
+        }
 
         this.logger.info('fact collection created', {
             pageId, collectionId: created.id, label: created.label,

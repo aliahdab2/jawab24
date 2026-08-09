@@ -962,7 +962,53 @@ export class PagesService {
         const existingPages = await this.getPages(workspaceId);
         const existingPagesMap = new Map(existingPages.filter(p => p.facebookPageId !== null && p.facebookPageId !== undefined).map(p => [p.facebookPageId as string, p]));
 
-        // 2. Process Facebook pages in parallel (optimizes external API calls)
+        // 2. Disable pages that the user revoked access to in Facebook.
+        // If a page exists in DB but was NOT returned by Facebook's /me/accounts,
+        // the user deselected it in Facebook's permission dialog — disable it.
+        // This MUST run before the plan-slot check below: a deselected page's slot
+        // has to be free for pages granted in the SAME sync, or the one-shot swap
+        // ("drop N pages, keep A, add B" in one edit of the Meta grant) refuses B
+        // on the first attempt and only succeeds on an identical retry.
+        const returnedFbPageIds = new Set(fbPages.data.map(p => p.id));
+        const revokedPages = existingPages.filter(p => p.facebookPageId && !returnedFbPageIds.has(p.facebookPageId));
+
+        for (const revokedPage of revokedPages) {
+            logger.info(`[Pages] Page "${revokedPage.name}" (${revokedPage.facebookPageId}) was not returned by Facebook — disabling auto-reply`);
+            await db
+                .update(pages)
+                .set({
+                    autoReplyEnabled: false,
+                    // Clear any prior reason — the blanked access token is the
+                    // authoritative disconnect signal here, and a stale system
+                    // reason ('trial_block'/'auto_pause') would misdescribe the
+                    // page in the admin UI and the comment-ingestion gate.
+                    autoReplyDisabledReason: null,
+                    instagramAutoReplyEnabled: false,
+                    accessToken: '',
+                    tokenLastVerifiedAt: null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(pages.id, revokedPage.id));
+            // Audit the off-transition when the page was actually replying before
+            // (deselected in the FB permission dialog). Skip already-off pages so a
+            // routine re-sync doesn't emit phantom events.
+            if (revokedPage.autoReplyEnabled) {
+                logAutoReplyToggle({
+                    pageId: revokedPage.id,
+                    workspaceId,
+                    userId,
+                    enabled: false,
+                    previous: true,
+                    reason: 'fb_sync',
+                });
+            }
+        }
+
+        if (revokedPages.length > 0) {
+            logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
+        }
+
+        // 3. Process Facebook pages in parallel (optimizes external API calls)
         const processPromises = fbPages.data.map(async (fbPage) => {
             logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
 
@@ -996,9 +1042,10 @@ export class PagesService {
 
         const results = await Promise.all(processPromises);
 
-        // 3. Determine how many more pages can be auto-enabled
+        // 4. Determine how many more pages can be auto-enabled
         // The trial / channel claim belongs to the BILLING account (workspace owner
         // with the subscription), not necessarily the team member running the sync.
+        // Runs after step 2 so slots freed by just-revoked pages count as free.
         const billing = billingUserId ?? userId;
         const enableCheck = await subscriptionsService.canEnablePage(billing, workspaceId);
         let remainingSlots: number | null = null; // null = unlimited
@@ -1031,7 +1078,7 @@ export class PagesService {
         // so the UI can offer "Switch to ‹X›" instead of the generic "ask the owner".
         const alreadyMemberOf: AlreadyMemberOfEntry[] = [];
 
-        // 4. Perform DB Writes (Sequential to ensure consistency)
+        // 5. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
         // or potential race conditions if multiple syncs happen simultaneously.
         for (const result of results) {
@@ -1286,48 +1333,6 @@ export class PagesService {
                     trialBlockedPages.push({ pageName: fbPage.name });
                 }
             }
-        }
-
-        // 5. Disable pages that the user revoked access to in Facebook
-        // If a page exists in DB but was NOT returned by Facebook's /me/accounts,
-        // the user deselected it in Facebook's permission dialog — disable it.
-        const returnedFbPageIds = new Set(fbPages.data.map(p => p.id));
-        const revokedPages = existingPages.filter(p => p.facebookPageId && !returnedFbPageIds.has(p.facebookPageId));
-
-        for (const revokedPage of revokedPages) {
-            logger.info(`[Pages] Page "${revokedPage.name}" (${revokedPage.facebookPageId}) was not returned by Facebook — disabling auto-reply`);
-            await db
-                .update(pages)
-                .set({
-                    autoReplyEnabled: false,
-                    // Clear any prior reason — the blanked access token is the
-                    // authoritative disconnect signal here, and a stale system
-                    // reason ('trial_block'/'auto_pause') would misdescribe the
-                    // page in the admin UI and the comment-ingestion gate.
-                    autoReplyDisabledReason: null,
-                    instagramAutoReplyEnabled: false,
-                    accessToken: '',
-                    tokenLastVerifiedAt: null,
-                    updatedAt: new Date(),
-                })
-                .where(eq(pages.id, revokedPage.id));
-            // Audit the off-transition when the page was actually replying before
-            // (deselected in the FB permission dialog). Skip already-off pages so a
-            // routine re-sync doesn't emit phantom events.
-            if (revokedPage.autoReplyEnabled) {
-                logAutoReplyToggle({
-                    pageId: revokedPage.id,
-                    workspaceId,
-                    userId,
-                    enabled: false,
-                    previous: true,
-                    reason: 'fb_sync',
-                });
-            }
-        }
-
-        if (revokedPages.length > 0) {
-            logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);

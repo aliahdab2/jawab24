@@ -20,6 +20,7 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
             // no-ops in production). A mock without this throws on every write.
             setLogger: vi.fn(),
             listCollectionsWithRows: vi.fn(),
+            createCollection: vi.fn(),
             addRow: vi.fn(),
             updateRow: vi.fn(),
             deleteRow: vi.fn(),
@@ -58,6 +59,8 @@ const COLL = '22222222-2222-2222-2222-222222222222';
 const ROW = '33333333-3333-3333-3333-333333333333';
 
 const WRITES = [
+    // The merchant «add list» door — a WRITE with the same admin gate as rows.
+    ['POST', `/pages/${PAGE}/fact-collections`],
     ['POST', `/pages/${PAGE}/fact-collections/${COLL}/rows`],
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
     ['DELETE', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
@@ -126,6 +129,81 @@ describe('Fact-collections routes — security + contract wiring', () => {
         const body = JSON.parse(res.payload);
         expect(body.data[0].rows).toHaveLength(1);
         expect(body.data[0].rows[0].name).toBe('دورة ICDL');
+    });
+
+    // ── POST /fact-collections — the merchant «add list» (G1b creation UI) ──
+    describe('POST create collection', () => {
+        it('201s, pins source to editor, and never forwards a client keyAttr', async () => {
+            vi.mocked(factCollectionsService.createCollection).mockResolvedValue({ id: COLL, label: 'رحلات الغوص' } as any);
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections`,
+                // A hostile/stale client may try to set the gating key or claim a
+                // trusted source — both must die at the schema, not in review.
+                payload: {
+                    label: 'رحلات الغوص',
+                    keyAttr: 'المدينة',
+                    source: 'kb_extract',
+                    rows: [{ name: 'رحلة دهب', price: '٢٥٠٠', currency: 'ج.م' }],
+                },
+            });
+            expect(res.statusCode).toBe(201);
+            expect(JSON.parse(res.payload).data.id).toBe(COLL);
+            const [pageId, input] = vi.mocked(factCollectionsService.createCollection).mock.calls[0];
+            expect(pageId).toBe(PAGE);
+            expect(input.label).toBe('رحلات الغوص');
+            expect(input.source).toBe('editor');
+            expect('keyAttr' in input).toBe(false);
+            // Same Arabic-Indic price normalization as the row endpoints.
+            expect(input.rows[0].price).toBe('2500.00');
+        });
+
+        it('400s an empty rows array — a collection may not be born empty', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections`,
+                payload: { label: 'قائمة فارغة', rows: [] },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.payload).code).toBe('VALIDATION');
+            expect(vi.mocked(factCollectionsService.createCollection)).not.toHaveBeenCalled();
+        });
+
+        it('400s a missing label, service never called', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections`,
+                payload: { rows: [{ name: 'عنصر' }] },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(vi.mocked(factCollectionsService.createCollection)).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['DUPLICATE_LABEL', 'A collection with this label already exists on this page', 409],
+            ['COLLECTION_LIMIT', 'At most 12 collections per page', 409],
+        ] as const)('surfaces %s as %i', async (code, message, status) => {
+            vi.mocked(factCollectionsService.createCollection).mockRejectedValue(
+                new FactCollectionLimitError(message, code),
+            );
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections`,
+                payload: { label: 'قائمة', rows: [{ name: 'عنصر' }] },
+            });
+            expect(res.statusCode).toBe(status);
+            expect(JSON.parse(res.payload).code).toBe(code);
+        });
+
+        it('wires the request-scoped logger', async () => {
+            vi.mocked(factCollectionsService.createCollection).mockResolvedValue({ id: COLL } as any);
+            await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections`,
+                payload: { label: 'قائمة', rows: [{ name: 'عنصر' }] },
+            });
+            expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
+        });
     });
 
     it('POST row: validates, normalizes Arabic-Indic price to a string, 201s', async () => {

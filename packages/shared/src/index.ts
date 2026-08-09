@@ -49,6 +49,12 @@ export interface FlagMeta {
     // in the comment + message threads so the merchant can tell the reply carried an
     // image; deliberately never set alongside needs_attention.
     reply_image?: Record<string, never>;
+    // Informational marker on OUTGOING rows only: this reply was delivered with a
+    // Post Reply CTA link button (Messenger button template / image-card button).
+    // Carries the merchant-authored label + URL so the comment + message threads can
+    // render the button the customer actually received — without it the app has no
+    // record a button was sent; deliberately never set alongside needs_attention.
+    reply_cta?: { label: string; url: string };
     // Open-ended: future flags can add their own namespaced meta here.
     [key: string]: Record<string, unknown> | undefined;
 }

@@ -399,6 +399,95 @@ describe('PagesService', () => {
             expect(revokeWrite.autoReplyDisabledReason).toBeNull();
         });
 
+        // Regression guard for the InMedia agency case (2026-08-09): a workspace
+        // at its full plan limit edits the Meta grant ONCE — dropping 4 unwanted
+        // pages, keeping 1, adding 1 new. The revocation step must run BEFORE the
+        // plan-slot check, so the slots freed by the deselected pages are usable
+        // by pages granted in the SAME sync. With the old order (slot check
+        // first), the new page was refused on the first attempt and only
+        // connected on an identical retry.
+        it('frees slots of pages deselected in the same grant edit before the slot check (one-shot swap)', async () => {
+            const workspaceId = 'workspace-inmedia';
+            const userId = 'user-inmedia';
+            const accessToken = 'token-inmedia';
+            const PLAN_LIMIT = 5;
+
+            // Meta grant after the edit: the kept page + the new page only
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { id: 'fb-shahin-world', name: 'Shahin World', access_token: 'pt-world' },
+                    { id: 'fb-shahin-tower', name: 'Shahin Tower Hotel', access_token: 'pt-tower' },
+                ],
+            });
+
+            // DB before the sync: 5 pages, all enabled — every slot taken
+            const existingPages = [
+                { id: 'p-world', facebookPageId: 'fb-shahin-world', name: 'Shahin World', accessToken: 'pt-world', autoReplyEnabled: true, userId },
+                { id: 'p-dima1', facebookPageId: 'fb-dima-1', name: 'Dima Handmade', accessToken: 'pt-d1', autoReplyEnabled: true, userId },
+                { id: 'p-tartous', facebookPageId: 'fb-tartous', name: 'Tartous Cars Online', accessToken: 'pt-tc', autoReplyEnabled: true, userId },
+                { id: 'p-dima2', facebookPageId: 'fb-dima-2', name: 'Dima handmade 2', accessToken: 'pt-d2', autoReplyEnabled: true, userId },
+                { id: 'p-almas', facebookPageId: 'fb-almas', name: 'مجوهرات ألماس طرطوس', accessToken: 'pt-al', autoReplyEnabled: true, userId },
+            ];
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(existingPages) }),
+                    }),
+                }),
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const setCalls: any[] = [];
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    setCalls.push(values);
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'updated' }]),
+                        }),
+                    };
+                }),
+            } as any);
+
+            const insertedValuesList: any[] = [];
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValuesList.push(values);
+                    return { returning: vi.fn().mockResolvedValue([{ id: 'p-tower', ...values }]) };
+                }),
+            } as any);
+
+            // Stateful slot check that mirrors countEnabledPageSlots: `remaining`
+            // reflects revoke writes ALREADY in the DB at call time. This is what
+            // makes the test order-sensitive — with the slot check running first,
+            // it sees 5/5 used and refuses the new page.
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canEnablePage).mockImplementation(async () => {
+                const revokedSoFar = setCalls.filter(v => v.accessToken === '').length;
+                const used = PLAN_LIMIT - revokedSoFar;
+                const remaining = PLAN_LIMIT - used;
+                return remaining > 0
+                    ? { allowed: true, limit: PLAN_LIMIT, used, remaining }
+                    : { allowed: false, reason: 'Enabled page limit reached. Disable another page or upgrade your plan.', code: 'page_limit_reached', limit: PLAN_LIMIT, used, remaining: 0 } as any;
+            });
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            // The 4 deselected pages are revoked
+            expect(result.revokedCount).toBe(4);
+            expect(setCalls.filter(v => v.accessToken === '')).toHaveLength(4);
+
+            // The new page connects and auto-enables IN THIS SAME SYNC — no
+            // plan-limit refusal, no second attempt needed
+            expect(result.skippedCount).toBe(0);
+            expect(result.skippedPages).toEqual([]);
+            expect(insertedValuesList).toHaveLength(1);
+            expect(insertedValuesList[0].facebookPageId).toBe('fb-shahin-tower');
+            expect(insertedValuesList[0].autoReplyEnabled).toBe(true);
+            expect(facebookService.subscribePageToWebhooks).toHaveBeenCalledWith('fb-shahin-tower', 'pt-tower');
+        });
+
         // Regression guard for the "Noor unstuck" UX:
         // When a sync attempts to attach a page that already lives in ANOTHER
         // workspace, AND the syncing user is already a member of that holding
