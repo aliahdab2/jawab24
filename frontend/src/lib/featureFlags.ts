@@ -104,6 +104,13 @@ const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
   // them — a prerequisite for the KB prose cleanup, which removes their free-text
   // duplicates (.planning/MES_CLEANUP_REVIEW.md).
   '9b6ba279-b569-4b45-b020-55b542dad5b6',
+  // Shahin World عالم شاهين (inmedia.sy@gmail.com) — third external merchant
+  // (owner ruling 2026-08-09): new annual-Pro signup (08-07) whose day-one
+  // complaint was hotel-name fabrication — the exact class the fact-collections
+  // coverage statement closes. Onboarded DIRECTLY onto the structured surface
+  // (paired with the /pages entry-point routing in pages.tsx) so he never
+  // invests in free-text prose we would migrate later.
+  'd06ed500-74ea-42ee-bff6-37bee2cf412a',
 ]);
 
 export function isCatalogVisible(
