@@ -171,6 +171,22 @@ describe('CommentDetailModal', () => {
     expect(cta).toHaveAttribute('href', 'https://jawab24.com/login');
   });
 
+  it('renders no CTA button for a non-http(s) URL (defense-in-depth scheme guard)', () => {
+    const repliedComment: Comment = {
+      ...mockComment,
+      replied: true,
+      replyText: 'تفضل الرابط 👇',
+      replyMethod: 'post_reply',
+      // Can't be stored via the API (validatePostReplyRuleInput rejects it) — the
+      // pill must still refuse to turn it into a clickable href.
+      flagMeta: { reply_cta: { label: 'رابط التسجيل', url: 'javascript:alert(1)' } },
+    };
+
+    renderModal({ comment: repliedComment });
+
+    expect(screen.queryByText('رابط التسجيل')).not.toBeInTheDocument();
+  });
+
   it('renders no CTA button when the reply has no reply_cta marker', () => {
     const repliedComment: Comment = {
       ...mockComment,

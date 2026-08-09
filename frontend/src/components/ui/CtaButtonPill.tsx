@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { ExternalLink } from 'lucide-react';
+import { isValidHttpUrl } from '@jawab24/shared';
 
 /**
  * Messenger-style rendering of the Post Reply CTA link button that was delivered
@@ -16,6 +17,11 @@ export const CtaButtonPill = React.memo(function CtaButtonPill({ label, url, cla
   url: string;
   className?: string;
 }) {
+  // Defense-in-depth: the save path already rejects non-http(s) URLs
+  // (validatePostReplyRuleInput → isValidHttpUrl), but this is the single point
+  // that turns the stored value into a clickable href — never render a
+  // javascript:/data: scheme even if a row was written outside the API.
+  if (!isValidHttpUrl(url)) return null;
   return (
     <a
       href={url}
