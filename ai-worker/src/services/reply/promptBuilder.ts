@@ -244,6 +244,28 @@ const KB_LANGUAGE_BAN =
     'Never choose a reply language because <business_knowledge>, the business name, or your persona is written in it — translate that information into the customer\'s language when replying.';
 
 /**
+ * Demonstration appended to BOTH uncertain directive variants (owner preference:
+ * demonstrations over rules). Our detector cannot name accent-free French or
+ * Arabizi — the model can, but under the bare "mirror if clearly something else"
+ * rule it kept falling back to the default/thread language on live traffic:
+ * Shahin World 2026-08-08, «Donne moi hotel a tartous» answered in ENGLISH
+ * (the paying merchant's second complaint), and the damascus-fixture probe read
+ * 0/6 French pre-demonstration. Two examples, each a real incident shape: the
+ * 2026-07-29 accent-free French screenshot, and romanized Arabic (which must go
+ * to Arabic script, never be mistaken for English or Spanish).
+ *
+ * Measured 2026-08-09 (damascus fixture, prod sampling, 6 reps/arm):
+ * accent-free French 0/6 → 6/6 French; English certain-control 6/6 unchanged;
+ * MES «Not registered» fragment 0/6 Arabic drift (still fixed). The Arabizi
+ * example measured INERT on the first-message shape («kam se3r dawrat ICDL?»
+ * still answered in English 6/6) — that remains the pre-existing accepted miss,
+ * not a regression; the example is kept for the mid-thread shapes and as the
+ * guard against Arabizi being mirrored as a European language.
+ */
+const VISIBLY_FOREIGN_MIRROR =
+    'Judge the message\'s language from its own words: «Quels cours proposez-vous ?» is French — reply in French even if all business content is Arabic; «kam el se3r?» is Arabic written in Latin letters — reply in Arabic.';
+
+/**
  * The reply-language directive.
  *
  * `certain` is the whole point. When the language is a POSITIVE reading of the
@@ -284,9 +306,9 @@ export function languageDirective(languageName: string, language: string, certai
     // message CLEARLY in another language wins, so a genuine mid-thread switch is
     // still mirrored (the 2026-07-29 «Quels cours proposez-vous ?» class).
     if (source === 'user-history') {
-        return `The customer's own previous messages in this conversation are in ${languageName} (language code: ${language}) — that is the conversation's language, chosen by the customer. Reply in ${languageName} unless the customer's LATEST message is itself clearly written in a different language. Never infer the customer's language from their name, and never switch language because your persona's dialect or the business content is written in another language — persona and business knowledge control tone and facts, never the reply language. ${KB_LANGUAGE_BAN}`;
+        return `The customer's own previous messages in this conversation are in ${languageName} (language code: ${language}) — that is the conversation's language, chosen by the customer. Reply in ${languageName} unless the customer's LATEST message is itself clearly written in a different language. ${VISIBLY_FOREIGN_MIRROR} Never infer the customer's language from their name, and never switch language because your persona's dialect or the business content is written in another language — persona and business knowledge control tone and facts, never the reply language. ${KB_LANGUAGE_BAN}`;
     }
-    return `Reply in the language of the customer's latest message — mirror the customer's language. We have NOT confirmed which language that message is in, so treat ${languageName} (language code: ${language}) only as the default: reply in ${languageName} when the message is in ${languageName} or is too short to tell, and reply in the customer's own language whenever it is clearly something else. ${KB_LANGUAGE_BAN}`;
+    return `Reply in the language of the customer's latest message — mirror the customer's language. We have NOT confirmed which language that message is in, so treat ${languageName} (language code: ${language}) only as the default: reply in ${languageName} when the message is in ${languageName} or is too short to tell, and reply in the customer's own language whenever it is clearly something else. ${VISIBLY_FOREIGN_MIRROR} ${KB_LANGUAGE_BAN}`;
 }
 
 /**

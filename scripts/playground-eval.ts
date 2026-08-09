@@ -2997,6 +2997,31 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Prod replay MES 2026-08-08 20:46 UTC: all-English thread + low-signal English fragment («Not registered») got an ARABIC reply. The reply must stay in the thread\'s English even though the KB, fact lists, customer name and the persona\'s dialect instruction are all Arabic-pulling.',
     },
+    // Case 757: Prod replay (Shahin World, 2026-08-08 21:24 UTC — the paying
+    // merchant's SECOND complaint that day). Accent-free French («Donne moi hotel
+    // a tartous», «23aout jusqua 25») was answered in ENGLISH throughout. The
+    // detector cannot name accent-free French (en@0.5 floor — an accepted miss,
+    // pinned in engine.test.ts); the model CAN, and the VISIBLY_FOREIGN_MIRROR
+    // demonstration in languageDirective is what makes it act on that (measured
+    // 0/6 → 6/6 French on the damascus fixture, 2026-08-09). The message here is
+    // deliberately DIFFERENT from the demonstration's example sentence, so this
+    // pins generalization, not parroting. English-anchored history exercises the
+    // user-history variant's escape hatch — the hardest arm of the fix.
+    {
+        id: 757, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'Donne moi la liste des cours avec les prix',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'What courses do you have please ?' },
+            { role: 'assistant', content: 'We offer several courses including ICDL, first aid, and English. Which one would you like to know more about?' },
+        ],
+        expected: {
+            // French function words an English (or Arabic) reply would not contain.
+            replyContainsAny: ['Nous', 'nous', 'notre', 'proposons', 'Voici', 'voici', 'Bonjour', 'les cours'],
+            replyNotContains: ['We offer', 'we offer', 'You can', 'you can', 'Here are'],
+        },
+        notes: 'Prod replay Shahin World 2026-08-08: accent-free French must be mirrored in French even though the detector reads it as uncertain English and the thread anchor is English. Guard for the VISIBLY_FOREIGN_MIRROR demonstration.',
+    },
 
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)

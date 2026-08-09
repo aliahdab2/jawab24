@@ -855,4 +855,15 @@ describe('languageDirective — the three-way contract (certain / user-history a
             expect(d).not.toContain('previous messages');
         }
     });
+
+    it('both uncertain variants carry the visibly-foreign demonstration; the certain variant does not', () => {
+        // The demonstration (accent-free French → French, Arabizi → Arabic) is what
+        // makes the mirror authorization actionable — the bare rule measured 0/6
+        // French on the damascus fixture (2026-08-09, Shahin World complaint).
+        // The certain branch must stay byte-stable: it already forbids switching.
+        expect(languageDirective('English', 'en', false, 'user-history')).toContain('Quels cours proposez-vous');
+        expect(languageDirective('Arabic', 'ar', false, 'merchant-default')).toContain('Quels cours proposez-vous');
+        expect(languageDirective('English', 'en', false, 'user-history')).toContain('kam el se3r');
+        expect(languageDirective('English', 'en', true)).not.toContain('Quels cours proposez-vous');
+    });
 });
