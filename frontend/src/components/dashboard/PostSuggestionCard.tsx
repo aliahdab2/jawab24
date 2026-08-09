@@ -5,7 +5,8 @@ import { Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
-import { getPostSuggestionsPageIds } from '@/lib/featureFlags';
+import { isPostSuggestionsVisible } from '@/lib/featureFlags';
+import { useAuthStore } from '@/lib/store';
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import { PostSuggestionSheet } from '@/components/post-suggestions/PostSuggestionSheet';
 import type { Page } from '@jawab24/shared';
@@ -28,10 +29,11 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const [latestByPage, setLatestByPage] = useState<Record<string, PostSuggestionResponse>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const eligiblePages = useMemo(() => {
-    const allowed = new Set(getPostSuggestionsPageIds(pages.map((p) => p.id)));
-    return pages.filter((p) => allowed.has(p.id) && p.isConnected);
-  }, [pages]);
+    if (!isPostSuggestionsVisible(activeWorkspaceId)) return [];
+    return pages.filter((p) => p.isConnected);
+  }, [pages, activeWorkspaceId]);
 
   const selectedPage = eligiblePages.find((p) => p.id === selectedId) ?? eligiblePages[0] ?? null;
   const pageId = selectedPage?.id ?? null;

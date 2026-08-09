@@ -24,7 +24,7 @@ const {
         dbResults,
         mockConfig: {
             openai: { apiKey: 'test-key' },
-            postSuggestions: { enabled: true, pageIds: [] as string[], dailyCapPerPage: 3 },
+            postSuggestions: { enabled: true, workspaceIds: [] as string[], dailyCapPerPage: 3 },
         },
     };
 });
@@ -84,8 +84,7 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 import { makeTrackedOpenAI } from '../services/openaiClient';
 import {
     postSuggestionsService,
-    isPostSuggestionsEnabledForPage,
-    isCronEligiblePage,
+    isPostSuggestionsEnabledForWorkspace,
     pickPostType,
     buildContactSuffix,
 } from '../services/postSuggestions';
@@ -103,7 +102,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     dbResults.length = 0;
     mockConfig.postSuggestions.enabled = true;
-    mockConfig.postSuggestions.pageIds = [];
+    mockConfig.postSuggestions.workspaceIds = [];
     mockConfig.postSuggestions.dailyCapPerPage = 3;
     mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
     mockIsConfigured.mockReturnValue(true);
@@ -113,28 +112,32 @@ beforeEach(() => {
 });
 
 describe('gate functions', () => {
-    it('endpoint gate: disabled kills everything; empty allowlist = fleet-wide; non-empty = only listed', () => {
+    it('workspace gate: disabled kills everything; empty allowlist = fleet-wide; non-empty = only listed', () => {
         mockConfig.postSuggestions.enabled = false;
-        expect(isPostSuggestionsEnabledForPage(PAGE)).toBe(false);
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
 
         mockConfig.postSuggestions.enabled = true;
-        mockConfig.postSuggestions.pageIds = [];
-        expect(isPostSuggestionsEnabledForPage(PAGE)).toBe(true);
+        mockConfig.postSuggestions.workspaceIds = [];
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
 
-        mockConfig.postSuggestions.pageIds = ['other-page'];
-        expect(isPostSuggestionsEnabledForPage(PAGE)).toBe(false);
-        mockConfig.postSuggestions.pageIds = [PAGE];
-        expect(isPostSuggestionsEnabledForPage(PAGE)).toBe(true);
+        mockConfig.postSuggestions.workspaceIds = ['other-workspace'];
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
+        mockConfig.postSuggestions.workspaceIds = [WS];
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
     });
 
-    it('cron gate is STRICTER: an empty allowlist means the cron generates for nobody', () => {
-        mockConfig.postSuggestions.pageIds = [];
-        expect(isCronEligiblePage(PAGE)).toBe(false); // endpoint would say true here
+    it('cron with an EMPTY workspace allowlist generates for nobody (stricter than the endpoint)', async () => {
+        mockConfig.postSuggestions.workspaceIds = [];
+        const result = await postSuggestionsService.runDailyPostSuggestions();
+        expect(result).toEqual({ generated: 0, skipped: 0 });
+        expect(mockCheckDailyCap).not.toHaveBeenCalled();
+    });
 
-        mockConfig.postSuggestions.pageIds = [PAGE];
-        expect(isCronEligiblePage(PAGE)).toBe(true);
-        mockConfig.postSuggestions.enabled = false;
-        expect(isCronEligiblePage(PAGE)).toBe(false);
+    it('generateSuggestion refuses a workspace outside the allowlist', async () => {
+        mockConfig.postSuggestions.workspaceIds = ['other-workspace'];
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r).toEqual({ ok: false, reason: 'gated' });
+        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
     });
 });
 

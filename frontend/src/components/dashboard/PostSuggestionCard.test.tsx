@@ -5,17 +5,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Page } from '@jawab24/shared';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
-const { mockGetToday, mockGetPageIds, mockRole } = vi.hoisted(() => ({
+const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
   mockGetToday: vi.fn(),
-  mockGetPageIds: vi.fn(),
+  mockIsVisible: vi.fn(),
   mockRole: { isAdmin: true },
 }));
 
 vi.mock('@/lib/api', () => ({
   postSuggestionsApi: { getToday: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
 }));
-vi.mock('@/lib/featureFlags', () => ({ getPostSuggestionsPageIds: mockGetPageIds }));
+vi.mock('@/lib/featureFlags', () => ({ isPostSuggestionsVisible: mockIsVisible }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));
+vi.mock('@/lib/store', () => ({
+  useAuthStore: (selector: (s: { activeWorkspaceId: string }) => unknown) =>
+    selector({ activeWorkspaceId: 'ws1' }),
+}));
 
 const PAGES = [{ id: 'p1', name: 'My Page', isConnected: true } as Page];
 
@@ -31,13 +35,13 @@ function renderCard(pages: Page[] = PAGES) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockRole.isAdmin = true;
-  mockGetPageIds.mockReturnValue(['p1']);
+  mockIsVisible.mockReturnValue(true);
   mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
 });
 
 describe('PostSuggestionCard — pilot self-gating', () => {
-  it('renders nothing when no workspace page is allowlisted', () => {
-    mockGetPageIds.mockReturnValue([]);
+  it('renders nothing when the workspace is not allowlisted', () => {
+    mockIsVisible.mockReturnValue(false);
     const { container } = renderCard();
     expect(container).toBeEmptyDOMElement();
     expect(mockGetToday).not.toHaveBeenCalled();
@@ -49,8 +53,7 @@ describe('PostSuggestionCard — pilot self-gating', () => {
     expect(mockGetToday).not.toHaveBeenCalled();
   });
 
-  it('shows the page switcher only when MULTIPLE connected pages are allowlisted, and switches', async () => {
-    mockGetPageIds.mockReturnValue(['p1', 'p2']);
+  it('shows the page switcher only when MULTIPLE connected pages exist, and switches', async () => {
     renderCard([
       { id: 'p1', name: 'متجر العطور', isConnected: true } as Page,
       { id: 'p2', name: 'مطعم الشام', isConnected: true } as Page,

@@ -122,22 +122,22 @@ export function isCatalogVisible(
 }
 
 /**
- * «بوست اليوم» pilot (owner rulings 2026-08-09: dogfood on our own page only;
- * ONE post/day; 3 generations/day absolute). The UI is deliberately STRICTER
- * than the backend's empty-allowlist-means-fleet-wide rule: no listed pages ⇒
- * no card anywhere, so the pilot cannot leak visually before GA. The backend
- * env gate (POST_SUGGESTIONS_*) stays the real enforcement — this only hides
- * the UI, and the card additionally fails closed when the API 404s.
+ * «بوست اليوم» pilot (owner rulings 2026-08-09: «just for aliahdab@gmail.com
+ * workspace»; ONE post/day; 3 generations/day absolute). WORKSPACE-gated with
+ * the founder workspace as the built-in default — the BUSINESS_SURFACE
+ * pattern — so the pilot ships in the normal production build with no build
+ * args and is visible only inside that workspace. The backend env gate
+ * (POST_SUGGESTIONS_ENABLED, default OFF) stays the real enforcement — this
+ * only hides the UI, and the card additionally fails closed on an API 404.
+ * Override the list for local dev via NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS.
  */
-const POST_SUGGESTIONS_PAGE_IDS: ReadonlySet<string> = new Set(
-  (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_PAGE_IDS || '')
+const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
+  (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS
+    || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
     .split(',').map((id) => id.trim()).filter(Boolean),
 );
 
-/** ALL of the workspace's allowlisted pages (order preserved), empty when the
- *  pilot is dark here. Multi-page merchants get a page switcher on the card
- *  (owner ruling 2026-08-09: «بدي اقدر اختار الصفحة»). */
-export function getPostSuggestionsPageIds(pageIds: readonly string[]): string[] {
-  if (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_ENABLED !== 'true') return [];
-  return pageIds.filter((id) => POST_SUGGESTIONS_PAGE_IDS.has(id));
+/** Whether the post-suggestions card may render for this workspace. */
+export function isPostSuggestionsVisible(workspaceId: string | null | undefined): boolean {
+  return Boolean(workspaceId && POST_SUGGESTIONS_WORKSPACE_IDS.has(workspaceId));
 }

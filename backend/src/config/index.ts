@@ -153,13 +153,14 @@ export const config = {
     // doubles as the instant rollback.
     postSuggestions: {
         enabled: process.env.POST_SUGGESTIONS_ENABLED === 'true',
-        // Page allowlist. EMPTY = every page (once enabled); non-empty = only
-        // these page UUIDs. A pilot belongs to one page, not the fleet
-        // (grounding-verifier posture). NOTE the cron is stricter: it
-        // pre-generates ONLY for explicitly listed pages — an empty list means
-        // the cron does nothing, because pre-generation is spend no user asked
-        // for (see runDailyPostSuggestions).
-        pageIds: (process.env.POST_SUGGESTIONS_PAGE_IDS || '')
+        // WORKSPACE allowlist (owner ruling 2026-08-09: «just for
+        // aliahdab@gmail.com workspace»). The default IS the founder's prod
+        // workspace, so enabling the pilot needs only POST_SUGGESTIONS_ENABLED
+        // — override the list for local dev or a wider rollout. EMPTY = every
+        // workspace (the eventual GA path); the cron never runs fleet-wide
+        // regardless (see runDailyPostSuggestions).
+        workspaceIds: (process.env.POST_SUGGESTIONS_WORKSPACE_IDS
+            || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
             .split(',').map(id => id.trim()).filter(Boolean),
         // ABSOLUTE generations/day/page cap (owner ruling 2026-08-09: 3, «ليس
         // أكثر») — the daily cron generation consumes 1 of these, leaving the

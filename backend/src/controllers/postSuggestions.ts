@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import type { PostSuggestionEvent, PostSuggestionPostType } from '@jawab24/shared';
-import { postSuggestionsService, isPostSuggestionsEnabledForPage } from '../services/postSuggestions';
+import { postSuggestionsService, isPostSuggestionsEnabledForWorkspace } from '../services/postSuggestions';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 const EVENTS: readonly PostSuggestionEvent[] = ['opened', 'copied', 'downloaded'];
@@ -23,7 +23,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.params;
-        if (!isPostSuggestionsEnabledForPage(pageId)) return reply.status(404).send({ error: 'Not found' });
+        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const result = await postSuggestionsService.getToday(req.workspaceId, pageId);
         return reply.send(result);
@@ -77,7 +77,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId, suggestionId } = request.params;
-        if (!isPostSuggestionsEnabledForPage(pageId)) return reply.status(404).send({ error: 'Not found' });
+        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const event = request.body?.event;
         if (!event || !(EVENTS as readonly string[]).includes(event)) {

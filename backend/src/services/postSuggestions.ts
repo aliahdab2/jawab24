@@ -18,7 +18,7 @@
  * buildFactCollectionsContext (ungated: no messageText → full live rows),
  * formatBusinessInfoPrompt — never a re-derivation of the reply pipeline.
  */
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import {
     formatBusinessInfoPrompt,
@@ -70,27 +70,17 @@ let logger: Logger = noopLogger;
 export function setPostSuggestionsLogger(l: Logger): void { logger = l; }
 
 /**
- * Whether the feature is live for this page. Pure and exported so the gate is
- * unit-testable on its own (same posture as shouldVerifyGrounding). Empty
- * allowlist = fleet-wide once enabled; non-empty = only those pages.
+ * Whether the feature is live for this WORKSPACE (owner ruling 2026-08-09:
+ * the pilot belongs to the founder's workspace, not to page lists). Pure and
+ * exported so the gate is unit-testable on its own (shouldVerifyGrounding
+ * posture). Empty allowlist = fleet-wide once enabled (the GA path);
+ * non-empty = only those workspaces.
  */
-export function isPostSuggestionsEnabledForPage(pageId: string): boolean {
+export function isPostSuggestionsEnabledForWorkspace(workspaceId: string): boolean {
     if (!config.postSuggestions?.enabled) return false;
-    const allowed = config.postSuggestions.pageIds;
-    if (allowed && allowed.length > 0 && !allowed.includes(pageId)) return false;
+    const allowed = config.postSuggestions.workspaceIds;
+    if (allowed && allowed.length > 0 && !allowed.includes(workspaceId)) return false;
     return true;
-}
-
-/**
- * Whether the CRON may pre-generate for this page. Stricter than the endpoint
- * gate on purpose: pre-generation is spend no user asked for, so an empty
- * allowlist means the cron does NOTHING (while the endpoint keeps the
- * fleet-wide-once-enabled semantics).
- */
-export function isCronEligiblePage(pageId: string): boolean {
-    if (!config.postSuggestions?.enabled) return false;
-    const allowed = config.postSuggestions.pageIds;
-    return allowed.length > 0 && allowed.includes(pageId);
 }
 
 /**
@@ -532,7 +522,7 @@ class PostSuggestionsService {
      * variety picker; still consumes a normal cap slot.
      */
     async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
-        if (!isPostSuggestionsEnabledForPage(pageId)) return { ok: false, reason: 'gated' };
+        if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return { ok: false, reason: 'gated' };
 
         const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId);
         let cap: DailyCapStatus;
@@ -643,16 +633,32 @@ class PostSuggestionsService {
     }
 
     /**
-     * Daily cron: pre-generate for every explicitly allowlisted page. Skips a
-     * page when today's cron row already exists (restart/blue-green safe — the
-     * partial unique index backstops the race) or when the last
-     * CRON_UNOPENED_STREAK cron suggestions were never opened (waste guard:
-     * a forgotten pilot must not drip spend).
+     * Daily cron: pre-generate for every CONNECTED page of the explicitly
+     * allowlisted workspaces. STRICTER than the endpoint gate on purpose —
+     * pre-generation is spend no user asked for, so an EMPTY workspace
+     * allowlist means the cron does nothing even when the feature is enabled
+     * fleet-wide. Skips a page when today's cron row already exists
+     * (restart/blue-green safe — the partial unique index backstops the race)
+     * or when the last CRON_UNOPENED_STREAK cron suggestions were never
+     * opened (waste guard: a forgotten pilot must not drip spend).
      */
     async runDailyPostSuggestions(): Promise<{ generated: number; skipped: number }> {
         const result = { generated: 0, skipped: 0 };
-        for (const pageId of config.postSuggestions.pageIds) {
-            if (!isCronEligiblePage(pageId)) { result.skipped++; continue; }
+        const workspaceIds = config.postSuggestions.workspaceIds;
+        if (!config.postSuggestions.enabled || workspaceIds.length === 0) return result;
+
+        // Connected pages only — a page without a token can't be posted to,
+        // so pre-generating for it is guaranteed waste.
+        const eligiblePages = await db.select({ id: pages.id, workspaceId: pages.workspaceId }).from(pages)
+            .where(and(
+                inArray(pages.workspaceId, workspaceIds),
+                isNotNull(pages.accessToken),
+                ne(pages.accessToken, ''),
+            ));
+
+        for (const page of eligiblePages) {
+            const pageId = page.id;
+            if (!page.workspaceId) { result.skipped++; continue; }
             try {
                 const today = todayIso();
                 const [existing] = await db.select({ id: postSuggestions.id }).from(postSuggestions)
@@ -672,9 +678,6 @@ class PostSuggestionsService {
                     result.skipped++;
                     continue;
                 }
-
-                const [page] = await db.select({ workspaceId: pages.workspaceId }).from(pages).where(eq(pages.id, pageId)).limit(1);
-                if (!page?.workspaceId) { result.skipped++; continue; }
 
                 const generated = await this.generateSuggestion(page.workspaceId, pageId, 'cron');
                 if (generated.ok) {
