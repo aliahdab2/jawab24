@@ -5,7 +5,7 @@
  * centralize three pieces of logic that were previously duplicated across
  * buildDynamicSystemSuffix, buildUserPrompt, and validateReply.
  */
-import { resolveInputLanguageWithSource } from '../language';
+import { resolveInputLanguageWithSource, type LanguageSource } from '../language';
 import type { GenerateRequest } from './types';
 
 /**
@@ -91,7 +91,7 @@ export function resolveLanguage(request: GenerateRequest): string {
  * field-by-field, so a dedicated boolean gets dropped in transit while unit tests
  * that inject it stay green. `comment` is the one field that provably survives.
  */
-export function resolveLanguageWithCertainty(request: GenerateRequest): { language: string; certain: boolean } {
+export function resolveLanguageWithCertainty(request: GenerateRequest): { language: string; certain: boolean; source: LanguageSource } {
     const resolved = resolveInputLanguageWithSource({
         comment: request.comment,
         language: request.language,
@@ -101,5 +101,9 @@ export function resolveLanguageWithCertainty(request: GenerateRequest): { langua
         defaultReplyLanguage: request.context?.defaultReplyLanguage,
     });
 
-    return { language: resolved.language, certain: resolved.fromCurrentMessage };
+    // `source` names which link of the chain won. The prompt layer needs it because
+    // ONE uncertain link — user-history — supports a truthful provenance sentence
+    // ("the customer's own previous messages are in X"), which earns a stronger
+    // directive than the other uncertain links (see languageDirective).
+    return { language: resolved.language, certain: resolved.fromCurrentMessage, source: resolved.source };
 }

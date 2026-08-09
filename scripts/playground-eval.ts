@@ -84,6 +84,11 @@ interface TestCase {
         nudgeMaxLength?: number;        // nudgeText length must be <= this
         commentReplyMode?: string;      // expected commentReplyMode value
         replyMaxLength?: number;        // reply length must be <= this
+        /** Which script carries the reply's LETTERS. Substring assertions cannot
+         *  express "the reply is in English" — a legitimate English reply may quote
+         *  Arabic proper nouns (outlet names, city names), so dominance by letter
+         *  count is the robust form. An empty reply fails (counts as a tie). */
+        replyDominantScript?: 'arabic' | 'latin';
     };
     notes?: string;
     /**
@@ -153,6 +158,9 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     moto: /المجد|موتوسيكلات|motoshop/i,
     incense: /بيت البخور|incense/i,
     distributor: /رواء|distributor/i,
+    // Anonymized MES clone (language-drift class, Cat 41 case 756) — un-keyed
+    // Arabic fact lists + Arabic-imperative KB, no retail prices.
+    electro: /تقنيات الشام/i,
     // The vendor's own support page (own-brand Check 6 exemption, Cat 72).
     support: /jawab\s?24/i,
 };
@@ -2944,6 +2952,51 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Counter-test: genuine high-confidence English switch must override the Arabic assistant anchor. Locks in that the < 0.6 threshold still respects intentional switches. Verified live reply: "Sure! How can I assist you today?"',
     },
+    // Case 756: Prod replay (MES ام. اي. اس, 2026-08-08 20:46 UTC). An ALL-ENGLISH
+    // DM thread hit a low-signal fragment («Not registered» — en@0.5, uncertain) and
+    // the reply came back in ARABIC: «صحيح، ما عندنا صالة مسجّلة في اللاذقية حالياً».
+    // Probe-verified: the resolution chain was CORRECT ('en' via user-history) and
+    // the soft languageDirective was emitted — the model overrode it under the
+    // page's combined Arabic gravity (all-Arabic KB with Arabic imperatives, the
+    // un-keyed fact lists' Arabic absence directive, an Arabic-dialect persona, an
+    // Arabic customer name). Direct replay of the REAL prod request (the page's
+    // actual 11k KB) reproduced the drift 5/8 at prod sampling; with the
+    // user-history languageDirective variant it reads 0/8.
+    //
+    // HONEST LIMITATION of this case: the anonymized 'electro' fixture replays the
+    // SHAPE but did NOT reproduce the pre-fix drift (0/8 with the fix stashed,
+    // measured 2026-08-09 at both 3.5k and 6.3k fixture-KB sizes) — the real page's
+    // full KB mass appears to be load-bearing and is not committable. So this case
+    // is a shape guard, not the revert pin; the deterministic revert protection is
+    // the languageDirective unit-test contract in ai-worker/test/promptBuilder.test.ts.
+    {
+        id: 756, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'Not registered',
+        page: 'electro',
+        senderName: 'Ahmad Tabbaa',
+        // The real persona shape: a DIALECT instruction with no "match the
+        // customer's language" qualifier — persona must control tone, never the
+        // reply language.
+        brandVoiceNotes: 'Name: This is Rasha from Sham Tech Company\nTone and Dialect: Friendly, Syrian dialect\nDistinctive Phrases: Some phrases with emojis\nResponse Style: Short, light emojis, sounds human — no dry replies\nGoal: Name and phone number - directing to showrooms based on the city 😊',
+        conversationHistory: [
+            { role: 'user', content: 'Pleae' },
+            { role: 'assistant', content: "For prices and availability, the best option is to call our showroom in Damascus, Al-Rawda: 0911000210. They'll give you the latest info on the 43-inch models." },
+            { role: 'user', content: 'Can you search for me for price' },
+            { role: 'assistant', content: "I don't have the exact prices for the 43-inch screens here, but you can get the latest details by calling our Damascus Al-Rawda showroom at 0911000210." },
+            { role: 'user', content: 'Please help me for price' },
+            { role: 'assistant', content: 'I understand you need the price. For the most accurate and current prices, please contact our Damascus Al-Rawda showroom at 0911000210. They can assist you right away.' },
+            { role: 'user', content: 'You can not fibd pdice realy ?' },
+            { role: 'assistant', content: "I really want to help, but I don't have the prices listed here. The showroom team at 0911000210 will give you the exact price for the 43-inch screens." },
+            { role: 'user', content: 'Price in the market' },
+            { role: 'assistant', content: "I don't have the market prices on hand, but our showroom in Damascus Al-Rawda at 0911000210 can provide you with the latest price info." },
+            { role: 'user', content: 'Ok can you find  showroom in latakia' },
+            { role: 'assistant', content: "We don't have a showroom registered in Latakia. Our closest showrooms are in Damascus and Aleppo. If you'd like, I can share their contact details." },
+        ],
+        expected: {
+            replyDominantScript: 'latin',
+        },
+        notes: 'Prod replay MES 2026-08-08 20:46 UTC: all-English thread + low-signal English fragment («Not registered») got an ARABIC reply. The reply must stay in the thread\'s English even though the KB, fact lists, customer name and the persona\'s dialect instruction are all Arabic-pulling.',
+    },
 
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)
@@ -4976,6 +5029,21 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     if (e.replyMaxLength && d.reply) {
         const pass = d.reply.length <= e.replyMaxLength;
         checks.push({ field: 'replyMaxLength', pass, detail: `length ${d.reply.length} vs max ${e.replyMaxLength}` });
+    }
+
+    // replyDominantScript — dominance by letter count, so an English reply quoting
+    // Arabic proper nouns still reads 'latin'. Empty reply → tie → fail.
+    if (e.replyDominantScript) {
+        const reply = d.reply || '';
+        const arabicLetters = (reply.match(/\p{Script=Arabic}/gu) || []).length;
+        const latinLetters = (reply.match(/\p{Script=Latin}/gu) || []).length;
+        const dominant = arabicLetters > latinLetters ? 'arabic' : latinLetters > arabicLetters ? 'latin' : 'tie';
+        const pass = dominant === e.replyDominantScript;
+        checks.push({
+            field: 'replyDominantScript',
+            pass,
+            detail: `expected ${e.replyDominantScript} got ${dominant} (arabic ${arabicLetters} / latin ${latinLetters})${d.reply ? '' : ' — reply was empty'}`,
+        });
     }
 
     // commentReplyMode

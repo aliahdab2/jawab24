@@ -10,6 +10,7 @@ import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab2
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
+import type { LanguageSource } from '../language';
 import type { GenerateRequest } from './types';
 
 // Token budget constants (configurable via env vars for production tuning)
@@ -255,17 +256,35 @@ const KB_LANGUAGE_BAN =
  * model can, so in the uncertain case it decides and X is only the default.
  *
  * The soft variant deliberately makes NO claim about where ${languageName} came from.
- * It is reached from several different links of the chain (history, post, KB, merchant
+ * It is reached from several different links of the chain (post, KB, merchant
  * default, and a current-message read the confidence detector could not confirm), so
  * any specific provenance sentence would be false in some of them — which is the exact
  * class of bug this function exists to remove.
  *
- * Exported for direct testing — the two branches are a behavioural contract, not
+ * EXCEPTION (2026-08-09): the `user-history` link gets its own middle variant,
+ * because for that link alone the provenance sentence IS true — the language was
+ * read off the customer's own earlier turns. See the branch comment for the prod
+ * incident and the measured 5/8 → 0/8 replay.
+ *
+ * Exported for direct testing — the three branches are a behavioural contract, not
  * cosmetic wording.
  */
-export function languageDirective(languageName: string, language: string, certain: boolean): string {
+export function languageDirective(languageName: string, language: string, certain: boolean, source?: LanguageSource): string {
     if (certain) {
         return `You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic). ${KB_LANGUAGE_BAN}`;
+    }
+    // The user-history anchor is the ONE uncertain link whose provenance sentence is
+    // TRUE: the resolved language was read off the customer's own earlier turns. That
+    // earns a directive strong enough to hold against the prompt's other language
+    // gravity — an all-Arabic KB, an Arabic-dialect persona, Arabic fact-list
+    // imperatives, an Arabic customer name. Prod incident (MES, 2026-08-08): an
+    // all-English thread got «صحيح، ما عندنا صالة مسجّلة في اللاذقية حالياً» for the
+    // fragment «Not registered» under the generic soft variant below — replayed 5/8
+    // at prod sampling, 0/8 with this variant. The escape hatch stays: a latest
+    // message CLEARLY in another language wins, so a genuine mid-thread switch is
+    // still mirrored (the 2026-07-29 «Quels cours proposez-vous ?» class).
+    if (source === 'user-history') {
+        return `The customer's own previous messages in this conversation are in ${languageName} (language code: ${language}) — that is the conversation's language, chosen by the customer. Reply in ${languageName} unless the customer's LATEST message is itself clearly written in a different language. Never infer the customer's language from their name, and never switch language because your persona's dialect or the business content is written in another language — persona and business knowledge control tone and facts, never the reply language. ${KB_LANGUAGE_BAN}`;
     }
     return `Reply in the language of the customer's latest message — mirror the customer's language. We have NOT confirmed which language that message is in, so treat ${languageName} (language code: ${language}) only as the default: reply in ${languageName} when the message is in ${languageName} or is too short to tell, and reply in the customer's own language whenever it is clearly something else. ${KB_LANGUAGE_BAN}`;
 }
@@ -283,7 +302,7 @@ function buildPerCallBlock(request: GenerateRequest): string {
     // conversation history → post content → KB language → merchant's configured default
     // before falling back to English.
     // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
-    const { language, certain: languageCertain } = resolveLanguageWithCertainty(request);
+    const { language, certain: languageCertain, source: languageSource } = resolveLanguageWithCertainty(request);
     // Language label for the reply directive. FLAG-GATED (Phase 1b): legacy mode
     // keeps the historical 7-entry map byte-identical — codes it doesn't know
     // (ru/ja/… from detectLanguageOrNull) render "English", matching the
@@ -362,7 +381,7 @@ STYLE: Be ${styleDirective}.
 ${isDM
 ? '- DM: give full answers with prices and specifics from <business_knowledge>. For catalog questions, mention categories and ask what interests them — don\'t dump everything.\n- You ARE the contact point — don\'t tell customers to "contact us" when they\'re already talking to you.\n- Don\'t repeat "I\'ll check" if you already said it earlier in the conversation.'
 : '- Comment: 1-3 sentences max. Include key facts (prices, hours) directly. Only suggest DM for private info or when the answer is not in KB.'}
-- CRITICAL: ${languageDirective(languageName, language, languageCertain)}`;
+- CRITICAL: ${languageDirective(languageName, language, languageCertain, languageSource)}`;
 
     if (language === 'ar') {
         // Per-call reinforcement of the dialect-mirroring rule in STATIC_SYSTEM_PREFIX.

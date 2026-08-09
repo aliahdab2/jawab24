@@ -481,6 +481,112 @@ export const DEMO_PAGES = [
         autoReplyEnabled: true,
         instagramUsername: null,
     },
+    {
+        // ELECTRO fixture (playground-eval Cat 41 case 756 + language-drift class).
+        // Anonymized clone of a real Syrian electronics agency (MES ام. اي. اس,
+        // prod incident 2026-08-08 20:46 UTC): an all-ENGLISH DM thread hit the
+        // low-signal fragment «Not registered» and the reply came back in ARABIC —
+        // the model overrode a correctly-resolved user-history 'en' under this
+        // page's combined Arabic gravity. That gravity is what this fixture
+        // reproduces, each source deliberately present:
+        //  1. an all-Arabic KB with Arabic MODEL-DIRECTED imperatives («لا تخترع
+        //     أسعاراً», «وجّه الزبون إلى الصالة») — the real page's KB style;
+        //  2. UN-KEYED «صالات الشركة» fact collections, whose rendered absence
+        //     directive is an Arabic imperative the drifting replies echoed
+        //     almost verbatim («ما عندنا صالة مسجّلة…»);
+        //  3. no retail prices anywhere (price questions deflect to a showroom
+        //     phone), so English threads stay on the honest-decline path;
+        //  4. showrooms in EXACTLY two cities (دمشق/حلب) so «showroom in Latakia»
+        //     is the honest-denial shape the prod conversation exercised.
+        // Named to dodge every other page's name pattern in playground-eval.ts —
+        // notably NOT containing «إلكترونيات» or «متجر» (the electronics/Shopify
+        // fixture's pattern; that page tests the native-catalog path, this one
+        // must stay on the full-KB path).
+        facebookPageId: 'demo_page_electro',
+        name: 'تقنيات الشام للأجهزة الكهربائية',
+        suggestedKnowledgeBase: `تقنيات الشام للأجهزة الكهربائية والمنزلية
+
+من نحن
+شركة سورية متخصصة باستيراد وتوزيع الأجهزة الكهربائية والمنزلية، وكيل معتمد لعدة علامات عالمية. نخدم قطاعي المفرق والجملة، ولدينا صالات عرض في دمشق وحلب وشبكة موزعين معتمدين في باقي المحافظات.
+
+✦ المنتجات:
+الموديل	المواصفات المختصرة (للمستخدم النهائي)
+65OL9300SA	شاشة 65 بوصة OLED - دقة 4K UHD - معالج صور الجيل 11 - 120Hz (حتى 165Hz للألعاب) | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب
+65OL9200SA	شاشة 65 بوصة OLED - دقة 4K UHD - معالج صور الجيل 9 - 120Hz (حتى 144Hz) - صوت 40 وات | واي فاي | بلوتوث | ريموت ذكي | مستشعر حركة | دردشة ذكية
+100QN8600SA	شاشة 100 بوصة QLED - دقة 4K UHD - معالج الجيل 8 - 120Hz (حتى 144Hz) - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | HDR10
+86QN8600SA	شاشة 86 بوصة QLED - دقة 4K UHD - معالج الجيل 8 - 120Hz (حتى 144Hz) - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | HDR10
+85NB8500SA	شاشة 85 بوصة NANO - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+75QN7200SA	شاشة 75 بوصة QLED - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+75QN8500SA	شاشة 75 بوصة QLED - دقة 4K UHD - معالج الجيل 8 - صوت 20 وات | واي فاي | بلوتوث | وضع ألعاب
+75NB8400SA 2026	شاشة 75 بوصة NANO - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+65QN8500SA	شاشة 65 بوصة QLED - دقة 4K UHD - معالج الجيل 8 | واي فاي | بلوتوث | ريموت ذكي | وضع أفلام | Dolby Vision | HDR10
+65QN8400SA	شاشة 65 بوصة QLED - دقة 4K UHD - معالج الجيل 8 | واي فاي | بلوتوث | ريموت ذكي | وضع أفلام | Dolby Vision | HDR10
+65QN7200SA	شاشة 65 بوصة QLED - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+65NB8500SA	شاشة 65 بوصة - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي
+55QN8600SA	شاشة 55 بوصة QLED - دقة 4K UHD - معالج الجيل 8 - صوت 20 وات | واي فاي | بلوتوث | وضع ألعاب
+55NB8400SA	شاشة 55 بوصة NANO - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+50NB8500SA	شاشة 50 بوصة NANO - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+43QX7100SA	شاشة 43 بوصة - دقة 4K UHD - معالج الجيل 7 - صوت 20 وات | واي فاي | ريموت ذكي | وضع ألعاب
+43NB8200SA 2026	شاشة 43 بوصة NANO - دقة 4K UHD - معالج الجيل 7 - 60Hz - صوت 20 وات | واي فاي | بلوتوث | ريموت ذكي | وضع ألعاب | وضع أفلام | HDR10
+32LB6500SA	شاشة 32 بوصة - دقة FHD - معالج الجيل 5/6 - صوت 10 وات | واي فاي | وضع ألعاب
+27GM4100SA	شاشة ألعاب 27 بوصة FHD 144Hz - زمن استجابة 1ms - IPS - HDR10
+WX7120SA	غسالة 7 كغ - محرك مباشر - تشخيص أعطال ذكي | 6 حركات غسيل | شاشة ضيقة
+WX7125SA	غسالة 7 كغ - محرك مباشر - 1200 دورة - تشخيص أعطال ذكي | 6 حركات غسيل | شاشة عريضة
+WX8140SA	غسالة 8 كغ - محرك مباشر - 1200 دورة - تشخيص أعطال ذكي | 6 حركات غسيل | شاشة عريضة
+WX9150SA	غسالة بخارية 9 كغ - محرك مباشر - 1400 دورة - واي فاي | تشخيص أعطال ذكي | 6 حركات غسيل | شاشة LED
+WX9155SA	غسالة بخارية 9 كغ - محرك مباشر - 1400 دورة - واي فاي | تشخيص أعطال ذكي | إضافة ملابس أثناء الغسيل
+WX9160SA	غسالة بخارية 9 كغ - محرك مباشر - 1400 دورة - تشخيص أعطال ذكي | 6 حركات غسيل
+WX1060SA	غسالة بخارية 10 كغ - محرك مباشر - 1400 دورة - تشخيص أعطال ذكي | 6 حركات غسيل
+WX1170SA	غسالة بخارية 11 كغ - محرك مباشر - 1400 دورة - واي فاي | تشخيص أعطال ذكي | غسيل توربو
+WD7145SA	غسالة بخارية مع نشافة 7 كغ - محرك مباشر - 1400 دورة - واي فاي | تشخيص أعطال ذكي
+WD8155SA	غسالة بخارية مع نشافة 8 كغ - محرك مباشر - 1400 دورة - واي فاي | إضافة ملابس أثناء الغسيل
+DR9030SA	مجففة ثياب 9 كغ - مضخة حرارية | واي فاي | تشخيص ذكي | حساس جفاف
+TL1380SA	غسالة تعبئة علوية 13 كغ - محرك انفرتر ذكي - تشخيص أعطال ذكي | غسيل توربو
+TL1465SA	غسالة تعبئة علوية 14 كغ - محرك انفرتر ذكي - تشخيص أعطال ذكي | غسيل توربو | شاشة LED
+DW6125SA	جلاية 14 مكان 5 برامج - محرك انفرتر | تنظيف قوي | رف قابل للتعديل
+DW8110SA	جلاية 13 مكان 7 برامج - محرك انفرتر | تنظيف قوي | رف قابل للتعديل
+DW4250SA	جلاية 14 مكان 9 برامج - محرك انفرتر | واي فاي | تنظيف قوي | بخارية
+RF3400SA	براد - 684 لتر - 4 أبواب - ضاغط انفرتر | واي فاي | تشخيص ذكي
+RF3480SA	براد - 862 لتر - بابين - ضاغط انفرتر | نوفروست | واي فاي | تشخيص ذكي | مبرد ماء | صانع ثلج
+RF3300SA	براد - 642 لتر - 4 أبواب - ضاغط انفرتر | واي فاي | تشخيص ذكي | مبرد ماء | صانع ثلج | باب زجاجي
+RF2740SA	براد - 679 لتر - 4 أبواب - ضاغط انفرتر | واي فاي | تشخيص ذكي | مبرد ماء | صانع ثلج
+FZ5140SA	فريزر - 16 قدم - ضاغط انفرتر | تنقية هواء
+RF5110SA	براد - 380 لتر - ضاغط انفرتر | واي فاي | تشخيص ذكي | مبرد ماء
+RF8920SA	براد - 653 لتر - فريزر علوي - ضاغط انفرتر | نوفروست | واي فاي | تشخيص ذكي | مبرد ماء
+RF8820SA	براد - 630 لتر - بابين - ضاغط انفرتر | واي فاي | تشخيص ذكي | مبرد ماء | تنقية هواء
+RF7320SA	براد - 547 لتر - فريزر علوي - ضاغط انفرتر | تنقية هواء | تبريد أبواب
+RF6820SA	براد - 471 لتر - فريزر علوي - ضاغط انفرتر | مبرد ماء | تبريد أبواب
+RF6390SA	براد - 438 لتر - فريزر علوي - ضاغط انفرتر | تنقية هواء | تبريد أبواب
+AC1230SA	مكيف 12000 وحدة - بارد وحار - انفرتر | تشخيص ذكي | توفير طاقة
+AC1840SA	مكيف 18000 وحدة - بارد وحار - انفرتر | واي فاي | تشخيص ذكي
+AC2450SA	مكيف 24000 وحدة - بارد وحار - انفرتر | واي فاي | تنقية هواء
+MW2540SA	ميكروويف 25 لتر - شواية | تذويب ذكي | قفل أطفال
+MW4260SA	ميكروويف 42 لتر - شواية وحمل حراري | تذويب ذكي | لوحة لمس
+VC1930SA	مكنسة كهربائية 1900 وات - كيس قابل للغسل | فلتر HEPA
+VC2280SA	مكنسة لاسلكية شاحن - بطارية حتى 60 دقيقة | فرشاة مزدوجة | فلتر HEPA
+
+الأسعار
+لا نعلن الأسعار عبر الصفحة لأنها تتغير حسب سعر الصرف وتوفر البضاعة. للاستفسار عن سعر أي موديل يرجى التواصل مع أقرب صالة عرض أو زيارتها مباشرة — فريق الصالة يعطيك السعر النهائي والعروض الحالية فوراً.
+
+الكفالة وخدمة ما بعد البيع
+جميع منتجاتنا مكفولة كفالة وكيل رسمية. الصيانة تتم في مراكزنا المعتمدة بدمشق وحلب، وقطع الغيار الأصلية متوفرة دائماً. لتسجيل طلب صيانة يرجى الاتصال بقسم خدمة ما بعد البيع.
+
+البيع بالجملة
+للسادة التجار: قسم مبيعات الجملة يستقبل طلباتكم يومياً، وتتوفر أسعار خاصة للكميات. التسليم من مستودعاتنا في دمشق وحلب.
+
+تعليمات للمساعد
+- لا تخترع أسعاراً أو موديلات أو مواصفات غير مذكورة هنا.
+- إذا سأل الزبون عن السعر وجّهه إلى أقرب صالة عرض مع رقم هاتفها.
+- إذا سأل عن التوفر قل له إن فريق الصالة يؤكد التوفر الحالي.
+- إذا طلب صيانة أعطه رقم قسم خدمة ما بعد البيع.
+- رد باختصار وبأسلوب ودود واحترافي.
+
+⏰ ساعات العمل:
+السبت - الخميس: 09:30 - 20:00
+الجمعة: مغلق`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+    },
 ];
 
 /**
@@ -898,6 +1004,59 @@ async function seedDistributorFactCollections(pageId: string): Promise<void> {
         source: 'kb_extract',
         rows: DEMO_DISTRIBUTOR_SIZE_LIST.rows.map(r => ({ name: r.name, attributes: r.attributes, price: r.price, currency: 'د' })),
     });
+}
+
+/**
+ * The electro fixture's collections — the anonymized clone of the real page's two
+ * UN-KEYED lists (see the fixture's comment in DEMO_PAGES). Un-keyed is the point:
+ * with `keyAttr: null` the renderer emits the honest un-keyed scope line plus the
+ * Arabic absence imperative («أي عنصر غير مذكور في هذه القائمة فهو غير مسجّل
+ * لدينا — قل للعميل…»), and that imperative is the strongest single Arabic-gravity
+ * source in the language-drift incident this fixture pins (its wording is what the
+ * drifting replies echoed). Keying the showrooms by «المدينة» was measured NOT to
+ * reproduce the drift — do not "improve" this to a keyed list.
+ */
+export const DEMO_ELECTRO_COLLECTIONS: {
+    label: string;
+    rows: { name: string; attributes: { label: string; value: string }[] }[];
+}[] = [
+    {
+        label: 'صالات الشركة',
+        rows: [
+            { name: 'صالة الروضة', attributes: [{ label: 'المدينة', value: 'دمشق' }, { label: 'العنوان', value: 'مقابل حديقة الجاحظ - بناء الوكالات' }, { label: 'الهاتف', value: '0911000210' }] },
+            { name: 'صالة المزرعة', attributes: [{ label: 'المدينة', value: 'دمشق' }, { label: 'العنوان', value: 'جانب المصرف التجاري' }, { label: 'الهاتف', value: '0911000220' }] },
+            { name: 'صالة العزيزية', attributes: [{ label: 'المدينة', value: 'حلب' }, { label: 'العنوان', value: 'شارع السبيل' }, { label: 'الهاتف', value: '0921000230' }] },
+            { name: 'صالة الفرقان', attributes: [{ label: 'المدينة', value: 'حلب' }, { label: 'العنوان', value: 'أمام الحديقة العامة' }, { label: 'الهاتف', value: '0921000240' }] },
+            { name: 'صالة الجميلية الجديدة', attributes: [{ label: 'المدينة', value: 'حلب' }, { label: 'العنوان', value: 'ساحة المحطة' }, { label: 'الهاتف', value: '0921000250' }] },
+        ],
+    },
+    {
+        label: 'أرقام الأقسام',
+        rows: [
+            { name: 'قسم خدمة ما بعد البيع', attributes: [{ label: 'الهاتف', value: '0911000202' }] },
+            { name: 'مبيعات الجملة للسادة التجار', attributes: [{ label: 'الهاتف', value: '0911000212' }, { label: 'هاتف بديل', value: '0911000262' }] },
+            { name: 'قسم المشاريع', attributes: [{ label: 'الهاتف', value: '0911000255' }] },
+        ],
+    },
+];
+
+/**
+ * Seed the electro fixture's collections. Same writer and idempotency contract as
+ * the distributor seeder above; both lists stay un-keyed and `isComplete` unset
+ * (D-038 — a fixture may not put words in a merchant's mouth), which is exactly
+ * the state the cloned prod page was in during the incident.
+ */
+async function seedElectroFactCollections(pageId: string): Promise<void> {
+    const { factCollectionsService } = await import('../../services/factCollections');
+    await db.delete(factCollections).where(eq(factCollections.pageId, pageId));
+    for (const collection of DEMO_ELECTRO_COLLECTIONS) {
+        await factCollectionsService.createCollection(pageId, {
+            label: collection.label,
+            keyAttr: null,
+            source: 'kb_extract',
+            rows: collection.rows,
+        });
+    }
 }
 
 /**
@@ -2052,6 +2211,18 @@ export async function seedDemoData(
             }
         }
 
+        // Refresh the electro fixture's un-keyed lists (language-drift class, Cat 41)
+        const electroRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_electro');
+        if (electroRefresh) {
+            // Same containment as the distributor path above.
+            try {
+                await seedElectroFactCollections(electroRefresh.id);
+                logger.debug('[DemoData] Refreshed electro fact collections', { collections: DEMO_ELECTRO_COLLECTIONS.length });
+            } catch (err) {
+                logger.error('[DemoData] Electro fact collections failed — demo continues without them', { err });
+            }
+        }
+
         // Refresh the damascus course lists (schedules slice, Cat 51) — re-seeding
         // also re-resolves the relative `inDays` cohort dates against today, so a
         // long-lived demo account keeps genuinely upcoming slots.
@@ -2230,6 +2401,18 @@ export async function seedDemoData(
             logger.debug('[DemoData] Seeded distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
         } catch (err) {
             logger.error('[DemoData] Distributor fact collections failed — demo continues without them', { err });
+        }
+    }
+
+    // Seed the electro fixture's un-keyed lists (language-drift class, Cat 41).
+    // Case 756 only reproduces the incident's Arabic gravity if these rows exist.
+    const electroPage = createdPages.find(p => p.facebookPageId === 'demo_page_electro');
+    if (electroPage) {
+        try {
+            await seedElectroFactCollections(electroPage.id);
+            logger.debug('[DemoData] Seeded electro fact collections', { collections: DEMO_ELECTRO_COLLECTIONS.length });
+        } catch (err) {
+            logger.error('[DemoData] Electro fact collections failed — demo continues without them', { err });
         }
     }
 
