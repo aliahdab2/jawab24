@@ -13,21 +13,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * (TeamPanel, admin PaymentRequestModal, admin/playground each do today and
  * can adopt this).
  */
-export function useCopyToClipboard(resetMs = 1500): { copied: boolean; copy: (text: string) => void } {
+export function useCopyToClipboard(resetMs = 1500): { copied: boolean; copy: (text: string) => Promise<boolean> } {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const copy = useCallback((text: string) => {
-    if (!text || !navigator.clipboard) return;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), resetMs);
-    }).catch(() => {
+  // Resolves TRUE only when the clipboard write actually landed — callers that
+  // record "copied" as a success signal (post-suggestion stamps) must await
+  // this instead of assuming the write worked. Fire-and-forget callers can
+  // keep ignoring the return value (additive change).
+  const copy = useCallback(async (text: string): Promise<boolean> => {
+    if (!text || !navigator.clipboard) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
       // Clipboard blocked (insecure context / denied permission) — benign.
-    });
+      return false;
+    }
+    setCopied(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), resetMs);
+    return true;
   }, [resetMs]);
 
   return { copied, copy };

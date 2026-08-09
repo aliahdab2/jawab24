@@ -1,11 +1,13 @@
 /**
- * Orphan audit for Post Reply trigger images. READ-ONLY — never deletes.
+ * Orphan audit for stored merchant images. READ-ONLY — never deletes.
+ * Covers every prefix the app writes: `trigger-images/` (Post Reply) and
+ * `generated-posts/` («بوست اليوم» suggestions).
  *
  * Reports two kinds of drift between the DB and the object store:
- *   - DB rows whose `trigger_image_key` object is MISSING from the bucket (a live
+ *   - DB rows whose image key object is MISSING from the bucket (a live
  *     image was lost — investigate; should never happen).
- *   - Bucket objects under `trigger-images/` with NO matching DB row (orphans left
- *     by a failed best-effort delete — safe to clean up).
+ *   - Bucket objects under an audited prefix with NO matching DB row (orphans
+ *     left by a failed best-effort delete — safe to clean up).
  *
  * Run before any bulk cleanup:
  *   npx ts-node src/scripts/audit-trigger-images.ts
@@ -16,10 +18,12 @@
  */
 import { S3Client, ListObjectsV2Command, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { db } from '../db';
-import { posts, instagramMedia } from '../db/schema';
+import { posts, instagramMedia, postSuggestions } from '../db/schema';
 import { isNotNull } from 'drizzle-orm';
 import { config } from '../config';
 import { imageStorage } from '../services/imageStorage';
+
+const AUDITED_PREFIXES = ['trigger-images/', 'generated-posts/'] as const;
 
 async function main() {
     if (!imageStorage.isConfigured()) {
@@ -33,7 +37,7 @@ async function main() {
         ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
     });
 
-    // 1. All keys referenced by live rows.
+    // 1. All keys referenced by live rows, across every writer of the bucket.
     const dbKeys = new Set<string>();
     for (const row of await db.select({ key: posts.triggerImageKey }).from(posts).where(isNotNull(posts.triggerImageKey))) {
         if (row.key) dbKeys.add(row.key);
@@ -41,17 +45,22 @@ async function main() {
     for (const row of await db.select({ key: instagramMedia.triggerImageKey }).from(instagramMedia).where(isNotNull(instagramMedia.triggerImageKey))) {
         if (row.key) dbKeys.add(row.key);
     }
+    for (const row of await db.select({ key: postSuggestions.imageKey }).from(postSuggestions).where(isNotNull(postSuggestions.imageKey))) {
+        if (row.key) dbKeys.add(row.key);
+    }
 
-    // 2. All objects under the prefix.
+    // 2. All objects under the audited prefixes.
     const bucketKeys = new Set<string>();
-    let token: string | undefined;
-    do {
-        const res = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: 'trigger-images/', ContinuationToken: token }));
-        for (const obj of res.Contents ?? []) {
-            if (obj.Key) bucketKeys.add(obj.Key);
-        }
-        token = res.IsTruncated ? res.NextContinuationToken : undefined;
-    } while (token);
+    for (const prefix of AUDITED_PREFIXES) {
+        let token: string | undefined;
+        do {
+            const res = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+            for (const obj of res.Contents ?? []) {
+                if (obj.Key) bucketKeys.add(obj.Key);
+            }
+            token = res.IsTruncated ? res.NextContinuationToken : undefined;
+        } while (token);
+    }
 
     // 3a. DB rows whose object is missing (live image lost — investigate).
     const missing: string[] = [];

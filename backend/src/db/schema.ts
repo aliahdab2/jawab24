@@ -1777,3 +1777,44 @@ export const waitlistEmailSends = pgTable('waitlist_email_sends', {
     sentBy: uuid('sent_by').notNull().references(() => users.id),
     sentAt: timestamp('sent_at').defaultNow(),
 });
+
+// ============================================
+// POST SUGGESTIONS — «بوست اليوم» pilot
+// ============================================
+// One AI-suggested social post per page per day (owner ruling 2026-08-09:
+// ONE post/day, regenerate REPLACES it — never accumulates). No publishing:
+// the merchant copies the text / downloads the image and posts manually
+// (FB_SCOPES has no pages_manage_posts). Pilot is env-gated to allowlisted
+// pages via config.postSuggestions; spend is bounded by an ABSOLUTE
+// 3-generations/day cap (cron consumes 1 of the 3).
+export const postSuggestions = pgTable('post_suggestions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    // UTC calendar day the suggestion belongs to — cron idempotency + history
+    // key. DATE not timestamp: day granularity IS the product semantics
+    // (catalog_items.startsAt precedent).
+    suggestedFor: isoDateString('suggested_for').notNull(),
+    source: varchar('source', { length: 20 }).notNull(), // 'cron' | 'manual'
+    postType: varchar('post_type', { length: 30 }), // 'promo' | 'product_spotlight' | 'faq_tip' | 'hours_reminder' | 'general'
+    text: text('text').notNull(),
+    // Both nullable = text-only suggestion (image call failed / storage off /
+    // image cleaned up after supersede). imageKey is the storage handle for
+    // delete + the generated-posts/ orphan audit; imageUrl is what the UI shows.
+    imageUrl: text('image_url'),
+    imageKey: text('image_key'),
+    status: varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'superseded'
+    // Market-signal stamps — the pilot's whole point is measuring these.
+    // First-write-wins; null = the merchant never did it.
+    openedAt: timestamp('opened_at'),
+    copiedAt: timestamp('copied_at'),
+    downloadedAt: timestamp('downloaded_at'),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+    pageDateIdx: index('idx_post_suggestions_page_date').on(table.pageId, table.suggestedFor),
+    // Cron idempotency at the DB level: blue+green can both tick the daily
+    // job; the second INSERT (onConflictDoNothing) is a no-op. Manual rows
+    // are exempt — regenerates create several rows per day by design.
+    cronOnceIdx: uniqueIndex('uq_post_suggestions_cron_once')
+        .on(table.pageId, table.suggestedFor)
+        .where(sql`source = 'cron'`),
+}));

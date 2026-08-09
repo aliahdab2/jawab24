@@ -43,6 +43,7 @@ import customerNotificationRoutes from "./routes/customerNotifications";
 import ecommerceAnalyticsRoutes from "./routes/ecommerceAnalytics";
 import leadsRoutes from "./routes/leads";
 import catalogRoutes from "./routes/catalog";
+import postSuggestionsRoutes from "./routes/postSuggestions";
 import factCollectionsRoutes from "./routes/factCollections";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
@@ -60,6 +61,8 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
+import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
+import { imageStorage } from "./services/imageStorage";
 import { setTrialRemindersLogger, runTrialEndingReminders, runTrialEndedNotices } from "./services/trialReminders";
 import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
@@ -274,6 +277,7 @@ const start = async () => {
     await server.register(pagesRoutes);
     await server.register(catalogRoutes);
     await server.register(factCollectionsRoutes);
+    await server.register(postSuggestionsRoutes);
     await server.register(postsRoutes);
     // Public: stable tap-through for Post Reply image cards already sitting in customer threads.
     await server.register(postReplyImageRoutes);
@@ -409,6 +413,30 @@ const start = async () => {
       // Staggered 2 min behind the ending-reminder sweep, same reasoning
       initialDelayMs: 9 * 60 * 1000,
       run: runTrialEndedNotices,
+      logError: logJobError,
+    });
+
+    // «بوست اليوم» pilot cron — once per day, pre-generates the suggested post
+    // for EXPLICITLY allowlisted pages only (empty allowlist = cron does
+    // nothing; pre-generation is spend no user asked for). Idempotent: the
+    // partial unique index on (page_id, suggested_for) WHERE source='cron'
+    // makes a blue/green double-tick a no-op, and each generation consumes the
+    // same absolute 3/day cap as the merchant's button.
+    setPostSuggestionsLogger(workerLogger);
+    if (config.postSuggestions.enabled && !imageStorage.isConfigured()) {
+      // Without object storage every generation silently ships TEXT-ONLY
+      // (`storage_off` degrade). The response tells the merchant; this boot
+      // line tells ops — otherwise an env drift is invisible until a human
+      // complains about imageless cards.
+      workerLogger.warn('[PostSuggestions] Enabled but object storage is NOT configured — all generations will be text-only (storage_off)');
+    }
+    scheduleRecurringJob({
+      label: '[PostSuggestions]',
+      tag: 'post_suggestions',
+      intervalMs: DAILY_MS,
+      // Staggered 2 min behind the trial-ended sweep so the daily jobs don't share a tick
+      initialDelayMs: 11 * 60 * 1000,
+      run: () => postSuggestionsService.runDailyPostSuggestions(),
       logError: logJobError,
     });
 

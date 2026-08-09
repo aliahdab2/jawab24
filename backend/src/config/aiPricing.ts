@@ -32,6 +32,15 @@ export const AI_PRICING = {
     // long-context column on both mini and nano, so only the short-context rates exist).
     'gpt-5.4-mini': { inputPer1K: 0.00075, cachedInputPer1K: 0.000075, outputPer1K: 0.0045 },
     'gpt-5.4-nano': { inputPer1K: 0.0002, cachedInputPer1K: 0.00002, outputPer1K: 0.00125 },
+    // gpt-image family — token-based like everything else: `usage.input_tokens`
+    // (prompt text; generate-only calls carry no image input) priced as input,
+    // `usage.output_tokens` (image tokens) as output. Rates from OpenAI's pricing
+    // page 2026-08-09: gpt-image-2 text-in $5/1M, image-out $30/1M (≈$0.05 per
+    // medium 1024×1024); gpt-image-1-mini text-in $2/1M, image-out $8/1M. The
+    // image-INPUT rate ($8/1M on gpt-image-2) applies only to edits, which no
+    // caller uses — add a distinct row if an edit path ever ships.
+    'gpt-image-2': { inputPer1K: 0.005, outputPer1K: 0.03 },
+    'gpt-image-1-mini': { inputPer1K: 0.002, outputPer1K: 0.008 },
     'gpt-4o-mini-transcribe': { inputPer1K: 0.00125, outputPer1K: 0.005 },
     'text-embedding-3-small': { inputPer1K: 0.00002, outputPer1K: 0 },
     'claude-haiku-4-5-20251001': { inputPer1K: 0.0008, outputPer1K: 0.004 },
@@ -45,7 +54,7 @@ export type ModelName = keyof typeof AI_PRICING;
  * new row. Bump when AI_PRICING values change so historical totals can be
  * filtered by version for apples-to-apples comparison.
  */
-export const PRICING_VERSION = 'v2';
+export const PRICING_VERSION = 'v3';
 
 const warnedUnknownModels = new Set<string>();
 const warnedSnapshotFallbacks = new Set<string>();

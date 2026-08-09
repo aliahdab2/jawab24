@@ -15,8 +15,8 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues } from '@jawab24/shared';
-export type { OrderNotificationType, NotificationTemplate, NotificationStats };
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -207,6 +207,22 @@ export const catalogApi = {
     api.post<CatalogScanResponse>(`/pages/${pageId}/catalog/scan-posts`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
   batchCreate: (pageId: string, items: CatalogItemInput[]) =>
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
+};
+
+/** «بوست اليوم» pilot. Server 404s every route for non-allowlisted pages
+ *  (dark feature) — callers treat 404 as "pilot off", never as an error.
+ *  Response envelope: the shared `PostSuggestionResponse` (one shape for
+ *  getToday AND generate — re-exported above for component imports). */
+export const postSuggestionsApi = {
+  getToday: (pageId: string) =>
+    api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
+  // Text + image generation — the long-timeout override every AI endpoint uses.
+  // includeContact: merchant toggle for the server-composed contact footer.
+  // postType: merchant-chosen angle; omitted = the server's variety picker.
+  generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }, { timeout: LONG_RUNNING_TIMEOUT }),
+  markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
+    api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
 };
 
 /** One row of a fact collection, as the API serves it. `price` is the numeric

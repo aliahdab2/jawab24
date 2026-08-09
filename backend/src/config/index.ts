@@ -146,6 +146,29 @@ export const config = {
             .split(',').map(id => id.trim()).filter(Boolean),
     },
 
+    // «بوست اليوم» pilot — AI-suggested daily post (text + image) from Business
+    // Info. No publishing; the merchant copies/downloads manually. OFF by
+    // default: every generation is real OpenAI spend (~$0.006/image at
+    // gpt-image-2 LOW, the owner-ruled quality; 'medium' at ~$0.05 is the
+    // documented upgrade lever), so it is enabled deliberately and the switch
+    // doubles as the instant rollback.
+    postSuggestions: {
+        enabled: process.env.POST_SUGGESTIONS_ENABLED === 'true',
+        // WORKSPACE allowlist (owner ruling 2026-08-09: «just for
+        // aliahdab@gmail.com workspace»). The default IS the founder's prod
+        // workspace, so enabling the pilot needs only POST_SUGGESTIONS_ENABLED
+        // — override the list for local dev or a wider rollout. EMPTY = every
+        // workspace (the eventual GA path); the cron never runs fleet-wide
+        // regardless (see runDailyPostSuggestions).
+        workspaceIds: (process.env.POST_SUGGESTIONS_WORKSPACE_IDS
+            || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
+            .split(',').map(id => id.trim()).filter(Boolean),
+        // ABSOLUTE generations/day/page cap (owner ruling 2026-08-09: 3, «ليس
+        // أكثر») — the daily cron generation consumes 1 of these, leaving the
+        // merchant at most 2 manual regenerates.
+        dailyCapPerPage: parseInt(process.env.POST_SUGGESTIONS_DAILY_CAP || '3', 10),
+    },
+
     // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds
     // for the admin AI Cost panel. The org credit wallet is drained by ALL keys, so
     // burn/runway are computed from the OpenAI Costs API org total, not ai_usage_log.

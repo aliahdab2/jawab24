@@ -120,3 +120,24 @@ export function isCatalogVisible(
   if (user?.isAdmin === true) return true;
   return (workspaceIds ?? []).some((id) => BUSINESS_SURFACE_WORKSPACE_IDS.has(id));
 }
+
+/**
+ * «بوست اليوم» pilot (owner rulings 2026-08-09: «just for aliahdab@gmail.com
+ * workspace»; ONE post/day; 3 generations/day absolute). WORKSPACE-gated with
+ * the founder workspace as the built-in default — the BUSINESS_SURFACE
+ * pattern — so the pilot ships in the normal production build with no build
+ * args and is visible only inside that workspace. The backend env gate
+ * (POST_SUGGESTIONS_ENABLED, default OFF) stays the real enforcement — this
+ * only hides the UI, and the card additionally fails closed on an API 404.
+ * Override the list for local dev via NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS.
+ */
+const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
+  (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS
+    || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
+    .split(',').map((id) => id.trim()).filter(Boolean),
+);
+
+/** Whether the post-suggestions card may render for this workspace. */
+export function isPostSuggestionsVisible(workspaceId: string | null | undefined): boolean {
+  return Boolean(workspaceId && POST_SUGGESTIONS_WORKSPACE_IDS.has(workspaceId));
+}

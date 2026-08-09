@@ -760,4 +760,18 @@ test.describe('Dashboard Page', () => {
     // Default mock has 20% usage — no badge should appear
     await expect(page.getByText(t('dashboard.commandCenter.quotaExceeded'))).not.toBeVisible();
   });
+
+  test('post-suggestion pilot card must NOT render for a standard (non-founder) workspace', async ({ page }) => {
+    // The card's gate is a NEXT_PUBLIC_* allowlist compiled into the REAL
+    // bundle — the one wiring unit tests (which mock the flag module) cannot
+    // see. The standard test workspace is outside the founder allowlist, so
+    // any appearance here is a fleet-wide leak of the dark feature.
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    await expect(page.getByText(t('postSuggestions.cardTitle'))).toHaveCount(0);
+    await expect(page.getByRole('button', { name: t('postSuggestions.cardCta') })).toHaveCount(0);
+  });
 });

@@ -189,19 +189,32 @@ its own decision.
 
 ## 9. Data lifecycle / GDPR
 
-- **Key scheme:** `trigger-images/{workspaceId}/{uuid}.{ext}`.
+- **Key schemes (one per writer):**
+  - `trigger-images/{workspaceId}/{uuid}.{ext}` — Post Reply trigger images
+    (`postsService.updateTrigger`).
+  - `generated-posts/{workspaceId}/{uuid}.jpg` — «بوست اليوم» AI-suggested post images
+    (`services/postSuggestions.ts`, pilot 2026-08; JPEG q88 — photographic cards, ~10×
+    smaller than PNG). The reuse the door was left open for (§1) — same three-method
+    surface, no new abstraction.
 - **Reference-based lifecycle (industry standard):** an image lives exactly as long as
   its Post Reply. On replace / remove / trigger-clear the old object is deleted
   (`postsService.updateTrigger`, safe-order: upload new → commit DB → delete old, so a
   live image is never lost). Page delete drops all its images
   (`pagesService.deletePage`). **Age-based expiry targets ONLY orphaned/non-current
-  objects — never a live, referenced image.**
+  objects — never a live, referenced image.** Post-suggestion images follow the same
+  safe order: a regenerate inserts the replacement row and supersedes the old one in ONE
+  transaction, and only after commit best-effort deletes the old object — a live image is
+  never lost to a failed replacement. Page delete collects `post_suggestions.image_key`
+  alongside the trigger-image keys and removes the `generated-posts/` objects after the
+  cascade commits (`pagesService.deletePage`), so the "page delete drops all its images"
+  invariant holds for BOTH prefixes.
 - **Never hand a storage key to something that outlives it.** Deleting a replaced object is
   correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
-  sent message must never embed the bucket URL. See §11.
-- **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) lists DB
-  rows whose object is missing (investigate) and bucket objects with no DB row
-  (safe-to-clean orphans). Run before any bulk cleanup.
+  sent message must never embed the bucket URL. See §11. (Post-suggestion images are never
+  sent by us at all — the merchant downloads and posts manually.)
+- **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) covers BOTH
+  prefixes: lists DB rows whose object is missing (investigate) and bucket objects with
+  no DB row (safe-to-clean orphans). Run before any bulk cleanup.
 
 ## 10. Delivery — differs per platform
 

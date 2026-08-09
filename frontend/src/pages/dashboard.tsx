@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton, UpgradeCTA, FeedSnippet, ArrowLink } from '@/components/ui';
 import { WhatsAppNudgeBanner } from '@/components/dashboard/WhatsAppNudgeBanner';
 import { PostReplyNudgeBanner } from '@/components/dashboard/PostReplyNudgeBanner';
+import { PostSuggestionCard } from '@/components/dashboard/PostSuggestionCard';
 import { intentLabelKey } from '@/utils/feedPreview';
 import dynamic from 'next/dynamic';
 
@@ -1041,6 +1042,9 @@ const DashboardPage: NextPageWithLayout = () => {
               onTry={postReplySetup.openPicker}
             />
           )}
+
+          {/* «بوست اليوم» pilot — self-gating (build-time allowlist + API 404 fail-closed) */}
+          <PostSuggestionCard pages={pages} />
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

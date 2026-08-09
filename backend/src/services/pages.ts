@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores, postSuggestions } from '../db/schema';
 import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
@@ -873,8 +873,9 @@ export class PagesService {
      * Delete a page
      */
     async deletePage(workspaceId: string, pageId: string) {
-        // Collect Post Reply image keys BEFORE the cascade delete drops the rows, so
-        // the stored objects don't orphan. Ownership is enforced by the delete's WHERE.
+        // Collect stored-image keys (Post Reply triggers + generated post cards)
+        // BEFORE the cascade delete drops the rows, so the objects don't orphan.
+        // Ownership is enforced by the delete's WHERE.
         const [ownedPage] = await db
             .select({ id: pages.id })
             .from(pages)
@@ -884,6 +885,7 @@ export class PagesService {
         const imageKeys = [
             ...(await db.select({ key: posts.triggerImageKey }).from(posts).where(eq(posts.pageId, pageId))),
             ...(await db.select({ key: instagramMedia.triggerImageKey }).from(instagramMedia).where(eq(instagramMedia.pageId, pageId))),
+            ...(await db.select({ key: postSuggestions.imageKey }).from(postSuggestions).where(eq(postSuggestions.pageId, pageId))),
         ].map(r => r.key).filter((k): k is string => !!k);
 
         await db

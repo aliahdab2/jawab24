@@ -35,6 +35,12 @@ export interface TrackedOpenAIContext {
 export interface TrackedOpenAI {
     chat: OpenAI['chat'];
     embeddings: OpenAI['embeddings'];
+    /**
+     * Deliberately `generate`-only: `images.edit` / `createVariation` would run
+     * untracked through a spread copy, silently bypassing ai_usage_log. Widen
+     * this (with tracking) if an edit path ever ships.
+     */
+    images: Pick<OpenAI['images'], 'generate'>;
     /** Escape hatch for the raw client. Callers that use this are responsible for logging. */
     raw: OpenAI;
 }
@@ -134,12 +140,53 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
         return response;
     }) as typeof embedCreate;
 
+    const imagesGenerate = client.images.generate.bind(client.images);
+    const trackedImagesGenerate = (async (...args: Parameters<typeof imagesGenerate>) => {
+        const requestedModel = String((args[0] as { model?: string }).model ?? 'unknown');
+        recordAiAttempt(ctx.pipeline, requestedModel);
+        let response;
+        try {
+            response = await imagesGenerate(...(args as Parameters<typeof imagesGenerate>));
+        } catch (err) {
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, classifyFailure(args[1]));
+            throw err;
+        }
+        recordAiReturn(ctx.pipeline, requestedModel);
+        // gpt-image models report token usage (input_tokens = prompt text,
+        // output_tokens = image tokens). ImagesResponse carries no `model`
+        // field, so the requested model is what gets logged.
+        if (response && typeof response === 'object' && 'usage' in response) {
+            const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+            logAiUsage({
+                userId: ctx.userId,
+                pageId: ctx.pageId,
+                model: requestedModel,
+                tokensIn: usage?.input_tokens ?? 0,
+                cachedInputTokens: 0,
+                tokensOut: usage?.output_tokens ?? 0,
+                cached: false,
+                pipeline: ctx.pipeline,
+                intent: ctx.intent ?? null,
+            }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+        } else {
+            // Unlike chat, images have NO streaming path — a resolved response
+            // without `usage` is always an anomaly: the call was billed but no
+            // ai_usage_log row will follow. Book it (§13c: every logAiUsage
+            // bypass emits failed_before_log) so the gap analysis can name the
+            // miss instead of showing an unexplained R−L gap on the most
+            // expensive call in the codebase.
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'ZeroTokens');
+        }
+        return response;
+    }) as typeof imagesGenerate;
+
     return {
         chat: {
             ...client.chat,
             completions: { ...client.chat.completions, create: trackedChatCreate },
         } as OpenAI['chat'],
         embeddings: { ...client.embeddings, create: trackedEmbedCreate } as OpenAI['embeddings'],
+        images: { generate: trackedImagesGenerate },
         raw: client,
     };
 }

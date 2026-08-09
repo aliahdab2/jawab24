@@ -38,6 +38,7 @@ import enOnboarding from '../src/i18n/en/onboarding.json';
 import enPages from '../src/i18n/en/pages.json';
 import enPayment from '../src/i18n/en/payment.json';
 import enPlans from '../src/i18n/en/plans.json';
+import enPostSuggestions from '../src/i18n/en/postSuggestions.json';
 import enPricing from '../src/i18n/en/pricing.json';
 import enPrivacy from '../src/i18n/en/privacy.json';
 import enProfile from '../src/i18n/en/profile.json';
@@ -82,6 +83,7 @@ import arOnboarding from '../src/i18n/ar/onboarding.json';
 import arPages from '../src/i18n/ar/pages.json';
 import arPayment from '../src/i18n/ar/payment.json';
 import arPlans from '../src/i18n/ar/plans.json';
+import arPostSuggestions from '../src/i18n/ar/postSuggestions.json';
 import arPricing from '../src/i18n/ar/pricing.json';
 import arPrivacy from '../src/i18n/ar/privacy.json';
 import arProfile from '../src/i18n/ar/profile.json';
@@ -105,6 +107,7 @@ export const en = {
   ecommerceAnalytics: enEcommerceAnalytics,
   messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications, orderNotifications: enOrderNotifications,
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
+  postSuggestions: enPostSuggestions,
   pricing: enPricing, privacy: enPrivacy, profile: enProfile,
   salla: enSalla, settings: enSettings, shopify: enShopify, sidebar: enSidebar,
   sse: enSse, subscription: enSubscription, team: enTeam,
@@ -120,6 +123,7 @@ export const ar = {
   ecommerceAnalytics: arEcommerceAnalytics,
   messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications, orderNotifications: arOrderNotifications,
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
+  postSuggestions: arPostSuggestions,
   pricing: arPricing, privacy: arPrivacy, profile: arProfile,
   salla: arSalla, settings: arSettings, shopify: arShopify, sidebar: arSidebar,
   sse: arSse, subscription: arSubscription, team: arTeam,

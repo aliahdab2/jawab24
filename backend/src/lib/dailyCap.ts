@@ -11,10 +11,14 @@
  */
 import { redis } from './redis';
 
-/** Build a daily-cap key: `${prefix}:${id}:YYYY-MM-DD` (UTC day). */
-export function dailyCapKey(prefix: string, id: string): string {
-    const today = new Date().toISOString().slice(0, 10);
-    return `${prefix}:${id}:${today}`;
+/**
+ * Build a daily-cap key: `${prefix}:${id}:YYYY-MM-DD` (UTC day). Pass `date`
+ * (ISO `YYYY-MM-DD`) when the caller has already fixed its working day, so the
+ * cap key and the caller's own rows can never straddle a midnight boundary.
+ */
+export function dailyCapKey(prefix: string, id: string, date?: string): string {
+    const day = date ?? new Date().toISOString().slice(0, 10);
+    return `${prefix}:${id}:${day}`;
 }
 
 export interface DailyCapStatus {
@@ -52,6 +56,20 @@ export async function claimDailyOnce(key: string, ttlSeconds = 86400): Promise<b
     } catch {
         return true;
     }
+}
+
+/**
+ * Atomically claim one of today's `limit` slots for `key`: the INCR itself is
+ * the arbiter, so two callers racing the last slot can never both be granted
+ * (the TOCTOU window a separate check + increment leaves open). A refused
+ * claim still bumps the counter past `limit` — harmless, because the arbiter
+ * is `n <= limit` and readers clamp. THROWS if Redis is unreachable — same
+ * fail-closed contract as `checkDailyCap` (the cap bounds real spend).
+ */
+export async function claimDailyCapSlot(key: string, limit: number): Promise<boolean> {
+    const n = await redis.incr(key);
+    await redis.expire(key, 86400);
+    return n <= limit;
 }
 
 /**

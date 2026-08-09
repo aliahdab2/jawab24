@@ -50,7 +50,7 @@ export const PAGE_NAMESPACES = {
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
-  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'settings', 'subscription', 'time', 'topup'],
+  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'postSuggestions', 'settings', 'subscription', 'time', 'topup'],
   // 'settings' is needed by PauseBanner (rendered in Comment/MessageDetailModal)
   // for the duration labels (duration15min, duration30min, …).
   // 'kb' + 'pages' are needed by the in-conversation Business Info editor

@@ -28,6 +28,8 @@ export type AiPipeline =
     | 'cache_warm'           // Post-deploy re-warm: replays recent AI-replied comments through the playground path to repopulate the reply caches (scripts/warm-reply-cache.ts). Excluded from REPLY_PIPELINES so it can't distort prod hit-rate.
     | 'gender_name_backfill' // One-off name→gender classification seeding the v53 gender map (scripts/backfill-gender-map.ts)
     | 'gender_variant_transform' // Save-time addressee-gender rewrite for the dual-variant DM cache (services/genderVariantTransform.ts)
+    | 'post_generation'      // «بوست اليوم» suggested-post TEXT (pinned gpt-4.1-mini, JSON mode; pilot gated by config.postSuggestions)
+    | 'post_image_generation' // «بوست اليوم» suggested-post IMAGE (pinned gpt-image-2 via images.generate; ~100× the text cost — kept separate so per-pipeline cost stays readable)
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it
 

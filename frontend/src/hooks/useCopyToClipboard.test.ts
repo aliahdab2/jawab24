@@ -39,7 +39,7 @@ describe('useCopyToClipboard', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 
     const { result } = renderHook(() => useCopyToClipboard());
-    act(() => { result.current.copy(''); });
+    act(() => { void result.current.copy(''); });
 
     expect(writeText).not.toHaveBeenCalled();
     expect(result.current.copied).toBe(false);
@@ -50,9 +50,24 @@ describe('useCopyToClipboard', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 
     const { result } = renderHook(() => useCopyToClipboard());
-    await act(async () => { result.current.copy('hello'); });
+    await act(async () => { await result.current.copy('hello'); });
 
     expect(writeText).toHaveBeenCalledWith('hello');
     expect(result.current.copied).toBe(false);
+  });
+
+  // Copy is a SUCCESS SIGNAL for some callers (the post-suggestion `copied`
+  // stamp is a pilot metric) — the boolean must tell the truth.
+  it('resolves TRUE only when the write lands, FALSE on rejection or a missing API', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { result } = renderHook(() => useCopyToClipboard());
+    await expect(result.current.copy('hello')).resolves.toBe(true);
+
+    writeText.mockRejectedValue(new Error('denied'));
+    await expect(result.current.copy('hello')).resolves.toBe(false);
+
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    await expect(result.current.copy('hello')).resolves.toBe(false);
   });
 });
