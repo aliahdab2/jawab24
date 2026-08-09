@@ -10,15 +10,17 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockChatCreate, mockEmbedCreate } = vi.hoisted(() => ({
+const { mockChatCreate, mockEmbedCreate, mockImagesGenerate } = vi.hoisted(() => ({
     mockChatCreate: vi.fn(),
     mockEmbedCreate: vi.fn(),
+    mockImagesGenerate: vi.fn(),
 }));
 
 vi.mock('openai', () => ({
     default: class {
         chat = { completions: { create: mockChatCreate } };
         embeddings = { create: mockEmbedCreate };
+        images = { generate: mockImagesGenerate };
     },
     APIError: class APIErrorMock extends Error {},
     BadRequestError: class BadRequestErrorMock extends Error {},
@@ -32,7 +34,8 @@ vi.mock('../lib/aiMetrics', () => ({
 }));
 
 import { makeTrackedOpenAI } from '../services/openaiClient';
-import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { logAiUsage } from '../services/aiUsageLog';
 
 const CTX = { userId: 'u1', pageId: 'p1', pipeline: 'image_understanding' as const };
 /** The SDK's real abort shape: a bare Error named "Error", not "AbortError". */
@@ -79,6 +82,20 @@ describe('makeTrackedOpenAI — failed_before_log classification', () => {
         expect(recordAiFailedBeforeLog).toHaveBeenCalledWith('image_understanding', 'gpt-4.1-mini', 'OpenAIApiError');
     });
 
+    it('classifies image generation calls the same way', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        mockImagesGenerate.mockRejectedValue(abortError());
+        const client = makeTrackedOpenAI('k', { ...CTX, pipeline: 'post_image_generation' });
+
+        await expect(client.images.generate(
+            { model: 'gpt-image-2', prompt: 'a cafe scene' },
+            { signal: controller.signal },
+        )).rejects.toThrow();
+
+        expect(recordAiFailedBeforeLog).toHaveBeenCalledWith('post_image_generation', 'gpt-image-2', 'AiTimeoutError');
+    });
+
     it('classifies embedding calls the same way', async () => {
         const controller = new AbortController();
         controller.abort();
@@ -91,5 +108,40 @@ describe('makeTrackedOpenAI — failed_before_log classification', () => {
         )).rejects.toThrow();
 
         expect(recordAiFailedBeforeLog).toHaveBeenCalledWith('embedding_rag', 'text-embedding-3-small', 'AiTimeoutError');
+    });
+});
+
+describe('makeTrackedOpenAI — images.generate usage logging', () => {
+    it('books attempts/returns and logs gpt-image token usage against the requested model', async () => {
+        // ImagesResponse carries no `model` field, so the wrapper must log the
+        // REQUESTED model — a regression here books image spend as "unknown".
+        mockImagesGenerate.mockResolvedValue({
+            created: 1,
+            data: [{ b64_json: 'aGVsbG8=' }],
+            usage: { input_tokens: 120, output_tokens: 1056 },
+        });
+        const client = makeTrackedOpenAI('k', { ...CTX, pipeline: 'post_image_generation' });
+
+        await client.images.generate({ model: 'gpt-image-2', prompt: 'a cafe scene', size: '1024x1024' });
+
+        expect(recordAiAttempt).toHaveBeenCalledWith('post_image_generation', 'gpt-image-2');
+        expect(recordAiReturn).toHaveBeenCalledWith('post_image_generation', 'gpt-image-2');
+        expect(logAiUsage).toHaveBeenCalledWith(expect.objectContaining({
+            model: 'gpt-image-2',
+            pipeline: 'post_image_generation',
+            tokensIn: 120,
+            tokensOut: 1056,
+            cached: false,
+        }));
+    });
+
+    it('skips logging when the response has no usage (streamed / non-token models)', async () => {
+        mockImagesGenerate.mockResolvedValue({ created: 1, data: [{ url: 'https://x' }] });
+        const client = makeTrackedOpenAI('k', { ...CTX, pipeline: 'post_image_generation' });
+
+        await client.images.generate({ model: 'gpt-image-2', prompt: 'p' });
+
+        expect(recordAiReturn).toHaveBeenCalled();
+        expect(logAiUsage).not.toHaveBeenCalled();
     });
 });

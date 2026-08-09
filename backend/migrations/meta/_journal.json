@@ -1079,6 +1079,13 @@
       "when": 1786173529282,
       "tag": "0154_brave_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1786240850847,
+      "tag": "0155_narrow_kate_bishop",
+      "breakpoints": true
     }
   ]
 }
