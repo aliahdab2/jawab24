@@ -72,7 +72,14 @@ describe('the screenshot bug: French DM on an English-anchored Arabic thread', (
 
     it('must authorise mirroring the customer\'s own language for THIS message', () => {
         const prompt = buildSystemPrompt(institute(FRENCH_DM, PRIOR_ENGLISH_TURN));
-        expect(prompt).toMatch(/repl(y|ies) in the (same )?language the customer used|mirror the customer's language/i);
+        // Two accepted authorization forms: the generic soft variant's "mirror the
+        // customer's language", and the user-history variant's escape hatch (added
+        // 2026-08-09, MES incident) — "…unless the customer's LATEST message is
+        // itself clearly written in a different language". This scenario resolves
+        // via user-history (the prior customer turn is English), so it now renders
+        // the second form; the contract is that SOME authorization to deviate from
+        // the anchor is present, never which wording carries it.
+        expect(prompt).toMatch(/repl(y|ies) in the (same )?language the customer used|mirror the customer's language|clearly written in a different language/i);
     });
 
     it('still forbids letting the Arabic knowledge base pick the reply language', () => {

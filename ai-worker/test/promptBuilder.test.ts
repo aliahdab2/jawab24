@@ -22,6 +22,7 @@ import {
     buildUserPrompt,
     formatTimeGap,
     formatTodayForPrompt,
+    languageDirective,
 } from '../src/services/reply/promptBuilder';
 import { STATIC_SYSTEM_PREFIX } from '../src/services/reply/systemPrompt';
 import type { GenerateRequest } from '../src/services/reply/types';
@@ -809,5 +810,60 @@ describe('buildUserPrompt — customer message sanitization (prompt-injection de
     it('leaves a normal customer message intact (no over-stripping of legit content)', () => {
         const normal = 'Do you deliver to Riyadh? Is the price under 200 SAR?';
         expect(buildUserPrompt(req(normal))).toContain(normal);
+    });
+});
+
+describe('languageDirective — the three-way contract (certain / user-history anchor / soft default)', () => {
+    // Prod incident pinned here: MES ام. اي. اس, 2026-08-08 20:46 UTC. An all-English
+    // DM thread hit a low-signal fragment («Not registered», en@0.5 uncertain). The
+    // chain correctly resolved 'en' via user-history, but the old two-way directive
+    // rendered only the soft "we have NOT confirmed" variant — and the model, pulled
+    // by an all-Arabic KB + an Arabic-dialect persona + Arabic fact-list imperatives,
+    // replied «صحيح، ما عندنا صالة مسجّلة في اللاذقية حالياً». Direct replay of the
+    // real request reproduced it 5/8 at prod sampling (probe, 2026-08-09).
+    // The user-history link is the ONE soft source for which a provenance claim is
+    // TRUE ("the customer's own previous messages are in X"), so it gets its own
+    // stronger variant; the other soft links (post, KB, merchant default, en@0.5
+    // floor) keep the no-claim wording — asserting provenance there is the lie that
+    // answered «Quels cours proposez-vous ?» in English on 2026-07-29.
+
+    it('certain: asserts the customer wrote the language and forbids switching (unchanged)', () => {
+        const d = languageDirective('English', 'en', true);
+        expect(d).toContain('You MUST reply in English');
+        expect(d).toContain('The customer wrote in English');
+    });
+
+    it('user-history anchor: makes the truthful thread claim and pins the reply to it', () => {
+        const d = languageDirective('English', 'en', false, 'user-history');
+        expect(d).toContain("customer's own previous messages");
+        expect(d).toContain('English');
+        // Each gravity source that produced the MES drift is named and banned.
+        expect(d).toContain('name');           // Arabic sender name must not flip the language
+        expect(d).toContain('persona');        // "Syrian dialect" persona must not flip it
+        expect(d).toContain('business');       // all-Arabic KB / fact lists must not flip it
+    });
+
+    it('user-history anchor still yields to a clear language switch in the latest message', () => {
+        const d = languageDirective('English', 'en', false, 'user-history');
+        expect(d).toMatch(/clearly written in a different language/);
+    });
+
+    it('soft default for non-history sources: no provenance claim, language is default only', () => {
+        for (const source of ['merchant-default', 'kb', 'post', 'current-message', undefined] as const) {
+            const d = languageDirective('Arabic', 'ar', false, source);
+            expect(d).toContain('only as the default');
+            expect(d).not.toContain('previous messages');
+        }
+    });
+
+    it('both uncertain variants carry the visibly-foreign demonstration; the certain variant does not', () => {
+        // The demonstration (accent-free French → French, Arabizi → Arabic) is what
+        // makes the mirror authorization actionable — the bare rule measured 0/6
+        // French on the damascus fixture (2026-08-09, Shahin World complaint).
+        // The certain branch must stay byte-stable: it already forbids switching.
+        expect(languageDirective('English', 'en', false, 'user-history')).toContain('Quels cours proposez-vous');
+        expect(languageDirective('Arabic', 'ar', false, 'merchant-default')).toContain('Quels cours proposez-vous');
+        expect(languageDirective('English', 'en', false, 'user-history')).toContain('kam el se3r');
+        expect(languageDirective('English', 'en', true)).not.toContain('Quels cours proposez-vous');
     });
 });
