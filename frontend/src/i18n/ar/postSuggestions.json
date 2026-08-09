@@ -6,6 +6,7 @@
   "pageSwitcher": "اختر الصفحة",
   "sheetTitle": "بوست اليوم",
   "generating": "جارٍ كتابة البوست…",
+  "generatingAngle": "جارٍ كتابة بوست «{angle}»…",
   "generatingHint": "نحضّر النص والصورة — قد يستغرق الأمر دقيقة.",
   "copyText": "نسخ النص",
   "copied": "تم النسخ",

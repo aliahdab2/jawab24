@@ -50,6 +50,9 @@ export function PostSuggestionSheet({
   const [includeContact, setIncludeContact] = useState(true);
   // Merchant's local edits to the post text — what Copy copies. Reset per suggestion.
   const [editedText, setEditedText] = useState('');
+  // Which angle the merchant just asked for — echoed in the loading state so a
+  // ~30s generation never feels like a dead click (dogfood feedback 08-09).
+  const [pendingType, setPendingType] = useState<PostSuggestionPostType | null>(null);
   const stampedOpen = useRef(false);
   // Auto-generate must fire ONCE per sheet open: StrictMode double-mounts
   // effects in dev, and each paid call consumes a daily-cap slot — caught
@@ -61,6 +64,7 @@ export function PostSuggestionSheet({
   }, [pageId]);
 
   const generate = useCallback(async (postType?: PostSuggestionPostType) => {
+    setPendingType(postType ?? null);
     setLoading(true);
     setError(null);
     try {
@@ -145,7 +149,9 @@ export function PostSuggestionSheet({
         {loading && (
           <div className="py-10 text-center space-y-2" aria-busy="true" aria-live="polite">
             <RefreshCw className="w-6 h-6 mx-auto animate-spin text-brand-500" aria-hidden="true" />
-            <p className="text-sm font-semibold text-foreground">{t('generating')}</p>
+            <p className="text-sm font-semibold text-foreground">
+              {pendingType ? t('generatingAngle', { angle: t(`type_${pendingType}`) }) : t('generating')}
+            </p>
             <p className="text-xs text-muted-foreground">{t('generatingHint')}</p>
           </div>
         )}
