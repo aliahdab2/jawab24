@@ -1,0 +1,70 @@
+import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useQuery } from '@tanstack/react-query';
+import { Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui';
+import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
+import { getPostSuggestionsPageId } from '@/lib/featureFlags';
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
+import { PostSuggestionSheet } from '@/components/post-suggestions/PostSuggestionSheet';
+import type { Page } from '@jawab24/shared';
+
+/**
+ * «بوست اليوم» dashboard card (pilot). Self-gating like PostReplyNudgeBanner:
+ * renders null unless BOTH the build-time allowlist names one of this
+ * workspace's pages AND the backend confirms (a 404 from the dark-feature
+ * routes hides the card — deep links and stale builds fail closed).
+ */
+export function PostSuggestionCard({ pages }: { pages: Page[] }) {
+  const t = useTranslations('postSuggestions');
+  const { isAdmin } = useWorkspaceRole();
+  const [open, setOpen] = useState(false);
+  const [latest, setLatest] = useState<PostSuggestionResponse | null>(null);
+
+  const pageId = getPostSuggestionsPageId(pages.map((p) => p.id));
+
+  const { data, isError } = useQuery({
+    queryKey: ['post-suggestion-today', pageId],
+    queryFn: async () => {
+      const res = await postSuggestionsApi.getToday(pageId as string);
+      return res.data;
+    },
+    enabled: Boolean(pageId),
+    staleTime: 60_000,
+    retry: false, // a 404 means "pilot off here" — retrying can't change that
+  });
+
+  if (!pageId || isError) return null;
+
+  const current = latest ?? data ?? null;
+  const hasPost = Boolean(current?.suggestion);
+  // Nothing to show and nothing this member may do about it → no card.
+  if (!hasPost && !isAdmin) return null;
+
+  return (
+    <>
+      <div className="flex items-start gap-3 p-4 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800 transition-all">
+        <div className="w-9 h-9 rounded-xl bg-brand-500 text-white flex items-center justify-center flex-shrink-0" aria-hidden="true">
+          <Sparkles className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-brand-900 dark:text-brand-200">{t('cardTitle')}</p>
+          <p className="text-xs text-brand-800/80 dark:text-brand-300/80 mt-0.5">{t('cardDesc')}</p>
+        </div>
+        <Button size="sm" onClick={() => setOpen(true)}>
+          {hasPost ? t('cardOpen') : t('cardCta')}
+        </Button>
+      </div>
+
+      {open && (
+        <PostSuggestionSheet
+          pageId={pageId}
+          initial={current}
+          canGenerate={isAdmin}
+          onClose={() => setOpen(false)}
+          onChanged={setLatest}
+        />
+      )}
+    </>
+  );
+}

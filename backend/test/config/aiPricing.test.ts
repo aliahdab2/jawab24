@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AI_PRICING, PRICING_VERSION, cacheSavingsUsd, estimateCostUsd, estimateWhisperCostUsd } from '../../src/config/aiPricing';
 
 describe('AI Pricing', () => {
-    it('exports PRICING_VERSION v2', () => {
-        expect(PRICING_VERSION).toBe('v2');
+    it('exports PRICING_VERSION v3', () => {
+        // v3 = the gpt-image family rows (post suggestions pilot, 2026-08-09).
+        expect(PRICING_VERSION).toBe('v3');
     });
 
     it('exports pricing for gpt-4o-mini with 50% cached discount', () => {

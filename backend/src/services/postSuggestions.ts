@@ -266,7 +266,7 @@ Rules:
 - Write in Arabic, in the business's own voice and register as evidenced by <brand_voice> and the business's own text. This is the MERCHANT speaking to their customers, not a corporate announcement.
 - Use ONLY facts present in the blocks above. NEVER invent prices, dates, discounts, phone numbers, addresses, or claims. If a detail is not in the blocks, leave it out.
 - 2–6 short lines, at most 500 characters. Light emoji use. End with a clear call to action (message us / order / visit). Add 2–4 relevant Arabic hashtags on the last line.
-- Also produce an IMAGE BRIEF in English: one sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers appearing in the image.
+- Also produce an IMAGE BRIEF in English: one sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers appearing in the image, and WITHOUT people or faces — products, places, and atmosphere only.
 
 Return JSON: {"text": string, "imageBrief": string}`;
 }
@@ -322,7 +322,14 @@ async function generatePostText(bundle: PageBundle, postType: PostSuggestionPost
 
 function buildImagePrompt(imageBrief: string, category?: string): string {
     const forBusiness = category ? ` for a ${category} business` : '';
-    return `${imageBrief}. Professional social-media promotional photograph${forBusiness}, warm and inviting, clean composition, square format. STRICT: absolutely no text, no letters, no words, no numbers, no logos, no watermarks, no signage with writing anywhere in the image.`;
+    // Two hard exclusions, both industry-standard (2026):
+    // - no text: Arabic typography in gen models is broken — the caption carries the words;
+    // - no people/faces: Meta auto-detects AI media via embedded C2PA and makes the
+    //   label PROMINENT when a photorealistic person is generated; scenes/products
+    //   keep the label unobtrusive and dodge the uncanny-valley trust hit.
+    // Square 1024x1024: the only gpt-image size that renders uncropped on both FB
+    // and IG feeds (its portrait option is 2:3, which the 4:5 feed would crop).
+    return `${imageBrief}. Professional social-media promotional photograph${forBusiness}, warm and inviting, clean composition, square format. STRICT: absolutely no text, no letters, no words, no numbers, no logos, no watermarks, no signage with writing anywhere in the image. No people, no faces, no hands — products, scenery, and atmosphere only.`;
 }
 
 interface GeneratedImage {

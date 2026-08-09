@@ -1,0 +1,191 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { X, Copy, Check, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
+import type { PostSuggestionDto } from '@jawab24/shared';
+import { DetailSheet, Button } from '@/components/ui';
+import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
+import { useCopyToClipboard } from '@/hooks';
+import { downloadImage } from '@/utils/imageDownload';
+import { captureError } from '@/lib/sentryHelpers';
+
+/**
+ * «بوست اليوم» viewer — today's suggested post: text to copy, image to
+ * save/share, capped regenerate. No publishing: the merchant reviews and
+ * posts manually (the review line is deliberate — industry norm is
+ * AI-drafted, human-approved).
+ *
+ * Opened with `initial` when the dashboard already fetched today's
+ * suggestion; opened with null it generates immediately (the card's CTA
+ * path). Every user signal (open/copy/download) is stamped fire-and-forget —
+ * those stamps ARE the pilot's success metric.
+ */
+export function PostSuggestionSheet({
+  pageId,
+  initial,
+  canGenerate,
+  onClose,
+  onChanged,
+}: {
+  pageId: string;
+  initial: PostSuggestionResponse | null;
+  /** Workspace admins only — the generate route is requireRole('admin'). */
+  canGenerate: boolean;
+  onClose: () => void;
+  /** Bubble the latest server state up so the card stays in sync. */
+  onChanged: (latest: PostSuggestionResponse) => void;
+}) {
+  const t = useTranslations('postSuggestions');
+  const tc = useTranslations('common');
+  const { copied, copy } = useCopyToClipboard();
+
+  const [suggestion, setSuggestion] = useState<PostSuggestionDto | null>(initial?.suggestion ?? null);
+  const [remaining, setRemaining] = useState<number>(initial?.remainingToday ?? 0);
+  const [degraded, setDegraded] = useState<boolean>(Boolean(initial?.imageDegraded));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const stampedOpen = useRef(false);
+
+  const stamp = useCallback((id: string, event: 'opened' | 'copied' | 'downloaded') => {
+    postSuggestionsApi.markEvent(pageId, id, event).catch(() => { /* signal only — never user-visible */ });
+  }, [pageId]);
+
+  const generate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await postSuggestionsApi.generate(pageId);
+      setSuggestion(res.data.suggestion);
+      setRemaining(res.data.remainingToday);
+      setDegraded(Boolean(res.data.imageDegraded));
+      onChanged(res.data);
+    } catch (err) {
+      const axiosErr = err as { response?: { status?: number; data?: { code?: string } } };
+      const code = axiosErr.response?.data?.code;
+      if (code === 'daily_cap') setError(t('errorDailyCap'));
+      else if (code === 'quota_check_unavailable') setError(t('errorQuotaCheck'));
+      else if (code === 'generation_failed') setError(t('errorGeneration'));
+      else {
+        setError(t('errorGeneric'));
+        captureError(err, 'Post suggestion generation failed', { extra: { pageId } });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [pageId, onChanged, t]);
+
+  // Opened with a suggestion → stamp `opened` once. Opened empty (CTA path) →
+  // generate immediately, if this member is allowed to.
+  useEffect(() => {
+    if (suggestion && !stampedOpen.current) {
+      stampedOpen.current = true;
+      stamp(suggestion.id, 'opened');
+    } else if (!suggestion && !loading && !error && canGenerate) {
+      void generate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + first-suggestion only
+  }, [suggestion]);
+
+  const handleCopy = () => {
+    if (!suggestion) return;
+    copy(suggestion.text);
+    stamp(suggestion.id, 'copied');
+  };
+
+  const handleDownload = async () => {
+    if (!suggestion?.imageUrl) return;
+    try {
+      const { savedToFiles } = await downloadImage(suggestion.imageUrl, `jawab24-post-${suggestion.suggestedFor}.png`);
+      stamp(suggestion.id, 'downloaded');
+      toast.success(savedToFiles ? t('imageSavedToFiles') : t('imageDownloadStarted'));
+    } catch (err) {
+      captureError(err, 'Post suggestion image download failed', { extra: { pageId } });
+      toast.error(t('errorGeneric'));
+    }
+  };
+
+  return (
+    <DetailSheet
+      fitContent
+      onSwipeDismiss={onClose}
+      panelClassName="sm:max-w-lg"
+      dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'post-suggestion-title' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:p-5 border-b border-theme-border flex-shrink-0">
+        <h2 id="post-suggestion-title" className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-brand-500" aria-hidden="true" />
+          {t('sheetTitle')}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={tc('close')}
+          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-icon-muted"
+        >
+          <X className="w-5 h-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+        {loading && (
+          <div className="py-10 text-center space-y-2" aria-busy="true" aria-live="polite">
+            <RefreshCw className="w-6 h-6 mx-auto animate-spin text-brand-500" aria-hidden="true" />
+            <p className="text-sm font-semibold text-foreground">{t('generating')}</p>
+            <p className="text-xs text-muted-foreground">{t('generatingHint')}</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="alert-error rounded-xl p-4 text-sm" role="alert">{error}</div>
+        )}
+
+        {!loading && suggestion && (
+          <>
+            {suggestion.imageUrl ? (
+               
+              // generated media; dimensions unknown at build time, modal-only surface
+              <img
+                src={suggestion.imageUrl}
+                alt={t('postImageAlt')}
+                className="w-full rounded-xl border border-theme-border"
+              />
+            ) : (
+              degraded && <p className="text-xs text-muted-foreground">{t('textOnlyNotice')}</p>
+            )}
+
+            <p dir="auto" className="whitespace-pre-wrap text-sm text-foreground text-start leading-relaxed">
+              {suggestion.text}
+            </p>
+
+            <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={handleCopy}>
+                {copied ? <Check className="w-4 h-4 me-1.5" aria-hidden="true" /> : <Copy className="w-4 h-4 me-1.5" aria-hidden="true" />}
+                {copied ? t('copied') : t('copyText')}
+              </Button>
+              {suggestion.imageUrl && (
+                <Button variant="secondary" size="sm" onClick={handleDownload}>
+                  <Download className="w-4 h-4 me-1.5" aria-hidden="true" />
+                  {t('downloadImage')}
+                </Button>
+              )}
+              {canGenerate && remaining > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => void generate()}>
+                  <RefreshCw className="w-4 h-4 me-1.5" aria-hidden="true" />
+                  {t('regenerate')}
+                </Button>
+              )}
+            </div>
+
+            <p className="text-xs text-subtle">
+              {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}
+            </p>
+          </>
+        )}
+      </div>
+    </DetailSheet>
+  );
+}

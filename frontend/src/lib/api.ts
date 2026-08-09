@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -207,6 +207,23 @@ export const catalogApi = {
     api.post<CatalogScanResponse>(`/pages/${pageId}/catalog/scan-posts`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
   batchCreate: (pageId: string, items: CatalogItemInput[]) =>
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
+};
+
+/** «بوست اليوم» pilot. Server 404s every route for non-allowlisted pages
+ *  (dark feature) — callers treat 404 as "pilot off", never as an error. */
+export interface PostSuggestionResponse {
+  suggestion: PostSuggestionDto | null;
+  remainingToday: number;
+  imageDegraded?: 'image_failed' | 'storage_off';
+}
+export const postSuggestionsApi = {
+  getToday: (pageId: string) =>
+    api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
+  // Text + image generation — the long-timeout override every AI endpoint uses.
+  generate: (pageId: string) =>
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
+  markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
+    api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
 };
 
 /** One row of a fact collection, as the API serves it. `price` is the numeric

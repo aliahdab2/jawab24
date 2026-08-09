@@ -107,7 +107,7 @@ describe('logAiUsage', () => {
         const row = valuesMock.mock.calls[0]![0]!;
         expect(row.cachedInputTokens).toBe(1500);
         expect(row.costUsd).toBeCloseTo(0.00067, 6);
-        expect(row.pricingVersion).toBe('v2');
+        expect(row.pricingVersion).toBe('v3');
     });
 
     it('defaults cachedInputTokens to 0 when caller omits it (back-compat)', async () => {

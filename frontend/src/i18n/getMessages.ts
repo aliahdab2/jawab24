@@ -44,6 +44,7 @@ import enShopify       from './en/shopify.json';
 import enSidebar       from './en/sidebar.json';
 import enSse           from './en/sse.json';
 import enSubscription  from './en/subscription.json';
+import enPostSuggestions from './en/postSuggestions.json';
 import enTeam          from './en/team.json';
 import enTerms         from './en/terms.json';
 import enTestSmartReply from './en/testSmartReply.json';
@@ -97,6 +98,7 @@ import arShopify       from './ar/shopify.json';
 import arSidebar       from './ar/sidebar.json';
 import arSse           from './ar/sse.json';
 import arSubscription  from './ar/subscription.json';
+import arPostSuggestions from './ar/postSuggestions.json';
 import arTeam          from './ar/team.json';
 import arTerms         from './ar/terms.json';
 import arTestSmartReply from './ar/testSmartReply.json';
@@ -154,6 +156,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/sidebar': enSidebar,       'ar/sidebar': arSidebar,
   'en/sse': enSse,               'ar/sse': arSse,
   'en/subscription': enSubscription, 'ar/subscription': arSubscription,
+  'en/postSuggestions': enPostSuggestions, 'ar/postSuggestions': arPostSuggestions,
   'en/team': enTeam,             'ar/team': arTeam,
   'en/terms': enTerms,           'ar/terms': arTerms,
   'en/testSmartReply': enTestSmartReply, 'ar/testSmartReply': arTestSmartReply,

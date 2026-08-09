@@ -224,6 +224,8 @@
     "aiCostPipeline_operational_facts_extraction": "استخراج معلومات النشاط التجاري",
     "aiCostPipeline_catalog_extraction": "استخراج عناصر الكتالوج",
     "aiCostPipeline_ecommerce_tools": "أدوات المتجر",
+    "aiCostPipeline_post_generation": "اقتراح البوستات (النص)",
+    "aiCostPipeline_post_image_generation": "اقتراح البوستات (الصورة)",
     "aiCostPipeline_playground": "بيئة التجربة",
     "aiCostPipeline_eval": "التقييم",
     "aiCostPipeline_failover": "النموذج الاحتياطي",

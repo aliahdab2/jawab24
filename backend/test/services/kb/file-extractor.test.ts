@@ -42,6 +42,9 @@ vi.mock('openai', () => ({
     default: vi.fn().mockImplementation(() => ({
         chat: { completions: { create: mockOpenAICreate } },
         embeddings: { create: vi.fn() },
+        // makeTrackedOpenAI binds images.generate at construction, so every
+        // mock of the SDK must carry it even when the test never calls it.
+        images: { generate: vi.fn() },
     })),
 }));
 

@@ -189,19 +189,27 @@ its own decision.
 
 ## 9. Data lifecycle / GDPR
 
-- **Key scheme:** `trigger-images/{workspaceId}/{uuid}.{ext}`.
+- **Key schemes (one per writer):**
+  - `trigger-images/{workspaceId}/{uuid}.{ext}` — Post Reply trigger images
+    (`postsService.updateTrigger`).
+  - `generated-posts/{workspaceId}/{uuid}.png` — «بوست اليوم» AI-suggested post images
+    (`services/postSuggestions.ts`, pilot 2026-08). The reuse the door was left open
+    for (§1) — same three-method surface, no new abstraction.
 - **Reference-based lifecycle (industry standard):** an image lives exactly as long as
   its Post Reply. On replace / remove / trigger-clear the old object is deleted
   (`postsService.updateTrigger`, safe-order: upload new → commit DB → delete old, so a
   live image is never lost). Page delete drops all its images
   (`pagesService.deletePage`). **Age-based expiry targets ONLY orphaned/non-current
-  objects — never a live, referenced image.**
+  objects — never a live, referenced image.** Post-suggestion images follow the same
+  rule: a regenerate supersedes the previous row and best-effort deletes its object
+  (page delete cascades the rows; their objects become audit-visible orphans).
 - **Never hand a storage key to something that outlives it.** Deleting a replaced object is
   correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
-  sent message must never embed the bucket URL. See §11.
-- **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) lists DB
-  rows whose object is missing (investigate) and bucket objects with no DB row
-  (safe-to-clean orphans). Run before any bulk cleanup.
+  sent message must never embed the bucket URL. See §11. (Post-suggestion images are never
+  sent by us at all — the merchant downloads and posts manually.)
+- **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) covers BOTH
+  prefixes: lists DB rows whose object is missing (investigate) and bucket objects with
+  no DB row (safe-to-clean orphans). Run before any bulk cleanup.
 
 ## 10. Delivery — differs per platform
 

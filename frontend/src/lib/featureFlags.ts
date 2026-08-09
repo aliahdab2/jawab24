@@ -120,3 +120,22 @@ export function isCatalogVisible(
   if (user?.isAdmin === true) return true;
   return (workspaceIds ?? []).some((id) => BUSINESS_SURFACE_WORKSPACE_IDS.has(id));
 }
+
+/**
+ * «بوست اليوم» pilot (owner rulings 2026-08-09: dogfood on our own page only;
+ * ONE post/day; 3 generations/day absolute). The UI is deliberately STRICTER
+ * than the backend's empty-allowlist-means-fleet-wide rule: no listed pages ⇒
+ * no card anywhere, so the pilot cannot leak visually before GA. The backend
+ * env gate (POST_SUGGESTIONS_*) stays the real enforcement — this only hides
+ * the UI, and the card additionally fails closed when the API 404s.
+ */
+const POST_SUGGESTIONS_PAGE_IDS: ReadonlySet<string> = new Set(
+  (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_PAGE_IDS || '')
+    .split(',').map((id) => id.trim()).filter(Boolean),
+);
+
+/** The workspace's first allowlisted page, or null when the pilot is dark here. */
+export function getPostSuggestionsPageId(pageIds: readonly string[]): string | null {
+  if (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_ENABLED !== 'true') return null;
+  return pageIds.find((id) => POST_SUGGESTIONS_PAGE_IDS.has(id)) ?? null;
+}
