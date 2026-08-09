@@ -26,6 +26,10 @@ export default async function factCollectionsRoutes(fastify: FastifyInstance) {
         adminRoutes.addHook('preHandler', resolveWorkspace);
         adminRoutes.addHook('preHandler', requireRole('admin'));
 
+        adminRoutes.post('/pages/:pageId/fact-collections', {
+            schema: { tags: ['FactCollections'], summary: 'Create a collection with its first rows (merchant «add list»)', security: auth },
+        }, factCollectionsController.createCollection.bind(factCollectionsController));
+
         adminRoutes.post('/pages/:pageId/fact-collections/:collectionId/rows', {
             schema: { tags: ['FactCollections'], summary: 'Add a row to a collection', security: auth },
         }, factCollectionsController.addRow.bind(factCollectionsController));

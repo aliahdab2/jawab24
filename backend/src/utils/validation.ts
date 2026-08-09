@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
+    MAX_ROWS_PER_COLLECTION,
 } from '@jawab24/shared';
 import type { CatalogVertical } from '@jawab24/shared';
 
@@ -378,9 +379,27 @@ export const FactCompletenessSchema = z.object({
     isComplete: z.boolean().nullable(),
 });
 
+/**
+ * POST /pages/:pageId/fact-collections — the merchant's «add list» (G1b).
+ *
+ * Deliberately narrower than the service's `CreateCollectionInput`:
+ * - `keyAttr` is NOT accepted. The key drives reply-time row gating (L2) and
+ *   the coverage index — a seeding/admin concern. Un-keyed lists answer fine
+ *   (the MES showrooms precedent), so the merchant door never sets one.
+ * - `source` is NOT accepted; the controller pins it to 'editor'.
+ * The label cap mirrors fact_collections.label varchar(120).
+ */
+export const FactCollectionCreateSchema = z.object({
+    label: z.string().trim().min(1, 'Label is required').max(120),
+    rows: z.array(FactRowSchema)
+        .min(1, 'A collection needs at least one row')
+        .max(MAX_ROWS_PER_COLLECTION, `At most ${MAX_ROWS_PER_COLLECTION} rows per collection`),
+});
+
 export type FactRowBodyInput = z.infer<typeof FactRowSchema>;
 export type FactEntitySaveBodyInput = z.infer<typeof FactEntitySaveSchema>;
 export type FactRowUpdateBodyInput = z.infer<typeof FactRowUpdateSchema>;
+export type FactCollectionCreateInput = z.infer<typeof FactCollectionCreateSchema>;
 
 /** POST /pages/:pageId/catalog/extract body. Min 10 keeps accidental fragments
  *  from burning an LLM call; the max is the shared frontend/backend contract. */

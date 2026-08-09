@@ -210,6 +210,15 @@
     "searchAllPlaceholder": "ابحث في القوائم — بالاسم أو التفاصيل…",
     "searchCount": "يعرض {shown, plural, zero {لا صفوف} one {صفًا واحدًا} two {صفين} few {# صفوف} many {# صفًا} other {# صف}} من أصل {total}",
     "searchCountCards": "يعرض {shown, plural, zero {لا عناصر} one {عنصرًا واحدًا} two {عنصرين} few {# عناصر} many {# عنصرًا} other {# عنصر}} من أصل {total}",
-    "searchNoResults": "لا نتائج مطابقة — جرّب كلمة أخرى."
+    "searchNoResults": "لا نتائج مطابقة — جرّب كلمة أخرى.",
+    "addList": "إضافة قائمة",
+    "newListTitle": "قائمة جديدة",
+    "newListNameLabel": "اسم القائمة",
+    "newListNamePlaceholder": "مثال: أسعار الدورات، الفروع، مناطق التوصيل",
+    "newListNameHint": "بعد ذلك أضف أول عنصر — تُنشأ القائمة مع أول عنصر فيها.",
+    "createdList": "أُنشئت القائمة",
+    "emptyHint": "نظّم ما يسأل عنه عملاؤك — الأسعار والمواعيد والفروع — في قوائم يقتبس منها جواب حرفياً.",
+    "errCollectionLimit": "وصلت هذه الصفحة إلى الحد الأقصى ({max} قائمة).",
+    "errDuplicateLabel": "توجد قائمة بهذا الاسم في هذه الصفحة."
   }
 }
