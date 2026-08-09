@@ -1495,6 +1495,21 @@ export interface PostSyncJobData {
 }
 export const POST_SYNC_QUEUE_NAME = 'post-sync-queue';
 
+// --- Post Suggestions («بوست اليوم» pilot) ---
+// ONE AI-suggested post per page per day; regenerate replaces it. Shared so
+// the backend service/controller and the frontend api client speak one shape.
+export type PostSuggestionPostType = 'promo' | 'product_spotlight' | 'faq_tip' | 'hours_reminder' | 'general';
+export type PostSuggestionEvent = 'opened' | 'copied' | 'downloaded';
+export interface PostSuggestionDto {
+  id: string;
+  text: string;
+  imageUrl: string | null; // null = text-only (image degraded / cleaned up)
+  postType: PostSuggestionPostType;
+  source: 'cron' | 'manual';
+  suggestedFor: string; // ISO date (UTC day)
+  createdAt: string; // ISO timestamp
+}
+
 // --- Leads Types ---
 export type LeadStatus = 'new' | 'contacted' | 'converted';
 export type LeadSourceType = 'message' | 'comment';
