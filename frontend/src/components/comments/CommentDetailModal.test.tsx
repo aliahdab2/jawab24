@@ -154,6 +154,36 @@ describe('CommentDetailModal', () => {
     expect(screen.queryByRole('button', { name: /Resolve/i })).not.toBeInTheDocument();
   });
 
+  // The delivered Post Reply CTA button (flagMeta.reply_cta) renders inside the reply
+  // bubble as the customer received it — label linking to the configured URL.
+  it('renders the delivered Post Reply CTA button inside the reply bubble', () => {
+    const repliedComment: Comment = {
+      ...mockComment,
+      replied: true,
+      replyText: 'تفضل الرابط 👇',
+      replyMethod: 'post_reply',
+      flagMeta: { reply_cta: { label: 'رابط التسجيل', url: 'https://jawab24.com/login' } },
+    };
+
+    renderModal({ comment: repliedComment });
+
+    const cta = screen.getByRole('link', { name: 'رابط التسجيل' });
+    expect(cta).toHaveAttribute('href', 'https://jawab24.com/login');
+  });
+
+  it('renders no CTA button when the reply has no reply_cta marker', () => {
+    const repliedComment: Comment = {
+      ...mockComment,
+      replied: true,
+      replyText: 'تفضل الرابط 👇',
+      replyMethod: 'post_reply',
+    };
+
+    renderModal({ comment: repliedComment });
+
+    expect(screen.queryByText('رابط التسجيل')).not.toBeInTheDocument();
+  });
+
   it('renders PauseToggle when comment has fromId', () => {
     const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
     renderModal({ comment: commentWithSender });

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, ImageAttachedBadge, DetailSheet, InfoPopover } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, ImageAttachedBadge, CtaButtonPill, DetailSheet, InfoPopover } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -406,6 +406,11 @@ export function MessageDetailModal({
                     <p className="text-sm leading-relaxed italic-arabic" dir="auto">
                       {renderMessageText(msg.attachmentType === 'image' ? stripImageDescription(msg.message) : msg.message)}
                     </p>
+                  )}
+                  {/* Post Reply CTA button exactly as the customer received it
+                      (delivered-only marker — see reply_cta in FlagMeta). */}
+                  {msg.direction === 'outgoing' && msg.flagMeta?.reply_cta && (
+                    <CtaButtonPill label={msg.flagMeta.reply_cta.label} url={msg.flagMeta.reply_cta.url} />
                   )}
                 </div>
                 <div className={clsx(

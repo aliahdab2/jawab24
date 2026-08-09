@@ -1082,16 +1082,32 @@ export class CommentProcessor {
         // no badge, keeping the badge honest.
         //
         // Two DISTINCT targets, deliberately not the same object:
-        //   • the stored DM row (message thread) gets ONLY the reply_image marker. It
-        //     previously carried no flagMeta at all; the comment's needs-attention flags
-        //     (info_not_in_kb, dm_failed, …) are comment-scoped and must NOT leak onto the
-        //     outgoing bubble (they'd show a KB-gap badge / match flagMeta filters there).
-        //   • the comment row merges reply_image INTO its own flagMeta (additive), since
-        //     that row legitimately holds the reply's needs-attention flags.
+        //   • the stored DM row (message thread) gets ONLY the delivery markers
+        //     (reply_image / reply_cta). It previously carried no flagMeta at all; the
+        //     comment's needs-attention flags (info_not_in_kb, dm_failed, …) are
+        //     comment-scoped and must NOT leak onto the outgoing bubble (they'd show a
+        //     KB-gap badge / match flagMeta filters there).
+        //   • the comment row merges the delivery markers INTO its own flagMeta
+        //     (additive), since that row legitimately holds the reply's needs-attention flags.
         const hasReplyImage = sendResult.imageDelivered === true;
-        const messageFlagMeta = hasReplyImage ? { reply_image: {} as Record<string, never> } : undefined;
-        const commentFlagMeta = hasReplyImage
-            ? { ...(flagMeta ?? {}), reply_image: {} as Record<string, never> }
+        // Post Reply CTA button: the Facebook sender attaches the CTA to every DM shape
+        // that can succeed (button template, image card, image-fallback text), so
+        // "a DM went out AND a CTA was configured" is exactly "the customer received the
+        // button". Stored with its label + URL — not a bare marker — so the thread views
+        // can render the button the customer actually sees; without this the app had no
+        // record a button was ever sent. (Instagram's adapter takes no CTA and returns no
+        // dmRecipientId, so the condition stays false there.)
+        const deliveredCta = opts.replyCta && sendResult.dmRecipientId
+            ? { label: opts.replyCta.label, url: opts.replyCta.url }
+            : undefined;
+        const deliveryMarkers = {
+            ...(hasReplyImage ? { reply_image: {} as Record<string, never> } : {}),
+            ...(deliveredCta ? { reply_cta: deliveredCta } : {}),
+        };
+        const hasDeliveryMarkers = hasReplyImage || !!deliveredCta;
+        const messageFlagMeta = hasDeliveryMarkers ? deliveryMarkers : undefined;
+        const commentFlagMeta = hasDeliveryMarkers
+            ? { ...(flagMeta ?? {}), ...deliveryMarkers }
             : flagMeta;
 
         // Store outgoing DM so conversation history exists for future messages from this sender.

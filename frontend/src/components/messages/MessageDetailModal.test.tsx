@@ -718,6 +718,53 @@ describe('MessageDetailModal', () => {
     });
   });
 
+  // The delivered Post Reply CTA button (flagMeta.reply_cta) renders inside the
+  // outgoing bubble as the customer received it — label linking to the configured URL.
+  describe('Post Reply CTA button pill', () => {
+    it('renders the delivered CTA button inside an outgoing bubble', () => {
+      const incoming = makeMessage({ id: '1', message: 'رابط', direction: 'incoming' });
+      const outgoing = makeMessage({
+        id: '2',
+        message: 'تفضل الرابط 👇',
+        direction: 'outgoing',
+        replied: true,
+        replyMethod: 'post_reply',
+        createdAt: '2026-02-17T10:05:00Z',
+        flagMeta: { reply_cta: { label: 'رابط التسجيل', url: 'https://jawab24.com/login' } },
+      });
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({ messages: [incoming, outgoing], lastMessage: outgoing })}
+        />,
+      );
+
+      const cta = screen.getByRole('link', { name: 'رابط التسجيل' });
+      expect(cta).toHaveAttribute('href', 'https://jawab24.com/login');
+    });
+
+    it('renders no CTA button when the outgoing message has no reply_cta marker', () => {
+      const outgoing = makeMessage({
+        id: '2',
+        message: 'تفضل الرابط 👇',
+        direction: 'outgoing',
+        replied: true,
+        replyMethod: 'post_reply',
+        createdAt: '2026-02-17T10:05:00Z',
+      });
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({ messages: [makeMessage({}), outgoing], lastMessage: outgoing })}
+        />,
+      );
+
+      expect(screen.queryByText('رابط التسجيل')).not.toBeInTheDocument();
+    });
+  });
+
   // Regression: dual-mode comment-reply flows leave a conversation in our DB that
   // has only the bot's outgoing DM and no incoming message. handleSend used to bail
   // silently in that case. Now it falls back to the conversation-level endpoint
