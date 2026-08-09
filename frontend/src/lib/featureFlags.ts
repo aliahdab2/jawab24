@@ -134,8 +134,10 @@ const POST_SUGGESTIONS_PAGE_IDS: ReadonlySet<string> = new Set(
     .split(',').map((id) => id.trim()).filter(Boolean),
 );
 
-/** The workspace's first allowlisted page, or null when the pilot is dark here. */
-export function getPostSuggestionsPageId(pageIds: readonly string[]): string | null {
-  if (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_ENABLED !== 'true') return null;
-  return pageIds.find((id) => POST_SUGGESTIONS_PAGE_IDS.has(id)) ?? null;
+/** ALL of the workspace's allowlisted pages (order preserved), empty when the
+ *  pilot is dark here. Multi-page merchants get a page switcher on the card
+ *  (owner ruling 2026-08-09: «بدي اقدر اختار الصفحة»). */
+export function getPostSuggestionsPageIds(pageIds: readonly string[]): string[] {
+  if (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_ENABLED !== 'true') return [];
+  return pageIds.filter((id) => POST_SUGGESTIONS_PAGE_IDS.has(id));
 }

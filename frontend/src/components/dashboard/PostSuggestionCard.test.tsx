@@ -1,29 +1,29 @@
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Page } from '@jawab24/shared';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
-const { mockGetToday, mockGetPageId, mockRole } = vi.hoisted(() => ({
+const { mockGetToday, mockGetPageIds, mockRole } = vi.hoisted(() => ({
   mockGetToday: vi.fn(),
-  mockGetPageId: vi.fn(),
+  mockGetPageIds: vi.fn(),
   mockRole: { isAdmin: true },
 }));
 
 vi.mock('@/lib/api', () => ({
   postSuggestionsApi: { getToday: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
 }));
-vi.mock('@/lib/featureFlags', () => ({ getPostSuggestionsPageId: mockGetPageId }));
+vi.mock('@/lib/featureFlags', () => ({ getPostSuggestionsPageIds: mockGetPageIds }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));
 
-const PAGES = [{ id: 'p1', name: 'My Page' } as Page];
+const PAGES = [{ id: 'p1', name: 'My Page', isConnected: true } as Page];
 
-function renderCard() {
+function renderCard(pages: Page[] = PAGES) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PostSuggestionCard pages={PAGES} />
+      <PostSuggestionCard pages={pages} />
     </QueryClientProvider>,
   );
 }
@@ -31,16 +31,37 @@ function renderCard() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockRole.isAdmin = true;
-  mockGetPageId.mockReturnValue('p1');
+  mockGetPageIds.mockReturnValue(['p1']);
   mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
 });
 
 describe('PostSuggestionCard — pilot self-gating', () => {
   it('renders nothing when no workspace page is allowlisted', () => {
-    mockGetPageId.mockReturnValue(null);
+    mockGetPageIds.mockReturnValue([]);
     const { container } = renderCard();
     expect(container).toBeEmptyDOMElement();
     expect(mockGetToday).not.toHaveBeenCalled();
+  });
+
+  it('renders nothing when the allowlisted page is DISCONNECTED (owner rule: connected only)', () => {
+    const { container } = renderCard([{ id: 'p1', name: 'My Page', isConnected: false } as Page]);
+    expect(container).toBeEmptyDOMElement();
+    expect(mockGetToday).not.toHaveBeenCalled();
+  });
+
+  it('shows the page switcher only when MULTIPLE connected pages are allowlisted, and switches', async () => {
+    mockGetPageIds.mockReturnValue(['p1', 'p2']);
+    renderCard([
+      { id: 'p1', name: 'متجر العطور', isConnected: true } as Page,
+      { id: 'p2', name: 'مطعم الشام', isConnected: true } as Page,
+      { id: 'p3', name: 'صفحة مفصولة', isConnected: false } as Page,
+    ]);
+    expect(await screen.findByRole('tab', { name: 'متجر العطور' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'مطعم الشام' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'صفحة مفصولة' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'مطعم الشام' }));
+    await waitFor(() => expect(mockGetToday).toHaveBeenCalledWith('p2'));
   });
 
   it('fails closed when the API 404s (backend gate off / stale build)', async () => {
