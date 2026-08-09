@@ -19,7 +19,7 @@ The single most useful thing in this document. Update it whenever a finding move
 |----|----------|-------|--------|
 | M1 | Critical | Native shell re-initializes on every navigation; Android back exits the app from any screen | ✅ **Fixed** — PR #641, plus #642 for the counter it exposed. ⏰ **Unverified on a device** (MOB-11) |
 | M2 | High | Push breaks silently after a re-login, and can register to the wrong account | 🔴 Open |
-| M3 | High | Offline banner is painted over by the fixed header — nobody ever sees it | ✅ **Fixed** — moved inside `<main>`; verified in a browser across 24 cells |
+| M3 | High | Offline banner is painted over by the fixed header — nobody ever sees it | ✅ **Fixed & merged** — PR #661 (2026-08-07). ⏰ **Not in any released build yet** — 2.0.27 predates the merge |
 | M4 | High | Notification language pinned to Arabic in-app regardless of the user | 🔴 Open |
 | M5 | Medium | Reply-mode selector clipped off-screen on 360 px phones | 🔴 Open |
 | M6 | Medium | Bare `landscape:` also matches desktop — 8 descriptions hidden from most users | 🔴 Open — **has already cost a blocked deploy**, see below |
@@ -59,7 +59,16 @@ The single most useful thing in this document. Update it whenever a finding move
   in which the back button can actually be tested. *(Probed 2026-08-07: 2.0.26 is now live in
   **production**, status `completed`. It was promoted before MOB-11 ran — run it anyway.)*
 
-### 2026-08-07 — M3 fixed, and native-only findings became browser-measurable
+### 2026-08-07 — M3 fixed and merged, and native-only findings became browser-measurable
+
+**Merged as PR #661** (`4657fbc0`), three commits: the fix, then two more from the review of the fix.
+
+⏰ **It is in `main` but in no released build.** `chore(android): release v2.0.27 (code 20027)`
+landed on `main` the same day but **before** this merge, so 2.0.27 does not carry M3 — confirmed
+with `git merge-base --is-ancestor`, not inferred from the dates. The next Android build is the
+first that can. (2.0.26's promotion to production before MOB-11 ran is the standing reminder that
+"merged" and "in front of merchants" are different questions, and the ledger should keep answering
+both.)
 
 **M3 is fixed.** The banner now renders inside `<main>`, which already carries `pt-header`. That
 puts it below the fixed header while keeping it in normal flow, so it is visible *and* still pushes
@@ -791,10 +800,15 @@ MOB-64 and MOB-97). Then **M3 and M5**: small, measured, and independently verif
 M4 together**, since both live in `notifications.ts` and share one fix — *read the state at call time,
 not at registration time*. The low findings ride along with any change that touches their files.
 
-> **Progress:** step 1 is done (#641 + #642) but **not yet device-verified** — and 2.0.26 reached
-> production anyway, so MOB-11 is now overdue rather than pending. **M3 is done and verified in a
-> browser** (2026-08-07). **M5 is next**, and it is already measured: 32 px at 360, 2 px at 390,
-> English only. Then M2 + M4 together.
+> **Progress (2026-08-07):** step 1 is done (#641 + #642) but **not yet device-verified** — and
+> 2.0.26 reached production anyway, so MOB-11 is now overdue rather than pending. **M3 is merged**
+> (#661), verified in a browser, and **not yet in a released build** — 2.0.27 predates it.
+> **M5 is next**, and it is already measured: 32 px at 360, 2 px at 390, English only. Then
+> M2 + M4 together.
+>
+> Two of the 17 are now closed. Both took more than one attempt, and in both cases the *second*
+> defect was invisible until the first was fixed — #642 followed #641, and two review findings
+> followed the M3 fix. Budget for that on the remaining ones rather than treating it as bad luck.
 
 ---
 
@@ -816,6 +830,22 @@ The four probes were: a horizontal-overflow sweep (8 routes × 2 widths), a focu
 `elementFromPoint` occlusion check for the offline banner, and a media-query read at desktop and phone
 sizes. They are worth promoting to `e2e/mobile-overflow.spec.ts` and `e2e/mobile-a11y.spec.ts` almost
 as they stand — items A1.1, A1.2 and A1.6 above are those same probes plus assertions.
+
+### Probing the native-only paths (added 2026-08-07)
+
+The recipe above reaches only what a desktop browser renders. To exercise the nine findings behind
+`isNativePlatform()`, see the M3 entry in *What happened after the review* — the short version is
+that stubbing `window.Capacitor` does not work, and that **`getPersistStorage()` must be kept on
+`localStorage`** or a seeded session is silently discarded and every route bounces to `/login`.
+
+Two more practical notes, both learned by losing time to them:
+
+- **Do not let Playwright's `webServer` block reuse `:3001`.** On this machine that port usually
+  belongs to a different checkout, so the repo config would happily run this branch's specs against
+  someone else's code. Use a probe config with no `webServer` and an explicit `baseURL`.
+- **If you bypass that block, you also lose its env** — `REVALIDATE_SECRET` and the two WhatsApp
+  vars that flip the nav label to "Channels". Eleven specs failed on that alone before the cause was
+  obvious. Pass them to the dev server yourself, or expect a misleading red.
 
 ---
 
