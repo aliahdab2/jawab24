@@ -151,6 +151,14 @@ export interface UpdatePageDTO {
     autoReplyEnabled?: boolean;
     knowledgeBase?: string;
     businessProfile?: import('../utils/validation').BusinessProfileInput;
+    /**
+     * Fields of `businessProfile` the merchant explicitly reviewed in this save
+     * (opened that field's editor and saved), even if the value is unchanged.
+     * Only these — plus fields whose value actually changed — get their
+     * provenance stamped editor-confirmed; the rest of the full-replace echo
+     * carries its existing provenance forward (the fb_sync-laundering fix).
+     */
+    businessProfileConfirmFields?: string[];
 }
 
 /**

@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessReadinessCard } from '@/components/business/BusinessReadinessCard';
 import type { Page } from '@jawab24/shared';
-import { businessPage as makePage } from '@/utils/__tests__/businessPageFixture';
+import { businessPage as makePage, businessPageFbSynced } from '@/utils/__tests__/businessPageFixture';
 
 
 function renderRows(page: Page) {
@@ -76,6 +76,20 @@ describe('BusinessFactRows — state badges', () => {
       channels: { whatsapp: ['0911111111', '0922222222'] },
     }));
     expect(within(row('Phone')).getAllByLabelText('WhatsApp')).toHaveLength(2);
+  });
+
+  // An unconfirmed Facebook-synced value must be VISIBLE but never settled:
+  // MES's stale UAE phone sat hidden in the profile until an unrelated save
+  // laundered it into replies (2026-08-08). The row now shows the value,
+  // names its origin, and asks for review.
+  it('shows an fb_sync value as «Needs review» with its origin, never as Complete', () => {
+    renderRows(businessPageFbSynced({ phones: ['+971556087128'] }));
+    const phoneRow = row('Phone');
+    expect(within(phoneRow).getByText('Needs review')).toBeInTheDocument();
+    expect(within(phoneRow).getByText(/From your Facebook Page/)).toBeInTheDocument();
+    expect(within(phoneRow).getByText(/\+971556087128/)).toBeInTheDocument();
+    expect(within(phoneRow).queryByText('Complete')).not.toBeInTheDocument();
+    expect(within(phoneRow).getByText('Review')).toBeInTheDocument();
   });
 
   // A store-answered fact is not a gap: the store's policiesSummary reaches

@@ -37,6 +37,11 @@ interface FactRow {
   /** Richer rendering when plain text can't carry the meaning (the WhatsApp
    *  mark on a phone number). `value` still drives the is-set logic. */
   valueNode?: React.ReactNode;
+  /** An UNCONFIRMED value (Facebook-synced / unreviewed) exists for this fact.
+   *  Rendered as «من فيسبوك: …» with a review badge — visible but never
+   *  presented as settled. Only set when `value` is null: a confirmed value
+   *  always wins the row. */
+  suggestedValue?: string | null;
   /** Jawab can answer about this — the merchant's value or the connected store. */
   covered: boolean;
   /** A connected store answers this fact and the merchant wrote nothing. */
@@ -63,17 +68,17 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
   const t = useTranslations('business');
 
   const rows: FactRow[] = useMemo(() => {
-    const { values, covered, storeAnswered } = computeFactCoverage(page);
+    const { values, suggested, covered, storeAnswered } = computeFactCoverage(page);
 
     // Show the actual week, grouped — a merchant with different Friday hours
     // needs to SEE that from the row, not discover it by opening the sheet.
-    const hoursValue = values.hours
-      ? summarizeWeek(parseWeek(values.hours), {
+    const summarize = (week: NonNullable<typeof values.hours>) =>
+      summarizeWeek(parseWeek(week), {
         closed: t('facts.hoursClosed'),
         allDay: t('facts.hoursAllDay'),
         day: (key: DayKey) => t(`facts.day_${key}`),
-      })
-      : null;
+      });
+    const hoursValue = values.hours ? summarize(values.hours) : null;
     const { phones, whatsapp } = values;
 
     const row = (key: BusinessFactKey, extra: Omit<FactRow, 'key' | 'covered' | 'storeAnswered'>): FactRow => ({
@@ -84,14 +89,19 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
     });
 
     return [
-      row('hours', { icon: Clock, value: hoursValue }),
-      row('address', { icon: MapPin, value: values.address }),
+      row('hours', {
+        icon: Clock,
+        value: hoursValue,
+        suggestedValue: suggested.hours ? summarize(suggested.hours) : null,
+      }),
+      row('address', { icon: MapPin, value: values.address, suggestedValue: suggested.address ?? null }),
       // WhatsApp is a MARK on a number, not a row of its own: in this market it
       // is nearly always a SIM the merchant already listed, so a second row meant
       // the same digits typed twice and two copies to keep in sync.
       row('phone', {
         icon: Phone,
         value: phones.length ? phones.join(' · ') : null,
+        suggestedValue: suggested.phones?.length ? suggested.phones.join(' · ') : null,
         valueNode: phones.length ? (
           <span className="inline-flex items-center gap-1 min-w-0">
             {phones.map((p, i) => (
@@ -112,9 +122,9 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
       // When the store genuinely answers these, an empty value is NOT a gap — so
       // the row says so instead of nagging, and the badge reads مكتمل. It stays
       // tappable: writing a value is a deliberate override.
-      row('delivery', { icon: Truck, value: values.delivery }),
-      row('payment', { icon: CreditCard, value: values.payment }),
-      row('website', { icon: Globe, value: values.website }),
+      row('delivery', { icon: Truck, value: values.delivery, suggestedValue: suggested.delivery ?? null }),
+      row('payment', { icon: CreditCard, value: values.payment, suggestedValue: suggested.payment ?? null }),
+      row('website', { icon: Globe, value: values.website, suggestedValue: suggested.website ?? null }),
     ];
   }, [page, t]);
 
@@ -127,15 +137,21 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
         {rows.map((row) => {
           const Icon = row.icon;
           const isSet = row.value !== null;
+          const hasSuggestion = !isSet && !!row.suggestedValue;
           // Unscored facts (phone, website) never badge «ناقص»: the readiness
           // counter above doesn't count them, and an amber "missing" on a row
           // the score ignores is the two-scoreboards contradiction this module
           // family exists to prevent. They read «اختياري» in neutral gray.
+          // A Facebook-synced suggestion outranks both idle states — scored or
+          // not, an unreviewed value waiting on the row IS the errand (the
+          // hidden-UAE-phone lesson): show it and ask for review.
           const badge = row.covered
             ? { className: 'status-success', label: t('state.covered') }
-            : isScoredFactKey(row.key)
-              ? { className: 'status-warning', label: t('state.missing') }
-              : { className: 'bg-muted text-muted-foreground border-theme-border', label: t('state.optional') };
+            : hasSuggestion
+              ? { className: 'status-warning', label: t('state.reviewNeeded') }
+              : isScoredFactKey(row.key)
+                ? { className: 'status-warning', label: t('state.missing') }
+                : { className: 'bg-muted text-muted-foreground border-theme-border', label: t('state.optional') };
           // Identical content whether the row is a control or plain text — a
           // view-only row must read the same, minus the action pill.
           const rowContent = (
@@ -171,13 +187,18 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
                   >
                     {isSet
                       ? (row.valueNode ?? (row.value || t('facts.isSet')))
-                      : row.storeAnswered
-                        ? t('facts.storeAnswered')
-                        : readOnly
-                          // «أضف عنوانك» is an instruction to the person who
-                          // can. A member gets the state, not the errand.
-                          ? t('facts.notSet')
-                          : t(`facts.add_${row.key}`)}
+                      : hasSuggestion
+                        // The value the merchant never typed, shown AS what it
+                        // is — a Facebook copy awaiting review. Members see it
+                        // too (it's state, not an errand).
+                        ? t('facts.fromFacebook', { value: row.suggestedValue ?? '' })
+                        : row.storeAnswered
+                          ? t('facts.storeAnswered')
+                          : readOnly
+                            // «أضف عنوانك» is an instruction to the person who
+                            // can. A member gets the state, not the errand.
+                            ? t('facts.notSet')
+                            : t(`facts.add_${row.key}`)}
                   </span>
                 </span>
                 {/* Visual affordance only — see the row's className note. It is
@@ -194,7 +215,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
                       row.covered ? 'border-theme-border text-muted-foreground' : 'status-brand'
                     }`}
                   >
-                    {isSet ? t('facts.edit') : t('facts.add')}
+                    {isSet ? t('facts.edit') : hasSuggestion ? t('facts.review') : t('facts.add')}
                   </span>
                 )}
             </>

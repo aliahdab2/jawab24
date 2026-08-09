@@ -1,5 +1,5 @@
-import { unwrapBusinessProfile, whatsappNumbers } from '@jawab24/shared';
-import type { Page } from '@jawab24/shared';
+import { unwrapBusinessProfile, whatsappNumbers, isFieldAuthoritative } from '@jawab24/shared';
+import type { Page, BusinessProfile } from '@jawab24/shared';
 
 /**
  * «نشاطك التجاري» coverage — THE single answer to "can Jawab answer about X?".
@@ -94,8 +94,21 @@ export interface ReadinessScore {
   missing: ReadinessAreaKey[];
 }
 
+/** Unconfirmed values present in the profile — same shapes as
+ *  `BusinessFactValues`, but these are Facebook-synced (or legacy-unreviewed)
+ *  values the reply pipeline refuses to use. They exist so the rows can SHOW
+ *  the merchant what is waiting for review instead of hiding it: the hidden
+ *  «+971556087128» UAE phone (MES, 2026-08-08) sat invisible in the profile
+ *  until an unrelated save laundered it into replies. */
+export type SuggestedFactValues = Partial<
+  Pick<BusinessFactValues, 'hours' | 'address' | 'phones' | 'delivery' | 'payment' | 'website'>
+>;
+
 export interface BusinessFactCoverage {
   values: BusinessFactValues;
+  /** Facebook-synced / unreviewed values for rows to surface as «راجعه» —
+   *  never counted as covered (the reply pipeline won't answer from them). */
+  suggested: SuggestedFactValues;
   /** Can Jawab answer about this today — from the merchant's own value or a
    *  connected store? */
   covered: Record<BusinessFactKey, boolean>;
@@ -123,27 +136,72 @@ function text(value: string | null | undefined): string | null {
  * have to invent a `productsCount` to ask a question that has no products in it.
  */
 export function computeFactCoverage(page: Page): BusinessFactCoverage {
-  const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
+  const { merchant = {}, merchantProvenance } = unwrapBusinessProfile(page.businessProfile);
 
-  const hasHours = !!merchant.hours
-    && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0);
+  // The docstring's contract, now actually enforced: values/covered read the
+  // AUTHORITATIVE merchant half only — the exact predicate the reply pipeline's
+  // BUSINESS_INFO gate uses (imported, never re-derived). An unconfirmed
+  // fb_sync value is NOT covered (the pipeline won't answer from it); it goes
+  // into `suggested` so the row shows it as needing review instead of either
+  // hiding it or dressing it up as a settled fact.
+  const authoritative = (field: keyof BusinessProfile) => isFieldAuthoritative(merchantProvenance, field);
+
+  const week = (h: BusinessProfile['hours']) =>
+    h && Object.values(h).some((v) => Array.isArray(v) && v.length > 0) ? h : null;
+  const phoneList = (p: BusinessProfile['phones']) =>
+    (p ?? []).filter((v): v is string => !!v?.trim()).map((v) => v.trim());
+  // City counts. `formatBusinessInfoPrompt` joins address/city/country into
+  // one "Address" line, so a merchant who gave only «دمشق» HAS given Jawab an
+  // answer to «وين محلكم؟» — and the row displays it. Calling that ناقص would
+  // contradict the value printed right next to the badge.
+  // (Deliberately looser than shared `presentFieldsFromProfile`, which gates
+  // KB-line REMOVAL and is strict on purpose: a false positive there deletes a
+  // fact. Do not "unify" the two — they answer different questions.)
+  // Address components gate independently, mirroring joinAddress in the prompt.
+  const joinedAddress = (fields: Array<string | null | undefined>) =>
+    text(fields.filter((v) => v?.trim()).join('، '));
 
   const values: BusinessFactValues = {
-    hours: hasHours ? merchant.hours! : null,
-    // City counts. `formatBusinessInfoPrompt` joins address/city/country into
-    // one "Address" line, so a merchant who gave only «دمشق» HAS given Jawab an
-    // answer to «وين محلكم؟» — and the row displays it. Calling that ناقص would
-    // contradict the value printed right next to the badge.
-    // (Deliberately looser than shared `presentFieldsFromProfile`, which gates
-    // KB-line REMOVAL and is strict on purpose: a false positive there deletes a
-    // fact. Do not "unify" the two — they answer different questions.)
-    address: text([merchant.address, merchant.city].filter((v) => v?.trim()).join('، ')),
-    phones: (merchant.phones ?? []).filter((p): p is string => !!p?.trim()).map((p) => p.trim()),
-    whatsapp: whatsappNumbers(merchant),
-    delivery: text(merchant.policies?.shipping),
-    payment: text(merchant.policies?.payment),
-    website: text(merchant.website),
+    hours: authoritative('hours') ? week(merchant.hours) : null,
+    address: joinedAddress([
+      authoritative('address') ? merchant.address : null,
+      authoritative('city') ? merchant.city : null,
+    ]),
+    phones: authoritative('phones') ? phoneList(merchant.phones) : [],
+    whatsapp: authoritative('channels') ? whatsappNumbers(merchant) : [],
+    delivery: authoritative('policies') ? text(merchant.policies?.shipping) : null,
+    payment: authoritative('policies') ? text(merchant.policies?.payment) : null,
+    website: authoritative('website') ? text(merchant.website) : null,
   };
+
+  // What remains once the authoritative half is taken: values that exist in the
+  // profile but failed the authority gate. Only populated where the row would
+  // otherwise show nothing — a confirmed value beats a lingering suggestion.
+  const suggested: SuggestedFactValues = {};
+  if (!values.hours && !authoritative('hours')) {
+    const w = week(merchant.hours);
+    if (w) suggested.hours = w;
+  }
+  if (!values.address) {
+    const addr = joinedAddress([merchant.address, merchant.city]);
+    if (addr) suggested.address = addr;
+  }
+  if (values.phones.length === 0) {
+    const p = phoneList(merchant.phones);
+    if (p.length && !authoritative('phones')) suggested.phones = p;
+  }
+  if (!values.delivery && !authoritative('policies')) {
+    const d = text(merchant.policies?.shipping);
+    if (d) suggested.delivery = d;
+  }
+  if (!values.payment && !authoritative('policies')) {
+    const p = text(merchant.policies?.payment);
+    if (p) suggested.payment = p;
+  }
+  if (!values.website && !authoritative('website')) {
+    const w = text(merchant.website);
+    if (w) suggested.website = w;
+  }
 
   // `storeAnswersPolicies` is server-derived (store is active AND synced policy
   // text) and is the ONLY sanctioned proof — see `storeAnswersPolicies` in
@@ -169,7 +227,7 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
     website: values.website !== null,
   };
 
-  return { values, covered, storeAnswered };
+  return { values, suggested, covered, storeAnswered };
 }
 
 /**
@@ -187,7 +245,7 @@ export function computeReadiness(
   /** LIVE fact-collection rows (G1b lists). undefined = still loading. */
   factRowsCount: number | undefined,
 ): BusinessReadiness {
-  const { values, covered: factCovered, storeAnswered } = computeFactCoverage(page);
+  const { values, suggested, covered: factCovered, storeAnswered } = computeFactCoverage(page);
 
   const covered: Record<CoverageKey, boolean> = {
     ...factCovered,
@@ -218,7 +276,7 @@ export function computeReadiness(
     };
   })();
 
-  return { values, covered, storeAnswered, score };
+  return { values, suggested, covered, storeAnswered, score };
 }
 
 /**

@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
-import { isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
+import { computeFactCoverage, isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { useWorkspaceRole } from '@/hooks';
@@ -42,6 +42,20 @@ const TestSmartReplyModal = dynamic(
 
 /** Anchor for the readiness card's products chip (scrollIntoView target). */
 const PRODUCTS_SECTION_ID = 'business-products-section';
+
+/**
+ * Which profile fields each single-field sheet actually reviews — sent as
+ * `businessProfileConfirmFields` so the server confirms exactly what the
+ * merchant had in front of them, and nothing that merely rode along in the
+ * full-replace echo. Must mirror what `saveFact` writes per key.
+ */
+const CONFIRM_FIELDS: Record<EditableFactKey, ReadonlyArray<keyof BusinessProfile>> = {
+  address: ['address'],
+  phone: ['phones', 'channels'],
+  website: ['website'],
+  delivery: ['policies'],
+  payment: ['policies'],
+};
 
 /**
  * «نشاطك التجاري» — the unified business surface (B1): readiness summary →
@@ -199,6 +213,17 @@ function BusinessPageInner() {
   const [fieldCleanup, setFieldCleanup] = useState<{ kbText: string; profile: StoredBusinessProfile } | null>(null);
   useEffect(() => { setSaveError(null); }, [editingFact, editingHours]);
 
+  /** Which facts currently carry an unconfirmed Facebook-synced value — the
+   *  sheets label the prefill's origin and let an unchanged save count as the
+   *  explicit confirmation. */
+  const factSuggested = useMemo(
+    () => (selectedPage ? computeFactCoverage(selectedPage).suggested : {}),
+    [selectedPage],
+  );
+  /** Row key → suggested-value key ('phone' row reads the 'phones' field). */
+  const hasFbSuggestion = (key: EditableFactKey): boolean =>
+    key === 'phone' ? factSuggested.phones !== undefined : factSuggested[key] !== undefined;
+
   /** Current confirmed value for a fact, as the sheet's single text field. */
   const factValue = (key: EditableFactKey): string => {
     const { merchant = {} } = unwrapBusinessProfile(selectedPage?.businessProfile);
@@ -223,6 +248,7 @@ function BusinessPageInner() {
   const saveProfile = async (
     mutate: (merchant: BusinessProfile) => BusinessProfile,
     onDone: () => void,
+    confirmFields: ReadonlyArray<keyof BusinessProfile>,
   ) => {
     if (!selectedPage) return;
     const { merchant = {} } = unwrapBusinessProfile(selectedPage.businessProfile);
@@ -231,7 +257,16 @@ function BusinessPageInner() {
     setSavingFact(true);
     setSaveError(null);
     try {
-      await api.put(`/pages/${selectedPage.id}`, { businessProfile: patch });
+      // `businessProfileConfirmFields` names the field(s) whose sheet the
+      // merchant actually had open — only those (plus genuinely changed
+      // values) get provenance-confirmed server-side. The rest of the
+      // full-replace echo keeps its provenance, so an fb_sync value can no
+      // longer be laundered into "merchant-confirmed" by an unrelated save
+      // (the MES «+971556087128» incident, 2026-08-08).
+      await api.put(`/pages/${selectedPage.id}`, {
+        businessProfile: patch,
+        businessProfileConfirmFields: confirmFields,
+      });
       // Refetch so the readiness chips + rows reflect the new confirmed value.
       await queryClient.invalidateQueries({ queryKey: ['pages'] });
       onDone();
@@ -305,11 +340,11 @@ function BusinessPageInner() {
         case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
       }
       return patch;
-    }, () => setEditingFact(null));
+    }, () => setEditingFact(null), CONFIRM_FIELDS[key]);
   };
 
   const saveHours = (hours: Record<string, string[]> | undefined) =>
-    saveProfile((patch) => { patch.hours = hours; return patch; }, () => setEditingHours(false));
+    saveProfile((patch) => { patch.hours = hours; return patch; }, () => setEditingHours(false), ['hours']);
 
   /** Readiness chip → the matching editor. `products` scrolls to the catalog
    *  section instead: it has no single-field sheet, and whenever its chip is
@@ -518,6 +553,7 @@ function BusinessPageInner() {
       {editingHours && selectedPage && (
         <BusinessHoursSheet
           initialHours={unwrapBusinessProfile(selectedPage.businessProfile).merchant?.hours}
+          fbSuggested={factSuggested.hours !== undefined}
           saving={savingFact}
           saveError={saveError}
           onSave={saveHours}
@@ -537,6 +573,7 @@ function BusinessPageInner() {
           // The field list comes from `STORE_POLICY_KEYS` (via isStorePolicyKey)
           // so adding a store-answerable policy row never leaves this hint behind.
           storeAnswered={!!selectedPage.storeAnswersPolicies && isStorePolicyKey(editingFact)}
+          fbSuggested={hasFbSuggestion(editingFact)}
           saving={savingFact}
           saveError={saveError}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}

@@ -20,3 +20,23 @@ export function businessPage(
 ): Page {
   return { id: 'p1', name: 'Shop', businessProfile: { merchant }, ...extra } as unknown as Page;
 }
+
+/**
+ * Same page, but every named merchant field carries UNCONFIRMED fb_sync
+ * provenance — the state a Facebook auto-sync leaves behind. The coverage
+ * rules must treat these as suggestions to review, never as covered facts
+ * (the MES «+971556087128» laundering incident, 2026-08-08).
+ */
+export function businessPageFbSynced(
+  merchant: Record<string, unknown> = {},
+  extra: Partial<Page> = {},
+): Page {
+  const merchantProvenance = Object.fromEntries(
+    Object.keys(merchant).map((f) => [f, { source: 'fb_sync', confirmedAt: null }]),
+  );
+  return {
+    id: 'p1', name: 'Shop',
+    businessProfile: { merchant, suggestions: { ...merchant }, merchantProvenance },
+    ...extra,
+  } as unknown as Page;
+}

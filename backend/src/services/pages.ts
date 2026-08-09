@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores } from '../db/schema';
 import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, SHORT_DAY_KEYS, DAY_LABELS_AR, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
@@ -594,8 +594,10 @@ export class PagesService {
         data: UpdatePageDTO,
         opts?: { skipGapResolution?: boolean },
     ) {
+        // Not a column — consumed below by applyMerchantEdit only.
+        const { businessProfileConfirmFields, ...columnData } = data;
         const setData: Record<string, unknown> = {
-            ...data,
+            ...columnData,
             updatedAt: new Date(),
         };
 
@@ -623,9 +625,18 @@ export class PagesService {
                 .limit(1);
             const existingContainer = unwrapBusinessProfile(existingRow?.businessProfile as StoredBusinessProfile);
             const patch = data.businessProfile as BusinessProfile;
+            // Only tracked-field names are meaningful confirm targets; anything
+            // else in the client list is dropped (defense against typos and
+            // stale clients, not a validation error).
+            const confirmFields = (Array.isArray(businessProfileConfirmFields) ? businessProfileConfirmFields : [])
+                .filter((f): f is keyof BusinessProfile =>
+                    (TRACKED_FIELDS as readonly string[]).includes(f));
             const { merchant, merchantProvenance } = applyMerchantEdit(
                 patch,
                 existingContainer.merchantProvenance,
+                new Date(),
+                existingContainer.merchant,
+                confirmFields,
             );
             const container: BusinessProfileContainer = {
                 merchant,
