@@ -47,12 +47,14 @@ import { noopLogger, type Logger } from '../types/logger';
 // Pinned models + generation constants — a pilot's cost must be predictable,
 // so nothing here resolves per user (grounding-verifier posture).
 const POST_TEXT_MODEL = DEFAULT_AI_MODEL;
-// gpt-image-2 at medium: owner ruling 2026-08-09 — the pilot must test the
-// feature's best output, not its floor (~$0.05/image; ≤3/day = $0.15/day max).
-// One-line fallback if its thinking-mode latency breaches the budget often:
-// 'gpt-image-1-mini' (already priced in aiPricing.ts).
+// gpt-image-2 at LOW: owner ruling 2026-08-09 (superseding the earlier medium
+// ruling the same day — «لازم ما تزيد التكلفة الشهرية») — ~$0.006/image keeps
+// the ABSOLUTE worst case (3/day × 30) under $0.55/month/page. If low-tier
+// images measure as not-postable in the pilot, the levers are: quality
+// 'medium' (~$0.05, 8×), lazy generate-on-open, or satori/sharp brand
+// templates. 'gpt-image-1-mini' stays the latency fallback (priced).
 const POST_IMAGE_MODEL = 'gpt-image-2';
-const POST_IMAGE_QUALITY = 'medium' as const;
+const POST_IMAGE_QUALITY = 'low' as const;
 const POST_IMAGE_SIZE = '1024x1024' as const;
 const TEXT_TIMEOUT_MS = 20_000;
 const IMAGE_TIMEOUT_MS = 35_000; // frontend LONG_RUNNING_TIMEOUT is 60s total
