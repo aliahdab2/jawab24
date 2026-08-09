@@ -1928,6 +1928,9 @@ Facebook") computes its victim list purely from Facebook's `/me/accounts` respon
 from our UI selection and not from the plan — then clears the token and **deliberately
 nulls the reason** so a stale system reason can't misdescribe the page. That is why
 "revoked by Facebook" and "off with no reason recorded" are indistinguishable in the DB.
+Since 2026-08-09 it runs **before** the plan-slot check in the same sync, so slots freed
+by deselected pages are immediately usable by pages granted in the same Meta grant edit
+(the one-shot swap: drop N pages, add one — previously refused on the first attempt).
 
 **Known gaps (both open):** the revoke path writes no distinguishing reason (e.g.
 `fb_revoked`), and the merchant is never notified — a `page_disconnected` notification type
