@@ -15,7 +15,8 @@ import { useUIStore, useAuthStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { Toaster } from 'sonner';
 import { isNativePlatform, isIOSNative } from '@/lib/capacitor';
-import { isPaymentRoute } from '@/lib/paymentRoutes';
+import { isIOSBlockedRoute } from '@/lib/paymentRoutes';
+import { useIOSRouteGuard } from '@/hooks/useIOSRouteGuard';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
@@ -411,6 +412,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   }, []);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
+  // App Store Guideline 3.1.1 — the single choke point for route entry on iOS.
+  // Lives in a hook so it can be tested against a real router; see the hook for
+  // why the build-time layers cannot replace it.
+  useIOSRouteGuard();
+
   useEffect(() => {
     if (!hasHydrated || !isNativePlatform()) return;
 
@@ -445,7 +451,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         // into a payment surface. Refusing here means the route is not entered
         // at all — the page-level guard would only blank it AFTER hydration,
         // and the exported HTML holds the prices as plain markup.
-        if (slug && isIOSNative() && isPaymentRoute(slug)) return null;
+        if (slug && isIOSNative() && isIOSBlockedRoute(slug)) return null;
         return slug;
       };
 

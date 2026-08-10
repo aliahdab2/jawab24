@@ -31,8 +31,13 @@ const code = appSource
     .replace(/^\s*\/\/.*$/gm, '');
 
 describe('iOS payment deep-link guard (Guideline 3.1.1)', () => {
-    it('imports the shared payment-route predicate', () => {
-        expect(code).toMatch(/import\s*\{\s*isPaymentRoute\s*\}\s*from\s*['"]@\/lib\/paymentRoutes['"]/);
+    it('imports the shared blocked-route predicate', () => {
+        // Widened from isPaymentRoute on 2026-08-10: the deep-link handler must
+        // also refuse the marketing routes that quote prices (/compare, /blog,
+        // /what-is-jawab24), not only purchase surfaces. isIOSBlockedRoute is
+        // the union; asserting the NARROW predicate here would now pass while
+        // com.jawab24.app://compare/manychat sailed through.
+        expect(code).toMatch(/import\s*\{\s*isIOSBlockedRoute\s*\}\s*from\s*['"]@\/lib\/paymentRoutes['"]/);
     });
 
     it('imports isIOSNative, not just isNativePlatform', () => {
@@ -41,19 +46,29 @@ describe('iOS payment deep-link guard (Guideline 3.1.1)', () => {
         expect(code).toMatch(/isIOSNative/);
     });
 
-    it('refuses a payment slug on iOS inside handleDeepLink', () => {
-        expect(code).toMatch(/isIOSNative\(\)\s*&&\s*isPaymentRoute\(\s*slug\s*\)/);
+    it('refuses a blocked slug on iOS inside handleDeepLink', () => {
+        expect(code).toMatch(/isIOSNative\(\)\s*&&\s*isIOSBlockedRoute\(\s*slug\s*\)/);
     });
 
     it('returns null on refusal rather than navigating somewhere', () => {
-        expect(code).toMatch(/isIOSNative\(\)\s*&&\s*isPaymentRoute\(\s*slug\s*\)\s*\)\s*return null/);
+        expect(code).toMatch(/isIOSNative\(\)\s*&&\s*isIOSBlockedRoute\(\s*slug\s*\)\s*\)\s*return null/);
     });
 
     it('applies the guard before the slug can reach router.push', () => {
-        const guardAt = code.search(/isPaymentRoute\(\s*slug\s*\)/);
+        const guardAt = code.search(/isIOSBlockedRoute\(\s*slug\s*\)/);
         const pushAt = code.search(/\.push\(\s*slug\s*\)/);
         expect(guardAt).toBeGreaterThan(-1);
         expect(pushAt).toBeGreaterThan(-1);
         expect(guardAt).toBeLessThan(pushAt);
+    });
+
+    it('also mounts the app-wide route guard, which the deep-link check cannot replace', () => {
+        // handleDeepLink only sees links arriving from OUTSIDE the app. An
+        // in-app <Link> or router.push goes straight past it, and deleting the
+        // page's HTML does not stop that — Next serves the client-side
+        // navigation from the page's JS chunk. useIOSRouteGuard is the layer
+        // that closes it; losing the call here would reopen the hole silently.
+        expect(code).toMatch(/useIOSRouteGuard\(\)/);
+        expect(code).toMatch(/import\s*\{\s*useIOSRouteGuard\s*\}\s*from\s*['"]@\/hooks\/useIOSRouteGuard['"]/);
     });
 });
