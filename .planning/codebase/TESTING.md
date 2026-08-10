@@ -36,7 +36,7 @@ This document describes the testing architecture, frameworks, and patterns used 
 | **Hook Tests** | `frontend/src/hooks/*.test.ts` | `npm run test` | 75% (hooks folder) | On push, PR, CI |
 | **Service Tests** | `backend/src/services/**/*.test.ts` | `npm run test` | 80% (statements/lines) | On push, PR, CI |
 | **Middleware Tests** | `backend/test/middleware/*.test.ts` | `npm run test` | Part of 80% threshold | On push, PR, CI |
-| **Integration Tests** | `backend/test/integration/**` | `npm run test:integration` | Separate from unit (not in CI) | Manual / pre-deploy |
+| **Integration Tests** | `backend/test/integration/**` | `npm run test:integration:local` | Separate from unit (not in CI) | Manual / pre-deploy |
 | **E2E Tests** | `frontend/e2e/*.spec.ts` | `npm run test:e2e` | N/A (behavioral) | On push, PR, CI |
 | **SEO Tests** | `frontend/e2e/seo.spec.ts` | `npm run test:e2e -- e2e/seo.spec.ts` | 39 tests for meta/structured data | On push, PR, CI |
 
@@ -385,16 +385,36 @@ test.describe('SEO — Landing Page', () => {
 **Location**: `backend/test/integration/`
 
 **Setup:**
-- Uses real PostgreSQL instance (local DB; not part of default PR CI)
-- Runs migrations before each test suite
-- Creates isolated test database per run
+- Uses a real PostgreSQL instance — the dev Docker container on `localhost:5433` (not part of
+  default PR CI)
+- **One database per checkout**, named `autoreply_test_<checkout>_<hash>` and resolved by
+  `scripts/test-db-url.sh`. `test/integration/globalSetup.ts` creates it on first run, then
+  applies migrations **once** in the main vitest process, before any fork spawns.
+- `test/integration/setup.ts` TRUNCATEs ~20 tables before **every** test — which is why the
+  database must not be shared between concurrent runs (see the warning below)
+- Serialized on purpose: `fileParallelism: false`, `pool: 'forks'`, `singleFork: true`
 - NOT included in unit test runs (`npm run test`)
 
 **Running Integration Tests:**
 ```bash
-npm run test:integration          # Run all integration tests
-FILTER=messages npm run test:integration  # Run specific suite
+cd backend
+npm run test:integration:local                                        # all files
+npm run test:integration:local -- test/integration/messages.test.ts   # one file
+npm run test:integration:local -- -t 'isPaused'                       # one test by name
 ```
+
+> ⚠️ **Use `test:integration:local`.** Plain `npm run test:integration` is the CI/deploy-gate
+> variant: it trusts the ambient `DATABASE_URL` and now **fails fast** when none is set, rather
+> than silently falling back to a database shared with every other checkout.
+>
+> **Why per-checkout (fixed 2026-08-10).** This used to be one machine-global `autoreply_test`.
+> Because every test truncates the tables first, two suites running at once — a deploy gate in
+> the main checkout and a `test:integration:local` in any worktree — deleted each other's
+> fixtures. It produced a **false red** in the gate three separate times; the worst was 29
+> failures across 13 files ending in a FK violation on `workspaces.owner_id`, on a commit that
+> passes 414/414 in isolation. Full account in `AI_INSTRUCTIONS.md` under *Backend integration
+> tests*. ⛔ Never work around a blocked `DROP DATABASE` with `WITH (FORCE)` — that succeeds by
+> force-terminating someone else's suite.
 
 **Example: Messages Integration Test**
 ```typescript
@@ -642,18 +662,31 @@ test('should use correct translation for title', async ({ page }) => {
    - Soft warnings: performance < 70, SEO < 80
 6. **Integration tests**: Optional (manual trigger or deployment only)
 
-**Pre-Deploy Checks:**
+**Pre-Deploy Checks — the actual gate:**
 
-Script: `scripts/pre-deploy-check.sh`
-```bash
-#!/bin/bash
-npm run lint
-npm run test
-npm run test:integration   # Only if deploying backend
-cd frontend && npm run test:e2e
-```
+`scripts/pre-deploy-check.sh`, invoked by `./scripts/deploy-production.sh`. It is the **only**
+gate that runs; the numbered steps are, in order:
 
-**Unit + E2E + Lighthouse must pass on every PR. Integration tests run as a separate pre-deploy gate (not default PR CI).**
+| Step | What it checks |
+|------|----------------|
+| 0 | Config files, translations, sitemap, `llms.txt` (+ the validator's own tests), lockfile sync, pinned/synced OpenAI SDK, Fastify-5 plugin compatibility, dependency audit, native-binary matrix, cross-file duplication (Rule 10.8) |
+| — | `scripts/test-db-url.sh` self-tests — run before step 0, so a broken test-database invariant fails in seconds rather than minutes |
+| 1 | No ESM-only packages; shared package builds |
+| 2 | TypeScript compiles (all workspaces) |
+| 3 | Lint — backend, frontend, ai-worker, shared |
+| 4 | Duplicate API paths, migration validity, schema drift |
+| 5 | Unit tests ×4 workspaces, with coverage thresholds |
+| 6 | Drop/recreate this checkout's test database, then backend integration tests |
+| 6b | Real Stripe **test-mode** round-trip: subscribe → pay → activate (a missing key is a hard failure, not a skip) |
+| 7 | Full Playwright E2E suite, including the SEO regression spec |
+| 8 | Docker image builds |
+
+Run it directly with `npm run pre-deploy`.
+
+> ⚠️ Two corrections to older versions of this document. **Lighthouse is not a gate** — it is
+> configured only in the GitHub Actions path, which is not used, so today it runs nowhere and
+> its thresholds are enforced by review. And nothing "must pass on every PR" via CI: a red
+> GitHub check says nothing about a PR. See `AI_INSTRUCTIONS.md` → *Testing Strategy*.
 
 ---
 
@@ -714,7 +747,7 @@ npm run test:coverage          # Generate coverage report
 ```bash
 cd backend
 npm run test                    # Run all tests
-npm run test:integration       # Integration tests (real DB)
+npm run test:integration:local  # Integration tests (real DB, this checkout's own)
 npm run test:watch             # Watch mode
 npm run test:coverage          # Generate coverage report
 ```
