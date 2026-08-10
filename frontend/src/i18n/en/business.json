@@ -145,6 +145,8 @@
     "rowDate": "Start date",
     "rowDateHint": "Jawab stops mentioning a dated row the day after its start date. The end date is for display only.",
     "rowDateShownUntil": "Jawab mentions this row until {date}, then stops.",
+    "datesEnded": "The announced dates in «{list}» have ended — Jawab no longer mentions them. Add the new ones.",
+    "datesEnding": "The last announced date in «{list}» is {date}. After it, Jawab stops mentioning them.",
     "rowDatePassed": "Customers are not shown this row: its start date has passed. Clear the date, or move it forward.",
     "startsOn": "starts {date}",
     "expired": "Expired",

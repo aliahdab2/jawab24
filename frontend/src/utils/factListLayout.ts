@@ -1,4 +1,4 @@
-import { normalizeArabic } from '@jawab24/shared';
+import { normalizeArabic, isRowLive } from '@jawab24/shared';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 import { SUPPORTED_LOCALES } from './locale';
 import type { FactListGroup, GroupedRow } from './factListGrouping';
@@ -230,6 +230,63 @@ export function isDatedCollection(collection: FactCollectionWithRows): boolean {
   let dated = 0;
   for (const r of collection.rows) if (r.startsAt !== null) dated++;
   return dated > 0 && dated * 2 >= collection.rows.length;
+}
+
+/**
+ * How close to running out counts as "about to". Owner ruling 2026-08-10 —
+ * «مو ٧ أيام كتير… خليه ٣ ايام فقط»: a week's notice is so early it reads as
+ * noise, and the merchant ignores the one that matters.
+ */
+export const DATED_LIST_WARNING_DAYS = 3;
+
+/** `ended` = every dated row has retired, so the AI no longer mentions any of
+ *  them. `ending` = the last one retires within the window, and `lastDate` is
+ *  the day it does. `null` = nothing dated here, or plenty of runway. */
+export type DatedListFreshness =
+  | { state: 'ended' }
+  | { state: 'ending'; lastDate: string }
+  | null;
+
+/**
+ * Whether a list's announced dates have run out, or are about to.
+ *
+ * Fact rows retire themselves by date (D-057) — correct, and completely
+ * silent: on 2026-08-10 the pilot merchant had 26 of 46 announced slots
+ * already invisible and the remaining 20 gone by 08-31, with nothing anywhere
+ * telling him. The prompt builder even skips the emptied collection outright,
+ * so the customer-facing answer degrades honestly while the merchant hears
+ * nothing at all. This is the signal that closes that loop.
+ *
+ * The retiring date is `startsAt` when there is one and `endsAt` otherwise —
+ * the SAME anchor `isRowLive` keys off, so this cannot claim a row is live
+ * that the renderer has already dropped.
+ */
+export function datedListFreshness(
+  collection: FactCollectionWithRows,
+  todayIso: string,
+): DatedListFreshness {
+  const anchorOf = (row: FactRowDto) => row.startsAt ?? row.endsAt;
+  const dated = collection.rows.filter((r) => anchorOf(r) !== null);
+  // An outlet directory has no dates and must never be nagged about them.
+  if (dated.length === 0) return null;
+
+  const live = dated.filter((r) => isRowLive(r, todayIso));
+  if (live.length === 0) return { state: 'ended' };
+
+  const lastDate = live.reduce((latest, r) => {
+    const anchor = anchorOf(r) as string;
+    return anchor > latest ? anchor : latest;
+  }, '');
+  return lastDate <= isoPlusDays(todayIso, DATED_LIST_WARNING_DAYS)
+    ? { state: 'ending', lastDate }
+    : null;
+}
+
+/** `YYYY-MM-DD` + n days, in UTC so a DST boundary can never shift the result
+ *  by a day. Both columns are plain calendar dates, never instants. */
+function isoPlusDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 /**

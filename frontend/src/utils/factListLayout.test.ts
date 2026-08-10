@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks, datedListFreshness } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -444,5 +444,74 @@ describe('buildTierBlocks — every card keeps its edit door', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].base).toBeNull();
     expect(blocks[0].sessions).toHaveLength(1);
+  });
+});
+
+/**
+ * Announced dates retire themselves (D-057) and say nothing to the merchant
+ * while they do it. Measured on the pilot page 2026-08-10: 26 of 46 announced
+ * slots already invisible, the rest gone by 08-31, no signal anywhere. The
+ * window is 3 days by owner ruling the same day — a week reads as noise.
+ */
+describe('datedListFreshness', () => {
+  const TODAY = '2026-08-10';
+
+  it('says nothing about a list that carries no dates', () => {
+    const outlets = coll('نقاط البيع', 'المنطقة', [row('صيدلية النرجس'), row('صيدلية الودان')]);
+    expect(datedListFreshness(outlets, TODAY)).toBeNull();
+  });
+
+  it('says nothing while there is runway beyond the window', () => {
+    const slots = coll('مواعيد الدورات', null, [
+      row('دورة ICDL', { startsAt: '2026-08-13' }),
+      row('دورة الإكسل', { startsAt: '2026-08-31' }),
+    ]);
+    expect(datedListFreshness(slots, TODAY)).toBeNull();
+  });
+
+  it('reports the last date once every remaining one falls inside the window', () => {
+    const slots = coll('مواعيد الدورات', null, [
+      row('دورة ICDL', { startsAt: '2026-08-01' }),   // already retired
+      row('دورة الإكسل', { startsAt: '2026-08-13' }), // the last one standing
+    ]);
+    expect(datedListFreshness(slots, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-13' });
+  });
+
+  it('counts the boundary day itself as inside the window, and the next as outside', () => {
+    const inside = coll('مواعيد', null, [row('أ', { startsAt: '2026-08-13' })]);
+    const outside = coll('مواعيد', null, [row('أ', { startsAt: '2026-08-14' })]);
+    expect(datedListFreshness(inside, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-13' });
+    expect(datedListFreshness(outside, TODAY)).toBeNull();
+  });
+
+  it('reports a list whose dates have all retired', () => {
+    const slots = coll('مواعيد الدورات', null, [
+      row('دورة ICDL', { startsAt: '2026-07-25' }),
+      row('دورة الإكسل', { startsAt: '2026-08-09' }),
+    ]);
+    expect(datedListFreshness(slots, TODAY)).toEqual({ state: 'ended' });
+  });
+
+  it('treats a row starting TODAY as still live — it retires tomorrow, not now', () => {
+    const slots = coll('مواعيد', null, [row('أ', { startsAt: TODAY })]);
+    expect(datedListFreshness(slots, TODAY)).toEqual({ state: 'ending', lastDate: TODAY });
+  });
+
+  it('uses endsAt as the anchor when a row has no start date', () => {
+    // isRowLive keys off endsAt for these; the warning must agree with it, or
+    // it would call a row live that the renderer has already dropped.
+    const live = coll('عروض', null, [row('عرض', { endsAt: '2026-08-12' })]);
+    const gone = coll('عروض', null, [row('عرض', { endsAt: '2026-08-09' })]);
+    expect(datedListFreshness(live, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-12' });
+    expect(datedListFreshness(gone, TODAY)).toEqual({ state: 'ended' });
+  });
+
+  it('ignores undated rows — a price list with one dated promo still warns about it', () => {
+    // The real shape on the pilot page: 50 price rows, exactly 1 of them dated.
+    const prices = coll('أسعار الدورات', null, [
+      ...Array.from({ length: 5 }, (_, i) => row(`دورة ${i}`, { price: '35000.00' })),
+      row('مكياج متقدم مستوى ثاني', { price: '50000.00', startsAt: '2026-08-12' }),
+    ]);
+    expect(datedListFreshness(prices, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-12' });
   });
 });
