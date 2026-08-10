@@ -1,7 +1,7 @@
 import React, { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock, ArrowRight } from 'lucide-react';
+import { Plus, ListChecks, CalendarClock, Pencil, Trash2, ChevronDown, CalendarDays, Clock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRowLive, MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
@@ -117,6 +117,9 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  those objects, and a stale reference would re-open the sheet on the old
    *  label. */
   const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null);
+  /** Which list's delete is ARMED (id), if any. One at a time, and it disarms
+   *  on blur — a confirm left armed behind a scroll is a mis-tap waiting. */
+  const [confirmingDeleteList, setConfirmingDeleteList] = useState<string | null>(null);
 
   // Declared before EVERY consumer: the freshness memo takes it as a
   // dependency and `createSheets` is a JSX expression evaluated mid-body, so a
@@ -338,6 +341,27 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     }
   };
 
+  /** Delete a whole list. Only ever reached from the armed second tap. The
+   *  server cascades the rows and retires the page's reply caches, so the AI
+   *  stops quoting the list on the next question — no deploy, no restart. */
+  const removeCollection = async (collection: FactCollectionWithRows) => {
+    setSaving(true);
+    try {
+      await factCollectionsApi.deleteCollection(pageId, collection.id);
+      await refresh();
+      setConfirmingDeleteList(null);
+      // The open sheets hold ids this refetch may have just invalidated.
+      setEditing(null);
+      setEntityEditing(null);
+      toast.success(t('lists.listDeleted', { list: collection.label }));
+    } catch (error) {
+      setConfirmingDeleteList(null);
+      await reportWriteFailure(error, 'delete-fact-collection');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const removeRow = async () => {
     if (!editing?.row) return;
     setSaving(true);
@@ -543,6 +567,47 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       {t('lists.renameAction')}
     </button>
   );
+
+  /**
+   * The undo for «add list».
+   *
+   * It sits next to rename because that is where a merchant looks for "this
+   * list is wrong" — and because a create door with no delete door is how a
+   * duplicate list reached production on 2026-08-10 and had to be removed over
+   * SSH. Kept OUT of the row sheets: this deletes a whole list, and it must
+   * never be one tap from an edit.
+   *
+   * Two steps, and the second one names the blast radius (a directory can hold
+   * hundreds of rows). No undo afterwards — the confirm IS the undo.
+   */
+  const deleteListButton = (collection: FactCollectionWithRows) => {
+    if (readOnly) return null;
+    const armed = confirmingDeleteList === collection.id;
+    return (
+      <button
+        type="button"
+        onClick={() => (armed ? void removeCollection(collection) : setConfirmingDeleteList(collection.id))}
+        onBlur={() => armed && setConfirmingDeleteList(null)}
+        disabled={saving}
+        /* The accessible name stays COUNT-FREE and stable: a name that changes
+           with the row count is noise in a screen reader, and the visible text
+           beside it already carries the number. */
+        aria-label={armed
+          ? t('lists.deleteListConfirmFor', { list: collection.label })
+          : t('lists.deleteListActionFor', { list: collection.label })}
+        className={`min-h-[36px] inline-flex items-center gap-1 rounded-full border px-3 text-[11px] font-semibold flex-shrink-0 ${
+          armed
+            ? 'danger-zone-btn'
+            : 'border-theme-border text-muted-foreground hover:text-red-600 hover:bg-surface-100'
+        }`}
+      >
+        <Trash2 className="w-3 h-3" aria-hidden="true" />
+        {armed
+          ? t('lists.deleteListConfirm', { count: collection.rows.length })
+          : t('lists.deleteListAction')}
+      </button>
+    );
+  };
 
   /**
    * The shell every tappable row shares: a real <button> for someone who can
@@ -819,11 +884,12 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             {collections.map((collection) => (
               <div key={collection.id} className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
                 {/* On the entity-card layout this block is the ONLY per-list
-                    surface — the cards are per ENTITY — so the rename door
-                    lives here or nowhere. */}
+                    surface — the cards are per ENTITY — so the rename and
+                    delete doors live here or nowhere. */}
                 <span className="min-w-0 flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-semibold text-foreground break-words" dir="auto">{collection.label}</span>
                   {renameButton(collection)}
+                  {deleteListButton(collection)}
                 </span>
                 {completenessControl(collection)}
               </div>
@@ -906,6 +972,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                   <span className="min-w-0 flex items-center gap-2 flex-wrap">
                     <h3 className="text-[15px] font-bold text-foreground break-words" dir="auto">{collection.label}</h3>
                     {renameButton(collection)}
+                    {deleteListButton(collection)}
                   </span>
                   {collection.isComplete !== null && completenessControl(collection)}
                 </div>

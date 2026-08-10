@@ -77,17 +77,26 @@ const schedule = (rows: { id: string; startsAt: string }[]) => ({
 });
 
 let renamePayload: { label?: string } | null = null;
+/** Every DELETE the page issued against a collection, in order. Empty is the
+ *  assertion that matters most: the first tap must ARM, never delete. */
+let deletedCollectionUrls: string[] = [];
 
 function setupMockRoutes(
   page: import('@playwright/test').Page,
   collections: unknown[] = [OUTLETS],
 ) {
   renamePayload = null;
+  deletedCollectionUrls = [];
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
 
     if (url.includes('/fact-collections')) {
+      // A collection DELETE ends at the id; a ROW delete has /rows/ in it.
+      if (method === 'DELETE' && !url.includes('/rows/')) {
+        deletedCollectionUrls.push(url);
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { id: OUTLETS.id } }) });
+      }
       if (method === 'PATCH') {
         renamePayload = route.request().postDataJSON();
         return route.fulfill({
@@ -212,6 +221,45 @@ test.describe('/business — the Business Surface', () => {
     await field.fill('   ');
     await expect(page.getByRole('dialog').getByRole('button', { name: t('common.save') })).toBeDisabled();
     expect(renamePayload).toBeNull();
+  });
+
+  /**
+   * The undo for «add list». It exists because a merchant created a list on
+   * 2026-08-10, could not remove it, and the duplicate had to be deleted over
+   * SSH — a create door with no delete door is not a finished feature.
+   *
+   * The property under test is that ONE tap never destroys anything: the
+   * confirm is the only undo a list gets.
+   */
+  test.describe('deleting a list', () => {
+    const deleteDoor = () =>
+      t('business.lists.deleteListActionFor', { list: OUTLETS.label });
+    const confirmDoor = () =>
+      t('business.lists.deleteListConfirmFor', { list: OUTLETS.label });
+
+    test('the first tap arms and sends nothing', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await page.getByRole('button', { name: deleteDoor() }).click();
+
+      // Armed, and the confirm names the blast radius.
+      await expect(page.getByRole('button', { name: confirmDoor() })).toBeVisible();
+      expect(deletedCollectionUrls).toEqual([]);
+    });
+
+    test('the second tap deletes that collection, and only that one', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await page.getByRole('button', { name: deleteDoor() }).click();
+      await page.getByRole('button', { name: confirmDoor() }).click();
+
+      await expect.poll(() => deletedCollectionUrls.length).toBe(1);
+      expect(deletedCollectionUrls[0]).toContain(`/fact-collections/${OUTLETS.id}`);
+      // Never the row endpoint — that deletes one row and refuses the last.
+      expect(deletedCollectionUrls[0]).not.toContain('/rows/');
+    });
   });
 
   /**
