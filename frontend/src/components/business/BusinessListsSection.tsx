@@ -8,12 +8,13 @@ import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type 
 import { addErrorBreadcrumb, captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
 import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { formatCatalogPrice } from '@/utils/priceFormat';
-import { todayISODate, formatPlainDateParts } from '@/utils/dateUtils';
+import { todayISODate, formatPlainDate, formatPlainDateParts } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, type FactListSection, type FactEntityUnit,
+  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, datedListFreshness,
+  type FactListSection, type FactEntityUnit, type DatedListFreshness,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
@@ -117,6 +118,12 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  label. */
   const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null);
 
+  // Declared before EVERY consumer: the freshness memo takes it as a
+  // dependency and `createSheets` is a JSX expression evaluated mid-body, so a
+  // later `const` would be read from its temporal dead zone and crash the
+  // section on render.
+  const today = todayISODate();
+
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
   const faceLabel = useMemo(() => discoverFaceLabel(collections), [collections]);
@@ -143,6 +150,19 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   const hasDatedRow = useMemo(
     () => collections.some((c) => c.rows.some((r) => r.startsAt !== null)),
     [collections],
+  );
+
+  /** Lists whose announced dates have run out, or are close to it. Derived
+   *  per list — a page can have a healthy directory beside an exhausted
+   *  schedule; the window itself lives with the rule, in factListLayout. */
+  const staleLists = useMemo(
+    () =>
+      collections
+        .map((collection) => ({ collection, freshness: datedListFreshness(collection, today) }))
+        .filter((entry): entry is { collection: FactCollectionWithRows; freshness: NonNullable<DatedListFreshness> } =>
+          entry.freshness !== null,
+        ),
+    [collections, today],
   );
   const sectionHint = [
     t('lists.hintQuoted'),
@@ -218,6 +238,17 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       extra: { pageId, statusCode: getStatusCode(error), backendCode },
     });
     switch (backendCode) {
+      case 'VALIDATION':
+        // The editor now refuses everything this code covers BEFORE sending
+        // (the price through the server's own reader, the name at the server's
+        // own cap), so one arriving here is a client/server contract drift —
+        // which is exactly why it still goes to Sentry above, unlike the
+        // authorization outcomes. What must never happen again is telling the
+        // merchant to «try again»: the same body will fail forever. The
+        // server's `details` are DEVELOPER strings ("Expected number, received
+        // string") and are not shown — they reach Sentry, not the merchant.
+        toast.error(t('lists.errInvalidValue'));
+        break;
       case 'STALE_ROW':
         // The row changed under us. Retrying the same body cannot work, so
         // reload and close the sheet rather than inviting a doomed second tap.
@@ -407,6 +438,8 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           keyAttr={null}
           attributeLabels={[]}
           canDelete={false}
+          today={today}
+          intlLocale={intlLocale}
           saving={saving}
           onSave={createList}
           onDelete={() => {}}
@@ -452,7 +485,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   // prompt-build time. `isRowLive` (@jawab24/shared) is the SAME predicate the
   // renderer and the SQL clause use, so the badge a merchant sees can never
   // disagree with what the AI was given. Never re-derive "expired" locally.
-  const today = todayISODate();
   const isExpired = (row: FactRowDto) => !isRowLive(row, today);
 
   /** Display price with digit grouping («35,000») — display only; forms keep
@@ -745,6 +777,31 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{sectionHint}</p>
         </div>
       </div>
+
+      {/* Announced dates retire themselves silently (D-057). Said HERE, above
+          both layouts, because a list has no card of its own in the
+          entity-card one — and this must not depend on which layout the
+          page's data happened to select. */}
+      {staleLists.length > 0 && (
+        <div className="mt-3 space-y-1.5" role="status">
+          {staleLists.map(({ collection, freshness }) => (
+            <p
+              key={collection.id}
+              className={`rounded-xl border px-3 py-2 text-xs ${
+                freshness.state === 'ended' ? 'alert-warning' : 'bg-muted/40 border-theme-border text-muted-foreground'
+              }`}
+              dir="auto"
+            >
+              {freshness.state === 'ended'
+                ? t('lists.datesEnded', { list: collection.label })
+                : t('lists.datesEnding', {
+                    list: collection.label,
+                    date: formatPlainDate(freshness.lastDate, intlLocale) ?? freshness.lastDate,
+                  })}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* The completeness word (D-038, tri-state) belongs to the LIST — it
           changes what customers are TOLD about absence. On directory pages the
@@ -1345,6 +1402,8 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           keyAttr={editing.collection.keyAttr}
           attributeLabels={collectionAttributeLabels(editing.collection)}
           canDelete={editing.collection.rows.length > 1}
+          today={today}
+          intlLocale={intlLocale}
           saving={saving}
           onSave={save}
           onDelete={removeRow}

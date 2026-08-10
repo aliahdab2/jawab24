@@ -49,9 +49,39 @@ const OUTLETS = {
   ],
 };
 
+/**
+ * Dates RELATIVE to the run, never absolute — the same discipline the demo
+ * fixture uses (`start: { inDays }`). An absolute date here would pass today
+ * and silently start testing the "expired" branch some morning next month.
+ * Built with `toLocaleDateString('en-CA')` because that is exactly what
+ * `todayISODate()` gives the component: a LOCAL calendar day, so the two
+ * cannot disagree either side of UTC midnight.
+ */
+const isoInDays = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString('en-CA');
+};
+
+/** A dated list, in the two states the freshness notice reports. */
+const schedule = (rows: { id: string; startsAt: string }[]) => ({
+  id: 'coll_slots',
+  label: 'Announced course dates',
+  keyAttr: null,
+  isComplete: null,
+  rowCount: rows.length,
+  rows: rows.map(({ id, startsAt }) => ({
+    id, name: `Cohort ${id}`, attributes: null, price: null, currency: null,
+    startsAt, endsAt: null, isAvailable: true,
+  })),
+});
+
 let renamePayload: { label?: string } | null = null;
 
-function setupMockRoutes(page: import('@playwright/test').Page) {
+function setupMockRoutes(
+  page: import('@playwright/test').Page,
+  collections: unknown[] = [OUTLETS],
+) {
   renamePayload = null;
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
@@ -65,7 +95,7 @@ function setupMockRoutes(page: import('@playwright/test').Page) {
           body: JSON.stringify({ data: { id: OUTLETS.id, label: renamePayload?.label } }),
         });
       }
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [OUTLETS] }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: collections }) });
     }
     if (url.includes('/catalog')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [], vertical: { effective: 'general', source: 'default' } }) });
@@ -182,5 +212,80 @@ test.describe('/business — the Business Surface', () => {
     await field.fill('   ');
     await expect(page.getByRole('dialog').getByRole('button', { name: t('common.save') })).toBeDisabled();
     expect(renamePayload).toBeNull();
+  });
+
+  /**
+   * Announced dates retire themselves silently (D-057). On the pilot page,
+   * 26 of 46 slots were already invisible with nothing telling the merchant.
+   * These drive the notice in a real browser — the component tests prove the
+   * derivation, this proves it reaches the screen, in both languages.
+   */
+  test.describe('the freshness notice', () => {
+    /** The template minus its interpolated date, so the assertion comes from
+     *  the translation file rather than from a hardcoded English sentence and
+     *  never depends on how Intl formats the day. */
+    const endingPrefix = (label: string, translate: typeof t) =>
+      translate('business.lists.datesEnding', { list: label, date: '@@DATE@@' }).split('@@DATE@@')[0];
+
+    test('says a list has run out once every date has passed', async ({ page }) => {
+      const slots = schedule([
+        { id: 'r1', startsAt: isoInDays(-9) },
+        { id: 'r2', startsAt: isoInDays(-1) },
+      ]);
+      await setupMockRoutes(page, [slots]);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await expect(
+        page.getByText(t('business.lists.datesEnded', { list: slots.label })),
+      ).toBeVisible();
+    });
+
+    test('names the last date when the list is within the 3-day window', async ({ page }) => {
+      const slots = schedule([
+        { id: 'r1', startsAt: isoInDays(-1) },  // already retired
+        { id: 'r2', startsAt: isoInDays(2) },   // the last one standing
+      ]);
+      await setupMockRoutes(page, [slots]);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await expect(page.getByText(endingPrefix(slots.label, t), { exact: false })).toBeVisible();
+      await expect(page.getByText(t('business.lists.datesEnded', { list: slots.label }))).toHaveCount(0);
+    });
+
+    test('stays quiet while there is runway', async ({ page }) => {
+      const slots = schedule([{ id: 'r1', startsAt: isoInDays(30) }]);
+      await setupMockRoutes(page, [slots]);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      // The list itself renders — this is silence, not an empty page.
+      await expect(page.getByText(slots.label, { exact: true }).first()).toBeVisible();
+      await expect(page.getByText(endingPrefix(slots.label, t), { exact: false })).toHaveCount(0);
+      await expect(page.getByText(t('business.lists.datesEnded', { list: slots.label }))).toHaveCount(0);
+    });
+
+    test('never nags a business that has no dates at all', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await expect(page.getByText(OUTLETS.label, { exact: true }).first()).toBeVisible();
+      await expect(page.getByText(endingPrefix(OUTLETS.label, t), { exact: false })).toHaveCount(0);
+      await expect(page.getByText(t('business.lists.datesEnded', { list: OUTLETS.label }))).toHaveCount(0);
+    });
+
+    test('says it in Arabic too', async ({ page }) => {
+      const slots = schedule([{ id: 'r1', startsAt: isoInDays(-3) }]);
+      await setupMockRoutes(page, [slots]);
+      await page.addInitScript(() => {
+        localStorage.setItem('ui-storage', JSON.stringify({
+          state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false },
+          version: 0,
+        }));
+      });
+      await page.goto(`/ar/business?page=${PAGE_ID}`);
+
+      await expect(
+        page.getByText(tAr('business.lists.datesEnded', { list: slots.label })),
+      ).toBeVisible();
+    });
   });
 });

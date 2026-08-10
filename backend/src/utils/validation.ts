@@ -3,6 +3,7 @@ import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
     MAX_ROWS_PER_COLLECTION,
     MAX_LIST_LABEL_LENGTH,
+    parseMerchantPrice,
 } from '@jawab24/shared';
 import type { CatalogVertical } from '@jawab24/shared';
 
@@ -129,33 +130,17 @@ export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
 // ==========================================
 
 /**
- * Accept a price however a merchant naturally types it (Simplicity contract §5):
- * Arabic-Indic digits (٣٥٠٠), Eastern separators (٫ decimal / ٬ thousands),
- * Western separators, or a plain number — normalized before numeric validation.
- * null/'' = "price on request".
+ * Accept a price however a merchant naturally types it (Simplicity contract §5).
+ * The normalization itself lives in `parseMerchantPrice` (@jawab24/shared) so
+ * the editor can refuse the same strings this schema rejects, INLINE, instead
+ * of the merchant discovering it as a 400 (owner report, 2026-08-10).
  *
- * Comma disambiguation (M4, PR #407): a single comma followed by exactly 1–2
- * digits is a DECIMAL comma ("3,50" → 3.50 — common comma-as-decimal habit),
- * anything else treats commas as thousands separators ("3,500" → 3500,
- * "1,234,567" → 1234567). Mis-reading "3,50" as 350 would send a 100× wrong
- * price to customers.
+ * Unparseable text is passed through untouched so `z.number()` produces the
+ * error — the client maps the code, never this developer string.
  */
 const PriceInput = z.preprocess((raw) => {
-    if (raw === null || raw === undefined || raw === '') return null;
-    if (typeof raw === 'number') return raw;
-    if (typeof raw !== 'string') return raw; // let z.number() reject it
-    let normalized = raw
-        .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-        .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
-        .replace(/٫/g, '.')
-        .trim();
-    if (/^\d+,\d{1,2}$/.test(normalized)) {
-        normalized = normalized.replace(',', '.');
-    } else {
-        normalized = normalized.replace(/[,٬\s]/g, '');
-    }
-    const num = Number(normalized);
-    return Number.isFinite(num) ? num : raw; // unparseable → fails z.number() with a clear error
+    const parsed = parseMerchantPrice(raw);
+    return parsed.ok ? parsed.value : raw;
 }, z.number().min(0, 'Price must be non-negative').max(9_999_999_999.99).nullable());
 
 /** Currency label as the merchant or extractor writes it next to the price — a
