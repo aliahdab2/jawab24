@@ -12,6 +12,8 @@ interface BuyTopUpCTAProps {
     planSlug?: string;
     /** Shopify-billed workspaces can't buy Stripe top-ups (D-G) — hides the CTA. */
     paymentMethod?: string;
+    /** Salla merchants can't buy Stripe top-ups (Article 5) — hides the CTA. */
+    sallaBilled?: boolean;
     /** Override default 'primary' button variant. */
     variant?: 'primary' | 'secondary';
     size?: 'sm' | 'md';
@@ -25,14 +27,17 @@ interface BuyTopUpCTAProps {
  *   - User is on the Free plan (must subscribe first before topping up)
  *   - The workspace is Shopify-billed (D-G: no Stripe surfaces beside
  *     Shopify-managed billing)
+ *   - The merchant came from Salla (Article 5: paid plans must be billed
+ *     through Salla, so no Stripe top-up either)
  */
-export function BuyTopUpCTA({ userEmail, planSlug, paymentMethod, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
+export function BuyTopUpCTA({ userEmail, planSlug, paymentMethod, sallaBilled, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
     const t = useTranslations('topup');
     const [isOpen, setIsOpen] = useState(false);
 
     if (isIOSNative()) return null;
     if (planSlug === 'free') return null;
     if (paymentMethod === 'shopify') return null;
+    if (sallaBilled) return null;
 
     return (
         <>

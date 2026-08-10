@@ -286,7 +286,7 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
           {hasActiveSubscription && !isSanctioned && (
             <div className="text-center mt-6 flex flex-col items-center gap-2">
               <p className="text-sm text-muted-foreground">{tPricing('scaleOneTimeQuestion')}</p>
-              <BuyTopUpCTA variant="secondary" size="sm" planSlug={currentPlanSlug} paymentMethod={usage?.subscription?.paymentMethod} userEmail={user?.email} />
+              <BuyTopUpCTA variant="secondary" size="sm" planSlug={currentPlanSlug} paymentMethod={usage?.subscription?.paymentMethod} sallaBilled={usage?.subscription?.sallaBilled} userEmail={user?.email} />
             </div>
           )}
 

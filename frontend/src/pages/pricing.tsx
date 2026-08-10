@@ -540,6 +540,16 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 )}
               </div>
             )}
+
+            {/* Salla merchants are billed through Salla (Article 5). The grid
+                stays browsable, but every select action is refused by the
+                useSelectPlan guard — say so up front. No CTA: Salla billing
+                does not exist yet, so there is nowhere to link. */}
+            {usage.subscription.sallaBilled && (
+              <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
+                <span className="font-medium">{tPricing('sallaManagedBody')}</span>
+              </div>
+            )}
           </div>
         )}
 

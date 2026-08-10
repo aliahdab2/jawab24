@@ -65,6 +65,17 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
       return;
     }
 
+    // Salla merchants must be billed through Salla (apps-policy Article 5), so
+    // every Stripe path below is off-limits for them too. Unlike Shopify there
+    // is nowhere to send them yet — Salla billing does not exist, we ship the
+    // free tier there — so this is a plain "coming soon" notice, not a deep
+    // link. The backend enforces the same rule (code SALLA_BILLED); this is
+    // the friendly layer that stops them reaching a refusal at all.
+    if (usage?.subscription?.sallaBilled) {
+      toast.info(tPricing('sallaManagedToast'));
+      return;
+    }
+
     // On native (Android/iOS), hand off to Stripe-HOSTED checkout.
     //
     // Store policy prohibits in-app purchases via Stripe, so payment always

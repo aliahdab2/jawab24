@@ -1069,3 +1069,56 @@ Stripe (0/7 top-ups) but can pay Apple's Libya storefront in local currency. Gat
 verify Libya-storefront payment methods with a real Libyan Apple ID, enroll in the
 Small Business Program (15%), sign the Paid Apps Agreement. Do not build IAP before the
 app is launched and that verification is done.
+
+## D-065 · Salla Article 5: suppress Stripe for Salla merchants, exempt existing Stripe payers
+
+Owner ruling, 2026-08-10 (unblocked the same day Salla Partners ID verification was approved).
+
+**The rule.** An account must bill through Salla — and every Stripe surface is refused with
+400 `SALLA_BILLED` — when it has an **active Salla store** AND no established live Stripe
+relationship. A merchant who signed up on jawab24.com, paid through Stripe, and only later
+connected their Salla store is **exempt**: they were never a Salla-sourced sale, and pulling
+their billing rail out from under them is both a revenue loss and a broken experience.
+
+**Why it was ruled.** Salla apps-policy Article 5 mandates paid-app payment through Salla.
+We launch free-tier-only, which is compliant on its own, but a Salla merchant who exhausted
+the free quota still saw the product's normal upgrade CTAs — which led to Stripe. That is
+inadvertent steering, and the penalty is delisting; unpublishing a live Salla app is not
+self-serve (booked meeting with Salla), so the downside cannot be undone by us. This was
+flagged OPEN on 2026-08-01 and was the last engineering gate before submitting app 665811310.
+
+**Two rejected alternatives.** (a) Blanket suppression for every Salla-connected workspace —
+over-compliant: it silently strips the upgrade path from direct customers we already paid to
+acquire. (b) An `install_source` marker distinguishing App-Store-sourced installs — precise,
+but costs a migration, and once the app publishes Easy Mode is mandatory, so effectively
+every new Salla connect is App-Store-sourced anyway; the precision buys nothing going forward.
+
+**The trap this rule steps around.** A fresh signup is created `status='trialing'` with
+`payment_method` **NULL**. Exempting on status alone would exempt every user on the platform,
+and the guard would silently never fire — indistinguishable from "shipped and working" right
+up until Salla delists the app. The exemption therefore requires `payment_method='stripe'`,
+which is only ever written after a real Stripe payment. Pinned by
+`backend/test/config/sallaBilling.test.ts`.
+
+**Scope of the subject.** Store presence is resolved against the workspace OWNER (the D-E
+entitlement subject), across every workspace they own — NOT the workspace currently being
+viewed. One subscription serves all of an owner's workspaces, so a per-workspace scope would
+let the UI offer an upgrade the payment API then refuses (the dead-end the Shopify review
+caught as H2).
+
+**Precedence.** Shopify's D-G guard runs first and is unchanged; when both rails apply to one
+account, the refusal is `SHOPIFY_BILLED`, because Shopify has an admin deep link to send the
+merchant to and Salla does not.
+
+**Known uncovered surface (found in the persona review, owner decision owed).** The guard
+covers the six merchant-facing Stripe entry points. `services/admin/billing.ts:createPaymentRequest`
+mints a hosted Stripe Checkout link for an arbitrary user and consults **neither** marketplace
+rule — pre-existing, and equally unguarded for Shopify's D-G. It is admin-only and deliberate
+rather than a self-serve leak, and the manual rail is how we bill merchants Stripe cannot serve,
+so it was documented rather than silently blocked. Decide: guard it, warn in the admin UI, or
+accept it as a staffed-process risk.
+
+**Not implemented, deliberately:** Salla billing itself. When it lands (`'salla'` subscription
+source driven by `app.subscription.*` webhooks), the suppression becomes a redirect to Salla's
+plan management and the exemption predicate is replaced by a subscription-reading
+`isSallaBilled(row)`, exactly like Shopify's.

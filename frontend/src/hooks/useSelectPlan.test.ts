@@ -222,3 +222,69 @@ describe('useSelectPlan — Shopify-billed workspace (D-G)', () => {
         expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=month');
     });
 });
+
+describe('useSelectPlan — Salla merchant (apps-policy Article 5)', () => {
+    // Salla mandates that paid apps bill through Salla. We ship free-tier-only
+    // there, so unlike Shopify there is nowhere to route a plan click: it must
+    // stop at an informational toast and never touch a Stripe path.
+    const sallaUsage = (over: Record<string, unknown> = {}) => ({
+        subscription: {
+            plan: { slug: 'free' },
+            status: 'trialing',
+            sallaBilled: true,
+            ...over,
+        },
+    } as unknown as UsageSummary);
+
+    it('stops plan clicks with a toast — no Stripe path runs', async () => {
+        nativeState.native = false;
+        const { result } = render(sallaUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockToastInfo).toHaveBeenCalled();
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+    });
+
+    it('guards the NATIVE hosted-checkout path too', async () => {
+        nativeState.native = true;
+        const { result } = render(sallaUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+    });
+
+    // The exemption is resolved server-side (mustBillThroughSalla): a merchant
+    // already paying through Stripe simply arrives with sallaBilled absent, and
+    // must keep the normal flow.
+    it('does NOT guard when sallaBilled is absent — normal Stripe flow proceeds', async () => {
+        nativeState.native = false;
+        const { result } = render({
+            subscription: { plan: { slug: 'starter' }, status: 'trialing' },
+        } as unknown as UsageSummary);
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockToastInfo).not.toHaveBeenCalled();
+        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=month');
+    });
+
+    // Both rails can apply to one account (a merchant with both stores).
+    // Shopify wins because it has somewhere to send them.
+    it('prefers the Shopify deep link when both rails apply', async () => {
+        nativeState.native = false;
+        const { result } = render(sallaUsage({
+            paymentMethod: 'shopify',
+            shopifyManageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+        }));
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://admin.shopify.com/store/test/charges/jawab24/pricing_plans');
+        expect(mockToastInfo).not.toHaveBeenCalled();
+    });
+});
