@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Trash2, Plus } from 'lucide-react';
+import { parseMerchantPrice } from '@jawab24/shared';
 import { DetailSheet, Button, InfoPopover } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { formatCatalogPrice } from '@/utils/priceFormat';
+import { formatPlainDate } from '@/utils/dateUtils';
 import type { FactRowDto } from '@/lib/api';
 
 /** Attributes per row are capped so a merchant can't balloon the prompt block
  *  one field at a time — 12 is far above any real row (max seen: 4). */
 const MAX_ATTRS = 12;
+
+/** Mirrors the server's `name` cap. A silent client cap is friendlier than a
+ *  400 the merchant cannot read, and it keeps VALIDATION responses meaningful:
+ *  one arriving now is a contract drift, not a typo. */
+const MAX_ROW_NAME = 200;
 
 interface AttrField {
   label: string;
@@ -38,6 +45,14 @@ interface ListRowSheetProps {
   /** Whether this row may be deleted (the LAST row of a collection may not —
    *  an empty collection would silently drop its coverage boundary). */
   canDelete: boolean;
+  /** Today as `YYYY-MM-DD`, from the SAME source the list renders visibility
+   *  with — passed in, never read from the clock here, so the sheet's account
+   *  of what customers see cannot disagree with the list's (`isRowLive`). */
+  today: string;
+  /** BCP-47 tag for date display. The native picker's own format follows the
+   *  BROWSER locale and is not ours to set; everything WE render goes through
+   *  Intl with the app's locale. */
+  intlLocale: string;
   saving: boolean;
   onSave: (body: {
     name: string;
@@ -78,6 +93,8 @@ export function ListRowSheet({
   keyAttr,
   attributeLabels,
   canDelete,
+  today,
+  intlLocale,
   saving,
   onSave,
   onDelete,
@@ -126,6 +143,29 @@ export function ListRowSheet({
   };
   const anyLabelTaken = attrs.some((a, i) => a.added && labelTaken(a.label, i));
   const dateRangeInvalid = !!date && !!endDate && endDate < date;
+  /** The SAME reader the server validates with (@jawab24/shared), so what the
+   *  sheet accepts and what the API accepts cannot drift. Empty is valid — a
+   *  row without a price is an ordinary row, not an incomplete one. */
+  const priceInvalid = !parseMerchantPrice(price).ok;
+
+  /**
+   * What the start date DOES, stated at the field.
+   *
+   * The rule (D-057) is that a dated row leaves the prompt the day after it
+   * starts — so a start date in the past means «customers never see this row»,
+   * silently. That consequence used to live only behind an info icon, which is
+   * a WCAG 3.3.2 gap (instructions must be available where input is required)
+   * and, more plainly, the reason a merchant can set a date and watch a row
+   * vanish with no explanation anywhere on the screen.
+   *
+   * Computed from `isRowLive`'s own comparison, not a second reading of it.
+   */
+  const startDateState: 'none' | 'live' | 'passed' =
+    !date ? 'none' : date >= today ? 'live' : 'passed';
+  /** Never make an existing value unreachable: a row already dated in the past
+   *  keeps its own date as the floor, so editing its NAME does not force a
+   *  date change. New rows cannot be dated into invisibility at all. */
+  const minStartDate = row?.startsAt && row.startsAt < today ? row.startsAt : today;
 
   const originalEnd = row?.endsAt && row.endsAt !== row.startsAt ? row.endsAt : '';
   const dirty =
@@ -148,7 +188,7 @@ export function ListRowSheet({
       ]);
 
   const submit = () => {
-    if (saving || !name.trim() || anyLabelTaken || dateRangeInvalid) return;
+    if (saving || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid) return;
     const keptAttrs = attrs
       .map((a) => ({ label: a.label.trim(), value: a.value.trim() }))
       .filter((a) => a.label.length > 0 && a.value.length > 0);
@@ -204,6 +244,7 @@ export function ListRowSheet({
             onChange={(e) => setName(e.target.value)}
             dir={name ? 'auto' : undefined}
             autoFocus={!row}
+            maxLength={MAX_ROW_NAME}
             className={inputClass}
           />
         </div>
@@ -294,8 +335,17 @@ export function ListRowSheet({
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               placeholder={t('lists.rowPriceOptional')}
+              aria-invalid={priceInvalid || undefined}
+              aria-describedby={priceInvalid ? 'list-row-price-error' : undefined}
               className={inputClass}
             />
+            {/* Said HERE, at the field, while the merchant is still looking at
+                it — not as a toast after a failed round-trip. */}
+            {priceInvalid && (
+              <p id="list-row-price-error" className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                {t('lists.priceInvalid')}
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="list-row-currency" className="block text-sm text-muted-foreground mb-1.5">
@@ -327,7 +377,9 @@ export function ListRowSheet({
               id="list-row-date"
               type="date"
               value={date}
+              min={minStartDate}
               onChange={(e) => setDate(e.target.value)}
+              aria-describedby={startDateState === 'none' ? undefined : 'list-row-date-effect'}
               className={inputClass}
             />
           </div>
@@ -348,6 +400,19 @@ export function ListRowSheet({
         </div>
         {dateRangeInvalid && (
           <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
+        )}
+        {/* The consequence, in the merchant's terms, next to the control that
+            causes it — and only once a date exists, so an undated row (the
+            common case) reads no warning about a feature it never uses. */}
+        {startDateState === 'live' && (
+          <p id="list-row-date-effect" className="text-xs text-muted-foreground">
+            {t('lists.rowDateShownUntil', { date: formatPlainDate(date, intlLocale) ?? date })}
+          </p>
+        )}
+        {startDateState === 'passed' && (
+          <p id="list-row-date-effect" className="text-xs text-amber-700 dark:text-amber-400" role="status">
+            {t('lists.rowDatePassed')}
+          </p>
         )}
 
         {/* Destructive action at the END of the form, spatially far from Save
@@ -383,7 +448,7 @@ export function ListRowSheet({
           size="sm"
           onClick={submit}
           loading={saving && !confirmingDelete}
-          disabled={!dirty || !name.trim() || anyLabelTaken || dateRangeInvalid}
+          disabled={!dirty || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >

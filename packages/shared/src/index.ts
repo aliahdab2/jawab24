@@ -1775,3 +1775,8 @@ export type {
 // it; see factSchedule.ts for why the SQL copy needs a contract test. ---
 export { isRowLive } from './factSchedule';
 export type { FactRowSchedule } from './factSchedule';
+// --- Merchant-typed price → number. The server validates writes with it and
+// the editor refuses with it, so the two cannot disagree about what «50 ألف»
+// means (it means "unreadable", and the merchant is told so). ---
+export { parseMerchantPrice } from './price';
+export type { ParsedPrice } from './price';

@@ -187,6 +187,12 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   // without collections".
   if (isLoading) return null;
 
+  // Declared HERE, above the early returns and above `createSheets`, because
+  // that sheet is a JSX expression evaluated at this point in the body — a
+  // later `const` would be read from its temporal dead zone and crash the
+  // section on render.
+  const today = todayISODate();
+
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['fact-collections', pageId] });
 
   /**
@@ -218,6 +224,17 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       extra: { pageId, statusCode: getStatusCode(error), backendCode },
     });
     switch (backendCode) {
+      case 'VALIDATION':
+        // The editor now refuses everything this code covers BEFORE sending
+        // (the price through the server's own reader, the name at the server's
+        // own cap), so one arriving here is a client/server contract drift —
+        // which is exactly why it still goes to Sentry above, unlike the
+        // authorization outcomes. What must never happen again is telling the
+        // merchant to «try again»: the same body will fail forever. The
+        // server's `details` are DEVELOPER strings ("Expected number, received
+        // string") and are not shown — they reach Sentry, not the merchant.
+        toast.error(t('lists.errInvalidValue'));
+        break;
       case 'STALE_ROW':
         // The row changed under us. Retrying the same body cannot work, so
         // reload and close the sheet rather than inviting a doomed second tap.
@@ -407,6 +424,8 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           keyAttr={null}
           attributeLabels={[]}
           canDelete={false}
+          today={today}
+          intlLocale={intlLocale}
           saving={saving}
           onSave={createList}
           onDelete={() => {}}
@@ -452,7 +471,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   // prompt-build time. `isRowLive` (@jawab24/shared) is the SAME predicate the
   // renderer and the SQL clause use, so the badge a merchant sees can never
   // disagree with what the AI was given. Never re-derive "expired" locally.
-  const today = todayISODate();
   const isExpired = (row: FactRowDto) => !isRowLive(row, today);
 
   /** Display price with digit grouping («35,000») — display only; forms keep
@@ -1345,6 +1363,8 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           keyAttr={editing.collection.keyAttr}
           attributeLabels={collectionAttributeLabels(editing.collection)}
           canDelete={editing.collection.rows.length > 1}
+          today={today}
+          intlLocale={intlLocale}
           saving={saving}
           onSave={save}
           onDelete={removeRow}
