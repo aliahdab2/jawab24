@@ -16,6 +16,7 @@ import { useTranslations } from 'next-intl';
 import { Toaster } from 'sonner';
 import { isNativePlatform, isIOSNative } from '@/lib/capacitor';
 import { isIOSBlockedRoute } from '@/lib/paymentRoutes';
+import { useIOSRouteGuard } from '@/hooks/useIOSRouteGuard';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
@@ -411,38 +412,10 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   }, []);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
-  // App Store Guideline 3.1.1 — ONE choke point for every route entry on iOS.
-  //
-  // The deep-link handler below refuses blocked routes at the door, but it only
-  // sees links arriving from OUTSIDE the app. Any in-app navigation — a stray
-  // <Link> (the landing footer still links to /compare/*), router.push, or
-  // restored history — goes straight past it. Deleting the exported HTML does
-  // not help either: Next serves a client-side navigation from the page's JS
-  // chunk under _next/static/, which the build-time strip never touches. That
-  // is not theoretical — com.jawab24.app://compare/manychat rendered the full
-  // comparison table with "15 دولاراً شهرياً" on a simulator running a build
-  // whose compare/manychat.html had been deleted (2026-08-10).
-  //
-  // Guarding router.events here covers every entry path at once, and means a
-  // new priced page is protected without anyone remembering to add a hook to
-  // it. Aborting by throwing from routeChangeStart is Next's documented way to
-  // cancel a navigation; it stops the route being ENTERED, so there is no
-  // partially-rendered frame to flash a price.
-  useEffect(() => {
-    if (!isIOSNative()) return;
-
-    const guard = (url: string) => {
-      if (!isIOSBlockedRoute(url)) return;
-      router.events.emit('routeChangeError');
-      // Next cancels the navigation when routeChangeStart throws. The string is
-      // swallowed by the router; it is a control-flow signal, not an error, so
-      // it deliberately does not go through captureError.
-      throw 'Route cancelled: App Store Guideline 3.1.1';
-    };
-
-    router.events.on('routeChangeStart', guard);
-    return () => router.events.off('routeChangeStart', guard);
-  }, [router]);
+  // App Store Guideline 3.1.1 — the single choke point for route entry on iOS.
+  // Lives in a hook so it can be tested against a real router; see the hook for
+  // why the build-time layers cannot replace it.
+  useIOSRouteGuard();
 
   useEffect(() => {
     if (!hasHydrated || !isNativePlatform()) return;
