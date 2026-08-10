@@ -135,7 +135,6 @@
     "renameActionFor": "تعديل اسم القائمة «{list}»",
     "listOptionsFor": "خيارات القائمة «{list}»",
     "filteringByList": "تُعرض عناصر «{list}» فقط",
-    "addItemTo": "إضافة عنصر إلى «{list}»",
     "showAll": "إظهار الكل",
     "completenessChipComplete": "كاملة",
     "completenessChipPartial": "جزئية",

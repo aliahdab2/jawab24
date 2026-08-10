@@ -135,7 +135,6 @@
     "renameActionFor": "Rename the list «{list}»",
     "listOptionsFor": "Options for the list «{list}»",
     "filteringByList": "Showing only items from «{list}»",
-    "addItemTo": "Add an item to «{list}»",
     "showAll": "Show all",
     "completenessChipComplete": "Complete",
     "completenessChipPartial": "Partial",

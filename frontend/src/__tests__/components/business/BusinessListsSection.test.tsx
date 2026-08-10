@@ -630,17 +630,24 @@ describe('BusinessListsSection', () => {
       expect(screen.getByText('أسعار الدورات', { selector: 'p' })).toBeInTheDocument();
     });
 
-    it('with a strip filter active, targets the filtered list directly — no chooser', async () => {
+    it('a tapped strip line opens the LIST as a list — its rows, its own add door, no chooser', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
       await screen.findByText('دورة ICDL');
       // Tap the list's line in the strip (its accessible name = label + count).
+      // Filtering the entity CARDS was the first attempt and measured wrong:
+      // prices and schedules cover the same courses, so either tap showed the
+      // same cards. Now the tap swaps in the DIRECTORY view of that one list.
       fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
-      fireEvent.click(screen.getByRole('button', {
-        name: en.lists.addItemTo.replace('{list}', 'مواعيد الدورات المعلنة'),
-      }));
 
+      // The directory card: the list's own heading, the way back, and the
+      // entity cards gone (the price-only course has no card on screen).
+      expect(screen.getByRole('heading', { name: 'مواعيد الدورات المعلنة' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: en.lists.showAll })).toBeInTheDocument();
+
+      // Its own add door targets THIS list — no chooser step.
+      fireEvent.click(screen.getByRole('button', { name: en.lists.addItem }));
       expect(screen.getByRole('heading', { name: en.lists.addRow })).toBeInTheDocument();
       expect(screen.getByText('مواعيد الدورات المعلنة', { selector: 'p' })).toBeInTheDocument();
     });

@@ -829,7 +829,10 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               <button
                 type="button"
                 aria-pressed={activeListId === collection.id}
-                onClick={() => setActiveListId(activeListId === collection.id ? null : collection.id)}
+                // Same rule as the directory tabs: switching views clears the
+                // search — a leftover query would filter the next view with
+                // nothing on screen explaining why.
+                onClick={() => { setActiveListId(activeListId === collection.id ? null : collection.id); setListSearch(''); }}
                 className={`min-w-0 flex-1 min-h-[36px] flex items-center gap-2 rounded-lg px-1.5 -ms-1.5 text-start hover:bg-surface-100 ${
                   activeListId === collection.id ? 'text-brand-700 dark:text-brand-400' : 'text-foreground'
                 }`}
@@ -905,9 +908,38 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           labelled section per list so a price and a session can't be
           confused. Section titles are the merchant's own list labels. */}
       <div className="mt-4 space-y-3">
-        {!aggregates && collections
-          .filter((collection) => collections.length <= 1
-            || collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id))
+        {/* A tapped strip line REPLACES the cards with that list's directory
+            view (below) — this line says so where the content is, with the
+            way back. */}
+        {aggregates && activeListId && (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+            <span className="min-w-0 break-words" dir="auto">
+              {t('lists.filteringByList', {
+                list: collections.find((c) => c.id === activeListId)?.label ?? '',
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setActiveListId(null)}
+              className="min-h-[32px] flex-shrink-0 rounded-full border border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+            >
+              {t('lists.showAll')}
+            </button>
+          </p>
+        )}
+        {(!aggregates || activeListId !== null) && collections
+          .filter((collection) => {
+            // Entity-card pages: a tapped strip line opens THAT list in this
+            // directory presentation — the list AS a list (its own columns,
+            // key-grouped), not the same entity cards minus a few. Filtering
+            // cards was the first attempt and it measured wrong the same
+            // night: prices and schedules cover nearly the same courses, so
+            // tapping either list showed the same cards with the same content
+            // (owner: «بتضغط على مواعيد الدورات بترجع بتطلع نفسها»).
+            if (aggregates) return collection.id === activeListId;
+            return collections.length <= 1
+              || collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id);
+          })
           .map((collection) => {
           const syntheticGroup: FactListGroup = {
             key: collection.id,
@@ -1121,7 +1153,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             </div>
           );
         })}
-        {aggregates && (() => {
+        {aggregates && activeListId === null && (() => {
           // Live search over ALL entity cards — same folding as the directory
           // search (either script's digits, hamza/taa-marbuta), matching the
           // entity name and any row name/attribute. The pilot page holds 40
@@ -1141,33 +1173,9 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               fold(row.name).includes(query)
               || (row.attributes ?? []).some((a) => fold(a.value).includes(query) || fold(a.label).includes(query)));
           };
-          // The strip's list filter composes WITH the search: a tapped list
-          // narrows the cards to entities holding a row in it, and the search
-          // then narrows within that.
-          const inActiveList = (group: FactListGroup) =>
-            !activeListId || group.rows.some(({ collection }) => collection.id === activeListId);
-          const visibleGroups = groups.filter((g) => inActiveList(g) && (!searchable || groupMatches(g)));
+          const visibleGroups = searchable ? groups.filter(groupMatches) : groups;
           return (
             <>
-              {/* The filter must announce itself at the CARDS, not only in the
-                  strip: a merchant who scrolled past it would see 3 cards and
-                  conclude the rest were lost. */}
-              {activeListId && (
-                <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-                  <span className="min-w-0 break-words" dir="auto">
-                    {t('lists.filteringByList', {
-                      list: collections.find((c) => c.id === activeListId)?.label ?? '',
-                    })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveListId(null)}
-                    className="min-h-[32px] flex-shrink-0 rounded-full border border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
-                  >
-                    {t('lists.showAll')}
-                  </button>
-                </p>
-              )}
               {searchable && (
                 <div>
                   {/* Same dir rule as the directory box: empty → inherit the
@@ -1464,19 +1472,10 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               otherwise one tap expands to per-list chips (progressive
               disclosure, same pattern the per-card add used). */}
           {aggregates && (() => {
-            const activeCollection = collections.find((c) => c.id === activeListId) ?? null;
-            if (activeCollection) {
-              return (
-                <button
-                  type="button"
-                  onClick={() => setEditing({ collection: activeCollection, row: null })}
-                  className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
-                >
-                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span className="min-w-0 break-words" dir="auto">{t('lists.addItemTo', { list: activeCollection.label })}</span>
-                </button>
-              );
-            }
+            // With a list OPEN (strip tap), its directory card carries its own
+            // «إضافة عنصر» footer — a second door here would be the crowding
+            // this slice exists to remove.
+            if (activeListId) return null;
             if (addingItem) {
               return collections.map((c) => (
                 <button
