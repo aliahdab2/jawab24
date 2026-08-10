@@ -102,6 +102,49 @@ describe('pagesService.getPages — integration', () => {
         }
     });
 
+    it('still returns archived pages (the Facebook sync depends on seeing them)', async () => {
+        // Archived rows are hidden by the pages CONTROLLER, never by this service:
+        // syncFromFacebook builds its existing-page map and revoke list from here,
+        // so filtering at this level would re-insert duplicates and mis-revoke.
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        await createTestPage(user.id, {
+            name: 'Hidden Page',
+            workspaceId: workspace.id,
+            accessToken: '',
+            autoReplyEnabled: false,
+            archivedAt: new Date(),
+        });
+
+        const pages = await pagesService.getPages(workspace.id);
+
+        expect(pages).toHaveLength(1);
+        expect(pages[0].name).toBe('Hidden Page');
+        expect(pages[0].archivedAt).toBeInstanceOf(Date);
+    });
+
+    it('archivePage hides a disconnected page and refuses a connected one', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const disconnected = await createTestPage(user.id, {
+            name: 'Dead Page', workspaceId: workspace.id, accessToken: '', autoReplyEnabled: false,
+        });
+        const connected = await createTestPage(user.id, {
+            name: 'Live Page', workspaceId: workspace.id, accessToken: 'live-token',
+        });
+
+        const archived = await pagesService.archivePage(workspace.id, disconnected.id);
+        expect(archived.status).toBe('archived');
+
+        const refused = await pagesService.archivePage(workspace.id, connected.id);
+        expect(refused.status).toBe('not_disconnected');
+
+        const pages = await pagesService.getPages(workspace.id);
+        const stored = pages.find(p => p.id === disconnected.id);
+        expect(stored?.archivedAt).toBeInstanceOf(Date);
+        expect(pages.find(p => p.id === connected.id)?.archivedAt).toBeNull();
+    });
+
     it('returns empty array for workspace with no pages', async () => {
         const user = await createTestUser();
         const workspace = await createTestWorkspace(user.id);

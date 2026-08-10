@@ -268,6 +268,15 @@ export const pages = pgTable('pages', {
     consecutiveSendFailures: integer('consecutive_send_failures').default(0).notNull(),
     autoPauseReason: varchar('auto_pause_reason', { length: 30 }),
     autoPausedAt: timestamp('auto_paused_at'),
+    // Merchant-initiated soft-hide of an already-DISCONNECTED Facebook page
+    // (agencies rotate pages and their dead cards pile up on the channels
+    // screen). The row and ALL its data are kept — hard delete stays an
+    // admin/GDPR action. Hidden from merchant surfaces by the filter in the
+    // pages controller's getAll, NEVER inside pagesService.getPages: the
+    // Facebook sync needs archived rows in its existing-page map, or it would
+    // re-insert duplicates and mis-compute the revoke list. Sync clears this
+    // automatically when the page reappears in the merchant's Meta grant.
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

@@ -440,6 +440,10 @@ export interface Page {
   // auto-reply. See docs/page-auto-pause.md.
   autoPauseReason?: 'send_rejected' | null;
   autoPausedAt?: string | Date | null;
+  // Merchant soft-hid this disconnected page. Never present on pages returned by
+  // GET /pages (the controller filters archived rows out) — it reaches the client
+  // only through admin payloads. Reconnecting via Facebook clears it.
+  archivedAt?: string | Date | null;
   // Computed/joined fields
   commentsCount?: number;
   repliesCount?: number;

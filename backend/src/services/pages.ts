@@ -10,7 +10,7 @@ import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
 import { subscriptionsService } from './subscriptions';
 import { channelTrialService } from './channelTrial';
-import { logAutoReplyToggle } from './auditLog';
+import { logAutoReplyToggle, auditLog } from './auditLog';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
@@ -934,6 +934,52 @@ export class PagesService {
     }
 
     /**
+     * Archive (soft-hide) a disconnected Facebook page.
+     *
+     * Agencies rotate pages, and every rotation leaves a dead card on the channels
+     * screen with no merchant-facing remedy (hard delete is admin/GDPR only). This
+     * hides the card while keeping the row and ALL its data: reconnecting the page
+     * through Facebook clears `archivedAt` in `syncFromFacebook` and the page comes
+     * back exactly as it was.
+     *
+     * Only a page Facebook has already disconnected can be archived — archiving is
+     * NOT a disconnect. A page whose Facebook token died but whose WhatsApp channel
+     * is still live shows the same reconnect banner, yet hiding it would bury a
+     * working channel, so it is refused too.
+     */
+    async archivePage(workspaceId: string, pageId: string): Promise<
+        | { status: 'not_found' }
+        | { status: 'not_disconnected' }
+        | { status: 'archived'; page: typeof pages.$inferSelect; already: boolean }
+    > {
+        const [page] = await db
+            .select()
+            .from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
+
+        if (!page) return { status: 'not_found' };
+
+        // Mirrors serializePage's connection rules: a Facebook page with a blanked
+        // token, and no live WhatsApp channel behind it.
+        const whatsappConnected = !!page.whatsappAccessToken && page.whatsappAccessToken !== '';
+        if (!page.facebookPageId || !isPageDisconnected(page) || whatsappConnected) {
+            return { status: 'not_disconnected' };
+        }
+
+        // Idempotent: a double-submit (or a stale tab) must not rewrite the timestamp
+        // or emit a second audit event.
+        if (page.archivedAt) return { status: 'archived', page, already: true };
+
+        const [updated] = await db
+            .update(pages)
+            .set({ archivedAt: new Date(), updatedAt: new Date() })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return { status: 'archived', page: updated, already: false };
+    }
+
+    /**
      * Sync pages from Facebook (and linked Instagram accounts)
      * @param workspaceId - The workspace ID to sync pages for
      * @param userId - The user ID (billing owner)
@@ -1118,11 +1164,27 @@ export class PagesService {
                         instagramProfilePicUrl,
                         businessProfile,
                         businessProfileUpdatedAt: new Date(),
+                        // Un-archive: the page is back in the merchant's Meta grant, so
+                        // they want it again. Applied unconditionally (NOT inside the
+                        // isOriginalConnector spread) — a team member's sync proves the
+                        // same intent even though it may not refresh the token.
+                        archivedAt: null,
                         updatedAt: new Date(),
                     })
                     .where(eq(pages.id, existingPage.id))
                     .returning();
                 syncedPages.push(updated);
+                if (existingPage.archivedAt) {
+                    void auditLog({
+                        userId,
+                        workspaceId,
+                        pageId: existingPage.id,
+                        action: 'page.unarchived',
+                        entityType: 'page',
+                        entityId: existingPage.id,
+                        metadata: { reason: 'fb_sync' },
+                    });
+                }
 
                 // Subscribe page to webhook events (idempotent — safe to re-subscribe)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
@@ -1205,6 +1267,10 @@ export class PagesService {
                                 // through the existingPage branch above, which KEEPS the override.)
                                 leadStages: null,
                                 leadFields: null,
+                                // A claimed page is live again in its new workspace — an
+                                // archive flag set by the PREVIOUS owner must not keep it
+                                // hidden here.
+                                archivedAt: null,
                                 updatedAt: new Date(),
                             })
                             .where(eq(pages.id, globalExisting.id))
@@ -1216,6 +1282,17 @@ export class PagesService {
                         return row;
                     });
                     syncedPages.push(claimed);
+                    if (globalExisting.archivedAt) {
+                        void auditLog({
+                            userId,
+                            workspaceId,
+                            pageId: claimed.id,
+                            action: 'page.unarchived',
+                            entityType: 'page',
+                            entityId: claimed.id,
+                            metadata: { reason: 'fb_sync', fromWorkspaceId: globalExisting.workspaceId },
+                        });
+                    }
                     // Reclaiming a disconnected page (re)establishes its auto-reply
                     // state via Facebook — audit it as an fb_sync transition.
                     logAutoReplyToggle({

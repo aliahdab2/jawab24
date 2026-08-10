@@ -74,6 +74,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.delete);
 
+        adminRoutes.post('/pages/:id/archive', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Archive (soft-hide) a disconnected page — data is kept and restored on reconnect',
+                security: auth,
+            },
+        }, pagesController.archive);
+
         adminRoutes.patch('/pages/:id/auto-reply', {
             schema: {
                 tags: ['Pages'],

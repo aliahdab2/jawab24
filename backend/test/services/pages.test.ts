@@ -4,6 +4,7 @@ import { db } from '../../src/db';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
 import { channelTrialService } from '../../src/services/channelTrial';
+import { auditLog } from '../../src/services/auditLog';
 import {
     comments as commentsTable,
     instagramComments as instagramCommentsTable,
@@ -397,6 +398,125 @@ describe('PagesService', () => {
             expect(revokeWrite).toBeDefined();
             expect(revokeWrite.autoReplyEnabled).toBe(false);
             expect(revokeWrite.autoReplyDisabledReason).toBeNull();
+        });
+
+        it('un-archives a page that reappears in the Facebook grant', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'user-123';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-1', name: 'Page 1', access_token: 'pt-1' }],
+            });
+
+            // The merchant had hidden this disconnected page; granting it again in
+            // Facebook is the un-hide signal.
+            const existingPages = [{
+                id: 'p1', facebookPageId: 'fb-page-1', name: 'Page 1', accessToken: '',
+                userId, archivedAt: new Date('2026-08-01T00:00:00Z'),
+            }];
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(existingPages) }),
+                    }),
+                }),
+            } as any);
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const setCalls: any[] = [];
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    setCalls.push(values);
+                    return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'p1' }]) }) };
+                }),
+            } as any);
+
+            await pagesService.syncFromFacebook(workspaceId, userId, 'token-123');
+
+            const updateWrite = setCalls.find(v => 'archivedAt' in v);
+            expect(updateWrite).toBeDefined();
+            expect(updateWrite.archivedAt).toBeNull();
+            expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'page.unarchived',
+                pageId: 'p1',
+                metadata: expect.objectContaining({ reason: 'fb_sync' }),
+            }));
+        });
+
+        it('un-archives even when the syncing user is not the original connector', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'team-member';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-1', name: 'Page 1', access_token: 'pt-1' }],
+            });
+
+            // Original connector is someone else → the token is NOT refreshed, but the
+            // page's presence in the grant still proves the workspace wants it visible.
+            const existingPages = [{
+                id: 'p1', facebookPageId: 'fb-page-1', name: 'Page 1', accessToken: '',
+                userId: 'someone-else', archivedAt: new Date('2026-08-01T00:00:00Z'),
+            }];
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(existingPages) }),
+                    }),
+                }),
+            } as any);
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const setCalls: any[] = [];
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    setCalls.push(values);
+                    return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'p1' }]) }) };
+                }),
+            } as any);
+
+            await pagesService.syncFromFacebook(workspaceId, userId, 'token-123');
+
+            const updateWrite = setCalls.find(v => 'archivedAt' in v);
+            expect(updateWrite.archivedAt).toBeNull();
+            // Token untouched for a non-original connector
+            expect(updateWrite).not.toHaveProperty('accessToken');
+        });
+
+        it('leaves an archived page hidden when it stays out of the grant', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'user-123';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-1', name: 'Page 1', access_token: 'pt-1' }],
+            });
+
+            const existingPages = [
+                { id: 'p1', facebookPageId: 'fb-page-1', name: 'Page 1', accessToken: 'pt-1', userId },
+                // Archived AND absent from the grant → revoke path must not resurrect it
+                { id: 'p2', facebookPageId: 'fb-page-2', name: 'Page 2', accessToken: '', userId, archivedAt: new Date('2026-08-01T00:00:00Z') },
+            ];
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(existingPages) }),
+                    }),
+                }),
+            } as any);
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const setCalls: any[] = [];
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    setCalls.push(values);
+                    return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'x' }]) }) };
+                }),
+            } as any);
+
+            await pagesService.syncFromFacebook(workspaceId, userId, 'token-123');
+
+            const revokeWrite = setCalls.find(v => v.accessToken === '');
+            expect(revokeWrite).toBeDefined();
+            expect(revokeWrite).not.toHaveProperty('archivedAt');
         });
 
         // Regression guard for the InMedia agency case (2026-08-09): a workspace
@@ -982,6 +1102,99 @@ describe('PagesService', () => {
             expect(captured.set.autoReplyDisabledReason).toBeNull();
             expect(captured.set.consecutiveSendFailures).toBe(0);
             expect(captured.set.autoPauseReason).toBeNull();
+        });
+    });
+
+    describe('archivePage — merchant soft-hide of a disconnected page', () => {
+        const workspaceId = 'workspace-123';
+
+        /** Queue the single row `archivePage` selects, and capture any update. */
+        function mockPageRow(row: Record<string, unknown> | undefined) {
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(row ? [row] : []),
+                }),
+            } as any);
+            const captured: { set?: any } = {};
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    captured.set = values;
+                    return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...values }]) }) };
+                }),
+            } as any);
+            return captured;
+        }
+
+        it('archives a disconnected Facebook page', async () => {
+            const captured = mockPageRow({
+                id: 'page-1', workspaceId, facebookPageId: 'fb-1', accessToken: '', archivedAt: null,
+            });
+
+            const result = await pagesService.archivePage(workspaceId, 'page-1');
+
+            expect(result.status).toBe('archived');
+            expect(result).toMatchObject({ already: false });
+            expect(captured.set.archivedAt).toBeInstanceOf(Date);
+        });
+
+        it('refuses to archive a CONNECTED page (archiving is not a disconnect)', async () => {
+            const captured = mockPageRow({
+                id: 'page-1', workspaceId, facebookPageId: 'fb-1', accessToken: 'live-token', archivedAt: null,
+            });
+
+            const result = await pagesService.archivePage(workspaceId, 'page-1');
+
+            expect(result.status).toBe('not_disconnected');
+            expect(captured.set).toBeUndefined();
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('refuses when WhatsApp is still live behind a dead Facebook token', async () => {
+            // This card shows the same reconnect banner, but hiding it would bury a
+            // working WhatsApp channel.
+            const captured = mockPageRow({
+                id: 'page-1', workspaceId, facebookPageId: 'fb-1', accessToken: '',
+                whatsappAccessToken: 'wa-token', archivedAt: null,
+            });
+
+            const result = await pagesService.archivePage(workspaceId, 'page-1');
+
+            expect(result.status).toBe('not_disconnected');
+            expect(captured.set).toBeUndefined();
+        });
+
+        it('refuses a WhatsApp-only card (no Facebook page to archive)', async () => {
+            mockPageRow({
+                id: 'page-1', workspaceId, facebookPageId: null, accessToken: '',
+                whatsappAccessToken: '', archivedAt: null,
+            });
+
+            const result = await pagesService.archivePage(workspaceId, 'page-1');
+
+            expect(result.status).toBe('not_disconnected');
+        });
+
+        it('returns not_found when the page is not in this workspace', async () => {
+            mockPageRow(undefined);
+
+            const result = await pagesService.archivePage(workspaceId, 'page-missing');
+
+            expect(result.status).toBe('not_found');
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('is idempotent — an already-archived page is not rewritten', async () => {
+            const previouslyArchived = new Date('2026-08-01T00:00:00Z');
+            mockPageRow({
+                id: 'page-1', workspaceId, facebookPageId: 'fb-1', accessToken: '',
+                archivedAt: previouslyArchived,
+            });
+
+            const result = await pagesService.archivePage(workspaceId, 'page-1');
+
+            expect(result).toMatchObject({ status: 'archived', already: true });
+            // No rewritten timestamp, and the controller skips the audit event
+            expect(db.update).not.toHaveBeenCalled();
         });
     });
 

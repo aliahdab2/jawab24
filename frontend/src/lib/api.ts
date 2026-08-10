@@ -170,6 +170,9 @@ export const pagesApi = {
     api.patch(`/pages/${id}/auto-reply`, { enabled }),
   sync: (accessToken?: string) =>
     api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
+  // Soft-hide a DISCONNECTED page from the channels screen. The row and all its
+  // data survive; reconnecting the page through Facebook restores the card.
+  archive: (id: string) => api.post(`/pages/${id}/archive`),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
   // Phase C: remove merchant-confirmed KB lines that moved to the catalog or

@@ -30,6 +30,10 @@ let mockIsAdmin = false;
 // Mutable so the deep-link tests can start UNauthenticated (pages query
 // disabled) and hydrate mid-test — the RQ v5 race regression below.
 let mockIsAuthenticated = true;
+// Mutable workspace role for useWorkspaceRole (reads workspaces + activeWorkspaceId
+// from this store). null = leave `workspaces` undefined so the hook falls back to
+// its 'owner' default, which is what every pre-existing test expects.
+let mockWorkspaceRole: 'owner' | 'admin' | 'member' | null = null;
 vi.mock('@/lib/store', () => ({
     useAuthStore: (selector?: (s: Record<string, unknown>) => unknown) => {
         const state = {
@@ -37,6 +41,9 @@ vi.mock('@/lib/store', () => ({
             fbToken: 'mock-fb-token',
             user: { isAdmin: mockIsAdmin },
             setActiveWorkspace: vi.fn(),
+            ...(mockWorkspaceRole
+                ? { workspaces: [{ id: 'ws_test', role: mockWorkspaceRole }], activeWorkspaceId: 'ws_test' }
+                : {}),
         };
         return selector ? selector(state) : state;
     },
@@ -65,6 +72,7 @@ vi.mock('@/lib/api', () => ({
     pagesApi: {
         getAll: vi.fn(),
         toggle: vi.fn(),
+        archive: vi.fn(),
     },
     subscriptionApi: {
         getUsage: vi.fn(),
@@ -1527,5 +1535,115 @@ describe('PagesPage — Business Info deep-links', () => {
             expect(mockRouterReplace).toHaveBeenCalledTimes(1);
         });
         expect(screen.queryByTestId('kb-modal')).toBeNull();
+    });
+});
+
+// The archive (soft-hide) affordance on a DISCONNECTED Facebook card. Agencies
+// rotate pages and the dead cards used to pile up with no merchant-facing remedy
+// (hard delete is admin/GDPR only). Archiving hides the card; the row and its
+// data survive and come back when the page is reconnected.
+describe('PagesPage - archiving a disconnected page', () => {
+    const DISCONNECTED_PAGE = {
+        id: 'page_dead',
+        facebookPageId: 'fb_dead',
+        name: 'Dima Handmade',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: '',
+        isConnected: false,
+        whatsappConnected: false,
+    };
+
+    beforeEach(() => {
+        mockIsAdmin = false;
+        mockWorkspaceRole = null; // → hook default 'owner' → canEdit
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [DISCONNECTED_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        mockWorkspaceRole = null;
+        vi.clearAllMocks();
+    });
+
+    it('offers the archive action on the reconnect banner', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+        });
+
+        // Reconnect stays the primary call to action
+        expect(screen.getByText(enPages.reconnectRequired)).toBeInTheDocument();
+        expect(screen.getByText(enPages.archiveAction)).toBeInTheDocument();
+    });
+
+    it('confirms, calls the archive endpoint, and drops the card', async () => {
+        const { toast } = await import('sonner');
+        mockedPagesApi.archive.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedPagesApi.archive>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText(enPages.archiveAction));
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(screen.getByText(enPages.archiveTitle)).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.archiveConfirm, { selector: 'button' }));
+        });
+
+        expect(mockedPagesApi.archive).toHaveBeenCalledWith('page_dead');
+        await waitFor(() => {
+            expect(screen.queryByText('Dima Handmade')).not.toBeInTheDocument();
+        });
+        expect(vi.mocked(toast.success)).toHaveBeenCalledWith(enPages.archiveSuccess);
+    });
+
+    it('keeps the card and warns when the request fails', async () => {
+        mockedPagesApi.archive.mockRejectedValue(new Error('boom'));
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText(enPages.archiveAction));
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.archiveConfirm, { selector: 'button' }));
+        });
+
+        expect(mockToastError).toHaveBeenCalled();
+        expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+    });
+
+    it('hides the action when WhatsApp is still live on the card', async () => {
+        // Same reconnect banner, but archiving would bury a working channel
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...DISCONNECTED_PAGE, whatsappConnected: true, whatsappDisplayPhoneNumber: '+966 50 111 2233' }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(enPages.reconnectRequired)).toBeInTheDocument();
+        expect(screen.queryByText(enPages.archiveAction)).not.toBeInTheDocument();
+    });
+
+    it('hides the action from members (the route is admin+ only)', async () => {
+        mockWorkspaceRole = 'member';
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Dima Handmade')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText(enPages.archiveAction)).not.toBeInTheDocument();
     });
 });

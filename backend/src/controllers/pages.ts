@@ -8,7 +8,7 @@ import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
-import { logAutoReplyToggle } from '../services/auditLog';
+import { logAutoReplyToggle, auditLog } from '../services/auditLog';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -103,7 +103,11 @@ export class PagesController {
 
         try {
             const pages = await pagesService.getPages(req.workspaceId);
-            return reply.send(pages.map(serializePage));
+            // Archived pages are hidden HERE, not in pagesService.getPages: this is the
+            // single endpoint every merchant surface reads (channels, dashboard, inbox,
+            // pickers), while the Facebook sync needs the archived rows to stay visible
+            // to its existing-page map and revoke list.
+            return reply.send(pages.filter(page => !page.archivedAt).map(serializePage));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch pages' });
@@ -284,6 +288,51 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to delete page' });
+        }
+    }
+
+    /**
+     * Archive (soft-hide) a disconnected page
+     * POST /pages/:id/archive
+     */
+    async archive(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { workspaceId } = req;
+        const { userId } = req.user;
+        const { id } = request.params;
+
+        try {
+            const result = await pagesService.archivePage(workspaceId, id);
+
+            if (result.status === 'not_found') {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            if (result.status === 'not_disconnected') {
+                return reply.status(400).send({
+                    error: 'Only a disconnected Facebook page can be archived.',
+                    code: 'PAGE_NOT_DISCONNECTED',
+                });
+            }
+
+            if (!result.already) {
+                void auditLog({
+                    userId,
+                    workspaceId,
+                    pageId: id,
+                    action: 'page.archived',
+                    entityType: 'page',
+                    entityId: id,
+                    metadata: { reason: 'user' },
+                });
+            }
+
+            return reply.send(serializePage(result.page));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to archive page' });
         }
     }
 

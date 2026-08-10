@@ -10,6 +10,7 @@ vi.mock('../../src/services/pages', () => ({
         getPage: vi.fn(),
         updatePage: vi.fn(),
         deletePage: vi.fn(),
+        archivePage: vi.fn(),
         toggleAutoReply: vi.fn(),
         syncFromFacebook: vi.fn(),
     },
@@ -61,7 +62,7 @@ vi.mock('../../src/services/businessReadiness', async (importOriginal) => ({
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { subscriptionsService } from '../../src/services/subscriptions';
-import { logAutoReplyToggle } from '../../src/services/auditLog';
+import { logAutoReplyToggle, auditLog } from '../../src/services/auditLog';
 import { businessInfoGate } from '../../src/services/businessReadiness';
 
 // What businessInfoGate returns for a page with nothing to answer from.
@@ -154,6 +155,91 @@ describe('Pages Controller', () => {
             expect(sent[1]).toEqual(expect.objectContaining({ id: 'page-2', isConnected: false }));
             // accessToken should be stripped
             expect(sent[0].accessToken).toBeUndefined();
+        });
+
+        it('hides archived pages from the merchant list', async () => {
+            // The service intentionally still returns archived rows (the Facebook
+            // sync depends on seeing them) — this endpoint is the single choke point
+            // that hides them from every merchant surface.
+            const pages = [
+                { id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok', archivedAt: null },
+                { id: 'page-archived', facebookPageId: 'fb-2', accessToken: '', archivedAt: new Date('2026-08-09T00:00:00Z') },
+            ];
+            vi.mocked(pagesService.getPages).mockResolvedValue(pages as any);
+
+            await pagesController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent).toHaveLength(1);
+            expect(sent[0].id).toBe('page-1');
+        });
+    });
+
+    // ---- archive ----
+    describe('archive', () => {
+        it('archives a disconnected page, strips tokens, and audits it', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({
+                status: 'archived',
+                page: { id: 'page-1', facebookPageId: 'fb-1', accessToken: '', archivedAt: new Date() },
+                already: false,
+            } as any);
+            mockRequest.params = { id: 'page-1' };
+
+            await pagesController.archive(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.archivePage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent.id).toBe('page-1');
+            expect(sent.accessToken).toBeUndefined();
+            expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'page.archived',
+                pageId: 'page-1',
+                workspaceId: 'test_workspace_id',
+            }));
+        });
+
+        it('refuses a page that is not disconnected with PAGE_NOT_DISCONNECTED', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({ status: 'not_disconnected' } as any);
+            mockRequest.params = { id: 'page-1' };
+
+            await pagesController.archive(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_NOT_DISCONNECTED' }));
+            expect(auditLog).not.toHaveBeenCalled();
+        });
+
+        it('returns 404 when the page is not in the workspace', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({ status: 'not_found' } as any);
+            mockRequest.params = { id: 'nope' };
+
+            await pagesController.archive(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(auditLog).not.toHaveBeenCalled();
+        });
+
+        it('does not re-audit an already-archived page', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({
+                status: 'archived',
+                page: { id: 'page-1', facebookPageId: 'fb-1', accessToken: '', archivedAt: new Date() },
+                already: true,
+            } as any);
+            mockRequest.params = { id: 'page-1' };
+
+            await pagesController.archive(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.send).toHaveBeenCalled();
+            expect(auditLog).not.toHaveBeenCalled();
+        });
+
+        it('returns 500 when the service throws', async () => {
+            vi.mocked(pagesService.archivePage).mockRejectedValue(new Error('boom'));
+            mockRequest.params = { id: 'page-1' };
+
+            await pagesController.archive(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(500);
         });
     });
 

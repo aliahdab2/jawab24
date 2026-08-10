@@ -424,4 +424,78 @@ test.describe('Pages Page', () => {
     const bodyText = await page.locator('body').innerText();
     expect(bodyText.length).toBeGreaterThan(20);
   });
+
+  // Archive (soft-hide) of a disconnected card: the merchant-facing remedy for
+  // dead cards piling up after a page rotation. Nothing is deleted — the backend
+  // keeps the row and restores it when the page is reconnected.
+  test('archives a disconnected page from the reconnect banner', async ({ page }) => {
+    let archiveCalled = false;
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+
+      if (url.includes('/pages/page_dead/archive')) {
+        archiveCalled = true;
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'page_dead', archivedAt: new Date().toISOString() }),
+        });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: [
+              ...MOCK_PAGES,
+              {
+                id: 'page_dead',
+                facebookPageId: 'fb_dead',
+                name: 'Rotated Out Page',
+                autoReplyEnabled: false,
+                instagramAutoReplyEnabled: false,
+                commentsCount: 0,
+                knowledgeBase: '',
+                isConnected: false,
+                whatsappConnected: false,
+              },
+            ],
+          }),
+        });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_USAGE),
+        });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_SETTINGS),
+        });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/pages');
+
+    await expect(page.getByText('Rotated Out Page').first()).toBeVisible({ timeout: 15000 });
+    // Reconnect stays the primary action on the banner
+    await expect(page.getByText(t('pages.reconnectRequired')).first()).toBeVisible();
+
+    await page.getByRole('button', { name: t('pages.archiveAction') }).click();
+
+    // Confirmation must state the data is preserved before anything is hidden
+    await expect(page.getByText(t('pages.archiveTitle')).first()).toBeVisible();
+    await page.getByRole('button', { name: t('pages.archiveConfirm') }).click();
+
+    await expect(page.getByText('Rotated Out Page')).toHaveCount(0);
+    expect(archiveCalled).toBe(true);
+    // The healthy cards are untouched
+    await expect(page.getByText('My Business Page').first()).toBeVisible();
+  });
 });

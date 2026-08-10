@@ -306,6 +306,10 @@ class AdminUsersService {
                         ELSE (${pages.whatsappAccessToken} IS NULL OR ${pages.whatsappAccessToken} = '')
                     END`,
                 disconnectReason: pages.disconnectReason,
+                // Merchant soft-hid this disconnected page: it is gone from THEIR
+                // channels screen but still fully present here, so support never
+                // reads an archived page as "missing".
+                archivedAt: pages.archivedAt,
                 // KB summary lives under `kb` in the payload; select the raw
                 // inputs here (length only — never ship the KB text itself).
                 kbLength: sql<number>`length(coalesce(${pages.knowledgeBase}, ''))`,

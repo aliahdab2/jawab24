@@ -123,6 +123,36 @@ describe('Pages Routes', () => {
         });
     });
 
+    describe('POST /pages/:id/archive', () => {
+        it('archives a disconnected page', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({
+                status: 'archived',
+                page: { id: 'page_1', facebookPageId: 'fb_1', accessToken: '', archivedAt: new Date() },
+                already: false,
+            } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/pages/page_1/archive',
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(pagesService.archivePage).toHaveBeenCalledWith('test_workspace_id', 'page_1');
+        });
+
+        it('refuses a connected page with PAGE_NOT_DISCONNECTED', async () => {
+            vi.mocked(pagesService.archivePage).mockResolvedValue({ status: 'not_disconnected' } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/pages/page_1/archive',
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.json().code).toBe('PAGE_NOT_DISCONNECTED');
+        });
+    });
+
     describe('PATCH /pages/:id/auto-reply', () => {
         it('should toggle auto-reply', async () => {
             const updatedPage = { id: 'page_1', autoReplyEnabled: false, facebookPageId: 'fb_1', accessToken: 'tok' };

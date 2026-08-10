@@ -123,6 +123,9 @@ const PagesPage: NextPageWithLayout = () => {
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
   const [removeWhatsAppOnlyPage, setRemoveWhatsAppOnlyPage] = useState<Page | null>(null);
+  // Disconnected page whose archive confirmation is open (null = none). Archiving
+  // only hides the card — the page and its data are restored on reconnect.
+  const [archiveCandidate, setArchiveCandidate] = useState<Page | null>(null);
   // Pending "enable auto-reply without Business Info" confirmation: the page it
   // was requested on + the toggle to resume if the merchant confirms (null = closed)
   const [enableWithoutInfo, setEnableWithoutInfo] = useState<{ page: Page; proceed: () => void } | null>(null);
@@ -608,6 +611,18 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
+  const handleArchivePage = async (pageId: string) => {
+    setArchiveCandidate(null);
+    try {
+      await pagesApi.archive(pageId);
+      setPages(prev => prev.filter(p => p.id !== pageId));
+      toast.success(t('archiveSuccess'));
+    } catch (error) {
+      captureError(error, 'Failed to archive page', { tags: { page: 'pages', action: 'archive-page' } });
+      toast.error(tc('error'));
+    }
+  };
+
   const handleDisconnectWhatsApp = async (pageId: string) => {
     setDisconnectWhatsAppPage(null);
     try {
@@ -1060,6 +1075,21 @@ const PagesPage: NextPageWithLayout = () => {
                   >
                     {t('reconnect')}
                   </Button>
+                  {/* Secondary, deliberately quiet: most disconnections are accidents
+                      where reconnecting is the right answer. Archiving lives here (not
+                      in the card body below) because that body is pointer-events-none
+                      while disconnected. Hidden when WhatsApp is still live on this
+                      card — hiding it would bury a working channel — and for members,
+                      who would only get a 403 from the admin-scoped route. */}
+                  {canEdit && !page.whatsappConnected && (
+                    <button
+                      type="button"
+                      onClick={() => setArchiveCandidate(page)}
+                      className="self-center text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      {t('archiveAction')}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1570,6 +1600,20 @@ const PagesPage: NextPageWithLayout = () => {
         message={t('whatsappOnlyRemoveMessage', { number: removeWhatsAppOnlyPage?.whatsappDisplayPhoneNumber ?? '' })}
         confirmText={t('whatsappOnlyRemoveConfirm')}
         variant="danger"
+      />
+
+      {/* Archive (soft-hide) confirmation — 'warning', not 'danger': nothing is
+          deleted and reconnecting restores the page */}
+      <ConfirmationModal
+        isOpen={!!archiveCandidate}
+        onClose={() => setArchiveCandidate(null)}
+        onConfirm={() => {
+          if (archiveCandidate) handleArchivePage(archiveCandidate.id);
+        }}
+        title={t('archiveTitle')}
+        message={t('archiveMessage', { name: archiveCandidate?.name ?? '' })}
+        confirmText={t('archiveConfirm')}
+        variant="warning"
       />
 
       {/* Disconnect WhatsApp confirmation dialog */}

@@ -1912,6 +1912,19 @@ sent a live investigation down the wrong path (2026-07-31).
 | Repeated send failures | `auto_pause` | present | set | `services/pageAutoPause.ts` clears it on recovery |
 | **Facebook stopped returning the page** | **`NULL`** | **`''` (cleared)** | **`NULL`** | **reconnect via Facebook — upgrading does nothing** |
 
+**A page can also be ARCHIVED (`pages.archived_at` set, since 2026-08-09).** That is a
+merchant soft-hide, only offered on a page Facebook has ALREADY disconnected (blank
+token) with no live WhatsApp channel behind it — so it never explains why a page went
+quiet, it only explains why the merchant cannot see the card. The row and all its data
+are intact; hard delete remains admin/GDPR-only. Archived rows are filtered out in
+`controllers/pages.ts` `getAll` (the one endpoint every merchant surface reads) and are
+deliberately still returned by `pagesService.getPages`, because `syncFromFacebook` builds
+its existing-page map and revoke list from that call. `syncFromFacebook` clears
+`archived_at` the moment the page reappears in the merchant's Meta grant (both the
+existing-page and cross-workspace claim branches); the revoke path never touches it, so a
+page that stays out of the grant stays hidden. Both transitions are audited as
+`page.archived` / `page.unarchived`. Support sees `archivedAt` on the admin customer page.
+
 Two consequences that are easy to get wrong:
 
 - **The plan limit never turns an existing page off.** Over-limit pages are refused at
