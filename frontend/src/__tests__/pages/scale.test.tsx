@@ -43,7 +43,11 @@ vi.mock('@/utils/geoCheck', async (importOriginal) => ({
     isUserSanctioned: () => Promise.resolve(geo.sanctioned),
     isUserSanctionedNonBlocking: () => Promise.resolve({ sanctioned: geo.sanctioned, cached: false, timedOut: false }),
 }));
-vi.mock('@/lib/capacitor', () => ({ isNativePlatform: () => false, isIOSNative: () => false }));
+// `isIOSNative` is mutable so the Guideline 3.1.1 gate can be exercised. The
+// gate itself (useIOSPaymentRedirect) is deliberately NOT mocked — the test
+// drives the real production hook through this flag.
+const platform = { ios: false };
+vi.mock('@/lib/capacitor', () => ({ isNativePlatform: () => false, isIOSNative: () => platform.ios }));
 vi.mock('@/lib/openExternalUrl', () => ({ openExternalUrl: vi.fn() }));
 vi.mock('@/lib/webUrl', () => ({ buildWebUrl: (p: string) => p }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
@@ -93,8 +97,31 @@ describe('ScalePage (/pricing/scale)', () => {
         vi.clearAllMocks();
         authState.isAuthenticated = true;
         geo.sanctioned = false;
+        platform.ios = false;
         mockChangePlan.mockResolvedValue({ data: {} });
         mockGetUsage.mockResolvedValue({ data: proUsage });
+    });
+
+    // App Store Guideline 3.1.1 — the rejection that stalled the iOS launch for
+    // three months. /pricing has self-gated since May; this page shipped inside
+    // the iOS bundle as a reachable static route with no gate at all.
+    describe('iOS reader-app gate (Guideline 3.1.1)', () => {
+        it('renders no payment surface on iOS and redirects to the dashboard', async () => {
+            platform.ios = true;
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/dashboard'));
+            expect(screen.queryByRole('button', { name: /upgrade|subscribe|downgrade/i })).not.toBeInTheDocument();
+            // No price may render either — the guideline forbids the surface, not just the button.
+            expect(screen.queryByText('30,000')).not.toBeInTheDocument();
+        });
+
+        it('still renders the plan grid on every non-iOS platform', async () => {
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            expect(await screen.findByText('30,000')).toBeInTheDocument();
+            expect(mockReplace).not.toHaveBeenCalledWith('/dashboard');
+        });
     });
 
     it('upgrades an existing Pro subscriber in place via changePlan (never a second checkout)', async () => {
