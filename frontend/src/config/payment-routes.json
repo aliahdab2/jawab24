@@ -1,0 +1,4 @@
+{
+  "$comment": "Route prefixes that can show a price, a plan, or a purchase action. App Store Guideline 3.1.1 forbids all of them on iOS. This file is the SINGLE source of truth: src/lib/paymentRoutes.ts imports it for the runtime guards, and scripts/neutralize-ios-payment-routes.js requires it to decide which exported HTML to neutralize. Adding a payment surface means adding its prefix here and nowhere else.",
+  "prefixes": ["/pricing", "/checkout", "/payment"]
+}
