@@ -75,6 +75,18 @@ describe('buildHeadlineLayerSvg — typesetting bounds and honest degrades', () 
         expect(svg).not.toContain('<خاص>'); // raw model text never lands in markup
     });
 
+    it('the font stack names a real LATIN family, not just Arabic + the generic alias', () => {
+        // Mixed-script headlines are routine (brand names, course codes, SKUs).
+        // `sans-serif` is NOT a safety net — on an alpine with no Latin font it
+        // resolves to nothing and pango draws codepoint boxes.
+        const svg = mod.buildHeadlineLayerSvg(1024, 1024, 'دورة ICDL تبدأ اليوم', { renderText: true });
+        expect(svg).not.toBeNull();
+        expect(svg).toContain('ICDL');
+        const stack = /font-family="([^"]+)"/.exec(svg as string)?.[1] ?? '';
+        expect(stack).toContain("'Noto Sans Arabic'"); // Arabic script
+        expect(stack).toMatch(/'Noto Sans'|DejaVu Sans/); // Latin script
+    });
+
     it('a short in-spec headline gets NO width clamp', () => {
         const svg = mod.buildHeadlineLayerSvg(1024, 1024, 'تشكيلة العطور وصلت', { renderText: true });
         expect(svg).not.toBeNull();
@@ -137,21 +149,45 @@ describe('composePostCard — output format and base validation', () => {
         );
     });
 
-    it('probes fontconfig ONCE per process and skips text honestly when no Arabic family exists', async () => {
-        mockExecFileSync.mockReturnValue(''); // fc-list runs, reports zero Arabic families
+    it('probes fontconfig ONCE per process and skips text honestly when no font family exists', async () => {
+        mockExecFileSync.mockReturnValue(''); // fc-list runs, reports zero families for every script
         const base = await makeBasePng();
         const first = await mod.composePostCard(base, { headline: 'عرض اليوم', logo: null });
         const second = await mod.composePostCard(base, { headline: 'عرض اليوم', logo: null });
         expect(first).not.toBeNull();
         expect(second).not.toBeNull();
         expect((await sharp(first as Buffer).metadata()).format).toBe('jpeg');
-        // Probe is cached; the degraded state is captured once, fingerprinted.
-        expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+        // One probe per script on the FIRST compose, then cached — the second
+        // compose adds no calls.
+        expect(mockExecFileSync).toHaveBeenCalledTimes(2);
         expect(mockCaptureError).toHaveBeenCalledWith(
             expect.anything(),
-            expect.stringContaining('no Arabic font'),
-            expect.objectContaining({ fingerprint: ['post-suggestions-no-arabic-font'] }),
+            expect.stringContaining('missing script font'),
+            expect.objectContaining({ fingerprint: ['post-suggestions-missing-script-font'] }),
         );
+    });
+
+    /**
+     * REGRESSION (2026-08-10, caught on a real card): the container shipped
+     * font-noto-arabic and nothing else — 72 Arabic families, 0 Latin. The
+     * Arabic-only probe said "fonts fine", so «دورة ICDL تبدأ اليوم» rendered
+     * the Arabic correctly and drew I/C/D/L as codepoint tofu boxes.
+     */
+    it('Arabic present but LATIN missing still drops the text layer (mixed-script headlines would tofu)', async () => {
+        mockExecFileSync.mockImplementation((_cmd: string, args: string[]) =>
+            args[0] === ':lang=ar' ? 'NotoSansArabic-Regular.ttf: Noto Sans Arabic:style=Regular' : '',
+        );
+        const base = await makeBasePng();
+        const result = await mod.composePostCard(base, { headline: 'دورة ICDL تبدأ اليوم', logo: null });
+        expect(result).not.toBeNull(); // scrim-only card, never a half-tofu headline
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.stringContaining('missing script font'),
+            expect.objectContaining({ fingerprint: ['post-suggestions-missing-script-font'] }),
+        );
+        // The message must name the script that is actually missing.
+        expect(mockCaptureError.mock.calls[0][0].message).toContain('en');
+        expect(mockCaptureError.mock.calls[0][0].message).not.toContain('ar,');
     });
 
     it('fc-list being unavailable is NOT evidence of missing fonts — renders normally (dev macOS)', async () => {

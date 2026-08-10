@@ -31,12 +31,19 @@ RUN npm prune --omit=dev
 # Production Stage
 FROM node:22-alpine AS production
 WORKDIR /app
-# fontconfig + font-noto-arabic: sharp/librsvg typesets the Arabic post-card
-# headline via fontconfig at RUNTIME (services/imageCompose.ts) — a bare
-# alpine has ZERO fonts, so without these every generated card ships its
-# text layer as tofu/blank. Fonts only, no doc packages; the builder stage
-# does not need them (nothing renders at build time).
-RUN apk add --no-cache dumb-init wget fontconfig font-noto-arabic
+# fontconfig + fonts: sharp/librsvg typesets the post-card headline via
+# fontconfig at RUNTIME (services/imageCompose.ts) — a bare alpine has ZERO
+# fonts, so without these every generated card ships its text layer as
+# tofu/blank. Fonts only, no doc packages; the builder stage does not need
+# them (nothing renders at build time).
+#
+# BOTH scripts are required, and font-noto-arabic alone is NOT enough.
+# Merchant headlines routinely mix Latin into Arabic — brand names, course
+# codes, product SKUs. Shipped 2026-08-10 with Arabic only: fc-list reported
+# 72 Arabic families and 0 Latin, so «دورة ICDL تبدأ اليوم» rendered the
+# Arabic correctly and drew I/C/D/L as codepoint tofu boxes on a real card.
+# font-noto covers the Latin/Greek/Cyrillic core.
+RUN apk add --no-cache dumb-init wget fontconfig font-noto-arabic font-noto
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Get GIT_COMMIT from builder stage

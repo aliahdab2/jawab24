@@ -670,6 +670,13 @@ const DashboardPage: NextPageWithLayout = () => {
         repliedTodayByMethod={statsData.repliedTodayByMethod}
       />
 
+      {/* «بوست اليوم» pilot — self-gating (workspace allowlist + API 404 fail-closed),
+          so this renders nothing for every workspace outside the pilot. Sits ABOVE the
+          inbox on purpose: it is a "do something today" prompt, and below the fold it
+          read as an afterthought. NO wrapper element here: the component owns its own
+          bottom margin, so a null render leaves no stray gap on every other dashboard. */}
+      <PostSuggestionCard pages={pages} />
+
       {/* Inbox: Comments + Messages side by side */}
       {(() => {
         const getTimeLabel = (date: string | Date | null | undefined) =>
@@ -1042,9 +1049,6 @@ const DashboardPage: NextPageWithLayout = () => {
               onTry={postReplySetup.openPicker}
             />
           )}
-
-          {/* «بوست اليوم» pilot — self-gating (build-time allowlist + API 404 fail-closed) */}
-          <PostSuggestionCard pages={pages} />
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

@@ -103,6 +103,79 @@ describe('PostSuggestionCard — pilot self-gating', () => {
   });
 });
 
+describe('PostSuggestionCard — the card previews the REAL post', () => {
+  const WITH_IMAGE = {
+    id: 's1',
+    text: 'دورة ICDL تبدأ اليوم — سجل الآن',
+    imageUrl: 'https://storage.example/generated-posts/ws1/abc.jpg',
+    postType: 'promo' as const,
+    source: 'cron' as const,
+    suggestedFor: '2026-08-10',
+    createdAt: '2026-08-10T05:00:00Z',
+  };
+
+  it('shows the thumbnail, the angle badge, and the post text — not a generic banner', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
+    renderCard();
+
+    const thumb = await screen.findByAltText(enPostSuggestions.postImageAlt);
+    expect(thumb).toHaveAttribute('src', WITH_IMAGE.imageUrl);
+    expect(screen.getByText(WITH_IMAGE.text)).toBeInTheDocument();
+    expect(screen.getByText(enPostSuggestions.type_promo)).toBeInTheDocument();
+  });
+
+  it('a TEXT-ONLY post (image degraded) renders the brand tile, never a broken frame', async () => {
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: { ...WITH_IMAGE, imageUrl: null }, remainingToday: 2 },
+    });
+    renderCard();
+
+    expect(await screen.findByText(WITH_IMAGE.text)).toBeInTheDocument();
+    expect(screen.queryByAltText(enPostSuggestions.postImageAlt)).not.toBeInTheDocument();
+  });
+
+  it('a thumbnail that FAILS to load falls back to the tile (object storage hiccup)', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
+    renderCard();
+
+    const thumb = await screen.findByAltText(enPostSuggestions.postImageAlt);
+    fireEvent.error(thumb);
+    await waitFor(() =>
+      expect(screen.queryByAltText(enPostSuggestions.postImageAlt)).not.toBeInTheDocument(),
+    );
+    // The card itself survives — only the image is replaced.
+    expect(screen.getByText(WITH_IMAGE.text)).toBeInTheDocument();
+  });
+
+  it('a DIFFERENT image url is retried after one failed — the failure is per-url, not sticky', async () => {
+    // Regression: a boolean "thumb errored" flag kept hiding the image after a
+    // regenerate wrote a brand-new imageUrl into the query cache.
+    mockGetToday.mockImplementation((id: string) =>
+      Promise.resolve({
+        data: {
+          suggestion: { ...WITH_IMAGE, imageUrl: `https://storage.example/${id}.jpg` },
+          remainingToday: 2,
+        },
+      }),
+    );
+    renderCard([
+      { id: 'p1', name: 'Page One', isConnected: true } as Page,
+      { id: 'p2', name: 'Page Two', isConnected: true } as Page,
+    ]);
+
+    const first = await screen.findByAltText(enPostSuggestions.postImageAlt);
+    expect(first).toHaveAttribute('src', 'https://storage.example/p1.jpg');
+    fireEvent.error(first);
+    await waitFor(() =>
+      expect(screen.queryByAltText(enPostSuggestions.postImageAlt)).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Page Two' }));
+    const second = await screen.findByAltText(enPostSuggestions.postImageAlt);
+    expect(second).toHaveAttribute('src', 'https://storage.example/p2.jpg');
+  });
+});
+
 describe('postSuggestions Arabic plural — all six CLDR forms compile and the dual renders', () => {
   // The suite-wide next-intl mock resolves EN messages with English plural
   // rules, so the Arabic `remaining` message — the one string in this feature
