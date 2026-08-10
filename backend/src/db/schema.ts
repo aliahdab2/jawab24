@@ -1809,6 +1809,10 @@ export const postSuggestions = pgTable('post_suggestions', {
     // fact — a superseded row's image file is deleted, so without this the
     // day's visual output is unmeasurable the moment it is replaced.
     imageBrief: text('image_brief'),
+    // Which KIND of image this card used ('photo' | 'poster' | 'conceptual').
+    // Read back to rotate the next one — the variety mechanism that works,
+    // because code decides it rather than asking the model to vary.
+    imageMode: varchar('image_mode', { length: 20 }),
     status: varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'superseded'
     // Market-signal stamps — the pilot's whole point is measuring these.
     // First-write-wins; null = the merchant never did it.

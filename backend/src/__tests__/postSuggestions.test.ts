@@ -20,8 +20,10 @@ import { Column } from 'drizzle-orm';
 
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
-    mockIsConfigured, mockPut, mockRemove, mockComposePostCard, mockFetchRoundedLogo, mockConfig,
+    mockIsConfigured, mockPut, mockRemove, mockComposePostCard, mockFetchRoundedLogo,
+    mockRenderPosterBase, mockConfig,
 } = vi.hoisted(() => ({
+    mockRenderPosterBase: vi.fn(),
     mockChatCreate: vi.fn(),
     mockImagesGenerate: vi.fn(),
     mockCheckDailyCap: vi.fn(),
@@ -66,6 +68,8 @@ vi.mock('../services/imageStorage', () => ({
 vi.mock('../services/imageCompose', () => ({
     composePostCard: mockComposePostCard,
     fetchRoundedLogo: mockFetchRoundedLogo,
+    // Poster mode's base comes from here instead of the image model.
+    renderPosterBase: mockRenderPosterBase,
 }));
 vi.mock('../services/settings', () => ({
     settingsService: { getSettings: vi.fn().mockResolvedValue({ brandVoiceNotes: 'ودّي وقريب' }) },
@@ -97,6 +101,8 @@ import {
     buildContactSuffix,
     buildRecentBriefsBlock,
     findUngroundedNumbers,
+    pickImageMode,
+    IMAGE_MODES,
 } from '../services/postSuggestions';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -205,6 +211,7 @@ beforeEach(() => {
     mockImagesGenerate.mockResolvedValue({ data: [{ b64_json: 'aGVsbG8=' }], usage: { input_tokens: 90, output_tokens: 1000 } });
     mockComposePostCard.mockImplementation(async (base: Buffer) => base);
     mockFetchRoundedLogo.mockResolvedValue(null);
+    mockRenderPosterBase.mockResolvedValue(Buffer.from('poster-base'));
 });
 
 describe('gate functions', () => {
@@ -488,6 +495,72 @@ describe('findUngroundedNumbers — figures the inputs do not support', () => {
 
     it('is empty for text with no figures at all', () => {
         expect(findUngroundedNumbers('راسلنا لمعرفة السعر', 'أي بيانات')).toEqual([]);
+    });
+});
+
+/**
+ * Varying the KIND of image is the fix for the sameness that three prompt-level
+ * attempts could not achieve. Code decides it, so unlike those attempts it
+ * cannot be ignored.
+ */
+describe('pickImageMode — round-robin over image kinds', () => {
+    it('starts at photo when there is no history', () => {
+        expect(pickImageMode(null)).toBe('photo');
+        expect(pickImageMode(undefined)).toBe('photo');
+    });
+
+    it('visits EVERY mode — the filter-first shape would never reach the third', () => {
+        const seen: string[] = [];
+        let mode: string | null = null;
+        for (let i = 0; i < IMAGE_MODES.length; i++) {
+            mode = pickImageMode(mode);
+            seen.push(mode);
+        }
+        expect(new Set(seen).size).toBe(IMAGE_MODES.length);
+        expect([...seen].sort()).toEqual([...IMAGE_MODES].sort());
+    });
+
+    it('never repeats the previous mode, and cycles back round', () => {
+        for (const m of IMAGE_MODES) expect(pickImageMode(m)).not.toBe(m);
+        expect(pickImageMode(IMAGE_MODES[IMAGE_MODES.length - 1])).toBe(IMAGE_MODES[0]);
+    });
+
+    it('an unrecognised stored mode falls back to the start rather than throwing', () => {
+        expect(pickImageMode('something-retired')).toBe('photo');
+    });
+});
+
+describe('generateSuggestion — poster mode costs nothing', () => {
+    it('makes NO image-model call when the rotation lands on poster', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(null);
+        // Previous card was a photo ⇒ this one rotates to poster.
+        queueFullRun(INSERTED, { previous: [{ postType: 'promo', imageMode: 'photo' }] });
+
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        // The whole point: the poster is drawn in code, so the paid call is skipped.
+        expect(mockImagesGenerate).not.toHaveBeenCalled();
+        // The headline goes to the POSTER, which typesets it large and centred…
+        expect(mockRenderPosterBase).toHaveBeenCalledWith(
+            1024, 1024, expect.any(Number), expect.any(String),
+        );
+        // …so the card's own bottom-scrim headline layer must stay unused, or the
+        // same words would be drawn twice on one image.
+        expect(mockComposePostCard).toHaveBeenCalledWith(
+            expect.any(Buffer),
+            expect.objectContaining({ headline: null }),
+        );
+        expect(mockPut).toHaveBeenCalled();
+    });
+
+    it('still calls the image model when the rotation lands on a photographic mode', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(null);
+        // Previous was a poster ⇒ next is conceptual, which is model-generated.
+        queueFullRun(INSERTED, { previous: [{ postType: 'promo', imageMode: 'poster' }] });
+
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockImagesGenerate).toHaveBeenCalledTimes(1);
     });
 });
 
