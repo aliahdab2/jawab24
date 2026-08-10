@@ -192,6 +192,18 @@ else
     exit 1
 fi
 
+# The iOS 3.1.1 price gate. Its own tests run here for the same reason the
+# llms gate's do: it shipped once reporting a clean bundle while six compare/*
+# pages rendered "$15/mo" (2026-08-10). The gate runs during the iOS build,
+# which no deploy performs — so this is the only place its correctness is
+# checked on a cadence.
+if ! (cd frontend && npm run --silent build:ios:payment-guard:test) > /dev/null 2>&1; then
+    echo -e "${RED}   ❌ iOS payment-route gate's own tests failed — the 3.1.1 gate is broken${NC}"
+    (cd frontend && npm run --silent build:ios:payment-guard:test)
+    exit 1
+fi
+echo -e "${GREEN}   ✅ iOS 3.1.1 price gate self-tests pass${NC}"
+
 # =============================================
 # 0.6. Lock file sync check
 # =============================================

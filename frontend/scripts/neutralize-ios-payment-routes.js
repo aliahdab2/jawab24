@@ -45,29 +45,67 @@ const STUB_MARKER = 'jawab24-payment-route-neutralized';
 /** Locales the web build prefixes routes with (next.config.js i18n.locales). */
 const LOCALES = ['ar', 'en'];
 
+/** Digits in every numbering system the locales above can emit, plus the group
+ *  and decimal separators that sit between them. */
+const DIGITS = '\\d\\u0660-\\u0669\\u06f0-\\u06f9';
+
 /**
  * Currency markers, DERIVED from ICU rather than hand-typed. `formatUsd` uses
  * Intl.NumberFormat, so the literal a price renders as ("$US", "US$", "US٬")
  * depends on the locale's CLDR data and changes with the ICU version — a
  * hardcoded list would quietly stop matching after a Node upgrade and report
  * a clean bundle. We ask Intl what it emits and strip the digits.
+ *
+ * ⚠️ THIS UNDER-MATCHED AND SHIPPED A VIOLATION (2026-08-10). The first version
+ * kept only tokens of `length >= 2`, which threw away the single most common
+ * price marker there is — a bare "$" — and asked ICU only for the default
+ * `symbol` display, so the spelled-out form ("15 دولار") had no marker either.
+ * The guard duly reported "no price markup remains" for a bundle whose compare
+ * pages rendered "$15/mo" and "15 دولاراً شهرياً". We now ask ICU for all three
+ * displays and keep short tokens; the digit-adjacency requirement in
+ * `pricePattern` is what keeps a bare "$" from firing on ordinary prose.
  */
 const currencyMarkers = () => {
   const markers = new Set();
   for (const locale of LOCALES) {
     for (const currency of ['USD', 'SAR']) {
+      // symbol: "US$"/"SAR" · narrowSymbol: "$" · name: "دولار أمريكي"/"US dollars"
+      for (const currencyDisplay of ['symbol', 'narrowSymbol', 'name']) {
       try {
-        const sample = new Intl.NumberFormat(locale, { style: 'currency', currency }).format(1234);
+        const sample = new Intl.NumberFormat(locale, { style: 'currency', currency, currencyDisplay }).format(1234);
         // Keep the non-numeric run(s): the currency label/symbol itself.
         for (const token of sample.split(/[\d\s  .,٬٫]+/)) {
-          if (token.length >= 2) markers.add(token);
+          // Drop invisible bidi controls. ICU wraps the Arabic SAR format in
+          // U+200F RIGHT-TO-LEFT MARK; kept as a marker it would match every
+          // Arabic page that places a number after an RTL mark — a
+          // build-breaking false positive, and an invisible one to debug.
+          const clean = token.replace(/\p{Cf}/gu, '');
+          // Keep symbols of ANY length ("$") and words of 3+ ("SAR", "دولار").
+          // Dropping all-letter 2-char tokens keeps ICU's "US" (from "US
+          // dollars") out — it sits next to digits in ordinary prose.
+          if (clean && (clean.length >= 3 || /[^\p{L}]/u.test(clean))) markers.add(clean);
         }
       } catch {
         /* locale unavailable in this Node's ICU — the other locales still cover us */
       }
+      }
     }
   }
   return [...markers];
+};
+
+/**
+ * A price is a currency marker STANDING NEXT TO A NUMBER. Requiring adjacency is
+ * what lets us keep a bare "$" as a marker: "$15" is a price, a lone "$" in
+ * prose is not. Markers are matched longest-first so a hit reports "US$" rather
+ * than the "$" nested inside it.
+ */
+const pricePattern = (markers) => {
+  const alt = [...markers]
+    .sort((a, b) => b.length - a.length)
+    .map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  return new RegExp(`(?:${alt})\\s*[${DIGITS}]|[${DIGITS}]\\s*(?:${alt})`, 'u');
 };
 
 /** `out/pricing/scale.html` -> `/pricing/scale`; `out/index.html` -> `/`. */
@@ -140,6 +178,7 @@ function main() {
 
   // Verify against the built output rather than trusting the pass above.
   const markers = currencyMarkers();
+  const priceRe = pricePattern(markers);
   const offenders = [];
   for (const file of htmlFiles) {
     const route = routeOf(file);
@@ -156,14 +195,22 @@ function main() {
     // surface — it never paints. Scanning raw HTML flags all 13 dashboard
     // pages and buries the real signal.
     const markup = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-    const hit = markers.find((m) => markup.includes(m));
-    if (hit) offenders.push(`${route} — renders a price ("${hit}") but is not a known payment route`);
+    const hit = priceRe.exec(markup);
+    if (hit) {
+      offenders.push(
+        `${route} — renders a price ("${hit[0].trim()}") but is not a known payment route`,
+      );
+    }
   }
 
   if (offenders.length > 0) {
     console.error('iOS bundle still exposes payment content:');
     for (const o of offenders) console.error(`  - ${o}`);
-    console.error('Add the route prefix to src/config/payment-routes.json. Refusing to ship a 3.1.1 violation.');
+    console.error(
+      'Either add the route prefix to src/config/payment-routes.json (it is a payment ' +
+      'surface) or add it to scripts/strip-mobile-assets.js (it is web-only marketing ' +
+      'content). Refusing to ship a 3.1.1 violation.',
+    );
     process.exit(1);
   }
 
@@ -173,6 +220,6 @@ function main() {
   );
 }
 
-module.exports = { routeOf, isPaymentRoute, currencyMarkers, STUB_MARKER, stub };
+module.exports = { routeOf, isPaymentRoute, currencyMarkers, pricePattern, STUB_MARKER, stub };
 
 if (require.main === module) main();

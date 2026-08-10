@@ -94,8 +94,13 @@ describe('build script ↔ runtime agreement (Guideline 3.1.1)', () => {
     it('derives currency markers from ICU rather than hardcoding copy', () => {
         const markers = neutralizer.currencyMarkers();
         expect(markers.length).toBeGreaterThan(0);
-        // Whatever ICU emits, it must be substantive enough to match on.
-        for (const m of markers) expect(m.length).toBeGreaterThanOrEqual(2);
+        // NOT `length >= 2`: that pinned the defect, making a bare "$" — the
+        // commonest price marker there is — inexpressible, so the gate passed a
+        // bundle whose compare/* pages rendered "$15/mo" (2026-08-10). What
+        // keeps a short marker safe is the digit-adjacency the scan requires.
+        expect(markers).toContain('$');
+        expect(neutralizer.pricePattern(markers).test('$15/mo')).toBe(true);
+        expect(neutralizer.pricePattern(markers).test('a lone $ in prose')).toBe(false);
     });
 
     it('emits a stub that carries the marker the Xcode phase greps for', () => {
