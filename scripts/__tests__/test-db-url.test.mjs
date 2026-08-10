@@ -17,10 +17,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, copyFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isTestDatabaseName } from '../testDatabaseName.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-db-url.sh');
 
@@ -75,20 +76,40 @@ test('the same checkout always resolves to the same database', () => {
     }
 });
 
-test('the name always starts with autoreply_test', () => {
-    // pre-deploy-check.sh refuses to DROP anything not matching autoreply_test*,
-    // so this prefix is load-bearing for the gate's safety guard.
-    for (const name of ['plain', 'With-Caps', 'dots.and_stuff']) {
-        assert.match(dbNameOf(urlForFakeCheckout(name)), /^autoreply_test_/);
+test('every generated name satisfies the shared destructive-operation guard', () => {
+    // The generator and the validator are separate files, and the gate trusts BOTH:
+    // it resolves a name here and then refuses to DROP it unless the validator
+    // agrees. If they ever disagree, no checkout can run the suite at all — so tie
+    // them together with the awkward checkout names, not just the tidy ones.
+    for (const name of [
+        'plain',
+        'With-Caps',
+        'dots.and_stuff',
+        'a-very-long-worktree-name-that-keeps-going-and-going',
+        '...',
+        'trailing---',
+        '99-numeric-start',
+    ]) {
+        const dbName = dbNameOf(urlForFakeCheckout(name));
+        assert.ok(
+            isTestDatabaseName(dbName),
+            `checkout "${name}" produced "${dbName}", which the shared guard rejects`,
+        );
+        // No `__`: a doubled separator is legal but signals the label was emptied
+        // or truncated onto a separator, which makes names harder to eyeball.
+        assert.doesNotMatch(dbName, /__/, `${dbName} has a doubled separator`);
     }
 });
 
-test('the name is a legal Postgres identifier', () => {
-    // Identifiers cap at 63 bytes and the name is interpolated unquoted into
-    // CREATE/DROP DATABASE by the gate.
-    const name = dbNameOf(urlForFakeCheckout('a-very-long-worktree-name-that-keeps-going-and-going'));
-    assert.ok(name.length <= 63, `${name} is ${name.length} bytes`);
-    assert.match(name, /^[a-z][a-z0-9_]*$/);
+test('the script stays directly executable', () => {
+    // Both real call sites exec it, not `bash it`: pre-deploy-check.sh runs
+    // "$REPO_ROOT/scripts/test-db-url.sh" and backend's test:integration:local runs
+    // ../scripts/test-db-url.sh. Every other test here invokes it via `bash <path>`,
+    // which works fine without the mode bit — so a lost +x passes the whole suite
+    // and then makes both call sites resolve an EMPTY database URL.
+    assert.ok(statSync(SCRIPT).mode & 0o111, 'scripts/test-db-url.sh is not executable');
+    const url = execFileSync(SCRIPT, { encoding: 'utf8' }).trim();
+    assert.ok(isTestDatabaseName(dbNameOf(url)), `direct exec produced "${url}"`);
 });
 
 test('TEST_PG_HOST and TEST_PG_PORT override the server', () => {

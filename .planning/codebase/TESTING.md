@@ -392,6 +392,11 @@ test.describe('SEO — Landing Page', () => {
   applies migrations **once** in the main vitest process, before any fork spawns.
 - `test/integration/setup.ts` TRUNCATEs ~20 tables before **every** test — which is why the
   database must not be shared between concurrent runs (see the warning below)
+- Which databases may be destroyed is decided in exactly one place —
+  `scripts/testDatabaseName.mjs` (`^autoreply_test[a-z0-9_]*$`). The deploy gate calls it over
+  its `--validate` CLI before `DROP DATABASE`; `globalSetup.ts` and `setup.ts` import it before
+  `CREATE DATABASE` and the `TRUNCATE`. Never hand-write a second copy of that rule — a prefix
+  glob (`autoreply_test*`) accepts `autoreply_test; DROP DATABASE autoreply`.
 - Serialized on purpose: `fileParallelism: false`, `pool: 'forks'`, `singleFork: true`
 - NOT included in unit test runs (`npm run test`)
 
@@ -401,13 +406,24 @@ cd backend
 npm run test:integration:local                                        # all files
 npm run test:integration:local -- test/integration/messages.test.ts   # one file
 npm run test:integration:local -- -t 'isPaused'                       # one test by name
+TEST_DB_FRESH=1 npm run test:integration:local                        # drop + recreate first
 ```
+
+`TEST_DB_FRESH=1` matters because per-checkout databases are long-lived while `migrate()` is
+journal-driven and additive: a worktree moved between branches with divergent migrations keeps
+objects the current branch never created. The deploy gate always starts from a dropped database;
+this is the same clean slate for a hand-run suite.
+
+**Housekeeping:** each checkout leaves one ~16 MB database behind, and deleting a worktree does
+not delete its database. `globalSetup.ts` records the owning checkout path in the database
+`COMMENT`, so `npm run prune:test-dbs` (add `-- --drop` to act) can reap the ones whose checkout
+is gone.
 
 > ⚠️ **Use `test:integration:local`.** Plain `npm run test:integration` is the CI/deploy-gate
 > variant: it trusts the ambient `DATABASE_URL` and now **fails fast** when none is set, rather
 > than silently falling back to a database shared with every other checkout.
 >
-> **Why per-checkout (fixed 2026-08-10).** This used to be one machine-global `autoreply_test`.
+> **Why per-checkout (fixed 2026-08-09).** This used to be one machine-global `autoreply_test`.
 > Because every test truncates the tables first, two suites running at once — a deploy gate in
 > the main checkout and a `test:integration:local` in any worktree — deleted each other's
 > fixtures. It produced a **false red** in the gate three separate times; the worst was 29
@@ -670,7 +686,7 @@ gate that runs; the numbered steps are, in order:
 | Step | What it checks |
 |------|----------------|
 | 0 | Config files, translations, sitemap, `llms.txt` (+ the validator's own tests), lockfile sync, pinned/synced OpenAI SDK, Fastify-5 plugin compatibility, dependency audit, native-binary matrix, cross-file duplication (Rule 10.8) |
-| — | `scripts/test-db-url.sh` self-tests — run before step 0, so a broken test-database invariant fails in seconds rather than minutes |
+| — | `npm run test:db-tooling` — self-tests for the test-database name generator and the shared destroy-guard, run before step 0 so a broken invariant fails in seconds rather than minutes |
 | 1 | No ESM-only packages; shared package builds |
 | 2 | TypeScript compiles (all workspaces) |
 | 3 | Lint — backend, frontend, ai-worker, shared |

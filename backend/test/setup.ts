@@ -63,8 +63,14 @@ vi.mock('../src/lib/customerNotificationQueue', () => ({
   },
 }));
 
-// Set test environment variables
-process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/autoreply_test';
+// Set test environment variables.
+// Unit tests never open a connection — every DB access is mocked — so this only
+// has to satisfy the modules that read DATABASE_URL at import time. It is
+// deliberately NOT a real database: it used to read
+// `postgres://…@localhost:5432/autoreply_test`, which named the integration-test
+// database on the *dev* Postgres port, so a unit test that accidentally connected
+// would have reached a real server. Anything that tries to connect now fails loudly.
+process.env.DATABASE_URL = 'postgres://unit-tests:unit-tests@127.0.0.1:1/unit_tests_never_connect';
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.NODE_ENV = 'test';
 
