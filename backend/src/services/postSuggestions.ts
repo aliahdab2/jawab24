@@ -28,6 +28,7 @@ import {
     unwrapBusinessProfile,
     whatsappNumbers,
     isRowLive,
+    normalizeArabicIndic,
     DEFAULT_AI_MODEL,
     type BusinessProfile,
     type StoredBusinessProfile,
@@ -436,17 +437,72 @@ CRAFT — how professionals write feed posts:
 TRUTH — non-negotiable:
 - Every fact (price, date, product, place, claim) must exist in the blocks above. Not there → not said.
 - Do NOT write phone numbers or addresses — the platform appends the verified contact block automatically after your text.
+- FIGURES: every number you write must be copied from the data above. If the data carries no price for something, the post does not state one — invite the customer to ask instead. A figure in a post is public and permanent, and reads as a commitment the merchant never made.
 
 Also return:
-- "headline": 2–5 Arabic words the platform will typeset ON the image — the poster line. The reader sees the poster and the caption AT ONCE, so a headline that repeats a caption sentence wastes the poster. It carries a SECOND beat: the caption states the offer, the headline lands the feeling or the urgency.
-  Caption opens «✨ هل تريد تحسين مهاراتك في الحاسوب؟ دورة ICDL تبدأ اليوم!»
-    ✗ «دورة ICDL تبدأ اليوم» — the caption already said exactly this
-    ✓ «مقعدك بانتظارك»
+- "headline": 2–5 Arabic words the platform will typeset ON the image — the poster line. The reader sees the poster and the caption AT ONCE, so the poster must not spend itself re-saying the caption's opening line.
+  Test it: the headline must be a DIFFERENT KIND of line from the caption's opener. If the caption opens with a question, the headline is neither that question nor its direct answer — it is the RESULT the customer gets, or the reassurance, or the urgency. Rewording the same idea fails this test even though no words repeat.
+    Caption «✨ هل تريد تحسين مهاراتك في الحاسوب؟ دورة ICDL تبدأ اليوم!»
+      ✗ «دورة ICDL تبدأ اليوم» — verbatim from the caption
+      ✓ «مقعدك بانتظارك» — urgency; a beat the caption never played
+    Caption «❓ كيف تختار مقاس حفاضات طفلك؟»
+      ✗ «اختر مقاس طفلك بسهولة» — no words repeat, but it is the same idea reworded
+      ✓ «المقاس الصحيح من أول مرة» — the outcome, not the question
   No emojis, no punctuation except «!».
 - "imageBrief": one English sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers, and WITHOUT people or faces — products, places, and atmosphere only.
   Draw the scene from THIS business's own world — its goods, its materials, its workplace, the result its customers get. A generic desk with a laptop is the lazy default and says nothing about the business; a training school has classrooms, boards, notebooks, certificates, hands-free workbenches; a workshop has tools and materials.${recentBriefsBlock}
 
 Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
+}
+
+/** Numeric tokens in a blob, normalised: Arabic-Indic → ASCII, separators dropped. */
+function numericTokens(blob: string): string[] {
+    return [...normalizeArabicIndic(blob).matchAll(/\d[\d.,]*/g)]
+        .map(m => m[0].replace(/[.,]/g, ''))
+        .filter(Boolean);
+}
+
+/**
+ * Figures the model wrote that appear NOWHERE in its inputs.
+ *
+ * D-047 already forbids the model from writing PHONE digits — the platform
+ * composes those in code, because one mangled digit is a lost sale. A PRICE is
+ * the same kind of digit with a bigger blast radius, and on 2026-08-10 the
+ * generator invented «45 د» on four consecutive runs for a page whose data
+ * contains no price at all, wrapping the invented figure in otherwise perfectly
+ * grounded facts. The prompt already forbade it and the merchant's own KB said
+ * «لا تختلق أسعاراً»; both were ignored. A rule the model can ignore is not a
+ * guard, so this one is deterministic.
+ *
+ * Token EQUALITY, never substring: the phone «0932456789» contains "45", and a
+ * substring test would have accepted the very figure this exists to catch.
+ * Comparison is list-free — no currency vocabulary to maintain in any language
+ * (the no-hand-maintained-lists rule); any figure absent from the inputs is
+ * unsupported, whatever it denominates.
+ */
+export function findUngroundedNumbers(text: string, groundingCorpus: string): string[] {
+    const grounded = new Set(numericTokens(groundingCorpus));
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const token of numericTokens(text)) {
+        if (grounded.has(token) || seen.has(token)) continue;
+        seen.add(token);
+        out.push(token);
+    }
+    return out;
+}
+
+/** Everything the prompt shows the model — the only figures it may repeat. */
+function buildGroundingCorpus(bundle: PageBundle, today: string): string {
+    return [
+        bundle.pageName,
+        today,
+        bundle.businessInfoBlock,
+        bundle.productCatalog,
+        bundle.factCollectionsBlock,
+        bundle.knowledgeBase,
+        bundle.brandVoiceNotes,
+    ].filter(Boolean).join('\n');
 }
 
 /** JSON-mode text call. Null on any failure — the caller maps to generation_failed. */
@@ -493,8 +549,23 @@ async function generatePostText(
             recordAiFailedBeforeLog('post_generation', POST_TEXT_MODEL, 'AiEmptyReplyError');
             return null;
         }
+        const text = parsed.text.trim();
+
+        // SHADOW ONLY — it logs, it never blocks. Figure invention has NOT been
+        // observed here: the one case that looked like it (2026-08-10, «45 د»)
+        // was real merchant data living in `fact_rows.price`, invisible to a
+        // query that selected only name/attributes. Blocking on an unobserved
+        // failure would reject valid posts and burn a merchant's daily slot, so
+        // this measures first. Promote to a hard gate only if the numbers say so.
+        const ungrounded = findUngroundedNumbers(text, buildGroundingCorpus(bundle, today));
+        if (ungrounded.length > 0) {
+            logger.warn('[PostSuggestions] Figures absent from the prompt inputs (shadow)', {
+                pageId: bundle.pageId, postType, ungrounded,
+            });
+        }
+
         return {
-            text: parsed.text.trim(),
+            text,
             imageBrief: typeof parsed.imageBrief === 'string' ? parsed.imageBrief.trim() : '',
             headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
         };

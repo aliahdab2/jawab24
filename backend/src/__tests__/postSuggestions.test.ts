@@ -96,6 +96,7 @@ import {
     pickPostType,
     buildContactSuffix,
     buildRecentBriefsBlock,
+    findUngroundedNumbers,
 } from '../services/postSuggestions';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -444,6 +445,50 @@ describe('buildRecentBriefsBlock — the image gets the cross-day memory the ang
     it('renders one bullet per scene so the list cannot read as a single sentence', () => {
         const block = buildRecentBriefsBlock(['scene one', 'scene two', 'scene three']);
         expect(block.match(/^ {2}- /gm)).toHaveLength(3);
+    });
+});
+
+/**
+ * Shadow measurement of figures the model wrote that its inputs do not contain.
+ * D-047 already keeps phone digits out of model hands; this measures whether
+ * money and other figures need the same treatment.
+ */
+describe('findUngroundedNumbers — figures the inputs do not support', () => {
+    it('flags a figure that appears nowhere in the inputs', () => {
+        expect(findUngroundedNumbers('السعر 45 د فقط', 'رقم 1 — القطع: 22 — الوزن: 2-4 كيلو'))
+            .toEqual(['45']);
+    });
+
+    it('accepts a figure the inputs DO carry — the 2026-08-10 false alarm', () => {
+        // «45 د» lives in fact_rows.price and is rendered into the prompt block.
+        expect(findUngroundedNumbers(
+            'رواء رقم 2 بـ 45 د',
+            'رواء رقم 2 — السلسلة: عادي — القطع: 30 — الوزن: 3-6 كيلو — 45 د',
+        )).toEqual([]);
+    });
+
+    it('a PHONE NUMBER must not ground an unrelated price (token equality, not substring)', () => {
+        // «0932456789» contains the characters "45". A substring test would call
+        // the price grounded and miss exactly what this exists to catch.
+        expect(findUngroundedNumbers('السعر 45 د', 'اتصل بنا 0932456789')).toEqual(['45']);
+    });
+
+    it('normalises Arabic-Indic digits on both sides', () => {
+        expect(findUngroundedNumbers('السعر ٤٥ د', 'السعر 45 د')).toEqual([]);
+        expect(findUngroundedNumbers('السعر 45 د', 'السعر ٤٥ د')).toEqual([]);
+    });
+
+    it('ignores thousands separators so 35,000 matches 35000', () => {
+        expect(findUngroundedNumbers('بسعر 35,000 ل.س', 'الدورة بسعر 35000 ليرة')).toEqual([]);
+    });
+
+    it('reports each unsupported figure once, in order', () => {
+        expect(findUngroundedNumbers('99 ثم 77 ثم 99 مرة أخرى', 'لا أرقام هنا'))
+            .toEqual(['99', '77']);
+    });
+
+    it('is empty for text with no figures at all', () => {
+        expect(findUngroundedNumbers('راسلنا لمعرفة السعر', 'أي بيانات')).toEqual([]);
     });
 });
 
