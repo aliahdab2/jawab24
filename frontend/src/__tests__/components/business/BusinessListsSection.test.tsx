@@ -657,6 +657,50 @@ describe('BusinessListsSection', () => {
     });
   });
 
+  // The section's own explanation used to promise «أسعاره ومواعيده معاً في
+  // بطاقة» to EVERY page — institute vocabulary asserted at an outlet
+  // directory that has neither, and is not laid out as cards. Nothing in this
+  // engine knows a vertical; the copy must not either (owner catch 2026-08-10).
+  describe('the section hint is derived from the page, not assumed', () => {
+    const outletsOnly: FactCollectionWithRows = {
+      id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 2,
+      rows: [
+        { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'o2', name: 'صيدلية الياقوتة', attributes: [{ label: 'المنطقة', value: 'تلة الريح' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+
+    it('a directory with no dates and no cross-list items is told ONLY that Jawab quotes it', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outletsOnly] } } as any);
+      renderSection();
+
+      expect(await screen.findByText(en.lists.hintQuoted)).toBeInTheDocument();
+      expect(screen.queryByText(new RegExp(en.lists.hintGrouped))).toBeNull();
+      expect(screen.queryByText(new RegExp(en.lists.hintDated))).toBeNull();
+    });
+
+    it('a page whose lists join on one item, with dated rows, earns all three clauses', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
+      expect(hint).toHaveTextContent(en.lists.hintGrouped);
+      expect(hint).toHaveTextContent(en.lists.hintDated);
+    });
+
+    it('lists that join but carry no date are never told about expiry', async () => {
+      const undatedSlots = slotCollection({
+        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: null, endsAt: null })),
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), undatedSlots] } } as any);
+      renderSection();
+
+      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
+      expect(hint).toHaveTextContent(en.lists.hintGrouped);
+      expect(hint).not.toHaveTextContent(en.lists.hintDated);
+    });
+  });
+
   // A list's label is the header the prompt renderer puts above its rows, so a
   // typo is quoted to customers. Until this flow existed the only cure was a
   // database write — and `errLastRow` told merchants to delete a list they had

@@ -132,6 +132,25 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   );
 
   /**
+   * What this section promises, assembled from what the page actually holds.
+   *
+   * Only the first clause is true of every business: Jawab quotes these rows
+   * verbatim. The card-grouping clause belongs to pages whose lists JOIN on the
+   * same entity, and the expiry clause to pages that dated something at all —
+   * an outlet directory has neither, and telling it about prices, dates and
+   * cards describes an app the merchant is not looking at.
+   */
+  const hasDatedRow = useMemo(
+    () => collections.some((c) => c.rows.some((r) => r.startsAt !== null)),
+    [collections],
+  );
+  const sectionHint = [
+    t('lists.hintQuoted'),
+    ...(aggregates ? [t('lists.hintGrouped')] : []),
+    ...(hasDatedRow ? [t('lists.hintDated')] : []),
+  ].join(' ');
+
+  /**
    * A failed load must NEVER look like an empty one. Rendering `null` on error
    * told the merchant "you have no lists" when the truth was "we could not
    * reach the server" — the most alarming possible failure, indistinguishable
@@ -716,7 +735,14 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         <ListChecks className="w-5 h-5 text-brand-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
         <div className="min-w-0">
           <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('lists.title')}</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{t('lists.groupedHint')}</p>
+          {/* DERIVED, never one fixed sentence. The old copy promised «أسعاره
+              ومواعيده معاً» in a card — institute vocabulary asserted at an
+              outlet directory that has neither prices nor dates, and is not
+              even laid out as cards (owner catch, 2026-08-10). Nothing else in
+              this engine knows a vertical; the copy must not either. One
+              universal clause, plus only the clauses this page's own data has
+              earned. */}
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{sectionHint}</p>
         </div>
       </div>
 
