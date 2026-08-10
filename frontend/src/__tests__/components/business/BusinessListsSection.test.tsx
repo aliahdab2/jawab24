@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { factCollectionsApi, type FactCollectionWithRows } from '@/lib/api';
+import { dismissTopModal } from '@/hooks/useModalBackHandler';
+import { MAX_LIST_LABEL_LENGTH } from '@jawab24/shared';
 // Import the real copy rather than hardcoding it — a reworded key must not
 // silently turn this assertion into a no-op (project rule for E2E, same logic).
 import en from '@/i18n/en/business.json';
@@ -16,6 +18,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     factCollectionsApi: {
       list: vi.fn(),
       createCollection: vi.fn(),
+      renameCollection: vi.fn(),
       addRow: vi.fn(),
       updateRow: vi.fn(),
       deleteRow: vi.fn(),
@@ -370,7 +373,9 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     await screen.findByText('دورة ICDL');
-    expect(screen.getByText('1 announced date')).toBeInTheDocument();
+    // …and the neutral badge states the FACT (no date), not «announced date» —
+    // a row with no date is not a date, in any vertical.
+    expect(screen.getByText('1 row with no date')).toBeInTheDocument();
     expect(screen.queryByText(/upcoming/)).toBeNull();
   });
 
@@ -651,6 +656,174 @@ describe('BusinessListsSection', () => {
       renderSection({ readOnly: true });
       await screen.findByText('أسعار الدورات');
       expect(screen.queryByRole('button', { name: en.lists.addList })).toBeNull();
+    });
+  });
+
+  // The section's own explanation used to promise «أسعاره ومواعيده معاً في
+  // بطاقة» to EVERY page — institute vocabulary asserted at an outlet
+  // directory that has neither, and is not laid out as cards. Nothing in this
+  // engine knows a vertical; the copy must not either (owner catch 2026-08-10).
+  describe('the section hint is derived from the page, not assumed', () => {
+    const outletsOnly: FactCollectionWithRows = {
+      id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 2,
+      rows: [
+        { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'o2', name: 'صيدلية الياقوتة', attributes: [{ label: 'المنطقة', value: 'تلة الريح' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+
+    it('a directory with no dates and no cross-list items is told ONLY that Jawab quotes it', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outletsOnly] } } as any);
+      renderSection();
+
+      expect(await screen.findByText(en.lists.hintQuoted)).toBeInTheDocument();
+      expect(screen.queryByText(new RegExp(en.lists.hintGrouped))).toBeNull();
+      expect(screen.queryByText(new RegExp(en.lists.hintDated))).toBeNull();
+    });
+
+    it('a page whose lists join on one item, with dated rows, earns all three clauses', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
+      expect(hint).toHaveTextContent(en.lists.hintGrouped);
+      expect(hint).toHaveTextContent(en.lists.hintDated);
+    });
+
+    it('lists that join but carry no date are never told about expiry', async () => {
+      const undatedSlots = slotCollection({
+        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: null, endsAt: null })),
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), undatedSlots] } } as any);
+      renderSection();
+
+      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
+      expect(hint).toHaveTextContent(en.lists.hintGrouped);
+      expect(hint).not.toHaveTextContent(en.lists.hintDated);
+    });
+  });
+
+  // A list's label is the header the prompt renderer puts above its rows, so a
+  // typo is quoted to customers. Until this flow existed the only cure was a
+  // database write — and `errLastRow` told merchants to delete a list they had
+  // no way to delete.
+  describe('«تعديل الاسم» rename flow', () => {
+    const renameDoor = (label: string) => en.lists.renameActionFor.replace('{list}', label);
+
+    it('renames from the entity-card layout — prefilled, trimmed, one PATCH', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-prices', label: 'أسعار الدورات والشهادات' } } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel) as HTMLInputElement;
+      // Prefilled with the CURRENT name — a rename is an edit, not a re-entry.
+      expect(input.value).toBe('أسعار الدورات');
+
+      fireEvent.change(input, { target: { value: '  أسعار الدورات والشهادات  ' } });
+      fireEvent.click(screen.getByRole('button', { name: common.save }));
+
+      await waitFor(() => expect(factCollectionsApi.renameCollection).toHaveBeenCalledWith(
+        PAGE, 'coll-prices', 'أسعار الدورات والشهادات',
+      ));
+    });
+
+    it('refuses a SIBLING list\'s name inline, but allows re-saving the list\'s own', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel);
+
+      fireEvent.change(input, { target: { value: 'مواعيد الدورات المعلنة' } });
+      expect(screen.getByRole('alert')).toHaveTextContent(en.lists.errDuplicateLabel);
+      expect(screen.getByRole('button', { name: common.save })).toBeDisabled();
+
+      // Its OWN label is not a clash — the server treats that as a no-op.
+      fireEvent.change(input, { target: { value: 'أسعار الدورات' } });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByRole('button', { name: common.save })).toBeEnabled();
+      expect(factCollectionsApi.renameCollection).not.toHaveBeenCalled();
+    });
+
+    it('the door also exists on the directory layout, where the list card is the only per-list surface', async () => {
+      const outlets: FactCollectionWithRows = {
+        id: 'coll-outlets',
+        label: 'الصيدليات',
+        keyAttr: 'المنطقة',
+        isComplete: true,
+        rowCount: 1,
+        rows: [
+          { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
+      vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-outlets', label: 'نقاط البيع' } } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('الصيدليات') }));
+      fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: 'نقاط البيع' } });
+      fireEvent.click(screen.getByRole('button', { name: common.save }));
+
+      await waitFor(() => expect(factCollectionsApi.renameCollection).toHaveBeenCalledWith(PAGE, 'coll-outlets', 'نقاط البيع'));
+    });
+
+    // Found in the UX audit: focus reset to <body> on close, so a keyboard user
+    // with three lists on the page restarted from the top each time.
+    it('returns focus to the door that opened it', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      const door = await screen.findByRole('button', { name: renameDoor('أسعار الدورات') });
+      door.focus();
+      fireEvent.click(door);
+      fireEvent.click(screen.getByRole('button', { name: common.cancel }));
+
+      await waitFor(() => expect(document.activeElement).toBe(door));
+    });
+
+    // The cap used to be silent — typing just stopped at 120 characters.
+    it('warns as the name approaches the 120-character column cap', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel);
+
+      fireEvent.change(input, { target: { value: 'ق'.repeat(99) } });
+      expect(screen.queryByText(/character(s)? left/)).toBeNull();
+
+      fireEvent.change(input, { target: { value: 'ق'.repeat(MAX_LIST_LABEL_LENGTH - 3) } });
+      expect(screen.getByText('3 characters left')).toBeInTheDocument();
+
+      // At the cap the count reaches zero — which is the moment the merchant's
+      // typing goes dead, so this is the state that most needs to be visible.
+      // (ICU `=0` is NOT honoured by this next-intl setup — verified in a real
+      // render, it falls to `other` — so the copy must read well at zero.)
+      fireEvent.change(input, { target: { value: 'ق'.repeat(MAX_LIST_LABEL_LENGTH) } });
+      expect((input as HTMLInputElement).value).toHaveLength(MAX_LIST_LABEL_LENGTH);
+      expect(screen.getByText('0 characters left')).toBeInTheDocument();
+    });
+
+    // Android's hardware back must close the sheet, not leave /business (or
+    // exit the app) with a half-typed name.
+    it('closes on the Android back button instead of letting it reach the router', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      // What _app.tsx calls on a hardware back press.
+      expect(dismissTopModal()).toBe(true);
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('a member gets no rename door — the label is an admin write', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection({ readOnly: true });
+      await screen.findByText('أسعار الدورات');
+      expect(screen.queryByRole('button', { name: renameDoor('أسعار الدورات') })).toBeNull();
     });
   });
 });

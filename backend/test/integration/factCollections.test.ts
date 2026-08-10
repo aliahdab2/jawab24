@@ -284,6 +284,84 @@ describe('fact collections — the engine end to end', () => {
         expect(await readKbVersion(pageId)).toBeGreaterThan(beforeDelete);
     });
 
+    // ── Renaming a list («تعديل الاسم») ──────────────────────────────────
+    // The label is not a caption: the renderer prints it as the header of the
+    // list's block, so it is one of the few merchant strings the model reads.
+    // Until this existed, a typo could only be fixed with a DB write.
+
+    it('renames a collection, changes the prompt header, and retires the caches', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليا', keyAttr: 'المدينة', rows: OUTLETS,
+        });
+        const before = await readKbVersion(pageId);
+
+        const renamed = await factCollectionsService.renameCollection(pageId, c.id, 'الصيدليات');
+        expect(renamed?.label).toBe('الصيدليات');
+
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block;
+        expect(block).toContain('الصيدليات');
+        expect(block).not.toContain('الصيدليا\n');
+        // Rows are untouched by a rename — only the header moved.
+        expect(await factCollectionsService.getRows(c.id)).toHaveLength(OUTLETS.length);
+        expect(await readKbVersion(pageId)).toBeGreaterThan(before);
+    });
+
+    // D-049: a cache miss costs 2–4s of reply latency. Re-saving the name a
+    // list already has must not retire a single cached reply.
+    it('a no-op rename returns the collection and leaves the caches alone', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'العروض', keyAttr: null, rows: [{ name: 'عرض أ' }],
+        });
+        const before = await readKbVersion(pageId);
+
+        const same = await factCollectionsService.renameCollection(pageId, c.id, 'العروض');
+        expect(same?.id).toBe(c.id);
+        expect(await readKbVersion(pageId)).toBe(before);
+    });
+
+    it('refuses a rename onto a sibling list\'s label, by name', async () => {
+        const a = await factCollectionsService.createCollection(pageId, {
+            label: 'أسعار الدورات', keyAttr: null, rows: [{ name: 'ICDL', price: '35000' }],
+        });
+        await factCollectionsService.createCollection(pageId, {
+            label: 'رسوم الشهادات', keyAttr: null, rows: [{ name: 'شهادة حضور', price: '50000' }],
+        });
+
+        await expect(
+            factCollectionsService.renameCollection(pageId, a.id, 'رسوم الشهادات'),
+        ).rejects.toMatchObject({ name: 'FactCollectionLimitError', code: 'DUPLICATE_LABEL' });
+
+        // the refusal is total — the original name survives
+        const labels = (await factCollectionsService.listCollections(pageId)).map(c => c.label);
+        expect(labels).toEqual(['أسعار الدورات', 'رسوم الشهادات']);
+    });
+
+    // The race the pre-check cannot close: two lists renamed onto ONE new label
+    // at the same instant. Both pre-checks pass (neither sees the other's
+    // pending name) and uq_fact_collections_page_label decides — the loser must
+    // get the same named refusal, never a raw 23505.
+    it('one of two concurrent renames onto the same label wins; the other gets DUPLICATE_LABEL', async () => {
+        const a = await factCollectionsService.createCollection(pageId, {
+            label: 'قائمة أ', keyAttr: null, rows: [{ name: 'عنصر أ' }],
+        });
+        const b = await factCollectionsService.createCollection(pageId, {
+            label: 'قائمة ب', keyAttr: null, rows: [{ name: 'عنصر ب' }],
+        });
+
+        const results = await Promise.allSettled([
+            factCollectionsService.renameCollection(pageId, a.id, 'القائمة الموحدة'),
+            factCollectionsService.renameCollection(pageId, b.id, 'القائمة الموحدة'),
+        ]);
+        const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect(rejected[0].reason).toMatchObject({ name: 'FactCollectionLimitError', code: 'DUPLICATE_LABEL' });
+
+        const labels = (await factCollectionsService.listCollections(pageId)).map(c => c.label).sort();
+        expect(labels).toHaveLength(2);
+        expect(labels.filter(l => l === 'القائمة الموحدة')).toHaveLength(1);
+    });
+
     // ── Row-level CRUD (G1b list editor) ─────────────────────────────────
 
     it('addRow appends after existing rows and bumps the reply caches', async () => {
@@ -395,11 +473,13 @@ describe('fact collections — the engine end to end', () => {
 
         expect(await factCollectionsService.setCompleteness(other.id, c.id, true)).toBeNull();
         expect(await factCollectionsService.deleteCollection(other.id, c.id)).toBeNull();
+        expect(await factCollectionsService.renameCollection(other.id, c.id, 'مسروقة')).toBeNull();
 
         // untouched
         const [still] = await factCollectionsService.listCollections(pageId);
         expect(still.isComplete).toBeNull();
         expect(still.rowCount).toBe(OUTLETS.length);
+        expect(still.label).toBe('الصيدليات');
     });
 });
 

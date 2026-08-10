@@ -11,6 +11,7 @@
 import enAbout from '../src/i18n/en/about.json';
 import enAdmin from '../src/i18n/en/admin.json';
 import enAuth from '../src/i18n/en/auth.json';
+import enBusiness from '../src/i18n/en/business.json';
 import enCheckout from '../src/i18n/en/checkout.json';
 import enComments from '../src/i18n/en/comments.json';
 import enCommon from '../src/i18n/en/common.json';
@@ -56,6 +57,7 @@ import enTime from '../src/i18n/en/time.json';
 import arAbout from '../src/i18n/ar/about.json';
 import arAdmin from '../src/i18n/ar/admin.json';
 import arAuth from '../src/i18n/ar/auth.json';
+import arBusiness from '../src/i18n/ar/business.json';
 import arCheckout from '../src/i18n/ar/checkout.json';
 import arComments from '../src/i18n/ar/comments.json';
 import arCommon from '../src/i18n/ar/common.json';
@@ -99,7 +101,7 @@ import arTime from '../src/i18n/ar/time.json';
 
 // Merged translation objects keyed by namespace
 export const en = {
-  about: enAbout, admin: enAdmin, auth: enAuth, checkout: enCheckout,
+  about: enAbout, admin: enAdmin, auth: enAuth, business: enBusiness, checkout: enCheckout,
   comments: enComments, common: enCommon, compare: enCompare, contact: enContact,
   dashboard: enDashboard, dataDeletion: enDataDeletion, errorBoundary: enErrorBoundary,
   errors: enErrors, export: enExport, feedback: enFeedback, flagReason: enFlagReason,
@@ -115,7 +117,7 @@ export const en = {
 };
 
 export const ar = {
-  about: arAbout, admin: arAdmin, auth: arAuth, checkout: arCheckout,
+  about: arAbout, admin: arAdmin, auth: arAuth, business: arBusiness, checkout: arCheckout,
   comments: arComments, common: arCommon, compare: arCompare, contact: arContact,
   dashboard: arDashboard, dataDeletion: arDataDeletion, errorBoundary: arErrorBoundary,
   errors: arErrors, export: arExport, feedback: arFeedback, flagReason: arFlagReason,

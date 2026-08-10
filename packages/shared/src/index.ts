@@ -480,6 +480,11 @@ export const MAX_CATALOG_IMPORT_CHARS = 16_000;
  *  signal to look at, not a case to serve. */
 export const MAX_COLLECTIONS_PER_PAGE = 12;
 export const MAX_ROWS_PER_COLLECTION = 500;
+/** A list's name, capped by `fact_collections.label varchar(120)`. Here for the
+ *  same reason: the naming/rename sheet must stop the merchant AT the limit and
+ *  say so, which it cannot do from a literal that only the column and the Zod
+ *  schema know about. */
+export const MAX_LIST_LABEL_LENGTH = 120;
 
 /** A label+value detail on a catalog item ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
  *  Free text by design — the AI consumes these only as rendered prompt TEXT, so

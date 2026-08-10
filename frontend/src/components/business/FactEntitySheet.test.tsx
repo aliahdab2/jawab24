@@ -305,4 +305,34 @@ describe('FactEntitySheet — save preserves what the form does not display', ()
     expect(byId('row-own')?.name).toBe('دورة Y');
     expect(byId('row-sibling')?.name).toBe('دورة X أونلاين');
   });
+
+  /**
+   * The dated half of an item is headed by the MERCHANT'S list name, never a
+   * noun we picked. A fixed «المواعيد» reads as an appointment book — right
+   * for a course cohort, wrong for the seasonal-offers list below, and this
+   * page must fit any business (owner ruling 2026-08-10).
+   */
+  it('heads the dated section with the merchant\'s own list name, whatever that list is', () => {
+    const baseRow = row({ id: 'row-base', name: 'عطر الياسمين', price: '120.00', currency: 'ر.س' });
+    const prices = collection({ id: 'col-prices', label: 'أسعار العطور', rows: [baseRow] });
+    const offerRow = row({ id: 'row-offer', name: 'عطر الياسمين', startsAt: '2026-12-01' });
+    const offers = collection({ id: 'col-offers', label: 'عروض موسمية', rows: [offerRow] });
+    const unit: FactEntityUnit = {
+      title: 'عطر الياسمين',
+      faceLabel: null,
+      faceValue: null,
+      base: { row: baseRow, collection: prices },
+      sessions: [{ row: offerRow, collection: offers }],
+      sessionCollection: offers,
+    };
+
+    render(
+      <FactEntitySheet unit={unit} baseCollection={prices} saving={false} onSave={vi.fn()} onClose={vi.fn()} />,
+    );
+
+    // The perfume shop sees ITS list name…
+    expect(screen.getAllByRole('region', { name: 'عروض موسمية' }).length).toBeGreaterThan(0);
+    // …and never our word for someone else's business.
+    expect(screen.queryByRole('region', { name: 'Dates' })).toBeNull();
+  });
 });

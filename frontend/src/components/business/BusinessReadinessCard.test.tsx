@@ -229,7 +229,9 @@ describe('BusinessReadinessCard on a lists-shaped page (products live in fact li
     // 245 live list rows greeted the merchant with "0% ready — no products yet".
     renderCard(pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } }), 0, 245);
 
-    expect(screen.getByText('Your products — in your lists')).toBeInTheDocument();
+    // «What you offer», not «your products»: this same chip greets a training
+    // institute and a clinic, which sell no products at all.
+    expect(screen.getByText('What you offer — in your lists')).toBeInTheDocument();
     expect(screen.queryByText('No products yet')).not.toBeInTheDocument();
     // hours + products → 2 of 5.
     expect(screen.getByText('2 of 5')).toBeInTheDocument();

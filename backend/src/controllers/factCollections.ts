@@ -3,7 +3,7 @@ import { factCollectionsService, FactCollectionLimitError, type FactCollectionEr
 import { pagesService } from '../services/pages';
 import {
     FactRowSchema, FactRowUpdateSchema, FactCompletenessSchema, FactEntitySaveSchema,
-    FactCollectionCreateSchema, formatValidationErrors,
+    FactCollectionCreateSchema, FactCollectionRenameSchema, formatValidationErrors,
 } from '../utils/validation';
 import { createRequestLogger } from '../types';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -103,6 +103,37 @@ class FactCollectionsController {
                 rows: parsed.data.rows.map(({ price, ...r }) => ({ ...r, price: toPrice(price) })),
             });
             return reply.status(201).send({ data: collection });
+        } catch (err) {
+            if (err instanceof FactCollectionLimitError) {
+                return reply.status(statusForCode(err.code)).send({ error: err.message, code: err.code });
+            }
+            throw err;
+        }
+    }
+
+    /** PATCH /fact-collections/:collectionId — rename the list. The label is the
+     *  prompt block's header, so this is a reply-affecting edit, not cosmetic. */
+    async renameCollection(
+        request: FastifyRequest<{ Params: { pageId: string; collectionId: string }; Body: unknown }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
+        if (!page) return reply.status(404).send({ error: 'Page not found', code: 'PAGE_NOT_FOUND' });
+
+        wireLogger(request);
+        const parsed = FactCollectionRenameSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION', details: formatValidationErrors(parsed.error) });
+        }
+        try {
+            const collection = await factCollectionsService.renameCollection(
+                request.params.pageId,
+                request.params.collectionId,
+                parsed.data.label,
+            );
+            if (!collection) return reply.status(404).send({ error: 'Collection not found', code: 'COLLECTION_NOT_FOUND' });
+            return reply.send({ data: collection });
         } catch (err) {
             if (err instanceof FactCollectionLimitError) {
                 return reply.status(statusForCode(err.code)).send({ error: err.message, code: err.code });

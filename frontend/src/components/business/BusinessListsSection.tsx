@@ -1,7 +1,7 @@
 import React, { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
+import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRowLive, MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
@@ -18,7 +18,7 @@ import {
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
 import { FactEntitySheet } from './FactEntitySheet';
-import { NewListSheet } from './NewListSheet';
+import { ListLabelSheet } from './ListLabelSheet';
 
 interface BusinessListsSectionProps {
   pageId: string;
@@ -111,6 +111,11 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  (a born-empty list renders no prompt block and no card, so it must not
    *  exist). */
   const [newList, setNewList] = useState<'naming' | { label: string } | null>(null);
+  /** The list being renamed, captured by id + current label. Held as a VALUE,
+   *  not a reference into `collections`: the refetch after a save replaces
+   *  those objects, and a stale reference would re-open the sheet on the old
+   *  label. */
+  const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null);
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
@@ -125,6 +130,25 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     () => groups.some((g) => new Set(g.rows.map((r) => r.collection.id)).size > 1),
     [groups],
   );
+
+  /**
+   * What this section promises, assembled from what the page actually holds.
+   *
+   * Only the first clause is true of every business: Jawab quotes these rows
+   * verbatim. The card-grouping clause belongs to pages whose lists JOIN on the
+   * same entity, and the expiry clause to pages that dated something at all —
+   * an outlet directory has neither, and telling it about prices, dates and
+   * cards describes an app the merchant is not looking at.
+   */
+  const hasDatedRow = useMemo(
+    () => collections.some((c) => c.rows.some((r) => r.startsAt !== null)),
+    [collections],
+  );
+  const sectionHint = [
+    t('lists.hintQuoted'),
+    ...(aggregates ? [t('lists.hintGrouped')] : []),
+    ...(hasDatedRow ? [t('lists.hintDated')] : []),
+  ].join(' ');
 
   /**
    * A failed load must NEVER look like an empty one. Rendering `null` on error
@@ -265,6 +289,24 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     }
   };
 
+  /** Rename a list. The label is the header of its block in the prompt, so this
+   *  is a reply-affecting edit — the server invalidates the page's reply caches
+   *  for it, exactly as it does for a row edit. */
+  const renameList = async (label: string) => {
+    if (!renaming) return;
+    setSaving(true);
+    try {
+      await factCollectionsApi.renameCollection(pageId, renaming.id, label);
+      await refresh();
+      setRenaming(null);
+      toast.success(t('lists.saved'));
+    } catch (error) {
+      await reportWriteFailure(error, 'rename-fact-collection');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const removeRow = async () => {
     if (!editing?.row) return;
     setSaving(true);
@@ -334,10 +376,28 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   const createSheets = (
     <>
       {newList === 'naming' && (
-        <NewListSheet
+        <ListLabelSheet
           existingLabels={collections.map((c) => c.label)}
-          onContinue={(label) => setNewList({ label })}
+          title={t('lists.newListTitle')}
+          submitLabel={tc('continue')}
+          submitIcon={<ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />}
+          hint={t('lists.newListNameHint')}
+          onSubmit={(label) => setNewList({ label })}
           onClose={() => setNewList(null)}
+        />
+      )}
+      {renaming && (
+        <ListLabelSheet
+          // The list's OWN label is excluded: re-saving an unchanged name is a
+          // no-op the server accepts, not a duplicate to refuse.
+          existingLabels={collections.filter((c) => c.id !== renaming.id).map((c) => c.label)}
+          initialLabel={renaming.label}
+          title={t('lists.renameTitle')}
+          submitLabel={tc('save')}
+          hint={t('lists.renameHint')}
+          saving={saving}
+          onSubmit={renameList}
+          onClose={() => setRenaming(null)}
         />
       )}
       {newList !== null && newList !== 'naming' && (
@@ -429,6 +489,27 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       <Pencil className="w-3 h-3" aria-hidden="true" />
       {t('lists.edit')}
     </span>
+  );
+
+  /**
+   * «تعديل الاسم» — the only door onto a list's label.
+   *
+   * The label is not decoration: the prompt renderer puts it above the list's
+   * rows, so a typo reaches customers in the AI's own answers. An explicitly
+   * LABELLED button rather than a bare pencil (the affordance ruling from the
+   * #638 UX pass), and the accessible name carries the list it belongs to —
+   * «تعديل الاسم» alone is ambiguous on a page with several lists.
+   */
+  const renameButton = (collection: FactCollectionWithRows) => readOnly ? null : (
+    <button
+      type="button"
+      onClick={() => setRenaming({ id: collection.id, label: collection.label })}
+      aria-label={t('lists.renameActionFor', { list: collection.label })}
+      className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-theme-border px-3 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-surface-100 flex-shrink-0"
+    >
+      <Pencil className="w-3 h-3" aria-hidden="true" />
+      {t('lists.renameAction')}
+    </button>
   );
 
   /**
@@ -654,7 +735,14 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         <ListChecks className="w-5 h-5 text-brand-600 mt-0.5 flex-shrink-0" aria-hidden="true" />
         <div className="min-w-0">
           <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('lists.title')}</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{t('lists.groupedHint')}</p>
+          {/* DERIVED, never one fixed sentence. The old copy promised «أسعاره
+              ومواعيده معاً» in a card — institute vocabulary asserted at an
+              outlet directory that has neither prices nor dates, and is not
+              even laid out as cards (owner catch, 2026-08-10). Nothing else in
+              this engine knows a vertical; the copy must not either. One
+              universal clause, plus only the clauses this page's own data has
+              earned. */}
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{sectionHint}</p>
         </div>
       </div>
 
@@ -673,7 +761,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           <div className="divide-y divide-theme-border/60">
             {collections.map((collection) => (
               <div key={collection.id} className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-foreground" dir="auto">{collection.label}</span>
+                {/* On the entity-card layout this block is the ONLY per-list
+                    surface — the cards are per ENTITY — so the rename door
+                    lives here or nowhere. */}
+                <span className="min-w-0 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-foreground break-words" dir="auto">{collection.label}</span>
+                  {renameButton(collection)}
+                </span>
                 {completenessControl(collection)}
               </div>
             ))}
@@ -752,7 +846,10 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             <div key={collection.id} className="rounded-xl border border-theme-border">
               <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30 rounded-t-xl">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h3 className="text-[15px] font-bold text-foreground" dir="auto">{collection.label}</h3>
+                  <span className="min-w-0 flex items-center gap-2 flex-wrap">
+                    <h3 className="text-[15px] font-bold text-foreground break-words" dir="auto">{collection.label}</h3>
+                    {renameButton(collection)}
+                  </span>
                   {collection.isComplete !== null && completenessControl(collection)}
                 </div>
                 {/* The completeness ASK lives with its list (owner: the three
