@@ -38,7 +38,15 @@ const MAX_LOGO_BYTES = 2 * 1024 * 1024; // profile pictures are tiny; refuse any
  *  accent from the page logo's dominant color (sharp stats) per merchant. */
 const SCRIM_COLOR = '#0a3d34';
 const ACCENT_COLOR = '#2dd4bf';
-const ARABIC_FONT_STACK = "Cairo, Tajawal, 'Noto Sans Arabic', 'Geeza Pro', sans-serif";
+/**
+ * Arabic families first, then a LATIN family, then the generic alias. Headlines
+ * are mixed-script in practice («دورة ICDL تبدأ اليوم»), and pango resolves
+ * per-glyph down this list — so an Arabic-only stack draws Latin as tofu.
+ * 'Noto Sans' must stay paired with the `font-noto` package in the Dockerfile:
+ * the generic `sans-serif` tail is NOT a safety net, it resolves to nothing on
+ * an alpine that ships no Latin font.
+ */
+const HEADLINE_FONT_STACK = "Cairo, Tajawal, 'Noto Sans Arabic', 'Geeza Pro', 'Noto Sans', DejaVu Sans, sans-serif";
 
 /** Headline typesetting bounds — the compositor must never trust model text to fit. */
 const HEADLINE_FONT_SIZE = 60;
@@ -59,43 +67,52 @@ export function escapeXml(s: string): string {
 }
 
 /**
- * Does fontconfig know an Arabic-capable font family? Probed ONCE per process
- * (first compose), via `fc-list :lang=ar`.
+ * Does fontconfig know a font family for EVERY script a headline can contain?
+ * Probed ONCE per process (first compose), via `fc-list :lang=<code>`.
  *
- * Semantics: fc-list running and reporting ZERO Arabic families is the only
- * "no" — that is the broken-container state (Alpine without the font package)
- * where pango renders tofu. fc-list being absent/failing means we are on a
- * host without fontconfig tooling (dev macOS renders Arabic fine through its
- * system stack), so assume fonts are present and render.
+ * Both Arabic AND Latin are required. Checking only Arabic is what let the
+ * 2026-08-10 tofu bug ship: the container had 72 Arabic families and 0 Latin,
+ * so the probe said "fonts fine" and «دورة ICDL تبدأ اليوم» rendered the Latin
+ * word as codepoint boxes on a card a merchant could have posted publicly.
+ * A missing script for EITHER means the whole text layer is unsafe — a
+ * scrim-only card is a clean degrade, a half-tofu headline is not.
+ *
+ * Semantics: fc-list running and reporting ZERO families for a script is the
+ * only "no" — that is the broken-container state. fc-list being absent/failing
+ * means we are on a host without fontconfig tooling (dev macOS renders both
+ * fine through its system stack), so assume fonts are present and render.
  */
-let arabicFontPresent: boolean | null = null;
-function hasArabicFont(): boolean {
-    if (arabicFontPresent !== null) return arabicFontPresent;
+let headlineFontsPresent: boolean | null = null;
+function hasHeadlineFonts(): boolean {
+    if (headlineFontsPresent !== null) return headlineFontsPresent;
     try {
-        const out = execFileSync('fc-list', [':lang=ar'], {
-            encoding: 'utf8',
-            timeout: 3_000,
-            stdio: ['ignore', 'pipe', 'ignore'],
+        const missing = (['ar', 'en'] as const).filter((lang) => {
+            const out = execFileSync('fc-list', [`:lang=${lang}`], {
+                encoding: 'utf8',
+                timeout: 3_000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            });
+            return out.trim().length === 0;
         });
-        arabicFontPresent = out.trim().length > 0;
-        if (!arabicFontPresent) {
+        headlineFontsPresent = missing.length === 0;
+        if (!headlineFontsPresent) {
             // Once per process: the deliverable is visibly degraded (scrim-only
-            // cards) until the image ships fontconfig + font-noto-arabic.
+            // cards) until the image ships fontconfig + font-noto-arabic + font-noto.
             captureError(
-                new Error('fontconfig reports no Arabic-capable font family'),
-                'Post card: no Arabic font — skipping headline/accent layers (scrim only)',
+                new Error(`fontconfig reports no font family for: ${missing.join(', ')}`),
+                'Post card: missing script font — skipping headline/accent layers (scrim only)',
                 {
                     level: 'warning',
                     tags: { service: 'post-suggestions' },
-                    fingerprint: ['post-suggestions-no-arabic-font'],
+                    fingerprint: ['post-suggestions-missing-script-font'],
                 },
             );
         }
     } catch {
         // fc-list unavailable (dev macOS) — not evidence of missing fonts.
-        arabicFontPresent = true;
+        headlineFontsPresent = true;
     }
-    return arabicFontPresent;
+    return headlineFontsPresent;
 }
 
 /** Fetch + circle-mask the page avatar; null on any failure (badge skipped). */
@@ -163,7 +180,7 @@ export function buildHeadlineLayerSvg(
         ? `
   <rect x="${width - HEADLINE_SIDE_MARGIN - 440}" y="${height - 190}" width="440" height="6" rx="3" fill="${ACCENT_COLOR}"/>
   <text x="${width - HEADLINE_SIDE_MARGIN}" y="${height - 104}" direction="rtl" text-anchor="start"
-        font-family="${ARABIC_FONT_STACK}"
+        font-family="${HEADLINE_FONT_STACK}"
         font-size="${HEADLINE_FONT_SIZE}" font-weight="700" fill="#ffffff"${fitAttrs}>${escapeXml(headline)}</text>`
         : '';
 
@@ -214,7 +231,7 @@ export async function composePostCard(
 
         const headline = opts.headline?.trim();
         if (headline) {
-            const svg = buildHeadlineLayerSvg(width, height, headline, { renderText: hasArabicFont() });
+            const svg = buildHeadlineLayerSvg(width, height, headline, { renderText: hasHeadlineFonts() });
             if (svg) layers.push({ input: Buffer.from(svg), left: 0, top: 0 });
         }
 
