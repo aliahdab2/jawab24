@@ -379,6 +379,13 @@ Rules that follow from it:
 3. **After creating the worktree: `npm install`, then `cd packages/shared && npm run build`.**
    A fresh worktree has no `node_modules`, and a stale `dist/` silently breaks the backend
    while your changes appear to do nothing. Skip only for docs-only changes.
+
+   **A fresh worktree also has NO `.env` files** — they are gitignored, so `backend/.env`,
+   `ai-worker/.env` and `frontend/.env.local` do not come with it. Copy them from the main
+   checkout before running anything locally. Without `backend/.env` the backend starts and
+   then fails on the first DB call; without `frontend/.env.local` the frontend builds but
+   every `NEXT_PUBLIC_*` is missing. (Same class as the missing `node_modules` and the
+   missing `GoogleService-Info.plist` on iOS builds.)
 4. **One worktree, one purpose.** Check `git status --short` before committing and leave
    out anything that was already there; say so explicitly in the summary.
 5. **Dev servers: give each worktree its own ports** — two checkouts on one port silently
@@ -387,7 +394,23 @@ Rules that follow from it:
    frequently taken by an unrelated dev server, so check
    `lsof -iTCP:<port> -sTCP:LISTEN` before binding and never kill what you find. A worktree
    runs on its own: `PORT=3100` for the backend, 3005 for the ai-worker, and the frontend
-   must be pointed at it with `NEXT_PUBLIC_API_URL=http://localhost:3100`.
+   must be pointed at it with `NEXT_PUBLIC_API_URL=http://localhost:3100`. ⚠️ **3100/3005 are
+   only a convention, not a reservation** — a second concurrent worktree finds them taken
+   (2026-08-10) and must move up a band (3200/3201/3202) rather than reclaim them. The
+   backend serves routes at the ROOT locally, so the URL carries **no `/api` suffix**; that
+   prefix exists only because nginx adds it in production.
+
+   ⚠️ **The local dev database is SHARED by every worktree, and it drifts.** It is maintained
+   with `drizzle-kit push`, which writes no `__drizzle_migrations` journal entries — so its
+   journal lags while its schema runs ahead, and `npm run db:migrate` therefore FAILS on it
+   ("column … already exists"). On 2026-08-10 it was nine columns behind the code and demo
+   login died on `column "like_comments" does not exist` — which looks like a broken login,
+   not a stale database. The symptom to recognise: the request DOES reach the backend and
+   fails there with a `PostgresError`, so read the backend log before touching the frontend.
+   ⛔ Do **not** answer `drizzle-kit push`'s prompts blind — it asks about TABLE conflicts,
+   which is the class that can propose a drop or a rename on a box holding your fixtures.
+   Reconcile ADDITIVELY instead: diff the code's columns against `information_schema.columns`
+   and `ADD COLUMN IF NOT EXISTS` the missing ones as nullable. Never drop, rename, or retype.
 6. **A fresh worktree can fail suites you never touched** — an independent install can
    hoist a second copy of a framework (React → `Cannot read properties of null (reading
    'useEffect')`). Check `git diff --stat` first; if your change doesn't touch that
