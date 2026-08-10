@@ -27,6 +27,12 @@
   "metaItem1": "Go to My Pages and connect your Facebook page.",
   "metaItem2": "Grant the requested permissions so Jawab24 can read and reply to messages and comments.",
   "metaItem3": "To answer on Instagram, link your Instagram professional account to that Facebook page.",
+  "metaItem4": "If you manage several pages, select only the ones Jawab24 should handle in the Facebook dialog — you can add another page later by choosing \"Edit previous settings\" in that same dialog.",
+  "pageDisconnectedTitle": "A page stopped replying, or you want to hide it",
+  "pageDisconnectedText": "When Facebook revokes access to a page, its card moves to the \"Needs attention\" section and Facebook and Instagram replies stop for that page. You have two options:",
+  "pageDisconnectedItem1": "To resume replies: press Reconnect on the card, then complete the Facebook dialog with that page selected.",
+  "pageDisconnectedItem2": "If you no longer use the page: press \"Hide this page from the list\" to remove it from your channels and tidy your dashboard.",
+  "pageDisconnectedItem3": "Hiding deletes nothing: conversations, settings and your business info are kept, and reconnecting the page through Facebook brings it back exactly as it was.",
 
   "repliesTitle": "How Smart Replies work",
   "repliesText": "A Smart Reply is generated from your Business Info and your store catalog, and is written in the same language and dialect your customer used. Jawab24 will not invent prices or products it does not know — if something is not in your information, it hands the conversation to you instead of guessing.",

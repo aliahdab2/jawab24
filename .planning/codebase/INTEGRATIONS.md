@@ -39,8 +39,8 @@
 
 - **Key Endpoints Used**:
   - `/me/accounts` - list connected pages (primary page discovery path)
-  - `/debug_token` - verify token + extract `granular_scopes.target_ids` (used as fallback when `/me/accounts` is empty for Business-Portfolio-owned Pages)
-  - `/{page-id}?fields=id,name,access_token,category,about,phone,single_line_address,hours,website` - fetch individual page data in the fallback path (the `tasks` field is NOT requestable here — only on `/me/accounts`)
+  - `/debug_token` - verify token + extract `granular_scopes.target_ids` (the authorization truth; reconciled against `/me/accounts` on EVERY sync, not only when it comes back empty)
+  - `/{page-id}?fields=id,name,access_token,category,about,phone,single_line_address,hours,website` - fetch individual page data for pages `/me/accounts` omitted (the `tasks` field is NOT requestable here — only on `/me/accounts`)
   - `/me/instagram_accounts` - list connected Instagram accounts
   - `/me/messages` with `recipient.comment_id` - send private reply to a comment (DM linked to the comment)
   - `/me/messages` with `recipient.id` - send DM to a user (requires prior conversation)
@@ -50,7 +50,7 @@
 
 - **Rich Product Cards**: When an ecommerce tool returns a product reference (e.g. `check_inventory`), the reply pipeline sends a follow-up Generic Template carousel with the product image, price, and a `View product` button. Payload building (truncation, Meta limits, messaging_type) lives in `backend/src/services/metaMessaging.ts` and is shared by Messenger and Instagram. The card build/lookup lives in `backend/src/services/reply/productCardBuilder.ts`. Card send failures are logged but don't invalidate the text reply already delivered.
 
-- **Business Portfolio Fallback (2026-04-15)**: Facebook's `/me/accounts` returns an empty array for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions granted. `facebookService.getUserPages` handles this by falling back to `/debug_token` `granular_scopes` discovery and fetching each authorized Page individually. See `backend/src/services/facebook.ts:getUserPages` and tests in `backend/test/services/facebook.test.ts` describe block `getUserPages — Business Portfolio fallback`.
+- **Page discovery is a UNION, not a fallback (2026-04-15, corrected 2026-08-09)**: Facebook's `/me/accounts` is NOT authoritative for what a user authorized. For Pages owned by a Meta Business Portfolio or on the New Pages Experience it can omit granted Pages — returning an empty array, or a **partial** list (the 2026-08-09 case: `granular_scopes` carried two page IDs while `/me/accounts` returned one, so the newly granted Page was invisible to every sync). `facebookService.getUserPages` therefore always diffs `/me/accounts` against `/debug_token` `granular_scopes` and fetches each omitted Page via `GET /{page-id}`, returning the union of both. The original "fall back only when `/me/accounts` is EMPTY" shape is what hid the partial case. Degradation is deliberate: a `/debug_token` failure with a non-empty primary list returns that list unchanged rather than throwing (the sync's revoke step reads a failed sync as "everything was revoked"). See `backend/src/services/facebook.ts:getUserPages` and the `getUserPages — Business Portfolio fallback` describe block in `backend/test/services/facebook.test.ts` (partial-omission union, no-op, both degradation paths, tokenless-page skip).
 
 - **Reply Modes (Comments)**:
   - `public` - reply as a public comment

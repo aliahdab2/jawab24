@@ -220,15 +220,37 @@ This is handled automatically by the backend when users connect pages.
 2. Verify `pages_manage_engagement` permission
 3. Check backend logs for errors
 
-### Pages not appearing after login (Business Portfolio)
-Facebook's `/me/accounts` returns an empty list for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions are granted. Jawab24 handles this automatically: when `/me/accounts` is empty, `getUserPages` falls back to reading `granular_scopes` from `/debug_token` and fetches each authorized Page individually via `GET /{page-id}`.
+### Pages not appearing after login (Business Portfolio / New Pages Experience)
+**`/me/accounts` is not the authorization truth.** For Pages owned by a Meta Business
+Portfolio or on the New Pages Experience it can omit granted Pages — returning an empty
+list, or (the case that cost a full support night on 2026-08-09) a **partial** one: the
+merchant granted two Pages, `/me/accounts` listed only the older one, and the newly
+granted Page was invisible to every sync no matter how often he reconnected.
+
+`getUserPages` therefore always reconciles: it diffs `/me/accounts` against the token's
+`granular_scopes` (from `/debug_token`) and fetches every omitted Page individually via
+`GET /{page-id}`, returning the **union**. Treating this as a fallback that only ran when
+`/me/accounts` came back EMPTY is exactly what hid the partial case. Reconciliation is
+best-effort: if `/debug_token` fails while `/me/accounts` did return Pages, the primary
+list is returned unchanged rather than failing the sync (a thrown sync would read as
+"the user revoked everything" to the revoke step).
 
 If pages still don't appear, check backend logs for `[Facebook]` entries:
-- `/me/accounts returned N pages` → primary path succeeded
-- `/me/accounts empty, entering granular_scopes fallback` → fallback ran
-- `Recovered page via fallback` (per page) → fallback succeeded
-- `No page IDs in granular_scopes` → user didn't grant any Page during OAuth (reconnect + select pages)
-- `Failed to fetch page via fallback` → per-page failure (check the `error` field)
+- `/me/accounts returned N pages` → primary path result (N may be short — see below)
+- `granular_scopes lists pages missing from /me/accounts` → reconciliation kicked in; the log names the missing page IDs
+- `Recovered page missing from /me/accounts` (per page) → reconciliation succeeded
+- `granular_scopes lookup failed — returning /me/accounts result as-is` → `/debug_token` hiccup, degraded to the primary list
+- `Reconciled page missing access_token — skipping` → the user lacks `pages_read_engagement` on that specific Page
+- `Failed to fetch page missing from /me/accounts` → per-page failure (check the `error` field)
+
+**Diagnosing a "my page won't connect" report:** read the merchant's grant, not our DB.
+`/debug_token` on their stored user token lists `granular_scopes.pages_show_list.target_ids`
+— that is what Meta says they authorized. If the wanted Page ID is there, the grant is
+fine and the problem is on our side; if it is absent, they never completed the Meta dialog
+for that Page. ⚠️ A New-Pages-Experience Page has TWO ids: the `profile.php?id=…` URL shows
+a delegate id that Graph cannot resolve, while the real Page ID (the one in
+`granular_scopes` and in Meta's permission dialog) is different — never conclude "not a
+Page" from the URL id failing a Graph lookup.
 
 ---
 

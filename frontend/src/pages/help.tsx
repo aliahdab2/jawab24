@@ -19,7 +19,12 @@ export default function HelpCenter() {
     {
       title: t('metaTitle'),
       text: t('metaText'),
-      items: [t('metaItem1'), t('metaItem2'), t('metaItem3')],
+      items: [t('metaItem1'), t('metaItem2'), t('metaItem3'), t('metaItem4')],
+    },
+    {
+      title: t('pageDisconnectedTitle'),
+      text: t('pageDisconnectedText'),
+      items: [t('pageDisconnectedItem1'), t('pageDisconnectedItem2'), t('pageDisconnectedItem3')],
     },
     { title: t('repliesTitle'), text: t('repliesText') },
     {
