@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
     MAX_ROWS_PER_COLLECTION,
+    MAX_LIST_LABEL_LENGTH,
 } from '@jawab24/shared';
 import type { CatalogVertical } from '@jawab24/shared';
 
@@ -384,7 +385,7 @@ export const FactCompletenessSchema = z.object({
  *  where stray whitespace is what the model reads. ONE definition — create and
  *  rename must accept exactly the same names, or a list could be born with a
  *  label its own rename endpoint rejects. */
-const FactCollectionLabelField = z.string().trim().min(1, 'Label is required').max(120);
+const FactCollectionLabelField = z.string().trim().min(1, 'Label is required').max(MAX_LIST_LABEL_LENGTH);
 
 /**
  * POST /pages/:pageId/fact-collections — the merchant's «add list» (G1b).

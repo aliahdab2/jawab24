@@ -135,6 +135,7 @@
     "renameActionFor": "Rename the list «{list}»",
     "renameTitle": "Rename list",
     "renameHint": "Jawab reads this name above the list when it answers customers, so keep it descriptive.",
+    "nameCharsLeft": "{count, plural, one {# character left} other {# characters left}}",
     "rowName": "Name",
     "rowPrice": "Price",
     "rowPriceOptional": "Optional",

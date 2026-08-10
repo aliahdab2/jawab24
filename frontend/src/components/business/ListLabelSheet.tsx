@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { DetailSheet, Button } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useModalBackHandler } from '@/hooks/useModalBackHandler';
+import { MAX_LIST_LABEL_LENGTH } from '@jawab24/shared';
+
+/** One id, used by the <label>, the input and the focus-restore guard. */
+const FIELD_ID = 'list-label-input';
+
+/** How close to the cap the remaining-characters hint appears. */
+const COUNTER_VISIBLE_FROM = 20;
 
 interface ListLabelSheetProps {
   /** Labels already taken on this page — the uq_fact_collections_page_label
@@ -55,6 +63,7 @@ export function ListLabelSheet({
 
   const [label, setLabel] = useState(initialLabel);
   const trimmed = label.trim();
+  const remaining = MAX_LIST_LABEL_LENGTH - label.length;
   const taken = trimmed.length > 0 && existingLabels.some((l) => l === trimmed);
   // Renaming to the same name is a no-op, not an error: the server returns the
   // row untouched (and skips the cache invalidation), so the button stays live
@@ -62,6 +71,37 @@ export function ListLabelSheet({
   const canSubmit = trimmed.length > 0 && !taken && !saving;
 
   useEscapeKey(onClose, true);
+
+  // Android's hardware BACK must close the sheet, not the page. Without this
+  // the back press falls through to `router.back()` / `App.exitApp()`
+  // (`_app.tsx`), so a merchant mid-rename is thrown off /business — or out of
+  // the app entirely. Same guard the hours and Business Info sheets carry.
+  useModalBackHandler(true, onClose);
+
+  /**
+   * Return focus to whatever opened the sheet.
+   *
+   * With three lists on the page there are three «تعديل الاسم» buttons; when
+   * the sheet closes, focus otherwise resets to <body> and a keyboard user
+   * starts the whole page again instead of resuming at the list they just
+   * edited.
+   */
+  // Captured during the FIRST RENDER, not in an effect: React applies the
+  // input's autoFocus while committing, which is before effects run — read it
+  // any later and the "opener" you save is this sheet's own input.
+  const [opener] = useState<HTMLElement | null>(() =>
+    typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null),
+  );
+  useEffect(() => () => {
+    // Restore on the NEXT FRAME, and only if the field is really gone. React's
+    // dev StrictMode runs mount → cleanup → mount on one mounted component; a
+    // cleanup that focuses immediately yanks focus out of the input the sheet
+    // has just auto-focused (caught in the browser audit, invisible in jsdom).
+    requestAnimationFrame(() => {
+      if (document.getElementById(FIELD_ID)) return;
+      if (opener?.isConnected) opener.focus();
+    });
+  }, [opener]);
 
   const submit = () => {
     if (!canSubmit) return;
@@ -92,18 +132,18 @@ export function ListLabelSheet({
 
       <div className="p-4 sm:p-5 space-y-3">
         <div>
-          <label htmlFor="list-label-input" className="block text-sm text-muted-foreground mb-1.5">
+          <label htmlFor={FIELD_ID} className="block text-sm text-muted-foreground mb-1.5">
             {t('lists.newListNameLabel')}
           </label>
           <input
-            id="list-label-input"
+            id={FIELD_ID}
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
             dir={label ? 'auto' : undefined}
             autoFocus
-            maxLength={120}
+            maxLength={MAX_LIST_LABEL_LENGTH}
             placeholder={t('lists.newListNamePlaceholder')}
             aria-invalid={taken || undefined}
             className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -111,6 +151,15 @@ export function ListLabelSheet({
           {taken && (
             <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
               {t('lists.errDuplicateLabel')}
+            </p>
+          )}
+          {/* The cap used to be silent: typing simply stopped registering at
+              120 with nothing on screen to explain it. The counter appears
+              only once the limit is in sight, so it is information exactly
+              when it is needed and absent the rest of the time. */}
+          {remaining <= COUNTER_VISIBLE_FROM && (
+            <p className="mt-1 text-xs text-muted-foreground" aria-live="polite">
+              {t('lists.nameCharsLeft', { count: remaining })}
             </p>
           )}
         </div>

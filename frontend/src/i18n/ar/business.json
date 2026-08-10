@@ -135,6 +135,7 @@
     "renameActionFor": "تعديل اسم القائمة «{list}»",
     "renameTitle": "تعديل اسم القائمة",
     "renameHint": "يقرأ جواب هذا الاسم فوق القائمة عند الرد على العملاء، فاجعله واضحاً ومعبّراً.",
+    "nameCharsLeft": "{count, plural, zero {لم يتبقَّ أي حرف} one {بقي حرف واحد} two {بقي حرفان} few {بقيت # أحرف} many {بقي # حرفاً} other {بقي # حرف}}",
     "rowName": "الاسم",
     "rowPrice": "السعر",
     "rowPriceOptional": "اختياري",

@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { factCollectionsApi, type FactCollectionWithRows } from '@/lib/api';
+import { dismissTopModal } from '@/hooks/useModalBackHandler';
+import { MAX_LIST_LABEL_LENGTH } from '@jawab24/shared';
 // Import the real copy rather than hardcoding it — a reworded key must not
 // silently turn this assertion into a no-op (project rule for E2E, same logic).
 import en from '@/i18n/en/business.json';
@@ -718,6 +720,57 @@ describe('BusinessListsSection', () => {
       fireEvent.click(screen.getByRole('button', { name: common.save }));
 
       await waitFor(() => expect(factCollectionsApi.renameCollection).toHaveBeenCalledWith(PAGE, 'coll-outlets', 'نقاط البيع'));
+    });
+
+    // Found in the UX audit: focus reset to <body> on close, so a keyboard user
+    // with three lists on the page restarted from the top each time.
+    it('returns focus to the door that opened it', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      const door = await screen.findByRole('button', { name: renameDoor('أسعار الدورات') });
+      door.focus();
+      fireEvent.click(door);
+      fireEvent.click(screen.getByRole('button', { name: common.cancel }));
+
+      await waitFor(() => expect(document.activeElement).toBe(door));
+    });
+
+    // The cap used to be silent — typing just stopped at 120 characters.
+    it('warns as the name approaches the 120-character column cap', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel);
+
+      fireEvent.change(input, { target: { value: 'ق'.repeat(99) } });
+      expect(screen.queryByText(/character(s)? left/)).toBeNull();
+
+      fireEvent.change(input, { target: { value: 'ق'.repeat(MAX_LIST_LABEL_LENGTH - 3) } });
+      expect(screen.getByText('3 characters left')).toBeInTheDocument();
+
+      // At the cap the count reaches zero — which is the moment the merchant's
+      // typing goes dead, so this is the state that most needs to be visible.
+      // (ICU `=0` is NOT honoured by this next-intl setup — verified in a real
+      // render, it falls to `other` — so the copy must read well at zero.)
+      fireEvent.change(input, { target: { value: 'ق'.repeat(MAX_LIST_LABEL_LENGTH) } });
+      expect((input as HTMLInputElement).value).toHaveLength(MAX_LIST_LABEL_LENGTH);
+      expect(screen.getByText('0 characters left')).toBeInTheDocument();
+    });
+
+    // Android's hardware back must close the sheet, not leave /business (or
+    // exit the app) with a half-typed name.
+    it('closes on the Android back button instead of letting it reach the router', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      // What _app.tsx calls on a hardware back press.
+      expect(dismissTopModal()).toBe(true);
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
     it('a member gets no rename door — the label is an admin write', async () => {
