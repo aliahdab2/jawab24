@@ -1,5 +1,16 @@
 # Deployment Guide
 
+> ⛔ **The GitHub Actions CI path described below is NOT used** (owner ruling, reaffirmed
+> 2026-08-05 — see `AI_INSTRUCTIONS.md` → *Testing Strategy*). The real gate is
+> `./scripts/deploy-production.sh`, which runs `scripts/pre-deploy-check.sh` locally before
+> anything is deployed: config/translation/sitemap checks, lockfile sync, dependency audit,
+> `tsc`, lint, schema drift, duplication, unit tests with coverage thresholds, backend
+> integration tests, the real Stripe test-mode round-trip, and the full Playwright E2E suite.
+> A red GitHub check says nothing about a PR. **Blue-Green deployment itself is accurate**;
+> only the CI trigger framing is stale. ⚠️ The rest of this document has not been reconciled
+> with that ruling yet — treat any "on push to main, CI will…" statement below as describing
+> a pipeline that does not run.
+
 ## CI/CD Pipeline
 
 Jawab24 uses GitHub Actions for continuous integration and **Blue-Green Deployment** for zero downtime.

@@ -434,11 +434,50 @@ npm run translation:validate             # Check i18n files (from frontend/)
 ```
 
 > **Backend integration tests:** run `cd backend && npm run test:integration:local`. It
-> forces `DATABASE_URL` at the dedicated local test DB (`localhost:5433/autoreply_test`,
-> override with `TEST_DATABASE_URL`) so a stray `DATABASE_URL` from your shell or
-> `backend/.env` (which points at the dev DB on 5432) can't make the suite migrate/mutate
-> the wrong database. Plain `npm run test:integration` is the CI variant and trusts the
-> ambient `DATABASE_URL`.
+> forces `DATABASE_URL` at **this checkout's own** test DB on `localhost:5433` — the name is
+> `autoreply_test_<checkout>_<hash>`, printed by `npm run print:test-db-url`
+> (`scripts/test-db-url.sh`). Override the server with `TEST_PG_HOST` / `TEST_PG_PORT`, or the
+> whole URL with `TEST_DATABASE_URL` — but note that override is **not** unrestricted: whatever
+> it names must still match `^autoreply_test[a-z0-9_]*$`, because that rule
+> (`scripts/testDatabaseName.mjs`) is the single guard standing between the suite's per-test
+> TRUNCATE and, say, the dev database. That also stops a stray `DATABASE_URL` from your shell or
+> `backend/.env` (which points at the dev DB on 5432) from making the suite migrate/mutate the
+> wrong database. The DB is created on first run by `test/integration/globalSetup.ts`; add
+> `TEST_DB_FRESH=1` to drop and recreate it, which you want after moving a worktree between
+> branches with divergent migrations. Plain `npm run test:integration` is the CI variant and
+> trusts the ambient `DATABASE_URL`; with none set it now fails fast instead of silently
+> falling back to a shared database.
+>
+> ⚠️ **Why the name is per-checkout (2026-08-09).** It used to be one machine-global
+> `autoreply_test`. `test/integration/setup.ts` TRUNCATEs ~20 tables **before every test**, so
+> two suites running at once — a deploy gate in the main checkout and a `test:integration:local`
+> in any worktree — delete each other's fixtures. That produced a **false red** in the deploy
+> gate: 29 failures across 13 files, all rows-vanishing-mid-test, ending in a FK violation on
+> `workspaces.owner_id` because the other run had just truncated `users`. The same overlap also
+> killed an earlier gate run outright, since Postgres refuses `DROP DATABASE` while another
+> session is connected. The gate's lock is per-checkout and a bare `test:integration:local`
+> takes no lock at all, so isolating the database — not locking — is the fix. ⛔ Do **not**
+> "solve" a blocked drop with `DROP DATABASE ... WITH (FORCE)`: that makes your run succeed by
+> force-terminating someone else's suite.
+>
+> Each checkout that runs integration tests leaves one `autoreply_test_*` database (~16 MB)
+> behind, and deleting a worktree does not remove its database — with 100+ worktrees on this
+> host that is a real disk leak. `globalSetup.ts` records the owning checkout path in the
+> database's `COMMENT`, so pruning is mechanical rather than guesswork:
+>
+> ```bash
+> npm run prune:test-dbs             # report: live / orphaned / unknown owner
+> npm run prune:test-dbs -- --drop   # drop the ones whose checkout no longer exists
+> ```
+>
+> A database with no recorded owner is reported and never dropped — guessing is how you delete
+> something that mattered. It never uses `WITH (FORCE)` either: a blocked `DROP` means something
+> is still attached, and that is a signal, not an obstacle.
+>
+> The pre-2026-08-09 shared `autoreply_test` was deleted on 2026-08-10 — there is no legacy
+> database to keep in step with. If it reappears, some checkout still predates this change and
+> its `test:integration:local` recreated it; rebase that checkout rather than keeping the
+> database alive.
 
 For Shopify integration tests, AI eval, mobile builds, Android releases, and in-browser QA loops (console/network/RTL/i18n checks via Chrome DevTools MCP) — see the `/shopify-dev`, `/eval`, `/build-mobile`, `/release-android`, and `/qa` skills.
 

@@ -13,13 +13,32 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql, eq } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
+import {
+    assertTestDatabaseName,
+    databaseNameFromUrl,
+} from '../../../scripts/testDatabaseName.mjs';
 
-const connectionString =
-    process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/autoreply_test';
+// No default — see globalSetup.ts. The test database name is per-checkout
+// (scripts/test-db-url.sh); a hardcoded fallback would quietly point this file
+// at a database shared with every other checkout, whose per-test TRUNCATE would
+// then delete another run's fixtures mid-test.
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error(
+        'DATABASE_URL is not set. Run integration tests with `npm run test:integration:local`.',
+    );
+}
 
-// Set DATABASE_URL so that any module importing from ../../src/db uses the test database.
-// This must happen before any app module is imported.
-process.env.DATABASE_URL = connectionString;
+// This file issues the TRUNCATE, so this file checks the name. globalSetup.ts
+// checks it too, but a guard that lives one module away from the destructive
+// statement only holds for as long as the two keep running in that order — and
+// the statement below empties ~20 tables before EVERY test.
+assertTestDatabaseName(databaseNameFromUrl(connectionString), 'truncate tables in');
+
+// `process.env.DATABASE_URL` is already exactly `connectionString` (it is where the
+// value came from), so any module importing from ../../src/db picks up the test
+// database as-is. Do NOT reintroduce a `||` fallback here: that is what silently
+// pointed every entry point at one shared database in the first place.
 
 // Mirror production: token encryption key set, so service write paths store
 // enc:v1: ciphertext and read paths decrypt. Raw fixture inserts (plaintext
