@@ -152,9 +152,9 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     [collections],
   );
 
-  /** Lists whose announced dates have run out, or are within
-   *  `DATED_LIST_WARNING_DAYS` of it. Derived per list — a page can have a
-   *  healthy directory beside an exhausted schedule. */
+  /** Lists whose announced dates have run out, or are close to it. Derived
+   *  per list — a page can have a healthy directory beside an exhausted
+   *  schedule; the window itself lives with the rule, in factListLayout. */
   const staleLists = useMemo(
     () =>
       collections

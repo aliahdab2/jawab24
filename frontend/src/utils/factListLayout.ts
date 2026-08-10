@@ -237,7 +237,7 @@ export function isDatedCollection(collection: FactCollectionWithRows): boolean {
  * «مو ٧ أيام كتير… خليه ٣ ايام فقط»: a week's notice is so early it reads as
  * noise, and the merchant ignores the one that matters.
  */
-export const DATED_LIST_WARNING_DAYS = 3;
+const DATED_LIST_WARNING_DAYS = 3;
 
 /** `ended` = every dated row has retired, so the AI no longer mentions any of
  *  them. `ending` = the last one retires within the window, and `lastDate` is
