@@ -1,4 +1,5 @@
 {
-  "$comment": "Route prefixes that can show a price, a plan, or a purchase action. App Store Guideline 3.1.1 forbids all of them on iOS. This file is the SINGLE source of truth: src/lib/paymentRoutes.ts imports it for the runtime guards, and scripts/neutralize-ios-payment-routes.js requires it to decide which exported HTML to neutralize. Adding a payment surface means adding its prefix here and nowhere else.",
-  "prefixes": ["/pricing", "/checkout", "/payment"]
+  "$comment": "Routes App Store Guideline 3.1.1 forbids on iOS. SINGLE source of truth: src/lib/paymentRoutes.ts imports it for the runtime guards, and scripts/neutralize-ios-payment-routes.js requires it to decide which exported HTML to neutralize. `prefixes` are purchase surfaces — they are stubbed at build time and blocked at runtime. `webOnlyPrefixes` are marketing pages that quote prices in prose (comparison tables, blog posts); they are stripped from the mobile bundle by scripts/strip-mobile-assets.js AND blocked at runtime, because deleting the HTML alone does NOT stop them: Next serves a client-side navigation from the page's JS chunk, which the strip never touches. Proved on the simulator 2026-08-10 — com.jawab24.app://compare/manychat rendered '15 دولاراً شهرياً' from a build whose compare/*.html had been deleted.",
+  "prefixes": ["/pricing", "/checkout", "/payment"],
+  "webOnlyPrefixes": ["/compare", "/blog", "/what-is-jawab24"]
 }

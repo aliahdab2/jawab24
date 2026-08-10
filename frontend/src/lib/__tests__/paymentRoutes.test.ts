@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPaymentRoute, PAYMENT_ROUTE_PREFIXES } from '../paymentRoutes';
+import { isPaymentRoute, isIOSBlockedRoute, PAYMENT_ROUTE_PREFIXES, WEB_ONLY_ROUTE_PREFIXES } from '../paymentRoutes';
 import { SUPPORTED_LOCALES } from '@/utils/locale';
 // The build script is plain CJS so it can run under bare node; importing it
 // here means the test exercises the SAME code the build runs, rather than a
@@ -67,6 +67,61 @@ describe('isPaymentRoute', () => {
             expect(isPaymentRoute(`/${locale}/dashboard`)).toBe(false);
             expect(isPaymentRoute(`/${locale}`)).toBe(false);
         });
+    });
+});
+
+describe('isIOSBlockedRoute — marketing pages that quote prices', () => {
+    // REGRESSION (2026-08-10). These pages were "handled" by deleting their
+    // exported HTML in the mobile build. That does NOT close the route: Next
+    // serves a client-side navigation from the page's JS chunk under
+    // _next/static/, which the strip never touches. Fired on a simulator,
+    // com.jawab24.app://compare/manychat rendered the whole comparison table —
+    // "باقة Starter في جواب24 بـ 15 دولاراً شهرياً" — from a build whose
+    // compare/manychat.html had been deleted. The route has to be blocked at
+    // RUNTIME; the strip only removes the static paint.
+    it.each([
+        '/compare',
+        '/compare/manychat',
+        '/compare/tidio',
+        '/blog',
+        '/blog/best-auto-reply-tools-2026',
+        '/what-is-jawab24',
+    ])('blocks the priced marketing route %s', (route) => {
+        expect(isIOSBlockedRoute(route)).toBe(true);
+    });
+
+    it('still blocks every payment surface', () => {
+        for (const route of ['/pricing', '/pricing/scale', '/checkout', '/payment/success']) {
+            expect(isIOSBlockedRoute(route)).toBe(true);
+        }
+    });
+
+    it('leaves the real app routes alone', () => {
+        for (const route of ['/dashboard', '/messages', '/settings', '/business', '/', '/comparefoo']) {
+            expect(isIOSBlockedRoute(route)).toBe(false);
+        }
+    });
+
+    it('handles the custom-scheme deep link shape the incident used', () => {
+        expect(isIOSBlockedRoute('com.jawab24.app://compare/manychat')).toBe(true);
+        expect(isIOSBlockedRoute('com.jawab24.app://dashboard')).toBe(false);
+    });
+
+    it('strips a locale prefix, as the web build and AASA both emit', () => {
+        expect(isIOSBlockedRoute('/ar/compare/manychat')).toBe(true);
+        expect(isIOSBlockedRoute('/en/blog')).toBe(true);
+    });
+
+    it('keeps the two prefix lists disjoint — a route belongs to exactly one', () => {
+        // They are treated differently by the build (stub vs strip), so an
+        // overlap would make the build's behaviour depend on list order.
+        const overlap = WEB_ONLY_ROUTE_PREFIXES.filter((p) => PAYMENT_ROUTE_PREFIXES.includes(p));
+        expect(overlap).toEqual([]);
+    });
+
+    it('does not widen isPaymentRoute — the build must still only STUB purchase surfaces', () => {
+        expect(isPaymentRoute('/compare/manychat')).toBe(false);
+        expect(isPaymentRoute('/blog')).toBe(false);
     });
 });
 

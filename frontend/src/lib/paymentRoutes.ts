@@ -25,6 +25,23 @@ import { SUPPORTED_LOCALES } from '@/utils/locale';
 export const PAYMENT_ROUTE_PREFIXES: readonly string[] = paymentRoutesConfig.prefixes;
 
 /**
+ * Marketing routes that quote prices in prose — comparison tables, blog posts,
+ * the explainer page. They are not purchase surfaces, so they are not in
+ * PAYMENT_ROUTE_PREFIXES, but Guideline 3.1.1 does not care about the
+ * distinction: a reviewer who reaches them sees "15 دولاراً شهرياً".
+ *
+ * ⚠️ DELETING THEIR HTML IS NOT ENOUGH, and this cost a build to learn.
+ * `strip-mobile-assets.js` removes `blog/`, `compare/` and `what-is-jawab24`
+ * from the export, which kills the static paint — but Next serves a
+ * CLIENT-SIDE navigation from the page's JS chunk under `_next/static/`, which
+ * the strip never touches. On 2026-08-10, `com.jawab24.app://compare/manychat`
+ * rendered the full comparison table, prices and all, on a simulator running a
+ * build whose `compare/manychat.html` had been deleted. The strip and this
+ * runtime block are complementary, and neither alone closes the route.
+ */
+export const WEB_ONLY_ROUTE_PREFIXES: readonly string[] = paymentRoutesConfig.webOnlyPrefixes;
+
+/**
  * True when `pathOrUrl` addresses a payment surface.
  *
  * Accepts a bare path, a path with query/hash, or an absolute URL (http(s) or
@@ -37,6 +54,21 @@ export const PAYMENT_ROUTE_PREFIXES: readonly string[] = paymentRoutesConfig.pre
  * while `/pricingfoo` does not.
  */
 export function isPaymentRoute(pathOrUrl: string): boolean {
+    return matchesPrefix(pathOrUrl, PAYMENT_ROUTE_PREFIXES);
+}
+
+/**
+ * True when `pathOrUrl` addresses anything iOS must not render — a purchase
+ * surface OR a marketing page that quotes prices. This is the predicate the
+ * routing layers should use; `isPaymentRoute` stays narrower because the build
+ * script treats the two lists differently (stub vs strip).
+ */
+export function isIOSBlockedRoute(pathOrUrl: string): boolean {
+    return matchesPrefix(pathOrUrl, PAYMENT_ROUTE_PREFIXES)
+        || matchesPrefix(pathOrUrl, WEB_ONLY_ROUTE_PREFIXES);
+}
+
+function matchesPrefix(pathOrUrl: string, prefixes: readonly string[]): boolean {
     if (!pathOrUrl) return false;
 
     let pathname = pathOrUrl;
@@ -65,7 +97,7 @@ export function isPaymentRoute(pathOrUrl: string): boolean {
         }
     }
 
-    return PAYMENT_ROUTE_PREFIXES.some(
+    return prefixes.some(
         (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
     );
 }
