@@ -137,6 +137,15 @@ test.describe('/business — the Business Surface', () => {
   });
 
   test('the same page in Arabic says the same thing, in Arabic', async ({ page }) => {
+    // The stored dashboard language wins over the URL locale, so a session
+    // pinned to 'en' is bounced back out of /ar. Dev never showed it (the
+    // locale route falls back there); the standalone build the deploy gate
+    // runs does — the whole reason this suite is verified in BOTH modes.
+    await page.addInitScript(() => {
+      localStorage.setItem('ui-storage', JSON.stringify({
+        state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0,
+      }));
+    });
     await setupMockRoutes(page);
     await page.goto(`/ar/business?page=${PAGE_ID}`);
 
