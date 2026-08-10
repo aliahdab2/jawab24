@@ -373,7 +373,9 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     await screen.findByText('دورة ICDL');
-    expect(screen.getByText('1 announced date')).toBeInTheDocument();
+    // …and the neutral badge states the FACT (no date), not «announced date» —
+    // a row with no date is not a date, in any vertical.
+    expect(screen.getByText('1 row with no date')).toBeInTheDocument();
     expect(screen.queryByText(/upcoming/)).toBeNull();
   });
 

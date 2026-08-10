@@ -68,6 +68,15 @@ export function FactEntitySheet({
   const { intlLocale } = useLanguage();
 
   const sessionCollection = unit.sessionCollection;
+  /**
+   * What to call the dated half of this item — the merchant's OWN list name
+   * («مواعيد الدورات المعلنة», «عروض موسمية», «مواسم الحصاد»), never a noun we
+   * chose for them. A fixed «المواعيد» reads as an appointment book, which is
+   * one vertical's meaning of a date among many (owner ruling 2026-08-10: this
+   * page must fit ANY business). `lists.sessions` survives only as the fallback
+   * for the impossible case of a dated collection with no label.
+   */
+  const datesSectionLabel = sessionCollection?.label?.trim() || t('lists.sessions');
   const baseRow = unit.base?.row ?? null;
 
   /** Labels that get dedicated treatment and must not appear as free fields. */
@@ -513,7 +522,7 @@ export function FactEntitySheet({
       // hint already sits inside each date card, where it applies (owner catch,
       // 2026-08-04). Header hint only when the sheet can actually hold dates.
       headerExtra={sessionCollection
-        ? <InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>
+        ? <InfoPopover label={datesSectionLabel}>{t('lists.rowDateHint')}</InfoPopover>
         : undefined}
     >
       <div className="p-4 sm:p-5 space-y-6 pb-28">
@@ -584,7 +593,7 @@ export function FactEntitySheet({
 
         {/* ————— Dates — each one its own numbered card (point 3) ————— */}
         {sessionCollection && (
-          <section aria-label={t('lists.sessions')}>
+          <section aria-label={datesSectionLabel}>
             {sessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-theme-border px-4 py-6 text-center">
                 <CalendarClock className="w-6 h-6 mx-auto text-icon-muted" aria-hidden="true" />
