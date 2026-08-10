@@ -171,8 +171,9 @@ test.describe('/business — the Business Surface', () => {
     await page.goto(`/en/business?page=${PAGE_ID}`);
 
     await expect(page.getByText(t('business.lists.hintQuoted'))).toBeVisible();
-    await expect(page.getByText(t('business.lists.hintGrouped'))).toHaveCount(0);
-    await expect(page.getByText(t('business.lists.hintDated'))).toHaveCount(0);
+    // One clause, on every page: the layout clause described what the screen
+    // already shows, and the expiry clause now lives where it acts.
+    await expect(page.getByText(t('business.lists.hintQuoted'))).toBeVisible();
   });
 
   test('the same page in Arabic says the same thing, in Arabic', async ({ page }) => {

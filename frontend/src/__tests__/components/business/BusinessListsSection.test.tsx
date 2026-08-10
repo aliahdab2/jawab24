@@ -630,6 +630,26 @@ describe('BusinessListsSection', () => {
       expect(screen.getByText('أسعار الدورات', { selector: 'p' })).toBeInTheDocument();
     });
 
+    it('tapping a row in a list opens THAT row — not the whole list as one item', async () => {
+      // The directory row's group is SYNTHETIC — it carries every row in the
+      // collection — so routing the tap to the entity sheet opened all 47
+      // sessions as a single «item» titled with the LIST's name (owner, 2026-08-11).
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+      // Both sessions are on screen; tap the live one.
+      fireEvent.click(screen.getByText(/الأحد والثلاثاء/));
+
+      // The single-row editor, carrying THIS row's values.
+      expect(screen.getByRole('heading', { name: en.lists.editRow })).toBeInTheDocument();
+      expect((screen.getByLabelText(en.lists.rowName) as HTMLInputElement).value).toBe('دورة ICDL');
+      // …and never the entity sheet, whose save spans every row it was given
+      // (its footer is «Save changes», the row sheet's is plain «Save»).
+      expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    });
+
     it('a dated list shows each row\'s DATE — the field the list exists for', async () => {
       // Opening «مواعيد الدورات المعلنة» showed days and times with no date at
       // all: the directory row was built for an outlet list and had no date
@@ -760,34 +780,24 @@ describe('BusinessListsSection', () => {
       ],
     };
 
-    it('a directory with no dates and no cross-list items is told ONLY that Jawab quotes it', async () => {
+    it('a directory is told ONE thing: Jawab quotes these lists verbatim', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outletsOnly] } } as any);
       renderSection();
 
       expect(await screen.findByText(en.lists.hintQuoted)).toBeInTheDocument();
-      expect(screen.queryByText(new RegExp(en.lists.hintGrouped))).toBeNull();
-      expect(screen.queryByText(new RegExp(en.lists.hintDated))).toBeNull();
     });
 
-    it('a page whose lists join on one item, with dated rows, earns all three clauses', async () => {
+    it('says the SAME one thing on a page whose lists join and carry dates', async () => {
+      // The layout clause described what the screen shows anyway, and the
+      // expiry clause is now said where it acts — at the date field, and in
+      // the freshness notice when a list runs out. Explaining the screen on
+      // arrival is the copy this page had too much of (owner, 2026-08-11).
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
-      expect(hint).toHaveTextContent(en.lists.hintGrouped);
-      expect(hint).toHaveTextContent(en.lists.hintDated);
-    });
-
-    it('lists that join but carry no date are never told about expiry', async () => {
-      const undatedSlots = slotCollection({
-        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: null, endsAt: null })),
-      });
-      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), undatedSlots] } } as any);
-      renderSection();
-
-      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
-      expect(hint).toHaveTextContent(en.lists.hintGrouped);
-      expect(hint).not.toHaveTextContent(en.lists.hintDated);
+      const hint = await screen.findByText(en.lists.hintQuoted);
+      expect(hint).toHaveTextContent(en.lists.hintQuoted);
+      expect(hint.textContent?.trim()).toBe(en.lists.hintQuoted);
     });
   });
 

@@ -142,20 +142,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     [groups],
   );
 
-  /**
-   * What this section promises, assembled from what the page actually holds.
-   *
-   * Only the first clause is true of every business: Jawab quotes these rows
-   * verbatim. The card-grouping clause belongs to pages whose lists JOIN on the
-   * same entity, and the expiry clause to pages that dated something at all —
-   * an outlet directory has neither, and telling it about prices, dates and
-   * cards describes an app the merchant is not looking at.
-   */
-  const hasDatedRow = useMemo(
-    () => collections.some((c) => c.rows.some((r) => r.startsAt !== null)),
-    [collections],
-  );
-
   /** Lists whose announced dates have run out, or are close to it. Derived
    *  per list — a page can have a healthy directory beside an exhausted
    *  schedule; the window itself lives with the rule, in factListLayout. */
@@ -168,11 +154,18 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         ),
     [collections, today],
   );
-  const sectionHint = [
-    t('lists.hintQuoted'),
-    ...(aggregates ? [t('lists.hintGrouped')] : []),
-    ...(hasDatedRow ? [t('lists.hintDated')] : []),
-  ].join(' ');
+  /**
+   * ONE sentence, the only one a merchant needs before the content: these
+   * lists are quoted verbatim to customers.
+   *
+   * It used to be three. The other two described the LAYOUT («each item's
+   * things are gathered in one card» — visible at a glance) and a MECHANISM
+   * («a dated row disappears after its date» — which now says itself, at the
+   * date field while you set it, and in the freshness notice when a list runs
+   * out). Explaining on arrival what the screen shows anyway is the copy this
+   * page had too much of (owner, 2026-08-11).
+   */
+  const sectionHint = t('lists.hintQuoted');
 
   /**
    * A failed load must NEVER look like an empty one. Rendering `null` on error
@@ -750,7 +743,12 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         {rowShell(
           'w-full min-h-[44px] flex items-center gap-3 px-4 py-2 text-start',
           expired,
-          () => openEntity(group, { collection: section.collection, row }),
+          // THIS row, in the single-row editor — never the entity sheet.
+          // A directory row's group is SYNTHETIC: it carries every row in the
+          // collection, so the entity sheet opened all 47 sessions as one
+          // "item" titled with the LIST's name (owner: «معقول عنا كل هدا
+          // التواريخ», 2026-08-11). One row tapped is one row edited.
+          () => setEditing({ collection: section.collection, row }),
           <>
           {dateParts && (
             <span
@@ -1260,25 +1258,32 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           const datesBadge = collections.some(isDatedCollection) && (() => {
             // «قادمة» is a promise — only rows with a REAL future start
             // date earn it (round-8: wrong counts destroy trust).
-            // Undated announced sessions get their own neutral badge
-            // instead of inflating the upcoming number.
+            //
+            // ABSENCE IS NOT NEWS. «لا تواريخ» rendered on 28 of this page's
+            // 39 cards, saying nothing the merchant can act on and competing
+            // with the price for the eye (measured 2026-08-11, owner: remove
+            // what isn't needed). A badge now appears only when it CARRIES
+            // something: dates to come, or sessions announced without one —
+            // which IS actionable, since a session with no date is a gap.
             const live = group.rows.filter((r) =>
               isDatedCollection(r.collection) && !isExpired(r.row));
             const scheduled = live.filter((r) => !!r.row.startsAt).length;
             const unscheduled = live.length - scheduled;
-            return scheduled > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">
-                {t('lists.upcomingCount', { count: scheduled })}
-              </span>
-            ) : unscheduled > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
-                {t('lists.announcedCount', { count: unscheduled })}
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
-                {t('lists.noSessions')}
-              </span>
-            );
+            if (scheduled > 0) {
+              return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">
+                  {t('lists.upcomingCount', { count: scheduled })}
+                </span>
+              );
+            }
+            if (unscheduled > 0) {
+              return (
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                  {t('lists.announcedCount', { count: unscheduled })}
+                </span>
+              );
+            }
+            return null;
           })();
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">

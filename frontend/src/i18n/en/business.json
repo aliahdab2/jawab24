@@ -178,8 +178,6 @@
     "errLastRow": "A list needs at least one row. Edit this row instead of deleting it.",
     "errDateOrder": "The end date cannot be before the start date.",
     "hintQuoted": "Jawab quotes these lists exactly when it answers your customers.",
-    "hintGrouped": "Everything about one item is gathered in a single card.",
-    "hintDated": "A row carrying a date hides itself automatically once that date passes.",
     "attrPair": "{label}: {value}",
     "startsLabel": "starts",
     "rowEndDate": "End date (optional)",
