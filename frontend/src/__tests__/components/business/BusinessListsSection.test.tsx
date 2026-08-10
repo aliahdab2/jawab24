@@ -99,6 +99,16 @@ async function openCard(title: string) {
 describe('BusinessListsSection', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  /** Per-list management actions (rename · delete · completeness) live behind
+   *  the list's ⋯ menu since the crowding fix (2026-08-11): twelve flat
+   *  buttons above the content became one line per list. Tests reach the
+   *  doors the way a merchant now does — through the menu. */
+  const openListMenu = async (label: string) => {
+    fireEvent.click(await screen.findByRole('button', {
+      name: en.lists.listOptionsFor.replace('{list}', label),
+    }));
+  };
+
   // The old rollout gate (absence = nothing rendered, for everyone) split with
   // the G1b creation UI: an ADMIN now gets the «add list» door instead of a
   // dead end, while a plain member still sees nothing — every affordance in
@@ -191,12 +201,13 @@ describe('BusinessListsSection', () => {
     expect(screen.getByText('1 expired row')).toBeInTheDocument();
   });
 
-  it('asks the completeness question per LIST while un-asked, and sends the tri-state answer', async () => {
+  it('asks the completeness question in the LIST\'s own ⋯ menu, and sends the tri-state answer', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.setCompleteness).mockResolvedValue({} as any);
     renderSection();
 
     await screen.findByText('دورة ICDL');
+    await openListMenu('مواعيد الدورات المعلنة');
     fireEvent.click(screen.getByText('Yes, complete'));
     expect(factCollectionsApi.setCompleteness).toHaveBeenCalledWith(PAGE, 'coll-slots', true);
   });
@@ -599,6 +610,42 @@ describe('BusinessListsSection', () => {
     });
   });
 
+  /**
+   * «إضافة عنصر» on the entity-card layout — the door that never existed.
+   * The per-card «+» only adds rows to an existing entity, so a brand-new
+   * course could not be put into ANY list from this layout (owner, 2026-08-11).
+   */
+  describe('adding a NEW item on the entity-card layout', () => {
+    it('expands to per-list chips, and a chip opens the row sheet for THAT list', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: en.lists.addItem }));
+      fireEvent.click(screen.getByRole('button', { name: `${en.lists.addItem} — أسعار الدورات` }));
+
+      // The existing row sheet, subtitled with the chosen list — same second
+      // step as creation, so the flows cannot drift.
+      expect(screen.getByRole('heading', { name: en.lists.addRow })).toBeInTheDocument();
+      expect(screen.getByText('أسعار الدورات', { selector: 'p' })).toBeInTheDocument();
+    });
+
+    it('with a strip filter active, targets the filtered list directly — no chooser', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      // Tap the list's line in the strip (its accessible name = label + count).
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+      fireEvent.click(screen.getByRole('button', {
+        name: en.lists.addItemTo.replace('{list}', 'مواعيد الدورات المعلنة'),
+      }));
+
+      expect(screen.getByRole('heading', { name: en.lists.addRow })).toBeInTheDocument();
+      expect(screen.getByText('مواعيد الدورات المعلنة', { selector: 'p' })).toBeInTheDocument();
+    });
+  });
+
   describe('«add list» creation flow (G1b creation UI)', () => {
     it('names the list, collects the FIRST item, and creates both in one atomic POST', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
@@ -715,7 +762,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-prices', label: 'أسعار الدورات والشهادات' } } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel) as HTMLInputElement;
       // Prefilled with the CURRENT name — a rename is an edit, not a re-entry.
       expect(input.value).toBe('أسعار الدورات');
@@ -732,7 +780,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel);
 
       fireEvent.change(input, { target: { value: 'مواعيد الدورات المعلنة' } });
@@ -761,7 +810,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-outlets', label: 'نقاط البيع' } } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('الصيدليات') }));
+      await openListMenu('الصيدليات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('الصيدليات') }));
       fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: 'نقاط البيع' } });
       fireEvent.click(screen.getByRole('button', { name: common.save }));
 
@@ -769,17 +819,23 @@ describe('BusinessListsSection', () => {
     });
 
     // Found in the UX audit: focus reset to <body> on close, so a keyboard user
-    // with three lists on the page restarted from the top each time.
-    it('returns focus to the door that opened it', async () => {
+    // with three lists on the page restarted from the top each time. The door
+    // is a menu ITEM now, which unmounts with the menu — so the return target
+    // is the list's ⋯ TRIGGER, which survives the whole journey (the menu
+    // hands it focus before the sheet mounts, or the sheet would capture the
+    // about-to-unmount item and restore nothing).
+    it('returns focus to the list\'s ⋯ trigger after the sheet closes', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      const door = await screen.findByRole('button', { name: renameDoor('أسعار الدورات') });
-      door.focus();
-      fireEvent.click(door);
+      const trigger = await screen.findByRole('button', {
+        name: en.lists.listOptionsFor.replace('{list}', 'أسعار الدورات'),
+      });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       fireEvent.click(screen.getByRole('button', { name: common.cancel }));
 
-      await waitFor(() => expect(document.activeElement).toBe(door));
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
     });
 
     // The cap used to be silent — typing just stopped at 120 characters.
@@ -787,7 +843,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel);
 
       fireEvent.change(input, { target: { value: 'ق'.repeat(99) } });
@@ -811,7 +868,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       expect(screen.getByRole('dialog')).toBeInTheDocument();
 
       // What _app.tsx calls on a hardware back press.

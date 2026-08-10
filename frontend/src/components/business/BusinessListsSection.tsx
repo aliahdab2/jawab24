@@ -1,7 +1,7 @@
 import React, { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListChecks, CalendarClock, Pencil, Trash2, ChevronDown, CalendarDays, Clock, ArrowRight } from 'lucide-react';
+import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { isRowLive, MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
@@ -18,6 +18,7 @@ import {
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
+import { ListActionsMenu } from './ListActionsMenu';
 import { FactEntitySheet } from './FactEntitySheet';
 import { ListLabelSheet } from './ListLabelSheet';
 
@@ -117,9 +118,9 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  those objects, and a stale reference would re-open the sheet on the old
    *  label. */
   const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null);
-  /** Which list's delete is ARMED (id), if any. One at a time, and it disarms
-   *  on blur — a confirm left armed behind a scroll is a mis-tap waiting. */
-  const [confirmingDeleteList, setConfirmingDeleteList] = useState<string | null>(null);
+  /** «إضافة عنصر» expanded to its per-list choice chips (entity-card layout,
+   *  no filter active — with a filter the target list is already chosen). */
+  const [addingItem, setAddingItem] = useState(false);
 
   // Declared before EVERY consumer: the freshness memo takes it as a
   // dependency and `createSheets` is a JSX expression evaluated mid-body, so a
@@ -341,21 +342,20 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     }
   };
 
-  /** Delete a whole list. Only ever reached from the armed second tap. The
-   *  server cascades the rows and retires the page's reply caches, so the AI
-   *  stops quoting the list on the next question — no deploy, no restart. */
+  /** Delete a whole list. Only ever reached from the ⋯ menu's armed second
+   *  tap (the menu owns the confirm and disarms itself on close). The server
+   *  cascades the rows and retires the page's reply caches, so the AI stops
+   *  quoting the list on the next question — no deploy, no restart. */
   const removeCollection = async (collection: FactCollectionWithRows) => {
     setSaving(true);
     try {
       await factCollectionsApi.deleteCollection(pageId, collection.id);
       await refresh();
-      setConfirmingDeleteList(null);
       // The open sheets hold ids this refetch may have just invalidated.
       setEditing(null);
       setEntityEditing(null);
       toast.success(t('lists.listDeleted', { list: collection.label }));
     } catch (error) {
-      setConfirmingDeleteList(null);
       await reportWriteFailure(error, 'delete-fact-collection');
     } finally {
       setSaving(false);
@@ -546,68 +546,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       {t('lists.edit')}
     </span>
   );
-
-  /**
-   * «تعديل الاسم» — the only door onto a list's label.
-   *
-   * The label is not decoration: the prompt renderer puts it above the list's
-   * rows, so a typo reaches customers in the AI's own answers. An explicitly
-   * LABELLED button rather than a bare pencil (the affordance ruling from the
-   * #638 UX pass), and the accessible name carries the list it belongs to —
-   * «تعديل الاسم» alone is ambiguous on a page with several lists.
-   */
-  const renameButton = (collection: FactCollectionWithRows) => readOnly ? null : (
-    <button
-      type="button"
-      onClick={() => setRenaming({ id: collection.id, label: collection.label })}
-      aria-label={t('lists.renameActionFor', { list: collection.label })}
-      className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-theme-border px-3 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-surface-100 flex-shrink-0"
-    >
-      <Pencil className="w-3 h-3" aria-hidden="true" />
-      {t('lists.renameAction')}
-    </button>
-  );
-
-  /**
-   * The undo for «add list».
-   *
-   * It sits next to rename because that is where a merchant looks for "this
-   * list is wrong" — and because a create door with no delete door is how a
-   * duplicate list reached production on 2026-08-10 and had to be removed over
-   * SSH. Kept OUT of the row sheets: this deletes a whole list, and it must
-   * never be one tap from an edit.
-   *
-   * Two steps, and the second one names the blast radius (a directory can hold
-   * hundreds of rows). No undo afterwards — the confirm IS the undo.
-   */
-  const deleteListButton = (collection: FactCollectionWithRows) => {
-    if (readOnly) return null;
-    const armed = confirmingDeleteList === collection.id;
-    return (
-      <button
-        type="button"
-        onClick={() => (armed ? void removeCollection(collection) : setConfirmingDeleteList(collection.id))}
-        onBlur={() => armed && setConfirmingDeleteList(null)}
-        disabled={saving}
-        /* The accessible name stays COUNT-FREE and stable: a name that changes
-           with the row count is noise in a screen reader, and the visible text
-           beside it already carries the number. */
-        aria-label={armed
-          ? t('lists.deleteListConfirmFor', { list: collection.label })
-          : t('lists.deleteListActionFor', { list: collection.label })}
-        className={`min-h-[36px] inline-flex items-center gap-1 rounded-full border px-3 text-[11px] font-semibold flex-shrink-0 ${
-          armed
-            ? 'danger-zone-btn'
-            : 'border-theme-border text-muted-foreground hover:text-red-600 hover:bg-surface-100'
-        }`}
-      >
-        <Trash2 className="w-3 h-3" aria-hidden="true" />
-        {armed
-          ? t('lists.deleteListConfirm', { count: collection.rows.length })
-          : t('lists.deleteListAction')}
-      </button>
-    );
-  };
 
   /**
    * The shell every tappable row shares: a real <button> for someone who can
@@ -868,33 +806,65 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         </div>
       )}
 
-      {/* The completeness word (D-038, tri-state) belongs to the LIST — it
-          changes what customers are TOLD about absence. On directory pages the
-          control lives inside each list's own card (see below); the stacked
-          block here serves only the entity-card layout, where cards are per
-          ENTITY and per-LIST controls have no card to live in. The question +
-          consequence hint are said ONCE for the whole block, not per list. */}
+      {/* The per-list management strip — the entity-card layout's ONLY
+          per-list surface (cards are per ENTITY, so rename/delete/completeness
+          have no card to live in). ONE LINE per list: label + row count +
+          answered-state chip + ⋯. The flat version stacked TWELVE always-
+          visible buttons here on a three-list page (rename + delete + the two
+          completeness answers, each) — measured at 4.3 viewport heights of
+          section on 390px the night it shipped; the owner's «عم حسهم كتار».
+          The actions now live behind ⋯ (ListActionsMenu), completeness
+          question included. */}
       {aggregates && (
-        <div className="mt-3 rounded-xl border border-theme-border bg-muted/40">
-          <div className="px-3 pt-2.5 pb-2 border-b border-theme-border/60">
-            <span className="block text-xs font-semibold text-foreground">{t('lists.completenessAsk')}</span>
-            <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
-          </div>
-          <div className="divide-y divide-theme-border/60">
-            {collections.map((collection) => (
-              <div key={collection.id} className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
-                {/* On the entity-card layout this block is the ONLY per-list
-                    surface — the cards are per ENTITY — so the rename and
-                    delete doors live here or nowhere. */}
-                <span className="min-w-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-foreground break-words" dir="auto">{collection.label}</span>
-                  {renameButton(collection)}
-                  {deleteListButton(collection)}
+        <div className="mt-3 rounded-xl border border-theme-border bg-muted/40 divide-y divide-theme-border/60">
+          {collections.map((collection) => (
+            <div key={collection.id} className="px-3 py-1.5 flex items-center gap-2">
+              {/* The line is a DOOR, not just an index entry: tapping it
+                  filters the cards below to the entities holding a row in
+                  this list, tapping again shows all. Without this, the strip
+                  promised «الأونلاين (3)» with no way to lay eyes on the 3 —
+                  their rows live scattered inside entity cards (owner:
+                  «التاجر بضيع», 2026-08-11). A read action, so members get
+                  it too. */}
+              <button
+                type="button"
+                aria-pressed={activeListId === collection.id}
+                onClick={() => setActiveListId(activeListId === collection.id ? null : collection.id)}
+                className={`min-w-0 flex-1 min-h-[36px] flex items-center gap-2 rounded-lg px-1.5 -ms-1.5 text-start hover:bg-surface-100 ${
+                  activeListId === collection.id ? 'text-brand-700 dark:text-brand-400' : 'text-foreground'
+                }`}
+              >
+                <span className="min-w-0 text-xs font-semibold break-words" dir="auto">
+                  {collection.label}
                 </span>
-                {completenessControl(collection)}
-              </div>
-            ))}
-          </div>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums flex-shrink-0 ${
+                  activeListId === collection.id ? 'bg-brand-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}>
+                  {collection.rows.length}
+                </span>
+              </button>
+              {/* The answered completeness state, as a chip — the consequence
+                  sentence lives in the menu where there is room for it. An
+                  unanswered list shows no chip; the question waits in ⋯. */}
+              {collection.isComplete !== null && (
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold flex-shrink-0 ${
+                  collection.isComplete ? 'status-success border-transparent' : 'bg-card border-theme-border text-muted-foreground'
+                }`}>
+                  {collection.isComplete ? t('lists.completenessChipComplete') : t('lists.completenessChipPartial')}
+                </span>
+              )}
+              {!readOnly && (
+                <ListActionsMenu
+                  collection={collection}
+                  saving={saving}
+                  onRename={() => setRenaming({ id: collection.id, label: collection.label })}
+                  onDelete={() => void removeCollection(collection)}
+                  onSetCompleteness={(isComplete) => void setCompleteness(collection, isComplete)}
+                  showCompleteness
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -971,8 +941,19 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="min-w-0 flex items-center gap-2 flex-wrap">
                     <h3 className="text-[15px] font-bold text-foreground break-words" dir="auto">{collection.label}</h3>
-                    {renameButton(collection)}
-                    {deleteListButton(collection)}
+                    {/* Same ⋯ as the strip, minus the completeness section —
+                        this card already asks that question in its own body,
+                        and it must not be asked twice. */}
+                    {!readOnly && (
+                      <ListActionsMenu
+                        collection={collection}
+                        saving={saving}
+                        onRename={() => setRenaming({ id: collection.id, label: collection.label })}
+                        onDelete={() => void removeCollection(collection)}
+                        onSetCompleteness={(isComplete) => void setCompleteness(collection, isComplete)}
+                        showCompleteness={false}
+                      />
+                    )}
                   </span>
                   {collection.isComplete !== null && completenessControl(collection)}
                 </div>
@@ -1160,9 +1141,33 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               fold(row.name).includes(query)
               || (row.attributes ?? []).some((a) => fold(a.value).includes(query) || fold(a.label).includes(query)));
           };
-          const visibleGroups = searchable ? groups.filter(groupMatches) : groups;
+          // The strip's list filter composes WITH the search: a tapped list
+          // narrows the cards to entities holding a row in it, and the search
+          // then narrows within that.
+          const inActiveList = (group: FactListGroup) =>
+            !activeListId || group.rows.some(({ collection }) => collection.id === activeListId);
+          const visibleGroups = groups.filter((g) => inActiveList(g) && (!searchable || groupMatches(g)));
           return (
             <>
+              {/* The filter must announce itself at the CARDS, not only in the
+                  strip: a merchant who scrolled past it would see 3 cards and
+                  conclude the rest were lost. */}
+              {activeListId && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                  <span className="min-w-0 break-words" dir="auto">
+                    {t('lists.filteringByList', {
+                      list: collections.find((c) => c.id === activeListId)?.label ?? '',
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveListId(null)}
+                    className="min-h-[32px] flex-shrink-0 rounded-full border border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                  >
+                    {t('lists.showAll')}
+                  </button>
+                </p>
+              )}
               {searchable && (
                 <div>
                   {/* Same dir rule as the directory box: empty → inherit the
@@ -1447,7 +1452,59 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         })()}
       </div>
 
-      {addListButton && <div className="mt-3">{addListButton}</div>}
+      {!readOnly && (
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {/* «إضافة عنصر» — the door the entity-card layout NEVER had. The
+              per-card «+» adds rows to an EXISTING entity; a brand-new course
+              had no card to add from, so a merchant could not put a new item
+              into any list at all (owner, 2026-08-11: «ما عم شوف كيف ضيف عنصر
+              عالقائمة»). The directory layout is exempt — each list card
+              carries its own add.
+              With the strip filter active the target list is already chosen;
+              otherwise one tap expands to per-list chips (progressive
+              disclosure, same pattern the per-card add used). */}
+          {aggregates && (() => {
+            const activeCollection = collections.find((c) => c.id === activeListId) ?? null;
+            if (activeCollection) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => setEditing({ collection: activeCollection, row: null })}
+                  className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="min-w-0 break-words" dir="auto">{t('lists.addItemTo', { list: activeCollection.label })}</span>
+                </button>
+              );
+            }
+            if (addingItem) {
+              return collections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-label={`${t('lists.addItem')} — ${c.label}`}
+                  onClick={() => { setAddingItem(false); setEditing({ collection: c, row: null }); }}
+                  className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-brand-300 px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="min-w-0 break-words" dir="auto">{c.label}</span>
+                </button>
+              ));
+            }
+            return (
+              <button
+                type="button"
+                onClick={() => setAddingItem(true)}
+                className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('lists.addItem')}
+              </button>
+            );
+          })()}
+          {addListButton}
+        </div>
+      )}
 
       {createSheets}
 
