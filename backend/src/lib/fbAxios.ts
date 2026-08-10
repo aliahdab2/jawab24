@@ -33,6 +33,25 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 interface RetryConfig extends InternalAxiosRequestConfig {
     _retryCount?: number;
+    /**
+     * Opt OUT of the automatic retry for NON-IDEMPOTENT writes.
+     *
+     * Retrying a read, or a reply send, costs nothing when the first attempt
+     * actually succeeded. Retrying a PAGE PUBLISH does: a lost response is
+     * indistinguishable from a failed call, so a retry can put a SECOND public,
+     * permanent post on a merchant's page. Such callers set this and reconcile
+     * deliberately instead of guessing.
+     */
+    _noRetry?: boolean;
+}
+
+// Makes `{ _noRetry: true }` type-safe at every call site instead of needing a
+// cast. Augmentation rather than a helper const: one way to express it.
+declare module 'axios' {
+    interface AxiosRequestConfig {
+        /** Opt out of the automatic retry — see RetryConfig._noRetry. */
+        _noRetry?: boolean;
+    }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -84,6 +103,9 @@ if (instance?.interceptors) {
     instance.interceptors.response.use(undefined, async (error: AxiosError) => {
     const cfg = error.config as RetryConfig | undefined;
     if (!cfg) return Promise.reject(error);
+    // Non-idempotent write: never retry it for the caller. Checked FIRST so no
+    // other condition can resurrect the retry.
+    if (cfg._noRetry) return Promise.reject(error);
 
     const retryCount = cfg._retryCount ?? 0;
     if (retryCount >= MAX_RETRIES) return Promise.reject(error);

@@ -1808,6 +1808,23 @@ export const postSuggestions = pgTable('post_suggestions', {
     openedAt: timestamp('opened_at'),
     copiedAt: timestamp('copied_at'),
     downloadedAt: timestamp('downloaded_at'),
+    // Publishing to the merchant's Page. A published post is PUBLIC and
+    // PERMANENT, so the state machine — not the caller — is what makes a
+    // double-post impossible:
+    //   none → publishing → published
+    //                    ↘ failed → (merchant may retry) → publishing
+    // 'publishing' is CLAIMED in one atomic conditional UPDATE *before* the
+    // Graph call. Two concurrent requests cannot both win the claim, so only
+    // one ever reaches Facebook. A row stuck in 'publishing' (crash between
+    // claim and response) is deliberately NOT auto-retried: we cannot tell a
+    // lost response from a failed call, and guessing wrong posts twice on a
+    // public page. It is surfaced for reconciliation instead.
+    publishState: varchar('publish_state', { length: 20 }).notNull().default('none'),
+    publishedPostId: text('published_post_id'),
+    publishedAt: timestamp('published_at'),
+    /** Last failure reason — shown to the MERCHANT, not just Sentry (D-060). */
+    publishError: text('publish_error'),
+    publishClaimedAt: timestamp('publish_claimed_at'),
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
     pageDateIdx: index('idx_post_suggestions_page_date').on(table.pageId, table.suggestedFor),
@@ -1817,4 +1834,10 @@ export const postSuggestions = pgTable('post_suggestions', {
     cronOnceIdx: uniqueIndex('uq_post_suggestions_cron_once')
         .on(table.pageId, table.suggestedFor)
         .where(sql`source = 'cron'`),
+    // A Facebook post id may be recorded against at most ONE suggestion. The
+    // claim above already prevents the double call; this is the backstop that
+    // makes a duplicate unrepresentable in the data even if it ever did.
+    publishedPostOnceIdx: uniqueIndex('uq_post_suggestions_published_post')
+        .on(table.publishedPostId)
+        .where(sql`published_post_id IS NOT NULL`),
 }));
