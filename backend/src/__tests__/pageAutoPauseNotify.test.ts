@@ -95,7 +95,7 @@ describe('auto-pause merchant notification', () => {
             { pageName: 'My Page' },
             { pageId: PAGE, action: 'reconnect_page', urgent: true },
         );
-        expect(mockSet).toHaveBeenCalledWith(`email:auto_pause:${PAGE}`, '1', 'EX', 24 * 60 * 60, 'NX');
+        expect(mockSet).toHaveBeenCalledWith(`notif:auto_pause_email:${PAGE}`, '1', 'EX', 24 * 60 * 60, 'NX');
         expect(mockTemplate).toHaveBeenCalledWith({
             lang: 'ar',
             pageName: 'My Page',
@@ -169,6 +169,32 @@ describe('auto-pause merchant notification', () => {
         await flush();
 
         expect(mockTemplate).toHaveBeenCalledWith(expect.objectContaining({ lang: 'en' }));
+    });
+
+    it('releases the dedup key and reports when the email provider fails', async () => {
+        mockPauseRow();
+        // emailService.send RESOLVES with success:false — it does not throw.
+        mockEmailSend.mockResolvedValue({ success: false, error: 'Resend 503' });
+        await recordSendFailure(PAGE, 'our_fault');
+        await flush();
+
+        expect(mockDel).toHaveBeenCalledWith(`notif:auto_pause_email:${PAGE}`);
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            'pageAutoPause.autoPauseEmailFailed',
+            expect.objectContaining({ extra: { pageId: PAGE, userId: 'user-1' } }),
+        );
+    });
+
+    it('still emails when Redis is unavailable (fail-open on the dedup)', async () => {
+        mockPauseRow();
+        mockSet.mockRejectedValue(new Error('redis down'));
+        await recordSendFailure(PAGE, 'our_fault');
+        await flush();
+
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+        // Nothing to release — the key was never claimed.
+        expect(mockDel).not.toHaveBeenCalled();
     });
 
     it('a notification failure is captured and never throws into the reply path', async () => {

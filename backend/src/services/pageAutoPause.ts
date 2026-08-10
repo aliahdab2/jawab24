@@ -126,6 +126,7 @@ function trackPlatformFailure(pageId: string, platform: string, bucket: DmFailur
  * ONE email a day about it, not one per cycle (the in-app/push notification
  * still fires each cycle, since each cycle is a deliberate merchant action). */
 const AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS = 24 * 60 * 60;
+const NOTIFY_EMAIL_DEDUP_KEY = (pageId: string) => `notif:auto_pause_email:${pageId}`;
 
 /**
  * Tell the humans their page just went quiet. Dashboard-banner-only proved
@@ -164,17 +165,40 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
         }
 
         if (!row.userId || !info?.ownerEmail) return;
-        // Redis down → the set throws and we skip the email (the in-app/push
-        // above already fired) rather than risk unbounded repeats.
-        const set = await redis.set(`email:auto_pause:${row.id}`, '1', 'EX', AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS, 'NX');
-        if (set !== 'OK') return;
+
+        // Fail OPEN when Redis is unavailable. The crossing guard in the caller
+        // (`consecutiveSendFailures === PAUSE_THRESHOLD` exactly) already limits
+        // this to one email per pause cycle with no Redis at all; the dedup key
+        // only damps the re-toggle → re-pause loop. So a Redis blip costing the
+        // merchant their most important email is a far worse trade than a second
+        // email after a deliberate human re-toggle.
+        let dedupKeyClaimed = false;
+        try {
+            const set = await redis.set(NOTIFY_EMAIL_DEDUP_KEY(row.id), '1', 'EX', AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS, 'NX');
+            if (set !== 'OK') return; // already emailed within the window
+            dedupKeyClaimed = true;
+        } catch {
+            // Redis unreachable — send anyway (see above).
+        }
 
         const { subject, html } = autoPausedEmailTemplate({
             lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
             pageName,
             dashboardUrl: `${config.frontendUrl}/dashboard`,
         });
-        await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
+        const result = await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
+
+        // emailService.send RESOLVES with { success: false } on a provider
+        // failure — it does not throw. Without this check a Resend outage would
+        // silently consume the 24h dedup window and the merchant would never be
+        // emailed at all. Release the key so the next crossing can retry.
+        if (!result.success) {
+            if (dedupKeyClaimed) await redis.del(NOTIFY_EMAIL_DEDUP_KEY(row.id)).catch(() => {});
+            captureError(new Error(`Auto-pause email failed for page ${row.id}: ${result.error ?? 'unknown error'}`), 'pageAutoPause.autoPauseEmailFailed', {
+                tags: { component: 'pageAutoPause' },
+                extra: { pageId: row.id, userId: row.userId },
+            });
+        }
     } catch (err) {
         captureError(err, 'pageAutoPause.notifyMerchantAutoPaused failed', {
             tags: { component: 'pageAutoPause' },
@@ -245,7 +269,15 @@ export async function recordSendFailure(
                 reason: 'auto_pause',
                 extra: { bucket },
             });
-            void notifyMerchantAutoPaused(row);
+            // AWAITED, not fire-and-forget: both callers already dispatch
+            // recordSendFailure with `void` (commentProcessor, messageProcessor),
+            // so this costs the reply path nothing — and awaiting keeps the
+            // notification's ~4 queries inside the caller's promise instead of
+            // escaping it. The escaped version raced the integration suite's
+            // per-test TRUNCATE (queries landing after the test that spawned
+            // them), which is a flaky-gate generator. notifyMerchantAutoPaused
+            // never throws, so this cannot fail the pause.
+            await notifyMerchantAutoPaused(row);
         }
     } catch (err) {
         captureError(err, 'pageAutoPause.recordSendFailure failed', {
