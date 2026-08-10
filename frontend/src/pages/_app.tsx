@@ -14,7 +14,9 @@ import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { Toaster } from 'sonner';
-import { isNativePlatform } from '@/lib/capacitor';
+import { isNativePlatform, isIOSNative } from '@/lib/capacitor';
+import { isIOSBlockedRoute } from '@/lib/paymentRoutes';
+import { useIOSRouteGuard } from '@/hooks/useIOSRouteGuard';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
@@ -354,20 +356,35 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     if (!hasHydrated || !isAuthenticated || !authToken) return;
     if (!isNativePlatform()) return;
 
+    // Cancellation is owned by the EFFECT, not by the dynamic import's callback.
+    // Returning the cleanup from inside .then() hands it to the promise chain,
+    // which discards it — React never sees it, so the timer outlived the effect
+    // and could raise the pre-prompt after logout or stack duplicates when the
+    // token refreshed. The `cancelled` flag covers the window the timer cannot:
+    // the import and the two Preferences reads are all async, so each can still
+    // resolve after teardown.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
     // 1. Set up listeners if permission already granted (returning users)
     import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt, shouldShowPushDeniedBanner }) => {
+      if (cancelled) return;
       initPushNotifications(authToken).catch((err: unknown) => { captureError(err, 'Push notification init failed', { tags: { context: 'push-init' } }); });
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
       // shouldShowNotificationPrePrompt is async (uses native Preferences)
-      const timer = setTimeout(() => {
-        shouldShowNotificationPrePrompt().then(show => { if (show) setShowPushPrompt(true); });
+      timer = setTimeout(() => {
+        shouldShowNotificationPrePrompt().then(show => { if (!cancelled && show) setShowPushPrompt(true); });
         // Recovery banner for users who previously denied — only shows when
         // pre-prompt won't (the helpers are mutually exclusive by design).
-        shouldShowPushDeniedBanner().then(show => { if (show) setShowPushDeniedBanner(true); });
+        shouldShowPushDeniedBanner().then(show => { if (!cancelled && show) setShowPushDeniedBanner(true); });
       }, 5000);
-      return () => clearTimeout(timer);
     });
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [hasHydrated, isAuthenticated, authToken]);
 
   // SSE: moved to <SSEManager /> inside QueryClientProvider (see below)
@@ -395,6 +412,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   }, []);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
+  // App Store Guideline 3.1.1 — the single choke point for route entry on iOS.
+  // Lives in a hook so it can be tested against a real router; see the hook for
+  // why the build-time layers cannot replace it.
+  useIOSRouteGuard();
+
   useEffect(() => {
     if (!hasHydrated || !isNativePlatform()) return;
 
@@ -405,22 +427,32 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       
       // Helper for URL parsing — only allow known hosts
       const handleDeepLink = (url: string): string | null => {
-        // Custom scheme (e.g. com.jawab24.app://dashboard)
-        if (url.startsWith("com.jawab24.app://")) {
-            const raw = url.replace("com.jawab24.app://", "/");
-            return raw.startsWith("/") ? raw : `/${raw}`;
-        }
-        // HTTPS universal links — parse with URL API and whitelist hosts
-        try {
-            const parsed = new URL(url);
-            const allowedHosts = ["localhost", "jawab24.com", "www.jawab24.com"];
-            if (allowedHosts.includes(parsed.hostname)) {
-                return parsed.pathname + parsed.search;
-            }
-        } catch {
-            // Invalid URL — ignore
-        }
-        return null;
+        const resolve = (): string | null => {
+          // Custom scheme (e.g. com.jawab24.app://dashboard)
+          if (url.startsWith("com.jawab24.app://")) {
+              const raw = url.replace("com.jawab24.app://", "/");
+              return raw.startsWith("/") ? raw : `/${raw}`;
+          }
+          // HTTPS universal links — parse with URL API and whitelist hosts
+          try {
+              const parsed = new URL(url);
+              const allowedHosts = ["localhost", "jawab24.com", "www.jawab24.com"];
+              if (allowedHosts.includes(parsed.hostname)) {
+                  return parsed.pathname + parsed.search;
+              }
+          } catch {
+              // Invalid URL — ignore
+          }
+          return null;
+        };
+
+        const slug = resolve();
+        // App Store Guideline 3.1.1: a deep link must never carry the iOS app
+        // into a payment surface. Refusing here means the route is not entered
+        // at all — the page-level guard would only blank it AFTER hydration,
+        // and the exported HTML holds the prices as plain markup.
+        if (slug && isIOSNative() && isIOSBlockedRoute(slug)) return null;
+        return slug;
       };
 
       // 1. Warm Start Listener

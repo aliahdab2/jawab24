@@ -20,8 +20,10 @@ import { Column } from 'drizzle-orm';
 
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
-    mockIsConfigured, mockPut, mockRemove, mockComposePostCard, mockFetchRoundedLogo, mockConfig,
+    mockIsConfigured, mockPut, mockRemove, mockComposePostCard, mockFetchRoundedLogo,
+    mockRenderPosterBase, mockConfig,
 } = vi.hoisted(() => ({
+    mockRenderPosterBase: vi.fn(),
     mockChatCreate: vi.fn(),
     mockImagesGenerate: vi.fn(),
     mockCheckDailyCap: vi.fn(),
@@ -66,6 +68,8 @@ vi.mock('../services/imageStorage', () => ({
 vi.mock('../services/imageCompose', () => ({
     composePostCard: mockComposePostCard,
     fetchRoundedLogo: mockFetchRoundedLogo,
+    // Poster mode's base comes from here instead of the image model.
+    renderPosterBase: mockRenderPosterBase,
 }));
 vi.mock('../services/settings', () => ({
     settingsService: { getSettings: vi.fn().mockResolvedValue({ brandVoiceNotes: 'ودّي وقريب' }) },
@@ -95,6 +99,10 @@ import {
     setPostSuggestionsLogger,
     pickPostType,
     buildContactSuffix,
+    buildRecentBriefsBlock,
+    findUngroundedNumbers,
+    pickImageMode,
+    IMAGE_MODES,
 } from '../services/postSuggestions';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -203,6 +211,7 @@ beforeEach(() => {
     mockImagesGenerate.mockResolvedValue({ data: [{ b64_json: 'aGVsbG8=' }], usage: { input_tokens: 90, output_tokens: 1000 } });
     mockComposePostCard.mockImplementation(async (base: Buffer) => base);
     mockFetchRoundedLogo.mockResolvedValue(null);
+    mockRenderPosterBase.mockResolvedValue(Buffer.from('poster-base'));
 });
 
 describe('gate functions', () => {
@@ -419,6 +428,142 @@ describe('generateSuggestion — happy path and degrades', () => {
     });
 });
 
+/**
+ * The angle picker has had cross-day memory since day one; the IMAGE never did,
+ * so a service business with no physical product converged on "laptop on a
+ * desk" every morning. These pin the memory that closes that gap.
+ */
+describe('buildRecentBriefsBlock — the image gets the cross-day memory the angle already had', () => {
+    it('is EMPTY for a page with no history — nothing to avoid, no wasted tokens', () => {
+        expect(buildRecentBriefsBlock([])).toBe('');
+    });
+
+    it('lists the recent scenes so the model can avoid redrawing them', () => {
+        const block = buildRecentBriefsBlock([
+            'A laptop on a wooden desk beside a coffee cup',
+            'An open notebook under warm window light',
+        ]);
+        expect(block).toContain('A laptop on a wooden desk beside a coffee cup');
+        expect(block).toContain('An open notebook under warm window light');
+        expect(block).toMatch(/do not redraw/i);
+    });
+
+    it('renders one bullet per scene so the list cannot read as a single sentence', () => {
+        const block = buildRecentBriefsBlock(['scene one', 'scene two', 'scene three']);
+        expect(block.match(/^ {2}- /gm)).toHaveLength(3);
+    });
+});
+
+/**
+ * Shadow measurement of figures the model wrote that its inputs do not contain.
+ * D-047 already keeps phone digits out of model hands; this measures whether
+ * money and other figures need the same treatment.
+ */
+describe('findUngroundedNumbers — figures the inputs do not support', () => {
+    it('flags a figure that appears nowhere in the inputs', () => {
+        expect(findUngroundedNumbers('السعر 45 د فقط', 'رقم 1 — القطع: 22 — الوزن: 2-4 كيلو'))
+            .toEqual(['45']);
+    });
+
+    it('accepts a figure the inputs DO carry — the 2026-08-10 false alarm', () => {
+        // «45 د» lives in fact_rows.price and is rendered into the prompt block.
+        expect(findUngroundedNumbers(
+            'رواء رقم 2 بـ 45 د',
+            'رواء رقم 2 — السلسلة: عادي — القطع: 30 — الوزن: 3-6 كيلو — 45 د',
+        )).toEqual([]);
+    });
+
+    it('a PHONE NUMBER must not ground an unrelated price (token equality, not substring)', () => {
+        // «0932456789» contains the characters "45". A substring test would call
+        // the price grounded and miss exactly what this exists to catch.
+        expect(findUngroundedNumbers('السعر 45 د', 'اتصل بنا 0932456789')).toEqual(['45']);
+    });
+
+    it('normalises Arabic-Indic digits on both sides', () => {
+        expect(findUngroundedNumbers('السعر ٤٥ د', 'السعر 45 د')).toEqual([]);
+        expect(findUngroundedNumbers('السعر 45 د', 'السعر ٤٥ د')).toEqual([]);
+    });
+
+    it('ignores thousands separators so 35,000 matches 35000', () => {
+        expect(findUngroundedNumbers('بسعر 35,000 ل.س', 'الدورة بسعر 35000 ليرة')).toEqual([]);
+    });
+
+    it('reports each unsupported figure once, in order', () => {
+        expect(findUngroundedNumbers('99 ثم 77 ثم 99 مرة أخرى', 'لا أرقام هنا'))
+            .toEqual(['99', '77']);
+    });
+
+    it('is empty for text with no figures at all', () => {
+        expect(findUngroundedNumbers('راسلنا لمعرفة السعر', 'أي بيانات')).toEqual([]);
+    });
+});
+
+/**
+ * Varying the KIND of image is the fix for the sameness that three prompt-level
+ * attempts could not achieve. Code decides it, so unlike those attempts it
+ * cannot be ignored.
+ */
+describe('pickImageMode — round-robin over image kinds', () => {
+    it('starts at photo when there is no history', () => {
+        expect(pickImageMode(null)).toBe('photo');
+        expect(pickImageMode(undefined)).toBe('photo');
+    });
+
+    it('visits EVERY mode — the filter-first shape would never reach the third', () => {
+        const seen: string[] = [];
+        let mode: string | null = null;
+        for (let i = 0; i < IMAGE_MODES.length; i++) {
+            mode = pickImageMode(mode);
+            seen.push(mode);
+        }
+        expect(new Set(seen).size).toBe(IMAGE_MODES.length);
+        expect([...seen].sort()).toEqual([...IMAGE_MODES].sort());
+    });
+
+    it('never repeats the previous mode, and cycles back round', () => {
+        for (const m of IMAGE_MODES) expect(pickImageMode(m)).not.toBe(m);
+        expect(pickImageMode(IMAGE_MODES[IMAGE_MODES.length - 1])).toBe(IMAGE_MODES[0]);
+    });
+
+    it('an unrecognised stored mode falls back to the start rather than throwing', () => {
+        expect(pickImageMode('something-retired')).toBe('photo');
+    });
+});
+
+describe('generateSuggestion — poster mode costs nothing', () => {
+    it('makes NO image-model call when the rotation lands on poster', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(null);
+        // Previous card was a photo ⇒ this one rotates to poster.
+        queueFullRun(INSERTED, { previous: [{ postType: 'promo', imageMode: 'photo' }] });
+
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        // The whole point: the poster is drawn in code, so the paid call is skipped.
+        expect(mockImagesGenerate).not.toHaveBeenCalled();
+        // The headline goes to the POSTER, which typesets it large and centred…
+        expect(mockRenderPosterBase).toHaveBeenCalledWith(
+            1024, 1024, expect.any(Number), expect.any(String),
+        );
+        // …so the card's own bottom-scrim headline layer must stay unused, or the
+        // same words would be drawn twice on one image.
+        expect(mockComposePostCard).toHaveBeenCalledWith(
+            expect.any(Buffer),
+            expect.objectContaining({ headline: null }),
+        );
+        expect(mockPut).toHaveBeenCalled();
+    });
+
+    it('still calls the image model when the rotation lands on a photographic mode', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(null);
+        // Previous was a poster ⇒ next is conceptual, which is model-generated.
+        queueFullRun(INSERTED, { previous: [{ postType: 'promo', imageMode: 'poster' }] });
+
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockImagesGenerate).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('generateSuggestion — logo badge (pre-fetched, parallel, never fatal)', () => {
     const LOGO_PAGE_ROW = { ...PAGE_ROW, instagramProfilePicUrl: 'https://cdn.example/avatar.jpg' };
 
@@ -437,6 +582,34 @@ describe('generateSuggestion — logo badge (pre-fetched, parallel, never fatal)
         // is issued — not sequentially after it resolves (the old 5s tail).
         expect(mockFetchRoundedLogo.mock.invocationCallOrder[0])
             .toBeLessThan(mockImagesGenerate.mock.invocationCallOrder[0]);
+    });
+
+    /**
+     * REGRESSION (2026-08-10, spotted on a real card): the order used to put the
+     * Instagram avatar first, so a page whose linked IG was a PERSONAL account
+     * got the owner's face stamped on every generated card — while the image
+     * prompt forbids the model from drawing people at all. The card's
+     * destination is the Facebook Page, so the Page's own picture is the mark.
+     */
+    it('prefers the FACEBOOK PAGE picture over a linked Instagram avatar', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(Buffer.from('logo'));
+        queueFullRun(INSERTED, {
+            pageRow: { ...LOGO_PAGE_ROW, facebookPageId: '878802365317875' },
+        });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockFetchRoundedLogo).toHaveBeenCalledWith(
+            expect.stringContaining('graph.facebook.com/878802365317875/picture'),
+        );
+        expect(mockFetchRoundedLogo).not.toHaveBeenCalledWith('https://cdn.example/avatar.jpg');
+    });
+
+    it('falls back to the Instagram avatar only when the page has no Facebook id', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(Buffer.from('logo'));
+        queueFullRun(INSERTED, { pageRow: { ...LOGO_PAGE_ROW, facebookPageId: null } });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockFetchRoundedLogo).toHaveBeenCalledWith('https://cdn.example/avatar.jpg');
     });
 
     it('a logo-fetch REJECTION never fails the generation — composes with logo null', async () => {

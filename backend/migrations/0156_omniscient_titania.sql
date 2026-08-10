@@ -1,0 +1,1 @@
+ALTER TABLE "post_suggestions" ADD COLUMN "image_brief" text;
