@@ -133,7 +133,15 @@ export function isCatalogVisible(
  */
 const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
   (process.env.NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS
-    || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
+    || [
+      'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)
+      // First merchant tester (2026-08-10, owner-invited) — a real business
+      // helping exercise the pilot. Must stay in step with the backend's
+      // POST_SUGGESTIONS_WORKSPACE_IDS default: this hides the card, the
+      // backend decides, and a workspace listed in only one of the two either
+      // sees a card whose API 404s or gets nothing while paying the cron cost.
+      '9b6ba279-b569-4b45-b020-55b542dad5b6',
+    ].join(','))
     .split(',').map((id) => id.trim()).filter(Boolean),
 );
 
