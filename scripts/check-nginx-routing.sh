@@ -1,25 +1,42 @@
 #!/usr/bin/env bash
 #
-# Proves which upstream nginx routes each merchant-facing platform URL to.
+# Proves where nginx sends each merchant-facing platform URL — which upstream,
+# AND at which path.
 #
-# Runs the REAL nginx/nginx.conf inside an nginx container, with the blue-green
-# upstreams replaced by stubs that echo "BACKEND" / "FRONTEND", then curls every
-# platform URL and asserts the expected upstream. A pure `nginx -t` cannot catch
-# the failure class this guards against: a syntactically perfect config in which
-# a `location /zid/` prefix swallows a Next.js page (or is missing entirely, so
-# an OAuth callback 404s) parses fine and fails only in production.
+# Boots the REAL nginx/nginx.conf inside the SAME image production runs
+# (nginx:alpine, see docker-compose.yml), with the blue-green upstreams replaced
+# by stubs that echo the request line they received. Then curls every route and
+# compares "<upstream> <path>" against an expected table.
 #
-# Usage: ./scripts/check-nginx-routing.sh
-# Exit:  0 = all routes land where expected, 1 = at least one is wrong.
+# Why not just `nginx -t`: a config that routes a Next.js page to the backend, or
+# an OAuth callback to the frontend, parses perfectly and fails only in
+# production. On 2026-08-10 nginx.conf had no /zid/ block at all and the first
+# real Zid install hit a 404; `nginx -t` said OK throughout.
+#
+# Why the path matters too: the backend mounts Zid at `prefix: '/zid'`
+# (integrations/zid.ts) and `location /api/` carries a `rewrite ^/api/(.*)$ /$1`.
+# A block reaching the right upstream at the wrong path still 404s at Fastify.
+#
+# FAILS only on a real routing mismatch or a genuine nginx config error.
+# SKIPS (exit 0) when the environment cannot run the check — no docker, no
+# network for the image pull, container won't start for non-config reasons.
+# A CI/deploy gate must not turn an offline build host into a blocked deploy.
+#
+# Usage: ./scripts/check-nginx-routing.sh   (or: npm run check:nginx-routing)
 
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NGINX_CONF="$REPO_ROOT/nginx/nginx.conf"
 CONTAINER="nginx-routing-check-$$"
+# Must match docker-compose.yml's nginx service, or we are validating a
+# different nginx than the one that will serve this config.
 IMAGE="nginx:alpine"
 
-command -v docker >/dev/null 2>&1 || { echo "SKIP: docker not available"; exit 0; }
+skip() { echo "SKIP: $*"; exit 0; }
+
+command -v docker >/dev/null 2>&1 || skip "docker not available"
+docker info >/dev/null 2>&1 || skip "docker daemon not responding"
 [ -f "$NGINX_CONF" ] || { echo "FAIL: $NGINX_CONF not found"; exit 1; }
 
 WORKDIR="$(mktemp -d)"
@@ -29,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Stub upstreams: each echoes its identity and the URI it received ---------
+# --- Stub upstreams: each echoes its identity + the request line it received ---
 cat > "$WORKDIR/upstream.conf" <<'EOF'
 upstream backend_active   { server 127.0.0.1:9001; }
 upstream frontend_active  { server 127.0.0.1:9002; }
@@ -49,8 +66,8 @@ server {
 }
 EOF
 
-# --- Boot nginx with the real config + a self-signed cert at the LE path ------
-docker run -d --name "$CONTAINER" \
+# --- Boot nginx with the real config + a throwaway cert at the Let's Encrypt path
+if ! docker run -d --name "$CONTAINER" \
     -v "$NGINX_CONF:/etc/nginx/nginx.conf:ro" \
     -v "$WORKDIR/upstream.conf:/etc/nginx/upstream.conf:ro" \
     --entrypoint sh "$IMAGE" -c '
@@ -61,32 +78,47 @@ docker run -d --name "$CONTAINER" \
             -keyout /etc/letsencrypt/live/jawab24.com/privkey.pem \
             -out   /etc/letsencrypt/live/jawab24.com/fullchain.pem >/dev/null 2>&1 &&
         nginx -g "daemon off;"
-    ' >/dev/null || { echo "FAIL: could not start container"; exit 1; }
+    ' >/dev/null 2>&1
+then
+    skip "could not create the $IMAGE container (offline image pull?)"
+fi
 
 # Wait for nginx to answer rather than sleeping a fixed amount.
-for _ in $(seq 1 50); do
-    docker exec "$CONTAINER" curl -sk -o /dev/null \
-        -H 'Host: jawab24.com' https://127.0.0.1/nginx-health 2>/dev/null && break
-    sleep 0.2
+ready=0
+for _ in $(seq 1 60); do
+    if docker exec "$CONTAINER" curl -sk -o /dev/null --max-time 2 \
+        -H 'Host: jawab24.com' https://127.0.0.1/nginx-health 2>/dev/null; then
+        ready=1
+        break
+    fi
+    sleep 0.25
 done
+
+if [ "$ready" -ne 1 ]; then
+    # nginx refusing to start is EITHER a real config error (must fail) OR an
+    # environment problem such as a failed apk/openssl step (must skip).
+    # nginx writes "[emerg]" to the log for config errors — that is the tell.
+    if docker logs "$CONTAINER" 2>&1 | grep -q '\[emerg\]'; then
+        echo "FAIL: nginx refused to start with this config:"
+        docker logs "$CONTAINER" 2>&1 | grep '\[emerg\]' | sed 's/^/    /'
+        echo "    A config nginx cannot start is a full outage — the deploy script's"
+        echo "    post-restart loop only checks 'nginx -v' and would not catch it."
+        exit 1
+    fi
+    skip "nginx did not come up and reported no config error (environment issue)"
+fi
 
 if ! docker exec "$CONTAINER" nginx -t >/dev/null 2>&1; then
     echo "FAIL: nginx config did not pass 'nginx -t':"
     docker exec "$CONTAINER" nginx -t 2>&1 | sed 's/^/    /'
     exit 1
 fi
-echo "nginx -t: OK"
+echo "nginx -t: OK  (image: $IMAGE, same as docker-compose.yml)"
 echo
 
 # --- Expectations -------------------------------------------------------------
-# Format: <requested path>|<expected upstream> <expected path AT the upstream>
-#
-# Asserting the upstream alone is not enough. The backend mounts Zid at
-# `prefix: '/zid'` (integrations/zid.ts) and Salla at '/salla', while the
-# `location /api/` block carries `rewrite ^/api/(.*)$ /$1 break`. So a block
-# that reached the right upstream but rewrote (or failed to rewrite) the path
-# would still 404 at Fastify. The stubs echo the request line they received,
-# which is exactly what the real backend would see.
+# Format: <requested path>|<expected upstream>_<expected path AT the upstream>
+# ('_' stands in for the space, so each row stays one whitespace-free token.)
 #
 # Keep this table in step with the platform `location` blocks in nginx.conf.
 ROUTES="
@@ -105,11 +137,43 @@ ROUTES="
 /zid/store|BACKEND_/zid/store
 /api/zid/auth|BACKEND_/zid/auth
 "
+# --- Non-regression: routes this change must NOT move -------------------------
+# The platform blocks sit in the middle of a shared request pipeline. These pin
+# the paths that carry real traffic today, so a future edit to a `location`
+# cannot quietly re-route them. Locale-prefixed pages matter specifically
+# because /en/... and /ar/... do NOT match the `location /zid/` prefix — they
+# reach the frontend via the catch-all, and auth/callback.tsx redirects to the
+# locale-prefixed form for English merchants.
+ROUTES="$ROUTES
+/|FRONTEND_/
+/pricing|FRONTEND_/pricing
+/en/zid/onboarding|FRONTEND_/en/zid/onboarding
+/ar/zid/onboarding|FRONTEND_/ar/zid/onboarding
+/en/salla/connected|FRONTEND_/en/salla/connected
+/ar/salla/connected|FRONTEND_/ar/salla/connected
+/webhook|BACKEND_/webhook
+/api/pages|BACKEND_/pages
+/api/auth/login|BACKEND_/auth/login
+/ai/generate|AIWORKER_/generate
+"
+# --- Known, accepted behaviour: trailing slash ---------------------------------
+# `location = /x/page` matches the exact URI only, so the TRAILING-SLASH form
+# falls through to the platform prefix block and reaches the backend, which has
+# no such route (404) instead of the frontend's redirect-to-canonical. Salla has
+# behaved exactly this way since its prefix block shipped, nothing links to the
+# slashed form, and the alternative (a regex location) would take precedence over
+# every prefix block here and is not worth the subtlety. Pinned so the behaviour
+# is a decision on record rather than a surprise.
+ROUTES="$ROUTES
+/salla/onboarding/|BACKEND_/salla/onboarding/
+/zid/onboarding/|BACKEND_/zid/onboarding/
+"
 
 fails=0
-printf '%-46s %-34s %s\n' "REQUESTED" "REACHES (upstream + path)" "RESULT"
-printf '%-46s %-34s %s\n' "----------------------------------------------" \
-    "----------------------------------" "------"
+printf '%-56s %-40s %s\n' "REQUESTED" "REACHES (upstream + path)" "RESULT"
+printf '%-56s %-40s %s\n' \
+    "--------------------------------------------------------" \
+    "----------------------------------------" "------"
 
 for entry in $ROUTES; do
     [ -z "$entry" ] && continue
@@ -122,10 +186,10 @@ for entry in $ROUTES; do
     [ -z "$actual" ] && actual="(no response)"
 
     if [ "$actual" = "$expect" ]; then
-        printf '%-46s %-34s %s\n' "$path" "$actual" "ok"
+        printf '%-56s %-40s %s\n' "$path" "$actual" "ok"
     else
-        printf '%-46s %-34s %s\n' "$path" "$actual" "WRONG"
-        printf '%-46s %-34s\n' "" "expected: $expect"
+        printf '%-56s %-40s %s\n' "$path" "$actual" "WRONG"
+        printf '%-56s %-40s\n' "" "expected: $expect"
         fails=$((fails + 1))
     fi
 done
@@ -135,8 +199,10 @@ if [ "$fails" -ne 0 ]; then
     echo "FAIL: $fails route(s) wrong."
     echo "  - wrong upstream: a Next.js page on BACKEND (or an OAuth callback on"
     echo "    FRONTEND) is a 404 for the merchant."
-    echo "  - wrong path: right upstream, but Fastify has no route at that path,"
-    echo "    so it 404s just the same."
+    echo "  - wrong path: right upstream, but Fastify has no route there, so it"
+    echo "    404s just the same."
+    echo "  - exact-match blocks (location = /x/page) must sit ABOVE the prefix"
+    echo "    block (location /x/), or the prefix swallows the page."
     exit 1
 fi
 echo "PASS: all $(printf '%s' "$ROUTES" | grep -c '|') routes reach the expected upstream AND path."
