@@ -13,6 +13,7 @@ import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { useSelectPlan } from '@/hooks/useSelectPlan';
+import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { Check, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
@@ -174,6 +175,11 @@ function ScalePlanCard({
 
 const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
   const locale = useLocale();
+  // Guideline 3.1.1: this page is a paid-plan grid wired to Stripe-hosted
+  // checkout, and it ships inside the iOS bundle as a static route. UpgradeCTA
+  // hides the links on iOS, but the route itself stays reachable (deep link,
+  // restored history), so it must self-gate exactly like /pricing does.
+  const iosRedirecting = useIOSPaymentRedirect();
   const tPricing = useTranslations('pricing');
   const { isAuthenticated, user } = useAuthStore();
 
@@ -211,6 +217,8 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
   const currentPlanSlug = usage?.subscription?.plan?.slug;
   const hasActiveSubscription = Boolean(currentPlanSlug);
   const currentPlanPrice = usage?.subscription?.plan?.price ?? 0;
+
+  if (iosRedirecting) return null;
 
   return (
     <>
