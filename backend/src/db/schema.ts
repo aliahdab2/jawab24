@@ -1802,6 +1802,13 @@ export const postSuggestions = pgTable('post_suggestions', {
     // delete + the generated-posts/ orphan audit; imageUrl is what the UI shows.
     imageUrl: text('image_url'),
     imageKey: text('image_key'),
+    // The English scene description sent to the image model. Stored for TWO
+    // reasons, both learned the hard way: it is the anti-repetition input (the
+    // generator reads the page's recent briefs so it stops drawing the same
+    // desk every day), and it is the only way to AUDIT visual variety after the
+    // fact — a superseded row's image file is deleted, so without this the
+    // day's visual output is unmeasurable the moment it is replaced.
+    imageBrief: text('image_brief'),
     status: varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'superseded'
     // Market-signal stamps — the pilot's whole point is measuring these.
     // First-write-wins; null = the merchant never did it.

@@ -28,6 +28,7 @@ import {
     unwrapBusinessProfile,
     whatsappNumbers,
     isRowLive,
+    normalizeArabicIndic,
     DEFAULT_AI_MODEL,
     type BusinessProfile,
     type StoredBusinessProfile,
@@ -69,6 +70,12 @@ const KB_PROMPT_MAX_CHARS = 4_000;
 const DAILY_CAP_PREFIX = 'post_suggest';
 /** Cron waste guard: stop pre-generating after this many consecutive unopened cron suggestions. */
 const CRON_UNOPENED_STREAK = 3;
+/**
+ * How many recent scenes the image brief must avoid repeating. Five ≈ a working
+ * week, which is the span over which a merchant's feed reads as samey. Larger
+ * windows spend prompt tokens on scenes nobody remembers.
+ */
+const RECENT_BRIEF_WINDOW = 5;
 
 let logger: Logger = noopLogger;
 export function setPostSuggestionsLogger(l: Logger): void { logger = l; }
@@ -227,11 +234,25 @@ async function buildPageBundle(page: OwnedPage, userId: string, workspaceId: str
     const hasCatalog = Boolean(productCatalog && productCatalog.trim().length > 0);
     const hasLiveDatedRow = await pageHasLiveDatedRow(pageId, today);
 
-    // Logo for the corner badge: the stored IG avatar when present, else the
-    // public Graph picture redirect (works tokenless for most pages; the
-    // overlay is best-effort either way).
-    const logoUrl = page.instagramProfilePicUrl
-        || (page.facebookPageId ? `https://graph.facebook.com/${page.facebookPageId}/picture?type=large&width=200&height=200` : undefined);
+    // Logo for the corner badge, chosen by the card's DESTINATION. These cards
+    // are published to the FACEBOOK PAGE, so the Facebook page's own picture is
+    // the correct brand mark; the linked Instagram avatar is only a fallback for
+    // a page that has none. (When Instagram posting arrives, that destination
+    // should pick the IG avatar first — same rule, other channel.)
+    //
+    // The order used to be reversed, and it was wrong three ways: it branded a
+    // Facebook post with another channel's identity; it stamped a PERSONAL photo
+    // onto every card whenever the linked IG was a personal account (common for
+    // small merchants) — while the image prompt forbids the model from drawing
+    // people at all; and the stored IG url is a signed `scontent-*.fbcdn.net`
+    // link carrying oe=/oh= expiry params, so the badge silently vanished once
+    // it lapsed. The Graph picture endpoint is a stable redirect with none of
+    // those problems.
+    const logoUrl = (page.facebookPageId
+        ? `https://graph.facebook.com/${page.facebookPageId}/picture?type=large&width=200&height=200`
+        : undefined)
+        || page.instagramProfilePicUrl
+        || undefined;
 
     return {
         pageId,
@@ -369,7 +390,27 @@ interface GeneratedText {
     headline: string;
 }
 
-function buildTextPrompt(bundle: PageBundle, postType: PostSuggestionPostType, today: string): string {
+/**
+ * The page's own recent scenes, so the model can avoid redrawing them.
+ *
+ * The angle picker has had cross-day memory since day one; the IMAGE never
+ * did, which is why a service business with no physical product converged on
+ * "laptop on a desk" every single morning. Same fix, applied to the half that
+ * was missing it.
+ */
+export function buildRecentBriefsBlock(recentImageBriefs: readonly string[]): string {
+    if (recentImageBriefs.length === 0) return '';
+    const list = recentImageBriefs.map(b => `  - ${b}`).join('\n');
+    return `\n  This page's recent scenes — yours must differ in SUBJECT and SETTING, not merely in lighting or camera angle:\n${list}`;
+}
+
+function buildTextPrompt(
+    bundle: PageBundle,
+    postType: PostSuggestionPostType,
+    today: string,
+    recentImageBriefs: readonly string[] = [],
+): string {
+    const recentBriefsBlock = buildRecentBriefsBlock(recentImageBriefs);
     const blocks: string[] = [];
     if (bundle.businessInfoBlock) blocks.push(`<business_info>\n${bundle.businessInfoBlock}\n</business_info>`);
     if (bundle.productCatalog) blocks.push(`<product_catalog>\n${bundle.productCatalog}\n</product_catalog>`);
@@ -396,16 +437,82 @@ CRAFT — how professionals write feed posts:
 TRUTH — non-negotiable:
 - Every fact (price, date, product, place, claim) must exist in the blocks above. Not there → not said.
 - Do NOT write phone numbers or addresses — the platform appends the verified contact block automatically after your text.
+- FIGURES: every number you write must be copied from the data above. If the data carries no price for something, the post does not state one — invite the customer to ask instead. A figure in a post is public and permanent, and reads as a commitment the merchant never made.
+- Carry only the figures TODAY'S ANGLE needs. A price belongs in a post whose subject is the offer; a post explaining how to choose a size is about the choosing, and a price bolted onto it reads as a sales pitch interrupting an answer. Fewer, well-placed numbers beat a caption that recites the data.
 
 Also return:
-- "headline": 2–5 Arabic words the platform will typeset ON the image — the post's core idea as a poster line (e.g. «تشكيلة العطور وصلت»). No emojis, no punctuation except «!».
+- "headline": 2–5 Arabic words the platform will typeset ON the image — the poster line. The reader sees the poster and the caption AT ONCE, so the poster must not spend itself re-saying the caption's opening line.
+  Test it: the headline must be a DIFFERENT KIND of line from the caption's opener. If the caption opens with a question, the headline is neither that question nor its direct answer — it is the RESULT the customer gets, or the reassurance, or the urgency. Rewording the same idea fails this test even though no words repeat.
+    Caption «✨ هل تريد تحسين مهاراتك في الحاسوب؟ دورة ICDL تبدأ اليوم!»
+      ✗ «دورة ICDL تبدأ اليوم» — verbatim from the caption
+      ✓ «مقعدك بانتظارك» — urgency; a beat the caption never played
+    Caption «❓ كيف تختار مقاس حفاضات طفلك؟»
+      ✗ «اختر مقاس طفلك بسهولة» — no words repeat, but it is the same idea reworded
+      ✓ «المقاس الصحيح من أول مرة» — the outcome, not the question
+  No emojis, no punctuation except «!».
 - "imageBrief": one English sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers, and WITHOUT people or faces — products, places, and atmosphere only.
+  Draw the scene from THIS business's own world — its goods, its materials, its workplace, the result its customers get. A generic desk with a laptop is the lazy default and says nothing about the business; a training school has classrooms, boards, notebooks, certificates, hands-free workbenches; a workshop has tools and materials.${recentBriefsBlock}
 
 Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
 }
 
+/** Numeric tokens in a blob, normalised: Arabic-Indic → ASCII, separators dropped. */
+function numericTokens(blob: string): string[] {
+    return [...normalizeArabicIndic(blob).matchAll(/\d[\d.,]*/g)]
+        .map(m => m[0].replace(/[.,]/g, ''))
+        .filter(Boolean);
+}
+
+/**
+ * Figures the model wrote that appear NOWHERE in its inputs.
+ *
+ * D-047 already forbids the model from writing PHONE digits — the platform
+ * composes those in code, because one mangled digit is a lost sale. A PRICE is
+ * the same kind of digit with a bigger blast radius, and on 2026-08-10 the
+ * generator invented «45 د» on four consecutive runs for a page whose data
+ * contains no price at all, wrapping the invented figure in otherwise perfectly
+ * grounded facts. The prompt already forbade it and the merchant's own KB said
+ * «لا تختلق أسعاراً»; both were ignored. A rule the model can ignore is not a
+ * guard, so this one is deterministic.
+ *
+ * Token EQUALITY, never substring: the phone «0932456789» contains "45", and a
+ * substring test would have accepted the very figure this exists to catch.
+ * Comparison is list-free — no currency vocabulary to maintain in any language
+ * (the no-hand-maintained-lists rule); any figure absent from the inputs is
+ * unsupported, whatever it denominates.
+ */
+export function findUngroundedNumbers(text: string, groundingCorpus: string): string[] {
+    const grounded = new Set(numericTokens(groundingCorpus));
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const token of numericTokens(text)) {
+        if (grounded.has(token) || seen.has(token)) continue;
+        seen.add(token);
+        out.push(token);
+    }
+    return out;
+}
+
+/** Everything the prompt shows the model — the only figures it may repeat. */
+function buildGroundingCorpus(bundle: PageBundle, today: string): string {
+    return [
+        bundle.pageName,
+        today,
+        bundle.businessInfoBlock,
+        bundle.productCatalog,
+        bundle.factCollectionsBlock,
+        bundle.knowledgeBase,
+        bundle.brandVoiceNotes,
+    ].filter(Boolean).join('\n');
+}
+
 /** JSON-mode text call. Null on any failure — the caller maps to generation_failed. */
-async function generatePostText(bundle: PageBundle, postType: PostSuggestionPostType, today: string): Promise<GeneratedText | null> {
+async function generatePostText(
+    bundle: PageBundle,
+    postType: PostSuggestionPostType,
+    today: string,
+    recentImageBriefs: readonly string[] = [],
+): Promise<GeneratedText | null> {
     if (!config.openai?.apiKey) return null;
     const client = makeTrackedOpenAI(config.openai.apiKey, {
         userId: bundle.userId,
@@ -419,7 +526,7 @@ async function generatePostText(bundle: PageBundle, postType: PostSuggestionPost
     try {
         response = await client.chat.completions.create({
             model: POST_TEXT_MODEL,
-            messages: [{ role: 'user', content: buildTextPrompt(bundle, postType, today) }],
+            messages: [{ role: 'user', content: buildTextPrompt(bundle, postType, today, recentImageBriefs) }],
             temperature: 0.8, // creative variety day to day — unlike extraction pipelines
             max_tokens: 1000,
             response_format: { type: 'json_object' },
@@ -443,8 +550,23 @@ async function generatePostText(bundle: PageBundle, postType: PostSuggestionPost
             recordAiFailedBeforeLog('post_generation', POST_TEXT_MODEL, 'AiEmptyReplyError');
             return null;
         }
+        const text = parsed.text.trim();
+
+        // SHADOW ONLY — it logs, it never blocks. Figure invention has NOT been
+        // observed here: the one case that looked like it (2026-08-10, «45 د»)
+        // was real merchant data living in `fact_rows.price`, invisible to a
+        // query that selected only name/attributes. Blocking on an unobserved
+        // failure would reject valid posts and burn a merchant's daily slot, so
+        // this measures first. Promote to a hard gate only if the numbers say so.
+        const ungrounded = findUngroundedNumbers(text, buildGroundingCorpus(bundle, today));
+        if (ungrounded.length > 0) {
+            logger.warn('[PostSuggestions] Figures absent from the prompt inputs (shadow)', {
+                pageId: bundle.pageId, postType, ungrounded,
+            });
+        }
+
         return {
-            text: parsed.text.trim(),
+            text,
             imageBrief: typeof parsed.imageBrief === 'string' ? parsed.imageBrief.trim() : '',
             headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
         };
@@ -701,10 +823,21 @@ class PostSuggestionsService {
         // Latest suggestion from ANY day: the variety picker must see
         // yesterday's angle, or the cron (always the first row of its day)
         // would open on the same first candidate every single morning.
-        const [previous] = await db.select({ postType: postSuggestions.postType }).from(postSuggestions)
+        // One query serves both memories: [0] is the previous angle, and the
+        // whole window feeds the image's anti-repetition list. Older rows are
+        // superseded and their image files deleted, but the BRIEF survives —
+        // which is the point of storing it.
+        const recent = await db.select({
+            postType: postSuggestions.postType,
+            imageBrief: postSuggestions.imageBrief,
+        }).from(postSuggestions)
             .where(eq(postSuggestions.pageId, pageId))
             .orderBy(desc(postSuggestions.createdAt))
-            .limit(1);
+            .limit(RECENT_BRIEF_WINDOW);
+        const previous = recent[0];
+        const recentImageBriefs = recent
+            .map(r => r.imageBrief?.trim())
+            .filter((b): b is string => Boolean(b));
         // Merchant-chosen angle wins ONLY when the page's data can actually
         // deliver it — validated against the SAME flags the picker consumes
         // (fetched-catalog truth, not the cheap advertisement; see the
@@ -723,7 +856,7 @@ class PostSuggestionsService {
             logger.info('[PostSuggestions] Requested angle unavailable — downgraded to variety picker', { pageId, requested, used: postType });
         }
 
-        const generated = await generatePostText(bundle, postType, today);
+        const generated = await generatePostText(bundle, postType, today, recentImageBriefs);
         if (!generated) return { ok: false, reason: 'generation_failed' };
         // Deterministic contact footer — appended in code, never model-written.
         const includeContact = opts?.includeContact !== false;
@@ -753,6 +886,10 @@ class PostSuggestionsService {
                 text: finalText,
                 imageUrl: image?.url ?? null,
                 imageKey: image?.key ?? null,
+                // Stored even when the image call failed: the brief is what the
+                // NEXT generation must avoid repeating, and a failed render does
+                // not make the scene fresh again.
+                imageBrief: generated.imageBrief || null,
                 status: 'ready',
             }).onConflictDoNothing({
                 target: [postSuggestions.pageId, postSuggestions.suggestedFor],
