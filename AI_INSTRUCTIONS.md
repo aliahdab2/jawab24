@@ -470,9 +470,14 @@ npm run translation:validate             # Check i18n files (from frontend/)
 > npm run prune:test-dbs -- --drop   # drop the ones whose checkout no longer exists
 > ```
 >
-> It also flags the pre-2026-08-09 shared `autoreply_test` as superseded. It never uses
-> `WITH (FORCE)` — a blocked `DROP` means something is still attached, and that is a signal,
-> not an obstacle.
+> A database with no recorded owner is reported and never dropped — guessing is how you delete
+> something that mattered. It never uses `WITH (FORCE)` either: a blocked `DROP` means something
+> is still attached, and that is a signal, not an obstacle.
+>
+> The pre-2026-08-09 shared `autoreply_test` was deleted on 2026-08-10 — there is no legacy
+> database to keep in step with. If it reappears, some checkout still predates this change and
+> its `test:integration:local` recreated it; rebase that checkout rather than keeping the
+> database alive.
 
 For Shopify integration tests, AI eval, mobile builds, Android releases, and in-browser QA loops (console/network/RTL/i18n checks via Chrome DevTools MCP) — see the `/shopify-dev`, `/eval`, `/build-mobile`, `/release-android`, and `/qa` skills.
 

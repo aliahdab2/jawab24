@@ -26,7 +26,11 @@ set -euo pipefail
 PG_HOST="${TEST_PG_HOST:-localhost}"
 PG_PORT="${TEST_PG_PORT:-5433}"
 DROP=false
-if [[ "${1:-}" == "--drop" ]]; then DROP=true; fi
+case "${1:-}" in
+    --drop) DROP=true ;;
+    "") ;;
+    *) echo "usage: prune-test-dbs.sh [--drop]"; exit 2 ;;
+esac
 
 psql_q() { PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -v ON_ERROR_STOP=1 "$@"; }
 
@@ -54,12 +58,12 @@ printf '%-52s %10s  %s\n' "DATABASE" "SIZE" "OWNING CHECKOUT"
 while IFS=$'\t' read -r NAME OWNER; do
     [[ -z "$NAME" ]] && continue
     SIZE="$(psql_q -tAc "SELECT pg_size_pretty(pg_database_size('${NAME}'))")"
-    if [[ "$NAME" == "autoreply_test" ]]; then
-        # The pre-2026-08-09 machine-global database. Nothing points at it any more:
-        # every entry point now resolves a per-checkout name.
-        STATUS="🗑  LEGACY shared database — superseded, safe to drop"
-        ORPHANS+=("$NAME")
-    elif [[ -z "$OWNER" ]]; then
+    if [[ -z "$OWNER" ]]; then
+        # No recorded owner: either created by the deploy gate (which does not
+        # comment) before the suite ran, or the bare pre-2026-08-09 `autoreply_test`
+        # reappearing because some checkout still predates the per-checkout change.
+        # Report, never drop — an unattributed database is exactly the case where
+        # guessing is how you delete something that mattered.
         STATUS="❓ unknown owner — not dropped (run the suite once to record it)"
     elif [[ -d "$OWNER" ]]; then
         STATUS="✅ live — $OWNER"
