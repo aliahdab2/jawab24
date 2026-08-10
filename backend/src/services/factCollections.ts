@@ -581,6 +581,63 @@ class FactCollectionsService {
     }
 
     /**
+     * Rename a list.
+     *
+     * The label is NOT decoration: `buildFactCollectionsContext` renders it as
+     * the header of the list's block in the prompt, so it is one of the few
+     * merchant-authored strings the model reads and quotes. A typo — or a name
+     * the merchant has outgrown — therefore reaches customers, and until this
+     * existed the only cure was a database write.
+     *
+     * A no-op rename returns the row untouched and does NOT invalidate the
+     * caches: re-saving the same name must not retire the page's reply cache
+     * (D-049 — a cache miss costs 2–4s, every local check costs microseconds).
+     */
+    async renameCollection(pageId: string, collectionId: string, label: string) {
+        const collection = await this.ownedCollection(pageId, collectionId);
+        if (!collection) return null;
+        if (collection.label === label) return collection;
+
+        // Same rule as uq_fact_collections_page_label, answered as a conflict
+        // the client can name — identical contract to createCollection, and
+        // for the same reason: a raw unique-violation 500 tells the merchant
+        // nothing and pages on-call for an ordinary refusal.
+        const [rival] = await db
+            .select({ id: factCollections.id })
+            .from(factCollections)
+            .where(and(eq(factCollections.pageId, pageId), eq(factCollections.label, label)))
+            .limit(1);
+        if (rival) {
+            throw new FactCollectionLimitError('A collection with this label already exists on this page', 'DUPLICATE_LABEL');
+        }
+
+        let updated: typeof factCollections.$inferSelect | undefined;
+        try {
+            [updated] = await db
+                .update(factCollections)
+                .set({ label, updatedAt: new Date() })
+                .where(and(eq(factCollections.id, collectionId), eq(factCollections.pageId, pageId)))
+                .returning();
+        } catch (err) {
+            // The race the pre-check can't close — two admins renaming to one
+            // label concurrently. The unique index is the authority.
+            if (isUniqueViolation(err)) {
+                throw new FactCollectionLimitError('A collection with this label already exists on this page', 'DUPLICATE_LABEL');
+            }
+            throw err;
+        }
+        if (!updated) return null;
+
+        this.logger.info('fact collection renamed', {
+            pageId, collectionId, from: collection.label, to: updated.label,
+        });
+        // The prompt block header changed ⇒ every cached reply built on the old
+        // header is stale.
+        await pagesService.invalidatePageCaches(pageId);
+        return updated;
+    }
+
+    /**
      * The merchant's completeness declaration — the ONE action that upgrades
      * the absence wording from «غير مسجّل في قائمتي» to a confident
      * «لا يوجد لدينا». Nothing else in the system may set this.
@@ -714,7 +771,7 @@ class FactCollectionsService {
                 .from(factRows)
                 .where(eq(factRows.collectionId, collectionId));
             if (count <= 1) {
-                throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead', 'LAST_ROW');
+                throw new FactCollectionLimitError('Cannot delete the last row — a collection must keep at least one row', 'LAST_ROW');
             }
             const [row] = await tx
                 .delete(factRows)
@@ -789,7 +846,7 @@ class FactCollectionsService {
                 const removals = input.deletes.filter(d => d.collectionId === id).length;
                 const net = state.count + inserts - removals;
                 if (net <= 0) {
-                    throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead', 'LAST_ROW');
+                    throw new FactCollectionLimitError('Cannot delete the last row — a collection must keep at least one row', 'LAST_ROW');
                 }
                 if (net > MAX_ROWS_PER_COLLECTION) {
                     throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`, 'ROW_LIMIT');

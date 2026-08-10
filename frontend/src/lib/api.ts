@@ -296,6 +296,11 @@ export const factCollectionsApi = {
    *  refusals, mapped to copy in the section's failure handler. */
   createCollection: (pageId: string, body: FactCollectionCreateBody) =>
     api.post<{ data: { id: string; label: string } }>(`/pages/${pageId}/fact-collections`, body),
+  /** Rename a list. The label is the header of the list's block in the prompt,
+   *  so this changes what the AI reads — not just what the merchant sees. Same
+   *  409 DUPLICATE_LABEL contract as create. */
+  renameCollection: (pageId: string, collectionId: string, label: string) =>
+    api.patch<{ data: { id: string; label: string } }>(`/pages/${pageId}/fact-collections/${collectionId}`, { label }),
   saveEntity: (pageId: string, body: FactEntitySaveBody) =>
     api.put<{ data: { upserted: FactRowDto[]; deletedIds: string[] } }>(`/pages/${pageId}/fact-entity`, body),
   addRow: (pageId: string, collectionId: string, data: FactRowBody & { name: string }) =>

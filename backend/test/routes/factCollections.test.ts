@@ -21,6 +21,7 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
             setLogger: vi.fn(),
             listCollectionsWithRows: vi.fn(),
             createCollection: vi.fn(),
+            renameCollection: vi.fn(),
             addRow: vi.fn(),
             updateRow: vi.fn(),
             deleteRow: vi.fn(),
@@ -61,6 +62,9 @@ const ROW = '33333333-3333-3333-3333-333333333333';
 const WRITES = [
     // The merchant «add list» door — a WRITE with the same admin gate as rows.
     ['POST', `/pages/${PAGE}/fact-collections`],
+    // Renaming a list edits the header the prompt renders above its rows — a
+    // reply-affecting write, gated exactly like the rows themselves.
+    ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}`],
     ['POST', `/pages/${PAGE}/fact-collections/${COLL}/rows`],
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
     ['DELETE', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
@@ -201,6 +205,84 @@ describe('Fact-collections routes — security + contract wiring', () => {
                 method: 'POST',
                 url: `/pages/${PAGE}/fact-collections`,
                 payload: { label: 'قائمة', rows: [{ name: 'عنصر' }] },
+            });
+            expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
+        });
+    });
+
+    // ── PATCH /fact-collections/:id — «تعديل الاسم» ──
+    describe('PATCH rename collection', () => {
+        it('200s and forwards the TRIMMED label', async () => {
+            vi.mocked(factCollectionsService.renameCollection).mockResolvedValue({ id: COLL, label: 'رسوم الشهادات' } as any);
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload: { label: '  رسوم الشهادات  ' },
+            });
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload).data.label).toBe('رسوم الشهادات');
+            // Untrimmed, the stray spaces would land in the prompt block's
+            // header — the model reads this string verbatim.
+            expect(vi.mocked(factCollectionsService.renameCollection)).toHaveBeenCalledWith(PAGE, COLL, 'رسوم الشهادات');
+        });
+
+        it('never accepts anything but the label — keyAttr/source/completeness have their own doors', async () => {
+            vi.mocked(factCollectionsService.renameCollection).mockResolvedValue({ id: COLL, label: 'قائمة' } as any);
+            await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload: { label: 'قائمة', keyAttr: 'المدينة', source: 'kb_extract', isComplete: true },
+            });
+            // The service signature takes a bare label, so a widened schema is
+            // the only way those could ever reach it — this pins the narrowness.
+            expect(vi.mocked(factCollectionsService.renameCollection).mock.calls[0]).toEqual([PAGE, COLL, 'قائمة']);
+        });
+
+        it.each([
+            ['a blank label', { label: '   ' }],
+            ['a missing label', {}],
+            ['a label past the 120-char column cap', { label: 'ا'.repeat(121) }],
+        ])('400s %s, service never called', async (_case, payload) => {
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload,
+            });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.payload).code).toBe('VALIDATION');
+            expect(vi.mocked(factCollectionsService.renameCollection)).not.toHaveBeenCalled();
+        });
+
+        it('maps a label clash to 409 DUPLICATE_LABEL, not a 500', async () => {
+            vi.mocked(factCollectionsService.renameCollection).mockRejectedValue(
+                new FactCollectionLimitError('A collection with this label already exists on this page', 'DUPLICATE_LABEL'),
+            );
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload: { label: 'أسعار الدورات' },
+            });
+            expect(res.statusCode).toBe(409);
+            expect(JSON.parse(res.payload).code).toBe('DUPLICATE_LABEL');
+        });
+
+        it('404s COLLECTION_NOT_FOUND when the collection is not on this page', async () => {
+            vi.mocked(factCollectionsService.renameCollection).mockResolvedValue(null as any);
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload: { label: 'قائمة' },
+            });
+            expect(res.statusCode).toBe(404);
+            expect(JSON.parse(res.payload).code).toBe('COLLECTION_NOT_FOUND');
+        });
+
+        it('wires the request-scoped logger', async () => {
+            vi.mocked(factCollectionsService.renameCollection).mockResolvedValue({ id: COLL, label: 'قائمة' } as any);
+            await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+                payload: { label: 'قائمة' },
             });
             expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
         });

@@ -16,6 +16,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     factCollectionsApi: {
       list: vi.fn(),
       createCollection: vi.fn(),
+      renameCollection: vi.fn(),
       addRow: vi.fn(),
       updateRow: vi.fn(),
       deleteRow: vi.fn(),
@@ -651,6 +652,79 @@ describe('BusinessListsSection', () => {
       renderSection({ readOnly: true });
       await screen.findByText('أسعار الدورات');
       expect(screen.queryByRole('button', { name: en.lists.addList })).toBeNull();
+    });
+  });
+
+  // A list's label is the header the prompt renderer puts above its rows, so a
+  // typo is quoted to customers. Until this flow existed the only cure was a
+  // database write — and `errLastRow` told merchants to delete a list they had
+  // no way to delete.
+  describe('«تعديل الاسم» rename flow', () => {
+    const renameDoor = (label: string) => en.lists.renameActionFor.replace('{list}', label);
+
+    it('renames from the entity-card layout — prefilled, trimmed, one PATCH', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-prices', label: 'أسعار الدورات والشهادات' } } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel) as HTMLInputElement;
+      // Prefilled with the CURRENT name — a rename is an edit, not a re-entry.
+      expect(input.value).toBe('أسعار الدورات');
+
+      fireEvent.change(input, { target: { value: '  أسعار الدورات والشهادات  ' } });
+      fireEvent.click(screen.getByRole('button', { name: common.save }));
+
+      await waitFor(() => expect(factCollectionsApi.renameCollection).toHaveBeenCalledWith(
+        PAGE, 'coll-prices', 'أسعار الدورات والشهادات',
+      ));
+    });
+
+    it('refuses a SIBLING list\'s name inline, but allows re-saving the list\'s own', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      const input = screen.getByLabelText(en.lists.newListNameLabel);
+
+      fireEvent.change(input, { target: { value: 'مواعيد الدورات المعلنة' } });
+      expect(screen.getByRole('alert')).toHaveTextContent(en.lists.errDuplicateLabel);
+      expect(screen.getByRole('button', { name: common.save })).toBeDisabled();
+
+      // Its OWN label is not a clash — the server treats that as a no-op.
+      fireEvent.change(input, { target: { value: 'أسعار الدورات' } });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByRole('button', { name: common.save })).toBeEnabled();
+      expect(factCollectionsApi.renameCollection).not.toHaveBeenCalled();
+    });
+
+    it('the door also exists on the directory layout, where the list card is the only per-list surface', async () => {
+      const outlets: FactCollectionWithRows = {
+        id: 'coll-outlets',
+        label: 'الصيدليات',
+        keyAttr: 'المنطقة',
+        isComplete: true,
+        rowCount: 1,
+        rows: [
+          { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
+      vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-outlets', label: 'نقاط البيع' } } } as any);
+      renderSection();
+
+      fireEvent.click(await screen.findByRole('button', { name: renameDoor('الصيدليات') }));
+      fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: 'نقاط البيع' } });
+      fireEvent.click(screen.getByRole('button', { name: common.save }));
+
+      await waitFor(() => expect(factCollectionsApi.renameCollection).toHaveBeenCalledWith(PAGE, 'coll-outlets', 'نقاط البيع'));
+    });
+
+    it('a member gets no rename door — the label is an admin write', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection({ readOnly: true });
+      await screen.findByText('أسعار الدورات');
+      expect(screen.queryByRole('button', { name: renameDoor('أسعار الدورات') })).toBeNull();
     });
   });
 });

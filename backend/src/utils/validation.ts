@@ -379,6 +379,13 @@ export const FactCompletenessSchema = z.object({
     isComplete: z.boolean().nullable(),
 });
 
+/** The list's merchant-visible name. Cap mirrors fact_collections.label
+ *  varchar(120); trimmed because the same string is the prompt block's header,
+ *  where stray whitespace is what the model reads. ONE definition — create and
+ *  rename must accept exactly the same names, or a list could be born with a
+ *  label its own rename endpoint rejects. */
+const FactCollectionLabelField = z.string().trim().min(1, 'Label is required').max(120);
+
 /**
  * POST /pages/:pageId/fact-collections — the merchant's «add list» (G1b).
  *
@@ -387,13 +394,19 @@ export const FactCompletenessSchema = z.object({
  *   the coverage index — a seeding/admin concern. Un-keyed lists answer fine
  *   (the MES showrooms precedent), so the merchant door never sets one.
  * - `source` is NOT accepted; the controller pins it to 'editor'.
- * The label cap mirrors fact_collections.label varchar(120).
  */
 export const FactCollectionCreateSchema = z.object({
-    label: z.string().trim().min(1, 'Label is required').max(120),
+    label: FactCollectionLabelField,
     rows: z.array(FactRowSchema)
         .min(1, 'A collection needs at least one row')
         .max(MAX_ROWS_PER_COLLECTION, `At most ${MAX_ROWS_PER_COLLECTION} rows per collection`),
+});
+
+/** PATCH /pages/:pageId/fact-collections/:collectionId — rename only.
+ *  keyAttr/source/isComplete stay out for the same reasons they are absent from
+ *  the create body (completeness has its own endpoint, D-038). */
+export const FactCollectionRenameSchema = z.object({
+    label: FactCollectionLabelField,
 });
 
 export type FactRowBodyInput = z.infer<typeof FactRowSchema>;
