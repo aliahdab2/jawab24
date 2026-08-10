@@ -431,15 +431,14 @@ describe('buildRecentBriefsBlock — the image gets the cross-day memory the ang
         expect(buildRecentBriefsBlock([])).toBe('');
     });
 
-    it('lists the recent scenes and demands a different SUBJECT and SETTING', () => {
+    it('lists the recent scenes so the model can avoid redrawing them', () => {
         const block = buildRecentBriefsBlock([
             'A laptop on a wooden desk beside a coffee cup',
             'An open notebook under warm window light',
         ]);
         expect(block).toContain('A laptop on a wooden desk beside a coffee cup');
         expect(block).toContain('An open notebook under warm window light');
-        // Not "vary the lighting" — that is how the same desk comes back.
-        expect(block).toMatch(/SUBJECT and SETTING/);
+        expect(block).toMatch(/do not redraw/i);
     });
 
     it('renders one bullet per scene so the list cannot read as a single sentence', () => {

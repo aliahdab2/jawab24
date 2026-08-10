@@ -401,8 +401,22 @@ interface GeneratedText {
 export function buildRecentBriefsBlock(recentImageBriefs: readonly string[]): string {
     if (recentImageBriefs.length === 0) return '';
     const list = recentImageBriefs.map(b => `  - ${b}`).join('\n');
-    return `\n  This page's recent scenes — yours must differ in SUBJECT and SETTING, not merely in lighting or camera angle:\n${list}`;
+    return `\n  This page's recent scenes — do not redraw any of these:\n${list}`;
 }
+
+// NOTE (2026-08-10, measured): steering `imageBrief` from the prompt does not
+// work on this model. Three attempts failed on the same page — listing the last
+// five scenes with "must differ in SUBJECT and SETTING"; steering to the
+// business's own world; and naming a concrete framing chosen in code ("the
+// result the customer leaves with, presented on its own"). Each time the model
+// returned the same Damascus classroom, varying only the daylight. The prompt
+// was verified to contain every one of those instructions.
+//
+// The brief list below is kept because it costs almost nothing and a
+// product-led page (nappy shelves) did vary; the shot-type rotation was removed
+// rather than shipped, because it changed no output and its index could not
+// move for a page with a full history window. The real fix is structural — see
+// the note on buildRecentBriefsBlock's caller.
 
 function buildTextPrompt(
     bundle: PageBundle,
@@ -451,7 +465,7 @@ Also return:
       ✓ «المقاس الصحيح من أول مرة» — the outcome, not the question
   No emojis, no punctuation except «!».
 - "imageBrief": one English sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers, and WITHOUT people or faces — products, places, and atmosphere only.
-  Draw the scene from THIS business's own world — its goods, its materials, its workplace, the result its customers get. A generic desk with a laptop is the lazy default and says nothing about the business; a training school has classrooms, boards, notebooks, certificates, hands-free workbenches; a workshop has tools and materials.${recentBriefsBlock}
+  Draw the scene from THIS business's own world — its goods, its materials, its workplace, the result its customers get. A generic desk with a laptop is the lazy default and says nothing about the business.${recentBriefsBlock}
 
 Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
 }
