@@ -95,6 +95,7 @@ import {
     setPostSuggestionsLogger,
     pickPostType,
     buildContactSuffix,
+    buildRecentBriefsBlock,
 } from '../services/postSuggestions';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -419,6 +420,33 @@ describe('generateSuggestion — happy path and degrades', () => {
     });
 });
 
+/**
+ * The angle picker has had cross-day memory since day one; the IMAGE never did,
+ * so a service business with no physical product converged on "laptop on a
+ * desk" every morning. These pin the memory that closes that gap.
+ */
+describe('buildRecentBriefsBlock — the image gets the cross-day memory the angle already had', () => {
+    it('is EMPTY for a page with no history — nothing to avoid, no wasted tokens', () => {
+        expect(buildRecentBriefsBlock([])).toBe('');
+    });
+
+    it('lists the recent scenes and demands a different SUBJECT and SETTING', () => {
+        const block = buildRecentBriefsBlock([
+            'A laptop on a wooden desk beside a coffee cup',
+            'An open notebook under warm window light',
+        ]);
+        expect(block).toContain('A laptop on a wooden desk beside a coffee cup');
+        expect(block).toContain('An open notebook under warm window light');
+        // Not "vary the lighting" — that is how the same desk comes back.
+        expect(block).toMatch(/SUBJECT and SETTING/);
+    });
+
+    it('renders one bullet per scene so the list cannot read as a single sentence', () => {
+        const block = buildRecentBriefsBlock(['scene one', 'scene two', 'scene three']);
+        expect(block.match(/^ {2}- /gm)).toHaveLength(3);
+    });
+});
+
 describe('generateSuggestion — logo badge (pre-fetched, parallel, never fatal)', () => {
     const LOGO_PAGE_ROW = { ...PAGE_ROW, instagramProfilePicUrl: 'https://cdn.example/avatar.jpg' };
 
@@ -437,6 +465,34 @@ describe('generateSuggestion — logo badge (pre-fetched, parallel, never fatal)
         // is issued — not sequentially after it resolves (the old 5s tail).
         expect(mockFetchRoundedLogo.mock.invocationCallOrder[0])
             .toBeLessThan(mockImagesGenerate.mock.invocationCallOrder[0]);
+    });
+
+    /**
+     * REGRESSION (2026-08-10, spotted on a real card): the order used to put the
+     * Instagram avatar first, so a page whose linked IG was a PERSONAL account
+     * got the owner's face stamped on every generated card — while the image
+     * prompt forbids the model from drawing people at all. The card's
+     * destination is the Facebook Page, so the Page's own picture is the mark.
+     */
+    it('prefers the FACEBOOK PAGE picture over a linked Instagram avatar', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(Buffer.from('logo'));
+        queueFullRun(INSERTED, {
+            pageRow: { ...LOGO_PAGE_ROW, facebookPageId: '878802365317875' },
+        });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockFetchRoundedLogo).toHaveBeenCalledWith(
+            expect.stringContaining('graph.facebook.com/878802365317875/picture'),
+        );
+        expect(mockFetchRoundedLogo).not.toHaveBeenCalledWith('https://cdn.example/avatar.jpg');
+    });
+
+    it('falls back to the Instagram avatar only when the page has no Facebook id', async () => {
+        mockFetchRoundedLogo.mockResolvedValue(Buffer.from('logo'));
+        queueFullRun(INSERTED, { pageRow: { ...LOGO_PAGE_ROW, facebookPageId: null } });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        expect(mockFetchRoundedLogo).toHaveBeenCalledWith('https://cdn.example/avatar.jpg');
     });
 
     it('a logo-fetch REJECTION never fails the generation — composes with logo null', async () => {
