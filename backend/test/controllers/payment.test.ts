@@ -28,6 +28,14 @@ vi.mock('../../src/services/stripe', () => ({
         !ref ? null : typeof ref === 'string' ? ref : ref.id,
 }));
 
+// Salla Article-5 guard. Mocked at the service boundary (not the DB) so these
+// controller tests pin the WIRING — that every Stripe entry point consults the
+// rule — while services/sallaBilling.test.ts pins the rule itself. Defaults to
+// false so no pre-existing case changes behaviour.
+vi.mock('../../src/services/sallaBilling', () => ({
+    mustBillThroughSalla: vi.fn(async () => false),
+}));
+
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(() => ({
@@ -168,7 +176,10 @@ describe('Payment Controller', () => {
                 body: { planId: 'plan_123' },
                 user: { userId: 'user_123' },
                 geo: { country: 'US' }, // Mock allowed geo for sanctions check
-                log: { error: vi.fn() },
+                // info/warn are real on Fastify's logger; the guard logs a
+                // Salla refusal through it. Matches the fuller stubs used by
+                // the other describe blocks below.
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
             };
         });
 
@@ -228,6 +239,70 @@ describe('Payment Controller', () => {
             expect(mockReply.send).not.toHaveBeenCalledWith(
                 expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
             );
+        });
+
+        it('rejects a Salla merchant with 400 SALLA_BILLED before any Stripe call (Article 5)', async () => {
+            const { mustBillThroughSalla } = await import('../../src/services/sallaBilling');
+            vi.mocked(mustBillThroughSalla).mockResolvedValueOnce(true);
+
+            await paymentController.createCheckoutSession(mockRequest, mockReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SALLA_BILLED' }),
+            );
+            expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
+        });
+
+        // Article 5 is a blanket rule like D-G: EVERY Stripe surface refuses a
+        // Salla merchant server-side. Same parameterized shape as the Shopify
+        // block above, so a new handler that forgets the guard shows up as a
+        // missing row in BOTH tables rather than silently leaking one rail.
+        it.each([
+            ['createSubscriptionIntent', { planId: 'plan_123' }],
+            ['changePlan', { planId: 'plan_123' }],
+            ['createTopupIntent', { pack: '5k' }],
+            ['cancelSubscription', {}],
+            ['createBillingPortalSession', {}],
+        ] as const)('%s rejects a Salla merchant with 400 SALLA_BILLED', async (method, body) => {
+            const { mustBillThroughSalla } = await import('../../src/services/sallaBilling');
+            vi.mocked(mustBillThroughSalla).mockResolvedValueOnce(true);
+            mockRequest.body = body;
+
+            await (paymentController[method] as (req: unknown, rep: unknown) => Promise<unknown>)(
+                mockRequest, mockReply,
+            );
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SALLA_BILLED' }),
+            );
+        });
+
+        /**
+         * Ordering pin: a Shopify-billed account must be refused as SHOPIFY_BILLED
+         * (which carries the admin deep link the UI needs), never as SALLA_BILLED.
+         * The two rails can legitimately overlap on one account — a merchant with
+         * both stores connected — so the codes must not race.
+         */
+        it('reports SHOPIFY_BILLED, not SALLA_BILLED, when both rails would apply', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const { mustBillThroughSalla } = await import('../../src/services/sallaBilling');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({
+                paymentMethod: 'shopify',
+                status: 'active',
+            } as never);
+            vi.mocked(mustBillThroughSalla).mockResolvedValue(true);
+
+            await paymentController.createCheckoutSession(mockRequest, mockReply);
+
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
+            );
+            expect(mockReply.send).not.toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SALLA_BILLED' }),
+            );
+            vi.mocked(mustBillThroughSalla).mockResolvedValue(false);
         });
 
         it('should create checkout session successfully', async () => {

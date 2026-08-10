@@ -7,6 +7,7 @@ import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { isShopifyBilled, buildShopifyManageUrl } from '../config/shopifyBilling';
+import { mustBillThroughSalla } from './sallaBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
@@ -575,6 +576,15 @@ export const subscriptionsService = {
                     isShopifyBilled(subscription) && subscription.shopifyShopDomain
                         ? buildShopifyManageUrl(subscription.shopifyShopDomain)
                         : undefined,
+                // Salla Article 5: paid plans for a Salla merchant must go
+                // through Salla, so every Stripe CTA is suppressed for them.
+                // Computed at this ONE choke point against the SUBSCRIPTION
+                // OWNER — the same subject the backend guard uses — so the UI
+                // can never offer an upgrade the payment API then refuses.
+                // There is no Salla equivalent of shopifyManageUrl yet: Salla
+                // billing does not exist, so the UI says "coming soon" rather
+                // than linking anywhere.
+                sallaBilled: (await mustBillThroughSalla(subscriptionOwnerId, subscription)) || undefined,
             },
         };
     },

@@ -17,6 +17,8 @@ interface AiUsageWarningBannerProps {
     planSlug?: string;
     /** Billing rail — 'shopify' hides the Stripe top-up CTA (D-G). */
     paymentMethod?: string;
+    /** Salla merchant — hides the Stripe top-up CTA (Article 5). */
+    sallaBilled?: boolean;
     /** Current user's email — pre-fills the WhatsApp message in the top-up modal. */
     userEmail?: string;
     /**
@@ -48,7 +50,7 @@ interface AiUsageWarningBannerProps {
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
  * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, userEmail, topupBalance }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, sallaBilled, userEmail, topupBalance }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
@@ -253,6 +255,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                     <BuyTopUpCTA
                         planSlug={planSlug}
                         paymentMethod={paymentMethod}
+                        sallaBilled={sallaBilled}
                         userEmail={userEmail}
                         variant="primary"
                         size="sm"

@@ -495,7 +495,9 @@ function CheckoutPage() {
       // hard-blocks with this code (stale deep link / manual URL). Route the
       // merchant back to /pricing, where the Shopify-managed banner and the
       // admin deep link live.
-      if (errorData?.code === 'SHOPIFY_BILLED') {
+      // Same for Salla merchants (Article 5) — /pricing carries the
+      // Salla-managed banner explaining why no plan is selectable.
+      if (errorData?.code === 'SHOPIFY_BILLED' || errorData?.code === 'SALLA_BILLED') {
         router.replace('/pricing');
         return;
       }

@@ -1,4 +1,4 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest, FastifyBaseLogger } from 'fastify';
 import { stripeService, DemoUserStripeError } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { topupService, UnknownTopupPackError, type TopupPack } from '../services/topup';
@@ -7,6 +7,8 @@ import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
 import { isShopifyBilled } from '../config/shopifyBilling';
+import { SALLA_BILLED_CODE } from '../config/sallaBilling';
+import { mustBillThroughSalla } from '../services/sallaBilling';
 import { captureError } from '../utils/sentryHelpers';
 import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
@@ -21,19 +23,47 @@ interface AuthenticatedRequest extends FastifyRequest {
 }
 
 /**
- * Shopify-billed accounts must never reach a Stripe surface (D-G): Shopify
- * forbids off-platform billing for App Store installs, and a second live
- * subscription would double-bill the merchant. The canceled-mirror exemption
- * lives inside isShopifyBilled — a merchant who uninstalled the Shopify app is
- * free to come back through Stripe. Returns true (and sends the 400) when the
- * caller must stop.
+ * Marketplace-billed accounts must never reach a Stripe surface. Two rails,
+ * one gate — every Stripe entry point calls this and stops when it returns
+ * true (the 400 has already been sent).
+ *
+ * **Shopify (D-G):** Shopify forbids off-platform billing for App Store
+ * installs, and a second live subscription would double-bill the merchant. The
+ * canceled-mirror exemption lives inside isShopifyBilled — a merchant who
+ * uninstalled the Shopify app is free to come back through Stripe.
+ *
+ * **Salla (Article 5):** paid-app payment must go through Salla. We ship
+ * free-tier-only there, so there is no Salla subscription row to read — the
+ * signal is the active store connection, and the exemption is an established
+ * Stripe relationship. See config/sallaBilling.ts.
+ *
+ * Shopify is evaluated first and its behaviour is byte-for-byte unchanged, so
+ * a Salla-side regression cannot alter what a Shopify merchant sees. The
+ * subscription is read once and shared by both rails.
  */
-async function rejectIfShopifyBilled(userId: string, reply: FastifyReply): Promise<boolean> {
+async function rejectIfMarketplaceBilled(
+    userId: string,
+    reply: FastifyReply,
+    log?: FastifyBaseLogger,
+): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(userId);
     if (sub && isShopifyBilled(sub)) {
         reply.status(400).send({
             error: 'Billing for this account is managed in Shopify admin',
             code: 'SHOPIFY_BILLED',
+        });
+        return true;
+    }
+    if (await mustBillThroughSalla(userId, sub)) {
+        // Logged because this guard's characteristic failure is being SILENTLY
+        // INERT: the exemption reads a payment_method that is NULL on every
+        // fresh trial, so a regression there suppresses nothing and looks
+        // exactly like "no Salla merchants hit a paywall this week". A refusal
+        // count is the only way to tell working from broken in production.
+        log?.info({ userId, rail: 'salla' }, 'Marketplace billing guard refused a Stripe entry point');
+        reply.status(400).send({
+            error: 'Paid plans for Salla merchants are billed through Salla',
+            code: SALLA_BILLED_CODE,
         });
         return true;
     }
@@ -55,7 +85,7 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
 
@@ -220,7 +250,7 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             // SANCTIONS CHECK
 
@@ -351,7 +381,7 @@ export class PaymentController {
             // the friendly layer; this is the enforcement. Runs AFTER the free
             // in-memory gates (kill-switch, geo) — it is the only check here
             // that costs a DB read.
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             const pack = request.body.pack;
             const packConfig = pack ? config.topup.packs[pack as TopupPack] : undefined;
@@ -536,7 +566,7 @@ export class PaymentController {
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
 
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             // Check if geo is sanctioned
             if (request.geo && isSanctionedGeo(request.geo)) {
@@ -664,7 +694,7 @@ export class PaymentController {
             // D-G: a shopify row's externalSubscriptionId is an AppSubscription
             // GID — passing it to stripeService.cancelSubscription is a
             // guaranteed Stripe error. Cancellation lives in Shopify admin.
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             // Get subscription
             const [subscription] = await db
@@ -711,7 +741,7 @@ export class PaymentController {
             // D-G: the Stripe portal would open against a stale/foreign Stripe
             // customer for a shopify-billed account. Plan management lives in
             // Shopify admin.
-            if (await rejectIfShopifyBilled(userId, reply)) return;
+            if (await rejectIfMarketplaceBilled(userId, reply, request.log)) return;
 
             // SANCTIONS CHECK: Block billing portal access for sanctioned jurisdictions
 

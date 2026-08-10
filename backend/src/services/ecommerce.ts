@@ -5,9 +5,9 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, lt, gt, sql, desc, isNotNull, notInArray } from 'drizzle-orm';
+import { eq, and, or, lt, gt, sql, desc, isNotNull, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, customerNotificationsLog } from '../db/schema';
+import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import { isDemoStore } from './demoStore';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
@@ -299,6 +299,46 @@ export async function getStoreByUserId(platform: EcommercePlatform, userId: stri
         and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, platform))
     ).limit(1);
     return result[0] || null;
+}
+
+/**
+ * Does the billing subject `userId` have an active store on `platform`?
+ *
+ * "Billing subject" = the identity whose subscription row entitles the work —
+ * the workspace OWNER (the D-E rule Shopify billing already follows), because
+ * one subscription serves every workspace that owner has. So the question is
+ * deliberately NOT "does workspace X have a store": a user who owns a
+ * Salla-connected workspace is marketplace-billed for their single
+ * subscription, whichever workspace they happen to be looking at. Scoping this
+ * per-workspace would let the frontend offer an upgrade that the backend guard
+ * then refuses — the dead-end the Shopify review caught as H2.
+ *
+ * The `userId` leg catches stores connected before workspaces existed (and any
+ * row whose `workspace_id` is NULL); the owner join catches the normal case,
+ * including a store a non-owner member connected. Both legs hit existing
+ * indexes (`idx_ecommerce_stores_user_id`, `idx_ecommerce_stores_workspace_id`).
+ *
+ * Used by the marketplace billing guards (Salla Article 5 today; Zid's
+ * marketplace terms are the same shape and will reuse this).
+ */
+export async function hasActiveStoreForBillingSubject(
+    platform: EcommercePlatform,
+    userId: string,
+): Promise<boolean> {
+    const result = await db
+        .select({ id: ecommerceStores.id })
+        .from(ecommerceStores)
+        .leftJoin(workspaces, eq(ecommerceStores.workspaceId, workspaces.id))
+        .where(and(
+            eq(ecommerceStores.platform, platform),
+            eq(ecommerceStores.isActive, true),
+            or(
+                eq(ecommerceStores.userId, userId),
+                eq(workspaces.ownerId, userId),
+            ),
+        ))
+        .limit(1);
+    return result.length > 0;
 }
 
 export interface CreateStoreOptions {

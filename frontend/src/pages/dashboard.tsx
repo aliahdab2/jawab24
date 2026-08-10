@@ -629,6 +629,7 @@ const DashboardPage: NextPageWithLayout = () => {
           resetsAt={usage.currentPeriod?.end}
           planSlug={usage.subscription?.plan?.slug}
           paymentMethod={usage.subscription?.paymentMethod}
+          sallaBilled={usage.subscription?.sallaBilled}
           userEmail={user?.email}
           topupBalance={usage.topup?.balance}
         />

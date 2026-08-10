@@ -828,6 +828,11 @@ export interface UsageSummary {
     /** Deep link into Shopify admin plan management. Present only for
      * shopify-billed workspaces when the app handle is configured. */
     shopifyManageUrl?: string;
+    /** true = a Salla merchant, whose paid plans must be billed through Salla
+     * (apps-policy Article 5). Every Stripe surface — plan select, checkout,
+     * top-ups — must be suppressed; the backend refuses them with code
+     * SALLA_BILLED. Omitted (not `false`) when the rule does not apply. */
+    sallaBilled?: boolean;
   };
 }
 

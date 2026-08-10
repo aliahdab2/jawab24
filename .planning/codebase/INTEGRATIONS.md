@@ -320,6 +320,17 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   - `/orders` - order data (list shape differs from detail — see `mapSallaOrderToOrderInfo`)
   - `/store/info` - store info (used by `fetchStoreInfo`, incl. the Easy-Mode ownership check)
 
+- **Billing — Article 5 (Salla-managed billing is MANDATORY for paid apps)**:
+  - Salla apps-policy Article 5 requires paid-app payment to run "عبر منصة سلة". Steering a Salla-sourced merchant to Stripe risks delisting, and unpublishing a live Salla app is **not self-serve** (it needs a booked meeting with Salla), so the downside is unrecoverable.
+  - Jawab24 launches on Salla **free-tier-only**, which is compliant — but the product's normal upgrade CTAs led to Stripe. That leak is closed by the **Article-5 guard**.
+  - Rule (`services/sallaBilling.ts:mustBillThroughSalla`, ruling **D-065**): an account must bill through Salla when it has an **active Salla store** *and* no established live Stripe relationship. The exemption predicate is `config/sallaBilling.ts:hasLiveStripeBilling` (`payment_method='stripe'` AND status ∈ `LIVE_SUBSCRIPTION_STATUSES`) — a merchant who paid us through Stripe before connecting Salla was never a Salla-sourced sale and keeps their rail.
+  - ⚠️ The payment-method half of that predicate is load-bearing: a fresh signup is `status='trialing'` with `payment_method` NULL, so exempting on status alone would exempt **every** user and the guard would never fire.
+  - Store presence is resolved against the **billing subject** — the workspace owner (the D-E rule Shopify already follows) — by `services/ecommerce.ts:hasActiveStoreForBillingSubject`, deliberately NOT per-viewed-workspace, so the UI cannot offer an upgrade the API then refuses.
+  - Enforcement: all six **merchant-facing** Stripe entry points via `rejectIfMarketplaceBilled` in `controllers/payment.ts` → **400 `SALLA_BILLED`** (logged at `info` with `rail: 'salla'`). Shopify's `SHOPIFY_BILLED` is evaluated first and unchanged; when both rails apply, Shopify wins (it has a manage-plan deep link, Salla has nowhere to send them yet).
+  - ⚠️ **NOT covered:** `services/admin/billing.ts:createPaymentRequest` mints a hosted Stripe Checkout link and consults neither marketplace rule (pre-existing; Shopify/D-G is equally unguarded there). Admin-only and deliberate, so documented rather than blocked — owner decision owed.
+  - UI suppression is driven from the single choke point `getUsageSummary` → `subscription.sallaBilled`: plan select (`useSelectPlan`), pricing banner, top-up CTA, and a `/pricing` bounce from `checkout.tsx`.
+  - ❌ **Salla billing itself is NOT IMPLEMENTED.** When it lands (a `'salla'` subscription source driven by `app.subscription.*` webhooks), the suppression becomes a redirect to Salla's plan management and `hasLiveStripeBilling` is replaced by an `isSallaBilled(row)` that reads the subscription, exactly like Shopify's.
+
 - **Webhook Integration**:
   - Endpoint: `/salla/webhooks` (POST) — single endpoint, dispatched by `event` field in body
   - Events (11): `product.{created,deleted,price.updated,status.updated,quantity.low}`, `app.uninstalled`, `order.{created,updated,status.updated,shipment.created}`, `abandoned.cart`. Salla has NO `order.completed` and NO `order.shipping.update`: completion/delivery is a status VALUE inside `order.status.updated` (`data.customized.slug` ∈ {shipped,delivered,completed}); tracking arrives via `order.shipment.created` (payload `data` is the shipment: `ship_to.phone` + top-level `tracking_number`).

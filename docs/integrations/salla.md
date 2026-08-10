@@ -198,6 +198,64 @@ When products are synced, caches are invalidated in 4 steps:
 
 ---
 
+## Billing — Article 5 (paid plans must go through Salla)
+
+Salla's [apps policy](https://salla.partners/legal/apps-policy) **Article 5** requires paid-app
+payment to run through Salla, with Salla's commission. Steering a Salla-sourced merchant to an
+external rail risks delisting — and unpublishing a live Salla app is **not self-serve** (it needs
+a booked meeting with Salla), so the downside cannot be undone by us.
+
+Jawab24 ships on Salla **free-tier-only**, which is compliant on its own. The gap was that a
+Salla merchant who exhausted the free quota still saw the product's normal upgrade CTAs, which
+led to Stripe. The **Article-5 guard** (ruling **D-065**) closes it.
+
+**The rule** — `services/sallaBilling.ts:mustBillThroughSalla`:
+
+> bill through Salla when the account has an **active Salla store** AND no established live
+> Stripe relationship.
+
+- Store presence: `services/ecommerce.ts:hasActiveStoreForBillingSubject('salla', userId)`,
+  resolved against the **billing subject** — the workspace owner (the D-E rule Shopify billing
+  already follows) across every workspace they own, NOT the workspace being viewed. One
+  subscription serves all of an owner's workspaces, so a per-workspace scope would let the UI
+  offer an upgrade the API then refuses.
+- Exemption: `config/sallaBilling.ts:hasLiveStripeBilling` — `payment_method='stripe'` AND
+  status ∈ `LIVE_SUBSCRIPTION_STATUSES`. A merchant who signed up on jawab24.com and paid us
+  through Stripe *before* connecting Salla was never a Salla-sourced sale and keeps their rail.
+- ⚠️ **The payment-method check is not redundant.** A fresh signup is inserted
+  `status='trialing'` with `payment_method` **NULL**. Exempting on status alone would exempt
+  every user on the platform and the guard would silently never fire.
+
+**Enforcement.** All six **merchant-facing** Stripe entry points go through
+`rejectIfMarketplaceBilled` in `controllers/payment.ts` → **400 `SALLA_BILLED`**
+(`create-checkout-session`, `create-subscription-intent`, `create-topup-intent`, `change-plan`,
+`cancel-subscription`, `billing-portal`; the remaining payment routes are read-only or the
+inbound webhook). Shopify's `SHOPIFY_BILLED` (D-G) is evaluated first and is unchanged; when
+both rails apply to one account Shopify wins, because it has an admin deep link to send the
+merchant to and Salla does not. A refusal is logged at `info` with `rail: 'salla'` — this
+guard's characteristic failure is being silently inert, so a refusal count is the only
+production signal that distinguishes working from broken.
+
+⚠️ **NOT covered: the admin manual payment-request path.**
+`services/admin/billing.ts:createPaymentRequest` → `stripeService.createManualPaymentSession`
+mints a hosted Stripe Checkout link for an arbitrary user and consults **neither** marketplace
+rule (this predates the Salla guard and is equally unguarded for Shopify/D-G). An admin issuing
+one to a Salla merchant would be the exact Article-5 breach the guard exists to prevent. It is
+admin-only and deliberate rather than a self-serve leak, so it is documented rather than
+silently blocked — the manual rail is also the payment route for merchants Stripe cannot serve.
+**Owner decision owed:** guard it, warn in the admin UI, or accept it as a staffed-process risk.
+
+**UI suppression** reads the same answer from the single `getUsageSummary` choke point as
+`subscription.sallaBilled`: plan select (`useSelectPlan`), the `/pricing` banner, the top-up CTA
+(`BuyTopUpCTA`), and a `/pricing` bounce in `checkout.tsx`.
+
+❌ **Salla-managed billing itself is NOT IMPLEMENTED.** When it lands — a `'salla'` subscription
+source driven by `app.subscription.*` webhooks — the suppression becomes a redirect to Salla's
+plan management, and `hasLiveStripeBilling` is replaced by a subscription-reading
+`isSallaBilled(row)` exactly like Shopify's.
+
+---
+
 ## API Endpoints
 
 ### Public (no auth required)

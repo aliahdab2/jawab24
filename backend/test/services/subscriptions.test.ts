@@ -100,6 +100,15 @@ vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn().mockResolvedValue(null), set: vi.fn(), quit: vi.fn(), del: vi.fn() },
 }));
 
+// Salla Article-5 rule (D-065). getUsageSummary consults it to set
+// subscription.sallaBilled; it issues a real LEFT JOIN that this file's
+// hand-rolled db/drizzle mocks cannot serve. Mocked at the service boundary —
+// the rule is covered by test/services/sallaBilling.test.ts and, against real
+// Postgres, by test/integration/sallaArticle5Guard.test.ts.
+vi.mock('../../src/services/sallaBilling', () => ({
+    mustBillThroughSalla: vi.fn(async () => false),
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args) => ({ op: 'and', args })),
@@ -1452,5 +1461,31 @@ describe('getUsageSummary — shopify signals suppressed on a CANCELED mirror (H
         const summary = await subscriptionsService.getUsageSummary('u1', 'ws1');
 
         expect(summary?.subscription.paymentMethod).toBe('shopify');
+    });
+
+    /**
+     * The Salla Article-5 signal (D-065). This choke point is the ONLY place
+     * the frontend learns the answer, so if it stops being emitted every
+     * suppressed CTA silently comes back and Salla merchants walk into Stripe.
+     */
+    it('exposes sallaBilled for a Salla merchant, resolved against the subscription OWNER', async () => {
+        const { mustBillThroughSalla } = await import('../../src/services/sallaBilling');
+        vi.mocked(mustBillThroughSalla).mockResolvedValueOnce(true);
+        stubInternals({ status: 'trialing' });
+
+        const summary = await subscriptionsService.getUsageSummary('member-id', 'ws1');
+
+        expect(summary?.subscription.sallaBilled).toBe(true);
+        // 'u1' is the ownerId from resolveWorkspaceSubscription, NOT the caller:
+        // one subscription serves every workspace its owner has.
+        expect(mustBillThroughSalla).toHaveBeenCalledWith('u1', expect.anything());
+    });
+
+    it('omits sallaBilled entirely when the rule does not apply', async () => {
+        stubInternals({ status: 'trialing' });
+
+        const summary = await subscriptionsService.getUsageSummary('u1', 'ws1');
+
+        expect(summary?.subscription.sallaBilled).toBeUndefined();
     });
 });
