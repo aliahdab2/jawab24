@@ -44,7 +44,7 @@ import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { dailyCapKey, checkDailyCap, claimDailyCapSlot, type DailyCapStatus } from '../lib/dailyCap';
 import { imageStorage } from './imageStorage';
-import { composePostCard, fetchRoundedLogo } from './imageCompose';
+import { composePostCard, fetchRoundedLogo, renderPosterBase } from './imageCompose';
 import { settingsService } from './settings';
 import { getStoreContextForAI } from './ecommerce';
 import { catalogService } from './catalog';
@@ -373,6 +373,40 @@ export function pickPostType(
     return (varied.length > 0 ? varied : candidates)[0];
 }
 
+/**
+ * The KIND of image, rotated in code. This is the fix for the sameness problem
+ * that three prompt-level attempts could not solve (2026-08-10).
+ *
+ * The failed attempts all asked the model for a different photographic SCENE,
+ * which a service business cannot supply — a training institute's world really
+ * is one room, so "stay in your world" and "change the subject" contradict each
+ * other. Two independent product reviewers reached the same conclusion
+ * separately: vary the TYPE of image, not the scene inside it.
+ *
+ *   photo      — a real scene (what shipped first; still the strongest for
+ *                product-led pages, where it already varies on its own)
+ *   poster     — typography on a branded background, drawn entirely in code.
+ *                NO image model: zero cost, zero latency, and immune to the
+ *                model ignoring instructions — which is precisely what it did.
+ *   conceptual — materials, texture and light rather than a literal place;
+ *                the escape hatch for a business with no photogenic scene.
+ */
+export const IMAGE_MODES = ['photo', 'poster', 'conceptual'] as const;
+export type ImageMode = (typeof IMAGE_MODES)[number];
+
+/**
+ * Round-robin from the previous mode, so all three actually appear.
+ *
+ * Deliberately NOT `filter(m => m !== previous)[0]` — the shape pickPostType
+ * uses. That returns the first surviving candidate, which ping-pongs between
+ * the top two and never reaches the third. An unknown or absent previous mode
+ * starts the cycle at `photo`.
+ */
+export function pickImageMode(previousMode: string | null | undefined): ImageMode {
+    const i = IMAGE_MODES.indexOf(previousMode as ImageMode);
+    return IMAGE_MODES[(i + 1) % IMAGE_MODES.length] as ImageMode;
+}
+
 // Per-type CRAFT direction — what a senior copywriter would do differently
 // for each angle, not just what to talk about.
 const POST_TYPE_INSTRUCTIONS: Record<PostSuggestionPostType, string> = {
@@ -590,8 +624,15 @@ async function generatePostText(
     }
 }
 
-function buildImagePrompt(imageBrief: string, category?: string): string {
+function buildImagePrompt(imageBrief: string, category?: string, mode: ImageMode = 'photo'): string {
     const forBusiness = category ? ` for a ${category} business` : '';
+    if (mode === 'conceptual') {
+        // Deliberately NOT a place. A business whose only room is a classroom
+        // has no second scene to photograph, but it always has materials,
+        // surfaces and light — so the subject shifts from WHERE to WHAT-IT-IS-
+        // MADE-OF. Same hard exclusions as the photographic mode.
+        return `${imageBrief}. Close-up abstract composition${forBusiness}: materials, texture, and light rather than a room or a location. Shallow depth of field, single dominant subject, generous negative space, square format. STRICT: absolutely no text, no letters, no words, no numbers, no logos, no watermarks. No people, no faces, no hands.`;
+    }
     // Two hard exclusions, both industry-standard (2026):
     // - no text: Arabic typography in gen models is broken — the caption carries the words;
     // - no people/faces: Meta auto-detects AI media via embedded C2PA and makes the
@@ -612,13 +653,18 @@ interface GeneratedImage {
  * suggestion): storage unconfigured, model refusal, timeout, undecodable
  * model output, or upload error.
  */
-async function generatePostImage(bundle: PageBundle, imageBrief: string, headline: string): Promise<GeneratedImage | null> {
-    if (!config.openai?.apiKey || !imageBrief || !imageStorage.isConfigured()) return null;
-    const client = makeTrackedOpenAI(config.openai.apiKey, {
-        userId: bundle.userId,
-        pageId: bundle.pageId,
-        pipeline: 'post_image_generation',
-    });
+async function generatePostImage(
+    bundle: PageBundle,
+    imageBrief: string,
+    headline: string,
+    mode: ImageMode = 'photo',
+    posterVariant = 0,
+): Promise<GeneratedImage | null> {
+    if (!imageStorage.isConfigured()) return null;
+    // A poster needs no scene, so it needs neither a brief nor an API key; the
+    // photographic modes need both.
+    const apiKey = config.openai?.apiKey;
+    if (mode !== 'poster' && (!apiKey || !imageBrief)) return null;
 
     // The logo depends only on the bundle, so its fetch (up to 5s at
     // graph.facebook.com) starts NOW and runs concurrently with the image
@@ -630,13 +676,41 @@ async function generatePostImage(bundle: PageBundle, imageBrief: string, headlin
         ? fetchRoundedLogo(bundle.logoUrl).catch(() => null)
         : Promise.resolve(null);
 
+    // POSTER: drawn entirely in code — no model call, no spend, no latency, and
+    // no way for the model to hand back the same scene again. It then flows
+    // through the SAME compositor as a photograph, so the headline typesetting,
+    // logo badge, encoding and failure handling are shared, not duplicated.
+    if (mode === 'poster') {
+        const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
+        try {
+            // The poster typesets its OWN headline, large and centred, so the
+            // card's bottom-scrim headline layer is deliberately not used here.
+            const base = await renderPosterBase(1024, 1024, posterVariant, headline);
+            const designed = await composePostCard(base, { headline: null, logo: await logoPromise });
+            if (!designed) return null;
+            return await imageStorage.put(key, designed, 'image/jpeg');
+        } catch (err) {
+            captureError(err, 'Post suggestion: poster composition failed', { level: 'warning', tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
+            return null;
+        }
+    }
+
+    // Unreachable for the photographic modes (guarded above) — present so the
+    // key narrows without an assertion.
+    if (!apiKey) return null;
+    const client = makeTrackedOpenAI(apiKey, {
+        userId: bundle.userId,
+        pageId: bundle.pageId,
+        pipeline: 'post_image_generation',
+    });
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
     let b64: string | undefined;
     try {
         const response = await client.images.generate({
             model: POST_IMAGE_MODEL,
-            prompt: buildImagePrompt(imageBrief, bundle.category),
+            prompt: buildImagePrompt(imageBrief, bundle.category, mode),
             size: POST_IMAGE_SIZE,
             quality: POST_IMAGE_QUALITY,
         }, { signal: controller.signal });
@@ -844,6 +918,7 @@ class PostSuggestionsService {
         const recent = await db.select({
             postType: postSuggestions.postType,
             imageBrief: postSuggestions.imageBrief,
+            imageMode: postSuggestions.imageMode,
         }).from(postSuggestions)
             .where(eq(postSuggestions.pageId, pageId))
             .orderBy(desc(postSuggestions.createdAt))
@@ -878,7 +953,13 @@ class PostSuggestionsService {
             ? `${generated.text}\n\n${bundle.contactSuffix}`
             : generated.text;
 
-        const image = await generatePostImage(bundle, generated.imageBrief, generated.headline);
+        // Rotate the KIND of image off the last one. `recent.length` only varies
+        // the poster's geometry, never which mode is chosen — so the saturating
+        // window that froze the earlier attempt cannot freeze this.
+        const imageMode = pickImageMode(previous?.imageMode);
+        const image = await generatePostImage(
+            bundle, generated.imageBrief, generated.headline, imageMode, recent.length,
+        );
         const imageDegraded: PostSuggestionImageDegraded | undefined = image
             ? undefined
             : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
@@ -904,6 +985,9 @@ class PostSuggestionsService {
                 // NEXT generation must avoid repeating, and a failed render does
                 // not make the scene fresh again.
                 imageBrief: generated.imageBrief || null,
+                // Recorded even when the image failed: the next card rotates off
+                // the mode we ATTEMPTED, or a failing mode would be retried daily.
+                imageMode,
                 status: 'ready',
             }).onConflictDoNothing({
                 target: [postSuggestions.pageId, postSuggestions.suggestedFor],

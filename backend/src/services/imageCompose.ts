@@ -197,6 +197,104 @@ export function buildHeadlineLayerSvg(
 }
 
 /**
+ * A branded background drawn in CODE — no image model, no cost, no variance.
+ *
+ * This is the answer to the sameness problem that three prompt-level attempts
+ * could not solve (2026-08-10): a service business whose world is one room
+ * cannot be talked into a different photographic SCENE, but it can be given a
+ * different KIND of image. A typographic poster is exactly as on-brand and
+ * needs no photograph at all.
+ *
+ * `variant` rotates the composition so two posters never look identical either.
+ * Deterministic: the same variant always renders the same background.
+ */
+export function buildPosterBaseSvg(
+    width: number,
+    height: number,
+    variant: number,
+    headline?: string | null,
+): string {
+    // Three arrangements of the same brand palette. Kept as geometry rather
+    // than imagery so nothing here can ever render text, a face, or a hand.
+    const v = ((variant % 3) + 3) % 3;
+    const shapes = [
+        `<circle cx="${width * 0.82}" cy="${height * 0.18}" r="${width * 0.30}" fill="${ACCENT_COLOR}" fill-opacity="0.10"/>
+         <circle cx="${width * 0.20}" cy="${height * 0.30}" r="${width * 0.18}" fill="#ffffff" fill-opacity="0.05"/>`,
+        `<rect x="${-width * 0.10}" y="${height * 0.08}" width="${width * 0.75}" height="${height * 0.22}" rx="${height * 0.11}" fill="${ACCENT_COLOR}" fill-opacity="0.09" transform="rotate(-12 ${width / 2} ${height / 2})"/>
+         <circle cx="${width * 0.88}" cy="${height * 0.42}" r="${width * 0.16}" fill="#ffffff" fill-opacity="0.05"/>`,
+        `<path d="M0,${height * 0.42} Q${width * 0.5},${height * 0.16} ${width},${height * 0.40} L${width},0 L0,0 Z" fill="${ACCENT_COLOR}" fill-opacity="0.10"/>
+         <circle cx="${width * 0.28}" cy="${height * 0.16}" r="${width * 0.12}" fill="#ffffff" fill-opacity="0.06"/>`,
+    ][v];
+
+    // On a poster the TYPE is the subject, so it is set large and centred —
+    // not tucked into the bottom scrim, which is the right place only when a
+    // photograph occupies the frame. Wrapped across up to three lines because
+    // a centred headline that overflows looks broken in a way a cropped
+    // bottom line does not.
+    const words = (headline ?? '').trim().split(/\s+/).filter(Boolean);
+    const wantsText = words.length > 0 && words.length <= HEADLINE_MAX_WORDS
+        && (headline as string).length <= HEADLINE_MAX_CHARS && hasHeadlineFonts();
+
+    let textLayer = '';
+    if (wantsText) {
+        const lines = wrapWords(words, 3);
+        const size = lines.length >= 3 ? 84 : lines.length === 2 ? 96 : 108;
+        const lineHeight = size * 1.42;
+        // Optical, not arithmetic, centring: the accent rule sits above the type
+        // and carries visual weight, so a group centred at exactly height/2
+        // reads high. Nudging down by 4% balances it.
+        const blockTop = height * 0.54 - ((lines.length - 1) * lineHeight) / 2;
+        const rows = lines.map((line, i) =>
+            `<text x="${width / 2}" y="${blockTop + i * lineHeight}" text-anchor="middle" direction="rtl"
+        font-family="${HEADLINE_FONT_STACK}" font-size="${size}" font-weight="700" fill="#ffffff"
+        dominant-baseline="middle">${escapeXml(line)}</text>`).join('\n  ');
+        const ruleY = blockTop - lineHeight * 0.78;
+        textLayer = `
+  <rect x="${width / 2 - 90}" y="${ruleY}" width="180" height="6" rx="3" fill="${ACCENT_COLOR}"/>
+  ${rows}`;
+    }
+
+    return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="poster" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e5347"/>
+      <stop offset="100%" stop-color="${SCRIM_COLOR}"/>
+    </linearGradient>
+  </defs>
+  <rect width="${width}" height="${height}" fill="url(#poster)"/>
+  ${shapes}${textLayer}
+</svg>`;
+}
+
+/**
+ * Balance words over the FEWEST lines that keeps each line short (~3 words).
+ *
+ * Not "always fill maxLines": five words over three lines strands a single
+ * word on its own row, which reads as a mistake. Five words want two lines.
+ */
+export function wrapWords(words: string[], maxLines = 3, perLineTarget = 3): string[] {
+    const lineCount = Math.min(maxLines, Math.max(1, Math.ceil(words.length / perLineTarget)));
+    const perLine = Math.ceil(words.length / lineCount);
+    const lines: string[] = [];
+    for (let i = 0; i < words.length; i += perLine) lines.push(words.slice(i, i + perLine).join(' '));
+    return lines;
+}
+
+/**
+ * Rasterise the poster so it can feed composePostCard as a base. The headline
+ * is drawn HERE, not by the card's bottom-scrim layer — so the caller passes
+ * `headline: null` onward and composePostCard contributes only the logo badge.
+ */
+export async function renderPosterBase(
+    width: number,
+    height: number,
+    variant: number,
+    headline?: string | null,
+): Promise<Buffer> {
+    return sharp(Buffer.from(buildPosterBaseSvg(width, height, variant, headline))).png().toBuffer();
+}
+
+/**
  * Compose the designed post card: bottom brand scrim + Arabic headline
  * (bottom-end) + logo badge (top-end, clear of the text). Either layer is
  * skipped independently when its input is missing.

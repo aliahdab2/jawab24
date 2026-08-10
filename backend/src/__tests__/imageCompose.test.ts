@@ -200,6 +200,87 @@ describe('composePostCard — output format and base validation', () => {
     });
 });
 
+/**
+ * The poster background exists so a card can vary without an image model at
+ * all — the one variety lever that cannot be ignored by a model.
+ */
+describe('buildPosterBaseSvg — a branded background drawn in code', () => {
+    it('contains NO text element — the headline is typeset later, by the compositor', () => {
+        const svg = mod.buildPosterBaseSvg(1024, 1024, 0);
+        expect(svg).not.toContain('<text');
+        expect(svg).toContain('<svg');
+        expect(svg).toContain('1024');
+    });
+
+    it('is deterministic — the same variant renders byte-identical markup', () => {
+        expect(mod.buildPosterBaseSvg(1024, 1024, 2)).toBe(mod.buildPosterBaseSvg(1024, 1024, 2));
+    });
+
+    it('actually differs between variants, and cycles', () => {
+        const a = mod.buildPosterBaseSvg(1024, 1024, 0);
+        const b = mod.buildPosterBaseSvg(1024, 1024, 1);
+        const c = mod.buildPosterBaseSvg(1024, 1024, 2);
+        expect(new Set([a, b, c]).size).toBe(3);
+        expect(mod.buildPosterBaseSvg(1024, 1024, 3)).toBe(a);
+    });
+
+    it('survives a negative variant (a count can never make it throw)', () => {
+        expect(() => mod.buildPosterBaseSvg(1024, 1024, -1)).not.toThrow();
+    });
+
+    it('typesets the headline itself, and escapes it', () => {
+        const svg = mod.buildPosterBaseSvg(1024, 1024, 0, 'عرض <خاص> اليوم');
+        expect(svg).toContain('<text');
+        expect(svg).toContain('&lt;خاص&gt;');
+        expect(svg).not.toContain('<خاص>');
+    });
+
+    it('refuses a headline past the word/char bounds rather than overflowing the frame', () => {
+        expect(mod.buildPosterBaseSvg(1024, 1024, 0, 'ا ب ت ث ج ح خ')).not.toContain('<text');
+        expect(mod.buildPosterBaseSvg(1024, 1024, 0, 'ا'.repeat(41))).not.toContain('<text');
+    });
+});
+
+/**
+ * The wrap decides whether a centred headline reads as designed or as broken.
+ */
+describe('wrapWords — fewest lines, never a stranded word', () => {
+    it('five words go on TWO lines, not three with one word alone', () => {
+        // The layout that shipped first split 5 words 2/2/1 and stranded «مرة».
+        expect(mod.wrapWords(['المقاس', 'الصحيح', 'من', 'أول', 'مرة'])).toEqual([
+            'المقاس الصحيح من', 'أول مرة',
+        ]);
+    });
+
+    it('short headlines stay on one line', () => {
+        expect(mod.wrapWords(['مقعدك', 'بانتظارك'])).toEqual(['مقعدك بانتظارك']);
+        expect(mod.wrapWords(['ثلاث', 'كلمات', 'فقط'])).toEqual(['ثلاث كلمات فقط']);
+    });
+
+    it('never exceeds the line cap', () => {
+        expect(mod.wrapWords(['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨'], 3).length).toBeLessThanOrEqual(3);
+    });
+
+    it('loses no words, whatever the split', () => {
+        const words = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز'];
+        expect(mod.wrapWords(words).join(' ').split(' ')).toEqual(words);
+    });
+
+    it('renders to a real decodable image at the requested size', async () => {
+        const buf = await mod.renderPosterBase(512, 512, 1);
+        const meta = await sharp(buf).metadata();
+        expect(meta.width).toBe(512);
+        expect(meta.height).toBe(512);
+    });
+
+    it('composes through the SAME card pipeline as a photograph', async () => {
+        const base = await mod.renderPosterBase(512, 512, 0);
+        const card = await mod.composePostCard(base, { headline: 'مقعدك بانتظارك' });
+        expect(card).not.toBeNull();
+        expect((await sharp(card as Buffer).metadata()).format).toBe('jpeg');
+    });
+});
+
 describe('fetchRoundedLogo — never rejects, always null on failure', () => {
     it('network failure resolves null and captures the reason (fleet-wide breaks must be visible)', async () => {
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
