@@ -14,7 +14,8 @@ import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { Toaster } from 'sonner';
-import { isNativePlatform } from '@/lib/capacitor';
+import { isNativePlatform, isIOSNative } from '@/lib/capacitor';
+import { isPaymentRoute } from '@/lib/paymentRoutes';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
@@ -405,22 +406,32 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       
       // Helper for URL parsing — only allow known hosts
       const handleDeepLink = (url: string): string | null => {
-        // Custom scheme (e.g. com.jawab24.app://dashboard)
-        if (url.startsWith("com.jawab24.app://")) {
-            const raw = url.replace("com.jawab24.app://", "/");
-            return raw.startsWith("/") ? raw : `/${raw}`;
-        }
-        // HTTPS universal links — parse with URL API and whitelist hosts
-        try {
-            const parsed = new URL(url);
-            const allowedHosts = ["localhost", "jawab24.com", "www.jawab24.com"];
-            if (allowedHosts.includes(parsed.hostname)) {
-                return parsed.pathname + parsed.search;
-            }
-        } catch {
-            // Invalid URL — ignore
-        }
-        return null;
+        const resolve = (): string | null => {
+          // Custom scheme (e.g. com.jawab24.app://dashboard)
+          if (url.startsWith("com.jawab24.app://")) {
+              const raw = url.replace("com.jawab24.app://", "/");
+              return raw.startsWith("/") ? raw : `/${raw}`;
+          }
+          // HTTPS universal links — parse with URL API and whitelist hosts
+          try {
+              const parsed = new URL(url);
+              const allowedHosts = ["localhost", "jawab24.com", "www.jawab24.com"];
+              if (allowedHosts.includes(parsed.hostname)) {
+                  return parsed.pathname + parsed.search;
+              }
+          } catch {
+              // Invalid URL — ignore
+          }
+          return null;
+        };
+
+        const slug = resolve();
+        // App Store Guideline 3.1.1: a deep link must never carry the iOS app
+        // into a payment surface. Refusing here means the route is not entered
+        // at all — the page-level guard would only blank it AFTER hydration,
+        // and the exported HTML holds the prices as plain markup.
+        if (slug && isIOSNative() && isPaymentRoute(slug)) return null;
+        return slug;
       };
 
       // 1. Warm Start Listener

@@ -118,6 +118,7 @@
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
 				3685025D9C014A993CDC3D69 /* [CP] Embed Pods Frameworks */,
+				A11B24001C0FE3E100000001 /* Verify payment routes neutralized (3.1.1) */,
 			);
 			buildRules = (
 			);
@@ -223,6 +224,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-App/Pods-App-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		A11B24001C0FE3E100000001 /* Verify payment routes neutralized (3.1.1) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Verify payment routes neutralized (3.1.1)";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${SRCROOT}/Scripts/verify-payment-routes-neutralized.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
