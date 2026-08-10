@@ -355,20 +355,35 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     if (!hasHydrated || !isAuthenticated || !authToken) return;
     if (!isNativePlatform()) return;
 
+    // Cancellation is owned by the EFFECT, not by the dynamic import's callback.
+    // Returning the cleanup from inside .then() hands it to the promise chain,
+    // which discards it — React never sees it, so the timer outlived the effect
+    // and could raise the pre-prompt after logout or stack duplicates when the
+    // token refreshed. The `cancelled` flag covers the window the timer cannot:
+    // the import and the two Preferences reads are all async, so each can still
+    // resolve after teardown.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
     // 1. Set up listeners if permission already granted (returning users)
     import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt, shouldShowPushDeniedBanner }) => {
+      if (cancelled) return;
       initPushNotifications(authToken).catch((err: unknown) => { captureError(err, 'Push notification init failed', { tags: { context: 'push-init' } }); });
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
       // shouldShowNotificationPrePrompt is async (uses native Preferences)
-      const timer = setTimeout(() => {
-        shouldShowNotificationPrePrompt().then(show => { if (show) setShowPushPrompt(true); });
+      timer = setTimeout(() => {
+        shouldShowNotificationPrePrompt().then(show => { if (!cancelled && show) setShowPushPrompt(true); });
         // Recovery banner for users who previously denied — only shows when
         // pre-prompt won't (the helpers are mutually exclusive by design).
-        shouldShowPushDeniedBanner().then(show => { if (show) setShowPushDeniedBanner(true); });
+        shouldShowPushDeniedBanner().then(show => { if (!cancelled && show) setShowPushDeniedBanner(true); });
       }, 5000);
-      return () => clearTimeout(timer);
     });
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [hasHydrated, isAuthenticated, authToken]);
 
   // SSE: moved to <SSEManager /> inside QueryClientProvider (see below)
