@@ -630,6 +630,40 @@ describe('BusinessListsSection', () => {
       expect(screen.getByText('أسعار الدورات', { selector: 'p' })).toBeInTheDocument();
     });
 
+    it('a dated list shows each row\'s DATE — the field the list exists for', async () => {
+      // Opening «مواعيد الدورات المعلنة» showed days and times with no date at
+      // all: the directory row was built for an outlet list and had no date
+      // column, and it is the date that decides whether the AI still mentions
+      // the row (owner, 2026-08-11).
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+
+      // The live slot's day-of-month leads its row, beside its day-name value.
+      const day = new Date(future).getDate().toString();
+      const dayChip = screen.getAllByTitle(en.lists.startsLabel);
+      expect(dayChip.length).toBeGreaterThan(0);
+      expect(dayChip[0]).toHaveTextContent(day);
+      // The directory row joins its attributes into one «label: value» line.
+      expect(screen.getByText(/الأحد والثلاثاء/)).toBeInTheDocument();
+    });
+
+    it('an UNDATED list grows no date column — a directory must not be given one', async () => {
+      const outlets: FactCollectionWithRows = {
+        id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 1,
+        rows: [
+          { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
+      renderSection();
+
+      await screen.findByText('صيدلية النرجس');
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+    });
+
     it('a tapped strip line opens the LIST as a list — its rows, its own add door, no chooser', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();

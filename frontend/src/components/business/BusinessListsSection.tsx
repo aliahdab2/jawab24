@@ -738,6 +738,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       section, row,
       dropLabel ? { keepKey: false, dropLabels: [dropLabel] } : { keepKey: true },
     );
+    // A dated row LEADS with its date — the same agenda chip the session rows
+    // use inside entity cards. Without it, opening «مواعيد الدورات المعلنة»
+    // showed days and times with no DATE at all, which is the one field that
+    // list exists for and the one that decides whether the AI still mentions
+    // the row (owner: «بالمواعيد أنا ما عم شوف تاريخ», 2026-08-11). Undated
+    // rows keep the flat line — an outlet directory must grow no date column.
+    const dateParts = formatPlainDateParts(row.startsAt ?? row.endsAt, intlLocale);
     return (
       <li key={row.id} className="list-none">
         {rowShell(
@@ -745,6 +752,15 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           expired,
           () => openEntity(group, { collection: section.collection, row }),
           <>
+          {dateParts && (
+            <span
+              className="flex-shrink-0 w-11 rounded-lg bg-card border border-theme-border text-center py-1 leading-tight"
+              title={t('lists.startsLabel')}
+            >
+              <span className="block text-sm font-bold text-foreground tabular-nums">{dateParts.day}</span>
+              <span className="block text-[10px] text-muted-foreground">{dateParts.month}</span>
+            </span>
+          )}
           {/* ONE flowing line — name then muted detail; wraps only when it must.
               The two-line row cost 13 size rows twice the height they need. */}
           <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
