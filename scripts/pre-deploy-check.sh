@@ -491,6 +491,34 @@ fi
 rm -f /tmp/dupcheck.$$
 
 # =============================================
+# 0.98. nginx platform routing (Zid/Salla/Shopify)
+# =============================================
+# `nginx -t` passes on a config that routes a merchant-facing page to the backend
+# (or an OAuth callback to the frontend) — both are 404s that only show up when a
+# real merchant or a marketplace reviewer clicks Install. On 2026-08-10 the first
+# real Zid install hit a 404 because nginx.conf had no /zid/ block at all, and
+# /salla/connected had been silently swallowed by the /salla/ prefix. This boots
+# the real config against stub upstreams and asserts where each URL lands.
+# Skips (does not fail) when docker is unavailable.
+echo ""
+echo "🧭 Checking nginx platform routing..."
+if ./scripts/check-nginx-routing.sh > /tmp/nginxroute.$$ 2>&1; then
+    if grep -q "^SKIP" /tmp/nginxroute.$$; then
+        echo -e "${YELLOW}   ⚠️  Skipped (docker unavailable)${NC}"
+    else
+        echo -e "${GREEN}   ✅ $(grep '^PASS' /tmp/nginxroute.$$)${NC}"
+    fi
+else
+    echo -e "${RED}   ❌ nginx routes a platform URL to the wrong upstream${NC}"
+    cat /tmp/nginxroute.$$
+    echo -e "${RED}   A Next.js page must reach frontend_active; OAuth/webhooks must reach backend_active.${NC}"
+    echo -e "${YELLOW}   Exact-match blocks (location = /x/page) must sit ABOVE the prefix block (location /x/).${NC}"
+    rm -f /tmp/nginxroute.$$
+    exit 1
+fi
+rm -f /tmp/nginxroute.$$
+
+# =============================================
 # 1. Check for ESM-only packages
 # =============================================
 echo ""

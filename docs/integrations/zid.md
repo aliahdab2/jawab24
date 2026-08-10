@@ -86,7 +86,31 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 | Basic-auth verification | `backend/src/utils/basicAuthVerify.ts` |
 | Config | `backend/src/config/index.ts` (`config.zid`; enabled when `ZID_CLIENT_ID` set) |
 | Migration (dual-token columns) | `backend/migrations/0146_left_prodigy.sql` |
+| **Edge routing** | `nginx/nginx.conf` — `location /zid/` → backend, `location = /zid/onboarding` → frontend |
 | Tests | `backend/test/{services,controllers,routes,integrations}/zid.test.ts`, `backend/test/utils/basicAuthVerify.test.ts` |
+| Routing gate | `scripts/check-nginx-routing.sh` (`npm run check:nginx-routing`, pre-deploy step 0.98) |
+
+### ⚠️ The backend routes are not reachable without the nginx block
+
+The Zid Partner app is configured with **un-prefixed** URLs (`https://jawab24.com/zid/auth`,
+`/zid/auth/callback`, `/zid/webhooks`) — not `/api/...`. In production nginx is what maps
+those to the backend; the `/api/` prefix exists only because nginx adds it. `services/zid.ts`
+also builds its own `redirect_uri` as `https://<ZID_HOST_NAME>/zid/auth/callback`, so the
+OAuth round-trip depends on the same block.
+
+**Incident 2026-08-10:** `nginx/nginx.conf` had **no `/zid/` block at all** — the string
+"zid" did not appear in the file. Every Zid-configured URL fell through to the frontend
+catch-all and returned 404, so the first real install (a test store, while app 7367 was In
+Review) dead-ended before reaching the backend. `ZID_CLIENT_ID` was correctly set; the
+credentials were never the problem. Two properties made it invisible:
+
+- `nginx -t` passes on the broken config — it is syntactically perfect.
+- `/zid/onboarding` returned 200 *by accident* of the catch-all, so the prefix looked wired.
+
+Ordering matters: exact-match blocks (`location = /zid/onboarding`) must sit **above** the
+prefix block (`location /zid/`), or the prefix swallows the Next.js page. The same defect
+was live for Salla's `/salla/connected` (its Easy-Mode App URL) and is fixed in the same
+change. `npm run check:nginx-routing` now asserts every platform URL's upstream.
 
 Env vars: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID` (webhook `original_id`;
 prod-required with the client id), `ZID_HOST_NAME`, `ZID_WEBHOOK_SECRET` (Basic-auth

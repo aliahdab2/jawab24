@@ -42,6 +42,7 @@
     "test": "npm run test --workspaces",
     "type-check": "npm run type-check --workspaces --if-present",
     "pre-deploy": "./scripts/pre-deploy-check.sh",
+    "check:nginx-routing": "./scripts/check-nginx-routing.sh",
     "check:duplication": "node scripts/check-duplication.mjs",
     "check:duplication:baseline": "node scripts/check-duplication.mjs --update-baseline",
     "check:duplication:test": "node --test scripts/__tests__/check-duplication.test.mjs",
