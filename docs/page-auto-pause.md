@@ -69,10 +69,13 @@ When the counter crosses the threshold (in a single atomic UPDATE):
 2. `auto_pause_reason = 'send_rejected'`
 3. `auto_paused_at = NOW()`
 4. A `page.auto_reply_toggled` audit event is emitted (`actor: 'system'`, `reason: 'auto_pause'`) via [logAutoReplyToggle](../backend/src/services/auditLog.ts) — a timestamped record of the pause in the `logs` table, distinct from the standing `auto_pause_reason` column. See [Audit trail](#audit-trail) below.
+5. **The merchant is notified** (fire-and-forget, never blocks the reply path): an `auto_reply_paused` in-app + push notification to every workspace member (falling back to the page owner when the page has no workspace), and an email (`autoPausedEmailTemplate`, in the owner's dashboard language) to the **page owner** — the original connector, i.e. the one user whose re-auth can refresh a dead token. The email is deduped per page across pause cycles via Redis (`email:auto_pause:<pageId>`, 24h) so a merchant stuck in a toggle → re-pause loop gets one email a day; the in-app/push fires on every cycle. Added after 2026-08-10, when a real page auto-paused twice in one evening and the merchant learned about it from lost customers.
 
 ### Recovery
 
 The customer toggles auto-reply back on in the UI ([pages.ts toggleAutoReply](../backend/src/services/pages.ts)). The off → on transition clears all three columns, giving the page a fresh start. If the underlying Meta-side issue persists, the counter climbs back to the threshold and the page pauses again — no manual operator intervention required either way.
+
+**When the cause is an invalidated token** (Graph `code=190, subcode=460` — the merchant changed their Facebook password or Meta forced re-auth), toggling alone is a trap: the stored page token stays dead, so the page re-pauses within minutes and each cycle burns ~10 customer messages. The merchant must **reconnect the page in Jawab24 first** (a full Facebook dialog — signing in and out of facebook.com does nothing to our stored token), *then* toggle auto-reply back on. This exact loop happened in production on 2026-08-10, which is why the notification copy leads with the reconnect step.
 
 Disabling auto-reply (on → off) **preserves** the pause-reason audit trail so support can see "this page was auto-paused at X, then the customer toggled it off."
 
@@ -102,9 +105,11 @@ A bilingual banner on the Page card on the dashboard ([PageAccordionItem.tsx](..
 
 Translation keys: `pages.autoPausedSendRejected` (EN + AR).
 
+Plus, since 2026-08 (see step 5 above): an in-app + push notification to the workspace and an email to the page owner, both carrying the two-step fix (reconnect the page, then re-enable) and the explicit warning that a Facebook login/logout is not enough. Notification copy: `auto_reply_paused` in [notifications.ts](../backend/src/services/notifications.ts); email copy: `autoPaused*` keys in [backend/src/i18n](../backend/src/i18n/en.json).
+
 ## What this is NOT
 
-- **Not a token disconnect.** The page row stays connected; `access_token` is left intact. The token works fine; it's the Page that's misbehaving. Reconnecting won't help.
+- **Not a token disconnect.** The page row stays connected; `access_token` is left intact, `disconnect_reason` stays empty. ⚠️ That does **not** mean the token is healthy: a dead token (`our_fault`, e.g. Graph 190/460 after a Facebook password change) is one of the buckets that *causes* the pause, and in that case the DB row still looks fully connected — diagnose from the send-failure logs, not the row, and the fix **is** a reconnect. For Page-side causes (restricted, unpublished, lost permission) the token genuinely works and reconnecting won't help.
 - **Not a retry/backoff scheduler.** There's no background job that tries the page again. Recovery is explicit, customer-driven.
 - **Not a billing/usage fix.** The customer's smart-reply usage counter still counts AI generations (not deliveries). That's a separate decision tracked elsewhere.
 - **Not a substitute for the existing `disconnectReason` field.** `disconnectReason` is set when the token is revoked/dead. `autoPauseReason` is set when the token works but the Page rejects sends. Different states, separate columns.

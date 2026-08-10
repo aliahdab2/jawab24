@@ -1,10 +1,14 @@
 import { db } from '../db';
-import { pages } from '../db/schema';
+import { pages, users, settings } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { DmFailureBucket } from '../utils/fbGraphErrors';
 import { captureError } from '../utils/sentryHelpers';
 import { logAutoReplyToggle } from './auditLog';
 import { redis } from '../lib/redis';
+import { notificationService } from './notifications';
+import { emailService } from './email';
+import { autoPausedEmailTemplate } from '../utils/emailTemplates';
+import { config } from '../config';
 
 /**
  * Auto-pause defense for "dead pages" — pages where Facebook persistently
@@ -25,6 +29,9 @@ import { redis } from '../lib/redis';
  *    keep being stored unreplied, see commentProcessor).
  *  - Comment + message processors short-circuit on paused pages BEFORE the
  *    OpenAI call, so paused pages cost nothing.
+ *  - The crossing also NOTIFIES the merchant (in-app + push to the workspace,
+ *    email to the page owner) — a paused page answers nobody, and only a human
+ *    re-enable brings it back, so silence here costs customers.
  *  - Customer toggling auto-reply back on in the UI clears the counter +
  *    reason (handled in pages.ts updatePage / settings route).
  *
@@ -114,6 +121,68 @@ function trackPlatformFailure(pageId: string, platform: string, bucket: DmFailur
     }
 }
 
+/** One auto-pause email per page per 24h, across pause cycles. A merchant who
+ * re-toggles without reconnecting re-pauses within minutes — they should get
+ * ONE email a day about it, not one per cycle (the in-app/push notification
+ * still fires each cycle, since each cycle is a deliberate merchant action). */
+const AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * Tell the humans their page just went quiet. Dashboard-banner-only proved
+ * insufficient in production (2026-08-10: a page auto-paused twice in one
+ * evening; the merchant learned of it from lost customers, and the recovery
+ * attempt — a Facebook login/logout — was the wrong fix for lack of guidance).
+ *
+ * - In-app + push to the whole workspace (agencies manage merchant pages),
+ *   falling back to the page owner when the page has no workspace.
+ * - Email to the page OWNER only — the original connector is the one user
+ *   whose re-auth can refresh the stored token (pages.ts, isOriginalConnector).
+ *
+ * Never throws — an alerting failure must not look like a pause failure.
+ */
+async function notifyMerchantAutoPaused(row: { id: string; userId: string | null; workspaceId: string | null }): Promise<void> {
+    try {
+        const [info] = await db
+            .select({
+                pageName: pages.name,
+                ownerEmail: users.email,
+                dashboardLanguage: settings.dashboardLanguage,
+            })
+            .from(pages)
+            .leftJoin(users, eq(users.id, pages.userId))
+            .leftJoin(settings, eq(settings.userId, pages.userId))
+            .where(eq(pages.id, row.id))
+            .limit(1);
+
+        const pageName = info?.pageName ?? 'Facebook Page';
+        const data = { pageId: row.id, action: 'reconnect_page', urgent: true };
+
+        if (row.workspaceId) {
+            await notificationService.sendTemplateNotificationToWorkspace(row.workspaceId, 'auto_reply_paused', { pageName }, data);
+        } else if (row.userId) {
+            await notificationService.sendTemplateNotification(row.userId, 'auto_reply_paused', { pageName }, data);
+        }
+
+        if (!row.userId || !info?.ownerEmail) return;
+        // Redis down → the set throws and we skip the email (the in-app/push
+        // above already fired) rather than risk unbounded repeats.
+        const set = await redis.set(`email:auto_pause:${row.id}`, '1', 'EX', AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS, 'NX');
+        if (set !== 'OK') return;
+
+        const { subject, html } = autoPausedEmailTemplate({
+            lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
+            pageName,
+            dashboardUrl: `${config.frontendUrl}/dashboard`,
+        });
+        await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
+    } catch (err) {
+        captureError(err, 'pageAutoPause.notifyMerchantAutoPaused failed', {
+            tags: { component: 'pageAutoPause' },
+            extra: { pageId: row.id },
+        });
+    }
+}
+
 /**
  * Bump the failure counter; auto-pause the page if the threshold is crossed.
  * Fire-and-forget — never blocks the reply path. Errors logged to Sentry only.
@@ -176,6 +245,7 @@ export async function recordSendFailure(
                 reason: 'auto_pause',
                 extra: { bucket },
             });
+            void notifyMerchantAutoPaused(row);
         }
     } catch (err) {
         captureError(err, 'pageAutoPause.recordSendFailure failed', {

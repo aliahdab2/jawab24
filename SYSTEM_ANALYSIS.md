@@ -1909,7 +1909,7 @@ sent a live investigation down the wrong path (2026-07-31).
 |---|---|---|---|---|
 | Merchant toggled it off | `user` | present | set | their choice — ask before "fixing" |
 | Channel already used its free trial | `trial_block` | **present** | set | subscribe (anti-abuse ledger, applied at connect) |
-| Repeated send failures | `auto_pause` | present | set | `services/pageAutoPause.ts` clears it on recovery |
+| Repeated send failures | `auto_pause` | present ⚠️ but possibly DEAD | set | merchant notified since 2026-08 (in-app+push+email, `pageAutoPause.ts`); re-enable via the dashboard toggle (`pages.ts toggleAutoReply` clears the pause on off→on). ⚠️ A dead token (Graph 190/460, e.g. FB password change) also lands here with a healthy-looking row — then the fix is reconnect FIRST, and a bare re-toggle just re-pauses |
 | **Facebook stopped returning the page** | **`NULL`** | **`''` (cleared)** | **`NULL`** | **reconnect via Facebook — upgrading does nothing** |
 
 **A page can also be ARCHIVED (`pages.archived_at` set, since 2026-08-09).** That is a
