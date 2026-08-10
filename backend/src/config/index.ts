@@ -161,7 +161,14 @@ export const config = {
         // workspace (the eventual GA path); the cron never runs fleet-wide
         // regardless (see runDailyPostSuggestions).
         workspaceIds: (process.env.POST_SUGGESTIONS_WORKSPACE_IDS
-            || 'a0005407-92bf-473e-9368-013f14c57a7d') // Jawab24 founder workspace (prod)
+            || [
+                'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)
+                // First merchant tester (2026-08-10, owner-invited). Kept in the
+                // DEFAULT rather than the server env so enabling a tester is one
+                // reviewable deploy, not a manual env edit someone must remember
+                // to mirror in the frontend allowlist.
+                '9b6ba279-b569-4b45-b020-55b542dad5b6',
+            ].join(','))
             .split(',').map(id => id.trim()).filter(Boolean),
         // ABSOLUTE generations/day/page cap (owner ruling 2026-08-09: 3, «ليس
         // أكثر») — the daily cron generation consumes 1 of these, leaving the

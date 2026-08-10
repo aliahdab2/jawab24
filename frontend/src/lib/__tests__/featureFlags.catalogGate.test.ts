@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isCatalogVisible } from '@/lib/featureFlags';
+import { isCatalogVisible, isPostSuggestionsVisible } from '@/lib/featureFlags';
 
 const FOUNDER_WS = 'a0005407-92bf-473e-9368-013f14c57a7d';
 const MES_WS = '9b6ba279-b569-4b45-b020-55b542dad5b6';
@@ -24,5 +24,23 @@ describe('isCatalogVisible — business surface gate (admin OR allowlisted works
     expect(isCatalogVisible({ isAdmin: false })).toBe(false);
     expect(isCatalogVisible(null, [FOUNDER_WS.toUpperCase()])).toBe(false);
     expect(isCatalogVisible(undefined)).toBe(false);
+  });
+});
+
+describe('isPostSuggestionsVisible — «بوست اليوم» pilot allowlist', () => {
+  it('shows for the founder workspace and the invited merchant tester', () => {
+    expect(isPostSuggestionsVisible(FOUNDER_WS)).toBe(true);
+    expect(isPostSuggestionsVisible(MES_WS)).toBe(true);
+  });
+
+  it('hides for everyone else — the pilot must not leak to the fleet', () => {
+    expect(isPostSuggestionsVisible('some-other-workspace')).toBe(false);
+    expect(isPostSuggestionsVisible(null)).toBe(false);
+    expect(isPostSuggestionsVisible(undefined)).toBe(false);
+    expect(isPostSuggestionsVisible('')).toBe(false);
+  });
+
+  it('matches exactly — a case-shifted id is a different workspace', () => {
+    expect(isPostSuggestionsVisible(MES_WS.toUpperCase())).toBe(false);
   });
 });
