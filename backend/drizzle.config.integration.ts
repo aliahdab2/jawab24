@@ -9,7 +9,10 @@ export default defineConfig({
     out: './migrations',
     driver: 'pg',
     dbCredentials: {
-        connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/autoreply_test',
+        // No hardcoded fallback: the test database name is per-checkout, resolved
+        // by scripts/test-db-url.sh. Export DATABASE_URL before running drizzle-kit
+        // against a test database — e.g. DATABASE_URL=$(../scripts/test-db-url.sh).
+        connectionString: process.env.DATABASE_URL || '',
     },
     verbose: false,
     strict: false,

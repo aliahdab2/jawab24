@@ -434,11 +434,36 @@ npm run translation:validate             # Check i18n files (from frontend/)
 ```
 
 > **Backend integration tests:** run `cd backend && npm run test:integration:local`. It
-> forces `DATABASE_URL` at the dedicated local test DB (`localhost:5433/autoreply_test`,
-> override with `TEST_DATABASE_URL`) so a stray `DATABASE_URL` from your shell or
-> `backend/.env` (which points at the dev DB on 5432) can't make the suite migrate/mutate
-> the wrong database. Plain `npm run test:integration` is the CI variant and trusts the
-> ambient `DATABASE_URL`.
+> forces `DATABASE_URL` at **this checkout's own** test DB on `localhost:5433` — the name is
+> `autoreply_test_<checkout>_<hash>`, printed by `scripts/test-db-url.sh` (override the whole
+> URL with `TEST_DATABASE_URL`, or just the server with `TEST_PG_HOST` / `TEST_PG_PORT`). That
+> stops a stray `DATABASE_URL` from your shell or `backend/.env` (which points at the dev DB on
+> 5432) from making the suite migrate/mutate the wrong database. The DB is created on first run
+> by `test/integration/globalSetup.ts`. Plain `npm run test:integration` is the CI variant and
+> trusts the ambient `DATABASE_URL`; with none set it now fails fast instead of silently
+> falling back to a shared database.
+>
+> ⚠️ **Why the name is per-checkout (2026-08-09).** It used to be one machine-global
+> `autoreply_test`. `test/integration/setup.ts` TRUNCATEs ~20 tables **before every test**, so
+> two suites running at once — a deploy gate in the main checkout and a `test:integration:local`
+> in any worktree — delete each other's fixtures. That produced a **false red** in the deploy
+> gate: 29 failures across 13 files, all rows-vanishing-mid-test, ending in a FK violation on
+> `workspaces.owner_id` because the other run had just truncated `users`. The same overlap also
+> killed an earlier gate run outright, since Postgres refuses `DROP DATABASE` while another
+> session is connected. The gate's lock is per-checkout and a bare `test:integration:local`
+> takes no lock at all, so isolating the database — not locking — is the fix. ⛔ Do **not**
+> "solve" a blocked drop with `DROP DATABASE ... WITH (FORCE)`: that makes your run succeed by
+> force-terminating someone else's suite.
+>
+> Consequence to keep an eye on: each checkout that runs integration tests leaves one
+> `autoreply_test_*` database behind, and deleting a worktree does not remove its database. They
+> are small, but this host runs near a full disk — list and prune stale ones with:
+>
+> ```bash
+> psql -h localhost -p 5433 -U postgres -tAc \
+>   "SELECT datname FROM pg_database WHERE datname LIKE 'autoreply\_test\_%'"
+> psql -h localhost -p 5433 -U postgres -c 'DROP DATABASE <name>'   # only if its checkout is gone
+> ```
 
 For Shopify integration tests, AI eval, mobile builds, Android releases, and in-browser QA loops (console/network/RTL/i18n checks via Chrome DevTools MCP) — see the `/shopify-dev`, `/eval`, `/build-mobile`, `/release-android`, and `/qa` skills.
 

@@ -31,8 +31,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # =============================================
 # Exclusive run lock — one gate run per working copy
 # =============================================
-# Two runs of this script in the SAME checkout share frontend/.next (and the
-# autoreply_test database). The frontend build script begins with `rm -rf .next`,
+# Two runs of this script in the SAME checkout share frontend/.next (and that
+# checkout's test database — the name is per-checkout as of 2026-08-09, so runs
+# in DIFFERENT checkouts no longer collide, but two runs in this one still do).
+# The frontend build script begins with `rm -rf .next`,
 # so run B wipes the build directory while run A sits between "Collecting page
 # data" and "Generating static pages" — A then dies with "Could not find a
 # production build in the '.next' directory" (next-export-no-build-id), an error
@@ -58,10 +60,26 @@ fi
 echo $$ > "$LOCK_DIR/pid"
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
-# Database URL: CI provides this via env; locally falls back to dev Docker on port 5433.
-export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5433/autoreply_test}"
+# Database URL: CI provides this via env; locally falls back to a test database
+# whose name is unique to THIS checkout, so a gate run and a suite running in
+# another worktree cannot truncate each other's fixtures. scripts/test-db-url.sh
+# is the single source of truth and carries the full rationale.
+export DATABASE_URL="${DATABASE_URL:-$("$REPO_ROOT/scripts/test-db-url.sh")}"
 PG_HOST=$(echo "$DATABASE_URL" | sed -E 's|.*@([^:/]+).*|\1|')
 PG_PORT=$(echo "$DATABASE_URL" | sed -E 's|.*:([0-9]+)/.*|\1|')
+# Database name = last path segment, minus any ?query string.
+TEST_DB_NAME="${DATABASE_URL##*/}"
+TEST_DB_NAME="${TEST_DB_NAME%%\?*}"
+
+# The naming rules must hold before anything relies on them: step 6 DROPs whatever
+# this resolves to, and `test:integration:local` has to resolve the identical name
+# or the gate would migrate one database while the suite reads another. Checked
+# here rather than at step 6 so a broken invariant fails in seconds, not minutes.
+if ! node --test "$REPO_ROOT/scripts/__tests__/test-db-url.test.mjs" > /dev/null 2>&1; then
+    echo -e "${RED}❌ scripts/test-db-url.sh self-tests failed — test-database isolation is not trustworthy${NC}"
+    node --test "$REPO_ROOT/scripts/__tests__/test-db-url.test.mjs"
+    exit 1
+fi
 
 # =============================================
 # 0. Verify critical config files
@@ -827,21 +845,40 @@ fi
 # This prevents schema drift issues from previous drizzle-kit push:pg runs.
 # Integration tests now use migrations (not push:pg) which match production.
 #
-# SAFETY: This only affects autoreply_test (test DB), never production.
+# SAFETY: the name must start with autoreply_test AND the server must be local.
+# This was an OR until 2026-08-09, which meant ANY database reachable on
+# localhost — including the dev database `autoreply` — was eligible to be
+# DROPPED by the gate. Both conditions are required now.
 # Integration tests should always start with a fresh database to ensure reproducibility.
-echo "   Setting up clean test database (autoreply_test)..."
-if [[ "$DATABASE_URL" == *"autoreply_test"* ]] || [[ "$PG_HOST" == "localhost" ]] || [[ "$PG_HOST" == "127.0.0.1" ]]; then
-    # Terminate lingering connections (e.g. from a previous test run) so DROP succeeds
-    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
-        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='autoreply_test' AND pid <> pg_backend_pid()" > /dev/null 2>&1
-    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
-        "DROP DATABASE IF EXISTS autoreply_test" > /dev/null 2>&1
-    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
-        "CREATE DATABASE autoreply_test" > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Test database created${NC}"
+echo "   Setting up clean test database (${TEST_DB_NAME})..."
+if [[ "$TEST_DB_NAME" == autoreply_test* ]] \
+    && { [[ "$PG_HOST" == "localhost" ]] || [[ "$PG_HOST" == "127.0.0.1" ]]; }; then
+    # Every psql call below used to be silenced with `> /dev/null 2>&1`. Combined
+    # with `set -e` at the top of this script, that made a failure here INVISIBLE:
+    # the gate died immediately after the line above and printed nothing at all,
+    # so the deploy log showed a bare "Pre-deploy checks failed!" with no cause.
+    # Seen live 2026-08-09; the failing command was DROP DATABASE, which Postgres
+    # refuses while another session is connected to the database. Capture the
+    # output and print it on failure instead.
+    _DB_LOG=$(mktemp)
+    _test_psql() {
+        PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres \
+            -v ON_ERROR_STOP=1 -q -c "$1" >> "$_DB_LOG" 2>&1
+    }
+    # Terminate connections left behind by a previous run in THIS checkout. No
+    # other run can be attached: the database name is unique to this checkout.
+    if ! _test_psql "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${TEST_DB_NAME}' AND pid <> pg_backend_pid()" \
+        || ! _test_psql "DROP DATABASE IF EXISTS ${TEST_DB_NAME}" \
+        || ! _test_psql "CREATE DATABASE ${TEST_DB_NAME}"; then
+        echo -e "${RED}   ❌ Could not recreate test database ${TEST_DB_NAME} on ${PG_HOST}:${PG_PORT}!${NC}"
+        cat "$_DB_LOG"; rm -f "$_DB_LOG"
+        exit 1
+    fi
+    rm -f "$_DB_LOG"
+    echo -e "${GREEN}   ✅ Test database created (${TEST_DB_NAME})${NC}"
 else
-    echo -e "${RED}   ❌ Safety check failed: Not running on localhost!${NC}"
-    echo -e "${RED}   Test database operations are only allowed locally.${NC}"
+    echo -e "${RED}   ❌ Safety check failed: refusing to drop '${TEST_DB_NAME}' on ${PG_HOST}.${NC}"
+    echo -e "${RED}   The test database must be named autoreply_test* and live on localhost.${NC}"
     exit 1
 fi
 

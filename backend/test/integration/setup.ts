@@ -14,8 +14,16 @@ import postgres from 'postgres';
 import { sql, eq } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 
-const connectionString =
-    process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/autoreply_test';
+// No default — see globalSetup.ts. The test database name is per-checkout
+// (scripts/test-db-url.sh); a hardcoded fallback would quietly point this file
+// at a database shared with every other checkout, whose per-test TRUNCATE would
+// then delete another run's fixtures mid-test.
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error(
+        'DATABASE_URL is not set. Run integration tests with `npm run test:integration:local`.',
+    );
+}
 
 // Set DATABASE_URL so that any module importing from ../../src/db uses the test database.
 // This must happen before any app module is imported.
