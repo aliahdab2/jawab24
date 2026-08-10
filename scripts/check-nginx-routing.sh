@@ -79,52 +79,64 @@ echo "nginx -t: OK"
 echo
 
 # --- Expectations -------------------------------------------------------------
-# Merchant-facing Next.js pages MUST reach the frontend; OAuth/webhook/API
-# surfaces MUST reach the backend. Keep this table in step with the platform
-# `location` blocks in nginx/nginx.conf.
+# Format: <requested path>|<expected upstream> <expected path AT the upstream>
+#
+# Asserting the upstream alone is not enough. The backend mounts Zid at
+# `prefix: '/zid'` (integrations/zid.ts) and Salla at '/salla', while the
+# `location /api/` block carries `rewrite ^/api/(.*)$ /$1 break`. So a block
+# that reached the right upstream but rewrote (or failed to rewrite) the path
+# would still 404 at Fastify. The stubs echo the request line they received,
+# which is exactly what the real backend would see.
+#
+# Keep this table in step with the platform `location` blocks in nginx.conf.
 ROUTES="
-/salla/onboarding|FRONTEND
-/salla/connected|FRONTEND
-/shopify/onboarding|FRONTEND
-/zid/onboarding|FRONTEND
-/salla/auth|BACKEND
-/salla/auth/callback|BACKEND
-/salla/webhooks|BACKEND
-/shopify/auth|BACKEND
-/shopify/webhooks|BACKEND
-/zid/auth|BACKEND
-/zid/auth/callback|BACKEND
-/zid/webhooks|BACKEND
-/zid/store|BACKEND
-/api/zid/auth|BACKEND
+/salla/onboarding|FRONTEND_/salla/onboarding
+/salla/connected|FRONTEND_/salla/connected
+/shopify/onboarding|FRONTEND_/shopify/onboarding
+/zid/onboarding|FRONTEND_/zid/onboarding
+/salla/auth|BACKEND_/salla/auth
+/salla/auth/callback|BACKEND_/salla/auth/callback
+/salla/webhooks|BACKEND_/salla/webhooks
+/shopify/auth|BACKEND_/shopify/auth
+/shopify/webhooks|BACKEND_/shopify/webhooks
+/zid/auth|BACKEND_/zid/auth
+/zid/auth/callback|BACKEND_/zid/auth/callback
+/zid/webhooks?e=app.market.application.uninstall&sid=42|BACKEND_/zid/webhooks?e=app.market.application.uninstall&sid=42
+/zid/store|BACKEND_/zid/store
+/api/zid/auth|BACKEND_/zid/auth
 "
 
 fails=0
-printf '%-32s %-9s %-9s %s\n' "PATH" "EXPECT" "ACTUAL" "RESULT"
-printf '%-32s %-9s %-9s %s\n' "--------------------------------" "---------" "---------" "------"
+printf '%-46s %-34s %s\n' "REQUESTED" "REACHES (upstream + path)" "RESULT"
+printf '%-46s %-34s %s\n' "----------------------------------------------" \
+    "----------------------------------" "------"
 
 for entry in $ROUTES; do
     [ -z "$entry" ] && continue
     path="${entry%%|*}"
-    expect="${entry##*|}"
+    expect="$(printf '%s' "${entry##*|}" | tr '_' ' ')"
 
     body="$(docker exec "$CONTAINER" curl -sk --max-time 5 \
         -H 'Host: jawab24.com' "https://127.0.0.1${path}" 2>/dev/null)"
-    actual="$(printf '%s' "$body" | awk '{print $1; exit}')"
-    [ -z "$actual" ] && actual="(none)"
+    actual="$(printf '%s' "$body" | head -n1 | tr -d '\r')"
+    [ -z "$actual" ] && actual="(no response)"
 
     if [ "$actual" = "$expect" ]; then
-        printf '%-32s %-9s %-9s %s\n' "$path" "$expect" "$actual" "ok"
+        printf '%-46s %-34s %s\n' "$path" "$actual" "ok"
     else
-        printf '%-32s %-9s %-9s %s\n' "$path" "$expect" "$actual" "WRONG"
+        printf '%-46s %-34s %s\n' "$path" "$actual" "WRONG"
+        printf '%-46s %-34s\n' "" "expected: $expect"
         fails=$((fails + 1))
     fi
 done
 
 echo
 if [ "$fails" -ne 0 ]; then
-    echo "FAIL: $fails route(s) reach the wrong upstream."
-    echo "A page landing on BACKEND (or nothing) is a 404 for the merchant."
+    echo "FAIL: $fails route(s) wrong."
+    echo "  - wrong upstream: a Next.js page on BACKEND (or an OAuth callback on"
+    echo "    FRONTEND) is a 404 for the merchant."
+    echo "  - wrong path: right upstream, but Fastify has no route at that path,"
+    echo "    so it 404s just the same."
     exit 1
 fi
-echo "PASS: all $(printf '%s' "$ROUTES" | grep -c '|') routes reach the expected upstream."
+echo "PASS: all $(printf '%s' "$ROUTES" | grep -c '|') routes reach the expected upstream AND path."
