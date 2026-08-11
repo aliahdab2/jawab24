@@ -5,14 +5,6 @@ import { AppSkeleton } from '@/components/ui';
 import { captureError } from '@/lib/sentryHelpers';
 
 /**
- * Fallback page for Android App Links.
- *
- * Normally, Android intercepts https://jawab24.com/auth/app-sync and opens the native
- * app directly (via App Links), so this page is never rendered. It only loads in Chrome
- * when App Links verification hasn't completed yet (e.g. fresh install before first
- * background verification). In that case we forward via the custom scheme.
- */
-/**
  * The parameters a real bridge hand-off carries. Their PRESENCE is what makes a
  * token-less arrival a defect worth alerting on rather than an ordinary visit.
  *
@@ -24,6 +16,14 @@ import { captureError } from '@/lib/sentryHelpers';
  */
 const BRIDGE_PARAMS = ['token', 'fbToken', 'redirect', 'user'] as const;
 
+/**
+ * Fallback page for Android App Links.
+ *
+ * Normally, Android intercepts https://jawab24.com/auth/app-sync and opens the native
+ * app directly (via App Links), so this page is never rendered. It only loads in Chrome
+ * when App Links verification hasn't completed yet (e.g. fresh install before first
+ * background verification). In that case we forward via the custom scheme.
+ */
 export default function AuthAppSync() {
   const router = useRouter();
 
