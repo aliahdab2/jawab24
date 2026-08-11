@@ -67,6 +67,10 @@ const PLATFORMS: PlatformConfig[] = [
     icon: <ShopifyIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-emerald',
     storeMetaClass: 'alert-success border',
+    // Jawab24 is not published on the Shopify App Store yet (2026-08-11), so
+    // the card must not imply a finished integration. The connect flow stays
+    // open for admin/early-access testing — see the `status` docs above.
+    status: 'coming_soon',
     getReconnectPath: (domain) => `/shopify/auth?shop=${encodeURIComponent(domain)}`,
     getStore: ecommerceApi.getStore,
     syncProducts: ecommerceApi.syncProducts,
@@ -82,6 +86,10 @@ const PLATFORMS: PlatformConfig[] = [
     icon: <SallaIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-brand',
     storeMetaClass: 'status-brand border',
+    // Not published on the Salla App Store yet (2026-08-11). Partner identity is
+    // verified and the listing form is reachable, but an approved partner
+    // account is not a published app — the card said "live" for neither.
+    status: 'coming_soon',
     getReconnectPath: () => '/salla/auth',
     getStore: sallaApi.getStore,
     syncProducts: sallaApi.syncProducts,
