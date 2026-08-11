@@ -113,6 +113,38 @@ class FactCollectionsController {
 
     /** PATCH /fact-collections/:collectionId — rename the list. The label is the
      *  prompt block's header, so this is a reply-affecting edit, not cosmetic. */
+    /**
+     * DELETE /fact-collections/:collectionId — remove a list and its rows.
+     *
+     * Deliberately unbuilt until 2026-08-10, when the reason arrived: a
+     * merchant created a list from the editor, could not undo it, and left a
+     * duplicate in production that had to be removed over SSH. A door that
+     * creates without a matching door that undoes is not a finished feature.
+     *
+     * The service cascades the rows and invalidates the page's reply caches,
+     * so a deleted list stops being quoted on the next question. The blast
+     * radius (a directory can hold hundreds of rows) is answered in the UI by
+     * a two-step confirm that names the row count — never here: an endpoint
+     * that second-guesses an authorized, explicit request is a worse contract
+     * than one that does what it is told.
+     */
+    async deleteCollection(
+        request: FastifyRequest<{ Params: { pageId: string; collectionId: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
+        if (!page) return reply.status(404).send({ error: 'Page not found', code: 'PAGE_NOT_FOUND' });
+
+        wireLogger(request);
+        const deleted = await factCollectionsService.deleteCollection(
+            request.params.pageId,
+            request.params.collectionId,
+        );
+        if (!deleted) return reply.status(404).send({ error: 'Collection not found', code: 'COLLECTION_NOT_FOUND' });
+        return reply.send({ data: deleted });
+    }
+
     async renameCollection(
         request: FastifyRequest<{ Params: { pageId: string; collectionId: string }; Body: unknown }>,
         reply: FastifyReply,

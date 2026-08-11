@@ -99,6 +99,16 @@ async function openCard(title: string) {
 describe('BusinessListsSection', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  /** Per-list management actions (rename · delete · completeness) live behind
+   *  the list's ⋯ menu since the crowding fix (2026-08-11): twelve flat
+   *  buttons above the content became one line per list. Tests reach the
+   *  doors the way a merchant now does — through the menu. */
+  const openListMenu = async (label: string) => {
+    fireEvent.click(await screen.findByRole('button', {
+      name: en.lists.listOptionsFor.replace('{list}', label),
+    }));
+  };
+
   // The old rollout gate (absence = nothing rendered, for everyone) split with
   // the G1b creation UI: an ADMIN now gets the «add list» door instead of a
   // dead end, while a plain member still sees nothing — every affordance in
@@ -191,12 +201,13 @@ describe('BusinessListsSection', () => {
     expect(screen.getByText('1 expired row')).toBeInTheDocument();
   });
 
-  it('asks the completeness question per LIST while un-asked, and sends the tri-state answer', async () => {
+  it('asks the completeness question in the LIST\'s own ⋯ menu, and sends the tri-state answer', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.setCompleteness).mockResolvedValue({} as any);
     renderSection();
 
     await screen.findByText('دورة ICDL');
+    await openListMenu('مواعيد الدورات المعلنة');
     fireEvent.click(screen.getByText('Yes, complete'));
     expect(factCollectionsApi.setCompleteness).toHaveBeenCalledWith(PAGE, 'coll-slots', true);
   });
@@ -599,6 +610,103 @@ describe('BusinessListsSection', () => {
     });
   });
 
+  /**
+   * «إضافة عنصر» on the entity-card layout — the door that never existed.
+   * The per-card «+» only adds rows to an existing entity, so a brand-new
+   * course could not be put into ANY list from this layout (owner, 2026-08-11).
+   */
+  describe('adding a NEW item on the entity-card layout', () => {
+    it('expands to per-list chips, and a chip opens the row sheet for THAT list', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: en.lists.addItem }));
+      fireEvent.click(screen.getByRole('button', { name: `${en.lists.addItem} — أسعار الدورات` }));
+
+      // The existing row sheet, subtitled with the chosen list — same second
+      // step as creation, so the flows cannot drift.
+      expect(screen.getByRole('heading', { name: en.lists.addRow })).toBeInTheDocument();
+      expect(screen.getByText('أسعار الدورات', { selector: 'p' })).toBeInTheDocument();
+    });
+
+    it('tapping a row in a list opens THAT row — not the whole list as one item', async () => {
+      // The directory row's group is SYNTHETIC — it carries every row in the
+      // collection — so routing the tap to the entity sheet opened all 47
+      // sessions as a single «item» titled with the LIST's name (owner, 2026-08-11).
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+      // Both sessions are on screen; tap the live one.
+      fireEvent.click(screen.getByText(/الأحد والثلاثاء/));
+
+      // The single-row editor, carrying THIS row's values.
+      expect(screen.getByRole('heading', { name: en.lists.editRow })).toBeInTheDocument();
+      expect((screen.getByLabelText(en.lists.rowName) as HTMLInputElement).value).toBe('دورة ICDL');
+      // …and never the entity sheet, whose save spans every row it was given
+      // (its footer is «Save changes», the row sheet's is plain «Save»).
+      expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    });
+
+    it('a dated list shows each row\'s DATE — the field the list exists for', async () => {
+      // Opening «مواعيد الدورات المعلنة» showed days and times with no date at
+      // all: the directory row was built for an outlet list and had no date
+      // column, and it is the date that decides whether the AI still mentions
+      // the row (owner, 2026-08-11).
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+
+      // The live slot's day-of-month leads its row, beside its day-name value.
+      const day = new Date(future).getDate().toString();
+      const dayChip = screen.getAllByTitle(en.lists.startsLabel);
+      expect(dayChip.length).toBeGreaterThan(0);
+      expect(dayChip[0]).toHaveTextContent(day);
+      // The directory row joins its attributes into one «label: value» line.
+      expect(screen.getByText(/الأحد والثلاثاء/)).toBeInTheDocument();
+    });
+
+    it('an UNDATED list grows no date column — a directory must not be given one', async () => {
+      const outlets: FactCollectionWithRows = {
+        id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 1,
+        rows: [
+          { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
+      renderSection();
+
+      await screen.findByText('صيدلية النرجس');
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+    });
+
+    it('a tapped strip line opens the LIST as a list — its rows, its own add door, no chooser', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      // Tap the list's line in the strip (its accessible name = label + count).
+      // Filtering the entity CARDS was the first attempt and measured wrong:
+      // prices and schedules cover the same courses, so either tap showed the
+      // same cards. Now the tap swaps in the DIRECTORY view of that one list.
+      fireEvent.click(screen.getByRole('button', { name: 'مواعيد الدورات المعلنة 2' }));
+
+      // The directory card: the list's own heading, the way back, and the
+      // entity cards gone (the price-only course has no card on screen).
+      expect(screen.getByRole('heading', { name: 'مواعيد الدورات المعلنة' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: en.lists.showAll })).toBeInTheDocument();
+
+      // Its own add door targets THIS list — no chooser step.
+      fireEvent.click(screen.getByRole('button', { name: en.lists.addItem }));
+      expect(screen.getByRole('heading', { name: en.lists.addRow })).toBeInTheDocument();
+      expect(screen.getByText('مواعيد الدورات المعلنة', { selector: 'p' })).toBeInTheDocument();
+    });
+  });
+
   describe('«add list» creation flow (G1b creation UI)', () => {
     it('names the list, collects the FIRST item, and creates both in one atomic POST', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [] } } as any);
@@ -619,6 +727,8 @@ describe('BusinessListsSection', () => {
         rows: [{
           name: 'وسط المدينة',
           attributes: null, price: null, currency: null, startsAt: null, endsAt: null,
+          // A new row is available unless the merchant says otherwise.
+          isAvailable: true,
         }],
       }));
     });
@@ -663,6 +773,88 @@ describe('BusinessListsSection', () => {
   // بطاقة» to EVERY page — institute vocabulary asserted at an outlet
   // directory that has neither, and is not laid out as cards. Nothing in this
   // engine knows a vertical; the copy must not either (owner catch 2026-08-10).
+  /**
+   * REGRESSION GUARD FOR THE OTHER MERCHANTS.
+   *
+   * Only four workspaces can reach /business (`isCatalogVisible`), and two of
+   * them are external merchants whose pages this branch never set out to
+   * change. Their shapes are reproduced here from the prod row counts measured
+   * 2026-08-11 — a keyed 213-row outlet directory that happens to contain a
+   * few duplicate pharmacy names, and small un-keyed lists with none — so that
+   * the name-grouping added for the owner's course list can never silently
+   * restyle a directory it was not meant to touch.
+   *
+   * The counts are scaled down; the SHAPE (keyed vs not, duplicate names or
+   * not, dated or not) is exactly theirs, and the shape is what the layout
+   * decisions read.
+   */
+  describe('the other merchants on the allowlist are left alone', () => {
+    /** Feras — «نقاط البيع»: keyed by المنطقة, 213 rows / 208 distinct names,
+     *  i.e. a handful of pharmacies share a name across areas. */
+    const ferasDirectory = (): FactCollectionWithRows => ({
+      id: 'coll-outlets', label: 'نقاط البيع', keyAttr: 'المنطقة', isComplete: true, rowCount: 4,
+      rows: [
+        { id: 'f1', name: 'صيدلية الحياة', attributes: [{ label: 'المنطقة', value: 'جنزور' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'f2', name: 'صيدلية الريان', attributes: [{ label: 'المنطقة', value: 'جنزور' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        // The duplicate name — same pharmacy brand in a different area.
+        { id: 'f3', name: 'صيدلية الحياة', attributes: [{ label: 'المنطقة', value: 'تاجوراء' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'f4', name: 'صيدلية الواحة', attributes: [{ label: 'المنطقة', value: 'تاجوراء' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    });
+
+    /** Feras — «أسعار حفاضات بامبو»: un-keyed, every name distinct, priced. */
+    const ferasPrices = (): FactCollectionWithRows => ({
+      id: 'coll-diapers', label: 'أسعار حفاضات بامبو', keyAttr: null, isComplete: true, rowCount: 3,
+      rows: [
+        { id: 'd1', name: 'حفاضات بامبو رقم 1', attributes: [{ label: 'النوع', value: 'عادي' }, { label: 'الوزن', value: '2-4 كيلو' }], price: '38.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'd2', name: 'حفاضات بامبو جامبو رقم 3', attributes: [{ label: 'النوع', value: 'جامبو' }, { label: 'الوزن', value: '4-8 كيلو' }], price: '70.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'd3', name: 'حفاضات بامبو للسباحة', attributes: [{ label: 'النوع', value: 'سباحة' }], price: '46.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    });
+
+    it('Feras: a KEYED directory still groups by المنطقة — duplicate names never take over', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [ferasDirectory()] } } as any);
+      renderSection();
+
+      await screen.findByText('صيدلية الواحة');
+      // The area headers are the axis, exactly as before this branch.
+      expect(screen.getByText('جنزور')).toBeInTheDocument();
+      expect(screen.getByText('تاجوراء')).toBeInTheDocument();
+      // The duplicated pharmacy name appears under BOTH areas — never hoisted
+      // into a single name group that would break the area axis.
+      expect(screen.getAllByText('صيدلية الحياة')).toHaveLength(2);
+    });
+
+    it('Feras: an UN-KEYED price list with all-distinct names stays flat — no headers appear', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [ferasPrices()] } } as any);
+      renderSection();
+
+      await screen.findByText('حفاضات بامبو رقم 1');
+      // Every row keeps its own name inline; nothing became a group heading.
+      expect(screen.getByText('حفاضات بامبو جامبو رقم 3')).toBeInTheDocument();
+      expect(screen.getByText('حفاضات بامبو للسباحة')).toBeInTheDocument();
+      // No dates anywhere in his data → no date chips, no expiry copy.
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+      expect(screen.queryByText(new RegExp(en.lists.datesEnded.split('«')[0]))).toBeNull();
+    });
+
+    it('MES: small un-keyed lists render exactly as before — one row each, no grouping chrome', async () => {
+      const showrooms: FactCollectionWithRows = {
+        id: 'coll-showrooms', label: 'صالات الشركة', keyAttr: null, isComplete: null, rowCount: 2,
+        rows: [
+          { id: 's1', name: 'صالة أبو رمانة', attributes: [{ label: 'الهاتف', value: '0993301080' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+          { id: 's2', name: 'صالة المزة', attributes: [{ label: 'الهاتف', value: '0933222298' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [showrooms] } } as any);
+      renderSection();
+
+      await screen.findByText('صالة أبو رمانة');
+      expect(screen.getByText('صالة المزة')).toBeInTheDocument();
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+    });
+  });
+
   describe('the section hint is derived from the page, not assumed', () => {
     const outletsOnly: FactCollectionWithRows = {
       id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 2,
@@ -672,34 +864,24 @@ describe('BusinessListsSection', () => {
       ],
     };
 
-    it('a directory with no dates and no cross-list items is told ONLY that Jawab quotes it', async () => {
+    it('a directory is told ONE thing: Jawab quotes these lists verbatim', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outletsOnly] } } as any);
       renderSection();
 
       expect(await screen.findByText(en.lists.hintQuoted)).toBeInTheDocument();
-      expect(screen.queryByText(new RegExp(en.lists.hintGrouped))).toBeNull();
-      expect(screen.queryByText(new RegExp(en.lists.hintDated))).toBeNull();
     });
 
-    it('a page whose lists join on one item, with dated rows, earns all three clauses', async () => {
+    it('says the SAME one thing on a page whose lists join and carry dates', async () => {
+      // The layout clause described what the screen shows anyway, and the
+      // expiry clause is now said where it acts — at the date field, and in
+      // the freshness notice when a list runs out. Explaining the screen on
+      // arrival is the copy this page had too much of (owner, 2026-08-11).
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
-      expect(hint).toHaveTextContent(en.lists.hintGrouped);
-      expect(hint).toHaveTextContent(en.lists.hintDated);
-    });
-
-    it('lists that join but carry no date are never told about expiry', async () => {
-      const undatedSlots = slotCollection({
-        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: null, endsAt: null })),
-      });
-      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), undatedSlots] } } as any);
-      renderSection();
-
-      const hint = await screen.findByText(new RegExp(en.lists.hintQuoted));
-      expect(hint).toHaveTextContent(en.lists.hintGrouped);
-      expect(hint).not.toHaveTextContent(en.lists.hintDated);
+      const hint = await screen.findByText(en.lists.hintQuoted);
+      expect(hint).toHaveTextContent(en.lists.hintQuoted);
+      expect(hint.textContent?.trim()).toBe(en.lists.hintQuoted);
     });
   });
 
@@ -715,7 +897,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-prices', label: 'أسعار الدورات والشهادات' } } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel) as HTMLInputElement;
       // Prefilled with the CURRENT name — a rename is an edit, not a re-entry.
       expect(input.value).toBe('أسعار الدورات');
@@ -732,7 +915,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel);
 
       fireEvent.change(input, { target: { value: 'مواعيد الدورات المعلنة' } });
@@ -761,7 +945,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.renameCollection).mockResolvedValue({ data: { data: { id: 'coll-outlets', label: 'نقاط البيع' } } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('الصيدليات') }));
+      await openListMenu('الصيدليات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('الصيدليات') }));
       fireEvent.change(screen.getByLabelText(en.lists.newListNameLabel), { target: { value: 'نقاط البيع' } });
       fireEvent.click(screen.getByRole('button', { name: common.save }));
 
@@ -769,17 +954,23 @@ describe('BusinessListsSection', () => {
     });
 
     // Found in the UX audit: focus reset to <body> on close, so a keyboard user
-    // with three lists on the page restarted from the top each time.
-    it('returns focus to the door that opened it', async () => {
+    // with three lists on the page restarted from the top each time. The door
+    // is a menu ITEM now, which unmounts with the menu — so the return target
+    // is the list's ⋯ TRIGGER, which survives the whole journey (the menu
+    // hands it focus before the sheet mounts, or the sheet would capture the
+    // about-to-unmount item and restore nothing).
+    it('returns focus to the list\'s ⋯ trigger after the sheet closes', async () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      const door = await screen.findByRole('button', { name: renameDoor('أسعار الدورات') });
-      door.focus();
-      fireEvent.click(door);
+      const trigger = await screen.findByRole('button', {
+        name: en.lists.listOptionsFor.replace('{list}', 'أسعار الدورات'),
+      });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       fireEvent.click(screen.getByRole('button', { name: common.cancel }));
 
-      await waitFor(() => expect(document.activeElement).toBe(door));
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
     });
 
     // The cap used to be silent — typing just stopped at 120 characters.
@@ -787,7 +978,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       const input = screen.getByLabelText(en.lists.newListNameLabel);
 
       fireEvent.change(input, { target: { value: 'ق'.repeat(99) } });
@@ -811,7 +1003,8 @@ describe('BusinessListsSection', () => {
       vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
       renderSection();
 
-      fireEvent.click(await screen.findByRole('button', { name: renameDoor('أسعار الدورات') }));
+      await openListMenu('أسعار الدورات');
+      fireEvent.click(screen.getByRole('button', { name: renameDoor('أسعار الدورات') }));
       expect(screen.getByRole('dialog')).toBeInTheDocument();
 
       // What _app.tsx calls on a hardware back press.

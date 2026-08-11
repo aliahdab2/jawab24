@@ -13,11 +13,12 @@ import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/f
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, datedListFreshness,
+  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, sectionNameGroups, datedListFreshness,
   type FactListSection, type FactEntityUnit, type DatedListFreshness,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
+import { ListActionsMenu } from './ListActionsMenu';
 import { FactEntitySheet } from './FactEntitySheet';
 import { ListLabelSheet } from './ListLabelSheet';
 
@@ -117,6 +118,9 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  those objects, and a stale reference would re-open the sheet on the old
    *  label. */
   const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null);
+  /** «إضافة عنصر» expanded to its per-list choice chips (entity-card layout,
+   *  no filter active — with a filter the target list is already chosen). */
+  const [addingItem, setAddingItem] = useState(false);
 
   // Declared before EVERY consumer: the freshness memo takes it as a
   // dependency and `createSheets` is a JSX expression evaluated mid-body, so a
@@ -138,20 +142,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
     [groups],
   );
 
-  /**
-   * What this section promises, assembled from what the page actually holds.
-   *
-   * Only the first clause is true of every business: Jawab quotes these rows
-   * verbatim. The card-grouping clause belongs to pages whose lists JOIN on the
-   * same entity, and the expiry clause to pages that dated something at all —
-   * an outlet directory has neither, and telling it about prices, dates and
-   * cards describes an app the merchant is not looking at.
-   */
-  const hasDatedRow = useMemo(
-    () => collections.some((c) => c.rows.some((r) => r.startsAt !== null)),
-    [collections],
-  );
-
   /** Lists whose announced dates have run out, or are close to it. Derived
    *  per list — a page can have a healthy directory beside an exhausted
    *  schedule; the window itself lives with the rule, in factListLayout. */
@@ -164,11 +154,18 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         ),
     [collections, today],
   );
-  const sectionHint = [
-    t('lists.hintQuoted'),
-    ...(aggregates ? [t('lists.hintGrouped')] : []),
-    ...(hasDatedRow ? [t('lists.hintDated')] : []),
-  ].join(' ');
+  /**
+   * ONE sentence, the only one a merchant needs before the content: these
+   * lists are quoted verbatim to customers.
+   *
+   * It used to be three. The other two described the LAYOUT («each item's
+   * things are gathered in one card» — visible at a glance) and a MECHANISM
+   * («a dated row disappears after its date» — which now says itself, at the
+   * date field while you set it, and in the freshness notice when a list runs
+   * out). Explaining on arrival what the screen shows anyway is the copy this
+   * page had too much of (owner, 2026-08-11).
+   */
+  const sectionHint = t('lists.hintQuoted');
 
   /**
    * A failed load must NEVER look like an empty one. Rendering `null` on error
@@ -333,6 +330,26 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
       toast.success(t('lists.saved'));
     } catch (error) {
       await reportWriteFailure(error, 'rename-fact-collection');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Delete a whole list. Only ever reached from the ⋯ menu's armed second
+   *  tap (the menu owns the confirm and disarms itself on close). The server
+   *  cascades the rows and retires the page's reply caches, so the AI stops
+   *  quoting the list on the next question — no deploy, no restart. */
+  const removeCollection = async (collection: FactCollectionWithRows) => {
+    setSaving(true);
+    try {
+      await factCollectionsApi.deleteCollection(pageId, collection.id);
+      await refresh();
+      // The open sheets hold ids this refetch may have just invalidated.
+      setEditing(null);
+      setEntityEditing(null);
+      toast.success(t('lists.listDeleted', { list: collection.label }));
+    } catch (error) {
+      await reportWriteFailure(error, 'delete-fact-collection');
     } finally {
       setSaving(false);
     }
@@ -524,27 +541,6 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
   );
 
   /**
-   * «تعديل الاسم» — the only door onto a list's label.
-   *
-   * The label is not decoration: the prompt renderer puts it above the list's
-   * rows, so a typo reaches customers in the AI's own answers. An explicitly
-   * LABELLED button rather than a bare pencil (the affordance ruling from the
-   * #638 UX pass), and the accessible name carries the list it belongs to —
-   * «تعديل الاسم» alone is ambiguous on a page with several lists.
-   */
-  const renameButton = (collection: FactCollectionWithRows) => readOnly ? null : (
-    <button
-      type="button"
-      onClick={() => setRenaming({ id: collection.id, label: collection.label })}
-      aria-label={t('lists.renameActionFor', { list: collection.label })}
-      className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-theme-border px-3 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-surface-100 flex-shrink-0"
-    >
-      <Pencil className="w-3 h-3" aria-hidden="true" />
-      {t('lists.renameAction')}
-    </button>
-  );
-
-  /**
    * The shell every tappable row shares: a real <button> for someone who can
    * edit, plain markup for a member. One helper rather than a `readOnly &&` at
    * each of the four row shapes — a row that forgot the check would be exactly
@@ -730,26 +726,64 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
 
   /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
    *  detail beneath, price at the end when the list prices things. */
-  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropLabel: string | null = null) => {
+  const directoryRow = (
+    group: FactListGroup,
+    section: FactListSection,
+    row: FactRowDto,
+    expired: boolean,
+    /** `dropLabel` — the attribute the group header already said.
+     *  `hideName` — the group header IS the name (name-grouped lists), so the
+     *  row carries only what distinguishes it. */
+    opts: { dropLabel?: string | null; hideName?: boolean } = {},
+  ) => {
+    const { dropLabel = null, hideName = false } = opts;
     const pairs = rowDisplayAttributes(
       section, row,
       dropLabel ? { keepKey: false, dropLabels: [dropLabel] } : { keepKey: true },
     );
+    // A dated row LEADS with its date — the same agenda chip the session rows
+    // use inside entity cards. Without it, opening «مواعيد الدورات المعلنة»
+    // showed days and times with no DATE at all, which is the one field that
+    // list exists for and the one that decides whether the AI still mentions
+    // the row (owner: «بالمواعيد أنا ما عم شوف تاريخ», 2026-08-11). Undated
+    // rows keep the flat line — an outlet directory must grow no date column.
+    const dateParts = formatPlainDateParts(row.startsAt ?? row.endsAt, intlLocale);
     return (
       <li key={row.id} className="list-none">
         {rowShell(
           'w-full min-h-[44px] flex items-center gap-3 px-4 py-2 text-start',
           expired,
-          () => openEntity(group, { collection: section.collection, row }),
+          // THIS row, in the single-row editor — never the entity sheet.
+          // A directory row's group is SYNTHETIC: it carries every row in the
+          // collection, so the entity sheet opened all 47 sessions as one
+          // "item" titled with the LIST's name (owner: «معقول عنا كل هدا
+          // التواريخ», 2026-08-11). One row tapped is one row edited.
+          () => setEditing({ collection: section.collection, row }),
           <>
+          {dateParts && (
+            <span
+              className="flex-shrink-0 w-11 rounded-lg bg-card border border-theme-border text-center py-1 leading-tight"
+              title={t('lists.startsLabel')}
+            >
+              <span className="block text-sm font-bold text-foreground tabular-nums">{dateParts.day}</span>
+              <span className="block text-[10px] text-muted-foreground">{dateParts.month}</span>
+            </span>
+          )}
           {/* ONE flowing line — name then muted detail; wraps only when it must.
               The two-line row cost 13 size rows twice the height they need. */}
           <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
-            <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+            {!hideName && (
+              <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+            )}
             {pairs.length > 0 && (
-              <span className="text-xs text-muted-foreground break-words" dir="auto">
+              <span className={`break-words ${hideName ? 'text-sm text-foreground' : 'text-xs text-muted-foreground'}`} dir="auto">
                 {pairs.map((a) => `${a.label}: ${a.value}`).join(t('lists.listSeparator'))}
               </span>
+            )}
+            {/* A tier with nothing but a price would be a blank line once the
+                header takes the name — the price is what distinguishes it. */}
+            {hideName && pairs.length === 0 && !row.price && (
+              <span className="text-sm text-foreground break-words" dir="auto">{row.name}</span>
             )}
             {expired && expiredBadge}
           </span>
@@ -803,32 +837,68 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         </div>
       )}
 
-      {/* The completeness word (D-038, tri-state) belongs to the LIST — it
-          changes what customers are TOLD about absence. On directory pages the
-          control lives inside each list's own card (see below); the stacked
-          block here serves only the entity-card layout, where cards are per
-          ENTITY and per-LIST controls have no card to live in. The question +
-          consequence hint are said ONCE for the whole block, not per list. */}
+      {/* The per-list management strip — the entity-card layout's ONLY
+          per-list surface (cards are per ENTITY, so rename/delete/completeness
+          have no card to live in). ONE LINE per list: label + row count +
+          answered-state chip + ⋯. The flat version stacked TWELVE always-
+          visible buttons here on a three-list page (rename + delete + the two
+          completeness answers, each) — measured at 4.3 viewport heights of
+          section on 390px the night it shipped; the owner's «عم حسهم كتار».
+          The actions now live behind ⋯ (ListActionsMenu), completeness
+          question included. */}
       {aggregates && (
-        <div className="mt-3 rounded-xl border border-theme-border bg-muted/40">
-          <div className="px-3 pt-2.5 pb-2 border-b border-theme-border/60">
-            <span className="block text-xs font-semibold text-foreground">{t('lists.completenessAsk')}</span>
-            <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
-          </div>
-          <div className="divide-y divide-theme-border/60">
-            {collections.map((collection) => (
-              <div key={collection.id} className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
-                {/* On the entity-card layout this block is the ONLY per-list
-                    surface — the cards are per ENTITY — so the rename door
-                    lives here or nowhere. */}
-                <span className="min-w-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-foreground break-words" dir="auto">{collection.label}</span>
-                  {renameButton(collection)}
+        <div className="mt-3 rounded-xl border border-theme-border bg-muted/40 divide-y divide-theme-border/60">
+          {collections.map((collection) => (
+            <div key={collection.id} className="px-3 py-1.5 flex items-center gap-2">
+              {/* The line is a DOOR, not just an index entry: tapping it
+                  filters the cards below to the entities holding a row in
+                  this list, tapping again shows all. Without this, the strip
+                  promised «الأونلاين (3)» with no way to lay eyes on the 3 —
+                  their rows live scattered inside entity cards (owner:
+                  «التاجر بضيع», 2026-08-11). A read action, so members get
+                  it too. */}
+              <button
+                type="button"
+                aria-pressed={activeListId === collection.id}
+                // Same rule as the directory tabs: switching views clears the
+                // search — a leftover query would filter the next view with
+                // nothing on screen explaining why.
+                onClick={() => { setActiveListId(activeListId === collection.id ? null : collection.id); setListSearch(''); }}
+                className={`min-w-0 flex-1 min-h-[36px] flex items-center gap-2 rounded-lg px-1.5 -ms-1.5 text-start hover:bg-surface-100 ${
+                  activeListId === collection.id ? 'text-brand-700 dark:text-brand-400' : 'text-foreground'
+                }`}
+              >
+                <span className="min-w-0 text-xs font-semibold break-words" dir="auto">
+                  {collection.label}
                 </span>
-                {completenessControl(collection)}
-              </div>
-            ))}
-          </div>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums flex-shrink-0 ${
+                  activeListId === collection.id ? 'bg-brand-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}>
+                  {collection.rows.length}
+                </span>
+              </button>
+              {/* The answered completeness state, as a chip — the consequence
+                  sentence lives in the menu where there is room for it. An
+                  unanswered list shows no chip; the question waits in ⋯. */}
+              {collection.isComplete !== null && (
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold flex-shrink-0 ${
+                  collection.isComplete ? 'status-success border-transparent' : 'bg-card border-theme-border text-muted-foreground'
+                }`}>
+                  {collection.isComplete ? t('lists.completenessChipComplete') : t('lists.completenessChipPartial')}
+                </span>
+              )}
+              {!readOnly && (
+                <ListActionsMenu
+                  collection={collection}
+                  saving={saving}
+                  onRename={() => setRenaming({ id: collection.id, label: collection.label })}
+                  onDelete={() => void removeCollection(collection)}
+                  onSetCompleteness={(isComplete) => void setCompleteness(collection, isComplete)}
+                  showCompleteness
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -869,9 +939,38 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           labelled section per list so a price and a session can't be
           confused. Section titles are the merchant's own list labels. */}
       <div className="mt-4 space-y-3">
-        {!aggregates && collections
-          .filter((collection) => collections.length <= 1
-            || collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id))
+        {/* A tapped strip line REPLACES the cards with that list's directory
+            view (below) — this line says so where the content is, with the
+            way back. */}
+        {aggregates && activeListId && (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+            <span className="min-w-0 break-words" dir="auto">
+              {t('lists.filteringByList', {
+                list: collections.find((c) => c.id === activeListId)?.label ?? '',
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setActiveListId(null)}
+              className="min-h-[32px] flex-shrink-0 rounded-full border border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+            >
+              {t('lists.showAll')}
+            </button>
+          </p>
+        )}
+        {(!aggregates || activeListId !== null) && collections
+          .filter((collection) => {
+            // Entity-card pages: a tapped strip line opens THAT list in this
+            // directory presentation — the list AS a list (its own columns,
+            // key-grouped), not the same entity cards minus a few. Filtering
+            // cards was the first attempt and it measured wrong the same
+            // night: prices and schedules cover nearly the same courses, so
+            // tapping either list showed the same cards with the same content
+            // (owner: «بتضغط على مواعيد الدورات بترجع بتطلع نفسها»).
+            if (aggregates) return collection.id === activeListId;
+            return collections.length <= 1
+              || collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id);
+          })
           .map((collection) => {
           const syntheticGroup: FactListGroup = {
             key: collection.id,
@@ -905,7 +1004,19 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="min-w-0 flex items-center gap-2 flex-wrap">
                     <h3 className="text-[15px] font-bold text-foreground break-words" dir="auto">{collection.label}</h3>
-                    {renameButton(collection)}
+                    {/* Same ⋯ as the strip, minus the completeness section —
+                        this card already asks that question in its own body,
+                        and it must not be asked twice. */}
+                    {!readOnly && (
+                      <ListActionsMenu
+                        collection={collection}
+                        saving={saving}
+                        onRename={() => setRenaming({ id: collection.id, label: collection.label })}
+                        onDelete={() => void removeCollection(collection)}
+                        onSetCompleteness={(isComplete) => void setCompleteness(collection, isComplete)}
+                        showCompleteness={false}
+                      />
+                    )}
                   </span>
                   {collection.isComplete !== null && completenessControl(collection)}
                 </div>
@@ -955,7 +1066,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                 // size list). Falls back to the flat list whenever the data
                 // doesn't compress (no partition / all unique).
                 const partitionLabel = sectionPartitionLabel(section);
-                const keyGroups = sectionKeyGroups(section, live, partitionLabel);
+                // Last resort before a flat list: group by the row NAME. A
+                // price list repeats one course per tier, and flat that reads
+                // as the same name three times («ما نكرر اسم الدورة»). The
+                // header says it once; the rows carry only what differs.
+                const nameGroups = sectionNameGroups(live);
+                const keyGroups = sectionKeyGroups(section, live, partitionLabel) ?? nameGroups;
+                const groupedByName = !sectionKeyGroups(section, live, partitionLabel) && !!nameGroups;
                 if (!keyGroups) {
                   return (
                     <ul className="divide-y divide-theme-border/60">
@@ -968,14 +1085,20 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                   <div>
                     {keyGroups.map((kg) => (
                       <div key={kg.value ?? '__missing__'}>
-                        {/* sticky: on a 224-row directory the reader must
+                        {/* A name group of ONE gets no header: a heading over a
+                            single row spends two lines to say what the row
+                            already says, which is the opposite of why the
+                            grouping exists. Key groups always keep theirs —
+                            the area IS the axis there, even with one outlet. */}
+                        {!(groupedByName && kg.rows.length === 1) && (
+                        /* sticky: on a 224-row directory the reader must
                             always know which area they are inside. The offset
                             mirrors the mobile top bar (fixed, h-14 sm:h-16,
                             landscape h-10, hidden from lg) — top-0 alone pins
                             the header BEHIND that bar. Solid bg (not /60) so
                             scrolled rows don't ghost through. The value sits
                             in a FILLED brand pill — items are outlined chips,
-                            the header is filled: unmistakably a heading. */}
+                            the header is filled: unmistakably a heading. */
                         <div className="sticky top-14 sm:top-16 max-lg:landscape:top-10 lg:top-0 z-10 flex items-center gap-2 px-4 py-2 bg-surface-100 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
                           <span className="rounded-full bg-brand-600 text-white text-[15px] font-bold px-3.5 py-1 break-words" dir="auto">
                             {kg.display ?? t('lists.missingKeyGroup', { label: partitionLabel ?? '' })}
@@ -997,6 +1120,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                             </button>
                           )}
                         </div>
+                        )}
                         {/* Name-only rows (no price, no attributes left once the
                             header said the key) compress into wrapped chips —
                             224 pharmacies must not cost 224 full-width rows.
@@ -1021,7 +1145,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                                 ) : (
                                   <button
                                     type="button"
-                                    onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
+                                    onClick={() => setEditing({ collection: section.collection, row: entry.row })}
                                     title={entry.row.name}
                                     className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
                                   >
@@ -1034,7 +1158,11 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                           </ul>
                         ) : (
                           <ul className="divide-y divide-theme-border/60">
-                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, kg.display ? partitionLabel : null))}
+                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, {
+                              dropLabel: groupedByName ? null : (kg.display ? partitionLabel : null),
+                              // A headerless singleton must still say its name.
+                              hideName: groupedByName && kg.rows.length > 1,
+                            }))}
                           </ul>
                         )}
                       </div>
@@ -1073,7 +1201,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             </div>
           );
         })}
-        {aggregates && (() => {
+        {aggregates && activeListId === null && (() => {
           // Live search over ALL entity cards — same folding as the directory
           // search (either script's digits, hamza/taa-marbuta), matching the
           // entity name and any row name/attribute. The pilot page holds 40
@@ -1164,25 +1292,32 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           const datesBadge = collections.some(isDatedCollection) && (() => {
             // «قادمة» is a promise — only rows with a REAL future start
             // date earn it (round-8: wrong counts destroy trust).
-            // Undated announced sessions get their own neutral badge
-            // instead of inflating the upcoming number.
+            //
+            // ABSENCE IS NOT NEWS. «لا تواريخ» rendered on 28 of this page's
+            // 39 cards, saying nothing the merchant can act on and competing
+            // with the price for the eye (measured 2026-08-11, owner: remove
+            // what isn't needed). A badge now appears only when it CARRIES
+            // something: dates to come, or sessions announced without one —
+            // which IS actionable, since a session with no date is a gap.
             const live = group.rows.filter((r) =>
               isDatedCollection(r.collection) && !isExpired(r.row));
             const scheduled = live.filter((r) => !!r.row.startsAt).length;
             const unscheduled = live.length - scheduled;
-            return scheduled > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">
-                {t('lists.upcomingCount', { count: scheduled })}
-              </span>
-            ) : unscheduled > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
-                {t('lists.announcedCount', { count: unscheduled })}
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
-                {t('lists.noSessions')}
-              </span>
-            );
+            if (scheduled > 0) {
+              return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">
+                  {t('lists.upcomingCount', { count: scheduled })}
+                </span>
+              );
+            }
+            if (unscheduled > 0) {
+              return (
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                  {t('lists.announcedCount', { count: unscheduled })}
+                </span>
+              );
+            }
+            return null;
           })();
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
@@ -1380,7 +1515,50 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         })()}
       </div>
 
-      {addListButton && <div className="mt-3">{addListButton}</div>}
+      {!readOnly && (
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {/* «إضافة عنصر» — the door the entity-card layout NEVER had. The
+              per-card «+» adds rows to an EXISTING entity; a brand-new course
+              had no card to add from, so a merchant could not put a new item
+              into any list at all (owner, 2026-08-11: «ما عم شوف كيف ضيف عنصر
+              عالقائمة»). The directory layout is exempt — each list card
+              carries its own add.
+              With the strip filter active the target list is already chosen;
+              otherwise one tap expands to per-list chips (progressive
+              disclosure, same pattern the per-card add used). */}
+          {aggregates && (() => {
+            // With a list OPEN (strip tap), its directory card carries its own
+            // «إضافة عنصر» footer — a second door here would be the crowding
+            // this slice exists to remove.
+            if (activeListId) return null;
+            if (addingItem) {
+              return collections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-label={`${t('lists.addItem')} — ${c.label}`}
+                  onClick={() => { setAddingItem(false); setEditing({ collection: c, row: null }); }}
+                  className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-brand-300 px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="min-w-0 break-words" dir="auto">{c.label}</span>
+                </button>
+              ));
+            }
+            return (
+              <button
+                type="button"
+                onClick={() => setAddingItem(true)}
+                className="min-h-[36px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('lists.addItem')}
+              </button>
+            );
+          })()}
+          {addListButton}
+        </div>
+      )}
 
       {createSheets}
 

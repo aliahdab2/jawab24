@@ -22,6 +22,7 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
             listCollectionsWithRows: vi.fn(),
             createCollection: vi.fn(),
             renameCollection: vi.fn(),
+            deleteCollection: vi.fn(),
             addRow: vi.fn(),
             updateRow: vi.fn(),
             deleteRow: vi.fn(),
@@ -65,6 +66,9 @@ const WRITES = [
     // Renaming a list edits the header the prompt renders above its rows — a
     // reply-affecting write, gated exactly like the rows themselves.
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}`],
+    // Deleting a list destroys its rows and stops the AI quoting them — the
+    // most destructive door in the subtree, so it is gated like the rest.
+    ['DELETE', `/pages/${PAGE}/fact-collections/${COLL}`],
     ['POST', `/pages/${PAGE}/fact-collections/${COLL}/rows`],
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
     ['DELETE', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
@@ -206,6 +210,36 @@ describe('Fact-collections routes — security + contract wiring', () => {
                 url: `/pages/${PAGE}/fact-collections`,
                 payload: { label: 'قائمة', rows: [{ name: 'عنصر' }] },
             });
+            expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
+        });
+    });
+
+    // ── DELETE /fact-collections/:id — the undo for «add list» ──
+    describe('DELETE collection', () => {
+        it('200s and forwards page + collection, so a row id alone can never authorize it', async () => {
+            vi.mocked(factCollectionsService.deleteCollection).mockResolvedValue({ id: COLL } as any);
+            const res = await app.inject({
+                method: 'DELETE',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+            });
+            expect(res.statusCode).toBe(200);
+            expect(vi.mocked(factCollectionsService.deleteCollection)).toHaveBeenCalledWith(PAGE, COLL);
+        });
+
+        it('404s when the collection is not on this page — a cross-page delete must not succeed quietly', async () => {
+            // The service returns null when its page-scoped WHERE matches nothing.
+            vi.mocked(factCollectionsService.deleteCollection).mockResolvedValue(null as any);
+            const res = await app.inject({
+                method: 'DELETE',
+                url: `/pages/${PAGE}/fact-collections/${COLL}`,
+            });
+            expect(res.statusCode).toBe(404);
+            expect(JSON.parse(res.payload).code).toBe('COLLECTION_NOT_FOUND');
+        });
+
+        it('wires the request logger before deleting', async () => {
+            vi.mocked(factCollectionsService.deleteCollection).mockResolvedValue({ id: COLL } as any);
+            await app.inject({ method: 'DELETE', url: `/pages/${PAGE}/fact-collections/${COLL}` });
             expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
         });
     });

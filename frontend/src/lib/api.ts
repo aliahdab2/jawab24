@@ -304,6 +304,10 @@ export const factCollectionsApi = {
    *  409 DUPLICATE_LABEL contract as create. */
   renameCollection: (pageId: string, collectionId: string, label: string) =>
     api.patch<{ data: { id: string; label: string } }>(`/pages/${pageId}/fact-collections/${collectionId}`, { label }),
+  /** Delete a list and its rows — the undo for «add list». The server cascades
+   *  the rows and retires the page's reply caches. */
+  deleteCollection: (pageId: string, collectionId: string) =>
+    api.delete(`/pages/${pageId}/fact-collections/${collectionId}`),
   saveEntity: (pageId: string, body: FactEntitySaveBody) =>
     api.put<{ data: { upserted: FactRowDto[]; deletedIds: string[] } }>(`/pages/${pageId}/fact-entity`, body),
   addRow: (pageId: string, collectionId: string, data: FactRowBody & { name: string }) =>

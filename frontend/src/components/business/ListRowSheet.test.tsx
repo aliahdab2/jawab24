@@ -10,6 +10,11 @@ vi.mock('@/components/ui', () => ({
     children: React.ReactNode; onClick?: () => void; disabled?: boolean;
   }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
   InfoPopover: () => null,
+  Toggle: ({ enabled, onChange, 'aria-label': label }: {
+    enabled: boolean; onChange: (v: boolean) => void; 'aria-label'?: string;
+  }) => (
+    <button type="button" role="switch" aria-checked={enabled} aria-label={label} onClick={() => onChange(!enabled)} />
+  ),
 }));
 
 const TODAY = '2026-08-10';
@@ -88,6 +93,50 @@ describe('ListRowSheet — a price the server cannot read is refused here', () =
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(saveButton()).toBeEnabled();
+  });
+});
+
+/**
+ * `is_available` has existed on every fact row since the engine shipped, and
+ * the prompt renderer has always printed «غير متاح حالياً» for a false one —
+ * but no editor exposed it, so only a seeding script could set it. That is the
+ * honest middle answer between quoting a sold-out item and denying it exists
+ * (BAMBO's «رقم 7»).
+ */
+describe('ListRowSheet — temporarily unavailable', () => {
+  const availabilityToggle = () => screen.getByRole('switch', { name: 'Available now' });
+
+  it('defaults a NEW row to available, and carries the flag on save', () => {
+    renderSheet();
+    fireEvent.change(nameField(), { target: { value: 'بامبو رقم 7' } });
+    expect(availabilityToggle()).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ isAvailable: true }));
+  });
+
+  it('marks a row unavailable — and that alone is a change worth saving', () => {
+    renderSheet();
+    fireEvent.change(nameField(), { target: { value: 'بامبو رقم 7' } });
+    fireEvent.click(availabilityToggle());
+
+    expect(availabilityToggle()).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ isAvailable: false }));
+  });
+
+  it('reads an existing row\'s flag, and toggling it back is the only edit needed', () => {
+    renderSheet({
+      id: 'row-1', name: 'بامبو رقم 7', attributes: null, structured: null,
+      price: '70.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: false,
+    });
+    expect(availabilityToggle()).toHaveAttribute('aria-checked', 'false');
+    // Nothing else touched: Save is armed by the flag alone.
+    fireEvent.click(availabilityToggle());
+    expect(saveButton()).toBeEnabled();
+
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ isAvailable: true }));
   });
 });
 

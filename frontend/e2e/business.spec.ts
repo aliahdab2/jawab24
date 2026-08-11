@@ -77,17 +77,26 @@ const schedule = (rows: { id: string; startsAt: string }[]) => ({
 });
 
 let renamePayload: { label?: string } | null = null;
+/** Every DELETE the page issued against a collection, in order. Empty is the
+ *  assertion that matters most: the first tap must ARM, never delete. */
+let deletedCollectionUrls: string[] = [];
 
 function setupMockRoutes(
   page: import('@playwright/test').Page,
   collections: unknown[] = [OUTLETS],
 ) {
   renamePayload = null;
+  deletedCollectionUrls = [];
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
 
     if (url.includes('/fact-collections')) {
+      // A collection DELETE ends at the id; a ROW delete has /rows/ in it.
+      if (method === 'DELETE' && !url.includes('/rows/')) {
+        deletedCollectionUrls.push(url);
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { id: OUTLETS.id } }) });
+      }
       if (method === 'PATCH') {
         renamePayload = route.request().postDataJSON();
         return route.fulfill({
@@ -162,8 +171,9 @@ test.describe('/business — the Business Surface', () => {
     await page.goto(`/en/business?page=${PAGE_ID}`);
 
     await expect(page.getByText(t('business.lists.hintQuoted'))).toBeVisible();
-    await expect(page.getByText(t('business.lists.hintGrouped'))).toHaveCount(0);
-    await expect(page.getByText(t('business.lists.hintDated'))).toHaveCount(0);
+    // One clause, on every page: the layout clause described what the screen
+    // already shows, and the expiry clause now lives where it acts.
+    await expect(page.getByText(t('business.lists.hintQuoted'))).toBeVisible();
   });
 
   test('the same page in Arabic says the same thing, in Arabic', async ({ page }) => {
@@ -184,13 +194,18 @@ test.describe('/business — the Business Surface', () => {
     await expect(page.getByText(tAr('business.lists.hintDated'))).toHaveCount(0);
   });
 
+  /** Rename and delete both live behind the per-list ⋯ menu — the flat
+   *  buttons stacked 12 controls above the content on a 3-list page (the
+   *  owner's «عم حسهم كتار», measured at 4.3 viewport heights). */
+  const openListMenu = (page: import('@playwright/test').Page) =>
+    page.getByRole('button', { name: t('business.lists.listOptionsFor', { list: OUTLETS.label }) }).click();
+
   test('an admin can rename a list, and the name reaches the API trimmed', async ({ page }) => {
     await setupMockRoutes(page);
     await page.goto(`/en/business?page=${PAGE_ID}`);
 
-    const door = page.getByRole('button', { name: t('business.lists.renameActionFor', { list: OUTLETS.label }) });
-    await expect(door).toBeVisible();
-    await door.click();
+    await openListMenu(page);
+    await page.getByRole('button', { name: t('business.lists.renameActionFor', { list: OUTLETS.label }) }).click();
 
     const field = page.locator('#list-label-input');
     await expect(field).toHaveValue(OUTLETS.label);
@@ -204,6 +219,7 @@ test.describe('/business — the Business Surface', () => {
     await setupMockRoutes(page);
     await page.goto(`/en/business?page=${PAGE_ID}`);
 
+    await openListMenu(page);
     await page.getByRole('button', { name: t('business.lists.renameActionFor', { list: OUTLETS.label }) }).click();
     const field = page.locator('#list-label-input');
     // Renaming to its OWN name is a no-op, never a clash.
@@ -212,6 +228,103 @@ test.describe('/business — the Business Surface', () => {
     await field.fill('   ');
     await expect(page.getByRole('dialog').getByRole('button', { name: t('common.save') })).toBeDisabled();
     expect(renamePayload).toBeNull();
+  });
+
+  /**
+   * The undo for «add list». It exists because a merchant created a list on
+   * 2026-08-10, could not remove it, and the duplicate had to be deleted over
+   * SSH — a create door with no delete door is not a finished feature.
+   *
+   * The property under test is that ONE tap never destroys anything: the
+   * confirm is the only undo a list gets.
+   */
+  test.describe('deleting a list', () => {
+    const deleteDoor = () =>
+      t('business.lists.deleteListActionFor', { list: OUTLETS.label });
+    /** The product's shared destructive dialog, not a bespoke in-menu confirm. */
+    const confirmDialog = (page: import('@playwright/test').Page) =>
+      page.getByRole('dialog').filter({ hasText: t('business.lists.deleteListTitle') });
+
+    test('choosing delete opens the warning dialog and sends nothing', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await openListMenu(page);
+      await page.getByRole('button', { name: deleteDoor() }).click();
+
+      // The dialog states the list, the row count, and that it cannot be undone.
+      const dialog = confirmDialog(page);
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(OUTLETS.label);
+      await expect(dialog).toContainText(String(OUTLETS.rows.length));
+      expect(deletedCollectionUrls).toEqual([]);
+    });
+
+    test('cancelling destroys nothing', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await openListMenu(page);
+      await page.getByRole('button', { name: deleteDoor() }).click();
+      await confirmDialog(page).getByRole('button', { name: t('common.cancel') }).click();
+
+      await expect(confirmDialog(page)).toHaveCount(0);
+      expect(deletedCollectionUrls).toEqual([]);
+    });
+
+    test('confirming deletes that collection, and only that one', async ({ page }) => {
+      await setupMockRoutes(page);
+      await page.goto(`/en/business?page=${PAGE_ID}`);
+
+      await openListMenu(page);
+      await page.getByRole('button', { name: deleteDoor() }).click();
+      await confirmDialog(page).getByRole('button', { name: t('business.lists.deleteListAction') }).click();
+
+      await expect.poll(() => deletedCollectionUrls.length).toBe(1);
+      expect(deletedCollectionUrls[0]).toContain(`/fact-collections/${OUTLETS.id}`);
+      // Never the row endpoint — that deletes one row and refuses the last.
+      expect(deletedCollectionUrls[0]).not.toContain('/rows/');
+    });
+  });
+
+  /**
+   * The strip line is a DOOR: tapping a list filters the entity cards to
+   * those holding one of its rows. Without it the strip said «online (3)»
+   * with no way to see the 3 — their rows live scattered inside course cards
+   * (owner: «التاجر بضيع», 2026-08-11).
+   */
+  test('tapping a list in the strip shows exactly its entities, and «show all» clears', async ({ page }) => {
+    // Two courses priced; only ONE has an online row. The shared name joins
+    // price+online rows into one entity → aggregates → the strip renders.
+    const prices = {
+      id: 'c_prices', label: 'Course prices', keyAttr: null, isComplete: null, rowCount: 2,
+      rows: [
+        { id: 'p1', name: 'Excel course', attributes: null, price: '10.00', currency: '$', startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'p2', name: 'Guitar course', attributes: null, price: '20.00', currency: '$', startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+    const online = {
+      id: 'c_online', label: 'Available online courses', keyAttr: null, isComplete: null, rowCount: 1,
+      rows: [
+        { id: 'o1', name: 'Excel course', attributes: [{ label: 'Note', value: 'Zoom' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+    await setupMockRoutes(page, [prices, online]);
+    await page.goto(`/en/business?page=${PAGE_ID}`);
+
+    await expect(page.getByText('Guitar course')).toBeVisible();
+
+    // Exact name (label + count chip) — a bare substring also matches the
+    // list's ⋯ button, whose aria-label carries the same name.
+    await page.getByRole('button', { name: `${online.label} ${online.rows.length}`, exact: true }).click();
+
+    // Only the entity with an online row remains; the filter announces itself.
+    await expect(page.getByText(t('business.lists.filteringByList', { list: online.label }))).toBeVisible();
+    await expect(page.getByText('Guitar course')).toHaveCount(0);
+    await expect(page.getByText('Excel course')).toBeVisible();
+
+    await page.getByRole('button', { name: t('business.lists.showAll') }).click();
+    await expect(page.getByText('Guitar course')).toBeVisible();
   });
 
   /**

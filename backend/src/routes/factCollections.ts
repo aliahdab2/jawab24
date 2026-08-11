@@ -34,6 +34,10 @@ export default async function factCollectionsRoutes(fastify: FastifyInstance) {
             schema: { tags: ['FactCollections'], summary: 'Rename a collection (its label is the prompt block header)', security: auth },
         }, factCollectionsController.renameCollection.bind(factCollectionsController));
 
+        adminRoutes.delete('/pages/:pageId/fact-collections/:collectionId', {
+            schema: { tags: ['FactCollections'], summary: 'Delete a collection and its rows (the merchant undo for «add list»)', security: auth },
+        }, factCollectionsController.deleteCollection.bind(factCollectionsController));
+
         adminRoutes.post('/pages/:pageId/fact-collections/:collectionId/rows', {
             schema: { tags: ['FactCollections'], summary: 'Add a row to a collection', security: auth },
         }, factCollectionsController.addRow.bind(factCollectionsController));

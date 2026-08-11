@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks, datedListFreshness } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks, datedListFreshness, sectionNameGroups } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -453,6 +453,44 @@ describe('buildTierBlocks — every card keeps its edit door', () => {
  * slots already invisible, the rest gone by 08-31, no signal anywhere. The
  * window is 3 days by owner ruling the same day — a week reads as noise.
  */
+/**
+ * A price list carries one course per tier, so flat it reads as the same name
+ * three times — the redundancy entity cards exist to remove, still present in
+ * the list view (owner, 2026-08-11: «المهم ما نكرر اسم الدورة»).
+ */
+describe('sectionNameGroups', () => {
+  const g = (name: string, over: Partial<FactRowDto> = {}) => ({
+    collection: coll('أسعار الدورات', null, []),
+    row: row(name, over),
+  });
+
+  it('gathers a repeated name into one group, in first-seen order', () => {
+    const groups = sectionNameGroups([
+      g('دورة الحلاقة النسائية', { price: '35000.00' }),
+      g('دورة صبغات', { price: '100000.00' }),
+      g('دورة الحلاقة النسائية', { price: '50000.00' }),
+      g('دورة الحلاقة النسائية', { price: '75000.00' }),
+    ]);
+    expect(groups).not.toBeNull();
+    expect(groups!.map((x) => [x.display, x.rows.length])).toEqual([
+      ['دورة الحلاقة النسائية', 3],
+      ['دورة صبغات', 1],
+    ]);
+  });
+
+  it('returns null when nothing repeats — grouping singletons adds chrome and compresses nothing', () => {
+    expect(sectionNameGroups([g('دورة أ'), g('دورة ب'), g('دورة ج')])).toBeNull();
+  });
+
+  it('folds names the way the entity join does, so a list and a card cannot disagree', () => {
+    // Same normalizer as groupFactCollections: hamza and taa-marbuta folded.
+    const groups = sectionNameGroups([g('دورة الإنكليزية'), g('دورة الانكليزية')]);
+    expect(groups).not.toBeNull();
+    expect(groups).toHaveLength(1);
+    expect(groups![0].rows).toHaveLength(2);
+  });
+});
+
 describe('datedListFreshness', () => {
   const TODAY = '2026-08-10';
 
