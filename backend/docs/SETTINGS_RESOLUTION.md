@@ -69,6 +69,12 @@ of a bug that reproduces for one merchant, on one container, and not in a test.
 
 ## 3. A user really can belong to more than one workspace
 
+**This is a core product feature, not an edge case.** «الفريق» / Team is a first-class page
+in the main sidebar (`Sidebar.tsx:147`, gated by `canManageTeam`), with invite creation,
+listing, revocation and acceptance all exposed in the client. Multi-membership is the
+*designed outcome* of that feature, so every assumption of "one workspace per user" in this
+codebase is wrong by construction, not by accident.
+
 What matters is the **membership count** (`workspace_members` rows for one `user_id`) —
 not who owns the workspace — because that is what resolver 3 queries.
 
@@ -207,6 +213,27 @@ Fix is cheap and local: `buildPageBundle` already receives `workspaceId`
 (`postSuggestions.ts:194`), so it can read the workspace store and go through
 `resolveBrandVoiceNotes`, like every other consumer.
 
+### D-5 — An e-commerce store can be claimed into the wrong workspace
+
+`services/ecommerce.ts:1227` (inside `finalizeClaim`, reached from `claimPendingInstall`)
+resolves the workspace a newly-installed Salla / Shopify / Zid store is attached to with
+its own copy of the arbitrary query:
+
+```js
+const [membership] = await db.select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers).where(eq(workspaceMembers.userId, userId)).limit(1);
+```
+
+The claim runs from the **login** handler (`controllers/auth.ts`, "check for pending
+e-commerce integration installs"), which has no `request.workspaceId` — the auth routes run
+before `resolveWorkspace`. But that same handler computes
+`workspaceService.resolveDefaultWorkspaceId(user.id)` a few lines away (`auth.ts:129`), the
+resolver that honors last-active and page counts.
+
+So for a team member with two memberships, a store install can attach the store to the
+workspace they are not working in. Fix: use `resolveDefaultWorkspaceId` here instead of a
+private `limit(1)`. Own PR — it changes store attachment and wants its own tests.
+
 ### D-4 — Tracked drift: `commentReplyMode` and the dual-reply nudge
 
 `playgroundContext.ts:94` and `warm-reply-cache.ts:128` still take `commentReplyMode`
@@ -248,6 +275,8 @@ Concretely:
    a documented last-resort fallback, kept only for callers that hold no workspace.
 2. ⬜ **Open — D-3.** Point `postSuggestions` at the workspace store, through
    `resolveBrandVoiceNotes`. Small, local, and user-visible today.
+3. ⬜ **Open — D-5.** Use `resolveDefaultWorkspaceId` for the e-commerce store claim
+   instead of a private unordered `limit(1)`.
 3. ⬜ **Open — D-4.** Fold `commentReplyMode` / the dual-reply nudge onto the workspace
    store in `playgroundContext` and `warm-reply-cache`. Needs the Rule 19 eval mirror,
    because it changes which comment mode the test reply previews.
