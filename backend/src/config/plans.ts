@@ -49,7 +49,7 @@ export const PLANS: PlanSeed[] = [
         ecommerceEnabled: false,
         showBranding: true,
         prioritySupport: false,
-        trialDays: 30,
+        trialDays: 7,
         isActive: true,
         isPublic: true,
         isDefault: true,

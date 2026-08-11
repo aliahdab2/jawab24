@@ -1220,3 +1220,21 @@ Facebook-connect. facebook.com refuses framing, and a scope-preserving break-out
 scope through the shared `/auth/browser-handoff` bridge — shared infra not touched here. The
 embedded empty-state now breaks OUT to a top-level tab instead of dead-ending, which is honest
 but not seamless. See `ZID_TEST_PLAN.md`.
+
+## D-067 · Free trial is 7 days — new subscriptions only (2026-08-11)
+
+**Ruling (owner):** the free trial on the default Starter plan is **7 days**, down from 30.
+The change applies to **subscriptions created after deploy only** — accounts already
+`trialing` keep their original end date.
+
+**Why the scoping needs no code:** `trialEndsAt` is computed once at subscription creation
+(`now + plan.trialDays`, `services/subscriptions.ts`) and persisted on the subscription row;
+every later read (`trialDaysRemaining`, reminders, expiry) uses the stored date. The plan seed
+(`scripts/seed-plans.ts`) reconciles only the `plans` table on deploy and never touches
+`subscriptions`, so shortening `trialDays` cannot retroactively cut a running trial. Stripe
+checkout likewise stamps `trial_period_days` at session creation only.
+
+**Where the number lives:** `backend/src/config/plans.ts` (`starter.trialDays`) is the single
+source of truth; the DB row follows on next deploy via the seed. Marketing copy updated in the
+same change: `pricing.json` (en/ar), `_document.tsx` structured data, waitlist launch email
+templates. Trial-length tests are fixture-driven and assert behavior, not the constant.

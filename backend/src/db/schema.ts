@@ -346,7 +346,7 @@ export const channelTrials = pgTable('channel_trials', {
 // 2c. Trial Grants Table — anti-abuse ledger for the per-ACCOUNT free trial
 //
 // Sibling to `channel_trials`, but guarding a different benefit: the one-time
-// 30-day free trial (default Starter plan) that every brand-new account gets.
+// 7-day free trial (default Starter plan) that every brand-new account gets.
 // Account deletion is a GDPR-honoring HARD delete (services/auth.ts deleteUser)
 // that also removes the user's subscription + usage rows — so without this ledger
 // a person could delete their account and re-sign-up with the same phone /
@@ -846,7 +846,7 @@ export const plans = pgTable('plans', {
     prioritySupport: boolean('priority_support').default(false),
 
     // Trial
-    trialDays: integer('trial_days').default(0), // 0 = no trial, 30 = 30-day trial
+    trialDays: integer('trial_days').default(0), // 0 = no trial, 7 = 7-day trial
 
     // Regional pricing (optional JSON for different regions)
     regionalPricing: jsonb('regional_pricing').default({}), // { "SY": 350000, "SA": 50 }
