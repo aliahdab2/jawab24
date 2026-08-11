@@ -17,6 +17,7 @@ import { useLanguage } from '@/i18n/hooks';
 
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
+import { getMarketplaceBilling } from '@/lib/marketplaceBilling';
 import { settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
 import type { AnalyticsOverview, AiUsageReport } from '@/lib/api';
 import {
@@ -629,7 +630,7 @@ const DashboardPage: NextPageWithLayout = () => {
           resetsAt={usage.currentPeriod?.end}
           planSlug={usage.subscription?.plan?.slug}
           paymentMethod={usage.subscription?.paymentMethod}
-          sallaBilled={usage.subscription?.sallaBilled}
+          marketplaceBilled={!!getMarketplaceBilling(usage)}
           userEmail={user?.email}
           topupBalance={usage.topup?.balance}
         />

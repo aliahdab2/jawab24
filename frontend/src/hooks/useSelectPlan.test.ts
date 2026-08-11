@@ -174,6 +174,10 @@ describe('useSelectPlan — Shopify-billed workspace (D-G)', () => {
             status: 'active',
             paymentMethod: 'shopify',
             shopifyManageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+            marketplaceBilling: {
+                marketplace: 'shopify',
+                manageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+            },
             ...over,
         },
     } as unknown as UsageSummary);
@@ -201,7 +205,10 @@ describe('useSelectPlan — Shopify-billed workspace (D-G)', () => {
 
     it('falls back to an informational toast when no manage URL is configured', async () => {
         nativeState.native = false;
-        const { result } = render(shopifyUsage({ shopifyManageUrl: undefined }));
+        const { result } = render(shopifyUsage({
+            shopifyManageUrl: undefined,
+            marketplaceBilling: { marketplace: 'shopify' },
+        }));
 
         await act(() => result.current.handleSelectPlan('plan_biz'));
 
@@ -231,7 +238,14 @@ describe('useSelectPlan — Salla merchant (apps-policy Article 5)', () => {
         subscription: {
             plan: { slug: 'free' },
             status: 'trialing',
-            sallaBilled: true,
+            // The legacy `sallaBilled` boolean is deliberately NOT set here: the
+            // hook no longer reads it (D-073), and leaving it in would suggest it
+            // still drives this fixture. It stays on the wire only for older
+            // bundled app builds — see its doc comment in packages/shared.
+            //
+            // Salla has no self-serve destination, so the verdict deliberately
+            // carries no manageUrl — absent means "suppress, show no link".
+            marketplaceBilling: { marketplace: 'salla' },
             ...over,
         },
     } as unknown as UsageSummary);
@@ -258,10 +272,10 @@ describe('useSelectPlan — Salla merchant (apps-policy Article 5)', () => {
         expect(mockOpenExternalUrl).not.toHaveBeenCalled();
     });
 
-    // The exemption is resolved server-side (mustBillThroughSalla): a merchant
-    // already paying through Stripe simply arrives with sallaBilled absent, and
-    // must keep the normal flow.
-    it('does NOT guard when sallaBilled is absent — normal Stripe flow proceeds', async () => {
+    // The exemption is resolved server-side (resolveMarketplaceBilling, D-073):
+    // a merchant already paying through Stripe simply arrives with NO
+    // marketplaceBilling verdict at all, and must keep the normal flow.
+    it('does NOT guard when no marketplace verdict is present — normal Stripe flow proceeds', async () => {
         nativeState.native = false;
         const { result } = render({
             subscription: { plan: { slug: 'starter' }, status: 'trialing' },
@@ -273,18 +287,94 @@ describe('useSelectPlan — Salla merchant (apps-policy Article 5)', () => {
         expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=month');
     });
 
-    // Both rails can apply to one account (a merchant with both stores).
-    // Shopify wins because it has somewhere to send them.
+    // Both rails can apply to one account (a merchant with both stores). The
+    // backend resolves the precedence at its one choke point and hands us a
+    // single verdict — Shopify's, because it has somewhere to send them.
     it('prefers the Shopify deep link when both rails apply', async () => {
         nativeState.native = false;
         const { result } = render(sallaUsage({
             paymentMethod: 'shopify',
             shopifyManageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+            marketplaceBilling: {
+                marketplace: 'shopify',
+                manageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+            },
         }));
 
         await act(() => result.current.handleSelectPlan('plan_biz'));
 
         expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://admin.shopify.com/store/test/charges/jawab24/pricing_plans');
         expect(mockToastInfo).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * The reason this change exists. Before it, the hook knew only
+ * `paymentMethod === 'shopify'` and `sallaBilled`, so a Zid merchant fell
+ * straight through both guards into the Stripe path and met a generic error
+ * toast from the backend's 400 `ZID_BILLED` — no explanation, no destination.
+ */
+describe('useSelectPlan — Zid merchant (App Market, D-070/D-073)', () => {
+    const zidUsage = (over: Record<string, unknown> = {}) => ({
+        subscription: {
+            plan: { slug: 'business' },
+            status: 'active',
+            paymentMethod: 'zid',
+            // ZID_APP_MARKET_URL ships unset — the URL shape is undocumented and
+            // a guessed link would send payers to a 404. Absent must still
+            // suppress Stripe.
+            marketplaceBilling: { marketplace: 'zid' },
+            ...over,
+        },
+    } as unknown as UsageSummary);
+
+    it('stops plan clicks with a toast instead of a generic error — no Stripe path runs', async () => {
+        nativeState.native = false;
+        const { result } = render(zidUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockToastInfo).toHaveBeenCalled();
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+    });
+
+    it('guards the NATIVE hosted-checkout path too', async () => {
+        nativeState.native = true;
+        const { result } = render(zidUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+    });
+
+    /** Once the App Market URL is observed and configured, send them there. */
+    it('routes to the App Market when a manage URL IS configured', async () => {
+        nativeState.native = false;
+        const { result } = render(zidUsage({
+            marketplaceBilling: { marketplace: 'zid', manageUrl: 'https://zid.market/apps/jawab24' },
+        }));
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://zid.market/apps/jawab24');
+        expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    /** A canceled mirror is not marketplace-billed — the merchant uninstalled
+     *  and must be free to come back through Stripe. The backend omits the
+     *  field entirely in that case. */
+    it('does NOT guard once the mirror is canceled — the Stripe rail reopens', async () => {
+        nativeState.native = false;
+        const { result } = render({
+            subscription: { plan: { slug: 'starter' }, status: 'trialing', paymentMethod: 'zid' },
+        } as unknown as UsageSummary);
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockToastInfo).not.toHaveBeenCalled();
+        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=month');
     });
 });

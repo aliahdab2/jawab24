@@ -21,6 +21,7 @@ import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHer
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { getMarketplaceBilling, MARKETPLACE_COPY } from '@/lib/marketplaceBilling';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
 interface PricingPageProps {
@@ -416,6 +417,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   // Use slug for plan matching — slugs are stable ('starter', 'business', 'pro'),
   // whereas plan.id is a UUID that differs between environments and after re-seeding.
   const currentPlanSlug = usage?.subscription?.plan?.slug;
+  // Which marketplace — if any — owns this account's paid plans (D-073). Read
+  // from the one field the backend's guard computes, so this banner and the
+  // useSelectPlan refusal can never disagree about who is billed where.
+  const marketplaceBilling = getMarketplaceBilling(usage);
   const hasActiveSubscription = Boolean(currentPlanSlug);
 
   // Current plan price for upgrade/downgrade comparison — O(1) lookup per render
@@ -520,34 +525,30 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               </div>
             </div>
 
-            {/* Shopify-billed workspaces change plans inside Shopify admin (D-G).
-                The grid below stays browsable, but every select action routes to
-                the deep link (useSelectPlan guard) — say so up front. */}
-            {usage.subscription.paymentMethod === 'shopify' && (
+            {/* A marketplace owns this account's paid plans (D-073). The grid
+                below stays browsable, but every select action is refused by the
+                useSelectPlan guard — say so up front, and offer the destination
+                when there is one. Salla has no plan to manage; Zid has none
+                until its App Market URL is observed rather than guessed. */}
+            {marketplaceBilling && (
               <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
-                <span className="font-medium">{tPricing('shopifyManagedBody')}</span>
-                {usage.subscription.shopifyManageUrl && (
+                <span className="font-medium">
+                  {tPricing(MARKETPLACE_COPY[marketplaceBilling.marketplace].body)}
+                </span>
+                {marketplaceBilling.manageUrl && (
                   // openExternalUrl, not a raw anchor: on native the deep link
                   // must open in the system browser / Custom Tab like every
                   // other external billing surface (same path as useSelectPlan).
                   <button
                     type="button"
-                    onClick={() => { void openExternalUrl(usage.subscription.shopifyManageUrl!); }}
+                    onClick={() => { void openExternalUrl(marketplaceBilling.manageUrl!); }}
                     className="font-bold underline underline-offset-2 whitespace-nowrap"
                   >
-                    {tPricing('shopifyManagedCta')}
+                    {tPricing('marketplaceManageCta', {
+                      marketplace: tPricing(MARKETPLACE_COPY[marketplaceBilling.marketplace].name),
+                    })}
                   </button>
                 )}
-              </div>
-            )}
-
-            {/* Salla merchants are billed through Salla (Article 5). The grid
-                stays browsable, but every select action is refused by the
-                useSelectPlan guard — say so up front. No CTA: Salla billing
-                does not exist yet, so there is nowhere to link. */}
-            {usage.subscription.sallaBilled && (
-              <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
-                <span className="font-medium">{tPricing('sallaManagedBody')}</span>
               </div>
             )}
           </div>

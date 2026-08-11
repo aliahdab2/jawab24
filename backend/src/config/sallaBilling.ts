@@ -1,3 +1,4 @@
+import type { MarketplaceBilledCode } from '@jawab24/shared';
 import { LIVE_SUBSCRIPTION_STATUSES } from './shopifyBilling';
 
 /**
@@ -19,8 +20,9 @@ import { LIVE_SUBSCRIPTION_STATUSES } from './shopifyBilling';
  * `isSallaBilled(row)` that reads the subscription, exactly like Shopify's.
  */
 
-/** Wire code returned to clients when a Stripe path is refused under Article 5. */
-export const SALLA_BILLED_CODE = 'SALLA_BILLED';
+/** Wire code returned to clients when a Stripe path is refused under Article 5.
+ *  Typed from the shared code set — see `marketplaceBilledCodes.ts`. */
+export const SALLA_BILLED_CODE: MarketplaceBilledCode = 'SALLA_BILLED';
 
 /**
  * Is this subscription row an established, currently-live **Stripe**

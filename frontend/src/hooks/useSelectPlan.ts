@@ -10,6 +10,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebAuthedUrl } from '@/lib/webUrl';
 import { captureError } from '@/lib/sentryHelpers';
+import { getMarketplaceBilling, MARKETPLACE_COPY } from '@/lib/marketplaceBilling';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 
 interface UseSelectPlanArgs {
@@ -50,29 +51,28 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
       return;
     }
 
-    // Shopify-billed workspaces manage their plan inside Shopify admin (D-G):
-    // Shopify forbids off-platform billing for App Store installs, so EVERY
-    // Stripe path below (hosted checkout, /checkout, in-place changePlan) is
-    // off-limits — route to the admin deep link instead. The backend enforces
-    // the same rule (code SHOPIFY_BILLED); this is the friendly layer.
-    if (usage?.subscription?.paymentMethod === 'shopify') {
-      const manageUrl = usage.subscription.shopifyManageUrl;
-      if (manageUrl) {
-        await openExternalUrl(manageUrl);
+    // A marketplace owns this account's paid plans (D-073), so EVERY Stripe
+    // path below — hosted checkout, /checkout, in-place changePlan — is
+    // off-limits. Send them where they actually manage the plan when we can
+    // name a destination; otherwise say so plainly.
+    //
+    // One branch for all three rails, reading the SAME field the backend's
+    // guard computes. It used to be two hard-coded branches that knew nothing
+    // about Zid, so a Zid merchant fell straight through to Stripe and met a
+    // generic error from the 400 — no explanation, no destination.
+    //
+    // An absent manageUrl means "suppress, but we have no link to offer"
+    // (Salla has no plan to manage; Zid until ZID_APP_MARKET_URL is observed
+    // rather than guessed) — it NEVER means "let them through".
+    const marketplace = getMarketplaceBilling(usage);
+    if (marketplace) {
+      if (marketplace.manageUrl) {
+        // openExternalUrl, not a raw anchor: on native this must open in the
+        // system browser / Custom Tab like every other external billing surface.
+        await openExternalUrl(marketplace.manageUrl);
       } else {
-        toast.info(tPricing('shopifyManagedToast'));
+        toast.info(tPricing(MARKETPLACE_COPY[marketplace.marketplace].toast));
       }
-      return;
-    }
-
-    // Salla merchants must be billed through Salla (apps-policy Article 5), so
-    // every Stripe path below is off-limits for them too. Unlike Shopify there
-    // is nowhere to send them yet — Salla billing does not exist, we ship the
-    // free tier there — so this is a plain "coming soon" notice, not a deep
-    // link. The backend enforces the same rule (code SALLA_BILLED); this is
-    // the friendly layer that stops them reaching a refusal at all.
-    if (usage?.subscription?.sallaBilled) {
-      toast.info(tPricing('sallaManagedToast'));
       return;
     }
 

@@ -1,4 +1,4 @@
-import { normalizeArabic } from '@jawab24/shared';
+import { normalizeArabic, type MarketplaceBilledCode } from '@jawab24/shared';
 import { config } from './index';
 
 /**
@@ -43,8 +43,9 @@ import { config } from './index';
  */
 export type ZidBillablePlanSlug = 'business' | 'pro';
 
-/** Wire code returned to clients when a Stripe path is refused for a Zid merchant. */
-export const ZID_BILLED_CODE = 'ZID_BILLED';
+/** Wire code returned to clients when a Stripe path is refused for a Zid merchant.
+ *  Typed from the shared code set — see `marketplaceBilledCodes.ts`. */
+export const ZID_BILLED_CODE: MarketplaceBilledCode = 'ZID_BILLED';
 
 /**
  * The Partner-Dashboard plan ids, which are what a subscription payload
