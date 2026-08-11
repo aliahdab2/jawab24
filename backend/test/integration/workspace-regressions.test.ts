@@ -14,7 +14,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import {
+    testDb,
     createTestUser,
     createTestWorkspace,
     createTestPage,
@@ -23,6 +25,16 @@ import {
     insertInstagramMedia,
     insertInstagramComment,
 } from './setup';
+import * as schema from '../../src/db/schema';
+
+/** The workspace's stored settings blob, unmediated by defaults or the drift-heal. */
+async function readWorkspaceSettingsJsonb(workspaceId: string): Promise<Record<string, unknown>> {
+    const [row] = await testDb
+        .select({ settings: schema.workspaces.settings })
+        .from(schema.workspaces)
+        .where(eq(schema.workspaces.id, workspaceId));
+    return (row?.settings ?? {}) as Record<string, unknown>;
+}
 import { pagesService } from '../../src/services/pages';
 import { commentsService } from '../../src/services/comments';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
@@ -125,6 +137,84 @@ describe('Settings → workspaceSettings sync', () => {
 
         const delay = await workspaceSettingsService.getReplyDelay(ws.id);
         expect(delay).toBe(30);
+    });
+});
+
+// ── 2a2. The write lands in the REQUESTED workspace, against a real DB ───────
+
+/**
+ * The authorization boundary, end to end.
+ *
+ * `PUT /settings` runs `resolveWorkspace` + `requireRole('admin')`, so the role is
+ * checked against `request.workspaceId`. The pipeline write must land in THAT
+ * workspace. It used to be routed by `settingsService.resolveWorkspaceId(userId)` —
+ * an unordered `limit(1)` over the user's memberships — so for a user holding two it
+ * could land in the workspace whose role was never checked, and it ignored the
+ * workspace pin a restricted embedded session carries (D-067).
+ *
+ * Two memberships is not a contrived state: «الفريق» / Team is a first-class feature,
+ * and `workspaceInvite.acceptInvite` adds a membership unconditionally, so anyone who
+ * signed up and later accepted an invite holds two. `createTestWorkspace` inserts an
+ * owner membership, so calling it twice reproduces exactly that shape.
+ *
+ * Asserted against the RAW JSONB rather than `workspaceSettingsService.getSettings`,
+ * because that read applies the legacy drift-heal — see the test below it.
+ */
+describe('Settings — the pipeline write lands in the named workspace', () => {
+    it('a user in TWO workspaces: only the named workspace receives the write', async () => {
+        const user = await createTestUser();
+        const wsA = await createTestWorkspace(user.id, { name: 'Workspace A' });
+        const wsB = await createTestWorkspace(user.id, { name: 'Workspace B' });
+        // The service memoizes userId→workspaceId for the process lifetime.
+        settingsService.clearWorkspaceIdCache();
+
+        // The request resolved wsB (X-Workspace-Id / last-active / embedded token pin).
+        await settingsService.updateSettings(user.id, { commentsAutoReply: false }, wsB.id);
+
+        const rawB = await readWorkspaceSettingsJsonb(wsB.id);
+        const rawA = await readWorkspaceSettingsJsonb(wsA.id);
+
+        expect(rawB.commentsAutoReply).toBe(false);
+        // wsA was never named, so nothing may have been written into it.
+        expect(rawA).not.toHaveProperty('commentsAutoReply');
+    });
+
+    it('with no workspace named, the legacy fallback still resolves one (login payload path)', async () => {
+        const user = await createTestUser();
+        const ws = await createTestWorkspace(user.id);
+        settingsService.clearWorkspaceIdCache();
+
+        await settingsService.updateSettings(user.id, { replyDelay: 30 });
+
+        expect((await readWorkspaceSettingsJsonb(ws.id)).replyDelay).toBe(30);
+    });
+});
+
+/**
+ * ⚠️ Known gap this fix does NOT close, pinned so it cannot regress silently.
+ *
+ * `workspaceSettingsService.getSettings` runs `detectLegacyDrift`, which fills keys
+ * MISSING from a workspace's JSONB from the OWNER's legacy `settings` row. The legacy
+ * row is per-user, so after a write scoped to wsB, a first read of wsA heals itself
+ * from that same row and adopts wsB's value — the write leaks across workspaces at
+ * READ time, through a different mechanism than the one fixed above.
+ *
+ * This is why the consolidation deletes the drift-heal (Phase 3b) rather than only
+ * scoping the writer: while two stores exist, the per-user store keeps re-joining them.
+ * When drift-heal is deleted, this test flips to `toBe(true)` — that is the fix, not a
+ * regression.
+ */
+describe('Settings — drift-heal leaks a scoped write across workspaces (documented gap)', () => {
+    it('reading the OTHER workspace heals it from the shared legacy row', async () => {
+        const user = await createTestUser();
+        const wsA = await createTestWorkspace(user.id, { name: 'Workspace A' });
+        const wsB = await createTestWorkspace(user.id, { name: 'Workspace B' });
+        settingsService.clearWorkspaceIdCache();
+
+        await settingsService.updateSettings(user.id, { commentsAutoReply: false }, wsB.id);
+
+        // The JSONB write stayed in wsB (asserted above); the READ is what leaks.
+        expect(await workspaceSettingsService.isCommentsAutoReplyEnabled(wsA.id)).toBe(false);
     });
 });
 

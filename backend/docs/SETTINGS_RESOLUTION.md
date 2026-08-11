@@ -213,6 +213,39 @@ Fix is cheap and local: `buildPageBundle` already receives `workspaceId`
 (`postSuggestions.ts:194`), so it can read the workspace store and go through
 `resolveBrandVoiceNotes`, like every other consumer.
 
+### D-6 — The drift-heal leaks a workspace-scoped write into the user's OTHER workspace
+
+**Confirmed against a real database**, not inferred:
+`backend/test/integration/workspace-regressions.test.ts` → "drift-heal leaks a scoped write
+across workspaces (documented gap)".
+
+Scoping the writer (D-2) is necessary but **not sufficient**, because the read path
+re-joins the two workspaces. `workspaceSettingsService.getSettings` runs
+`detectLegacyDrift`, which fills keys MISSING from a workspace's JSONB from the **owner's
+legacy `settings` row**. That row is per-user and shared by every workspace the user owns.
+So:
+
+```
+user owns wsA and wsB (Team invite / second workspace)
+PUT /settings scoped to wsB   → legacy row commentsAutoReply=false, wsB JSONB gets it
+first read of wsA             → wsA's JSONB lacks the key → healed from the SAME legacy row
+                              → wsA now answers commentsAutoReply=false too
+```
+
+The merchant turned auto-reply off in one workspace and it went off in the other, at read
+time, with no write to wsA ever issued. The JSONB write itself stayed correctly in wsB —
+the leak is entirely in the heal.
+
+This is the sharpest argument that the two-store design cannot be made correct by scoping
+alone: **as long as a per-user store feeds a per-workspace store, per-workspace values are
+not actually per-workspace.** The fix is deleting the drift-heal (consolidation Phase 3b),
+after which the pinned test flips from `toBe(false)` to `toBe(true)`.
+
+Blast radius today: bounded by the heal's own precondition — it only fills keys that are
+*absent*, so a workspace whose JSONB has been written through `updateSettings` (which
+merges `DEFAULTS`, materializing all keys) is immune forever after. It bites newly-created
+second workspaces, which is exactly the Team-invite cohort.
+
 ### D-5 — An e-commerce store can be claimed into the wrong workspace
 
 `services/ecommerce.ts:1227` (inside `finalizeClaim`, reached from `claimPendingInstall`)
@@ -277,6 +310,9 @@ Concretely:
    `resolveBrandVoiceNotes`. Small, local, and user-visible today.
 3. ⬜ **Open — D-5.** Use `resolveDefaultWorkspaceId` for the e-commerce store claim
    instead of a private unordered `limit(1)`.
+4. ⬜ **Open — D-6.** Delete the drift-heal so a per-workspace value stops being fed from
+   the shared per-user row. Requires the one-shot fill-missing backfill first, so no
+   workspace loses a value the heal was silently supplying.
 3. ⬜ **Open — D-4.** Fold `commentReplyMode` / the dual-reply nudge onto the workspace
    store in `playgroundContext` and `warm-reply-cache`. Needs the Rule 19 eval mirror,
    because it changes which comment mode the test reply previews.
