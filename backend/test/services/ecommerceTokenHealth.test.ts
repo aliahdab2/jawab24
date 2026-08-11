@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
     selectResult: [] as unknown[],
     capturedUpdateSet: undefined as Record<string, unknown> | undefined,
     capturedConflict: undefined as { set?: Record<string, unknown> } | undefined,
+    capturedInsertValues: undefined as Record<string, unknown> | undefined,
     updateCalls: 0,
 }));
 
@@ -50,11 +51,14 @@ vi.mock('../../src/db', () => ({
             }),
         }),
         insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-                onConflictDoUpdate: vi.fn().mockImplementation((conf: { set?: Record<string, unknown> }) => {
-                    state.capturedConflict = conf;
-                    return { returning: vi.fn().mockResolvedValue([{ id: 'store-x' }]) };
-                }),
+            values: vi.fn().mockImplementation((values: Record<string, unknown>) => {
+                state.capturedInsertValues = values;
+                return {
+                    onConflictDoUpdate: vi.fn().mockImplementation((conf: { set?: Record<string, unknown> }) => {
+                        state.capturedConflict = conf;
+                        return { returning: vi.fn().mockResolvedValue([{ id: 'store-x' }]) };
+                    }),
+                };
             }),
         }),
     },
@@ -66,6 +70,7 @@ beforeEach(() => {
     state.selectResult = [];
     state.capturedUpdateSet = undefined;
     state.capturedConflict = undefined;
+    state.capturedInsertValues = undefined;
     state.updateCalls = 0;
 });
 
@@ -153,6 +158,74 @@ describe('token blanking on inactive (SI-4)', () => {
             accessTokenIv: '',
             refreshToken: null,
             refreshTokenIv: null,
+        });
+    });
+});
+
+/**
+ * Regression: the 2026-08-11 Zid App Market install failure.
+ *
+ * Zid returned `currency` as an object, the adapter's TypeScript said `string`,
+ * and the object reached `store_currency varchar(10)` — Postgres 22001, callback
+ * aborted, merchant left with an account and no store. The adapter is fixed at
+ * its own boundary (services/zid.ts), but EVERY adapter parses unvalidated JSON,
+ * so the class is closed here, at the one place all three rails write.
+ */
+describe('createStore / applySyncedStoreInfo — descriptive scalars can never break a write', () => {
+    const ZID_CURRENCY_OBJECT = { id: 4, name: 'ريال سعودي', code: 'SAR', symbol: ' ر.س ' };
+
+    it('never sends a non-string scalar to the database on install', async () => {
+        await createStore({
+            userId: 'u', platform: 'zid', storeDomain: 'a0xxorvfi5.zid.store', accessToken: 'a',
+            shopInfo: { shopName: 'Test', shopEmail: 'appmarket@zid.sa', shopCurrency: ZID_CURRENCY_OBJECT },
+        });
+
+        expect(state.capturedInsertValues?.storeCurrency).toBeUndefined();
+        expect(state.capturedInsertValues?.storeName).toBe('Test');
+        // The install itself must still complete — that is the whole point.
+        expect(state.capturedInsertValues?.storeDomain).toBe('a0xxorvfi5.zid.store');
+    });
+
+    it('guards the RECONNECT branch too, not just the insert', async () => {
+        // A returning merchant takes the conflict path; a guard on only one
+        // branch would leave every reinstall able to fail exactly as before.
+        await createStore({
+            userId: 'u', platform: 'zid', storeDomain: 'a0xxorvfi5.zid.store', accessToken: 'a',
+            shopInfo: { shopCurrency: ZID_CURRENCY_OBJECT },
+        });
+
+        expect(state.capturedConflict?.set?.storeCurrency).toBeUndefined();
+    });
+
+    it('guards the 6-hourly sync, which writes the same columns from the same payloads', async () => {
+        state.selectResult = [{ platformData: { merchantId: '130216' } }];
+
+        await applySyncedStoreInfo('store-1', { storeName: 'Test', storeCurrency: ZID_CURRENCY_OBJECT });
+
+        expect(state.capturedUpdateSet?.storeCurrency).toBeUndefined();
+        expect(state.capturedUpdateSet?.storeName).toBe('Test');
+    });
+
+    it('truncates an over-long name rather than rejecting the whole write', async () => {
+        await createStore({
+            userId: 'u', platform: 'salla', storeDomain: 'x.salla.sa', accessToken: 'a',
+            shopInfo: { shopName: 'م'.repeat(400) },
+        });
+
+        expect(state.capturedInsertValues?.storeName).toHaveLength(255);
+    });
+
+    it('leaves well-formed values exactly as they are', async () => {
+        await createStore({
+            userId: 'u', platform: 'salla', storeDomain: 'x.salla.sa', accessToken: 'a',
+            shopInfo: { shopName: 'متجر الدمام', shopEmail: 'store@salla.sa', shopCurrency: 'SAR', shopTimezone: 'Asia/Riyadh' },
+        });
+
+        expect(state.capturedInsertValues).toMatchObject({
+            storeName: 'متجر الدمام',
+            storeEmail: 'store@salla.sa',
+            storeCurrency: 'SAR',
+            storeTimezone: 'Asia/Riyadh',
         });
     });
 });

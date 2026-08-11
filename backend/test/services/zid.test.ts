@@ -523,7 +523,114 @@ describe('Zid Service', () => {
         it('throws when the response has no store object', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({ user: { id: 7 } }));
 
-            await expect(fetchStoreInfo(CREDS)).rejects.toThrow('no store object');
+            await expect(fetchStoreInfo(CREDS)).rejects.toThrow('no usable store object');
+        });
+
+        // ------------------------------------------------------------------
+        // Regression: the first REAL App Market install (2026-08-11)
+        //
+        // Every fixture above was written from docs.zid.sa, and every one of them
+        // sends `currency` as a string — which is why the suite was green while
+        // production could not complete a single install. Zid sends an OBJECT.
+        // The object reached `store_currency varchar(10)`, Postgres raised 22001,
+        // and the whole callback aborted after the merchant account had already
+        // been provisioned. These cases are pinned to the payload prod received.
+        // ------------------------------------------------------------------
+        describe('currency envelope [live-confirmed 2026-08-11]', () => {
+            /** Verbatim from the production log of store a0xxorvfi5.zid.store. */
+            const LIVE_CURRENCY = {
+                id: 4,
+                name: 'ريال سعودي',
+                code: 'SAR',
+                symbol: ' ر.س ',
+                country: {
+                    id: 184, name: 'السعودية', priority: 1,
+                    code: 'SA', country_code: 'SAU',
+                    flag: 'https://media.zid.store/static/sa.svg',
+                },
+            };
+
+            it('reads the ISO code from the object Zid actually sends', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 130216,
+                            title: 'Test',
+                            email: 'appmarket@zid.sa',
+                            currency: LIVE_CURRENCY,
+                            url: 'https://a0xxorvfi5.zid.store',
+                        },
+                    },
+                }));
+
+                const info = await fetchStoreInfo(CREDS);
+
+                expect(info).toEqual({
+                    storeName: 'Test',
+                    storeEmail: 'appmarket@zid.sa',
+                    storeCurrency: 'SAR',
+                    storeDomain: 'a0xxorvfi5.zid.store',
+                    merchantId: '130216',
+                });
+                // The bug in one assertion: anything longer than the column is
+                // what took the install down.
+                expect(info.storeCurrency?.length).toBeLessThanOrEqual(10);
+            });
+
+            it('still accepts a bare string, so a docs-shaped response keeps working', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: { store: { id: 1, title: 'S', currency: 'SAR', url: 'https://s.zid.store' } },
+                }));
+
+                expect((await fetchStoreInfo(CREDS)).storeCurrency).toBe('SAR');
+            });
+
+            it('drops a currency shape it cannot read instead of failing the install', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 1, title: 'S', url: 'https://s.zid.store',
+                            currency: { id: 4, symbol: 'ر.س' }, // no `code`
+                        },
+                    },
+                }));
+
+                const info = await fetchStoreInfo(CREDS);
+
+                expect(info.storeCurrency).toBeUndefined();
+                // Identity survives — the merchant still gets a working store.
+                expect(info.merchantId).toBe('1');
+                expect(info.storeDomain).toBe('s.zid.store');
+            });
+
+            it('drops any decorative field of an unexpected shape, never the install', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 77,
+                            title: { ar: 'متجر', en: 'Store' }, // a shape drift we have not seen yet
+                            email: ['a@b.c'],
+                            currency: LIVE_CURRENCY,
+                            url: 'https://s.zid.store',
+                        },
+                    },
+                }));
+
+                const info = await fetchStoreInfo(CREDS);
+
+                expect(info.storeName).toBeUndefined();
+                expect(info.storeEmail).toBeUndefined();
+                expect(info.merchantId).toBe('77');
+                expect(info.storeCurrency).toBe('SAR');
+            });
+
+            it('treats a missing store id as a hard failure — identity is not decorative', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: { store: { title: 'No id', currency: LIVE_CURRENCY } },
+                }));
+
+                await expect(fetchStoreInfo(CREDS)).rejects.toThrow('no usable store object');
+            });
         });
     });
 
