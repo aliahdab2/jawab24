@@ -116,8 +116,8 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     // and then call workspaceSettingsService.getSettings(page.workspaceId). The owner row is
     // NOT a substitute — settingsService.getSettings overlays the pipeline fields from
     // resolveWorkspaceId(userId), an unordered `limit(1)` over the user's memberships, so a
-    // merchant who holds more than one workspace (a personal one beside a store one, which
-    // D-066 Zid installs auto-provision) can be previewed with another workspace's persona.
+    // merchant who holds more than one (anyone who signed up and later accepted a team
+    // invite) can be previewed with another workspace's persona.
     //
     // resolveBrandVoiceNotes is production's own resolver (it picks the language variant
     // matching the customer's message), imported rather than re-implemented so the two

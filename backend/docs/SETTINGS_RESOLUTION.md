@@ -69,15 +69,39 @@ of a bug that reproduces for one merchant, on one container, and not in a test.
 
 ## 3. A user really can belong to more than one workspace
 
-Three reachable paths, all shipped:
+What matters is the **membership count** (`workspace_members` rows for one `user_id`) —
+not who owns the workspace — because that is what resolver 3 queries.
 
-1. **Team invites** — `workspaceService.addMember` (`services/workspace.ts:182`), bounded
-   by `MAX_MEMBERS_PER_WORKSPACE`. An invited user keeps their own workspace and gains a
-   second membership.
-2. **Zid App Market installs** — D-066 auto-provisions a store workspace. D-067's own text
-   states the case plainly: "a merchant can hold both a personal and a store workspace".
-3. **Page transfer between workspaces** — pages can end up split across workspaces, which
-   is why resolver 2 counts pages rather than trusting membership order.
+**The live path: accepting a team invite.** `workspaceInvite.acceptInvite`
+(`services/workspaceInvite.ts:130`) calls `workspaceService.addMember` **unconditionally**
+— it adds a membership and removes nothing. Every user gets a workspace at signup
+(`auth.provisionUserWorkspace`), so:
+
+> signup (1 membership) → later accepts an invite → **2 memberships**
+
+The whole flow is shipped and exposed in the UI (`createInvite` / `listInvites` /
+`acceptInvite` in `frontend/src/lib/api.ts`).
+
+Note the near-miss that shows the intent: `provisionUserWorkspace` skips creating a
+personal workspace when a **pending invite** already exists, so someone invited *before*
+signing up ends with one membership. Only the invite-after-signup order produces two — and
+nothing guards that order.
+
+**Second path, API-only:** `POST /workspaces` → `workspaceService.createWorkspace` inserts
+a workspace plus a membership with no existing-membership guard. No frontend code calls it
+(`api.ts` exposes only `list`), so today it is reachable only by a direct API call.
+
+**Retracted — these do NOT create a second membership:**
+
+- ~~Zid / e-commerce auto-provisioning~~. Both `provisionUserWorkspace` and
+  `ensurePersonalWorkspace` (`services/auth.ts`) return early when the user already has a
+  membership, and `controllers/zid.ts` resolves an existing workspace
+  (`store.workspaceId ?? resolveDefaultWorkspaceId`) rather than creating one. D-067's
+  prose says "a merchant can hold both a personal and a store workspace"; the source does
+  not support reading that as auto-provisioning a second one.
+- ~~Page transfer~~. It moves pages between workspaces, which splits a user's **pages**
+  across workspaces — a different failure mode, and the reason resolver 2 counts pages.
+  It does not change membership count.
 
 > ⚠️ **Not measured:** how many production users hold more than one membership today. Two
 > attempts to run that count over SSH were refused by the tool classifier. The code

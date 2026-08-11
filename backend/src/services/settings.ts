@@ -236,9 +236,9 @@ export class SettingsService {
     /**
      * ⚠️ LAST-RESORT resolver — pass an explicit `workspaceId` instead wherever one
      * exists. This is an UNORDERED `limit(1)` over the user's memberships, so for a
-     * user who holds more than one it returns an ARBITRARY workspace. Multi-membership
-     * is reachable today: team invites (`workspaceService.addMember`), D-066 Zid
-     * installs provisioning a store workspace beside a personal one, and page transfer.
+     * user who holds more than one it returns an ARBITRARY workspace. Multi-membership is
+     * reachable today: `workspaceInvite.acceptInvite` adds a membership unconditionally,
+     * so anyone who signed up (1 workspace) and later accepted a team invite holds two.
      *
      * It also knows nothing about the workspace pin on a restricted embedded session
      * (D-067) or the `X-Workspace-Id` header, both of which `resolveWorkspace`
