@@ -70,6 +70,7 @@ const EXCLUDED_ROUTES = new Map([
   ['team', 'app workspace (auth-gated)'],
   ['unsubscribe', 'email utility (noindex)'],
   ['zid/onboarding', 'merchant onboarding (auth-gated)'],
+  ['zid/embedded', 'Zid Embedded Apps entry (noindex — the iframe Application URL; only reachable with a one-per-store token from Zid)'],
 ]);
 
 // Dynamic [slug] routes → the data module whose `slug:` entries enumerate the

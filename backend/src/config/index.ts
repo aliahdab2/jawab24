@@ -285,9 +285,15 @@ export const config = {
         // Basic-auth PASSWORD for webhook deliveries (username is the fixed
         // ZID_WEBHOOK_BASIC_USER constant) — Zid has no HMAC signature header.
         webhookSecret: process.env.ZID_WEBHOOK_SECRET || '',
-        // Provisional scope names — confirm against the real scope list shown at
-        // Zid Partner app creation before going live (docs never publish them).
-        scopes: 'offline_access products.read orders.read webhooks.manage',
+        // The ONLY scope string Zid's docs show in an authorize URL
+        // (docs.zid.sa/embedded-apps, Step 1) — required for POST
+        // /v1/managers/embedded-apps-token, which powers direct merchant access
+        // from the Zid dashboard iframe. Every other permission (Account, Orders,
+        // Products, Webhooks…) is granted by the app's scope matrix in the
+        // Partner Dashboard, not by this parameter — the previous value here was
+        // four GUESSED names Zid never documented (part of the 2026-08-10
+        // "OAuth does not meet our required standards" rejection).
+        scopes: 'embedded_apps_tokens_write',
     },
 
     // Stripe Payment

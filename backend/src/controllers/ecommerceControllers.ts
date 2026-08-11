@@ -70,6 +70,49 @@ export interface EcommerceControllerAdapter {
     pendingCookieName: string;
     /** Cookie options for the pending-install cookie. */
     pendingCookieOptions: CookieOptions;
+
+    // --- Optional platform hooks (all default to the pre-hook behavior) ---
+
+    /**
+     * Auto-provision a merchant account from the platform-asserted store
+     * identity, for App Market installs that arrive with no Jawab24 session
+     * ("direct merchant access, no sign-in prompt" — the Zid review standard).
+     * Return null to fall back to the pending-install claim flow (e.g. the
+     * store email already belongs to an account, or is missing).
+     */
+    provisionMerchant?: (storeInfo: OAuthStoreInfo) => Promise<{ userId: string } | null>;
+    /**
+     * Runs after a store install completes (store created, webhooks registered,
+     * sync enqueued) on every path — logged-in, auto-provisioned, and platform
+     * reinstall — e.g. Zid embedded-token registration. `platformInitiated` is
+     * true when the install arrived with no Jawab24 session (App Market flow),
+     * where the returned redirect is the merchant's ONLY way into the app. A
+     * returned URL replaces the default post-install redirect; null keeps it.
+     */
+    postInstall?: (
+        store: { id: string; storeDomain: string },
+        tokens: OAuthTokenResponse,
+        storeInfo: OAuthStoreInfo,
+        platformInitiated: boolean,
+        log: FastifyRequest['log'],
+    ) => Promise<string | null>;
+    /**
+     * How to treat a platform-initiated install (no session) for a store that
+     * ALREADY exists — active or uninstalled. The server-to-server code
+     * exchange proves the platform sent us here for THAT store, so
+     * 'reactivate-for-owner' rotates tokens and reactivates it for its
+     * EXISTING owner in its EXISTING workspace (ownership is never re-bound),
+     * then runs postInstall for the redirect. Omitted: active stores bounce to
+     * `already_connected`, inactive ones fall to the pending-install claim
+     * flow (pre-hook behavior).
+     */
+    reinstallPolicy?: 'reactivate-for-owner';
+    /**
+     * Platform-side teardown for a merchant-initiated disconnect. Runs BEFORE
+     * disconnectStore, which blanks the OAuth tokens such a call needs. Must
+     * not throw — a failed remote revocation cannot block the disconnect.
+     */
+    onDisconnect?: (storeId: string, log: FastifyRequest['log']) => Promise<void>;
 }
 
 /**
@@ -117,6 +160,55 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
         const frontendUrl = config.frontendUrl;
 
+        // Create the store + webhooks + sync for a known owner — shared by the
+        // logged-in, auto-provisioned, and reinstall paths (one body). The
+        // reinstall path passes workspaceIdOverride so the store stays in its
+        // ORIGINAL workspace — resolving workspaces[0] for a multi-workspace
+        // owner would silently move it.
+        async function installStoreForUser(
+            ownerId: string,
+            tokens: OAuthTokenResponse,
+            storeInfo: OAuthStoreInfo,
+            tokenExpiresAt: Date,
+            log: FastifyRequest['log'],
+            workspaceIdOverride?: string | null,
+        ) {
+            const workspaceId = workspaceIdOverride !== undefined
+                ? workspaceIdOverride
+                : (await workspaceService.getUserWorkspaces(ownerId))[0]?.id || null;
+
+            const store = await createStore({
+                userId: ownerId,
+                platform,
+                storeDomain: storeInfo.storeDomain,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                authorizationToken: tokens.authorizationToken,
+                tokenExpiresAt,
+                shopInfo: {
+                    shopName: storeInfo.storeName,
+                    shopEmail: storeInfo.storeEmail,
+                    shopCurrency: storeInfo.storeCurrency,
+                },
+                platformData: { merchantId: storeInfo.merchantId },
+                workspaceId,
+            });
+
+            // Webhooks via persist-on-throw + retry queue — install never fails on a
+            // webhook hiccup (a marker is persisted + a retry enqueued).
+            await registerWebhooksWithPersist(
+                store.id,
+                platform,
+                () => adapter.registerWebhooks(tokens, store.id),
+            );
+
+            enqueueSyncJob(store.id, platform).catch(err => {
+                log.error({ err }, `Failed to enqueue ${platformLabel} sync`);
+            });
+
+            return store;
+        }
+
         try {
             const tokens = await adapter.exchangeCodeForToken(code);
             const storeInfo = await adapter.fetchStoreInfo(tokens);
@@ -126,46 +218,62 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
             if (userId) {
                 // --- LOGGED IN: create store directly ---
-                const workspaces = await workspaceService.getUserWorkspaces(userId);
-                const workspaceId = workspaces[0]?.id || null;
+                const store = await installStoreForUser(userId, tokens, storeInfo, tokenExpiresAt, request.log);
 
-                const store = await createStore({
-                    userId,
-                    platform,
-                    storeDomain: storeInfo.storeDomain,
-                    accessToken: tokens.accessToken,
-                    refreshToken: tokens.refreshToken,
-                    authorizationToken: tokens.authorizationToken,
-                    tokenExpiresAt,
-                    shopInfo: {
-                        shopName: storeInfo.storeName,
-                        shopEmail: storeInfo.storeEmail,
-                        shopCurrency: storeInfo.storeCurrency,
-                    },
-                    platformData: { merchantId: storeInfo.merchantId },
-                    workspaceId,
-                });
-
-                // Webhooks via persist-on-throw + retry queue — install never fails on a
-                // webhook hiccup (a marker is persisted + a retry enqueued).
-                await registerWebhooksWithPersist(
-                    store.id,
-                    platform,
-                    () => adapter.registerWebhooks(tokens, store.id),
-                );
-
-                enqueueSyncJob(store.id, platform).catch(err => {
-                    request.log.error({ err }, `Failed to enqueue ${platformLabel} sync`);
-                });
-
-                return reply.redirect(`${frontendUrl}/${platform}/onboarding`);
+                const redirectOverride = adapter.postInstall
+                    ? await adapter.postInstall(store, tokens, storeInfo, false, request.log)
+                    : null;
+                return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
             } else {
-                // --- NOT LOGGED IN: create pending install (claim after login) ---
+                // --- NOT LOGGED IN (platform-initiated install) ---
                 const existingStore = await getStoreByDomain(platform, storeInfo.storeDomain);
-                if (existingStore && existingStore.isActive) {
-                    return reply.redirect(`${frontendUrl}/login?${platform}_error=already_connected`);
+
+                if (existingStore) {
+                    // Reinstall of a known store. The code exchange proves the
+                    // platform sent us here for THIS store, so the policy may
+                    // rotate tokens and reactivate it for its EXISTING owner in
+                    // its EXISTING workspace (createStore's upsert — ownership
+                    // is never re-bound). Without the policy: active stores keep
+                    // the already_connected bounce, inactive ones fall through
+                    // to the pending-install claim flow (pre-hook behavior).
+                    if (adapter.reinstallPolicy === 'reactivate-for-owner') {
+                        const store = await installStoreForUser(
+                            existingStore.userId, tokens, storeInfo, tokenExpiresAt,
+                            request.log, existingStore.workspaceId ?? null,
+                        );
+                        const redirectOverride = adapter.postInstall
+                            ? await adapter.postInstall(store, tokens, storeInfo, true, request.log)
+                            : null;
+                        // A reactivation SUCCEEDED — onboarding is the honest
+                        // destination, not `already_connected` on a login page
+                        // (the login wall this whole flow exists to remove). The
+                        // override is normally set (Zid sends them to the framed
+                        // dashboard); this fallback only fires for a platform that
+                        // reactivates without its own post-install redirect.
+                        return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
+                    }
+                    if (existingStore.isActive) {
+                        return reply.redirect(`${frontendUrl}/login?${platform}_error=already_connected`);
+                    }
                 }
 
+                // Fresh store, no session: auto-provision a merchant account from
+                // the platform-asserted identity when the adapter supports it
+                // ("direct merchant access" — the merchant never sees a login).
+                if (!existingStore && adapter.provisionMerchant) {
+                    const provisioned = await adapter.provisionMerchant(storeInfo);
+                    if (provisioned) {
+                        const store = await installStoreForUser(
+                            provisioned.userId, tokens, storeInfo, tokenExpiresAt, request.log,
+                        );
+                        const redirectOverride = adapter.postInstall
+                            ? await adapter.postInstall(store, tokens, storeInfo, true, request.log)
+                            : null;
+                        return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
+                    }
+                }
+
+                // Fall back: pending install, claimed after login.
                 const pendingId = await createPendingInstall(platform, {
                     storeDomain: storeInfo.storeDomain,
                     accessToken: tokens.accessToken,
@@ -206,6 +314,10 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
         const req = request as ResolvedWorkspaceRequest;
         const store = await getStoreByWorkspace(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
+        // Platform-side teardown BEFORE disconnectStore blanks the tokens it needs
+        // (Zid: revoke the embedded-app session token — a surviving one would keep
+        // the in-dashboard entry able to open a session for a disconnected store).
+        if (adapter.onDisconnect) await adapter.onDisconnect(store.id, request.log);
         await disconnectStore(store.id);
         return reply.send({ ok: true });
     }

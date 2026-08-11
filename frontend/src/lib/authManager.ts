@@ -17,6 +17,7 @@ import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axio
 import { captureError } from '@/lib/sentryHelpers';
 import { tError } from '@/lib/i18nErrors';
 import { AUTH_BRIDGE_PATHS } from '@/constants/auth';
+import { isEmbeddedSession, refreshEmbeddedToken, clearEmbeddedSession, getEmbeddedPlatform } from '@/lib/embeddedSession';
 
 // Types
 interface AuthStateChangeCallback {
@@ -115,6 +116,12 @@ class AuthManager {
       console.warn(`Logout triggered: ${reason}`);
     }
 
+    // Captured before the clear below: an embedded tab must never be sent to
+    // /login — inside a platform dashboard that IS the sign-in prompt the
+    // embedded flow exists to remove. It goes to the embedded entry instead,
+    // which explains how to reopen the app.
+    const embeddedPlatform = typeof window !== 'undefined' ? getEmbeddedPlatform() : null;
+
     try {
       // 0. Remove push notification token before clearing auth (best-effort)
       if (typeof window !== 'undefined') {
@@ -136,6 +143,7 @@ class AuthManager {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        clearEmbeddedSession();
       }
 
       // 2. Clear Zustand store (async import to avoid circular deps)
@@ -167,10 +175,16 @@ class AuthManager {
         // The important thing is client state is cleared
       }
 
-      // 5. Redirect to login (if requested and not already there)
+      // 5. Redirect (if requested and not already there)
       if (redirect && typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
-        if (!currentPath.includes('/login') && currentPath !== '/' && !currentPath.match(/^\/[a-z]{2}\/?$/)) {
+        if (embeddedPlatform) {
+          // Embedded: back to the entry page, which shows "reopen the app from
+          // your dashboard" rather than a login form we know cannot be used.
+          if (!currentPath.includes(`/${embeddedPlatform}/embedded`)) {
+            window.location.href = `/${embeddedPlatform}/embedded?expired=1`;
+          }
+        } else if (!currentPath.includes('/login') && currentPath !== '/' && !currentPath.match(/^\/[a-z]{2}\/?$/)) {
           window.location.href = '/login';
         }
       }
@@ -197,8 +211,17 @@ class AuthManager {
   /**
    * Attempt to refresh the access token
    * Returns true if refresh was successful, false otherwise
+   *
+   * Embedded surfaces (platform dashboard iframe) take a different route:
+   * `/auth/refresh` rotates the HttpOnly refresh COOKIE, which a third-party
+   * frame never sends — it would 401 forever. There the platform credential
+   * re-mints the access token instead. See lib/embeddedSession.ts.
    */
   async refreshToken(axiosInstance: AxiosInstance): Promise<boolean> {
+    if (isEmbeddedSession()) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+      return (await refreshEmbeddedToken(apiUrl)) !== null;
+    }
     try {
       const response = await axiosInstance.post<RefreshResponse>('/auth/refresh');
       return response.data?.success === true;

@@ -10,6 +10,12 @@ const mockVerifyWebhookBasicAuth = vi.fn();
 const mockRegisterWebhooks = vi.fn().mockResolvedValue({ registered: [], failed: [], lastAttempt: '' });
 const mockFetchStoreInfo = vi.fn();
 const mockFullSync = vi.fn().mockResolvedValue({ synced: 15 });
+const mockRegisterEmbeddedToken = vi.fn().mockResolvedValue(undefined);
+const mockDeleteEmbeddedToken = vi.fn().mockResolvedValue(undefined);
+const mockResolveZidCredentials = vi.fn().mockResolvedValue({
+    managerToken: 'zid_access_token',
+    authorizationToken: 'zid_auth_token',
+});
 
 vi.mock('../../src/services/zid', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../src/services/zid')>();
@@ -21,6 +27,9 @@ vi.mock('../../src/services/zid', async (importOriginal) => {
         registerWebhooks: (...args: unknown[]) => mockRegisterWebhooks(...args),
         fetchStoreInfo: (...args: unknown[]) => mockFetchStoreInfo(...args),
         fullSync: (...args: unknown[]) => mockFullSync(...args),
+        registerEmbeddedToken: (...args: unknown[]) => mockRegisterEmbeddedToken(...args),
+        deleteEmbeddedToken: (...args: unknown[]) => mockDeleteEmbeddedToken(...args),
+        resolveZidCredentials: (...args: unknown[]) => mockResolveZidCredentials(...args),
     };
 });
 
@@ -45,6 +54,8 @@ const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-zid-123');
 const mockRegisterWebhooksWithPersist = vi.fn(
     (_storeId: string, _platform: string, fn: () => Promise<unknown>) => fn(),
 );
+const mockSetEmbeddedTokenHash = vi.fn().mockResolvedValue(undefined);
+const mockGetStoreByEmbeddedTokenHash = vi.fn().mockResolvedValue(null);
 
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
@@ -61,6 +72,9 @@ vi.mock('../../src/services/ecommerce', () => ({
     mapToEcommerceStore: (...args: unknown[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: unknown[]) => mockCreatePendingInstall(...args),
     registerWebhooksWithPersist: (...args: unknown[]) => mockRegisterWebhooksWithPersist(...args as [string, string, () => Promise<unknown>]),
+    setEmbeddedTokenHash: (...args: unknown[]) => mockSetEmbeddedTokenHash(...args),
+    getStoreByEmbeddedTokenHash: (...args: unknown[]) => mockGetStoreByEmbeddedTokenHash(...args),
+    touchEmbeddedTokenUse: vi.fn().mockResolvedValue(undefined),
     // Imported by the REAL services/zid module (kept real via importOriginal).
     updateStoreTokens: vi.fn(),
     markStoreNeedsReauth: vi.fn(),
@@ -69,17 +83,42 @@ vi.mock('../../src/services/ecommerce', () => ({
     PRODUCT_SAFETY_CAP: 5000,
 }));
 
+// The embedded-session exchange lives in its own service (shared with future
+// platforms) and is unit-tested directly in test/services/embeddedSession.test.ts.
+// Here we mock it so the CONTROLLER test proves only what the controller owns:
+// it delegates, maps ok→{accessToken,workspaceId}, and collapses every failure
+// to one opaque 401. hashEmbeddedToken is kept REAL — the controller still uses
+// it to register a token on install.
+const mockExchangeEmbeddedCredential = vi.fn();
+vi.mock('../../src/services/embeddedSession', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/services/embeddedSession')>();
+    return {
+        ...actual,
+        exchangeEmbeddedCredential: (...args: unknown[]) => mockExchangeEmbeddedCredential(...args),
+    };
+});
+
 const mockVerifyToken = vi.fn();
+const mockProvisionMerchantUser = vi.fn();
+const mockGetUserById = vi.fn();
+const mockGenerateToken = vi.fn().mockReturnValue('minted.access.token');
+const mockMintBrowserHandoffCode = vi.fn().mockResolvedValue('handoff-code-xyz');
 vi.mock('../../src/services/auth', () => ({
     authService: {
         verifyToken: (...args: unknown[]) => mockVerifyToken(...args),
+        provisionEcommerceMerchantUser: (...args: unknown[]) => mockProvisionMerchantUser(...args),
+        getUserById: (...args: unknown[]) => mockGetUserById(...args),
+        generateToken: (...args: unknown[]) => mockGenerateToken(...args),
+        mintBrowserHandoffCode: (...args: unknown[]) => mockMintBrowserHandoffCode(...args),
     },
 }));
 
 const mockGetUserWorkspaces = vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]);
+const mockResolveDefaultWorkspaceId = vi.fn().mockResolvedValue('resolved_workspace_id');
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: (...args: unknown[]) => mockGetUserWorkspaces(...args),
+        resolveDefaultWorkspaceId: (...args: unknown[]) => mockResolveDefaultWorkspaceId(...args),
     },
 }));
 
@@ -98,6 +137,10 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'https://jawab24.com',
+        // Read at MODULE LOAD by lib/customerNotificationQueue (pulled in via the
+        // real orderNotificationScheduler) — omitting it fails the whole suite at
+        // import time, not in a test.
+        redis: { host: 'localhost', port: 6379, password: undefined },
         zid: {
             clientId: 'test_zid_client',
             clientSecret: 'test_zid_secret',
@@ -145,6 +188,7 @@ import {
     syncStore,
     getStoreProducts,
     linkPage,
+    embeddedSession,
 } from '../../src/controllers/zid';
 
 const VALID_TOKENS = {
@@ -275,6 +319,9 @@ describe('Zid Controller', () => {
         });
 
         it('should treat a missing nonce cookie as a platform-initiated (Zid App Market) install and proceed', async () => {
+            // No account exists for the store email → auto-provision one; the
+            // merchant must never meet a login page (Zid rejection 2026-08-10).
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
             const req = mockRequest({
                 query: { code: 'code123', state: 'zid_state_abc' },
                 cookies: {},
@@ -284,8 +331,8 @@ describe('Zid Controller', () => {
             await authCallback(req, rep);
 
             expect(mockExchangeCodeForToken).toHaveBeenCalledWith('code123');
-            expect(mockCreatePendingInstall).toHaveBeenCalled();
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?zid_pending=true');
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('dashboard.zid.sa'));
             expect(rep.status).not.toHaveBeenCalledWith(400);
         });
 
@@ -433,7 +480,7 @@ describe('Zid Controller', () => {
             }));
         });
 
-        it('should create pending install carrying the Authorization token when user is NOT logged in', async () => {
+        it('should create pending install carrying the Authorization token when NOT logged in and the store email is already taken', async () => {
             const unsignCookie = vi.fn()
                 .mockImplementation((cookie: string) => {
                     if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
@@ -441,6 +488,10 @@ describe('Zid Controller', () => {
                 });
 
             mockGetStoreByDomain.mockResolvedValue(null);
+            // Email belongs to an existing account — auto-provisioning REFUSES
+            // (account-takeover vector), so the claim-after-login flow is the
+            // correct fallback and the pending row must still carry both tokens.
+            mockProvisionMerchantUser.mockResolvedValue(null);
 
             const req = mockRequest({
                 query: { code: 'code123', state: 'nonce123' },
@@ -472,14 +523,20 @@ describe('Zid Controller', () => {
             expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?zid_pending=true');
         });
 
-        it('should redirect with error when store is already connected (not logged in)', async () => {
+        it('should reactivate an existing store for its ORIGINAL owner and workspace on a platform reinstall', async () => {
             const unsignCookie = vi.fn()
                 .mockImplementation((cookie: string) => {
                     if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
                     return { valid: false, value: null };
                 });
 
-            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', isActive: true });
+            mockGetStoreByDomain.mockResolvedValue({
+                id: 'store-1',
+                userId: 'original-owner',
+                workspaceId: 'original-workspace',
+                storeDomain: 'my-zid-store.zid.store',
+                isActive: false,
+            });
 
             const req = mockRequest({
                 query: { code: 'code123', state: 'nonce123' },
@@ -490,8 +547,98 @@ describe('Zid Controller', () => {
 
             await authCallback(req, rep);
 
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?zid_error=already_connected');
+            // Ownership is NEVER re-bound, and the store must not drift into
+            // workspaces[0] — a multi-workspace owner would silently lose it.
+            expect(mockCreateStore).toHaveBeenCalledWith(expect.objectContaining({
+                userId: 'original-owner',
+                workspaceId: 'original-workspace',
+            }));
+            expect(mockGetUserWorkspaces).not.toHaveBeenCalled();
+            expect(mockProvisionMerchantUser).not.toHaveBeenCalled();
             expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('dashboard.zid.sa'));
+        });
+
+        it('should NOT auto-provision when the store profile carries no email', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockFetchStoreInfo.mockResolvedValueOnce({ ...STORE_INFO, storeEmail: undefined });
+
+            const req = mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockProvisionMerchantUser).not.toHaveBeenCalled();
+            expect(mockCreatePendingInstall).toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?zid_pending=true');
+        });
+
+        it('should register an embedded token and send the merchant to the Zid dashboard on an App Market install', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+
+            const req = mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockRegisterEmbeddedToken).toHaveBeenCalledWith(
+                { managerToken: 'zid_access_token', authorizationToken: 'zid_auth_token' },
+                expect.stringMatching(/^[0-9a-f-]{36}$/),
+            );
+            // Only the DIGEST is persisted — the UUID itself opens a session.
+            const [, storedHash] = mockSetEmbeddedTokenHash.mock.calls[0];
+            expect(storedHash).toMatch(/^[0-9a-f]{64}$/);
+            const [, registeredUuid] = mockRegisterEmbeddedToken.mock.calls[0];
+            expect(storedHash).not.toBe(registeredUuid);
+
+            expect(rep.redirect).toHaveBeenCalledWith(
+                'https://dashboard.zid.sa/ar-sa/stores/67890/apps/zid-app-777/embedded',
+            );
+        });
+
+        it('should fall back to a logged-in browser session when embedded-token registration fails', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            mockRegisterEmbeddedToken.mockRejectedValueOnce(new Error('Zid 500'));
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1' });
+
+            const req = mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            // A dead iframe or a login wall would both be failures — the merchant
+            // lands in the app with a real session instead.
+            expect(mockSetEmbeddedTokenHash).not.toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith(
+                'https://jawab24.com/auth/sync?code=handoff-code-xyz&redirect=%2Fzid%2Fonboarding',
+            );
+        });
+
+        it('should NOT register an embedded token or override the redirect for a merchant-initiated connect', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    if (cookie === 'signed_jwt') return { valid: true, value: 'jwt_token' };
+                    return { valid: false, value: null };
+                });
+            mockVerifyToken.mockReturnValue({ userId: 'user-123' });
+
+            const req = mockRequest({
+                query: { code: 'code123', state: 'nonce123' },
+                cookies: { zidNonce: 'signed_nonce', token: 'signed_jwt' },
+                user: undefined,
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            // The merchant already has a session; they belong in onboarding, and
+            // an embedded token is still registered so the dashboard entry works.
+            expect(mockRegisterEmbeddedToken).toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
         });
 
         it('should redirect with error on token exchange failure', async () => {
@@ -751,6 +898,44 @@ describe('Zid Controller', () => {
             await webhookHandler(req, rep);
 
             expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('revokes the embedded token BEFORE deactivating (deactivate blanks the tokens the revoke needs)', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue({
+                id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+            });
+            const order: string[] = [];
+            mockDeleteEmbeddedToken.mockImplementationOnce(async () => { order.push('delete-at-zid'); });
+            mockSetEmbeddedTokenHash.mockImplementationOnce(async () => { order.push('clear-hash'); });
+            mockDeactivateStore.mockImplementationOnce(async () => { order.push('deactivate'); });
+
+            const req = webhookRequest({
+                body: { event: 'app.market.application.uninstall', store_id: '67890' },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(order).toEqual(['delete-at-zid', 'clear-hash', 'deactivate']);
+        });
+
+        it('still clears the local embedded hash when Zid rejects the revocation', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue({
+                id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+            });
+            // Expected: Zid invalidates our tokens at uninstall, so the DELETE
+            // often 401s. A surviving hash would keep the session path OPEN.
+            mockDeleteEmbeddedToken.mockRejectedValueOnce(new Error('401'));
+
+            const req = webhookRequest({
+                body: { event: 'app.market.application.uninstall', store_id: '67890' },
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockSetEmbeddedTokenHash).toHaveBeenCalledWith('store-1', null);
+            expect(mockDeactivateStore).toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
@@ -1109,6 +1294,79 @@ describe('Zid Controller', () => {
             await linkPage(req, rep);
 
             expect(mockLinkStoreToPage).toHaveBeenCalledWith('store-1', 'page-1', 'test_workspace_id');
+            expect(rep.send).toHaveBeenCalledWith({ ok: true });
+        });
+    });
+
+    // --- Embedded Apps: the controller is a thin delegate over the shared
+    //     exchange service. Exchange internals (hash lookup, scoping, owner /
+    //     workspace guards, idle-clock) are proven in
+    //     test/services/embeddedSession.test.ts.
+
+    describe('embeddedSession', () => {
+        it('delegates to the exchange with platform "zid" and the request-body credential', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({
+                ok: true, session: { accessToken: 'minted.access.token', workspaceId: 'ws-1', storeId: 'store-1' },
+            });
+            const req = mockRequest({ body: { embeddedToken: 'uuid-abc' } });
+            const rep = mockReply();
+
+            await embeddedSession(req, rep);
+
+            expect(mockExchangeEmbeddedCredential).toHaveBeenCalledWith('zid', 'uuid-abc', expect.anything());
+        });
+
+        it('maps a successful exchange to { accessToken, workspaceId } and nothing else', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({
+                ok: true, session: { accessToken: 'minted.access.token', workspaceId: 'ws-1', storeId: 'store-1' },
+            });
+            const rep = mockReply();
+
+            await embeddedSession(mockRequest({ body: { embeddedToken: 'uuid-abc' } }), rep);
+
+            // storeId is deliberately NOT leaked to the frame — the session is
+            // the only thing the page needs.
+            expect(rep.send).toHaveBeenCalledWith({ accessToken: 'minted.access.token', workspaceId: 'ws-1' });
+        });
+
+        it.each([
+            ['missing-token'],
+            ['unknown-or-expired-credential'],
+            ['owner-missing'],
+            ['no-workspace'],
+        ])('collapses failure "%s" to one opaque 401 — never distinguishes the cause to the caller', async (reason) => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({ ok: false, reason });
+            const rep = mockReply();
+
+            await embeddedSession(mockRequest({ body: { embeddedToken: 'x' } }), rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
+            expect(rep.send).toHaveBeenCalledWith({
+                error: { message: 'Embedded session could not be established', code: 'EMBEDDED_SESSION_INVALID' },
+            });
+        });
+
+        it('reads the credential from `embeddedToken`, not `token` (which is the SESSION out)', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({ ok: false, reason: 'missing-token' });
+            await embeddedSession(mockRequest({ body: { token: 'wrong-field' } }), mockReply());
+
+            // The old field name must reach the exchange as undefined, not silently work.
+            expect(mockExchangeEmbeddedCredential).toHaveBeenCalledWith('zid', undefined, expect.anything());
+        });
+    });
+
+    describe('disconnect', () => {
+        it('revokes the embedded token before disconnecting the store', async () => {
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
+            const order: string[] = [];
+            mockDeleteEmbeddedToken.mockImplementationOnce(async () => { order.push('delete-at-zid'); });
+            mockSetEmbeddedTokenHash.mockImplementationOnce(async () => { order.push('clear-hash'); });
+            mockDisconnectStore.mockImplementationOnce(async () => { order.push('disconnect'); });
+
+            const rep = mockReply();
+            await disconnectStoreHandler(mockRequest(), rep);
+
+            expect(order).toEqual(['delete-at-zid', 'clear-hash', 'disconnect']);
             expect(rep.send).toHaveBeenCalledWith({ ok: true });
         });
     });

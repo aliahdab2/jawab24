@@ -48,7 +48,24 @@ export async function requireAdmin(request: AuthenticatedRequest, reply: Fastify
             code: 'AUTH_REQUIRED',
         });
     }
-    
+
+    // A restricted (embedded) session can never be admin — even if the OWNER is
+    // a real Jawab24 admin. This gate re-reads admin status from the DB (unlike
+    // middleware/auth.ts, which trusts the force-cleared JWT flag), so the JWT
+    // clearing alone would NOT stop it here — the session marker must.
+    if (user.embeddedPlatform) {
+        request.log.warn({
+            userId: user.userId,
+            route: request.url,
+            embeddedPlatform: user.embeddedPlatform,
+        }, 'Admin access denied for embedded session');
+        return reply.status(403).send({
+            error: true,
+            message: 'Admin access required',
+            code: 'ADMIN_REQUIRED',
+        });
+    }
+
     const isAdmin = await isUserAdmin(user.userId);
     
     if (!isAdmin) {

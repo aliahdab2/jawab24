@@ -24,6 +24,8 @@ export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string;
 /**
  * Resolves the workspace context for the current request.
  *
+ * 0. If the TOKEN pins a workspace (restricted embedded session — see
+ *    TokenScope), that pin wins over the header and over the default resolver.
  * 1. If `X-Workspace-Id` header is present, verify the user is a member.
  * 2. If no header, auto-select a default workspace (owned-first, then oldest membership).
  *    This matches standard SaaS behaviour and unblocks clients whose workspace
@@ -45,37 +47,35 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         });
     }
 
+    // A restricted session is PINNED to the workspace named in its own token.
+    // The client cannot widen it by sending a different X-Workspace-Id: the
+    // embedded credential proves the store, so the session must not reach the
+    // owner's other workspaces (their other pages, stores, and billing).
+    // Enforced here rather than at each handler so no route can forget it.
+    const scopedWorkspaceId = request.user?.scopedWorkspaceId;
+    if (scopedWorkspaceId) {
+        const requested = request.headers['x-workspace-id'] as string | undefined;
+        if (requested && requested !== scopedWorkspaceId) {
+            request.log.warn({
+                userId,
+                route: request.url,
+                requested,
+                scopedWorkspaceId,
+                embeddedPlatform: request.user?.embeddedPlatform,
+            }, 'Embedded session tried to use a workspace outside its scope');
+            return reply.status(403).send({
+                error: true,
+                message: 'This session is limited to a single workspace',
+                code: 'WORKSPACE_SCOPE_DENIED',
+            });
+        }
+        return applyMembership(request, reply, userId, scopedWorkspaceId, 'out-of-scope');
+    }
+
     const headerWorkspaceId = request.headers['x-workspace-id'] as string | undefined;
 
     if (headerWorkspaceId) {
-        // Verify user is a member of this workspace
-        const membership = await db
-            .select({
-                role: workspaceMembers.role,
-                ownerId: workspaces.ownerId,
-            })
-            .from(workspaceMembers)
-            .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-            .where(
-                and(
-                    eq(workspaceMembers.workspaceId, headerWorkspaceId),
-                    eq(workspaceMembers.userId, userId),
-                )
-            )
-            .limit(1);
-
-        if (membership.length === 0) {
-            return reply.status(403).send({
-                error: true,
-                message: 'You are not a member of this workspace',
-                code: 'WORKSPACE_ACCESS_DENIED',
-            });
-        }
-
-        request.workspaceId = headerWorkspaceId;
-        request.workspaceRole = membership[0].role as WorkspaceRole;
-        request.workspaceOwnerId = membership[0].ownerId;
-        return;
+        return applyMembership(request, reply, userId, headerWorkspaceId, 'not-a-member');
     }
 
     // No header — defer to the server-authoritative resolver. Same logic used
@@ -93,6 +93,24 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         });
     }
 
+    // Resolver returning an id the user is no longer a member of should be
+    // impossible (it membership-checks), but guard anyway.
+    return applyMembership(request, reply, userId, defaultWorkspaceId, 'no-workspace');
+}
+
+/**
+ * Load the caller's membership of `workspaceId` and attach the resolved
+ * workspace context to the request, or answer with the caller-appropriate
+ * failure. One body for all three entry paths (token-pinned, header, resolved
+ * default) so the membership check cannot drift between them.
+ */
+async function applyMembership(
+    request: WorkspaceRequest,
+    reply: FastifyReply,
+    userId: string,
+    workspaceId: string,
+    onMissing: 'not-a-member' | 'no-workspace' | 'out-of-scope',
+) {
     const [membership] = await db
         .select({
             role: workspaceMembers.role,
@@ -102,23 +120,38 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
         .where(
             and(
-                eq(workspaceMembers.workspaceId, defaultWorkspaceId),
+                eq(workspaceMembers.workspaceId, workspaceId),
                 eq(workspaceMembers.userId, userId),
             )
         )
         .limit(1);
 
     if (!membership) {
-        // Resolver returned a workspace id that the user is no longer a member of.
-        // Should be impossible (resolver membership-checks), but guard anyway.
-        return reply.status(404).send({
+        if (onMissing === 'no-workspace') {
+            return reply.status(404).send({
+                error: true,
+                message: 'No workspace found. Please log out and log back in.',
+                code: 'NO_WORKSPACE',
+            });
+        }
+        if (onMissing === 'out-of-scope') {
+            // A pinned session whose workspace it no longer belongs to. It cannot
+            // fall back to another one by design, so say so rather than sending
+            // the merchant to a login page they cannot use inside a frame.
+            return reply.status(403).send({
+                error: true,
+                message: 'This session is limited to a single workspace',
+                code: 'WORKSPACE_SCOPE_DENIED',
+            });
+        }
+        return reply.status(403).send({
             error: true,
-            message: 'No workspace found. Please log out and log back in.',
-            code: 'NO_WORKSPACE',
+            message: 'You are not a member of this workspace',
+            code: 'WORKSPACE_ACCESS_DENIED',
         });
     }
 
-    request.workspaceId = defaultWorkspaceId;
+    request.workspaceId = workspaceId;
     request.workspaceRole = membership.role as WorkspaceRole;
     request.workspaceOwnerId = membership.ownerId;
 }

@@ -1,10 +1,18 @@
+import crypto from 'crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as zidService from '../services/zid';
 import {
     resolveStoreByDomainOrMerchant,
     deactivateStore,
     getStoreById,
+    setEmbeddedTokenHash,
 } from '../services/ecommerce';
+import { authService } from '../services/auth';
+import {
+    exchangeEmbeddedCredential,
+    hashEmbeddedToken,
+} from '../services/embeddedSession';
+import { captureError } from '../utils/sentryHelpers';
 import {
     dispatchOrderNotification,
     orderConfirmedEvent,
@@ -31,6 +39,152 @@ function credsFromTokens(tokens: OAuthTokenResponse): zidService.ZidCredentials 
         throw new Error('Zid adapter received a token response without an Authorization token');
     }
     return { managerToken: tokens.accessToken, authorizationToken: tokens.authorizationToken };
+}
+
+// --- Embedded Apps: direct merchant access from the Zid dashboard ---
+//
+// Zid's review standard is "direct merchant access (no sign-in prompt)": after an
+// App Market install the merchant must reach a working app without a login wall,
+// and must be able to re-open it from the Zid dashboard the same way. The
+// mechanism (docs.zid.sa/embedded-apps) is a UUID we generate, register with Zid,
+// and receive back as `?token=` when Zid frames our Application URL.
+//
+// Threat model and the session rules that follow from it live with the exchange
+// itself, in services/embeddedSession.ts. This file owns only the Zid half:
+// minting the UUID, registering it with Zid, and revoking it.
+
+/**
+ * Zid's post-install destination: the app opened INSIDE the merchant dashboard.
+ * `store_id`/`language_code` may be any valid value — Zid's Hermes resolves the
+ * real store and language from the merchant's dashboard session.
+ */
+function zidDashboardEmbeddedUrl(merchantId: string | undefined, log: FastifyRequest['log']): string {
+    const hasMerchantId = Boolean(merchantId && merchantId.trim());
+    if (!hasMerchantId) {
+        // Zid resolves the real store from the dashboard session, so a filler
+        // segment works today. Log it anyway: if Zid ever validates the segment
+        // this becomes a 404 on the merchant's ONLY way into the app, and a
+        // silent fallback is how the last Zid failure took eight days to name.
+        log.warn('Zid store profile carried no merchantId — using a filler store segment in the dashboard URL');
+    }
+    const storeSegment = hasMerchantId ? encodeURIComponent(merchantId as string) : '1';
+    return `https://dashboard.zid.sa/ar-sa/stores/${storeSegment}/apps/${encodeURIComponent(config.zid.appId)}/embedded`;
+}
+
+/**
+ * Mint + register the embedded-app token for a freshly installed store, and
+ * persist its hash. Returns false when Zid rejects the registration (the store
+ * is still installed and usable in the browser — only the in-dashboard entry is
+ * unavailable, so callers fall back to a browser session rather than sending the
+ * merchant to an iframe that cannot authenticate them).
+ */
+async function provisionEmbeddedToken(
+    storeId: string,
+    tokens: { accessToken: string; authorizationToken?: string },
+    log: FastifyRequest['log'],
+): Promise<boolean> {
+    if (!tokens.authorizationToken) {
+        // credsFromTokens throws on this and exchangeCodeForToken fails fast, so
+        // reaching here means a non-Zid token response was routed to the Zid
+        // adapter. Same degraded outcome as a rejected registration — and the
+        // same visibility, because a silent `return false` here looked identical
+        // to a healthy install while costing the merchant their dashboard entry.
+        captureError(
+            new Error('Zid embedded-token registration skipped: no Authorization token'),
+            'Zid embedded-token registration skipped',
+            { tags: { service: 'zid', action: 'register-embedded-token' }, extra: { storeId } },
+        );
+        log.error({ storeId }, 'Zid embedded-token registration skipped — token response carried no Authorization token');
+        return false;
+    }
+    const embeddedToken = crypto.randomUUID();
+    try {
+        await zidService.registerEmbeddedToken(
+            { managerToken: tokens.accessToken, authorizationToken: tokens.authorizationToken },
+            embeddedToken,
+        );
+        await setEmbeddedTokenHash(storeId, hashEmbeddedToken(embeddedToken));
+        return true;
+    } catch (error) {
+        // Never fail the install for this — but it MUST be visible: without it
+        // the merchant has no in-dashboard entry, which is the exact defect Zid
+        // rejected the app for.
+        captureError(error, 'Zid embedded-token registration failed', {
+            tags: { service: 'zid', action: 'register-embedded-token' },
+            extra: { storeId },
+        });
+        log.error({ err: error, storeId }, 'Zid embedded-token registration failed');
+        return false;
+    }
+}
+
+/**
+ * Revoke a store's embedded-app token — at Zid (best-effort) and locally
+ * (always). Called on uninstall and on merchant-initiated disconnect.
+ */
+export async function revokeEmbeddedToken(
+    storeId: string,
+    log: FastifyRequest['log'],
+    reason: 'uninstall' | 'disconnect' = 'uninstall',
+): Promise<void> {
+    try {
+        const creds = await zidService.resolveZidCredentials(storeId);
+        if (creds) await zidService.deleteEmbeddedToken(creds);
+    } catch (error) {
+        // On UNINSTALL this is expected — Zid invalidates our OAuth tokens as
+        // part of the uninstall, so the DELETE has nothing to authenticate with.
+        // On DISCONNECT the tokens are still live, so a failure means a usable
+        // credential survives at Zid's side and is worth a Sentry event.
+        if (reason === 'disconnect') {
+            captureError(error, 'Zid embedded-token revocation failed on merchant disconnect', {
+                tags: { service: 'zid', action: 'revoke-embedded-token' },
+                extra: { storeId },
+            });
+        }
+        log.warn({ err: error, storeId, reason }, 'Zid embedded-token revocation at Zid failed — clearing local hash anyway');
+    }
+    try {
+        await setEmbeddedTokenHash(storeId, null);
+    } catch (error) {
+        // THIS one matters: a surviving hash keeps the session path open.
+        captureError(error, 'Failed to clear Zid embedded token hash', {
+            tags: { service: 'zid', action: 'clear-embedded-token' },
+            extra: { storeId },
+        });
+    }
+}
+
+/**
+ * POST /zid/embedded/session — trade the iframe's UUID for a real session.
+ *
+ * PUBLIC by necessity: the request comes from our page running inside Zid's
+ * dashboard iframe, a cross-site context where our SameSite=strict auth cookies
+ * are not sent. The UUID is the credential, and it is exactly what Zid puts in
+ * the iframe URL by design. The exchange itself — including the scoping that
+ * keeps this session inside the store's workspace — is in
+ * services/embeddedSession.ts, shared with whatever platform adopts it next.
+ *
+ * Every refusal answers with the SAME opaque 401. A public endpoint must not
+ * tell an unknown caller whether a credential is unknown, revoked or expired;
+ * the reason is in the logs instead.
+ */
+export async function embeddedSession(request: FastifyRequest, reply: FastifyReply) {
+    const { embeddedToken } = (request.body ?? {}) as { embeddedToken?: string };
+
+    const result = await exchangeEmbeddedCredential('zid', embeddedToken, request.log);
+
+    if (!result.ok) {
+        return reply.status(401).send({
+            error: { message: 'Embedded session could not be established', code: 'EMBEDDED_SESSION_INVALID' },
+        });
+    }
+
+    // `accessToken`, not `token`: the request body's credential is also a
+    // "token", and naming both the same is how they get wired backwards.
+    return reply.send({
+        accessToken: result.session.accessToken,
+        workspaceId: result.session.workspaceId,
+    });
 }
 
 // --- Webhook (single endpoint — Basic-auth verified, dispatches by event) ---
@@ -96,7 +250,15 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
     if (event === ZID_UNINSTALL_EVENT) {
         const store = await resolveStore();
-        if (store) await deactivateStore('zid', store.storeDomain);
+        if (store) {
+            // Revoke the in-dashboard entry BEFORE deactivating: deactivateStore
+            // blanks the OAuth tokens, after which the Zid DELETE cannot be
+            // authenticated. Best-effort at Zid's side (it invalidates our tokens
+            // at uninstall anyway), but clearing OUR hash is what actually closes
+            // the session path, so it happens either way.
+            await revokeEmbeddedToken(store.id, request.log);
+            await deactivateStore('zid', store.storeDomain);
+        }
         return reply.status(200).send({ ok: true });
     }
 
@@ -201,4 +363,47 @@ export const {
     scopes: config.zid.scopes,
     pendingCookieName: 'pendingZidId',
     pendingCookieOptions: PENDING_ZID_COOKIE_OPTIONS,
+
+    // An App Market install arrives with no Jawab24 session. Zid requires the
+    // merchant to reach a working app with no sign-in prompt, so we create the
+    // account from the store profile Zid itself returned. Returning null (email
+    // missing, or already held by an account — an account-takeover vector, see
+    // provisionEcommerceMerchantUser) falls back to the claim-after-login flow.
+    provisionMerchant: async (storeInfo) => {
+        if (!storeInfo.storeEmail) return null;
+        const user = await authService.provisionEcommerceMerchantUser(
+            storeInfo.storeEmail,
+            storeInfo.storeName,
+            'zid',
+        );
+        return user ? { userId: user.id } : null;
+    },
+
+    // A merchant reinstalling from the App Market has no browser session either.
+    // The code exchange proves Zid sent us here for THIS store, so reactivate it
+    // for its existing owner (fresh tokens, fresh embedded token) instead of
+    // bouncing them to a login page saying it is already connected.
+    reinstallPolicy: 'reactivate-for-owner',
+
+    onDisconnect: (storeId, log) => revokeEmbeddedToken(storeId, log, 'disconnect'),
+
+    postInstall: async (store, tokens, storeInfo, platformInitiated, log) => {
+        const registered = await provisionEmbeddedToken(store.id, tokens, log);
+
+        if (!platformInitiated) {
+            // Merchant started from inside Jawab24 and still has their session.
+            return null;
+        }
+        if (registered) {
+            // Documented Zid flow: hand the merchant back to their dashboard,
+            // which frames our app and authenticates it with the token above.
+            return zidDashboardEmbeddedUrl(storeInfo.merchantId, log);
+        }
+        // No in-dashboard entry available — put them in the app in the browser
+        // with a real session rather than a login wall or a dead iframe.
+        const store_ = await getStoreById(store.id);
+        if (!store_) return null;
+        const code = await authService.mintBrowserHandoffCode(store_.userId);
+        return `${config.frontendUrl}/auth/sync?code=${encodeURIComponent(code)}&redirect=${encodeURIComponent('/zid/onboarding')}`;
+    },
 });

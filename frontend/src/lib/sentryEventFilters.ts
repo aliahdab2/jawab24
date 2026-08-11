@@ -91,3 +91,45 @@ export function isInAppBrowserInjectedEvent(event: SentryEvent): boolean {
 
   return values.some((value) => value.stacktrace?.frames?.some(isInjectedFrame) ?? false);
 }
+
+/**
+ * Query-string parameters that carry a live bearer credential and must never
+ * reach Sentry. The Zid embedded-app entry is framed at
+ * `/zid/embedded?token=<uuid>` — the UUID opens a merchant session, so a crash
+ * on that page (or a navigation breadcrumb through it) would otherwise ship the
+ * credential to our error store. The page strips it from the address bar too;
+ * this is the second layer, for the report the SDK captured before the strip.
+ */
+const CREDENTIAL_QUERY_PARAMS = ['token', 'embeddedToken', 'code'];
+
+/** Replace any credential-bearing query param value in a URL string with REDACTED. */
+export function redactCredentialQuery(url: string): string {
+  if (!url || (!url.includes('?') && !url.includes('&'))) return url;
+  let out = url;
+  for (const param of CREDENTIAL_QUERY_PARAMS) {
+    // Matches `?param=...` / `&param=...` up to the next & or #, value redacted.
+    out = out.replace(new RegExp(`([?&]${param}=)[^&#]*`, 'gi'), '$1REDACTED');
+  }
+  return out;
+}
+
+/**
+ * Walk an outgoing Sentry event and redact credential-bearing query params from
+ * every place a URL can hide: the request URL, the transaction name, and every
+ * breadcrumb (navigation `to`/`from`, and fetch/xhr `data.url`). Mutates in
+ * place and returns the event — meant to run first in `beforeSend`.
+ */
+export function scrubCredentialsFromEvent<T extends SentryEvent>(event: T): T {
+  if (event.request?.url) {
+    event.request.url = redactCredentialQuery(event.request.url);
+  }
+  if (typeof event.transaction === 'string') {
+    event.transaction = redactCredentialQuery(event.transaction);
+  }
+  for (const crumb of event.breadcrumbs ?? []) {
+    if (typeof crumb.data?.to === 'string') crumb.data.to = redactCredentialQuery(crumb.data.to);
+    if (typeof crumb.data?.from === 'string') crumb.data.from = redactCredentialQuery(crumb.data.from);
+    if (typeof crumb.data?.url === 'string') crumb.data.url = redactCredentialQuery(crumb.data.url);
+  }
+  return event;
+}

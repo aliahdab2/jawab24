@@ -4,9 +4,18 @@
 > traffic before un-gating the integration (D-020) and before publishing to the Zid App
 > Market. This is a tickable run-book — execute in order, log pass/fail, capture evidence.
 >
-> **Status: BLOCKED on Zid's agreement approval (external).** Everything else is ready.
-> Code shipped dark in PR #586 (merged 2026-08-01); `ZID_CLIENT_ID` is unset in prod and
-> the integrations page shows `coming_soon` until this plan's exit gates pass.
+> **Status: NOT blocked externally — this run-book is the next action.**
+> Zid support confirmed the real order on 2026-08-08/09: app **Draft → In Review → Zid's
+> technical review passes → agreement countersigned**. The agreement is the EXIT, never an
+> entry condition; the earlier "blocked on the agreement" header was wrong and cost eight
+> idle days (08-01 → 08-09).
+>
+> App 7367 was submitted and **REJECTED on 2026-08-10**: *"OAuth does not yet meet our
+> required standards. Key updates needed: • Direct merchant access (no sign-in prompt)
+> • Full data integration with Zid."* The first bullet is addressed by the Embedded Apps
+> work (§L below); the second needs §H billing plus a green §A–§F. Prod env vars ARE set
+> (`ZID_CLIENT_ID`=7192 verified live); `ZID_CLIENT_SECRET` remains the one unverified
+> value — §A-1 is what proves it.
 >
 > **Companion docs:** `docs/integrations/zid.md` (verified API contract + `[provisional]`
 > parser list), `SHOPIFY_TEST_PLAN.md` (same structure; shared-infrastructure cases mirror
@@ -37,7 +46,8 @@ surprise.
 
 | # | Item | How to verify | Status |
 |---|------|---------------|:--:|
-| P-1 | **Zid partnership agreement APPROVED** (submitted 2026-08-01, "In Review") | partner.zid.sa → Partnership page shows approved/signed agreement | ☐ |
+| P-1 | ⛔ **INVERTED 2026-08-11 — the agreement is NOT a precondition.** It is countersigned only AFTER Zid's technical review passes (Zid support, 08-08/09), so this run-book runs FIRST. Nothing here waits on partner.zid.sa. | Agreement state is an EXIT check in §K, not an entry one | n/a |
+| P-1b | App **7367 is editable** (it returned to Draft after the 08-10 rejection — verified 08-11: the wizard shows Edit + "Send for review") | partner.zid.sa → My Apps → row shows `Rejected`, pencil icon opens the wizard | ☑ |
 | P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures) | `https://h47p59.zid.store/` renders the storefront publicly | ☐ |
 | P-3 | Partner app **7367** (Client ID 7192) reachable; decide dev-redirect strategy: dedicated DEV app (mirrors `Jawab24-Dev` on Salla, recommended) OR temporarily point app 7367's Redirection/Callback URLs at ngrok | Partner Dashboard → app → General Settings | ☐ |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
@@ -56,9 +66,15 @@ surprise.
 > "Save disabled" usually means a hidden required field (e.g. scope justification,
 > 50–200 chars).
 
+> ✅ **Scope strings: RESOLVED 2026-08-11, no capture needed.** The dashboard's scope
+> matrix (Account R, Account Identity R, Store Core Details R, Orders R, Products R,
+> Webhooks RW) is what grants permissions — it is NOT expressed in the authorize URL. The
+> only scope Zid documents for that parameter is `embedded_apps_tokens_write`
+> (docs.zid.sa/embedded-apps Step 1), which is now what `config.zid.scopes` sends. The
+> previous value was four invented names.
+
 **Still-open questions this plan must answer from captures** (from
-`docs/integrations/zid.md`): the OAuth **scope strings** for the authorize URL (dashboard
-shows groups, not strings — fix `config.zid.scopes` from the real consent screen); whether
+`docs/integrations/zid.md`): whether
 `ZID_APP_ID` (webhook `original_id`) is the app id **7367** or the Client ID **7192**;
 what auth `app.market.*` lifecycle deliveries carry.
 
@@ -357,6 +373,52 @@ If throttling appears, verify the sync retries rather than truncating (the old s
 
 ---
 
+## L. Direct Merchant Access — Embedded Apps (the 2026-08-10 rejection)
+
+> Zid's stated defect: *"Direct merchant access (no sign-in prompt)."* Before this,
+> a platform-initiated install with no Jawab24 session created a pending install and
+> redirected to `/login?zid_pending=true` — the reviewer met a login wall and could not
+> complete a single scenario. Implemented per docs.zid.sa/embedded-apps.
+>
+> ⚠️ **Every case here must be run by someone who is NOT logged into Jawab24 in that
+> browser profile.** A stray session silently routes you down the logged-in path and the
+> whole section passes for the wrong reason. Use a fresh private window per case.
+
+| ID | Test | Expected | Capture |
+|----|------|----------|:--:|
+| L-1 | Install app 7367 on the dev store from the Zid App Market, logged OUT of Jawab24 | **No login page at any point.** Account auto-created from the store profile; browser ends on `dashboard.zid.sa/…/apps/7367/embedded` | C12: the full redirect chain |
+| L-2 | Inspect the new account | User row has the store's email, NO facebookId, NO phone; owns a workspace; has a subscription row | — |
+| L-3 | Open the app from the Zid dashboard (Apps → Jawab24) | App renders INSIDE the dashboard iframe, already authenticated; no sign-in prompt | C13: the `?token=…&language=…` iframe URL |
+| L-4 | Navigate inside the iframe (dashboard → business info → settings) | Every page renders framed; no blank frame, no XFO/CSP error in the console | Console log if it fails |
+| L-5 | Let the access token expire (>15 min idle), then act | Session re-mints silently from the stored UUID; merchant is NOT bounced to `/login` | — |
+| L-6 | Reinstall the app after an uninstall | A NEW UUID is registered; the store is reactivated for its ORIGINAL owner and workspace (never re-bound, never `already_connected`) | C14: the reinstall callback |
+| L-7 | Uninstall, then replay the OLD iframe URL | `POST /zid/embedded/session` → 401; `embedded_token_hash` is NULL in the DB | C15: the uninstall delivery |
+| L-8 | Disconnect from inside Jawab24 (Integrations → Disconnect), then replay the iframe URL | 401 — a merchant-side disconnect must close the dashboard entry too | — |
+| L-9 | **Takeover guard:** set the dev store's email to an address that already has a Jawab24 account, then install logged-out | NO auto-login. Falls back to the claim-after-login flow; the existing account is untouched | — |
+| L-10 | `curl -sI https://jawab24.com/zid/embedded` | No `X-Frame-Options` header; CSP `frame-ancestors` names dashboard.zid.sa + web.zid.sa, and does NOT contain `zid.dev` | — |
+| L-11 | **Scope:** inside the frame, try to reach the admin console or switch to another of the owner's workspaces (set `X-Workspace-Id` to a different one) | 403 `WORKSPACE_SCOPE_DENIED` / `ADMIN_REQUIRED`. The embedded session sees ONLY the store's workspace; even an owner who is a Jawab24 admin gets no admin surface | DevTools network tab |
+| L-12 | **Credential hygiene:** after the frame loads, inspect the address bar, `nginx` access log for `/zid/embedded`, and any Sentry event | No `?token=<uuid>` anywhere — stripped from the URL, path-only in the log, `REDACTED` in Sentry | — |
+| L-13 | **Idle expiry:** leave a store's embedded entry unused for >30 days (or set `embedded_token_last_used_at` back in the DB), then open it | 401 — the merchant reopens/reinstalls to mint a fresh UUID | — |
+| L-14 | **Workspace guarantee:** provision a merchant whose store email matches a *pending workspace invite*, then open the app | The merchant still owns a personal workspace (the invite does not suppress it); store reads do not 404 | — |
+| L-15 | **No pages yet:** open the freshly-provisioned app in the frame; on the "connect a page" step | An actionable **"Connect a Facebook page"** button (not a dead sentence); it opens Jawab24 in a NEW top-level tab (facebook.com cannot be framed) | C16: the new tab opening |
+
+**Shared-infrastructure re-check (§G-adjacent, MANDATORY).** Removing `X-Frame-Options`
+domain-wide is a change every response carries. Before publish, confirm on PROD that
+`frame-ancestors` is present and correct on a normal page (`/`, `/pricing`, `/dashboard`)
+— a CSP typo silently drops the whole header, taking clickjacking protection with it.
+`npm run check:nginx-routing` asserts both the routes and these headers.
+
+> **⚠️ Deferred — blocks the RESUBMISSION, not this PR.** The seamless in-frame Facebook
+> connect is NOT built. facebook.com refuses framing (`X-Frame-Options: DENY`), and a
+> scope-preserving break-out needs threading the embedded scope through the shared
+> `/auth/browser-handoff` bridge (shared infra, deliberately untouched here). Today L-15
+> breaks OUT to a top-level tab, where the merchant authenticates normally and connects a
+> page. Before resubmitting app 7367, either finish the scoped-handoff break-out or confirm
+> the top-level-tab flow is acceptable to the reviewer, and run §A–§F live plus the §H
+> billing scenario. Do not resubmit on the embedded flow alone.
+
+---
+
 ## K. Finalize + Un-Gate (exit)
 
 1. Fold every capture (C1–C11 + §H/§I captures) into the test fixtures; finalize all
@@ -380,10 +442,17 @@ connect → both creds stored → products synced → KB reply cites a real prod
 uninstall deactivates the store → reconnect works → refresh proven.
 
 **Publish gate:** D-020 gate + §G security + §I soak/robustness + §J rehearsal +
-(once the billing PR exists) §H billing cases green.
+§L direct-merchant-access + §H billing cases green.
 
-**Effort estimate once P-1 lands:** 1–2 focused sessions for §A–§F (Salla's equivalent
-took one evening); §H after its PR; §I adds ~half a session.
+**Resubmission gate (app 7367 → In Review), addressing the 08-10 rejection:**
+§L green (bullet 1: "direct merchant access") + §H green (bullet 2's Subscription-App
+scenario 2, "subscribe to a plan, confirm it syncs") + §A–§F green (scenario 3, "all
+scenarios and features sync") + the listing gaps closed (5–12 min video, Arabic
+screenshots, activation steps in the description, in-app support channel with a stated
+response time, test-account credentials).
+
+**Effort estimate:** 1–2 focused sessions for §A–§F (Salla's equivalent took one
+evening); §L ~half a session; §I adds ~half a session.
 
 ---
 
@@ -398,3 +467,7 @@ code change before publish.
 
 - 2026-08-01: Created — absorbs the session capture plan (C1–C11, D-020 exit) and adds
   billing spec (§H), real-traffic soak/robustness (§I), and publish rehearsal (§J).
+- 2026-08-11: **P-1 inverted** — the agreement is an exit, not an entry (Zid support
+  08-08/09); the old header stalled this run-book for eight days. Records the 08-10
+  rejection and its stated reasons, adds **§L** (direct merchant access / Embedded Apps,
+  C12–C15) and a resubmission gate, and closes the scope-strings open question.

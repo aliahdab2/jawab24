@@ -1122,3 +1122,101 @@ accept it as a staffed-process risk.
 source driven by `app.subscription.*` webhooks), the suppression becomes a redirect to Salla's
 plan management and the exemption predicate is replaced by a subscription-reading
 `isSallaBilled(row)`, exactly like Shopify's.
+
+---
+
+## D-066 · Zid App Market installs auto-provision the merchant account, and the app runs embedded in Zid's dashboard
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Supersedes:** nothing (extends D-053)
+
+**Context.** Zid rejected app 7367 on 2026-08-10: *"OAuth does not yet meet our required
+standards. Key updates needed: • Direct merchant access (no sign-in prompt) • Full data
+integration with Zid."* The proximate defect was structural, not a bug: a platform-initiated
+install arrives with **no Jawab24 session**, and `createEcommerceControllers`' callback
+answered that by creating a pending install and redirecting to `/login?zid_pending=true`.
+The reviewer met a login wall and could not complete a single scenario. Zid's own guidance
+is explicit — *"Create an account for the merchant using our APIs and don't let them create
+one"* (help-partner.zid.sa/en/articles/8645309).
+
+**Ruling.**
+
+1. **Auto-provision on platform-initiated install.** When the OAuth callback has no session,
+   the merchant account is created from the store profile Zid returned
+   (`authService.provisionEcommerceMerchantUser`) — user + workspace + subscription — and the
+   store is attached to it. No login, ever.
+2. **An existing email REFUSES auto-provisioning** and falls back to claim-after-login. A
+   store's email is set by whoever controls the store, so an email match is not proof of
+   identity; auto-logging in on one would be account takeover. The check is
+   case-insensitive on the column, not just the input.
+3. **The app runs embedded** in the Zid Merchant Dashboard per docs.zid.sa/embedded-apps: a
+   UUID we mint is registered with Zid, comes back as `?token=` on the framed Application
+   URL, and is traded for a normal short-lived access token. Only the UUID's SHA-256 is
+   stored; it is rotated on every (re)install and revoked — at Zid and locally — on both
+   uninstall and merchant-side disconnect, always *before* the token-blanking step.
+4. **Inside the frame the session is a Bearer token in `sessionStorage`, not a cookie.**
+   `SameSite=strict` cookies are never sent to a third-party frame, so both cookie auth and
+   the `/auth/refresh` rotation are unavailable there by construction. Re-minting from the
+   UUID replaces refresh. No long-lived bearer token is ever issued.
+5. **A platform reinstall reactivates the store for its ORIGINAL owner and workspace.** The
+   server-to-server code exchange proves Zid sent us there for that store; ownership is never
+   re-bound, and the workspace is taken from the existing row rather than `workspaces[0]`
+   (which would silently move the store for a multi-workspace owner).
+6. **`X-Frame-Options` is removed domain-wide in favour of CSP `frame-ancestors`.** XFO has
+   no allowlist form, so `SAMEORIGIN` blocked the integration outright. `frame-ancestors
+   'self' dashboard.zid.sa web.zid.sa *.zid.dev` is the standards-track replacement,
+   overrides XFO where both exist, and is honoured by every browser we support.
+
+**Why this is worth the shared-infrastructure risk (point 6).** It touches every response on
+the domain — the review rules class that as Critical, and it is the one part of this change
+that can hurt pages nobody was thinking about. Accepted because: the allowlist is three named
+Zid hosts (not `*`), anti-clickjacking behaviour is unchanged for every other origin, this is
+what Shopify and Salla embedded apps require too, and the alternative (relaxing only
+`/zid/embedded`) blanks the frame on the merchant's first navigation. `npm run
+check:nginx-routing` boots the real config and asserts both the routes and these headers, so
+a well-meaning "restore the security header" edit fails the gate instead of silently killing
+the integration.
+
+**Scope boundary.** All four adapter hooks (`provisionMerchant`, `postInstall`,
+`reinstallPolicy`, `onDisconnect`) are **opt-in**; Salla and Shopify pass none of them and
+their behaviour is byte-identical. Salla will need the same treatment before ITS review — the
+Easy-Mode claim flow has the same login-wall shape — and should adopt these hooks rather than
+grow a parallel implementation.
+
+**Not addressed here.** The rejection's second bullet, "full data integration", needs the Zid
+billing PR (Subscription-App scenario 2, "subscribe to a plan, confirm it syncs" — specified
+in `ZID_TEST_PLAN.md` §H) plus a green §A–§F. Do not resubmit on this PR alone.
+
+### D-066 addendum (2026-08-11) — persona-review hardening
+
+The first cut authenticated the embedded frame as the store owner with an **unscoped** session
+and removed `X-Frame-Options` with `*.zid.dev` in the production allowlist. Review found the
+credential (a permanent UUID) rode the URL into logs/Sentry, a blocked-storage frame fell
+through to `/login` inside the iframe, and an auto-provisioned merchant could end up
+workspace-less with no recovery. Resolved, all in the same change:
+
+1. **The embedded session is workspace-SCOPED, not full-account** (`TokenScope`;
+   `generateToken(user, expiry, scope)`). A scoped token pins one workspace (`resolveWorkspace`
+   refuses any other, even via `X-Workspace-Id`) and is admin-stripped (`requireAdmin` in BOTH
+   `middleware/auth.ts` and `middleware/admin.ts` rejects it). A leaked UUID therefore grants
+   the store, never the owner's other pages/stores/billing/admin — which also bounds the
+   reinstall-for-owner path: a store collaborator who reinstalls lands in a scoped session, not
+   the owner's account.
+2. **The credential never persists in the clear**: the entry page strips `?token=` from the URL
+   on arrival, nginx logs path-only for `/zid/embedded` (`log_format main_noquery`), Sentry
+   `beforeSend` redacts it, and the UUID idle-expires (`embedded_token_last_used_at`, 30 days,
+   migration `0160`).
+3. **Blocked third-party storage** falls back to an in-memory store instead of silently
+   no-op-ing the write and dropping to a cookie session that a frame cannot send.
+4. **Auto-provisioning GUARANTEES a workspace** (bypassing the pending-invite skip, which only
+   made sense for accounts that can log in and accept the invite) and refuses rather than
+   returns a half-built account.
+5. **`*.zid.dev` dropped** from the production `frame-ancestors`; `check:nginx-routing` now
+   asserts its absence.
+6. The exchange is extracted to `services/embeddedSession.ts` (platform-agnostic, ready for
+   Salla) and every refusal is one opaque 401 with a distinct logged reason.
+
+**Still deferred (not blocking this PR, blocking the resubmission):** the seamless in-frame
+Facebook-connect. facebook.com refuses framing, and a scope-preserving break-out needs threading
+scope through the shared `/auth/browser-handoff` bridge — shared infra not touched here. The
+embedded empty-state now breaks OUT to a top-level tab instead of dead-ending, which is honest
+but not seamless. See `ZID_TEST_PLAN.md`.

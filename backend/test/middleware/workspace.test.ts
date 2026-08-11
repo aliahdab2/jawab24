@@ -44,6 +44,8 @@ function makeRequest(overrides: Record<string, unknown> = {}) {
     return {
         user: { userId: 'user-1' },
         headers: {},
+        url: '/some/route',
+        log: { warn: vi.fn() },
         ...overrides,
     } as any;
 }
@@ -114,6 +116,60 @@ describe('resolveWorkspace', () => {
 
         expect(reply.status).toHaveBeenCalledWith(404);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'NO_WORKSPACE' }));
+    });
+
+    // ── Scoped (embedded) session pin ───────────────────────────────────────
+    // A session minted for a platform dashboard iframe carries scopedWorkspaceId
+    // in its token. It must be PINNED to that workspace: it may not widen scope
+    // via X-Workspace-Id, and it never runs the default resolver.
+    it('pins a scoped session to its token workspace and ignores the resolver', async () => {
+        const req = makeRequest({ user: { userId: 'user-1', embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-scoped' } });
+        const reply = makeReply();
+        mockQuery([{ role: 'owner', ownerId: 'user-1' }]);
+
+        await resolveWorkspace(req, reply);
+
+        expect(req.workspaceId).toBe('ws-scoped');
+        expect(workspaceService.resolveDefaultWorkspaceId).not.toHaveBeenCalled();
+        expect(reply.status).not.toHaveBeenCalled();
+    });
+
+    it('rejects a scoped session that asks for a DIFFERENT workspace via header', async () => {
+        const req = makeRequest({
+            user: { userId: 'user-1', embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-scoped' },
+            headers: { 'x-workspace-id': 'ws-other' },
+        });
+        const reply = makeReply();
+
+        await resolveWorkspace(req, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WORKSPACE_SCOPE_DENIED' }));
+    });
+
+    it('allows a scoped session that re-states its OWN workspace in the header', async () => {
+        const req = makeRequest({
+            user: { userId: 'user-1', embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-scoped' },
+            headers: { 'x-workspace-id': 'ws-scoped' },
+        });
+        const reply = makeReply();
+        mockQuery([{ role: 'owner', ownerId: 'user-1' }]);
+
+        await resolveWorkspace(req, reply);
+
+        expect(req.workspaceId).toBe('ws-scoped');
+        expect(reply.status).not.toHaveBeenCalled();
+    });
+
+    it('refuses (scope-denied) rather than fall back when a scoped session lost its membership', async () => {
+        const req = makeRequest({ user: { userId: 'user-1', embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-scoped' } });
+        const reply = makeReply();
+        mockQuery([]); // no membership row
+
+        await resolveWorkspace(req, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WORKSPACE_SCOPE_DENIED' }));
     });
 
     // ── Multi-workspace auto-select (regression guard, 2026-04-27) ──────────

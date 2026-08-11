@@ -1107,6 +1107,20 @@
       "when": 1786401602853,
       "tag": "0158_pages_archived_at",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1786405056969,
+      "tag": "0159_zid_embedded_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1786409980427,
+      "tag": "0160_embedded_token_last_used",
+      "breakpoints": true
     }
   ]
 }

@@ -147,5 +147,29 @@ describe('Admin Middleware', () => {
 
             expect(statusMock).not.toHaveBeenCalled();
         });
+
+        it('rejects an embedded session even when its owner IS a real admin (never reads the DB)', async () => {
+            // This gate re-reads admin status from the DB, so the JWT flag-clear
+            // alone would not stop it — the session marker must. The db.select
+            // spy must never be reached.
+            const dbSelect = db.select as ReturnType<typeof vi.fn>;
+            dbSelect.mockClear();
+            mockRequest.user = { userId: 'owner-1', isAdmin: true, embeddedPlatform: 'zid' };
+            mockRequest.url = '/admin/plans';
+            mockRequest.log = { warn: vi.fn() } as never;
+
+            await requireAdmin(
+                mockRequest as AuthenticatedRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(statusMock).toHaveBeenCalledWith(403);
+            expect(sendMock).toHaveBeenCalledWith({
+                error: true,
+                message: 'Admin access required',
+                code: 'ADMIN_REQUIRED',
+            });
+            expect(dbSelect).not.toHaveBeenCalled();
+        });
     });
 });

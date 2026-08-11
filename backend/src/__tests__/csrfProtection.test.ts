@@ -77,6 +77,11 @@ describe('csrfProtection', () => {
             // from an earlier handoff must not be 403'd on the next one
             // (observed live 2026-07-30: every handoff retry failed the sync).
             '/auth/browser-handoff/exchange',
+            // The embedded UUID in the body is the credential; the entry page
+            // calls this with raw axios. A merchant with a cookie session who
+            // opens the entry TOP-LEVEL would otherwise be 403'd ("Could not
+            // open the app") — same one-time-credential rationale.
+            '/zid/embedded/session',
         ];
 
         it.each(exemptRoutes)('allows POST %s with stale token cookie and no CSRF header', async (route) => {

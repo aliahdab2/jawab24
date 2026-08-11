@@ -15,6 +15,7 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
+import { getEmbeddedToken } from './embeddedSession';
 import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
@@ -82,11 +83,16 @@ function attachCsrfToken(config: InternalAxiosRequestConfig): void {
  * Token Strategy:
  * - Web (cookies): HttpOnly cookies auto-sent, add CSRF token for mutations
  * - Mobile (native): Bearer token from localStorage
+ * - Embedded (platform dashboard iframe): Bearer token from sessionStorage —
+ *   third-party-frame cookies are never sent, so cookies cannot work there
  */
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // Embedded first: an embedded tab must never fall back to a cookie session
+    // that isn't there. See lib/embeddedSession.ts.
+    const embeddedToken = getEmbeddedToken();
     // Mobile/Legacy: Add Bearer token if present in localStorage
-    const token = localStorage.getItem('token');
+    const token = embeddedToken ?? localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

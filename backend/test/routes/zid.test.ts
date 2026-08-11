@@ -22,6 +22,7 @@ vi.mock('../../src/controllers/zid', () => ({
     syncStore: vi.fn(),
     linkPage: vi.fn(),
     unlinkPage: vi.fn(),
+    embeddedSession: vi.fn(),
 }));
 
 import zidRoutes from '../../src/routes/zid';
@@ -30,11 +31,14 @@ describe('Zid Routes', () => {
     it('should register all required routes', async () => {
         const registeredRoutes: string[] = [];
 
-        const mockFastify = {
+        const mockFastify: Record<string, unknown> = {
             get: vi.fn((path: string) => registeredRoutes.push(`GET ${path}`)),
             post: vi.fn((path: string) => registeredRoutes.push(`POST ${path}`)),
             delete: vi.fn((path: string) => registeredRoutes.push(`DELETE ${path}`)),
             patch: vi.fn((path: string) => registeredRoutes.push(`PATCH ${path}`)),
+            // zidRoutes nests the shared route set via fastify.register — run it
+            // against the same double so both layers land in one list.
+            register: vi.fn((plugin: (f: unknown) => unknown) => plugin(mockFastify)),
         };
 
         await zidRoutes(mockFastify as any);
@@ -49,5 +53,8 @@ describe('Zid Routes', () => {
         expect(registeredRoutes).toContain('POST /store/sync');
         expect(registeredRoutes).toContain('PATCH /store/link-page');
         expect(registeredRoutes).toContain('PATCH /store/unlink-page');
+        // Embedded Apps entry — PUBLIC by necessity (the Zid dashboard iframe is a
+        // cross-site context where our auth cookies are never sent).
+        expect(registeredRoutes).toContain('POST /embedded/session');
     });
 });

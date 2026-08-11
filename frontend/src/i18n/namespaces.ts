@@ -83,4 +83,5 @@ export const PAGE_NAMESPACES = {
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],
   sallaOnboard:       ['salla', 'integrations', 'onboarding'],
   zidOnboard:         ['zid', 'integrations', 'onboarding'],
+  zidEmbedded:        ['zid'],
 } as const;

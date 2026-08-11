@@ -312,6 +312,59 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
     };
 }
 
+// --- Embedded Apps (docs.zid.sa/embedded-apps) ---
+
+/**
+ * Register the embedded-app lookup UUID with Zid. When the merchant opens the
+ * app inside the Zid Merchant Dashboard, Zid loads our Application URL in an
+ * iframe with this UUID as `?token=` — POST /zid/embedded/session
+ * (services/embeddedSession.ts) resolves it back to the store (via its SHA-256,
+ * stored on ecommerce_stores.embedded_token_hash) and opens a WORKSPACE-SCOPED
+ * session with no sign-in prompt. The docs mandate a short UUID
+ * rather than the Authorization JWT (URL truncation) and a NEW UUID on every
+ * reinstall (the old one goes stale at Zid's side).
+ */
+export async function registerEmbeddedToken(creds: ZidCredentials, embeddedToken: string): Promise<void> {
+    const response = await tracedExternalCall('zid', 'registerEmbeddedToken', () =>
+        fetch('https://api.zid.sa/v1/managers/embedded-apps-token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${creds.authorizationToken}`,
+                'X-Manager-Token': creds.managerToken,
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ token: embeddedToken }),
+        }),
+    );
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Zid embedded-token registration failed: ${response.status} ${text.slice(0, ERROR_TEXT_MAX_LENGTH)}`);
+    }
+}
+
+/**
+ * Revoke the embedded-app token at Zid (uninstall path). Zid invalidates the
+ * store's OAuth tokens at uninstall, so this call may legitimately fail —
+ * callers treat it as best-effort and clear the local hash regardless.
+ */
+export async function deleteEmbeddedToken(creds: ZidCredentials): Promise<void> {
+    const response = await tracedExternalCall('zid', 'deleteEmbeddedToken', () =>
+        fetch('https://api.zid.sa/v1/managers/embedded-apps-token', {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${creds.authorizationToken}`,
+                'X-Manager-Token': creds.managerToken,
+                'Accept': 'application/json',
+            },
+        }),
+    );
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Zid embedded-token deletion failed: ${response.status} ${text.slice(0, ERROR_TEXT_MAX_LENGTH)}`);
+    }
+}
+
 // --- Products (REST, page-based) ---
 
 /** [provisional] Field shapes pending live captures — read tolerantly. */
@@ -405,7 +458,7 @@ async function fetchAllProducts(creds: ZidCredentials): Promise<ZidProduct[]> {
 }
 
 /** Resolve the decrypted credential pair for an active Zid store, or null. */
-async function resolveZidCredentials(storeId: string): Promise<ZidCredentials | null> {
+export async function resolveZidCredentials(storeId: string): Promise<ZidCredentials | null> {
     const pair = await resolveStoreCredentialPair(storeId, ZID_TOKEN_REFRESH_CONFIG);
     if (!pair) return null;
     if (!pair.authorizationToken) {

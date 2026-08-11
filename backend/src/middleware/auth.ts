@@ -6,6 +6,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { authService } from '../services/auth';
 import { csrfInvalidCaptureMessage } from '../lib/sentry';
+import type { EmbeddedPlatform } from '../types';
 
 // In-memory throttle: avoid writing last_seen_at more than once per 2 minutes per user.
 // Capped at 10,000 entries to prevent unbounded growth on long-running instances.
@@ -29,6 +30,14 @@ export interface AuthenticatedRequest extends FastifyRequest {
     user?: {
         userId: string;
         isAdmin?: boolean;
+        /**
+         * Set only for a RESTRICTED session minted for a platform dashboard
+         * iframe (see TokenScope). Its presence means the caller proved the
+         * STORE, not the person — requireAdmin rejects it, and resolveWorkspace
+         * pins the session to `scopedWorkspaceId`.
+         */
+        embeddedPlatform?: EmbeddedPlatform;
+        scopedWorkspaceId?: string;
     };
 }
 
@@ -78,6 +87,8 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
         request.user = {
             userId: payload.userId,
             isAdmin: payload.isAdmin || false,
+            ...(payload.embeddedPlatform && { embeddedPlatform: payload.embeddedPlatform }),
+            ...(payload.workspaceId && { scopedWorkspaceId: payload.workspaceId }),
         };
 
         // Set Sentry user context so every error in this request is linked to the user
@@ -138,6 +149,14 @@ const CSRF_EXEMPT_ROUTES = new Set<string>([
     // so a browser holding cookies from an EARLIER handoff was 403'd on every
     // retry (observed live 2026-07-30, "فشل المزامنة" on the owner's device).
     '/auth/browser-handoff/exchange',
+    // Identical rationale for the platform embedded-app entry: the UUID in the
+    // body IS the credential, the endpoint ignores any ambient cookie, and the
+    // entry page calls it with raw axios (no X-CSRF-Token). Inside the iframe
+    // the sameSite:strict cookie is never sent so this never mattered — but a
+    // TOP-LEVEL open by a merchant who already has a cookie session sends it,
+    // and without this line they get a 403 rendered as "Could not open the app".
+    // Same failure shape as the two incidents above.
+    '/zid/embedded/session',
 ]);
 
 /**
@@ -220,6 +239,25 @@ export async function requireAdmin(request: AuthenticatedRequest, reply: Fastify
             error: true,
             message: 'Authentication required',
             code: 'AUTH_REQUIRED',
+        });
+    }
+
+    // A restricted (embedded) session can never be admin — generateToken
+    // force-clears the flag at mint time. Rejecting it explicitly here too is
+    // deliberate belt-and-braces: this is the one check whose failure mode is
+    // "attacker reaches the admin console", so it must not depend on a single
+    // upstream line staying correct.
+    if (request.user.embeddedPlatform) {
+        request.log.warn({
+            userId: request.user.userId,
+            route: request.url,
+            embeddedPlatform: request.user.embeddedPlatform,
+        }, 'Admin access denied for embedded session');
+
+        return reply.status(403).send({
+            error: true,
+            message: 'Admin privileges required',
+            code: 'ADMIN_REQUIRED',
         });
     }
 
