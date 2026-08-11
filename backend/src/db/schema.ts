@@ -34,7 +34,9 @@ export const users = pgTable('users', {
     topupBalance: integer('topup_balance').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
-    // App-level invariant: at least one of facebookId or phone must be non-null
+    // App-level invariant: at least one identity anchor must be non-null —
+    // facebookId, phone, or (for auto-provisioned e-commerce merchants, whose
+    // sign-in path is the platform's embedded entry) email.
 });
 
 // OTP Codes Table — for phone number verification
@@ -1209,6 +1211,15 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
     // Platform-specific extras (e.g. Shopify planName, Salla merchant_id)
     platformData: jsonb('platform_data'),
 
+    // Zid Embedded Apps (docs.zid.sa/embedded-apps): SHA-256 hex of the UUID we
+    // register with Zid via POST /v1/managers/embedded-apps-token. Zid passes the
+    // UUID back as ?token= when the merchant opens the app inside the dashboard
+    // iframe, and GET /zid/embedded resolves it to a session. The UUID is a bearer
+    // credential (it opens a merchant session), so only its hash is stored — a DB
+    // leak must not leak live dashboard access. Null for Shopify/Salla and for
+    // stores installed before the embedded flow; rotated on every (re)install.
+    embeddedTokenHash: varchar('embedded_token_hash', { length: 64 }),
+
     // Sync state
     lastSyncAt: timestamp('last_sync_at'),
     isActive: boolean('is_active').default(true),
@@ -1221,6 +1232,7 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
     return {
         platformCheck: check('ecommerce_stores_platform_check', sql`${table.platform} in ('shopify', 'salla', 'zid')`),
         platformDomainUnique: uniqueIndex('idx_ecommerce_stores_platform_domain').on(table.platform, table.storeDomain),
+        embeddedTokenHashUnique: uniqueIndex('idx_ecommerce_stores_embedded_token_hash').on(table.embeddedTokenHash),
         userIdIdx: index('idx_ecommerce_stores_user_id').on(table.userId),
         workspaceIdIdx: index('idx_ecommerce_stores_workspace_id').on(table.workspaceId),
         isActiveIdx: index('idx_ecommerce_stores_is_active').on(table.isActive),

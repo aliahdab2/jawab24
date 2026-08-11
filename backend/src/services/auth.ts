@@ -331,6 +331,57 @@ export class AuthService {
     }
 
     /**
+     * Auto-provision a merchant account from a platform-asserted store identity
+     * (Zid App Market install — "direct merchant access, no sign-in prompt").
+     *
+     * The identity anchor is the store email the PLATFORM returned from an
+     * authenticated server-to-server profile call — not user input. Two rules:
+     *
+     * - Email already belongs to a Jawab24 account → return null. Auto-logging
+     *   a platform install into an existing account on an email match alone is
+     *   an account-takeover vector (attacker sets their store email to the
+     *   victim's address); the caller falls back to the pending-install claim
+     *   flow, where the victim must actually log in.
+     * - Fresh email → create the account (no facebookId/phone — the merchant's
+     *   sign-in path is the platform's embedded entry; they can link phone or
+     *   Facebook later from Settings) with subscription + workspace, mirroring
+     *   findOrCreateUserByPhone.
+     */
+    async provisionEcommerceMerchantUser(
+        email: string,
+        name: string | undefined,
+        method: 'zid' | 'salla' | 'shopify',
+    ): Promise<User | null> {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail) return null;
+
+        // Case-INSENSITIVE on the column, not just on the input: accounts created
+        // through other paths store the address as the user typed it, and a
+        // `Store@x.com` row must still block a `store@x.com` install.
+        const existing = await db.select({ id: users.id }).from(users)
+            .where(sql`lower(${users.email}) = ${normalizedEmail}`).limit(1);
+        if (existing.length > 0) return null;
+
+        // users.email carries no unique constraint, so a concurrent duplicate
+        // install could double-create; installs are a single human clicking
+        // through a platform dialog, so the SELECT-then-INSERT window is
+        // accepted (same tolerance as the workspace/subscription seeding).
+        const [user] = await db.insert(users)
+            .values({ email: normalizedEmail, name: name ?? null })
+            .returning();
+
+        void recordActivationEvent(user.id, 'signup', { method });
+
+        await this.createSubscriptionForNewUser(user.id);
+        await this.provisionUserWorkspace(user.id, name || 'My Workspace', normalizedEmail, null);
+
+        return {
+            ...user,
+            facebookAccessToken: this.maybeDecrypt(user.facebookAccessToken),
+        };
+    }
+
+    /**
      * Generate secure token for user
      * Uses HMAC signature with expiry timestamp
      */

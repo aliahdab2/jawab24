@@ -1,0 +1,2 @@
+ALTER TABLE "ecommerce_stores" ADD COLUMN "embedded_token_hash" varchar(64);--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_ecommerce_stores_embedded_token_hash" ON "ecommerce_stores" USING btree ("embedded_token_hash");

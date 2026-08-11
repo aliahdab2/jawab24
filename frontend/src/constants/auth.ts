@@ -12,4 +12,8 @@ export const FB_CALLBACK_PATH = '/auth/callback';
 // deep-link handler and authManager's 401 guard (no refresh/logout there —
 // a refresh's Set-Cookie can be lost mid-teardown, stranding a revoked
 // token in the cookie jar; prod incident 2026-07-30).
-export const AUTH_BRIDGE_PATHS = ['/auth/app-sync', '/auth/sync'] as const;
+// `/zid/embedded` belongs here for the same reason: it is the platform-dashboard
+// entry point that ESTABLISHES the session. A background 401 while it is still
+// exchanging Zid's token must not trigger a refresh or a logout — it would race
+// the exchange and bounce the merchant out of the iframe.
+export const AUTH_BRIDGE_PATHS = ['/auth/app-sync', '/auth/sync', '/zid/embedded'] as const;

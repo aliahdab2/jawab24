@@ -27,6 +27,12 @@
   "loginToConnect": "Log in with Facebook to connect your store and start auto-replying with product data.",
   "errorAlreadyConnected": "This Zid store is already connected to another account.",
   "errorAuthFailed": "Zid connection failed. Please try installing the app again from Zid.",
+  "embedded": {
+    "title": "Opening Jawab24",
+    "loading": "Opening your store's assistant…",
+    "errorTitle": "Could not open the app",
+    "errorBody": "Please reopen Jawab24 from your Zid dashboard under Apps. If it keeps failing, reinstall the app from the Zid App Market."
+  },
   "onboarding": {
     "title": "Connect Your Zid Store",
     "storeConnected": "Store Connected!",

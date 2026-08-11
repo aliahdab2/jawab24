@@ -126,6 +126,8 @@ ROUTES="
 /salla/connected|FRONTEND_/salla/connected
 /shopify/onboarding|FRONTEND_/shopify/onboarding
 /zid/onboarding|FRONTEND_/zid/onboarding
+/zid/embedded|FRONTEND_/zid/embedded
+/zid/embedded/session|BACKEND_/zid/embedded/session
 /salla/auth|BACKEND_/salla/auth
 /salla/auth/callback|BACKEND_/salla/auth/callback
 /salla/webhooks|BACKEND_/salla/webhooks
@@ -194,9 +196,35 @@ for entry in $ROUTES; do
     fi
 done
 
+# --- Framing headers (Zid Embedded Apps) --------------------------------------
+# Asserted against the LIVE response, not the file: the Zid dashboard iframe is
+# blocked outright by X-Frame-Options (which has no allowlist form), so a
+# well-meaning "restore the security header" edit would silently kill the
+# integration. frame-ancestors is what replaced it — see nginx.conf.
+echo
+headers="$(docker exec "$CONTAINER" curl -sk --max-time 5 -D - -o /dev/null \
+    -H 'Host: jawab24.com' "https://127.0.0.1/zid/embedded" 2>/dev/null | tr -d '\r')"
+
+if printf '%s' "$headers" | grep -qi '^x-frame-options:'; then
+    echo "WRONG  X-Frame-Options is set — it has no allowlist and blocks the Zid iframe."
+    echo "       Use the CSP frame-ancestors directive instead."
+    fails=$((fails + 1))
+else
+    echo "ok     X-Frame-Options absent (superseded by frame-ancestors)"
+fi
+
+for host in "https://dashboard.zid.sa" "https://web.zid.sa"; do
+    if printf '%s' "$headers" | grep -i '^content-security-policy:' | grep -q "frame-ancestors[^;]*$host"; then
+        echo "ok     frame-ancestors allows $host"
+    else
+        echo "WRONG  frame-ancestors does not allow $host — the embedded app will not load."
+        fails=$((fails + 1))
+    fi
+done
+
 echo
 if [ "$fails" -ne 0 ]; then
-    echo "FAIL: $fails route(s) wrong."
+    echo "FAIL: $fails route(s)/header(s) wrong."
     echo "  - wrong upstream: a Next.js page on BACKEND (or an OAuth callback on"
     echo "    FRONTEND) is a 404 for the merchant."
     echo "  - wrong path: right upstream, but Fastify has no route there, so it"
@@ -205,4 +233,4 @@ if [ "$fails" -ne 0 ]; then
     echo "    block (location /x/), or the prefix swallows the page."
     exit 1
 fi
-echo "PASS: all $(printf '%s' "$ROUTES" | grep -c '|') routes reach the expected upstream AND path."
+echo "PASS: all $(printf '%s' "$ROUTES" | grep -c '|') routes reach the expected upstream AND path, and the framing headers allow the Zid dashboard."

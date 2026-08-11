@@ -433,6 +433,31 @@ export async function createStore(opts: CreateStoreOptions) {
     return result[0];
 }
 
+/**
+ * Persist (or clear, with null) the SHA-256 of a store's embedded-app lookup
+ * UUID. Zid-only today: the UUID is registered with Zid and comes back as
+ * `?token=` on the dashboard-iframe entry — see services/zid.ts
+ * registerEmbeddedToken and controllers/zid.ts embeddedEntry.
+ */
+export async function setEmbeddedTokenHash(storeId: string, hash: string | null) {
+    await db.update(ecommerceStores).set({
+        embeddedTokenHash: hash,
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
+}
+
+/** Resolve an ACTIVE store from an embedded-token hash (dashboard-iframe entry). */
+export async function getStoreByEmbeddedTokenHash(platform: EcommercePlatform, hash: string) {
+    const rows = await db.select().from(ecommerceStores)
+        .where(and(
+            eq(ecommerceStores.platform, platform),
+            eq(ecommerceStores.embeddedTokenHash, hash),
+            eq(ecommerceStores.isActive, true),
+        ))
+        .limit(1);
+    return rows[0] ?? null;
+}
+
 export async function updateStoreTokens(storeId: string, tokens: {
     accessToken: string;
     refreshToken?: string;

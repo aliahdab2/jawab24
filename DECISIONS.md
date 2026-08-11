@@ -1122,3 +1122,66 @@ accept it as a staffed-process risk.
 source driven by `app.subscription.*` webhooks), the suppression becomes a redirect to Salla's
 plan management and the exemption predicate is replaced by a subscription-reading
 `isSallaBilled(row)`, exactly like Shopify's.
+
+---
+
+## D-066 · Zid App Market installs auto-provision the merchant account, and the app runs embedded in Zid's dashboard
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Supersedes:** nothing (extends D-053)
+
+**Context.** Zid rejected app 7367 on 2026-08-10: *"OAuth does not yet meet our required
+standards. Key updates needed: • Direct merchant access (no sign-in prompt) • Full data
+integration with Zid."* The proximate defect was structural, not a bug: a platform-initiated
+install arrives with **no Jawab24 session**, and `createEcommerceControllers`' callback
+answered that by creating a pending install and redirecting to `/login?zid_pending=true`.
+The reviewer met a login wall and could not complete a single scenario. Zid's own guidance
+is explicit — *"Create an account for the merchant using our APIs and don't let them create
+one"* (help-partner.zid.sa/en/articles/8645309).
+
+**Ruling.**
+
+1. **Auto-provision on platform-initiated install.** When the OAuth callback has no session,
+   the merchant account is created from the store profile Zid returned
+   (`authService.provisionEcommerceMerchantUser`) — user + workspace + subscription — and the
+   store is attached to it. No login, ever.
+2. **An existing email REFUSES auto-provisioning** and falls back to claim-after-login. A
+   store's email is set by whoever controls the store, so an email match is not proof of
+   identity; auto-logging in on one would be account takeover. The check is
+   case-insensitive on the column, not just the input.
+3. **The app runs embedded** in the Zid Merchant Dashboard per docs.zid.sa/embedded-apps: a
+   UUID we mint is registered with Zid, comes back as `?token=` on the framed Application
+   URL, and is traded for a normal short-lived access token. Only the UUID's SHA-256 is
+   stored; it is rotated on every (re)install and revoked — at Zid and locally — on both
+   uninstall and merchant-side disconnect, always *before* the token-blanking step.
+4. **Inside the frame the session is a Bearer token in `sessionStorage`, not a cookie.**
+   `SameSite=strict` cookies are never sent to a third-party frame, so both cookie auth and
+   the `/auth/refresh` rotation are unavailable there by construction. Re-minting from the
+   UUID replaces refresh. No long-lived bearer token is ever issued.
+5. **A platform reinstall reactivates the store for its ORIGINAL owner and workspace.** The
+   server-to-server code exchange proves Zid sent us there for that store; ownership is never
+   re-bound, and the workspace is taken from the existing row rather than `workspaces[0]`
+   (which would silently move the store for a multi-workspace owner).
+6. **`X-Frame-Options` is removed domain-wide in favour of CSP `frame-ancestors`.** XFO has
+   no allowlist form, so `SAMEORIGIN` blocked the integration outright. `frame-ancestors
+   'self' dashboard.zid.sa web.zid.sa *.zid.dev` is the standards-track replacement,
+   overrides XFO where both exist, and is honoured by every browser we support.
+
+**Why this is worth the shared-infrastructure risk (point 6).** It touches every response on
+the domain — the review rules class that as Critical, and it is the one part of this change
+that can hurt pages nobody was thinking about. Accepted because: the allowlist is three named
+Zid hosts (not `*`), anti-clickjacking behaviour is unchanged for every other origin, this is
+what Shopify and Salla embedded apps require too, and the alternative (relaxing only
+`/zid/embedded`) blanks the frame on the merchant's first navigation. `npm run
+check:nginx-routing` boots the real config and asserts both the routes and these headers, so
+a well-meaning "restore the security header" edit fails the gate instead of silently killing
+the integration.
+
+**Scope boundary.** All four adapter hooks (`provisionMerchant`, `postInstall`,
+`reinstallPolicy`, `onDisconnect`) are **opt-in**; Salla and Shopify pass none of them and
+their behaviour is byte-identical. Salla will need the same treatment before ITS review — the
+Easy-Mode claim flow has the same login-wall shape — and should adopt these hooks rather than
+grow a parallel implementation.
+
+**Not addressed here.** The rejection's second bullet, "full data integration", needs the Zid
+billing PR (Subscription-App scenario 2, "subscribe to a plan, confirm it syncs" — specified
+in `ZID_TEST_PLAN.md` §H) plus a green §A–§F. Do not resubmit on this PR alone.

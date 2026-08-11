@@ -27,6 +27,51 @@
 - `exchangeCodeForToken` throws if the `Authorization` field is missing (fail fast — without
   it every API call 401s with no obvious cause).
 
+### Scopes — the authorize URL takes ONE, the dashboard grants the rest
+`config.zid.scopes` sends **`embedded_apps_tokens_write`** and nothing else. This is the
+only scope Zid documents for the `scope` parameter (docs.zid.sa/embedded-apps, Step 1);
+data permissions come from the app's scope matrix in the Partner Dashboard (Account R,
+Account Identity R, Store Core Details R, Orders R, Products R, Webhooks RW), not from
+this string. Until 2026-08-11 the value was four **invented** names
+(`offline_access products.read orders.read webhooks.manage`) that appear nowhere in Zid's
+docs or dashboard — part of the app-7367 rejection for "OAuth does not meet our required
+standards". Do not "restore" them.
+
+### Embedded Apps — direct merchant access (docs.zid.sa/embedded-apps)
+Zid requires the merchant to reach a working app with **no sign-in prompt**, both right
+after install and whenever they open it from their dashboard. Flow:
+
+1. Install (platform-initiated, no Jawab24 session) → `authCallback` exchanges the code,
+   reads the store profile, and **auto-provisions a merchant account** from the
+   store email (`authService.provisionEcommerceMerchantUser`).
+2. `postInstall` generates a UUID v4, registers it via
+   `POST /v1/managers/embedded-apps-token`, and stores **only its SHA-256** in
+   `ecommerce_stores.embedded_token_hash` (migration `0159`).
+3. The merchant is redirected to
+   `https://dashboard.zid.sa/{lang}/stores/{store_id}/apps/{app_id}/embedded` — Zid's
+   Hermes resolves the real store/language from the merchant's own session, so the
+   `store_id` and `lang` we send are placeholders.
+4. Zid frames our **Application URL** `https://jawab24.com/zid/embedded` with
+   `?token=<uuid>&language=<ar|en>`. The page trades the UUID at
+   `POST /zid/embedded/session` for a normal short-lived access token.
+5. Session transport inside the frame is a **Bearer token in `sessionStorage`**, not
+   cookies: `SameSite=strict` cookies are never sent in a third-party frame, so
+   `/auth/refresh` cannot work there. `lib/embeddedSession.ts` re-mints from the UUID.
+
+**Security properties, all deliberate:**
+- The UUID is a merchant credential (it opens a session). Only the digest is stored;
+  a new UUID is minted on every (re)install; uninstall AND merchant-side disconnect
+  revoke it at Zid and NULL the hash — revocation runs *before* `deactivateStore`/
+  `disconnectStore`, which blank the tokens the Zid call needs.
+- Auto-provisioning **refuses** when the store email already belongs to a Jawab24
+  account (case-insensitively) and falls back to claim-after-login. A store email is
+  attacker-settable, so a match is not proof of identity.
+- Only a short-lived access token is ever minted for the frame — never a long-lived one.
+- `nginx.conf` drops `X-Frame-Options` (no allowlist form) in favour of CSP
+  `frame-ancestors 'self' dashboard.zid.sa web.zid.sa *.zid.dev`. **Shared
+  infrastructure — every response carries it.** `npm run check:nginx-routing` asserts
+  both the routing and these headers.
+
 ### Dual-credential storage
 The second credential is AES-256-GCM encrypted into new nullable columns
 `authorization_token` / `authorization_token_iv` on **both** `ecommerce_stores` and
@@ -151,36 +196,37 @@ describe titles (grep for it).
 > authoritative — captures C1–C11, billing spec, real-traffic soak, publish rehearsal).
 > The checklist below is the condensed summary.
 
-Prereq — ✅ DONE 2026-08-01 (application submitted, agreement "In Review"): Partner
-account exists (partner.zid.sa, founder), dev store **3195980 "Jawab24 Dev"**
-(https://h47p59.zid.store/ — take out of maintenance mode before captures). Still
-needed: Zid's agreement approval + ngrok (the Salla Phase-4.2 capture method).
+Prereq — ✅ DONE 2026-08-01: Partner account exists (partner.zid.sa, founder), dev store
+**3195980 "Jawab24 Dev"** (https://h47p59.zid.store/ — take out of maintenance mode
+before captures). Still needed: ngrok (the Salla Phase-4.2 capture method).
 
-1. ✅ Partner app CREATED 2026-08-01: app id **7367** "Jawab24" (Draft), **Client ID
-   7192** (secret in dashboard → General Settings). Redirection URL
+⛔ **The agreement is NOT a prerequisite.** Zid support (2026-08-08/09): app Draft → In
+Review → technical review passes → *then* the agreement is countersigned. Treating it as
+an entry gate idled this work for eight days.
+
+1. ✅ Partner app CREATED 2026-08-01: app id **7367** "Jawab24", **Client ID 7192**
+   (secret in dashboard → General Settings). Redirection URL
    `https://jawab24.com/zid/auth`, Callback URL `https://jawab24.com/zid/auth/callback`.
    Dashboard scope groups selected: Account R, Account Identity R, Store Core Details R,
    Orders R, Products R, Webhooks RW. Lifecycle webhook configured:
    `app.market.application.uninstall` → `https://jawab24.com/zid/webhooks?e=app.market.application.uninstall`.
-   ⚠️ Still needed: the OAuth **scope strings** for the authorize URL (fix
-   `config.zid.scopes` — dashboard shows groups, not strings), whether `ZID_APP_ID`
-   (webhook `original_id`) is the app id 7367 or the Client ID 7192, and what auth the
-   `app.market.*` lifecycle deliveries carry.
 
-   🔴 **The scope strings are the one unknown that CANNOT be resolved by capture, and
-   they gate everything else.** Every other `[provisional]` item is answered by issuing a
-   request and reading the response — but the authorize URL is the first request, and it
-   needs correct scopes to succeed at all. A wrong guess fails OAuth with an opaque error
-   and blocks steps 2–5 entirely. `config.zid.scopes` is currently
-   `'offline_access products.read orders.read webhooks.manage'`, explicitly marked
-   provisional in `backend/src/config/index.ts`.
+   🔴 **Submitted and REJECTED 2026-08-10** — *"OAuth does not yet meet our required
+   standards. Key updates needed: • Direct merchant access (no sign-in prompt) • Full
+   data integration with Zid."* The app returned to an editable state (verified 08-11).
+   Addressed by the Embedded Apps work above; see `docs/testing/ZID_TEST_PLAN.md` §L.
 
-   **Get them before approval, not after.** The config comment says they come from the
-   Partner app-creation screen — and app 7367 already exists, so the real list should be
-   visible in the Partner dashboard now (app 7367 → scopes), without waiting on the
-   agreement. Doing this pre-approval removes the highest-risk unknown from the critical
-   path. Two other prereqs are also doable now: take dev store 3195980 out of maintenance
-   mode, and pre-stage ngrok.
+   ✅ **Scope strings: RESOLVED 2026-08-11 — the question was malformed.** The authorize
+   URL takes one documented scope (`embedded_apps_tokens_write`); the dashboard matrix
+   grants the data permissions. See "Scopes" above.
+
+   ⚠️ Still open from captures: whether `ZID_APP_ID` (webhook `original_id`) is the app
+   id 7367 or the Client ID 7192, and what auth the `app.market.*` lifecycle deliveries
+   carry.
+
+   ⚠️ **Portal changes still owed before resubmitting** (do them only AFTER this code is
+   deployed, or the reviewer hits a 404): tick the **Embedded App** toggle in General
+   Settings and set the **Application URL** to `https://jawab24.com/zid/embedded`.
 2. Capture raw responses: token exchange (form-urlencoded accepted? `Authorization` field
    on both grants?), profile, products (+ multilingual name shape), orders, and full
    webhook deliveries (headers + envelope + order payload).
