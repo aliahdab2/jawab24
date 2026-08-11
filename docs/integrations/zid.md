@@ -4,9 +4,20 @@
 > against the API contract verified from docs.zid.sa, replacing the original
 > implementation that was built on an assumed contract and never round-tripped a real
 > store (D-020's bug list is preserved at the bottom of this file for history).
-> It ships dark: `ZID_CLIENT_ID` stays unset in production and the integrations page
-> keeps Zid's `coming_soon` badge (`frontend/src/pages/integrations.tsx`) until a real
-> dev-store round-trip passes — that gate is D-020's and it still stands.
+> It is not user-facing: the integrations page keeps Zid's `coming_soon` badge
+> (`frontend/src/pages/integrations.tsx`) until a real dev-store round-trip passes — that
+> gate is D-020's and it still stands.
+>
+> ⛔ **CORRECTED 2026-08-11 — this file used to say "`ZID_CLIENT_ID` stays unset in
+> production". That was FALSE**, and `ZID_TEST_PLAN.md` had it right all along
+> (`ZID_CLIENT_ID`=7192). Verified live: `GET https://jawab24.com/zid/auth` returns **302**
+> to `oauth.zid.sa/oauth/authorize?client_id=7192&scope=embedded_apps_tokens_write&…`. So
+> the backend OAuth flow is **configured and reachable in production** — only the UI badge
+> is dark. Two things follow that the old wording hid: the 6-hourly `ZidBillingReconcile`
+> cron **is running** (it is gated on `!!config.zid.clientId`; harmless today because it
+> scans zero active Zid stores), and anyone hitting `/zid/auth` reaches Zid's consent
+> screen — where the install currently dies at `EC3` because app 7367 is Rejected, not
+> because of anything on our side.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
 >
 > **Shipped since the rebuild, all still unvalidated against a live store:** Embedded Apps
