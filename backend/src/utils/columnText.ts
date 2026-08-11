@@ -42,8 +42,15 @@ export function fitVarchar(value: unknown, column: AnyPgColumn): string | null |
     const text = toPlainText(value);
     if (text === undefined) return undefined;
 
-    const max = (column as unknown as BoundedColumn).length;
-    if (max === undefined || max <= 0) return text;
+    // Only a real column OBJECT with a numeric width clamps. The guard matters
+    // beyond paranoia: several suites partially mock the schema as plain strings
+    // ('storeName'), and a string has a `.length` too — trusting it silently
+    // clamped a value to the column NAME's length under test. An unbounded or
+    // unrecognisable column means "no width to enforce", never a guessed one.
+    const max = typeof column === 'object' && column !== null
+        ? (column as unknown as BoundedColumn).length
+        : undefined;
+    if (typeof max !== 'number' || max <= 0) return text;
     return clampToChars(text, max);
 }
 

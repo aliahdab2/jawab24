@@ -88,6 +88,16 @@ describe('fitVarchar', () => {
             expect(fitVarchar('SAR', currency)).toBe('SAR');
         });
 
+        it('never clamps against a mocked column — a bare string has a .length too', () => {
+            // Several suites partially mock the schema as { storeName: 'storeName' }.
+            // 'storeName'.length is 9; trusting it clamped real values to the
+            // column NAME's length under test. Only an object with a numeric
+            // length declares a width.
+            const stringMock = 'storeName' as unknown as Parameters<typeof fitVarchar>[1];
+
+            expect(fitVarchar('متجر تجريبي', stringMock)).toBe('متجر تجريبي');
+        });
+
         it('counts CHARACTERS like Postgres does, keeping Arabic intact', () => {
             // varchar(n) bounds code points, so 10 Arabic characters fit exactly.
             expect(fitVarchar('ريال سعودي', currency)).toBe('ريال سعودي');
