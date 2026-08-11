@@ -776,8 +776,8 @@ describe('BusinessListsSection', () => {
   /**
    * REGRESSION GUARD FOR THE OTHER MERCHANTS.
    *
-   * Only four workspaces can reach /business (`isCatalogVisible`), and two of
-   * them are external merchants whose pages this branch never set out to
+   * Only five workspaces can reach /business (`isCatalogVisible`), and the
+   * external merchants among them have pages this branch never set out to
    * change. Their shapes are reproduced here from the prod row counts measured
    * 2026-08-11 — a keyed 213-row outlet directory that happens to contain a
    * few duplicate pharmacy names, and small un-keyed lists with none — so that

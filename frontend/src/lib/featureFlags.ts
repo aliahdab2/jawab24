@@ -111,6 +111,13 @@ const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
   // (paired with the /pages entry-point routing in pages.tsx) so he never
   // invests in free-text prose we would migrate later.
   'd06ed500-74ea-42ee-bff6-37bee2cf412a',
+  // Waleed (waleedraffas@gmail.com, «متجر إجدابيا للأصلي») — fourth external
+  // merchant (owner ruling 2026-08-11). Unlike the seeded three he starts with
+  // ZERO collections and authors his own lists through the /business editor
+  // (#680 create flow, #698 list editor); he is the workspace owner. Obvious
+  // first lists from his KB: the per-city delivery-fee table and the بخور
+  // price lists.
+  '30c90e2c-6ede-4e20-9b9e-9c5cd308e25d',
 ]);
 
 export function isCatalogVisible(

@@ -3,6 +3,7 @@ import { isCatalogVisible, isPostSuggestionsVisible } from '@/lib/featureFlags';
 
 const FOUNDER_WS = 'a0005407-92bf-473e-9368-013f14c57a7d';
 const MES_WS = '9b6ba279-b569-4b45-b020-55b542dad5b6';
+const WALEED_WS = '30c90e2c-6ede-4e20-9b9e-9c5cd308e25d';
 
 describe('isCatalogVisible — business surface gate (admin OR allowlisted workspace)', () => {
   it('platform admin passes regardless of workspaces', () => {
@@ -17,6 +18,10 @@ describe('isCatalogVisible — business surface gate (admin OR allowlisted works
 
   it('a member of the MES workspace passes without platform admin (seeded merchant, 2026-08-08)', () => {
     expect(isCatalogVisible({ isAdmin: false }, [MES_WS])).toBe(true);
+  });
+
+  it('a member of the Waleed workspace passes without platform admin (self-authoring merchant, 2026-08-11)', () => {
+    expect(isCatalogVisible({ isAdmin: false }, [WALEED_WS])).toBe(true);
   });
 
   it('everyone else stays gated — including missing user or workspaces', () => {
