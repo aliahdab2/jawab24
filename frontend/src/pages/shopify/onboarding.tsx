@@ -16,7 +16,8 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { shopifyApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import type { Page, EcommerceStore } from '@jawab24/shared';
+import { useEcommerceStoreSync } from '@/hooks/useEcommerceStoreSync';
+import type { Page } from '@jawab24/shared';
 
 
 
@@ -28,11 +29,10 @@ export default function ShopifyOnboarding() {
   const tc = useTranslations('common');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [step, setStep] = useState(0);
-  const [store, setStore] = useState<EcommerceStore | null>(null);
-  const [storeLoading, setStoreLoading] = useState(true);
-  const [storeError, setStoreError] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
-  const [syncResult, setSyncResult] = useState<{ synced?: number }>({});
+  const {
+    store, storeLoading, storeError, syncStatus, syncResult,
+    retrySync: handleRetrySync,
+  } = useEcommerceStoreSync(shopifyApi, isAuthenticated && step >= 1);
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -45,44 +45,6 @@ export default function ShopifyOnboarding() {
       router.replace('/login');
     }
   }, [isAuthenticated, router]);
-
-  // Fetch store info when moving past welcome
-  useEffect(() => {
-    async function fetchStore() {
-      try {
-        const res = await shopifyApi.getStore();
-        setStore(res);
-        setStoreLoading(false);
-        // Auto-trigger sync
-        setSyncStatus('syncing');
-        try {
-          const syncRes = await shopifyApi.syncProducts();
-          setSyncResult(syncRes);
-          setSyncStatus('done');
-        } catch {
-          setSyncStatus('error');
-        }
-      } catch {
-        setStoreError(true);
-        setStoreLoading(false);
-      }
-    }
-    if (isAuthenticated && step >= 1) {
-      fetchStore();
-    }
-  }, [isAuthenticated, step >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Retry product sync independently
-  const handleRetrySync = useCallback(async () => {
-    setSyncStatus('syncing');
-    try {
-      const syncRes = await shopifyApi.syncProducts();
-      setSyncResult(syncRes);
-      setSyncStatus('done');
-    } catch {
-      setSyncStatus('error');
-    }
-  }, []);
 
   // Fetch pages when advancing to step 2
   const fetchPages = useCallback(async () => {

@@ -4,7 +4,6 @@
     "same-body:ai-worker/src/lib/errors.ts#AiQuotaExhaustedError|backend/src/utils/fbGraphErrors.ts#AiQuotaExhaustedError",
     "same-body:ai-worker/src/lib/errors.ts#AiRefusalError|backend/src/utils/fbGraphErrors.ts#AiRefusalError",
     "same-body:backend/src/services/tokenRefresh.ts#stopTokenRefreshCron|backend/src/services/whatsappTokenHealth.ts#stopWhatsAppTokenHealthCron",
-    "same-name-body:fetchStore:frontend/src/pages/salla/onboarding.tsx|frontend/src/pages/shopify/onboarding.tsx|frontend/src/pages/zid/onboarding.tsx",
     "same-name-body:getStats:backend/src/services/comments.ts|backend/src/services/messages.ts",
     "same-name-body:onMissingPipeline:ai-worker/src/lib/aiMetrics.ts|backend/src/lib/aiMetrics.ts"
   ]
