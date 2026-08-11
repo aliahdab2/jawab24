@@ -9,10 +9,12 @@
 > dev-store round-trip passes — that gate is D-020's and it still stands.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
 >
-> **Merged since the rebuild, all still unvalidated against a live store:** Embedded Apps
+> **Shipped since the rebuild, all still unvalidated against a live store:** Embedded Apps
 > direct merchant access (#704/#708, D-066/D-067) and the App Market **billing rail**
-> (#711, D-070–D-073). Merged is not deployed and deployed is not validated — see
-> **What's next** immediately below for which of the three each item has reached.
+> (#711, D-070–D-073). Both **deployed to production 2026-08-11** — but deployed is not
+> validated: no Zid store has ever exercised either one, because `EC3` blocks installing
+> a Rejected app. The rail is inert in the meantime (`ZID_CLIENT_ID` unset, `coming_soon`
+> badge, no `payment_method='zid'` row can exist). See **What's next** immediately below.
 >
 > **Exception, deliberate:** as of 2026-08-07 four *public* surfaces already describe Zid
 > as a live integration (llms.txt, llms-full.txt, the `SoftwareApplication` schema, and the
@@ -38,7 +40,7 @@ one. That misreading idled this work for eight days (2026-08-01 → 08-09).
 
 | # | Step | Depends on | Owner |
 |---|------|-----------|-------|
-| 1 | **Deploy to production.** Embedded Apps (#704/#708) and the billing rail (#711) are merged to `main` but **not deployed**. This must happen FIRST — step 2 points Zid's reviewer at `https://jawab24.com/zid/embedded`, and if that URL 404s the resubmission fails for a second, avoidable reason. | — | us |
+| 1 | ✅ **DONE 2026-08-11.** Deployed to production: Embedded Apps (#704/#708) and the billing rail (#711). This had to go first — step 2 points Zid's reviewer at `https://jawab24.com/zid/embedded`, and a 404 there would fail the resubmission for a second, avoidable reason. That URL now serves. | — | us |
 | 2 | **Portal changes.** Tick the **Embedded App** toggle in 7367's General Settings and set the **Application URL** to `https://jawab24.com/zid/embedded`. Also delete the stray free plan **3956 «اختبار»** while you are in there (it is deliberately unmapped, so an install on it fails loud). | 1 deployed | us |
 | 3 | **Resubmit 7367 for review**, answering the rejection: *"Direct merchant access (no sign-in prompt)"* → the auto-provision + embedded session (D-066/D-067); *"Full data integration with Zid"* → the App Market billing rail (D-070). | 2 | us |
 | 4 | **Zid approves** → install on dev store 3195980. | 3 | ⏳ Zid |
