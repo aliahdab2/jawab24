@@ -6,6 +6,7 @@ import { factCollectionsService } from '../factCollections';
 import { composeFactMatchText } from '../factCollectionsMatcher';
 import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
+import { resolveBrandVoiceNotes } from './contextEnricher';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
 import type { FacebookMessageTag } from '../../utils/commentText';
@@ -72,6 +73,18 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
     let nudgeText: string | null = null;
     let defaultReplyLanguage: string | undefined;
+    // The merchant's stored persona and tone, used ONLY when the caller passes none.
+    // Production takes both from the owner's settings (messageProcessor → enrichPageContext);
+    // the playground used to take them from the request body alone, so a merchant testing
+    // their own page got a reply built WITHOUT their persona and always in the default
+    // "professional" tone. That made the playground a poor witness for exactly the settings
+    // it is meant to demonstrate — a named persona («سارة») never introduced itself there,
+    // and the 10 merchants on casual/enthusiastic were previewed at the wrong tone.
+    // resolveBrandVoiceNotes is production's own resolver (it picks the language variant
+    // matching the customer's message), imported rather than re-implemented so the two
+    // paths cannot drift — the same single-choke-point rule the language work follows.
+    let storedBrandVoiceNotes: string | undefined;
+    let storedReplyStyle: string | undefined;
     if (page.userId) {
         try {
             const ownerSettings = await settingsService.getSettings(page.userId);
@@ -83,10 +96,16 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
                     qLang,
                 );
             }
+            storedBrandVoiceNotes = resolveBrandVoiceNotes(ownerSettings, question);
+            storedReplyStyle = ownerSettings.replyStyle || undefined;
         } catch {
             // Non-critical — fall back to defaults
         }
     }
+    // An explicit caller value still wins: the admin console and the eval harness pass a
+    // persona per request to try one the merchant has not saved.
+    const effectiveBrandVoiceNotes = brandVoiceNotes ?? storedBrandVoiceNotes;
+    const effectiveReplyStyle = replyStyle ?? storedReplyStyle;
     let timezone: string | undefined;
     if (page.workspaceId) {
         try {
@@ -183,8 +202,8 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         conversationHistory: channel === 'dm' ? conversationHistory : undefined,
         senderName: channel === 'dm' ? senderName : undefined,
         minutesSinceLastMessage: channel === 'dm' ? minutesSinceLastMessage : undefined,
-        replyStyle,
-        brandVoiceNotes,
+        replyStyle: effectiveReplyStyle,
+        brandVoiceNotes: effectiveBrandVoiceNotes,
         businessInfoBlock,
         customerContext,
         model,

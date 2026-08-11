@@ -463,6 +463,23 @@ ${isDM
             ? 'written by the business owner — this is WHO YOU ARE in this chat. Speak as this person naturally would, in your own words each reply. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
             : 'written by the business owner — this is WHO YOU ARE in this chat. Speak as this person naturally would, in your own words';
         prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${sanitizeUserField(request.context.brandVoiceNotes, MAX_BRAND_VOICE_LENGTH)}`;
+        // Persona NAME adoption — a SEPARATE line, never folded into the header sentence
+        // (extending that sentence measurably weakened offer non-repetition, eval #158).
+        //
+        // The static prefix's IDENTITY rule answers every identity question with "you are
+        // part of the page/business team". That is right for the human/bot probe, but the
+        // model generalises it to "who am I talking to?" and "what is your name?", so a
+        // merchant who names their persona («سارة …») never gets it used: measured 10/10
+        // «أنا من فريق <business>» on a fixture whose notes name the persona. The merchant
+        // wrote the name to be used, so this reclaims those two questions WITHOUT touching
+        // the static prefix (which would bump PROMPT_VERSION and retire the reply cache).
+        //
+        // Both hard bans survive verbatim: never claim to be human, never reveal
+        // automation. A persona name is how the business chooses to present itself — the
+        // same posture as a support agent's display name — not a claim to be a person, so
+        // the human/bot probe still gets the team deflection (measured separately).
+        // Rendered only when notes exist; a page with no persona keeps today's behaviour.
+        prompt += '\n(These notes are who you ARE. If they give you a personal name, that name is YOURS: when the customer asks who they are talking to or what your name is, introduce yourself with it — «معك سارة من ‹اسم النشاط›» / "This is Sara from ‹business›" — then answer their question. Still NEVER claim to be a human and NEVER describe yourself as a bot, an AI, or automated: the name is how this business presents itself, not a claim about being a person. If the notes give no name, keep answering as part of the business team.)';
     }
 
     // Customer context goes into the user prompt (next to the message) when conversation

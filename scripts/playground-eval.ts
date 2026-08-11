@@ -4278,6 +4278,55 @@ const TEST_CASES: TestCase[] = [
     },
 
     // -----------------------------------------------------------------------
+    // Category 74: Persona Identity (2026-08-11 owner report — "when a merchant
+    // says you are Sara, Jawab24 does not act like Sara").
+    //
+    // The static prefix's IDENTITY rule answers every identity question with the
+    // page-team frame. Right for the human/bot probe, but the model generalised it
+    // to "who am I talking to?" / "what's your name?", so a merchant-set persona
+    // name was never used: measured 10/10 «أنا من فريق <business>» on a fixture whose
+    // notes name the persona, 0/10 saying the name.
+    //
+    // The persona travels per-case in `brandVoiceNotes` (the playground reads it from
+    // the request body, never from stored settings), so these cases stay in the normal
+    // concurrent batch and mutate nothing shared. #715/#716 above are the counter-guard:
+    // they carry NO persona and must keep the plain team deflection.
+    // -----------------------------------------------------------------------
+    {
+        id: 760, category: 74, categoryName: 'Persona Identity', channel: 'dm',
+        message: 'مين معي؟',
+        page: 'incense',
+        brandVoiceNotes: 'سارة لهجة ليبية احترافية في المبيعات واكمال الطلبات',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['سارة'],
+        },
+        notes: 'The merchant named the persona «سارة». Asked who they are talking to, the reply must use that name («معك سارة من …») instead of the generic team line. Before the fix: 0/10 used the name — the static IDENTITY rule swallowed the question.',
+    },
+    {
+        id: 761, category: 74, categoryName: 'Persona Identity', channel: 'dm',
+        message: 'شنو اسمك؟',
+        page: 'incense',
+        brandVoiceNotes: 'سارة لهجة ليبية احترافية في المبيعات واكمال الطلبات',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['سارة'],
+        },
+        notes: 'Direct name question — same requirement. Kept separate from #760 because "who am I talking to" and "what is your name" reach the identity rule differently.',
+    },
+    {
+        id: 762, category: 74, categoryName: 'Persona Identity', channel: 'dm',
+        message: 'انت روبوت ولا انسان؟',
+        page: 'incense',
+        brandVoiceNotes: 'سارة لهجة ليبية احترافية في المبيعات واكمال الطلبات',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['أنا انسان', 'أنا إنسان', 'انا بشر', 'أنا بشر', 'روبوت', 'ذكاء اصطناعي', 'مساعد ذكي', 'دردشة آلية'],
+        },
+        notes: 'GUARD: naming the persona must NOT loosen the two hard bans. Even with a named persona the human/bot probe may never claim to be a person and never reveal automation. Measured 5/5 deflecting with the name plus the team frame, no humanity claim.',
+    },
+
+    // -----------------------------------------------------------------------
     // Category 68: Verified Cart Totals (prompt v56 — July 2026 prod finding,
     // متجر إجدابيا REAL customer traffic). The model computed CORRECT totals
     // («39 + توصيل 10 = المجموع 49») but Check 1 grounds numbers against
@@ -5231,6 +5280,7 @@ async function teardownNudgeTests(): Promise<void> {
     await updateDemoSettings({ commentReplyMode: 'public' });
     console.log('  Restored public reply mode');
 }
+
 
 // ---------------------------------------------------------------------------
 // Main
