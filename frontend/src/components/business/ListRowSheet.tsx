@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Trash2, Plus } from 'lucide-react';
 import { parseMerchantPrice } from '@jawab24/shared';
-import { DetailSheet, Button, InfoPopover } from '@/components/ui';
+import { DetailSheet, Button, InfoPopover, Toggle } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { formatPlainDate } from '@/utils/dateUtils';
@@ -61,6 +61,7 @@ interface ListRowSheetProps {
     currency: string | null;
     startsAt: string | null;
     endsAt: string | null;
+    isAvailable: boolean;
   }) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -129,6 +130,17 @@ export function ListRowSheet({
       added: false,
     }));
   });
+  /**
+   * Temporarily-unavailable, as the AI already understands it.
+   *
+   * `fact_rows.is_available` has always existed and the prompt renderer has
+   * always honoured it — an unavailable row prints «غير متاح حالياً», which is
+   * exactly the answer BAMBO's «رقم 7» needed (seeded that way by SCRIPT).
+   * No editor ever exposed it for lists, so only the catalog — dead in prod at
+   * one item fleet-wide — could set it. This was never removed; it was never
+   * given a door (owner, 2026-08-11).
+   */
+  const [isAvailable, setIsAvailable] = useState(row?.isAvailable ?? true);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEscapeKey(onClose, true);
@@ -174,6 +186,7 @@ export function ListRowSheet({
     currency.trim() !== (row?.currency ?? '') ||
     date !== (row?.startsAt ?? '') ||
     endDate !== originalEnd ||
+    isAvailable !== (row?.isAvailable ?? true) ||
     JSON.stringify(attrs.map((a) => [a.label.trim(), a.value.trim()])) !==
       JSON.stringify([
         ...(row?.attributes ?? []).map((a) => [a.label.trim(), a.value.trim()]),
@@ -201,6 +214,7 @@ export function ListRowSheet({
       // Exactly what the field says — the start date owns visibility, so an
       // empty end simply stores null (no more silent endsAt=startsAt).
       endsAt: endDate || null,
+      isAvailable,
     });
   };
 
@@ -401,6 +415,24 @@ export function ListRowSheet({
         {dateRangeInvalid && (
           <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
         )}
+
+        {/* Temporarily unavailable — the row STAYS in the list and the AI says
+            «غير متاح حالياً» instead of denying the item exists. That honest
+            middle answer is what «رقم 7» needed; without this door only a
+            seeding script could set it. */}
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-theme-border px-3 py-2.5">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">{t('lists.availableLabel')}</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              {isAvailable ? t('lists.availableHint') : t('lists.unavailableHint')}
+            </span>
+          </span>
+          <Toggle
+            enabled={isAvailable}
+            onChange={setIsAvailable}
+            aria-label={t('lists.availableLabel')}
+          />
+        </div>
         {/* The consequence, in the merchant's terms, next to the control that
             causes it — and only once a date exists, so an undated row (the
             common case) reads no warning about a feature it never uses. */}

@@ -13,7 +13,7 @@ import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/f
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, datedListFreshness,
+  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, sectionNameGroups, datedListFreshness,
   type FactListSection, type FactEntityUnit, type DatedListFreshness,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
@@ -726,7 +726,17 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
 
   /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
    *  detail beneath, price at the end when the list prices things. */
-  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropLabel: string | null = null) => {
+  const directoryRow = (
+    group: FactListGroup,
+    section: FactListSection,
+    row: FactRowDto,
+    expired: boolean,
+    /** `dropLabel` — the attribute the group header already said.
+     *  `hideName` — the group header IS the name (name-grouped lists), so the
+     *  row carries only what distinguishes it. */
+    opts: { dropLabel?: string | null; hideName?: boolean } = {},
+  ) => {
+    const { dropLabel = null, hideName = false } = opts;
     const pairs = rowDisplayAttributes(
       section, row,
       dropLabel ? { keepKey: false, dropLabels: [dropLabel] } : { keepKey: true },
@@ -762,11 +772,18 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           {/* ONE flowing line — name then muted detail; wraps only when it must.
               The two-line row cost 13 size rows twice the height they need. */}
           <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
-            <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+            {!hideName && (
+              <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+            )}
             {pairs.length > 0 && (
-              <span className="text-xs text-muted-foreground break-words" dir="auto">
+              <span className={`break-words ${hideName ? 'text-sm text-foreground' : 'text-xs text-muted-foreground'}`} dir="auto">
                 {pairs.map((a) => `${a.label}: ${a.value}`).join(t('lists.listSeparator'))}
               </span>
+            )}
+            {/* A tier with nothing but a price would be a blank line once the
+                header takes the name — the price is what distinguishes it. */}
+            {hideName && pairs.length === 0 && !row.price && (
+              <span className="text-sm text-foreground break-words" dir="auto">{row.name}</span>
             )}
             {expired && expiredBadge}
           </span>
@@ -1049,7 +1066,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                 // size list). Falls back to the flat list whenever the data
                 // doesn't compress (no partition / all unique).
                 const partitionLabel = sectionPartitionLabel(section);
-                const keyGroups = sectionKeyGroups(section, live, partitionLabel);
+                // Last resort before a flat list: group by the row NAME. A
+                // price list repeats one course per tier, and flat that reads
+                // as the same name three times («ما نكرر اسم الدورة»). The
+                // header says it once; the rows carry only what differs.
+                const nameGroups = sectionNameGroups(live);
+                const keyGroups = sectionKeyGroups(section, live, partitionLabel) ?? nameGroups;
+                const groupedByName = !sectionKeyGroups(section, live, partitionLabel) && !!nameGroups;
                 if (!keyGroups) {
                   return (
                     <ul className="divide-y divide-theme-border/60">
@@ -1062,14 +1085,20 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                   <div>
                     {keyGroups.map((kg) => (
                       <div key={kg.value ?? '__missing__'}>
-                        {/* sticky: on a 224-row directory the reader must
+                        {/* A name group of ONE gets no header: a heading over a
+                            single row spends two lines to say what the row
+                            already says, which is the opposite of why the
+                            grouping exists. Key groups always keep theirs —
+                            the area IS the axis there, even with one outlet. */}
+                        {!(groupedByName && kg.rows.length === 1) && (
+                        /* sticky: on a 224-row directory the reader must
                             always know which area they are inside. The offset
                             mirrors the mobile top bar (fixed, h-14 sm:h-16,
                             landscape h-10, hidden from lg) — top-0 alone pins
                             the header BEHIND that bar. Solid bg (not /60) so
                             scrolled rows don't ghost through. The value sits
                             in a FILLED brand pill — items are outlined chips,
-                            the header is filled: unmistakably a heading. */}
+                            the header is filled: unmistakably a heading. */
                         <div className="sticky top-14 sm:top-16 max-lg:landscape:top-10 lg:top-0 z-10 flex items-center gap-2 px-4 py-2 bg-surface-100 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
                           <span className="rounded-full bg-brand-600 text-white text-[15px] font-bold px-3.5 py-1 break-words" dir="auto">
                             {kg.display ?? t('lists.missingKeyGroup', { label: partitionLabel ?? '' })}
@@ -1091,6 +1120,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                             </button>
                           )}
                         </div>
+                        )}
                         {/* Name-only rows (no price, no attributes left once the
                             header said the key) compress into wrapped chips —
                             224 pharmacies must not cost 224 full-width rows.
@@ -1115,7 +1145,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                                 ) : (
                                   <button
                                     type="button"
-                                    onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
+                                    onClick={() => setEditing({ collection: section.collection, row: entry.row })}
                                     title={entry.row.name}
                                     className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
                                   >
@@ -1128,7 +1158,11 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                           </ul>
                         ) : (
                           <ul className="divide-y divide-theme-border/60">
-                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, kg.display ? partitionLabel : null))}
+                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, {
+                              dropLabel: groupedByName ? null : (kg.display ? partitionLabel : null),
+                              // A headerless singleton must still say its name.
+                              hideName: groupedByName && kg.rows.length > 1,
+                            }))}
                           </ul>
                         )}
                       </div>

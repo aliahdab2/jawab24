@@ -139,6 +139,39 @@ export interface SectionKeyGroup {
  * pilot's size list this elects «السلسلة» (عادي/جامبو) with nothing naming it
  * anywhere in code.
  */
+/**
+ * Group a list's rows by the row NAME, for lists that repeat one.
+ *
+ * A price list carries a course once per tier — «دورة الحلاقة النسائية»
+ * three times, at 35/50/75 — and read as a flat list that is the same name
+ * three times over, which is the redundancy the entity cards were built to
+ * remove (owner, 2026-08-11: «المهم ما نكرر اسم الدورة»).
+ *
+ * Deliberately NOT the same mechanism as `sectionPartitionLabel`: that one
+ * elects an ATTRIBUTE and needs it present on every row, so a level that only
+ * multi-tier courses carry disqualifies itself and the list stays flat. Every
+ * row has a name, so this always applies — and it returns null when no name
+ * repeats, because grouping singletons adds chrome and compresses nothing.
+ *
+ * Name equality uses the SAME folding as the entity join, so a list and a
+ * card can never disagree about which rows are the same thing.
+ */
+export function sectionNameGroups(rows: GroupedRow[]): SectionKeyGroup[] | null {
+  const buckets = new Map<string, SectionKeyGroup>();
+  const order: SectionKeyGroup[] = [];
+  for (const entry of rows) {
+    const id = norm(entry.row.name);
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { value: id, display: entry.row.name, rows: [] };
+      buckets.set(id, bucket);
+      order.push(bucket);
+    }
+    bucket.rows.push(entry);
+  }
+  return order.some((g) => g.rows.length > 1) ? order : null;
+}
+
 export function sectionPartitionLabel(section: FactListSection): string | null {
   const { collection } = section;
   if (collection.keyAttr) return collection.keyAttr;

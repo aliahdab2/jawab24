@@ -727,6 +727,8 @@ describe('BusinessListsSection', () => {
         rows: [{
           name: 'وسط المدينة',
           attributes: null, price: null, currency: null, startsAt: null, endsAt: null,
+          // A new row is available unless the merchant says otherwise.
+          isAvailable: true,
         }],
       }));
     });
