@@ -314,6 +314,7 @@ Business/الأعمال id 3740 = 189 SAR · Pro/الاحترافي id 3741 = 37
 | H-8 | While zid-billed: all six Stripe surfaces | 400 `ZID_BILLED` (the D-G analog), canceled-mirror exemption honored |
 | H-9 | Missed webhook (deliver failure window) | The 6-hourly `ZidBillingReconcile` sweep heals the mirror — webhook-must-not-be-SPOF, closed by D-070's verify-first design |
 | **H-10** | **Unrecognised `subscription_status`** | **NOTHING written, Sentry `unknown_status`. Explicitly NOT treated as inactive — see D-070: a status string we have not seen must never revoke a merchant Zid is billing** |
+| **H-11** | **Response shape we cannot parse** (unexpected nesting, transport wrapper only, list where an object was expected) | **NOTHING written, Sentry `zid-billing-unreadable-response`. Explicitly NOT treated as "no subscription" — an unreadable 200 must never reach the pause branch. Only an explicit empty container (`{"data": null}`) is a positive "nobody is paying" and may pause** |
 
 **Capture every `app.market.*` delivery** — the subscription-event envelopes are as
 unconfirmed as everything else was. The parser reads them tolerantly (root / `data` /

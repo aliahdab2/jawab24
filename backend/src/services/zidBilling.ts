@@ -30,13 +30,22 @@ import { resolveBillingSubjectUserId } from './ecommerce';
  * (`LIVE_SUBSCRIPTION_STATUSES`, the billing subject) is imported, never
  * re-declared.
  *
+ * ⚠️ **One place the Shopify shape does NOT port, and it is the pause branch.**
+ * `fetchShopifyActiveSubscription` reads a contract-verified GraphQL schema, so
+ * `activeSubscriptions: []` is an unambiguous "nobody is paying" and pausing on
+ * it is safe. Zid's envelope is INFERRED, so "we got nothing back" and "we
+ * could not read what came back" are different facts here — and only the first
+ * may pause. `fetchZidAppSubscription` therefore returns a three-way
+ * `ZidSubscriptionRead`, never a bare null.
+ *
  * ⚠️ **Nothing here has been round-tripped against a live store.** `EC3` — a
  * Rejected app cannot be installed — blocks every live validation until app
  * 7367 is resubmitted, so the response envelope is inferred from Zid's docs.
- * Every field is read tolerantly and marked [provisional], and the UNKNOWN
- * cases fail loud instead of guessing (see `mapZidStatus`). This is the posture
- * D-020/D-053 imposed after the first Zid implementation was written against an
- * assumed contract and had to be rebuilt.
+ * Every field is read tolerantly and marked [provisional], and every UNKNOWN —
+ * the plan (`mapZidPlanToSlug`), the status (`mapZidStatus`), and the envelope
+ * itself (`unwrapZidEnvelope`) — fails loud instead of guessing. This is the
+ * posture D-020/D-053 imposed after the first Zid implementation was written
+ * against an assumed contract and had to be rebuilt.
  */
 
 /** The subset of Zid's subscription payload we consume [provisional]. */
@@ -107,52 +116,147 @@ function asString(value: unknown): string | null {
 }
 
 /**
+ * What a read of Zid's subscription endpoint told us. THREE-way for the same
+ * reason `mapZidStatus` is three-way, and it is the load-bearing half of that
+ * ruling: a response we could not READ must never be mistaken for a response
+ * that said "nobody is paying".
+ *
+ * The first implementation collapsed both onto `null`, so an envelope shaped
+ * differently from our guess flowed into the pause branch and revoked a
+ * merchant Zid was actively billing — the exact self-inflicted outage D-070
+ * forbids for an unrecognised status, reached through the envelope door
+ * instead. Only `none` may pause; `unreadable` writes nothing and alerts.
+ */
+export type ZidSubscriptionRead =
+    | { kind: 'subscription'; subscription: ZidAppSubscription }
+    /** Zid POSITIVELY reported no subscription (an explicit null container). */
+    | { kind: 'none' }
+    /** A 200 we could not parse. Never treated as "no subscription". */
+    | { kind: 'unreadable'; reason: string };
+
+/**
+ * Keys Zid might nest the subscription under.
+ *
+ * Unwrapped by PRESENCE (`in`), never by `??`: an explicit `{"data": null}` is
+ * a positive "there is no subscription here", and skipping it to fall back on
+ * the root is precisely how a transport-level `"status": "success"` gets read
+ * as a subscription status.
+ */
+const ZID_ENVELOPE_WRAPPER_KEYS = ['subscription', 'data'] as const;
+
+/**
+ * Fields only a SUBSCRIPTION resource carries. Used to tell a flat subscription
+ * payload (`{id, status, plan_name, …}` — where a bare `status` IS the
+ * subscription's) apart from a bare transport wrapper (`{status:"success",
+ * message:"…"}` — where it is not). Without this test every unsubscribed store
+ * would book `unknown_status: "success"` at error level every six hours.
+ */
+const ZID_SUBSCRIPTION_MARKER_KEYS = [
+    'plan', 'plan_id', 'plan_name', 'subscription_id',
+    'start_date', 'started_at', 'end_date', 'expiry_date', 'ends_at', 'is_usage_based',
+] as const;
+
+type ZidEnvelope =
+    | { kind: 'body'; body: Record<string, unknown>; nested: boolean }
+    | { kind: 'empty' }
+    | { kind: 'unreadable'; reason: string };
+
+/**
+ * Peel Zid's wrappers off the subscription body [provisional].
+ *
+ * Up to TWO levels, because `{data:{subscription:{…}}}` is as plausible as
+ * either wrapper alone and composing them is what the first pass missed — it
+ * probed the three nestings as alternatives, so the composed shape resolved to
+ * the outer wrapper, found no status, and read as "no subscription".
+ */
+function unwrapZidEnvelope(raw: unknown): ZidEnvelope {
+    let current: unknown = raw;
+    let nested = false;
+
+    for (let depth = 0; depth <= ZID_ENVELOPE_WRAPPER_KEYS.length; depth++) {
+        if (current === null) return { kind: 'empty' };
+        if (typeof current !== 'object' || Array.isArray(current)) {
+            return {
+                kind: 'unreadable',
+                reason: Array.isArray(current)
+                    ? 'subscription container is an array'
+                    : `subscription container is a ${typeof current}`,
+            };
+        }
+        const obj = current as Record<string, unknown>;
+        const wrapper = ZID_ENVELOPE_WRAPPER_KEYS.find(key => key in obj);
+        if (!wrapper) return { kind: 'body', body: obj, nested };
+        current = obj[wrapper];
+        nested = true;
+    }
+
+    return { kind: 'unreadable', reason: 'subscription nested deeper than two wrappers' };
+}
+
+/**
  * Ask Zid what this store's App Market subscription is.
  *
- * Dual-header auth like every other Merchant API call, plus `app_id`. Returns
- * null when Zid reports no subscription at all.
+ * Dual-header auth like every other Merchant API call, plus `app_id`.
  *
  * The envelope is unconfirmed, so the payload is probed across the plausible
- * nestings (root / `data` / `subscription`) and each field across its plausible
- * names — the identical tactic `fetchStoreInfo` uses, for the identical reason.
+ * nestings (root / `data` / `subscription`, and the two composed) and each
+ * field across its plausible names — the identical tactic `fetchStoreInfo`
+ * uses, for the identical reason. What it does NOT do is guess: a shape that
+ * does not resolve comes back `unreadable`, so the caller fails loud instead of
+ * pausing a paying merchant.
  */
 export async function fetchZidAppSubscription(
     creds: ZidCredentials,
-): Promise<ZidAppSubscription | null> {
+): Promise<ZidSubscriptionRead> {
     const raw = await zidApiGet<Record<string, unknown>>(
         `https://api.zid.sa/v1/market/app/subscription?app_id=${encodeURIComponent(config.zid.appId)}`,
         creds,
     );
 
-    const envelope = (
-        (raw.subscription as Record<string, unknown> | undefined)
-        ?? (raw.data as Record<string, unknown> | undefined)
-        ?? raw
-    );
-    if (!envelope || typeof envelope !== 'object') return null;
+    const envelope = unwrapZidEnvelope(raw);
+    if (envelope.kind === 'empty') return { kind: 'none' };
+    if (envelope.kind === 'unreadable') return envelope;
+    const { body, nested } = envelope;
 
-    const status = asString(pick(envelope, 'subscription_status', 'status'));
-    if (!status) return null;
+    // A bare `status` is the SUBSCRIPTION's only inside a wrapper we descended
+    // into, or beside a field only a subscription carries. At a bare root it is
+    // just as likely to be the transport's own `"success"`.
+    const bareStatusIsTrustworthy =
+        nested || ZID_SUBSCRIPTION_MARKER_KEYS.some(key => key in body);
+    const status = asString(
+        bareStatusIsTrustworthy
+            ? pick(body, 'subscription_status', 'status')
+            : pick(body, 'subscription_status'),
+    );
+    if (!status) {
+        return {
+            kind: 'unreadable',
+            reason: `no subscription_status in ${nested ? 'nested' : 'root'} body (keys: ${Object.keys(body).slice(0, 12).join(',') || 'none'})`,
+        };
+    }
 
     // A bare `id`/`name` is only a PLAN's when it sits inside a nested plan
-    // object. Falling back to the envelope for those keys would read the
+    // object. Falling back to the body for those keys would read the
     // SUBSCRIPTION's own id as the plan id — which cannot activate a wrong tier
     // (an unmapped id fails loud) but would discard a perfectly good
     // `plan_name` sitting beside it, turning a working install into a
-    // support ticket. The flat spellings are read from the envelope; the bare
+    // support ticket. The flat spellings are read from the body; the bare
     // ones ONLY from the nested object.
-    const nestedPlan = pick(envelope, 'plan') as Record<string, unknown> | undefined;
+    const nestedPlan = pick(body, 'plan') as Record<string, unknown> | undefined;
     const fromPlan = (...keys: string[]) =>
         nestedPlan && typeof nestedPlan === 'object' ? pick(nestedPlan, ...keys) : undefined;
 
     return {
-        id: asString(pick(envelope, 'id', 'subscription_id')),
-        status,
-        planId: asString(pick(envelope, 'plan_id') ?? fromPlan('id', 'plan_id')),
-        planName: asString(pick(envelope, 'plan_name') ?? fromPlan('name', 'plan_name')),
-        startDate: asString(pick(envelope, 'start_date', 'started_at')),
-        endDate: asString(pick(envelope, 'end_date', 'expiry_date', 'ends_at')),
-        isUsageBased: pick(envelope, 'is_usage_based') === true,
+        kind: 'subscription',
+        subscription: {
+            id: asString(pick(body, 'id', 'subscription_id')),
+            status,
+            planId: asString(pick(body, 'plan_id') ?? fromPlan('id', 'plan_id')),
+            planName: asString(pick(body, 'plan_name') ?? fromPlan('name', 'plan_name')),
+            startDate: asString(pick(body, 'start_date', 'started_at')),
+            endDate: asString(pick(body, 'end_date', 'expiry_date', 'ends_at')),
+            isUsageBased: pick(body, 'is_usage_based') === true,
+        },
     };
 }
 
@@ -161,6 +265,7 @@ export type ZidBillingSyncOutcome =
     | 'refused'          // a paying stripe/manual row is in the way — human decides
     | 'unknown_plan'     // plan resolves to no slug — fail loud, no activation
     | 'unknown_status'   // status string we do not recognise — fail loud, no write
+    | 'unreadable'       // a 200 we could not parse — fail loud, NEVER read as "no subscription"
     | 'paused'           // Zid shows no live subscription; live local mirror paused
     | 'no_subscription'  // nothing on either side — nothing to do
     | 'no_store';        // no active zid store row
@@ -469,21 +574,43 @@ export async function syncZidBilling(
         return { outcome: 'no_store', changed: false };
     }
 
-    const zidSub = await fetchZidAppSubscription(creds);
+    const read = await fetchZidAppSubscription(creds);
+
+    // A response we could not READ is not a response that said "nobody is
+    // paying". Falling through to the pause below would revoke a merchant Zid
+    // is actively billing because Zid shaped the envelope differently from our
+    // guess — the same self-inflicted outage D-070 refuses for an unrecognised
+    // status, and a far likelier one while the envelope stays uncaptured.
+    // Fingerprinted because the FIRST unreadable shape is the whole story: it
+    // is the capture `docs/integrations/zid.md` says to narrow the parser with.
+    if (read.kind === 'unreadable') {
+        captureError(
+            new Error(`Zid subscription response could not be read: ${read.reason}`),
+            'Zid billing: unreadable subscription response — refusing to write',
+            {
+                level: 'error',
+                tags: { service: 'zid_billing', flow: 'unreadable' },
+                fingerprint: ['zid-billing-unreadable-response'],
+                extra: { storeId, reason: read.reason },
+            },
+        );
+        return { outcome: 'unreadable', changed: false };
+    }
 
     // Anything that is not a RECOGNISED "no longer entitled" goes to adopt —
     // which owns both the activation and the fail-loud path for a status we do
     // not recognise. Only a status we positively understand as inactive may
     // reach the pause below, so an unfamiliar status string can never revoke a
     // paying merchant's entitlement.
-    if (zidSub && mapZidStatus(zidSub.status).kind !== 'inactive') {
+    if (read.kind === 'subscription' && mapZidStatus(read.subscription.status).kind !== 'inactive') {
         const subjectUserId = await resolveBillingSubjectUserId(store);
-        return adoptZidSubscription(subjectUserId, zidSub, storeId, log);
+        return adoptZidSubscription(subjectUserId, read.subscription, storeId, log);
     }
 
-    // Zid says nobody is paying for this store. Pause a live local mirror —
-    // 'paused', not 'canceled': the app is still installed and re-subscribing
-    // inside Zid reactivates through this same sync.
+    // Zid POSITIVELY says nobody is paying for this store — either an explicit
+    // empty container or a status we recognise as inactive. Pause a live local
+    // mirror — 'paused', not 'canceled': the app is still installed and
+    // re-subscribing inside Zid reactivates through this same sync.
     const paused = await updateLiveMirrorsForStore(storeId, { status: 'paused', updatedAt: new Date() });
     if (paused.length > 0) {
         log.info({ storeId }, 'Zid shows no live subscription — paused local mirror');
@@ -497,7 +624,7 @@ export interface ZidBillingSweepResult {
     scanned: number;
     /** rows written to mirror a Zid-side change (adopt or pause) */
     healed: number;
-    /** refusals + unknown plans/statuses — states a human must resolve */
+    /** refusals + unknown plans/statuses + unreadable responses — states a human must resolve */
     flagged: number;
     /** live local 'zid' rows whose store row is gone/inactive */
     orphaned: number;
@@ -544,7 +671,12 @@ export async function reconcileZidBilling(options?: {
         try {
             const sync = await syncZidBilling(store.id, log);
             if (sync.changed) result.healed++;
-            if (sync.outcome === 'refused' || sync.outcome === 'unknown_plan' || sync.outcome === 'unknown_status') {
+            if (
+                sync.outcome === 'refused'
+                || sync.outcome === 'unknown_plan'
+                || sync.outcome === 'unknown_status'
+                || sync.outcome === 'unreadable'
+            ) {
                 result.flagged++;
             }
         } catch (err) {

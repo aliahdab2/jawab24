@@ -161,25 +161,75 @@ describe('fetchZidAppSubscription', () => {
      * The envelope is uncaptured, so the parser must survive the plausible
      * nestings rather than assume one. Each of these is a shape Zid's docs could
      * reasonably produce.
+     *
+     * The COMPOSED case is a regression: the first implementation probed the
+     * three nestings as alternatives (`raw.subscription ?? raw.data ?? raw`), so
+     * `{data:{subscription:{…}}}` resolved to the outer wrapper, found no status
+     * there, and reported "no subscription" — which paused a live mirror and cut
+     * a paying merchant's auto-replies. See the sync-level case below.
      */
     it.each([
         ['at the root', { subscription_status: 'active', plan_name: 'الأعمال', end_date: '2026-09-01' }],
         ['under data', { data: { subscription_status: 'active', plan_name: 'الأعمال', end_date: '2026-09-01' } }],
         ['under subscription', { subscription: { subscription_status: 'active', plan_name: 'الأعمال', end_date: '2026-09-01' } }],
+        ['under data.subscription', { data: { subscription: { subscription_status: 'active', plan_name: 'الأعمال', end_date: '2026-09-01' } } }],
+        ['under a nested bare `status`', { data: { status: 'active', plan_name: 'الأعمال', end_date: '2026-09-01' } }],
     ])('reads a payload %s', async (_label, payload) => {
         mockApiGet.mockResolvedValue(payload);
 
         const result = await fetchZidAppSubscription(creds);
 
-        expect(result?.status).toBe('active');
-        expect(result?.planName).toBe('الأعمال');
-        expect(result?.endDate).toBe('2026-09-01');
+        expect(result.kind).toBe('subscription');
+        expect(result.kind === 'subscription' && result.subscription.status).toBe('active');
+        expect(result.kind === 'subscription' && result.subscription.planName).toBe('الأعمال');
+        expect(result.kind === 'subscription' && result.subscription.endDate).toBe('2026-09-01');
     });
 
-    it('returns null when the payload carries no status at all', async () => {
-        mockApiGet.mockResolvedValue({});
+    /**
+     * "We could not read it" is NOT "there is no subscription". Only an explicit
+     * empty container may mean the latter — everything else must fail loud, or
+     * an envelope shaped differently from our guess revokes a paying merchant.
+     */
+    it.each([
+        ['an empty object', {}],
+        ['a bare transport wrapper', { status: 'success', message: 'ok' }],
+        ['a list under data', { data: [{ subscription_status: 'active' }] }],
+        ['a scalar container', { data: 'none' }],
+    ])('reports %s as UNREADABLE, never as "no subscription"', async (_label, payload) => {
+        mockApiGet.mockResolvedValue(payload);
 
-        await expect(fetchZidAppSubscription(creds)).resolves.toBeNull();
+        const result = await fetchZidAppSubscription(creds);
+
+        expect(result.kind).toBe('unreadable');
+    });
+
+    /**
+     * H1 regression: a transport-level `"status": "success"` is not a
+     * subscription status. Reading it as one booked `unknown_status` at error
+     * level for every installed-but-unsubscribed store, every six hours —
+     * burying the alert that means Zid really did ship a status we have not
+     * seen. An explicit null container is the one positive "nobody is paying".
+     */
+    it.each([
+        ['{"data": null}', { status: 'success', data: null }],
+        ['{"subscription": null}', { subscription: null }],
+    ])('reads %s as a positive NO SUBSCRIPTION, not as status "success"', async (_label, payload) => {
+        mockApiGet.mockResolvedValue(payload);
+
+        await expect(fetchZidAppSubscription(creds)).resolves.toEqual({ kind: 'none' });
+    });
+
+    /**
+     * A bare `status` beside fields only a subscription carries IS the
+     * subscription's — the marker-key test must not be so strict that a
+     * perfectly readable flat resource fails loud.
+     */
+    it('trusts a bare `status` at the root when subscription fields sit beside it', async () => {
+        mockApiGet.mockResolvedValue({ id: 'zid-sub-77', status: 'active', plan_name: 'الأعمال' });
+
+        const result = await fetchZidAppSubscription(creds);
+
+        expect(result.kind === 'subscription' && result.subscription.status).toBe('active');
     });
 
     it('reads a nested plan object', async () => {
@@ -191,9 +241,9 @@ describe('fetchZidAppSubscription', () => {
 
         const result = await fetchZidAppSubscription(creds);
 
-        expect(result?.id).toBe('zid-sub-77');
-        expect(result?.planId).toBe('3740');
-        expect(result?.planName).toBe('الأعمال');
+        expect(result.kind === 'subscription' && result.subscription.id).toBe('zid-sub-77');
+        expect(result.kind === 'subscription' && result.subscription.planId).toBe('3740');
+        expect(result.kind === 'subscription' && result.subscription.planName).toBe('الأعمال');
     });
 
     /**
@@ -210,9 +260,9 @@ describe('fetchZidAppSubscription', () => {
 
         const result = await fetchZidAppSubscription(creds);
 
-        expect(result?.id).toBe('zid-sub-77');
-        expect(result?.planId).toBeNull();
-        expect(result?.planName).toBe('الأعمال');
+        expect(result.kind === 'subscription' && result.subscription.id).toBe('zid-sub-77');
+        expect(result.kind === 'subscription' && result.subscription.planId).toBeNull();
+        expect(result.kind === 'subscription' && result.subscription.planName).toBe('الأعمال');
     });
 });
 
@@ -464,6 +514,99 @@ describe('syncZidBilling', () => {
 
         await expect(syncZidBilling(STORE, mkLog())).resolves.toEqual({
             outcome: 'no_subscription', changed: false,
+        });
+    });
+
+    /**
+     * C1 regression #1 — the composed nesting.
+     *
+     * `{data:{subscription:{…}}}` IS a live, active subscription. The first
+     * parser probed the nestings as ALTERNATIVES (`subscription ?? data ??
+     * root`), so it resolved to the outer wrapper, found no status there, and
+     * returned null — which fell into the pause branch and cut the auto-replies
+     * of a merchant Zid was actively billing. Here it must ADOPT.
+     */
+    it('adopts a subscription nested under data.subscription instead of pausing', async () => {
+        vi.mocked(db.select)
+            .mockReturnValueOnce(q([activeStoreRow]) as never)
+            .mockReturnValue(q([]) as never);
+        const chain = q([]);
+        vi.mocked(db.insert).mockReturnValue(chain as never);
+        mockApiGet.mockResolvedValue({
+            data: {
+                subscription: {
+                    subscription_status: 'active',
+                    plan_name: 'الأعمال',
+                    end_date: '2026-09-01T00:00:00Z',
+                },
+            },
+        });
+
+        const result = await syncZidBilling(STORE, mkLog());
+
+        expect(result).toEqual({ outcome: 'adopted', changed: true });
+        expect(chain.values).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'active', paymentMethod: 'zid', zidStoreId: STORE,
+        }));
+    });
+
+    /**
+     * C1 regression #2 — the shape we still cannot read.
+     *
+     * A body we do not understand must write NOTHING and alert, never pause:
+     * status 'paused' → `checkSubscriptionStatus` → `subscription_inactive` →
+     * auto-replies stop while Zid keeps billing, re-firing every 6h with
+     * nothing to heal it. Same fail-loud direction D-070 takes for an unknown
+     * status; a stale entitlement costs a little money, a revoked one costs a
+     * customer.
+     */
+    it('fails loud instead of pausing when the body is unreadable', async () => {
+        vi.mocked(db.select).mockReturnValue(q([activeStoreRow]) as never);
+        mockApiGet.mockResolvedValue({ data: { results: [] } });
+
+        const result = await syncZidBilling(STORE, mkLog());
+
+        expect(result).toEqual({ outcome: 'unreadable', changed: false });
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.anything(), expect.any(String),
+            expect.objectContaining({ fingerprint: ['zid-billing-unreadable-response'] }),
+        );
+    });
+
+    /**
+     * H1 regression: the transport wrapper. The first parser fell back to the
+     * root when `data`/`subscription` were absent and read `"status":"success"`
+     * as the subscription status — booking `unknown_status` at error level for
+     * every unsubscribed store, every six hours.
+     */
+    it('does not read a transport "success" as a subscription status', async () => {
+        vi.mocked(db.select).mockReturnValue(q([activeStoreRow]) as never);
+        mockApiGet.mockResolvedValue({ status: 'success', message: 'ok' });
+
+        const result = await syncZidBilling(STORE, mkLog());
+
+        expect(result.outcome).toBe('unreadable');
+        expect(mockCaptureError).not.toHaveBeenCalledWith(
+            expect.anything(), expect.any(String),
+            expect.objectContaining({ tags: expect.objectContaining({ flow: 'unknown_status' }) }),
+        );
+    });
+
+    /**
+     * The other half of C1: a POSITIVE empty container is still a pause, so
+     * §H-2 (trial expiry / unsubscribe → paused) keeps working. Failing loud on
+     * everything would trade a wrongly-revoked merchant for one who never loses
+     * entitlement at all.
+     */
+    it('still pauses on an explicit empty container — a positive "nobody is paying"', async () => {
+        vi.mocked(db.select).mockReturnValue(q([activeStoreRow]) as never);
+        vi.mocked(db.update).mockReturnValue(q([{ id: 'row_1', userId: 'u1' }]) as never);
+        mockApiGet.mockResolvedValue({ status: 'success', data: null });
+
+        await expect(syncZidBilling(STORE, mkLog())).resolves.toEqual({
+            outcome: 'paused', changed: true,
         });
     });
 
