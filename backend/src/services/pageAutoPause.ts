@@ -31,7 +31,9 @@ import { config } from '../config';
  *    OpenAI call, so paused pages cost nothing.
  *  - The crossing also NOTIFIES the merchant (in-app + push to the workspace,
  *    email to the page owner) — a paused page answers nobody, and only a human
- *    re-enable brings it back, so silence here costs customers.
+ *    re-enable brings it back, so silence here costs customers. The alert is
+ *    gated to Facebook-family channels (NOTIFIABLE_AUTO_PAUSE_PLATFORMS); the
+ *    pause itself still applies to every channel.
  *  - Customer toggling auto-reply back on in the UI clears the counter +
  *    reason (handled in pages.ts updatePage / settings route).
  *
@@ -129,6 +131,36 @@ const AUTO_PAUSE_EMAIL_DEDUP_TTL_SECONDS = 24 * 60 * 60;
 const NOTIFY_EMAIL_DEDUP_KEY = (pageId: string) => `notif:auto_pause_email:${pageId}`;
 
 /**
+ * Channels the auto-pause alert's copy is actually true for.
+ *
+ * Every string in that alert is Facebook-family specific — "reconnect the page",
+ * "complete the Facebook sign-in", "if you changed your Facebook password". The
+ * pause itself is platform-AGNOSTIC (`recordSendFailure` counts any page-level
+ * failure from any channel), so without this gate a WhatsApp merchant is handed
+ * instructions that are false on every clause: their credential is a separate
+ * WABA token with its own reconnect flow, and reconnecting the Facebook page
+ * does nothing for it.
+ *
+ * `undefined` is in the set on purpose: commentProcessor calls recordSendFailure
+ * with no platform, and comments exist only on Facebook and Instagram.
+ *
+ * An ALLOWLIST, not a WhatsApp denylist — a channel added later (TikTok, webchat)
+ * must default to silence rather than inheriting Facebook copy by omission.
+ *
+ * WhatsApp deliberately gets NOTHING here rather than something wrong. Its
+ * dead-token case already alerts through its own path
+ * (whatsappTokenHealth.markWhatsAppNeedsReconnect, fired on the FIRST 190 so it
+ * never reaches this threshold); the remaining causes that DO reach it — WABA
+ * quality restriction, policy block — need their own copy and their own recovery
+ * steps, which are not guessed here.
+ */
+const NOTIFIABLE_AUTO_PAUSE_PLATFORMS: ReadonlySet<string | undefined> = new Set([undefined, 'facebook', 'instagram']);
+
+export function isNotifiableAutoPausePlatform(platform: string | undefined): boolean {
+    return NOTIFIABLE_AUTO_PAUSE_PLATFORMS.has(platform);
+}
+
+/**
  * Tell the humans their page just went quiet. Dashboard-banner-only proved
  * insufficient in production (2026-08-10: a page auto-paused twice in one
  * evening; the merchant learned of it from lost customers, and the recovery
@@ -158,10 +190,23 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
         const pageName = info?.pageName ?? 'Facebook Page';
         const data = { pageId: row.id, action: 'reconnect_page', urgent: true };
 
-        if (row.workspaceId) {
-            await notificationService.sendTemplateNotificationToWorkspace(row.workspaceId, 'auto_reply_paused', { pageName }, data);
-        } else if (row.userId) {
-            await notificationService.sendTemplateNotification(row.userId, 'auto_reply_paused', { pageName }, data);
+        // The notification fails INDEPENDENTLY of the email. sendNotification has
+        // no internal catch (a failed `notifications` insert, or the workspace
+        // members query, throws straight out), so sharing this try with the email
+        // made the least reliable channel a hard gate on the most important one —
+        // while the dedup below deliberately fails OPEN to protect that same email.
+        // Both channels now get their own shot at reaching the merchant.
+        try {
+            if (row.workspaceId) {
+                await notificationService.sendTemplateNotificationToWorkspace(row.workspaceId, 'auto_reply_paused', { pageName }, data);
+            } else if (row.userId) {
+                await notificationService.sendTemplateNotification(row.userId, 'auto_reply_paused', { pageName }, data);
+            }
+        } catch (err) {
+            captureError(err, 'pageAutoPause.autoPauseNotificationFailed', {
+                tags: { component: 'pageAutoPause' },
+                extra: { pageId: row.id, workspaceId: row.workspaceId, userId: row.userId },
+            });
         }
 
         if (!row.userId || !info?.ownerEmail) return;
@@ -181,20 +226,40 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
             // Redis unreachable — send anyway (see above).
         }
 
-        const { subject, html } = autoPausedEmailTemplate({
-            lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
-            pageName,
-            dashboardUrl: `${config.frontendUrl}/dashboard`,
-        });
-        const result = await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
+        // The dedup key is released on ANY outcome that isn't a delivered email —
+        // hence the `finally`, not a check on `result.success` alone.
+        //
+        // emailService.send fails in TWO shapes and they need identical handling:
+        //   - it RESOLVES with { success: false } for a provider-level failure
+        //     (Resend 4xx/5xx, unconfigured API key), and
+        //   - it THROWS for a network-level one — there is no try/catch around its
+        //     `fetch`, so DNS failure, socket reset, TLS error and timeout all
+        //     propagate as a raw TypeError.
+        // Only the first shape was released before, which left the far more likely
+        // outage shape holding the key for the full 24h. The crossing guard
+        // guarantees no retry inside that window, so the merchant simply never
+        // heard about a page that had stopped answering.
+        let emailed = false;
+        let failureReason: string | undefined;
+        try {
+            const { subject, html } = autoPausedEmailTemplate({
+                lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
+                pageName,
+                dashboardUrl: `${config.frontendUrl}/dashboard`,
+            });
+            const result = await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
+            emailed = result.success;
+            failureReason = result.error;
+        } catch (err) {
+            failureReason = err instanceof Error ? err.message : String(err);
+        } finally {
+            if (!emailed && dedupKeyClaimed) {
+                await redis.del(NOTIFY_EMAIL_DEDUP_KEY(row.id)).catch(() => {});
+            }
+        }
 
-        // emailService.send RESOLVES with { success: false } on a provider
-        // failure — it does not throw. Without this check a Resend outage would
-        // silently consume the 24h dedup window and the merchant would never be
-        // emailed at all. Release the key so the next crossing can retry.
-        if (!result.success) {
-            if (dedupKeyClaimed) await redis.del(NOTIFY_EMAIL_DEDUP_KEY(row.id)).catch(() => {});
-            captureError(new Error(`Auto-pause email failed for page ${row.id}: ${result.error ?? 'unknown error'}`), 'pageAutoPause.autoPauseEmailFailed', {
+        if (!emailed) {
+            captureError(new Error(`Auto-pause email failed for page ${row.id}: ${failureReason ?? 'unknown error'}`), 'pageAutoPause.autoPauseEmailFailed', {
                 tags: { component: 'pageAutoPause' },
                 extra: { pageId: row.id, userId: row.userId },
             });
@@ -277,7 +342,12 @@ export async function recordSendFailure(
             // per-test TRUNCATE (queries landing after the test that spawned
             // them), which is a flaky-gate generator. notifyMerchantAutoPaused
             // never throws, so this cannot fail the pause.
-            await notifyMerchantAutoPaused(row);
+            //
+            // The PAUSE is platform-agnostic; the ALERT is not — its copy only
+            // holds for the Facebook family (see NOTIFIABLE_AUTO_PAUSE_PLATFORMS).
+            if (isNotifiableAutoPausePlatform(platform)) {
+                await notifyMerchantAutoPaused(row);
+            }
         }
     } catch (err) {
         captureError(err, 'pageAutoPause.recordSendFailure failed', {

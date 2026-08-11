@@ -39,7 +39,7 @@ vi.mock('../services/email', () => ({ emailService: { send: mockEmailSend } }));
 vi.mock('../utils/emailTemplates', () => ({ autoPausedEmailTemplate: mockTemplate }));
 vi.mock('../config', () => ({ config: { frontendUrl: 'https://jawab24.com' } }));
 
-import { recordSendFailure, PAUSE_THRESHOLD } from '../services/pageAutoPause';
+import { recordSendFailure, PAUSE_THRESHOLD, isNotifiableAutoPausePlatform } from '../services/pageAutoPause';
 
 const PAGE = 'page-1';
 const flush = () => new Promise((r) => setImmediate(r));
@@ -197,7 +197,7 @@ describe('auto-pause merchant notification', () => {
         expect(mockDel).not.toHaveBeenCalled();
     });
 
-    it('a notification failure is captured and never throws into the reply path', async () => {
+    it('a notification failure is captured, never throws, and still emails', async () => {
         mockPauseRow();
         mockNotifyWorkspace.mockRejectedValue(new Error('fcm down'));
 
@@ -206,9 +206,72 @@ describe('auto-pause merchant notification', () => {
 
         expect(mockCaptureError).toHaveBeenCalledWith(
             expect.any(Error),
-            'pageAutoPause.notifyMerchantAutoPaused failed',
-            expect.objectContaining({ extra: { pageId: PAGE } }),
+            'pageAutoPause.autoPauseNotificationFailed',
+            expect.objectContaining({ extra: expect.objectContaining({ pageId: PAGE }) }),
         );
+        // The email is the channel that reaches a merchant who isn't looking at
+        // the app. A dead push transport must not take it down with it — the
+        // dedup below fails OPEN for exactly this reason.
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the dedup key when the email send THROWS (network-level failure)', async () => {
+        mockPauseRow();
+        // No try/catch around emailService.send's `fetch`: DNS failure, socket
+        // reset, TLS error and timeout arrive as a throw, NOT as success:false.
+        // Releasing only on success:false left the likelier outage shape holding
+        // the key for 24h, with the crossing guard guaranteeing no retry.
+        mockEmailSend.mockRejectedValue(new TypeError('fetch failed'));
+        await recordSendFailure(PAGE, 'our_fault');
+        await flush();
+
+        expect(mockDel).toHaveBeenCalledWith(`notif:auto_pause_email:${PAGE}`);
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.objectContaining({ message: expect.stringContaining('fetch failed') }),
+            'pageAutoPause.autoPauseEmailFailed',
+            expect.objectContaining({ extra: { pageId: PAGE, userId: 'user-1' } }),
+        );
+    });
+
+    it('sends nothing for a WhatsApp pause — the copy is Facebook-only', async () => {
+        mockPauseRow();
+        // WhatsApp reaches this threshold for real (WABA quality restriction,
+        // policy block; the 190 case short-circuits in whatsappAdapter). Telling
+        // that merchant to reconnect the page and check their Facebook password
+        // is false on every clause — a WABA token has its own reconnect flow.
+        await recordSendFailure(PAGE, 'our_fault', 'whatsapp');
+        await flush();
+
+        expect(mockNotifyWorkspace).not.toHaveBeenCalled();
+        expect(mockNotifyUser).not.toHaveBeenCalled();
         expect(mockEmailSend).not.toHaveBeenCalled();
+    });
+
+    it('still notifies for instagram, and for the comment path that passes no platform', async () => {
+        mockPauseRow();
+        await recordSendFailure(PAGE, 'our_fault', 'instagram');
+        await flush();
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+
+        vi.clearAllMocks();
+        mockSet.mockResolvedValue('OK');
+        mockOwnerInfo();
+        mockPauseRow();
+        // commentProcessor calls recordSendFailure with no platform at all.
+        await recordSendFailure(PAGE, 'our_fault');
+        await flush();
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('isNotifiableAutoPausePlatform', () => {
+    // An ALLOWLIST: a channel added later must default to silence rather than
+    // inherit Facebook copy by omission.
+    it.each([[undefined], ['facebook'], ['instagram']])('%s → notify', (platform) => {
+        expect(isNotifiableAutoPausePlatform(platform)).toBe(true);
+    });
+
+    it.each([['whatsapp'], ['tiktok'], ['webchat']])('%s → stay silent', (platform) => {
+        expect(isNotifiableAutoPausePlatform(platform)).toBe(false);
     });
 });
