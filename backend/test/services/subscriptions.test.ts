@@ -100,13 +100,14 @@ vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn().mockResolvedValue(null), set: vi.fn(), quit: vi.fn(), del: vi.fn() },
 }));
 
-// Salla Article-5 rule (D-065). getUsageSummary consults it to set
-// subscription.sallaBilled; it issues a real LEFT JOIN that this file's
-// hand-rolled db/drizzle mocks cannot serve. Mocked at the service boundary —
-// the rule is covered by test/services/sallaBilling.test.ts and, against real
-// Postgres, by test/integration/sallaArticle5Guard.test.ts.
-vi.mock('../../src/services/sallaBilling', () => ({
-    mustBillThroughSalla: vi.fn(async () => false),
+// The marketplace billing guard. getUsageSummary consults it to set
+// subscription.marketplaceBilling (and the legacy sallaBilled flag); it issues a
+// real LEFT JOIN that this file's hand-rolled db/drizzle mocks cannot serve.
+// Mocked at the service boundary — the rule is covered by
+// test/services/marketplaceBilling.test.ts and, against real Postgres, by
+// test/integration/sallaArticle5Guard.test.ts.
+vi.mock('../../src/services/marketplaceBilling', () => ({
+    resolveMarketplaceBilling: vi.fn(async () => null),
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -1469,16 +1470,40 @@ describe('getUsageSummary — shopify signals suppressed on a CANCELED mirror (H
      * suppressed CTA silently comes back and Salla merchants walk into Stripe.
      */
     it('exposes sallaBilled for a Salla merchant, resolved against the subscription OWNER', async () => {
-        const { mustBillThroughSalla } = await import('../../src/services/sallaBilling');
-        vi.mocked(mustBillThroughSalla).mockResolvedValueOnce(true);
+        const { resolveMarketplaceBilling } = await import('../../src/services/marketplaceBilling');
+        vi.mocked(resolveMarketplaceBilling).mockResolvedValueOnce({
+            marketplace: 'salla', code: 'SALLA_BILLED', message: 'x',
+        });
         stubInternals({ status: 'trialing' });
 
         const summary = await subscriptionsService.getUsageSummary('member-id', 'ws1');
 
         expect(summary?.subscription.sallaBilled).toBe(true);
+        expect(summary?.subscription.marketplaceBilling).toEqual({
+            marketplace: 'salla', manageUrl: undefined,
+        });
         // 'u1' is the ownerId from resolveWorkspaceSubscription, NOT the caller:
         // one subscription serves every workspace its owner has.
-        expect(mustBillThroughSalla).toHaveBeenCalledWith('u1', expect.anything());
+        expect(resolveMarketplaceBilling).toHaveBeenCalledWith('u1', expect.anything());
+    });
+
+    /**
+     * The legacy flag is Salla-only ON PURPOSE — the mobile app ships a bundled
+     * frontend that lags, and an old build reading `sallaBilled` must not start
+     * seeing Zid merchants under a Salla-worded surface. The general field is
+     * what carries the Zid rail.
+     */
+    it('exposes a Zid merchant through marketplaceBilling WITHOUT setting the legacy sallaBilled flag', async () => {
+        const { resolveMarketplaceBilling } = await import('../../src/services/marketplaceBilling');
+        vi.mocked(resolveMarketplaceBilling).mockResolvedValueOnce({
+            marketplace: 'zid', code: 'ZID_BILLED', message: 'x',
+        });
+        stubInternals({ status: 'trialing' });
+
+        const summary = await subscriptionsService.getUsageSummary('u1', 'ws1');
+
+        expect(summary?.subscription.marketplaceBilling?.marketplace).toBe('zid');
+        expect(summary?.subscription.sallaBilled).toBeUndefined();
     });
 
     it('omits sallaBilled entirely when the rule does not apply', async () => {

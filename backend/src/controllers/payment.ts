@@ -6,9 +6,7 @@ import { db } from '../db';
 import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
-import { isShopifyBilled } from '../config/shopifyBilling';
-import { SALLA_BILLED_CODE } from '../config/sallaBilling';
-import { mustBillThroughSalla } from '../services/sallaBilling';
+import { resolveMarketplaceBilling } from '../services/marketplaceBilling';
 import { captureError } from '../utils/sentryHelpers';
 import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
@@ -23,23 +21,15 @@ interface AuthenticatedRequest extends FastifyRequest {
 }
 
 /**
- * Marketplace-billed accounts must never reach a Stripe surface. Two rails,
- * one gate — every Stripe entry point calls this and stops when it returns
- * true (the 400 has already been sent).
+ * Marketplace-billed accounts must never reach a Stripe surface. Three rails
+ * (Shopify D-G, Salla Article 5, Zid App Market), one gate — every Stripe entry
+ * point calls this and stops when it returns true (the 400 has already been
+ * sent).
  *
- * **Shopify (D-G):** Shopify forbids off-platform billing for App Store
- * installs, and a second live subscription would double-bill the merchant. The
- * canceled-mirror exemption lives inside isShopifyBilled — a merchant who
- * uninstalled the Shopify app is free to come back through Stripe.
- *
- * **Salla (Article 5):** paid-app payment must go through Salla. We ship
- * free-tier-only there, so there is no Salla subscription row to read — the
- * signal is the active store connection, and the exemption is an established
- * Stripe relationship. See config/sallaBilling.ts.
- *
- * Shopify is evaluated first and its behaviour is byte-for-byte unchanged, so
- * a Salla-side regression cannot alter what a Shopify merchant sees. The
- * subscription is read once and shared by both rails.
+ * The rails' rulings, their order, and the Stripe exemption all live in
+ * `services/marketplaceBilling.ts`; this function is only the HTTP shape around
+ * that verdict. Shopify is still evaluated first and its behaviour is
+ * byte-for-byte unchanged.
  */
 async function rejectIfMarketplaceBilled(
     userId: string,
@@ -47,27 +37,20 @@ async function rejectIfMarketplaceBilled(
     log?: FastifyBaseLogger,
 ): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(userId);
-    if (sub && isShopifyBilled(sub)) {
-        reply.status(400).send({
-            error: 'Billing for this account is managed in Shopify admin',
-            code: 'SHOPIFY_BILLED',
-        });
-        return true;
-    }
-    if (await mustBillThroughSalla(userId, sub)) {
-        // Logged because this guard's characteristic failure is being SILENTLY
-        // INERT: the exemption reads a payment_method that is NULL on every
-        // fresh trial, so a regression there suppresses nothing and looks
-        // exactly like "no Salla merchants hit a paywall this week". A refusal
-        // count is the only way to tell working from broken in production.
-        log?.info({ userId, rail: 'salla' }, 'Marketplace billing guard refused a Stripe entry point');
-        reply.status(400).send({
-            error: 'Paid plans for Salla merchants are billed through Salla',
-            code: SALLA_BILLED_CODE,
-        });
-        return true;
-    }
-    return false;
+    const verdict = await resolveMarketplaceBilling(userId, sub);
+    if (!verdict) return false;
+
+    // Logged because this guard's characteristic failure is being SILENTLY
+    // INERT: the store-based rails' exemption reads a payment_method that is
+    // NULL on every fresh trial, so a regression there suppresses nothing and
+    // looks exactly like "no marketplace merchants hit a paywall this week". A
+    // refusal count is the only way to tell working from broken in production.
+    log?.info(
+        { userId, rail: verdict.marketplace },
+        'Marketplace billing guard refused a Stripe entry point',
+    );
+    reply.status(400).send({ error: verdict.message, code: verdict.code });
+    return true;
 }
 
 export class PaymentController {

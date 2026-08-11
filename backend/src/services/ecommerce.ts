@@ -341,6 +341,33 @@ export async function hasActiveStoreForBillingSubject(
     return result.length > 0;
 }
 
+/**
+ * Resolve the billing SUBJECT for a store row — the identity whose subscription
+ * row a marketplace mirror must land on.
+ *
+ * The D-E rule: entitlements are resolved against the workspace OWNER's
+ * subscription (the `hasWhatsAppPlanAccess` pattern), so a mirror written to
+ * the connecting member's row would be invisible to every limit check. Falls
+ * back to the store's own `userId` for pre-workspace rows and for a
+ * `workspace_id` that no longer resolves.
+ *
+ * One home for both marketplace rails: `shopifyBilling` and `zidBilling` each
+ * ask this exact question at the same point in their sync, and a second copy
+ * would be a silent place for the two rails' answers to drift apart.
+ */
+export async function resolveBillingSubjectUserId(store: {
+    userId: string;
+    workspaceId?: string | null;
+}): Promise<string> {
+    if (!store.workspaceId) return store.userId;
+    const [ws] = await db
+        .select({ ownerId: workspaces.ownerId })
+        .from(workspaces)
+        .where(eq(workspaces.id, store.workspaceId))
+        .limit(1);
+    return ws?.ownerId ?? store.userId;
+}
+
 export interface CreateStoreOptions {
     userId: string;
     platform: EcommercePlatform;

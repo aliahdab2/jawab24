@@ -22,6 +22,7 @@ import {
 } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
+import { cancelZidSubscriptionLocal, syncZidBilling } from '../services/zidBilling';
 import { config } from '../config';
 import {
     PENDING_ZID_COOKIE_OPTIONS,
@@ -217,6 +218,22 @@ function verifyZidWebhookAuth(request: FastifyRequest, reply: FastifyReply): boo
  */
 const ZID_UNINSTALL_EVENT = 'app.market.application.uninstall';
 
+/**
+ * App Market SUBSCRIPTION lifecycle events. These are pure TRIGGERS: the
+ * handler never reads a plan, price, or status out of the delivery — it calls
+ * `syncZidBilling`, which asks Zid's own subscription endpoint and reconciles
+ * from that answer. So an envelope we have not captured (nothing on this rail
+ * has been round-tripped — EC3 blocks installing a Rejected app) cannot put
+ * wrong billing state into the database, and a delivery that never arrives is
+ * healed by the 6h reconciler instead of being lost (§H-9).
+ *
+ * Matched by PREFIX rather than an exact list for the same reason: Zid's exact
+ * event names are unconfirmed, and a subscription event we fail to recognise
+ * would silently skip the verify. A spurious verify is cheap; a missed one
+ * strands a paying merchant.
+ */
+const ZID_SUBSCRIPTION_EVENT_PREFIX = 'app.market.subscription';
+
 interface ZidWebhookBody {
     event?: string;
     store_id?: string | number;
@@ -258,7 +275,25 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
             // at uninstall anyway), but clearing OUR hash is what actually closes
             // the session path, so it happens either way.
             await revokeEmbeddedToken(store.id, request.log);
+            // Cancel the billing mirror BEFORE deactivating too, for a different
+            // reason: no paid local subscription may outlive the app (§H-6). It
+            // is keyed on zid_store_id rather than the store row, so the order
+            // is defensive rather than required.
+            await cancelZidSubscriptionLocal(store.id, 'zid_app_uninstalled', request.log);
             await deactivateStore('zid', store.storeDomain);
+        }
+        return reply.status(200).send({ ok: true });
+    }
+
+    if (event.startsWith(ZID_SUBSCRIPTION_EVENT_PREFIX)) {
+        const store = await resolveStore();
+        if (store) {
+            // Fire-and-forget: Zid's redelivery policy is uncaptured, so the ack
+            // must not wait on a Merchant API round-trip. A failure here is not
+            // lost — the 6h reconciler sweeps the same store.
+            syncZidBilling(store.id, request.log).catch(err => {
+                request.log.error({ err, storeId: store.id }, 'Zid billing sync failed for a subscription webhook');
+            });
         }
         return reply.status(200).send({ ok: true });
     }

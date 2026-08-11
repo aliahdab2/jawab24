@@ -297,6 +297,12 @@ export const config = {
         // four GUESSED names Zid never documented (part of the 2026-08-10
         // "OAuth does not meet our required standards" rejection).
         scopes: 'embedded_apps_tokens_write',
+        // Where a Zid merchant manages the App Market subscription that bills
+        // them for Jawab24. Unset by default ON PURPOSE: the App Market URL
+        // shape is absent from Zid's docs and has never been observed on a live
+        // install (EC3 blocks installing a Rejected app), and a guessed URL
+        // would send paying merchants to a 404. See config/zidBilling.ts.
+        appMarketUrl: process.env.ZID_APP_MARKET_URL || '',
     },
 
     // Stripe Payment

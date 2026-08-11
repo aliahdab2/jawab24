@@ -273,17 +273,30 @@ webhooks re-registered 6/6.
 
 ---
 
-## H. Billing — Zid App Market subscriptions (SPEC — blocked on the Zid billing PR)
+## H. Billing — Zid App Market subscriptions (rail SHIPPED; live validation blocked on EC3)
 
-> ⛔ **Not runnable yet**: the Zid billing PR does not exist. This section pins what that
-> PR must make testable, so the PR is written against these cases. Architecture ruling:
-> mirror **D-054**'s local-mirror model but **webhook-driven** — unlike Shopify, Zid
-> delivers `app.market.subscription.*` lifecycle events. Reuse the
-> `config/shopifyBilling.ts` vocabulary where it generalizes; add a `zid` entry to
-> `LAZY_EXPIRY_CANARIES` (never another copied if-block). The PR must also append the
-> owed DECISIONS entries: no-Starter-on-marketplaces (ecommerceEnabled=false makes the
-> app useless on Starter), the gross-up principle (SAR price nets ≈ Stripe USD after
-> Zid's 20% + VAT), and the 14-day marketplace trial.
+> ✅ **The Zid billing PR exists.** `services/zidBilling.ts` + `config/zidBilling.ts`,
+> migration 0161 (`subscriptions.zid_store_id` + partial unique index + CHECK), the
+> `zid` entry in `LAZY_EXPIRY_CANARIES`, the 6-hourly `ZidBillingReconcile` cron, and
+> the webhook triggers in `controllers/zid.ts`. Rulings appended: **D-070** (verify-first),
+> **D-071** (no Starter on marketplaces), **D-072** (gross-up), **D-073** (one marketplace
+> guard). The 14-day trial is recorded in D-072 with the provisional pricing.
+>
+> ⚠️ **The architecture ruling below CHANGED.** This section originally specified a
+> **webhook-driven** design. D-070 supersedes that: Zid documents
+> `GET /v1/market/app/subscription`, so the API is the authority and
+> `app.market.subscription.*` deliveries are only TRIGGERS that call the choke point
+> `syncZidBilling(storeId)`. That closes H-9 by construction — a missed delivery is at
+> most a six-hour delay, healed by the reconciler — and means an uncaptured envelope
+> cannot write wrong billing state, because nothing is read out of it.
+>
+> ⛔ **Still not runnable against a live store.** `EC3` (§5 of the 08-11 handoff — a
+> Rejected app cannot be installed) blocks every real round-trip until app 7367 is
+> resubmitted. H-1…H-9 below are covered at the UNIT level by
+> `backend/test/services/zidBilling.test.ts` (40 cases) and
+> `backend/test/controllers/zid.test.ts` (webhook wiring) against an envelope inferred
+> from Zid's docs. **Unit-green is NOT the live validation this section asks for** — the
+> rows below stay open until they are run against a real dev store.
 
 Plans as configured (PROVISIONAL — owner defers final pricing until WHT confirmed):
 Business/الأعمال id 3740 = 189 SAR · Pro/الاحترافي id 3741 = 379 SAR · Recurring,
@@ -292,17 +305,26 @@ Business/الأعمال id 3740 = 189 SAR · Pro/الاحترافي id 3741 = 37
 | ID | Test | Expected |
 |----|------|----------|
 | H-1 | Subscribe on the dev store (trial) | `app.market.subscription.active` (or install-time equivalent — CAPTURE the real first event) → local mirror row `payment_method='zid'`, status `trialing`, subject = workspace OWNER |
-| H-2 | Trial expiry / `subscription.expired` | Mirror pauses or expires per the PR's ruling; lazy-expiry canary does NOT fire when webhooks do their job |
-| H-3 | `subscription.renew` | Period advances contiguously; no duplicate row |
-| H-4 | `subscription.upgrade` | `plan_id` moves; usage window handled per ruling |
+| H-2 | Trial expiry / `subscription.expired` | Mirror → `paused` (not canceled: the app is still installed, re-subscribing recovers); lazy-expiry canary does NOT fire when the triggers work |
+| H-3 | `subscription.renew` | Period advances contiguously from the previous end; no duplicate row |
+| H-4 | `subscription.upgrade` | `plan_id` moves; usage window re-initialized to the new period |
 | H-5 | Unknown plan id/name in a subscription event | NO activation; Sentry; fail-loud (the D-054 principle) |
 | H-6 | Uninstall while subscribed | Mirror canceled; no paid local sub outlives the app |
 | H-7 | Stripe-paying workspace subscribes on Zid | Adoption REFUSED (D-H analog); Sentry; human decides |
-| H-8 | While zid-billed: all six Stripe surfaces | 400 rejection (the D-G analog), canceled-mirror exemption honored |
-| H-9 | Missed webhook (deliver failure window) | Whatever reconcile/verify mechanism the PR ships heals the mirror — the return-endpoint-must-not-be-SPOF principle (Shopify O-6) applies here as webhook-must-not-be-SPOF |
+| H-8 | While zid-billed: all six Stripe surfaces | 400 `ZID_BILLED` (the D-G analog), canceled-mirror exemption honored |
+| H-9 | Missed webhook (deliver failure window) | The 6-hourly `ZidBillingReconcile` sweep heals the mirror — webhook-must-not-be-SPOF, closed by D-070's verify-first design |
+| **H-10** | **Unrecognised `subscription_status`** | **NOTHING written, Sentry `unknown_status`. Explicitly NOT treated as inactive — see D-070: a status string we have not seen must never revoke a merchant Zid is billing** |
 
 **Capture every `app.market.*` delivery** — the subscription-event envelopes are as
-unconfirmed as everything else was.
+unconfirmed as everything else was. The parser reads them tolerantly (root / `data` /
+`subscription` nestings, several field spellings) precisely because nothing is captured;
+the first real delivery should be used to NARROW it, not merely to confirm it.
+
+⚠️ **`plan_name` comes back in Arabic**, so the plan map keys on the Partner-Dashboard
+plan **id** first (3740 «الأعمال» → `business`, 3741 «الاحترافي» → `pro`) and falls back
+to the normalized Arabic name. Shopify's "lowercase display name == slug" shortcut does
+not port. The stray free plan **3956 «اختبار» is deliberately unmapped** — delete it in
+the dashboard; until then an install on it fails loud rather than activating a guess.
 
 ---
 

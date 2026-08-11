@@ -893,8 +893,8 @@ export const subscriptions = pgTable('subscriptions', {
     currentPeriodEnd: timestamp('current_period_end'),
 
     // Payment info (for Stripe integration)
-    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID
-    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify'
+    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID / Zid App Market subscription id
+    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify', 'zid'
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
     stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
     // Shopify App Pricing (managed billing): the *.myshopify.com domain whose app
@@ -903,6 +903,19 @@ export const subscriptions = pgTable('subscriptions', {
     // two workspaces. Lives here — NOT on ecommerce_stores — so the paid state
     // survives GDPR shop/redact deleting the store row.
     shopifyShopDomain: varchar('shopify_shop_domain', { length: 255 }),
+    // Zid App Market (managed billing): our ecommerce_stores UUID for the Zid
+    // store whose App Market subscription this row mirrors. Same role as
+    // shopify_shop_domain on the Shopify rail — required when
+    // payment_method='zid' (CHECK below), unique among live zid rows (partial
+    // index) so one store can never bill two workspaces.
+    //
+    // Keyed on OUR store UUID rather than Zid's numeric store id because that
+    // is what every trigger already has in hand (the webhook target_url carries
+    // `sid`, the reconciler sweeps store rows) and it needs no extra lookup on
+    // the cancel path. Unlike Shopify there is no GDPR shop/redact mandate that
+    // deletes the store row out from under the subscription, so the mirror does
+    // not need to survive independently of ecommerce_stores.
+    zidStoreId: varchar('zid_store_id', { length: 255 }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
 
     // Cancellation
@@ -931,6 +944,21 @@ export const subscriptions = pgTable('subscriptions', {
         shopifyDomainRequiredCheck: check(
             'subscriptions_shopify_domain_required',
             sql`${table.paymentMethod} IS DISTINCT FROM 'shopify' OR ${table.shopifyShopDomain} IS NOT NULL`
+        ),
+        // The Zid rail's twin of the two constraints above — same reasoning,
+        // same canceled-row exclusion (a store that uninstalled from workspace A
+        // must stay adoptable by workspace B). Unlike 0147's era, the current
+        // drizzle-kit DOES emit the .where(), so migration 0161 is generated
+        // rather than hand-written — amended only to be re-runnable
+        // (IF NOT EXISTS / duplicate_object), matching the 0147 precedent.
+        zidStoreIdUnique: uniqueIndex('idx_subscriptions_zid_store_id')
+            .on(table.zidStoreId)
+            .where(sql`${table.paymentMethod} = 'zid' AND ${table.status} IS DISTINCT FROM 'canceled'`),
+        // A zid-billed row without its store id is unreconcilable — the sweep
+        // and the uninstall cancel both resolve rows by this column.
+        zidStoreIdRequiredCheck: check(
+            'subscriptions_zid_store_id_required',
+            sql`${table.paymentMethod} IS DISTINCT FROM 'zid' OR ${table.zidStoreId} IS NOT NULL`
         ),
     };
 });

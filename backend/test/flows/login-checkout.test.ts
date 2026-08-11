@@ -37,12 +37,12 @@ vi.mock('../../src/services/auth', () => ({
     ACCESS_TOKEN_EXPIRY: 900000,
 }));
 
-// Salla Article-5 guard (D-065) — every Stripe entry point consults it. Mocked
+// The marketplace billing guard — every Stripe entry point consults it. Mocked
 // at the service boundary so this flow test keeps exercising the happy path;
-// the rule itself is covered in test/services/sallaBilling.test.ts and the
+// the rule itself is covered in test/services/marketplaceBilling.test.ts and the
 // refusal wiring in test/controllers/payment.test.ts.
-vi.mock('../../src/services/sallaBilling', () => ({
-    mustBillThroughSalla: vi.fn(async () => false),
+vi.mock('../../src/services/marketplaceBilling', () => ({
+    resolveMarketplaceBilling: vi.fn(async () => null),
 }));
 
 vi.mock('../../src/services/stripe', () => ({

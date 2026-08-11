@@ -165,8 +165,11 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 | Controller (webhook handler, `buildZidOrderEvent`) | `backend/src/controllers/zid.ts` |
 | Routes (shared factory) | `backend/src/routes/zid.ts` |
 | Basic-auth verification | `backend/src/utils/basicAuthVerify.ts` |
+| **Billing rail (D-070)** | `backend/src/services/zidBilling.ts`, `backend/src/config/zidBilling.ts` |
+| **Marketplace guard (all rails, D-073)** | `backend/src/services/marketplaceBilling.ts` |
 | Config | `backend/src/config/index.ts` (`config.zid`; enabled when `ZID_CLIENT_ID` set) |
 | Migration (dual-token columns) | `backend/migrations/0146_left_prodigy.sql` |
+| Migration (billing mirror key) | `backend/migrations/0161_tense_garia.sql` (`subscriptions.zid_store_id`) |
 | **Edge routing** | `nginx/nginx.conf` — `location /zid/` → backend, `location = /zid/onboarding` → frontend |
 | Tests | `backend/test/{services,controllers,routes,integrations}/zid.test.ts`, `backend/test/utils/basicAuthVerify.test.ts` |
 | Routing gate | `scripts/check-nginx-routing.sh` (`npm run check:nginx-routing`, pre-deploy step 0.98) |
@@ -225,6 +228,20 @@ describe titles (grep for it).
 - Zid's duplicate-webhook status code (409 and 422 both treated as already-registered).
 - The exact casing of the `Basic` scheme on deliveries: verification compares the full
   header string (fails closed on `basic …`) — confirm Zid's casing from a real capture.
+- **Billing (D-070), the whole envelope.** `GET /v1/market/app/subscription` has never
+  been called against a live store — `EC3` blocks installing a Rejected app. Unconfirmed:
+  the response nesting (root / `data` / `subscription` — all three tolerated), the field
+  spellings (`subscription_status` vs `status`, `end_date` vs `expiry_date` vs `ends_at`,
+  whether a subscription `id` is present at all), whether `plan` is nested or flat, and
+  **the value set of `subscription_status`** — the one that matters most. Recognised
+  values are listed in `services/zidBilling.ts`; anything else resolves to
+  `unknown_status`, writes NOTHING, and raises Sentry rather than being read as
+  "inactive". The first real delivery should NARROW these tolerances, not just confirm
+  them. Also unconfirmed: the exact `app.market.subscription.*` event names (matched by
+  prefix, deliberately, so an unrecognised one still triggers a verify).
+- The Zid App Market URL where a merchant manages their subscription — undocumented and
+  unobserved, so `ZID_APP_MARKET_URL` ships unset and the guard offers no link rather
+  than a guessed 404.
 
 ## Live-validation checklist (the D-020 gate — follow-up PR)
 

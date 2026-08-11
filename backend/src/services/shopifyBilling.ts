@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { subscriptions, ecommerceStores, workspaces } from '../db/schema';
+import { subscriptions, ecommerceStores } from '../db/schema';
 import { and, eq, desc, inArray, notInArray } from 'drizzle-orm';
 import { subscriptionsService } from './subscriptions';
 import { plansService } from './plans';
@@ -9,6 +9,7 @@ import { mapShopifyPlanToSlug, LIVE_SUBSCRIPTION_STATUSES } from '../config/shop
 import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from './subscriptionLinking';
 import { isDemoStore } from './demoStore';
+import { resolveBillingSubjectUserId } from './ecommerce';
 
 /**
  * Shopify App Pricing → local subscription mirror.
@@ -382,15 +383,7 @@ export async function syncShopifyBilling(
         // when a non-owner member connected the store. Resolved only here: the
         // pause/no-op branches below never need it, and the 6h sweep's steady
         // state should not pay a query per store for nothing.
-        let subjectUserId = store.userId;
-        if (store.workspaceId) {
-            const [ws] = await db
-                .select({ ownerId: workspaces.ownerId })
-                .from(workspaces)
-                .where(eq(workspaces.id, store.workspaceId))
-                .limit(1);
-            if (ws) subjectUserId = ws.ownerId;
-        }
+        const subjectUserId = await resolveBillingSubjectUserId(store);
         return adoptShopifySubscription(subjectUserId, appSub, shopDomain, log);
     }
 

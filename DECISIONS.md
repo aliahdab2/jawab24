@@ -1336,3 +1336,110 @@ branch could be pinned by a test at all.
 **What this does NOT do.** It does not settle whether a break-out token should live 15
 minutes or 60 (D-067 chose 60; `services/embeddedSession.ts` argues the opposite for the
 in-frame token). Both sites read one constant, so that ruling can be made in one place.
+
+---
+
+## D-070 · Zid App Market billing is verify-first: the subscription API is the authority, webhooks are only triggers
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Mirrors:** D-054 · **Supersedes:** the webhook-driven design assumed by `ZID_TEST_PLAN.md` §H
+
+**Context.** §H was written believing Zid's `app.market.subscription.*` webhooks had to
+BE the billing state, because — unlike Shopify (D-054), which delivers no App Pricing
+webhook at all — Zid delivers them. That framing made every subscription a hostage to
+delivery: a dropped webhook means a paying merchant is never activated, and §H-9 had to
+be answered by a mechanism nobody had designed yet.
+
+Zid also documents `GET /v1/market/app/subscription` (dual-header auth + `app_id`,
+gated on the `Subscription.read` scope, now enabled on app 7367). That changes the
+shape of the problem: we can ASK.
+
+**Ruling.** The Zid rail mirrors D-054 rather than the webhook design. One idempotent
+choke point, `syncZidBilling(storeId)`, asks Zid what the subscription is and reconciles
+the local row to that answer. Webhook deliveries never carry state into the database —
+they call the choke point and nothing else. Three triggers: the subscription webhook,
+the uninstall webhook (cancel), and a 6-hourly reconciler that is the authority of last
+resort. §H-9 is therefore closed by construction, not by trusting delivery.
+
+**Consequences.**
+- A missed webhook is a delay of at most six hours, never a lost subscription.
+- The uncaptured envelope cannot corrupt billing state: nothing is read from it except
+  "something changed, go look". This matters because `EC3` (a Rejected app cannot be
+  installed) blocks every live round-trip until 7367 is resubmitted — so this rail
+  ships unvalidated against a real store, deliberately, with the fail-loud posture
+  D-020/D-053 imposed after the first Zid implementation was built on an assumed
+  contract.
+- Two identifiers must resolve or NOTHING is written: the plan (`unknown_plan`) and the
+  status (`unknown_status`). An unrecognised **status** is explicitly NOT treated as
+  "inactive" — pausing a merchant Zid is actively billing, because Zid shipped a string
+  we had not seen, is a self-inflicted outage. A stale entitlement costs us a little
+  money; a wrongly-revoked one costs a customer.
+- `plan_name` comes back in **Arabic**, so Shopify's "lowercase display name == slug"
+  shortcut does not port. The plan **id** is matched first (stable across a rename) and
+  the Arabic name is a fallback folded through the shared `normalizeArabic`, so an
+  أ/ا drift on Zid's side cannot demote a payer to `unknown_plan`.
+
+---
+
+## D-071 · Starter is not sold on any marketplace
+
+**Date:** 2026-08-11 · **Status:** Accepted
+
+**Context.** The Zid and Salla listings exist because the merchant's STORE is the
+integration. Starter carries `ecommerceEnabled=false`.
+
+**Ruling.** Marketplace plan matrices offer Business and Pro only. `ZID_BILLABLE_PLAN_SLUGS`
+omits `starter`, and an install that somehow reports it resolves to no slug and fails
+loud rather than activating.
+
+**Consequences.** Selling Starter through a store marketplace would sell a plan that
+cannot use the one feature the listing advertises — a refund request and a bad review,
+not a cheap entry tier. A merchant who wants Starter buys it on jawab24.com, where the
+plan makes sense.
+
+---
+
+## D-072 · Marketplace SAR pricing is grossed up so the net lands at the Stripe USD price
+
+**Date:** 2026-08-11 · **Status:** Accepted (pricing PROVISIONAL — final numbers deferred pending WHT confirmation)
+
+**Context.** Zid takes a commission on App Market sales and VAT applies on top, so a
+plan listed at the Stripe-equivalent SAR price nets materially less than the same plan
+sold direct.
+
+**Ruling.** Marketplace list prices are set so the NET receipt approximates the direct
+Stripe price, rather than matching the sticker price across channels. The provisional
+numbers are 189 SAR (الأعمال) and 379 SAR (الاحترافي), monthly with a 14-day trial.
+
+**Consequences.** A marketplace merchant sees a higher sticker price than the website —
+accepted, because the marketplace supplies the customer. The numbers stay provisional
+until the withholding-tax rate is confirmed; they are editable in the Partner Dashboard
+until the app is published.
+
+---
+
+## D-073 · One marketplace billing guard, not one per marketplace
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Generalizes:** D-065
+
+**Context.** Suppressing Stripe for marketplace-billed merchants had grown a rail's
+worth of code per marketplace: `isShopifyBilled` open-coded in the payment controller,
+`mustBillThroughSalla` beside it, and Zid about to add a third. Each rail also had to
+be threaded separately into the usage summary that drives the frontend CTAs, which is
+exactly where the two answers can drift and dead-end a merchant.
+
+**Ruling.** `services/marketplaceBilling.ts` owns the question for all three rails and
+returns a verdict (`marketplace`, wire `code`, `manageUrl?`). Each rail's *reason* stays
+in its own `config/*Billing.ts`; what is centralized is the ORDER the rails are asked
+in — row-based rails first, then the Stripe exemption, then store-based rails — because
+the order is the part a copy gets subtly wrong.
+
+**Consequences.**
+- Salla's answer is byte-for-byte unchanged, and Shopify is still evaluated first.
+- The API exposes `subscription.marketplaceBilling`; the legacy `sallaBilled` boolean is
+  still emitted and still Salla-only. It is NOT retired, because the mobile app ships a
+  BUNDLED frontend that lags the web build — dropping the field would silently
+  un-suppress Stripe for Salla merchants on an older app, an Article-5 violation with a
+  delisting risk. It retires when no supported build reads it.
+- A marketplace with no self-serve destination (Salla today; Zid until its App Market
+  URL is observed rather than guessed) returns no `manageUrl`. Absent means "suppress,
+  but show no link" — never "do not suppress".

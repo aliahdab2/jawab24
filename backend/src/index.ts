@@ -594,6 +594,23 @@ const start = async () => {
       recovered: r => ({ count: r.healed, message: `Shopify billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
     });
 
+    // Zid App Market billing reconciliation — the authority of last resort.
+    // Zid DOES deliver app.market.subscription.* webhooks, but a delivery that
+    // never arrives (endpoint down, Zid's redelivery policy is uncaptured —
+    // ZID_TEST_PLAN §I-3) would otherwise strand a paying merchant forever.
+    // This sweep is what makes a missed webhook a delay instead of a lost
+    // subscription (§H-9). 6-hourly, matching Shopify: each swept store costs
+    // one Merchant API call.
+    const { reconcileZidBilling } = await import('./services/zidBilling');
+    scheduleReconcileCron({
+      label: 'ZidBillingReconcile',
+      tag: 'zid_billing_reconcile',
+      enabled: () => !!config.zid.clientId,
+      intervalMs: 6 * 60 * 60 * 1000,
+      run: () => reconcileZidBilling({ log: server.log }),
+      recovered: r => ({ count: r.healed, message: `Zid billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
+    });
+
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
     const { getAllActiveStores } = await import('./services/ecommerce');
