@@ -148,6 +148,9 @@ const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
       // backend decides, and a workspace listed in only one of the two either
       // sees a card whose API 404s or gets nothing while paying the cron cost.
       '9b6ba279-b569-4b45-b020-55b542dad5b6',
+      // Second merchant tester (2026-08-11, owner-invited) — Waleed,
+      // waleedraffas@gmail.com. Same both-gates rule as above.
+      '30c90e2c-6ede-4e20-9b9e-9c5cd308e25d',
     ].join(','))
     .split(',').map((id) => id.trim()).filter(Boolean),
 );

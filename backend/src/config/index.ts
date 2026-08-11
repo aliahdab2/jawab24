@@ -168,6 +168,9 @@ export const config = {
                 // reviewable deploy, not a manual env edit someone must remember
                 // to mirror in the frontend allowlist.
                 '9b6ba279-b569-4b45-b020-55b542dad5b6',
+                // Second merchant tester (2026-08-11, owner-invited) — Waleed,
+                // waleedraffas@gmail.com, one connected page.
+                '30c90e2c-6ede-4e20-9b9e-9c5cd308e25d',
             ].join(','))
             .split(',').map(id => id.trim()).filter(Boolean),
         // ABSOLUTE generations/day/page cap (owner ruling 2026-08-09: 3, «ليس
