@@ -39,6 +39,33 @@ export const externalApiDuration = new Histogram({
     registers: [registry],
 });
 
+/**
+ * Vision (image-understanding) call latency, with its own buckets.
+ *
+ * Deliberately separate from `externalApiDuration` rather than reusing it with
+ * `service='openai_vision'`: that histogram jumps 10 → 30 seconds, and every
+ * interesting vision value lives inside that gap (measured over 30 days of
+ * production: p50 7.8s, p90 12.8s, p99 19.7s). Sharing it would collapse the
+ * whole distribution into one bucket and `histogram_quantile` could not tell
+ * a healthy day from the day we lost 8 of 10 images.
+ *
+ * The gap this closes: `ai_usage_log` stores tokens and cost but no duration,
+ * so the 2026-08-11 question "is the 20s vision timeout too tight?" could only
+ * be answered from `messages.updated_at`, a proxy polluted by every later write
+ * to the row. It was — the budget sat exactly on the p99.
+ *
+ * `outcome` is low-cardinality by construction (five values), so it is safe as
+ * a Prometheus label. Timeouts are recorded too: a latency distribution built
+ * only from successes is the survivorship bias that hid the problem.
+ */
+export const visionDuration = new Histogram({
+    name: 'jawab24_vision_duration_seconds',
+    help: 'Image-understanding vision call latency in seconds, by outcome',
+    labelNames: ['outcome'] as const,
+    buckets: [1, 2.5, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 35, 45],
+    registers: [registry],
+});
+
 // ------------------------------------------------------------------
 // Uptime gauge
 // ------------------------------------------------------------------

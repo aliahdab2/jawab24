@@ -10,7 +10,7 @@ import { enqueueMessage } from '../../lib/replyQueue';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { detectLanguageCode } from '../../utils/language';
 import { t } from '../../utils/i18n';
-import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
+import { getAttachmentPlaceholder, getTextOnlyNudge, NO_INTENT_ATTACHMENT_TYPES } from '../../utils/attachmentLabels';
 import { extractPostId, isSharedPostType } from '../../utils/instagram';
 import { facebookMessageAdapter } from './adapters/facebookAdapter';
 import { instagramMessageAdapter } from './adapters/instagramAdapter';
@@ -104,6 +104,69 @@ async function finalizeAttachmentDone(
     if (page.userId) {
         publishSSEEvent(page.userId, 'message:updated', { messageId, pageId: page.id, senderId });
     }
+}
+
+/**
+ * Terminal exit for an attachment WE failed to enrich: mark the stub failed
+ * (releasing any parked sibling text job) and say NOTHING to the customer.
+ *
+ * Shared by every such exit on both platforms, because the alternative — the
+ * same three statements inlined per branch — is how one platform gets a policy
+ * change and the other silently does not (§13c: the same timeout-classification
+ * bug shipped twice for exactly that reason).
+ *
+ * Silence, not an apology: the text-only nudge claims we cannot read images,
+ * which is false whenever the failure was ours. The photo still reaches the
+ * merchant's inbox and the SLA sweep surfaces it as unanswered.
+ */
+/**
+ * What the CUSTOMER hears when an image could not be read. One function, so the
+ * policy exists once instead of being re-derived per platform.
+ *
+ * `nudge` is only correct when the customer can act on it — the guiding question
+ * is never "did it fail?" but "can they fix it by sending text instead?".
+ */
+type ImageDenialAction = 'nudge' | 'silent' | 'silent_notify_cap';
+
+function actionForGateDenial(reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' | 'cap_reached'): ImageDenialAction {
+    switch (reason) {
+        // The merchant's daily quota is spent: silence for the customer, and the
+        // merchant — never their customer — is told.
+        case 'cap_reached':
+            return 'silent_notify_cap';
+        // A Redis/DB blip inside our own gate. Image reading is working fine —
+        // we just could not check the counter — so «we can only read text» is
+        // false. It is also the worst possible moment to say it: during a Redis
+        // outage every image sender fleet-wide would hear it, with no suppression
+        // either, because sendNudge's cooldown reads the same downed Redis and
+        // fails open.
+        case 'cap_check_failed':
+            return 'silent';
+        // Both of these are TRUE statements about a standing configuration, not
+        // failures of a working feature: the kill switch is deliberately off, or
+        // the workspace has no plan covering image reads. We genuinely cannot
+        // read this photo and will not be able to on a retry, so telling the
+        // customer to send text is honest AND the fastest route to an answer —
+        // silence would just leave them waiting on a reply that is never coming.
+        //
+        // The line this whole enum draws is "is the capability available right
+        // now?" — not "did something go wrong?". A disabled feature is a real
+        // limit; a timeout is us failing at something we do all day.
+        case 'env_disabled':
+        case 'no_subscription':
+            return 'nudge';
+    }
+}
+
+async function finalizeAttachmentFailedSilently(
+    stubId: string,
+    platform: 'facebook' | 'instagram' | 'whatsapp',
+    reason: string,
+    logger: Logger,
+    ids: { senderId: string; messageId: string },
+): Promise<void> {
+    await messagesService.finalizeEnrichment(stubId, 'failed');
+    logger.warn(`[${platform}] Image not read (${reason}) — staying silent`, ids);
 }
 
 export interface NonTextMessageEvent {
@@ -216,6 +279,26 @@ export async function handleNonTextMessage(
         });
         stubId = stub.id;
 
+        // 5b. The attachment carries no question at all (story mentions): nothing to
+        //     answer ⇒ nothing to nudge about. Mark resolved so the SLA sweep doesn't
+        //     file it as an unanswered customer.
+        //
+        //     Deliberately ABOVE the redelivery guard below. These rows are stored
+        //     non-enrichable, so on a retry the guard would return early — and if the
+        //     process died between storing the stub and resolving it, that retry is
+        //     the only remaining chance to set the flag. Left below the guard, a
+        //     crash at the wrong instant strands the row unresolved forever and the
+        //     SLA sweep files it as sla_no_reply: the exact symptom this branch
+        //     exists to prevent. Guarded on `resolved` (not `isNew`) and
+        //     markAsResolved is idempotent, so redelivery is free.
+        if (NO_INTENT_ATTACHMENT_TYPES.has(attachmentType)) {
+            if (!stub.resolved) await messagesService.markAsResolved(stub.id);
+            logger.debug(`[${platform}] No-intent attachment stored, no nudge`, {
+                senderId, messageId, attachmentType,
+            });
+            return;
+        }
+
         // Webhook redelivery of an already-finalized (or non-lifecycle) attachment:
         // nothing to do. A still-'pending' redelivery falls through to re-run enrichment
         // (finalizeEnrichment's pending-guard makes the double-finalize harmless).
@@ -280,43 +363,54 @@ export async function handleNonTextMessage(
         }
 
         // 9. Customer image: read it with AI vision → finalize → normal reply pipeline.
-        //    Gated by the env kill switch + per-plan daily cap. Any denial or failure
-        //    finalizes 'failed' (placeholder stands) and falls back to the nudge.
+        //    Gated by the env kill switch + per-plan daily cap. Every denial and
+        //    failure finalizes 'failed' (the placeholder stands); what differs is
+        //    what the CUSTOMER is told, and that turns on whose fault it was:
+        //      • image unusable (oversized / wrong format / malformed) → nudge,
+        //        because "send it as text instead" is honest and actionable;
+        //      • our failure (vision timeout, network, dead CDN link) → SILENCE;
+        //      • daily cap reached → SILENCE + notify the merchant.
+        //    Never claim we cannot read images: we can, and usually do.
         if (attachmentType === 'image' && attachmentUrl && page.userId) {
             const gate = await checkImageUnderstandingGate(page.userId, workspaceId);
             if (gate.allowed) {
-                const described = await imageUnderstandingService.describeFromUrl(
+                const outcome = await imageUnderstandingService.describeFromUrl(
                     attachmentUrl, lang, { userId: gate.ownerId, pageId: page.id },
                 );
-                if (described) {
-                    const body = t('attachmentImageDescribed', lang, { description: described.text });
+                if (outcome.ok) {
+                    const body = t('attachmentImageDescribed', lang, { description: outcome.text });
                     await finalizeAttachmentDone(stub.id, body, page, messageId, senderId, logger);
                     await incrementImageUnderstandingCounter(gate.ownerId);
                     await enqueueMessage({ jobType, pageId: platformPageId, messageId, senderId, text: body });
-                    logger.info(`[${platform}] Customer image understood`, { senderId, descriptionLength: described.text.length });
+                    logger.info(`[${platform}] Customer image understood`, { senderId, descriptionLength: outcome.text.length });
                     return; // AI pipeline handles the reply from here
                 }
-                logger.warn(`[${platform}] Image understanding failed, falling back to nudge`, { senderId, messageId });
-            } else if (gate.reason === 'cap_reached') {
-                // We DID NOT try to read this image — the merchant's daily quota
-                // is spent. That is a different event from "we tried and could
-                // not understand it", and the text-only nudge is the wrong reply
-                // to it on two counts: it tells the customer we cannot read
-                // images (false — we read several for this same page earlier
-                // today), and it makes the merchant's assistant announce a
-                // limitation to the person they are selling to. One merchant
-                // watched that message go to five of his customers and wrote
-                // «لما زبون يرسلك صورة لا ترد عليه» into his Business Info to
-                // make it stop — he wanted silence, not an apology.
-                //
-                // So: say nothing to the customer. The photo still lands in the
-                // merchant's inbox (flagged unanswered by the SLA sweep) and the
-                // merchant — never the customer — is told the quota ran out.
-                logger.info(`[${platform}] Image cap reached, staying silent`, { senderId, messageId, limit: gate.limit });
-                await messagesService.finalizeEnrichment(stub.id, 'failed');
-                await notifyImageCapReached(gate.ownerId, gate.limit);
-                return;
+                if (outcome.reason === 'our_failure') {
+                    // WE failed on a readable image — the vision deadline fired, the
+                    // network broke, or the CDN link died. Prod 2026-08-11: a guest
+                    // photographed a bad meal to complain and got «حالياً نستطيع الرد
+                    // على الرسائل النصية والصوتية» 20.7s later, because a timeout and
+                    // "this file is not an image" both returned null and took the
+                    // same exit.
+                    await finalizeAttachmentFailedSilently(stub.id, platform, 'our_failure', logger, { senderId, messageId });
+                    return;
+                }
+                // 'unusable_image' — oversized, or rejected by OpenAI as malformed.
+                // The customer CAN act on this, so the nudge is honest here.
+                logger.warn(`[${platform}] Image unusable, falling back to nudge`, { senderId, messageId });
             } else {
+                const action = actionForGateDenial(gate.reason);
+                if (action !== 'nudge') {
+                    await finalizeAttachmentFailedSilently(stub.id, platform, gate.reason, logger, { senderId, messageId });
+                    // One merchant watched the nudge reach five of his customers
+                    // after his quota ran out and wrote «لما زبون يرسلك صورة لا ترد
+                    // عليه» into his Business Info to stop it. He wanted silence —
+                    // and to be told himself, which is what this does.
+                    if (action === 'silent_notify_cap' && gate.reason === 'cap_reached') {
+                        await notifyImageCapReached(gate.ownerId, gate.limit);
+                    }
+                    return;
+                }
                 logger.info(`[${platform}] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
             }
             await messagesService.finalizeEnrichment(stub.id, 'failed');
@@ -417,6 +511,16 @@ export async function handleWhatsAppNonTextMessage(
         });
         stubId = stub.id;
 
+        // Same no-intent rule as FB/IG, and above the redelivery guard for the same
+        // reason. WhatsApp has no story mentions today, so this is a no-op here —
+        // it exists so the set governs BOTH platforms rather than looking shared
+        // while being enforced on one, which is how the two paths drift apart.
+        if (NO_INTENT_ATTACHMENT_TYPES.has(attachmentType)) {
+            if (!stub.resolved) await messagesService.markAsResolved(stub.id);
+            logger.debug('[whatsapp] No-intent attachment stored, no nudge', { senderId, messageId, attachmentType });
+            return;
+        }
+
         if (!isNew && stub.enrichmentStatus !== 'pending') return;
 
         const waNudge = () => sendNudge(
@@ -466,6 +570,11 @@ export async function handleWhatsAppNonTextMessage(
         if (attachmentType === 'image' && mediaId && page.userId) {
             const gate = await checkImageUnderstandingGate(page.userId, workspaceId);
             if (gate.allowed) {
+                // Mirrors the FB/IG path above: only an unusable IMAGE earns the
+                // nudge. Anything that went wrong on our side — WABA media fetch,
+                // vision timeout, network — must stay silent rather than tell the
+                // customer we cannot read photos.
+                let ourFailure = false;
                 try {
                     const media = await whatsappService.getMediaInfo(mediaId, whatsappAccessToken);
                     const buffer = media.url
@@ -473,23 +582,46 @@ export async function handleWhatsAppNonTextMessage(
                         : null;
                     if (buffer) {
                         const cleanMime = (mimeType ?? media.mimeType).split(';')[0].trim();
-                        const described = await imageUnderstandingService.describeFromBuffer(
+                        const outcome = await imageUnderstandingService.describeFromBuffer(
                             buffer, cleanMime, lang, { userId: gate.ownerId, pageId: page.id },
                         );
-                        if (described) {
-                            const body = t('attachmentImageDescribed', lang, { description: described.text });
+                        if (outcome.ok) {
+                            const body = t('attachmentImageDescribed', lang, { description: outcome.text });
                             await finalizeAttachmentDone(stub.id, body, page, messageId, senderId, logger);
                             await incrementImageUnderstandingCounter(gate.ownerId);
                             await enqueueMessage({ jobType: 'whatsapp_message', pageId: phoneNumberId, messageId, senderId, text: body, senderName });
-                            logger.info('[whatsapp] Customer image understood', { senderId, descriptionLength: described.text.length });
+                            logger.info('[whatsapp] Customer image understood', { senderId, descriptionLength: outcome.text.length });
                             return;
                         }
+                        ourFailure = outcome.reason === 'our_failure';
+                    } else {
+                        // WhatsApp gave us no media URL — Meta's side or ours, but
+                        // certainly not something the customer can fix.
+                        ourFailure = true;
                     }
                 } catch (error) {
-                    logger.warn('[whatsapp] Image media fetch failed, falling back to nudge', { senderId, messageId, error: String(error) });
+                    // WABA media fetch broke. The image itself was never assessed.
+                    logger.warn('[whatsapp] Image media fetch failed', { senderId, messageId, error: String(error) });
+                    ourFailure = true;
                 }
-                logger.warn('[whatsapp] Image understanding failed, falling back to nudge', { senderId, messageId });
+                if (ourFailure) {
+                    await finalizeAttachmentFailedSilently(stub.id, 'whatsapp', 'our_failure', logger, { senderId, messageId });
+                    return;
+                }
+                logger.warn('[whatsapp] Image unusable, falling back to nudge', { senderId, messageId });
             } else {
+                // Same policy function as FB/IG — until 2026-08-11 this branch
+                // nudged for EVERY denial including cap_reached, so a WhatsApp
+                // merchant's customers got the false "we can only read text"
+                // message and the merchant was never told his quota had run out.
+                const action = actionForGateDenial(gate.reason);
+                if (action !== 'nudge') {
+                    await finalizeAttachmentFailedSilently(stub.id, 'whatsapp', gate.reason, logger, { senderId, messageId });
+                    if (action === 'silent_notify_cap' && gate.reason === 'cap_reached') {
+                        await notifyImageCapReached(gate.ownerId, gate.limit);
+                    }
+                    return;
+                }
                 logger.info(`[whatsapp] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
             }
             await messagesService.finalizeEnrichment(stub.id, 'failed');

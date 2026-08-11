@@ -15,6 +15,7 @@ import { db } from '../../src/db';
 import { posts, instagramMedia } from '../../src/db/schema';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
+import { WORST_CASE_ENRICHMENT_MS } from '../../src/services/imageUnderstanding';
 
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
@@ -2551,9 +2552,13 @@ describe('MessageProcessor — attachment-enrichment park (store-then-enrich)', 
         ]);
         const adapter = createMockAdapter();
 
-        // attachmentRetries = 8 (MAX) → falls through.
+        // At the retry cap → falls through. DERIVED from the real budget, not the
+        // literal 8 this used to hardcode: that number was sized against a 20s
+        // vision deadline, and when the deadline moved to 35s the test kept
+        // asserting a cap the code no longer had.
+        const atCap = Math.ceil(WORST_CASE_ENRICHMENT_MS / 5_000) + 1;
         const result = await messageProcessor.processMessage(
-            adapter, 'page-1', 'sender-1', 'شو محتويات الدورة', 'msg-text', undefined, undefined, false, 8,
+            adapter, 'page-1', 'sender-1', 'شو محتويات الدورة', 'msg-text', undefined, undefined, false, atCap,
         );
 
         expect(result.attachmentPendingDelayMs).toBeUndefined();

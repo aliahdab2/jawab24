@@ -6,6 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, shouldHoldReply, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
+import { WORST_CASE_ENRICHMENT_MS } from '../imageUnderstanding';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { redis } from '../../lib/redis';
@@ -61,20 +62,26 @@ const ORIGIN_POST_TEXT_CAP = 500;
 
 /** Store-then-enrich park (step 11): a sibling attachment from the same sender is
  *  stored as a 'pending' stub the instant its webhook lands, then enriched
- *  asynchronously (vision 6–20s / Whisper / shared-post fetch). A DM whose reply
+ *  asynchronously (vision / Whisper / shared-post fetch). A DM whose reply
  *  job reaches consolidation while such a stub is still 'pending' PARKS — it
  *  re-enqueues itself so the eventual reply consolidates the real content instead
  *  of answering the bare "[صورة]" placeholder (or the text alone, blind). */
 const ATTACHMENT_PARK_DELAY_MS = 5_000;
-/** 8 × 5s = 40s budget ≥ the ~35s worst-case enrichment (download 10s + vision 20s
- *  + store/enqueue). After this the job proceeds and replies without the pending
- *  row — degrading to today's "second reply", never a permanent no-reply. */
-const MAX_ATTACHMENT_RETRIES = 8;
+/** Retries needed to outlast the worst-case enrichment, plus one delay of slack
+ *  for store/enqueue. DERIVED, never hand-typed: this budget was a literal 8
+ *  ("40s ≥ the ~35s worst case") until the vision deadline moved to 35s and
+ *  quietly made the worst case ~65s, at which point a parked job would answer
+ *  blind while the enrichment it waited for was still running. After the budget
+ *  the job proceeds and replies without the pending row — degrading to today's
+ *  "second reply", never a permanent no-reply. */
+const MAX_ATTACHMENT_RETRIES =
+    Math.ceil(WORST_CASE_ENRICHMENT_MS / ATTACHMENT_PARK_DELAY_MS) + 1;
 /** A 'pending' stub older than this is treated as NOT pending: the enricher must
  *  have crashed (webhook already ACKed, no redelivery), so no DM should wait on a
- *  corpse. > worst-case enrichment (~35s) with margin. The stale stub stays
+ *  corpse. Must stay ABOVE the worst case or a still-running enrichment gets
+ *  mistaken for a corpse — hence derived, with a 50% margin. The stale stub stays
  *  replied=false and is surfaced by the escalation SLA cron. */
-const PENDING_ENRICHMENT_MAX_AGE_MS = 60_000;
+const PENDING_ENRICHMENT_MAX_AGE_MS = Math.round(WORST_CASE_ENRICHMENT_MS * 1.5);
 
 /**
  * Unified Message Processor
