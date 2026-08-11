@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // reads real config at load) from running under the stubbed config.
 const {
     mockCreate, mockResolveSub, mockGetTopupBalance, mockCheckCap, mockIncrementCap,
-    mockClaimOnce, mockSendTemplateNotification,
+    mockClaimOnce, mockSendTemplateNotification, mockObserve,
 } = vi.hoisted(() => ({
     mockCreate: vi.fn(),
     mockResolveSub: vi.fn(),
@@ -14,6 +14,7 @@ const {
     mockIncrementCap: vi.fn(),
     mockClaimOnce: vi.fn(),
     mockSendTemplateNotification: vi.fn(),
+    mockObserve: vi.fn(),
 }));
 
 // notifications is dynamically imported inside notifyImageCapReached (to keep
@@ -52,7 +53,13 @@ vi.mock('../lib/dailyCap', () => ({
     claimDailyOnce: mockClaimOnce,
 }));
 
+// Vision latency goes to the shared prom-client histogram. Stubbed because
+// `lib/metrics.ts` pulls in collectDefaultMetrics and a live registry, which has
+// no place in a unit test — and so the observations can be asserted.
+vi.mock('../lib/metrics', () => ({ visionDuration: { startTimer: () => mockObserve } }));
+
 import {
+    VISION_TIMEOUT_MS,
     imageUnderstandingService,
     checkImageUnderstandingGate,
     incrementImageUnderstandingCounter,
@@ -101,7 +108,7 @@ describe('imageUnderstandingService.describeFromUrl', () => {
 
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
 
-        expect(result).toEqual({ text: 'صورة إعلان لمنتج Nourva LiftFix' });
+        expect(result).toEqual({ ok: true, text: 'صورة إعلان لمنتج Nourva LiftFix' });
         const body = mockCreate.mock.calls[0][0];
         expect(body.model).toBe('gpt-4.1-mini');
         const parts = body.messages[0].content;
@@ -109,48 +116,62 @@ describe('imageUnderstandingService.describeFromUrl', () => {
         expect(parts[1].image_url.url).toMatch(/^data:image\/jpeg;base64,/);
     });
 
-    it('skips (null) when the API key is missing, without fetching', async () => {
+    // Every failure below asserts WHICH SIDE failed, not merely that it failed.
+    // Before 2026-08-11 they all returned `null`, so nonTextHandler could not tell
+    // "this file is not an image" from "our 20s vision timeout fired" and sent the
+    // same «we can only read text» message to both — false in the second case, and
+    // sent to a guest who had just photographed a complaint. The reason IS the fix;
+    // asserting only `!result.ok` here would let that conflation come straight back.
+
+    it('blames OUR side when the API key is missing, without fetching', async () => {
         config.openai.apiKey = '';
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(globalThis.fetch).not.toHaveBeenCalled();
+        // Silent to the customer, LOUD to us: a keyless deploy drops every image
+        // fleet-wide, so it must not also be invisible in Sentry.
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Image understanding not configured',
+            expect.objectContaining({ fingerprint: ['image-understanding-missing-key'] }),
+        );
     });
 
-    it('returns null (no Sentry) when the download is not ok', async () => {
+    it('blames OUR side (no Sentry) when the CDN link is dead — the customer cannot fix that', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ ok: false, status: 403 }));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/expired.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(mockCreate).not.toHaveBeenCalled();
         expect(captureError).not.toHaveBeenCalled();
     });
 
-    it('returns null when content-length exceeds the cap, without calling the model', async () => {
+    it('blames the IMAGE when content-length exceeds the cap, without calling the model', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 6 * 1024 * 1024 }));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/big.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'unusable_image' });
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('captures to Sentry and returns null when the download throws', async () => {
+    it('blames OUR side and captures to Sentry when the download throws', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(captureError).toHaveBeenCalled();
     });
 
-    it('returns null (no Sentry) when the bytes are not a supported image (HTML error page)', async () => {
+    it('blames OUR side (no Sentry) when the bytes are an HTML error page — an expired CDN link, not a bad photo', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: HTML.length, body: HTML }));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(mockCreate).not.toHaveBeenCalled();
         expect(captureError).not.toHaveBeenCalled();
     });
 
-    it('returns null and captures a fingerprinted WARNING on an OpenAI 400 (bad image bytes)', async () => {
+    it('blames the IMAGE and captures a fingerprinted WARNING on an OpenAI 400 (bad image bytes)', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
         mockCreate.mockRejectedValue(new ApiError(400, 'invalid image'));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'unusable_image' });
         expect(captureError).toHaveBeenCalledWith(
             expect.anything(),
             'Image understanding OpenAI 400',
@@ -161,11 +182,11 @@ describe('imageUnderstandingService.describeFromUrl', () => {
         );
     });
 
-    it('captures to Sentry and returns null on a non-400 OpenAI error', async () => {
+    it('blames OUR side and captures to Sentry on a non-400 OpenAI error', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
         mockCreate.mockRejectedValue(new Error('rate limited'));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(captureError).toHaveBeenCalledWith(
             expect.anything(),
             'Image understanding failed',
@@ -173,10 +194,15 @@ describe('imageUnderstandingService.describeFromUrl', () => {
         );
     });
 
+    // THE regression test for prod 2026-08-11 (Sentry JAWAB24-BACKEND-1M, 20
+    // occurrences in 5 bursts): a guest's photo timed out after 20.684s and she was
+    // told we can only read text. The reason must be 'our_failure' so the caller
+    // stays silent — 'unusable_image' here would restore the bug exactly.
+    //
     // Companion to JAWAB24-BACKEND-1J (the voice-note variant): the OpenAI SDK's
     // abort error carries no distinguishing `name`, so the old check misfiled our
     // own VISION_TIMEOUT_MS as a hard failure. Detection reads the signal we own.
-    it('returns null and captures a fingerprinted WARNING when our vision timeout fires', async () => {
+    it('blames OUR side and captures a fingerprinted WARNING when our vision timeout fires', async () => {
         vi.useFakeTimers();
         try {
             (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
@@ -186,9 +212,12 @@ describe('imageUnderstandingService.describeFromUrl', () => {
                 }));
 
             const pending = imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-            await vi.advanceTimersByTimeAsync(20_000);
+            // Derived from the real constant: a hardcoded number that merely EQUALS
+            // the deadline would stop firing the abort the moment someone re-tunes
+            // it, and the test would die as an opaque timeout hang, not a diff.
+            await vi.advanceTimersByTimeAsync(VISION_TIMEOUT_MS + 1);
 
-            expect(await pending).toBeNull();
+            expect(await pending).toEqual({ ok: false, reason: 'our_failure' });
             expect(captureError).toHaveBeenCalledWith(
                 expect.anything(),
                 'Image understanding timeout',
@@ -197,23 +226,37 @@ describe('imageUnderstandingService.describeFromUrl', () => {
                     fingerprint: ['image-understanding-openai-timeout'],
                 }),
             );
+            // The TIMEOUT itself must land in the histogram, not just successes.
+            // A distribution built from survivors only is what let the old 20s
+            // budget sit on the p99 unnoticed for sixteen days.
+            //
+            expect(mockObserve).toHaveBeenCalledWith({ outcome: 'timeout' });
         } finally {
             vi.useRealTimers();
         }
     });
 
-    it('returns null when the model returns an empty description', async () => {
+    it('records a duration bucket and outcome on a successful call', async () => {
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
+        mockCreate.mockResolvedValue(visionReply('وصف'));
+
+        await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
+
+        expect(mockObserve).toHaveBeenCalledWith({ outcome: 'ok' });
+    });
+
+    it('blames OUR side when the model returns an empty description', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
         mockCreate.mockResolvedValue(visionReply('   '));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
     });
 
     it('caps the stored description length', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
         mockCreate.mockResolvedValue(visionReply('ا'.repeat(2000)));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
-        expect(result?.text.length).toBe(1000);
+        expect(result.ok && result.text.length).toBe(1000);
     });
 });
 
@@ -221,21 +264,21 @@ describe('imageUnderstandingService.describeFromBuffer', () => {
     it('describes a PNG buffer and ignores a declared mime with a codec suffix (re-sniffs)', async () => {
         mockCreate.mockResolvedValue(visionReply('لقطة شاشة لمحادثة'));
         const result = await imageUnderstandingService.describeFromBuffer(PNG, 'image/png;codecs=foo', 'ar', CTX);
-        expect(result).toEqual({ text: 'لقطة شاشة لمحادثة' });
+        expect(result).toEqual({ ok: true, text: 'لقطة شاشة لمحادثة' });
         const parts = mockCreate.mock.calls[0][0].messages[0].content;
         expect(parts[1].image_url.url).toMatch(/^data:image\/png;base64,/);
     });
 
-    it('returns null for an empty buffer without calling the model', async () => {
+    it('blames OUR side for an empty buffer — the download delivered nothing', async () => {
         const result = await imageUnderstandingService.describeFromBuffer(Buffer.alloc(0), 'image/png', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('skips (null) when the API key is missing', async () => {
+    it('blames OUR side when the API key is missing', async () => {
         config.openai.apiKey = '';
         const result = await imageUnderstandingService.describeFromBuffer(PNG, 'image/png', 'ar', CTX);
-        expect(result).toBeNull();
+        expect(result).toEqual({ ok: false, reason: 'our_failure' });
         expect(mockCreate).not.toHaveBeenCalled();
     });
 });

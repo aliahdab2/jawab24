@@ -6,6 +6,7 @@ vi.mock('../services/pages', () => ({
     pagesService: {
         getPageByFacebookId: vi.fn(),
         getPageByInstagramId: vi.fn(),
+        getPageByWhatsAppPhoneNumberId: vi.fn(),
     },
     // Published-at-stub-time SSE invalidates the workspace stats cache.
     invalidateWorkspaceStatsCache: vi.fn(),
@@ -38,6 +39,14 @@ vi.mock('../services/instagram', () => ({
     },
 }));
 
+vi.mock('../services/whatsapp', () => ({
+    whatsappService: {
+        getMediaInfo: mockWaGetMediaInfo,
+        downloadMedia: mockWaDownloadMedia,
+        sendTextMessage: mockWaSendText,
+    },
+}));
+
 vi.mock('../services/transcription', () => ({
     transcriptionService: {
         transcribe: vi.fn(),
@@ -64,9 +73,13 @@ vi.mock('../utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('ar'),
 }));
 
-vi.mock('../utils/attachmentLabels', () => ({
+vi.mock('../utils/attachmentLabels', async (importActual) => ({
     getAttachmentPlaceholder: vi.fn().mockReturnValue('[Image]'),
     getTextOnlyNudge: vi.fn().mockReturnValue('nudge text'),
+    // Real set — it is data, not I/O, and stubbing it would make the
+    // story-mention tests below assert against a fiction.
+    NO_INTENT_ATTACHMENT_TYPES: (await importActual<typeof import('../utils/attachmentLabels')>())
+        .NO_INTENT_ATTACHMENT_TYPES,
 }));
 
 vi.mock('../utils/instagram', () => ({
@@ -88,20 +101,27 @@ vi.mock('../services/reply/adapters/instagramAdapter', () => ({
 
 // Image understanding: control the gate + describe so the branch is testable
 // (and so the real service's subscriptions→redis import chain stays out).
-const { mockGate, mockDescribeUrl, mockIncrement, mockNotifyCap } = vi.hoisted(() => ({
+const {
+    mockGate, mockDescribeUrl, mockDescribeBuffer, mockIncrement, mockNotifyCap,
+    mockWaGetMediaInfo, mockWaDownloadMedia, mockWaSendText,
+} = vi.hoisted(() => ({
     mockGate: vi.fn(),
     mockDescribeUrl: vi.fn(),
+    mockDescribeBuffer: vi.fn(),
     mockIncrement: vi.fn(),
     mockNotifyCap: vi.fn(),
+    mockWaGetMediaInfo: vi.fn(),
+    mockWaDownloadMedia: vi.fn(),
+    mockWaSendText: vi.fn(),
 }));
 vi.mock('../services/imageUnderstanding', () => ({
     checkImageUnderstandingGate: mockGate,
-    imageUnderstandingService: { describeFromUrl: mockDescribeUrl, describeFromBuffer: vi.fn() },
+    imageUnderstandingService: { describeFromUrl: mockDescribeUrl, describeFromBuffer: mockDescribeBuffer },
     incrementImageUnderstandingCounter: mockIncrement,
     notifyImageCapReached: mockNotifyCap,
 }));
 
-import { handleNonTextMessage } from '../services/reply/nonTextHandler';
+import { handleNonTextMessage, handleWhatsAppNonTextMessage } from '../services/reply/nonTextHandler';
 import { pagesService } from '../services/pages';
 import { messagesService } from '../services/messages';
 import { facebookService } from '../services/facebook';
@@ -241,6 +261,114 @@ describe('handleNonTextMessage — non-enrichable (video/file, image w/o url or 
     });
 });
 
+describe('handleNonTextMessage — story mentions carry no question', () => {
+    // Prod 2026-08-11: a resort's 15 story mentions each got the text-only nudge
+    // («يرجى إعادة إرسال استفسارك كرسالة نصية») even though the guest had asked
+    // nothing — they had tagged the page in their own Instagram story. 11 of the
+    // rows were then flagged sla_no_reply, filling Needs Attention with story tags.
+    //
+    // Two vacuous-pass traps this block has to avoid, or "no nudge" proves nothing:
+    //   1. the shared beforeEach mocks only getPageByFacebookId, so an unmocked IG
+    //      lookup early-returns on the missing access token;
+    //   2. sendNudge's IG branch is itself gated on page.instagramAccountId, which
+    //      is null on the shared mockPage — so no IG nudge could ever fire.
+    // The `video` control at the bottom is what proves neither trap is active.
+    const igPage = { ...mockPage, instagramAccountId: 'ig-account-1' };
+
+    beforeEach(() => {
+        vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(igPage as never);
+    });
+
+    for (const attachmentType of ['story_mention'] as const) {
+        it(`stores a ${attachmentType} but sends NO nudge`, async () => {
+            vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
+                message: { id: 'story-msg-uuid' } as never,
+                isNew: true,
+            } as never);
+
+            await handleNonTextMessage(
+                'ig-page-id',
+                { senderId: 'user-1', messageId: 'msg-story', attachmentType },
+                'instagram',
+                mockLogger,
+            );
+
+            expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+            // storeOutgoingMessage is platform-independent inside sendNudge, so this
+            // catches a nudge that went out on any channel.
+            expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+            // Still stored, so the merchant inbox and the AI's chat history see it.
+            expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalled();
+            // ...and resolved, so the SLA sweep does not file it as unanswered.
+            expect(messagesService.markAsResolved).toHaveBeenCalledWith('story-msg-uuid');
+        });
+    }
+
+    it('does not re-resolve a story mention that is already resolved', async () => {
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
+            message: { id: 'story-msg-uuid', enrichmentStatus: null, resolved: true } as never,
+            isNew: false,
+        } as never);
+
+        await handleNonTextMessage(
+            'ig-page-id',
+            { senderId: 'user-1', messageId: 'msg-story', attachmentType: 'story_mention' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(messagesService.markAsResolved).not.toHaveBeenCalled();
+    });
+
+    it('DOES resolve on redelivery when a crash left the row unresolved', async () => {
+        // The row exists but was never resolved — the process died between storing
+        // the stub and resolving it. The redelivery is the only remaining chance:
+        // if it returns early the row stays unresolved forever and the SLA sweep
+        // files it as sla_no_reply, the exact symptom this branch prevents.
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
+            message: { id: 'story-msg-uuid', enrichmentStatus: null, resolved: false } as never,
+            isNew: false,
+        } as never);
+
+        await handleNonTextMessage(
+            'ig-page-id',
+            { senderId: 'user-1', messageId: 'msg-story', attachmentType: 'story_mention' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(messagesService.markAsResolved).toHaveBeenCalledWith('story-msg-uuid');
+        expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+    });
+
+    // ig_story is a customer REPLYING to the merchant's story — on Instagram that
+    // is how buying conversations open. Production shows «كم الواحد؟» / «السعر»
+    // arriving right after these rows, so suppressing them would swallow real
+    // questions AND hide them from Needs Attention. It stays on the nudge path.
+    it('still nudges an ig_story — a story REPLY is not a story mention', async () => {
+        await handleNonTextMessage(
+            'ig-page-id',
+            { senderId: 'user-1', messageId: 'msg-igstory', attachmentType: 'ig_story' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(instagramService.sendDirectMessage).toHaveBeenCalled();
+        expect(messagesService.markAsResolved).not.toHaveBeenCalled();
+    });
+
+    it('still nudges a video — the no-intent exemption is not a blanket opt-out', async () => {
+        await handleNonTextMessage(
+            'ig-page-id',
+            { senderId: 'user-1', messageId: 'msg-vid', attachmentType: 'video' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(instagramService.sendDirectMessage).toHaveBeenCalled();
+    });
+});
+
 describe('handleNonTextMessage — image understanding (store-then-enrich)', () => {
     const pageWithOwner = { ...mockPage, userId: 'page-owner-1' };
     const imageEvent = {
@@ -257,7 +385,7 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
 
     it('stores a pending stub FIRST, then finalizes with the description and enqueues it', async () => {
         mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
-        mockDescribeUrl.mockResolvedValue({ text: 'وصف الصورة' });
+        mockDescribeUrl.mockResolvedValue({ ok: true, text: 'وصف الصورة' });
 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
@@ -279,7 +407,7 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
 
     it('publishes message:received at stub time so the inbox shows the image instantly', async () => {
         mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
-        mockDescribeUrl.mockResolvedValue({ text: 'وصف' });
+        mockDescribeUrl.mockResolvedValue({ ok: true, text: 'وصف' });
 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
@@ -297,9 +425,9 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         );
     });
 
-    it('finalizes FAILED + nudges (no enqueue) when the description fails', async () => {
+    it('finalizes FAILED + nudges (no enqueue) when the IMAGE is unusable', async () => {
         mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
-        mockDescribeUrl.mockResolvedValue(null);
+        mockDescribeUrl.mockResolvedValue({ ok: false, reason: 'unusable_image' });
 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
@@ -309,11 +437,38 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
         expect(enqueueMessage).not.toHaveBeenCalled();
         expect(mockIncrement).not.toHaveBeenCalled();
+        // Oversized / wrong format / malformed — "send it as text" is honest here.
         expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
     });
 
-    it('finalizes FAILED + nudges (no vision) when the gate denies for a technical reason', async () => {
-        mockGate.mockResolvedValue({ allowed: false, reason: 'env_disabled' });
+    // THE prod regression, 2026-08-11. A guest photographed a bad meal to complain;
+    // our 20s vision timeout fired; she was told «حالياً نستطيع الرد على الرسائل
+    // النصية والصوتية» 20.684s later — false, since 35 photos were read the day
+    // before. Timeout and "not an image" both returned null, so the handler could
+    // not tell them apart. Same standing rule as the cap branch below: when WE
+    // fail, the customer hears nothing.
+    it('stays SILENT to the customer when the failure is OURS (vision timeout)', async () => {
+        mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
+        mockDescribeUrl.mockResolvedValue({ ok: false, reason: 'our_failure' });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        // The row still resolves to 'failed', so a parked text job is released and
+        // the placeholder stops being 'pending' forever.
+        expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
+        expect(enqueueMessage).not.toHaveBeenCalled();
+        expect(mockIncrement).not.toHaveBeenCalled();
+        // Not the quota path — the merchant gets no cap notification for a timeout.
+        expect(mockNotifyCap).not.toHaveBeenCalled();
+    });
+
+    it('finalizes FAILED + nudges (no vision) when the workspace has no plan for image reads', async () => {
+        // no_subscription is a stable business state, not a failure of ours, so
+        // "send it as text" is honest. env_disabled and cap_check_failed are OURS
+        // and now stay silent — see actionForGateDenial.
+        mockGate.mockResolvedValue({ allowed: false, reason: 'no_subscription' });
 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
@@ -454,5 +609,76 @@ describe('handleNonTextMessage — shared post (store-then-enrich)', () => {
             expect.objectContaining({ text: '[Customer shared a post]' }),
         );
         expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+    });
+});
+
+describe('handleWhatsAppNonTextMessage — image failures', () => {
+    // This platform had NO tests at all until 2026-08-11, while carrying a copy of
+    // the FB/IG image policy. That is exactly how one mirror gets a fix and the
+    // other silently does not (§13c). The cap case below was genuinely wrong here
+    // long after FB/IG was fixed: every WhatsApp denial nudged, so a merchant whose
+    // daily quota ran out had his customers told «we can only read text» — false —
+    // and was never notified himself.
+    const waPage = {
+        ...mockPage,
+        userId: 'page-owner-1',
+        whatsappPhoneNumberId: 'wa-phone-1',
+        // The handler gates on whatsappAccessToken specifically, not accessToken —
+        // without it every assertion below would pass vacuously on an early return.
+        whatsappAccessToken: 'wa-token',
+    };
+    const imageEvent = { senderId: 'user-1', messageId: 'wa-msg-1', attachmentType: 'image', mediaId: 'media-1' };
+
+    beforeEach(() => {
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(waPage as never);
+        mockWaGetMediaInfo.mockResolvedValue({ url: 'https://wa/media', mimeType: 'image/jpeg' });
+        mockWaDownloadMedia.mockResolvedValue(Buffer.from([0xff, 0xd8, 0xff]));
+        mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
+    });
+
+    it('stays SILENT when the failure is ours (vision timeout)', async () => {
+        mockDescribeBuffer.mockResolvedValue({ ok: false, reason: 'our_failure' });
+
+        await handleWhatsAppNonTextMessage('wa-phone-1', imageEvent, mockLogger);
+
+        expect(mockWaSendText).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
+    });
+
+    it('nudges when the IMAGE is unusable', async () => {
+        mockDescribeBuffer.mockResolvedValue({ ok: false, reason: 'unusable_image' });
+
+        await handleWhatsAppNonTextMessage('wa-phone-1', imageEvent, mockLogger);
+
+        expect(mockWaSendText).toHaveBeenCalled();
+    });
+
+    it('stays SILENT and notifies the MERCHANT when the daily cap is reached', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached', ownerId: 'page-owner-1', limit: 15 });
+
+        await handleWhatsAppNonTextMessage('wa-phone-1', imageEvent, mockLogger);
+
+        expect(mockWaSendText).not.toHaveBeenCalled();
+        expect(mockNotifyCap).toHaveBeenCalledWith('page-owner-1', 15);
+        expect(mockDescribeBuffer).not.toHaveBeenCalled();
+    });
+
+    it('stays SILENT when OUR gate check fails (Redis blip), rather than blaming the customer', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_check_failed' });
+
+        await handleWhatsAppNonTextMessage('wa-phone-1', imageEvent, mockLogger);
+
+        expect(mockWaSendText).not.toHaveBeenCalled();
+        expect(mockNotifyCap).not.toHaveBeenCalled();
+    });
+
+    it('stays SILENT when the WABA media fetch throws — the image was never assessed', async () => {
+        mockWaGetMediaInfo.mockRejectedValue(new Error('WABA 500'));
+
+        await handleWhatsAppNonTextMessage('wa-phone-1', imageEvent, mockLogger);
+
+        expect(mockWaSendText).not.toHaveBeenCalled();
+        expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
     });
 });

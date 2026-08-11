@@ -6,6 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, shouldHoldReply, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
+import { WORST_CASE_ENRICHMENT_MS, WORST_CASE_ENRICHMENT_WHATSAPP_MS } from '../imageUnderstanding';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { redis } from '../../lib/redis';
@@ -61,20 +62,29 @@ const ORIGIN_POST_TEXT_CAP = 500;
 
 /** Store-then-enrich park (step 11): a sibling attachment from the same sender is
  *  stored as a 'pending' stub the instant its webhook lands, then enriched
- *  asynchronously (vision 6–20s / Whisper / shared-post fetch). A DM whose reply
+ *  asynchronously (vision / Whisper / shared-post fetch). A DM whose reply
  *  job reaches consolidation while such a stub is still 'pending' PARKS — it
  *  re-enqueues itself so the eventual reply consolidates the real content instead
  *  of answering the bare "[صورة]" placeholder (or the text alone, blind). */
 const ATTACHMENT_PARK_DELAY_MS = 5_000;
-/** 8 × 5s = 40s budget ≥ the ~35s worst-case enrichment (download 10s + vision 20s
- *  + store/enqueue). After this the job proceeds and replies without the pending
- *  row — degrading to today's "second reply", never a permanent no-reply. */
-const MAX_ATTACHMENT_RETRIES = 8;
+/** Retries needed to outlast the worst-case enrichment, plus one delay of slack
+ *  for store/enqueue. DERIVED, never hand-typed: this budget was a literal 8
+ *  ("40s ≥ the ~35s worst case") until the vision deadline moved to 35s and
+ *  quietly made the worst case ~65s, at which point a parked job would answer
+ *  blind while the enrichment it waited for was still running. After the budget
+ *  the job proceeds and replies without the pending row — degrading to today's
+ *  "second reply", never a permanent no-reply. */
+const worstCaseEnrichmentMs = (platform: string): number =>
+    platform === 'whatsapp' ? WORST_CASE_ENRICHMENT_WHATSAPP_MS : WORST_CASE_ENRICHMENT_MS;
+const maxAttachmentRetries = (platform: string): number =>
+    Math.ceil(worstCaseEnrichmentMs(platform) / ATTACHMENT_PARK_DELAY_MS) + 1;
 /** A 'pending' stub older than this is treated as NOT pending: the enricher must
  *  have crashed (webhook already ACKed, no redelivery), so no DM should wait on a
- *  corpse. > worst-case enrichment (~35s) with margin. The stale stub stays
+ *  corpse. Must stay ABOVE the worst case or a still-running enrichment gets
+ *  mistaken for a corpse — hence derived, with a 50% margin. The stale stub stays
  *  replied=false and is surfaced by the escalation SLA cron. */
-const PENDING_ENRICHMENT_MAX_AGE_MS = 60_000;
+const pendingEnrichmentMaxAgeMs = (platform: string): number =>
+    Math.round(worstCaseEnrichmentMs(platform) * 1.5);
 
 /**
  * Unified Message Processor
@@ -130,7 +140,7 @@ export class MessageProcessor {
         wasHandoffPaused: boolean = false,
         // How many times this job has already parked waiting for a sibling
         // attachment to finish enriching (store-then-enrich). Bounds the wait at
-        // MAX_ATTACHMENT_RETRIES so we never block a reply forever.
+        // maxAttachmentRetries(platform) so we never block a reply forever.
         attachmentRetries: number = 0,
         // Sender display name captured by the webhook itself (WhatsApp
         // `contacts[].profile.name`). WhatsApp has no profile API, so the
@@ -564,7 +574,7 @@ export class MessageProcessor {
             // if the stub isn't yet in this set, the text alone (blind). So we park:
             // re-enqueue this job with a short delay and let the attachment's own
             // finalize→enqueue (or this job's own retry) consolidate the real content.
-            //   • Age-gated: a 'pending' stub older than PENDING_ENRICHMENT_MAX_AGE_MS
+            //   • Age-gated: a 'pending' stub older than pendingEnrichmentMaxAgeMs(platform)
             //     means the enricher crashed (webhook already ACKed, no redelivery) —
             //     treat it as not-pending so no DM waits on a corpse.
             //   • Placed BEFORE `didReachConsolidation = true` so a parked return never
@@ -576,9 +586,9 @@ export class MessageProcessor {
             const pendingRows = unrepliedMessages.filter(m =>
                 m.enrichmentStatus === 'pending'
                 && m.createdAt
-                && now - new Date(m.createdAt).getTime() < PENDING_ENRICHMENT_MAX_AGE_MS,
+                && now - new Date(m.createdAt).getTime() < pendingEnrichmentMaxAgeMs(platform),
             );
-            if (pendingRows.length > 0 && attachmentRetries < MAX_ATTACHMENT_RETRIES) {
+            if (pendingRows.length > 0 && attachmentRetries < maxAttachmentRetries(platform)) {
                 pipelineMetrics.record(pipeline, 'attachment_park');
                 this.logger.info(`[${platform}] Attachment enrichment in flight — parking DM`, {
                     senderId, pageId: page.id, attachmentRetries, pendingCount: pendingRows.length,
@@ -1329,7 +1339,7 @@ export class MessageProcessor {
                 undefined,
                 undefined,
                 false,
-                MAX_ATTACHMENT_RETRIES,
+                maxAttachmentRetries(adapter.platform),
             );
         } catch (err) {
             this.logger.error(`[${adapter.platform}] orphan_recheck_failed`, {

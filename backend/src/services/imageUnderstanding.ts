@@ -7,9 +7,12 @@
  *
  * The vision call goes through `makeTrackedOpenAI` so its OpenAI cost lands in
  * `ai_usage_log` (pipeline `image_understanding`) and aiMetrics automatically —
- * no manual logging. Every failure path returns `null`, and the caller falls
- * back to today's placeholder + "please type" nudge, so this can only ADD
- * capability, never regress the existing non-text behavior.
+ * no manual logging.
+ *
+ * Failures return a typed `ImageDescriptionOutcome`, never a bare null, because
+ * the caller's reply depends on WHOSE fault it was: an unusable image earns the
+ * "please send text instead" nudge, but a failure of ours must stay SILENT
+ * rather than tell a customer we cannot read photos. See `ImageFailureReason`.
  *
  * The image bytes are held only in memory for the call and never persisted;
  * only the returned text description is stored (see nonTextHandler).
@@ -20,12 +23,66 @@ import { makeTrackedOpenAI, APIError } from './openaiClient';
 import { sniffMimeType, VISION_MIME_TYPES } from './kb/file-extractor';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
 import { checkDailyCap, incrementDailyCap, dailyCapKey, claimDailyOnce } from '../lib/dailyCap';
+import { visionDuration } from '../lib/metrics';
 import { isTimeoutAbort } from '@jawab24/shared';
 
 /** Max time to download the image from the FB/IG CDN (matches transcription.ts). */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
-/** Max time for the vision call. High-detail vision is slower than Whisper's 15s. */
-const VISION_TIMEOUT_MS = 20_000;
+/**
+ * Max time for the vision call. High-detail vision is slower than Whisper's 15s.
+ *
+ * Raised 20s → 25s on 2026-08-11 against measured production data, not intuition.
+ * Over 30 days, 852 SUCCESSFUL image enrichments ran p50 7.8s / p90 12.8s /
+ * **p99 19.7s** — i.e. the old 20s budget sat exactly on the 99th percentile, with
+ * no headroom at all. And that sample is survivors only (`enrichment_status='done'`);
+ * every call that timed out is missing from it, so the true distribution is worse.
+ *
+ * The failure mode this produced was bursty, which is what a deadline-on-the-cliff
+ * looks like: ~1% lost on an ordinary day, then a whole cluster the moment OpenAI
+ * slowed down and the distribution shifted right (11 Aug: 8 of 10 attempts lost).
+ *
+ * WHY 25s AND NOT MORE. This call is awaited inline while holding one of only ten
+ * global webhook slots (`MAX_CONCURRENT_WEBHOOK_PROCESSING`), and vision slowdowns
+ * are correlated by nature — so a longer deadline means the slow images arrive
+ * together, pin every slot, and the server starts 503-ing unrelated webhooks:
+ * texts, comments, WhatsApp, all merchants. 25s keeps the worst-case slot hold at
+ * ~35s, close to what it has always been, while still clearing the measured p99
+ * with headroom. A more generous deadline is only safe once the enrichment
+ * continuation is detached from the webhook slot; the stub is already persisted
+ * before vision runs, so that is feasible — but it changes a shared request path
+ * and belongs in its own change.
+ *
+ * The real cure is making the call faster rather than the deadline longer:
+ * `detail: 'high'` costs ~2,366 input tokens per image against ~85 for `low`.
+ * That needs measuring on real Arabic screenshots first, since OCR needs the
+ * resolution — `jawab24_vision_duration_seconds` now makes that measurable.
+ */
+export const VISION_TIMEOUT_MS = 25_000;
+
+/** WABA media calls (getMediaInfo, downloadMedia) each carry this client timeout. */
+const WHATSAPP_MEDIA_TIMEOUT_MS = 15_000;
+
+/**
+ * Worst-case wall time for ONE image enrichment, PER PLATFORM, exported so the
+ * pipeline budgets that wait on it derive from these numbers instead of restating
+ * them.
+ *
+ * `messageProcessor`'s attachment park (a sibling text DM waiting for a photo to
+ * be read) was sized by hand against "download 10s + vision 20s"; when the vision
+ * deadline moved, that budget silently became too short and a parked reply would
+ * answer blind while the vision call it waited for was still legitimately running.
+ * Deriving it makes the drift impossible rather than merely unlikely (Rule 14).
+ *
+ * Split by platform on purpose. WhatsApp is far the widest path — two WABA media
+ * calls before vision even starts — and charging Facebook and Instagram customers
+ * for that shape would make the majority of DMs park ~20s longer than their own
+ * worst case requires, which is a latency regression on the text path (Rule 17)
+ * paid to cover a channel the message isn't even on.
+ */
+export const WORST_CASE_ENRICHMENT_MS = DOWNLOAD_TIMEOUT_MS + VISION_TIMEOUT_MS;
+export const WORST_CASE_ENRICHMENT_WHATSAPP_MS =
+    2 * WHATSAPP_MEDIA_TIMEOUT_MS + VISION_TIMEOUT_MS;
+
 /** Max image size (5MB) — matches the KB vision extractor's cap. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** Cap the vision completion — the prompt asks for < 900 chars of description. */
@@ -87,10 +144,70 @@ export interface ImageDescriptionResult {
     text: string;
 }
 
+/**
+ * Why an image produced no description.
+ *
+ * The axis is deliberately WHOSE FAULT it is, not whether a retry might help,
+ * because that is the question the caller actually has to answer: what do we
+ * say to the customer?
+ *
+ * - `unusable_image` — the bytes are the problem (oversized, not a supported
+ *   format, rejected by OpenAI as malformed). The customer can act on this, so
+ *   asking them to send text instead is honest and useful.
+ *
+ * - `our_failure` — WE failed: `VISION_TIMEOUT_MS` fired, the network broke, the
+ *   CDN link died before we fetched it (403, or a 200 carrying an HTML error
+ *   page), the download arrived empty, the model came back with no text, or no
+ *   API key is configured. The image was fine. Telling this customer «حالياً
+ *   نستطيع الرد على الرسائل النصية والصوتية» is simply false — we read 35 photos
+ *   for the same page the day before — and it makes the merchant's assistant
+ *   announce a limitation to the person they are selling to.
+ *
+ * The deadline is referenced by NAME on purpose: an earlier version of this
+ * comment hardcoded "20s" and was already wrong by the end of the same commit
+ * that raised it.
+ *
+ * Prod 2026-08-11 is why this distinction exists as a TYPE and not a comment:
+ * both cases returned `null`, so the caller could not tell them apart and sent
+ * the same false message to a guest who had photographed a complaint.
+ */
+export type ImageFailureReason = 'unusable_image' | 'our_failure';
+
+export type ImageDescriptionOutcome =
+    | { ok: true; text: string }
+    | { ok: false; reason: ImageFailureReason };
+
+/**
+ * No OpenAI key configured. Classed `our_failure` so no customer is told we
+ * cannot read photos — but it must NOT be silent to us as well.
+ *
+ * Before this, a keyless deployment produced no reply, no Sentry event, no
+ * metric and no log: every customer image on every page dropped indefinitely,
+ * detectable only by a merchant complaining. A config regression should be loud
+ * on our side and invisible on theirs, not the reverse. Fingerprinted so a
+ * fleet-wide outage is one alertable issue, not one event per photo.
+ */
+function missingKeyOutcome(): ImageDescriptionOutcome {
+    captureError(new Error('Image understanding called with no OpenAI API key'), 'Image understanding not configured', {
+        level: 'warning',
+        fingerprint: ['image-understanding-missing-key'],
+        tags: { service: 'image_understanding' },
+    });
+    return { ok: false, reason: 'our_failure' };
+}
+
 /** Human-readable language name for the prompt, from an ISO 639-1 hint. */
 function languageName(langHint: string): string {
     return langHint === 'ar' ? 'Arabic' : 'English';
 }
+
+/**
+ * Outcome labels for the vision-latency histogram. Deliberately finer than
+ * `ImageFailureReason`: the customer-facing decision only needs "whose fault",
+ * but diagnosing a latency shift needs to separate a timeout from a 400 from an
+ * empty completion.
+ */
+type VisionMetricOutcome = 'ok' | 'empty' | 'timeout' | 'error' | 'bad_image';
 
 /**
  * Describe an image a customer sent to a business's customer-service chat.
@@ -171,8 +288,8 @@ class ImageUnderstandingService {
         imageUrl: string,
         langHint: string,
         ctx: ImageUnderstandingContext,
-    ): Promise<ImageDescriptionResult | null> {
-        if (!this.hasKey()) return null;
+    ): Promise<ImageDescriptionOutcome> {
+        if (!this.hasKey()) return missingKeyOutcome();
 
         let buffer: Buffer;
         try {
@@ -182,14 +299,17 @@ class ImageUnderstandingService {
             // don't page. Network/timeout is unexpected — capture it.
             if (error instanceof MediaDownloadError && (error.reason === 'not_ok' || error.reason === 'too_large')) {
                 console.warn('[imageUnderstanding] image download skipped', { reason: error.reason, status: error.status });
-                return null;
+                // Oversized is genuinely the image; a dead CDN link is not — by the
+                // time the URL 404s the customer has done nothing wrong and cannot
+                // fix it by "sending text instead".
+                return { ok: false, reason: error.reason === 'too_large' ? 'unusable_image' : 'our_failure' };
             }
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
                 error instanceof MediaDownloadError && error.reason === 'timeout' ? 'Image download timeout' : 'Image download failed',
                 { tags: { service: 'image_understanding' } },
             );
-            return null;
+            return { ok: false, reason: 'our_failure' };
         }
 
         return this.describeBuffer(buffer, undefined, langHint, ctx);
@@ -197,8 +317,11 @@ class ImageUnderstandingService {
 
     /**
      * Describe an image from a raw buffer (WhatsApp media is downloaded by the
-     * caller with the WABA bearer token, then passed here). Returns null on any
-     * failure so the caller falls back to the nudge path.
+     * caller with the WABA bearer token, then passed here). Never throws — the
+     * outcome carries WHY it failed so the caller can pick the right reply.
+     *
+     * NOTE the caller must supply real bytes: an empty buffer is reported as
+     * `our_failure`, since nothing a customer does produces one.
      *
      * @param mimeType - Declared MIME (may carry a `;codecs` suffix); the actual
      *   bytes are re-sniffed and are authoritative.
@@ -208,8 +331,8 @@ class ImageUnderstandingService {
         mimeType: string,
         langHint: string,
         ctx: ImageUnderstandingContext,
-    ): Promise<ImageDescriptionResult | null> {
-        if (!this.hasKey()) return null;
+    ): Promise<ImageDescriptionOutcome> {
+        if (!this.hasKey()) return missingKeyOutcome();
         return this.describeBuffer(buffer, mimeType, langHint, ctx);
     }
 
@@ -219,10 +342,18 @@ class ImageUnderstandingService {
         _declaredMime: string | undefined,
         langHint: string,
         ctx: ImageUnderstandingContext,
-    ): Promise<ImageDescriptionResult | null> {
-        if (buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) {
-            console.warn('[imageUnderstanding] image empty or too large (buffer)', { byteLength: buffer.length });
-            return null;
+    ): Promise<ImageDescriptionOutcome> {
+        // Empty and oversized are NOT the same fault. A zero-byte body means the
+        // download delivered nothing (CDN 200 with no content, a truncated WABA
+        // fetch) — the customer's photo was fine and "resend as text" is a lie.
+        // Oversized is genuinely the image, and the customer can act on it.
+        if (buffer.length === 0) {
+            console.warn('[imageUnderstanding] empty image buffer — treating as our failure');
+            return { ok: false, reason: 'our_failure' };
+        }
+        if (buffer.length > MAX_IMAGE_BYTES) {
+            console.warn('[imageUnderstanding] image too large (buffer)', { byteLength: buffer.length });
+            return { ok: false, reason: 'unusable_image' };
         }
 
         // Magic bytes are authoritative — an expired CDN URL can return an HTML
@@ -233,7 +364,16 @@ class ImageUnderstandingService {
                 sniffed,
                 firstBytes: buffer.subarray(0, 16).toString('hex'),
             });
-            return null;
+            // OUR failure, not the customer's — counterintuitive, so: this branch
+            // is reached only AFTER a download succeeded, and the overwhelmingly
+            // common cause is the one the comment above names, an expired CDN link
+            // answering 200 with an HTML error page. Meta transcodes what customers
+            // upload, so genuinely unsupported bytes barely reach us here. Calling
+            // it `unusable_image` would send the false "resend as text" nudge to
+            // someone whose photo was fine — the 2026-08-11 defect through a second
+            // door, and the 403 form of the very same dead link is already
+            // classified `our_failure` in describeFromUrl.
+            return { ok: false, reason: 'our_failure' };
         }
 
         const dataUrl = `data:${sniffed};base64,${buffer.toString('base64')}`;
@@ -241,27 +381,39 @@ class ImageUnderstandingService {
         // below can tell a timeout from a real failure — and the OpenAI SDK's abort
         // error is indistinguishable by name (see isTimeoutAbort).
         const controller = new AbortController();
+        // prom-client's own timer idiom (same as tracing.ts) — it owns the
+        // ms→seconds conversion so no call site can get it wrong.
+        const endTimer = visionDuration.startTimer();
+        const observe = (outcome: VisionMetricOutcome) => { endTimer({ outcome }); };
         try {
-            return await this.describe(dataUrl, langHint, ctx, controller);
+            const result = await this.describe(dataUrl, langHint, ctx, controller);
+            observe(result ? 'ok' : 'empty');
+            // No error, but OpenAI returned nothing usable. The image was fine —
+            // this is our side coming back empty.
+            return result ? { ok: true, text: result.text } : { ok: false, reason: 'our_failure' };
         } catch (error) {
-            // A 400 means the image bytes are bad (unsupported/corrupt) — we
-            // already fall back gracefully. Capture as a fingerprinted WARNING
-            // (one grouped issue, alert on frequency) so a spike — e.g. our own
-            // buffer handling regressing — is visible without paging per event.
+            // A 400 means the image bytes are bad (unsupported/corrupt) — the one
+            // OpenAI-side error that IS the image's fault, so the customer can act
+            // on it. Capture as a fingerprinted WARNING (one grouped issue, alert
+            // on frequency) so a spike — e.g. our own buffer handling regressing —
+            // is visible without paging per event.
             if (error instanceof APIError && error.status === 400) {
-                console.warn('[imageUnderstanding] OpenAI 400, returning null', { message: error.message });
+                observe('bad_image');
+                console.warn('[imageUnderstanding] OpenAI 400, image unusable', { message: error.message });
                 captureError(error, 'Image understanding OpenAI 400', {
                     level: 'warning',
                     fingerprint: ['image-understanding-openai-400'],
                     tags: { service: 'image_understanding' },
                     extra: { message: error.message },
                 });
-                return null;
+                return { ok: false, reason: 'unusable_image' };
             }
-            // Our VISION_TIMEOUT_MS fired: the image falls back to the nudge path,
-            // so treat it like the 400 above — one fingerprinted warning to alert on
-            // frequency, not an error-level page per slow call.
+            // Our VISION_TIMEOUT_MS fired, or the network/OpenAI broke. Either way
+            // the image was readable and WE failed, so the caller must stay silent
+            // rather than tell the customer we cannot read photos. One fingerprinted
+            // warning to alert on frequency, not an error-level page per slow call.
             const isTimeout = isTimeoutAbort(controller.signal);
+            observe(isTimeout ? 'timeout' : 'error');
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
                 isTimeout ? 'Image understanding timeout' : 'Image understanding failed',
@@ -274,7 +426,7 @@ class ImageUnderstandingService {
                     }
                     : { tags: { service: 'image_understanding' } },
             );
-            return null;
+            return { ok: false, reason: 'our_failure' };
         }
     }
 }
@@ -294,9 +446,14 @@ export type ImageGateResult =
  * global env kill switch → resolve the owning subscription (team-member pages
  * share the workspace owner's plan) → per-plan daily cap, DOUBLED for merchants
  * with an active top-up balance (they've already paid for extra reply capacity).
- * On any denial the caller falls back to today's placeholder + nudge, so a
- * denied gate never regresses below the pre-feature behavior. Fails CLOSED if
- * the cap check can't run (the cap is the only per-merchant bound on the cost).
+ * Every denial stores the placeholder; what the CUSTOMER hears differs by reason
+ * and is decided in one place — `actionForGateDenial` in nonTextHandler. `env_disabled`
+ * and `no_subscription` nudge (both are true statements about a standing
+ * configuration); `cap_reached` is silence + a merchant notification; and
+ * `cap_check_failed` is silent, because image reading is working and only our
+ * counter lookup broke. Fails CLOSED if the cap check can't run (the cap is the only
+ * per-merchant bound on the cost) — but closed means silent, never a false
+ * "we can only read text" to the customer.
  */
 export async function checkImageUnderstandingGate(
     pageUserId: string,

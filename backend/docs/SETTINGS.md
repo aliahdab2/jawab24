@@ -84,8 +84,30 @@ since 2026-08-02.
 | **Greeting** | First incoming message from a customer, `greetingMessageEnabled = true` | `greetingMessageMulti` (authored only — **no shipped default**) | Once per customer (`isFirstIncomingMessage` + no prior outgoing) |
 | **Away** | Gate 5 blocks | `awayMessageMulti` → shipped `defaultAway` **only on the business-hours branch** | Once per (page, sender) per **24h** — Redis `SET NX EX`, key `away_msg:*`. **Fail-open**: Redis error ⇒ send (a duplicate beats silence). |
 | **Quota fallback** | Monthly Smart Reply limit exhausted, `limitFallbackEnabled = true` | `limitFallbackMessageMulti` → i18n `messageFallback` / `commentFallback` | — |
-| **Non-text nudge** | Unsupported media (failed transcription etc.) | i18n `nonTextNudge` | — |
+| **Non-text nudge** | Media the CUSTOMER can act on: video / file / unknown type, an oversized or malformed image, failed transcription, or a standing limit (`env_disabled` / `no_subscription`). **Never sent when the failure is ours** — see below | i18n `nonTextNudge` | — |
 | **Dual-reply nudge** | Public comment answered + DM sent (`commentReplyMode = 'dual'`) | `dualReplyNudgeVariations` / `dualReplyNudgeMulti` → i18n `dualNudgeDefault` | — |
+
+### When an attachment produces NO message at all
+
+Three cases send the customer nothing. This is deliberate, not a delivery bug — if
+you are investigating "why did this customer get no reply to their photo?", start here.
+
+| Case | Customer | Merchant |
+|---|---|---|
+| **Our failure** — vision/download deadline fired, network broke, dead CDN link, empty download, failed cap lookup, no API key | silence | photo lands in the inbox; SLA sweep flags it unanswered |
+| **Daily image cap reached** | silence | `image_limit_reached` notification (deduped per UTC day) |
+| **No-intent attachment** — sticker, Instagram story mention (`story_mention`) | silence | row stored and marked **resolved**, so it never reaches Needs Attention |
+
+The rule: the nudge says «حالياً نستطيع الرد على الرسائل النصية والصوتية», which is a
+claim about our capability. Whenever the reason we failed is *ours*, that claim is
+false — we read images for the same page every day — and it makes the merchant's
+assistant announce a limitation to someone they are selling to. One merchant watched
+it reach five of his customers and wrote «لما زبون يرسلك صورة لا ترد عليه» into his
+Business Info to stop it. So: nudge only when the customer can act on it.
+
+Both platforms follow the same policy; the decision lives in one place
+(`actionForGateDenial` + `ImageFailureReason` in `nonTextHandler.ts` /
+`imageUnderstanding.ts`) rather than per-channel.
 
 "Get Started" / «بدء الاستخدام» openers are system phrases: they fire the greeting when
 enabled and are silently suppressed otherwise — they never reach the AI.
