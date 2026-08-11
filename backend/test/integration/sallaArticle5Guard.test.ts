@@ -13,8 +13,11 @@
  * so every leg gets an explicit row here.
  *
  * The composed rule (exemption + this query) is unit-tested in
- * test/services/sallaBilling.test.ts; the controller wiring in
+ * test/services/marketplaceBilling.test.ts; the controller wiring in
  * test/controllers/payment.test.ts.
+ *
+ * The same query now serves the ZID rail too (D-073, one guard for all three
+ * marketplaces), so the platform-scoping legs below cover both.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createTestUser, createTestWorkspace, testDb } from './setup';
@@ -128,6 +131,30 @@ describe('hasActiveStoreForBillingSubject', () => {
 
         await expect(hasActiveStoreForBillingSubject('salla', user.id)).resolves.toBe(false);
         await expect(hasActiveStoreForBillingSubject('shopify', user.id)).resolves.toBe(true);
+    });
+
+    /**
+     * The Zid rail (D-070/D-073) reads this same query. Pinned separately from
+     * the Salla legs because a platform filter that silently matched everything
+     * would still pass every Salla case above while making Shopify and direct
+     * Stripe customers falsely Zid-billed.
+     */
+    it('is platform-scoped for Zid too — a Salla store does not make you Zid-billed', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        await insertStore({ userId: user.id, workspaceId: workspace.id, platform: 'salla' });
+
+        await expect(hasActiveStoreForBillingSubject('zid', user.id)).resolves.toBe(false);
+        await expect(hasActiveStoreForBillingSubject('salla', user.id)).resolves.toBe(true);
+    });
+
+    it('finds a Zid store a MEMBER connected, when asked about the workspace owner', async () => {
+        const owner = await createTestUser();
+        const member = await createTestUser();
+        const workspace = await createTestWorkspace(owner.id);
+        await insertStore({ userId: member.id, workspaceId: workspace.id, platform: 'zid' });
+
+        await expect(hasActiveStoreForBillingSubject('zid', owner.id)).resolves.toBe(true);
     });
 
     /**

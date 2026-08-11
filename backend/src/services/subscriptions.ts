@@ -7,7 +7,7 @@ import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { isShopifyBilled, buildShopifyManageUrl } from '../config/shopifyBilling';
-import { mustBillThroughSalla } from './sallaBilling';
+import { resolveMarketplaceBilling } from './marketplaceBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
@@ -141,6 +141,16 @@ const LAZY_EXPIRY_CANARIES: Record<string, {
     shopify: {
         message: 'Shopify-billed subscription lazily expired — the billing reconciler did not advance the period',
         flow: 'lazy_expiry_shopify',
+        requiresExternalId: false,
+    },
+    // Zid advances the period through its own App Market subscription, which we
+    // mirror on the webhook trigger and the 6h reconciler. A zid row reaching
+    // lazy expiry means BOTH missed — the webhook was not delivered AND the
+    // sweep did not heal it. requiresExternalId is false because the payload is
+    // not confirmed to carry a subscription id at all (see services/zidBilling).
+    zid: {
+        message: 'Zid-billed subscription lazily expired — neither the subscription webhook nor the billing reconciler advanced the period',
+        flow: 'lazy_expiry_zid',
         requiresExternalId: false,
     },
 };
@@ -536,6 +546,10 @@ export const subscriptionsService = {
         // user (team members see the owner's combined plan + top-up).
         const topup = await this.getTopupSummary(subscriptionOwnerId);
 
+        // Resolved once, against the SUBSCRIPTION OWNER — the same subject the
+        // payment controller's guard uses, so the UI and the API cannot disagree.
+        const marketplaceVerdict = await resolveMarketplaceBilling(subscriptionOwnerId, subscription);
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -576,15 +590,20 @@ export const subscriptionsService = {
                     isShopifyBilled(subscription) && subscription.shopifyShopDomain
                         ? buildShopifyManageUrl(subscription.shopifyShopDomain)
                         : undefined,
-                // Salla Article 5: paid plans for a Salla merchant must go
-                // through Salla, so every Stripe CTA is suppressed for them.
-                // Computed at this ONE choke point against the SUBSCRIPTION
-                // OWNER — the same subject the backend guard uses — so the UI
+                // Which marketplace — if any — owns this account's paid plans,
+                // so every Stripe CTA is suppressed for them. Computed at this
+                // ONE choke point against the SUBSCRIPTION OWNER, using the
+                // SAME resolver the payment controller's guard uses, so the UI
                 // can never offer an upgrade the payment API then refuses.
-                // There is no Salla equivalent of shopifyManageUrl yet: Salla
-                // billing does not exist, so the UI says "coming soon" rather
-                // than linking anywhere.
-                sallaBilled: (await mustBillThroughSalla(subscriptionOwnerId, subscription)) || undefined,
+                marketplaceBilling: marketplaceVerdict
+                    ? { marketplace: marketplaceVerdict.marketplace, manageUrl: marketplaceVerdict.manageUrl }
+                    : undefined,
+                // Kept in step with the legacy Salla-only flag for older
+                // bundled app builds — see the field's doc comment. Narrowed to
+                // 'salla' on purpose: this flag never described the Shopify or
+                // Zid rails, and widening it now would change what an old app
+                // does with it.
+                sallaBilled: marketplaceVerdict?.marketplace === 'salla' || undefined,
             },
         };
     },

@@ -165,8 +165,11 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 | Controller (webhook handler, `buildZidOrderEvent`) | `backend/src/controllers/zid.ts` |
 | Routes (shared factory) | `backend/src/routes/zid.ts` |
 | Basic-auth verification | `backend/src/utils/basicAuthVerify.ts` |
+| **Billing rail (D-070)** | `backend/src/services/zidBilling.ts`, `backend/src/config/zidBilling.ts` |
+| **Marketplace guard (all rails, D-073)** | `backend/src/services/marketplaceBilling.ts` |
 | Config | `backend/src/config/index.ts` (`config.zid`; enabled when `ZID_CLIENT_ID` set) |
 | Migration (dual-token columns) | `backend/migrations/0146_left_prodigy.sql` |
+| Migration (billing mirror key) | `backend/migrations/0161_tense_garia.sql` (`subscriptions.zid_store_id`) |
 | **Edge routing** | `nginx/nginx.conf` — `location /zid/` → backend, `location = /zid/onboarding` → frontend |
 | Tests | `backend/test/{services,controllers,routes,integrations}/zid.test.ts`, `backend/test/utils/basicAuthVerify.test.ts` |
 | Routing gate | `scripts/check-nginx-routing.sh` (`npm run check:nginx-routing`, pre-deploy step 0.98) |
@@ -225,6 +228,36 @@ describe titles (grep for it).
 - Zid's duplicate-webhook status code (409 and 422 both treated as already-registered).
 - The exact casing of the `Basic` scheme on deliveries: verification compares the full
   header string (fails closed on `basic …`) — confirm Zid's casing from a real capture.
+- **Billing (D-070), the whole envelope.** `GET /v1/market/app/subscription` has never
+  been called against a live store — `EC3` blocks installing a Rejected app. Unconfirmed:
+  the response nesting (root / `data` / `subscription`, **and the two composed** — all
+  four tolerated, up to two wrappers deep), the field spellings (`subscription_status` vs
+  `status`, `end_date` vs `expiry_date` vs `ends_at`, whether a subscription `id` is
+  present at all), whether `plan` is nested or flat, and **the value set of
+  `subscription_status`** — the one that matters most. Recognised values are listed in
+  `services/zidBilling.ts`; anything else resolves to `unknown_status`, writes NOTHING,
+  and raises Sentry rather than being read as "inactive". The first real delivery should
+  NARROW these tolerances, not just confirm them. Also unconfirmed: the exact
+  `app.market.subscription.*` event names (matched by prefix, deliberately, so an
+  unrecognised one still triggers a verify).
+  - ⚠️ **"We could not read it" is NOT "there is no subscription."** `fetchZidAppSubscription`
+    returns a three-way `ZidSubscriptionRead`. Only an **explicit empty container**
+    (`{"data": null}` / `{"subscription": null}`) is a positive `none` and may pause a
+    live mirror; anything unparseable is `unreadable`, which writes NOTHING and raises
+    Sentry (`zid-billing-unreadable-response`). Collapsing the two onto a single null is
+    how a shape we guessed wrong — e.g. `{"data":{"subscription":{…}}}` — paused a
+    merchant Zid was actively billing and cut their auto-replies.
+  - A bare `status` is trusted as the SUBSCRIPTION's only inside a wrapper we descended
+    into, or beside a field only a subscription carries (`plan_name`, `end_date`, …). At
+    a bare root it is just as likely to be the transport's own `"success"`, and reading
+    that as a subscription status booked `unknown_status` at error level for every
+    installed-but-unsubscribed store, every six hours.
+  - **The first real capture should collapse all of this**: pin the one true nesting,
+    the one status spelling, and what a genuine "no subscription" response looks like —
+    then delete the tolerances rather than leaving them as permanent guesswork.
+- The Zid App Market URL where a merchant manages their subscription — undocumented and
+  unobserved, so `ZID_APP_MARKET_URL` ships unset and the guard offers no link rather
+  than a guessed 404.
 
 ## Live-validation checklist (the D-020 gate — follow-up PR)
 

@@ -38,6 +38,17 @@ vi.mock('../../src/services/zid', async (importOriginal) => {
 vi.mock('../../src/db', () => ({ db: {} }));
 vi.mock('../../src/lib/redis', () => ({ redis: { set: vi.fn(), del: vi.fn() } }));
 
+// --- Mocked Zid billing rail (D-070) ---
+// Mocked at the service boundary so these controller tests pin the WIRING —
+// that uninstall cancels the mirror and a subscription event triggers a verify —
+// while services/zidBilling.test.ts pins the rail's own rules.
+const mockCancelZidSubscriptionLocal = vi.fn().mockResolvedValue(false);
+const mockSyncZidBilling = vi.fn().mockResolvedValue({ outcome: 'no_subscription', changed: false });
+vi.mock('../../src/services/zidBilling', () => ({
+    cancelZidSubscriptionLocal: (...args: unknown[]) => mockCancelZidSubscriptionLocal(...args),
+    syncZidBilling: (...args: unknown[]) => mockSyncZidBilling(...args),
+}));
+
 // --- Mocked shared ecommerce service ---
 const mockGetStoreById = vi.fn();
 const mockResolveStoreByDomainOrMerchant = vi.fn();
@@ -957,6 +968,7 @@ describe('Zid Controller', () => {
             const order: string[] = [];
             mockDeleteEmbeddedToken.mockImplementationOnce(async () => { order.push('delete-at-zid'); });
             mockSetEmbeddedTokenHash.mockImplementationOnce(async () => { order.push('clear-hash'); });
+            mockCancelZidSubscriptionLocal.mockImplementationOnce(async () => { order.push('cancel-billing'); return true; });
             mockDeactivateStore.mockImplementationOnce(async () => { order.push('deactivate'); });
 
             const req = webhookRequest({
@@ -965,7 +977,67 @@ describe('Zid Controller', () => {
 
             await webhookHandler(req, mockReply());
 
-            expect(order).toEqual(['delete-at-zid', 'clear-hash', 'deactivate']);
+            expect(order).toEqual(['delete-at-zid', 'clear-hash', 'cancel-billing', 'deactivate']);
+        });
+
+        // §H-6: no paid local subscription may outlive the app.
+        it('cancels the billing mirror on uninstall', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue({
+                id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+            });
+
+            await webhookHandler(
+                webhookRequest({ body: { event: 'app.market.application.uninstall', store_id: '67890' } }),
+                mockReply(),
+            );
+
+            expect(mockCancelZidSubscriptionLocal).toHaveBeenCalledWith(
+                'store-1', 'zid_app_uninstalled', expect.anything(),
+            );
+        });
+
+        /**
+         * D-070: the delivery is a TRIGGER. The handler must not read plan,
+         * price, or status out of it — it calls the choke point, which asks Zid.
+         */
+        it('triggers a billing verify on a subscription event, passing only the store id', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue({
+                id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+            });
+
+            const rep = mockReply();
+            await webhookHandler(
+                webhookRequest({
+                    body: {
+                        event: 'app.market.subscription.create',
+                        store_id: '67890',
+                        // Deliberately misleading payload: if any of it reached the
+                        // database this assertion set would not be enough to catch
+                        // it, but syncZidBilling's signature makes it impossible.
+                        plan_name: 'الاحترافي',
+                        subscription_status: 'active',
+                    },
+                }),
+                rep,
+            );
+
+            expect(mockSyncZidBilling).toHaveBeenCalledWith('store-1', expect.anything());
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('acks a subscription event even when the verify fails — the reconciler is the safety net', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue({
+                id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+            });
+            mockSyncZidBilling.mockRejectedValueOnce(new Error('Zid 500'));
+
+            const rep = mockReply();
+            await webhookHandler(
+                webhookRequest({ body: { event: 'app.market.subscription.renew', store_id: '67890' } }),
+                rep,
+            );
+
+            expect(rep.status).toHaveBeenCalledWith(200);
         });
 
         it('still clears the local embedded hash when Zid rejects the revocation', async () => {

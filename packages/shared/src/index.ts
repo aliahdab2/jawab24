@@ -840,8 +840,27 @@ export interface UsageSummary {
     /** true = a Salla merchant, whose paid plans must be billed through Salla
      * (apps-policy Article 5). Every Stripe surface — plan select, checkout,
      * top-ups — must be suppressed; the backend refuses them with code
-     * SALLA_BILLED. Omitted (not `false`) when the rule does not apply. */
+     * SALLA_BILLED. Omitted (not `false`) when the rule does not apply.
+     *
+     * ⚠️ Superseded by `marketplaceBilling` but deliberately still emitted: the
+     * mobile app ships a BUNDLED frontend that lags the web build by several
+     * releases, so removing this field would silently un-suppress Stripe for
+     * Salla merchants on an older app — an Article-5 violation with a delisting
+     * risk. Retire it only once no supported app build reads it. */
     sallaBilled?: boolean;
+    /** Set when a MARKETPLACE owns this account's paid plans instead of Stripe —
+     * Shopify App Pricing, Salla Article 5, or the Zid App Market. Supersedes
+     * `sallaBilled` and generalizes it: the frontend suppresses Stripe surfaces
+     * whenever this is present, and sends the merchant to `manageUrl` when there
+     * is one. Omitted when Stripe is the account's rail. */
+    marketplaceBilling?: {
+      marketplace: 'shopify' | 'salla' | 'zid';
+      /** Where the merchant manages their plan. Absent when the marketplace has
+       * no self-serve destination we can name (Salla today, Zid until its App
+       * Market URL is configured) — absent means "suppress, but show no link",
+       * never "do not suppress". */
+      manageUrl?: string;
+    };
   };
 }
 

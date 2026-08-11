@@ -249,7 +249,7 @@ export async function registerWebhooks(creds: ZidCredentials, storeId: string): 
 
 // --- Merchant API helper (dual-header auth) ---
 
-function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extraHeaders?: Record<string, string>): Promise<T> {
+export function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extraHeaders?: Record<string, string>): Promise<T> {
     return ecommerceApiGet<T>(url, {
         platform: 'zid',
         authHeaderValue: `Bearer ${creds.authorizationToken}`,
