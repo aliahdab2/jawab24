@@ -10,7 +10,7 @@ import { eq, inArray, sql, and, or, gt } from 'drizzle-orm';
 import { config } from '../config';
 import crypto from 'crypto';
 import { encryptFbToken, decryptFbToken } from './facebookCrypto';
-import type { User, JWTPayload, AuthResponse } from '../types';
+import type { User, JWTPayload, AuthResponse, TokenScope } from '../types';
 import { subscriptionsService } from './subscriptions';
 import { recordActivationEvent } from './activation';
 import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
@@ -346,6 +346,16 @@ export class AuthService {
      *   sign-in path is the platform's embedded entry; they can link phone or
      *   Facebook later from Settings) with subscription + workspace, mirroring
      *   findOrCreateUserByPhone.
+     *
+     * The workspace is GUARANTEED here, not best-effort. Every other caller of
+     * provisionUserWorkspace tolerates a skip (a pending invite defers creation
+     * to the accept-on-login step) because a normal login self-heals. This
+     * merchant has no login: no facebookId, no phone, and no email-login exists.
+     * A skipped workspace would strand them with a NULL-workspace store, a 404
+     * on every store read, and no path out — and a reinstall reproduces it. So a
+     * workspace is forced regardless of any invite, and a failure to create one
+     * REFUSES the provisioning (return null → claim-after-login) rather than
+     * returning a half-built account.
      */
     async provisionEcommerceMerchantUser(
         email: string,
@@ -373,7 +383,18 @@ export class AuthService {
         void recordActivationEvent(user.id, 'signup', { method });
 
         await this.createSubscriptionForNewUser(user.id);
-        await this.provisionUserWorkspace(user.id, name || 'My Workspace', normalizedEmail, null);
+
+        const hasWorkspace = await this.ensurePersonalWorkspace(user.id, name || 'My Workspace');
+        if (!hasWorkspace) {
+            // Genuine infra failure (createDefaultWorkspace already retried and
+            // logged fatal). Do not hand back an account the merchant cannot use.
+            captureError(
+                new Error('Auto-provisioned merchant has no workspace after creation'),
+                'Ecommerce merchant provisioning left no workspace',
+                { level: 'fatal', tags: { context: 'auth', action: 'provision-ecommerce-merchant' }, extra: { userId: user.id, method } },
+            );
+            return null;
+        }
 
         return {
             ...user,
@@ -382,13 +403,41 @@ export class AuthService {
     }
 
     /**
+     * Ensure a user has a personal workspace, IGNORING pending invites, and
+     * report whether one exists afterwards. Unlike provisionUserWorkspace this
+     * never defers to an invite — used where the caller has no login path that
+     * could later accept one (auto-provisioned e-commerce merchants).
+     */
+    private async ensurePersonalWorkspace(userId: string, name: string): Promise<boolean> {
+        const before = await db.select({ id: workspaceMembers.id }).from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, userId)).limit(1);
+        if (before.length > 0) return true;
+
+        await this.createDefaultWorkspace(userId, name);
+
+        const after = await db.select({ id: workspaceMembers.id }).from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, userId)).limit(1);
+        return after.length > 0;
+    }
+
+    /**
      * Generate secure token for user
      * Uses HMAC signature with expiry timestamp
+     *
+     * `scope` mints a RESTRICTED session (see TokenScope) — used only by the
+     * platform embedded-app surface, whose credential proves the store, not the
+     * person. Admin is force-cleared there rather than merely unused: an owner
+     * who is also a Jawab24 admin must not reach the admin console from an
+     * iframe authenticated by a UUID the platform hands out.
      */
-    generateToken(user: User, expiryMs: number = ACCESS_TOKEN_EXPIRY): string {
+    generateToken(user: User, expiryMs: number = ACCESS_TOKEN_EXPIRY, scope?: TokenScope): string {
         const payload: JWTPayload & { exp: number } = {
             userId: user.id,
-            isAdmin: user.isAdmin || false,
+            isAdmin: scope ? false : (user.isAdmin || false),
+            ...(scope && {
+                embeddedPlatform: scope.embeddedPlatform,
+                workspaceId: scope.workspaceId,
+            }),
             // RFC 7519: exp is Unix timestamp in SECONDS, not milliseconds
             exp: Math.floor((Date.now() + expiryMs) / 1000),
         };
@@ -445,6 +494,10 @@ export class AuthService {
             return {
                 userId: payload.userId,
                 isAdmin: payload.isAdmin || false,
+                // Scope claims must survive verification or the restriction is
+                // decorative — the middleware that enforces them reads them here.
+                ...(payload.embeddedPlatform && { embeddedPlatform: payload.embeddedPlatform }),
+                ...(payload.workspaceId && { workspaceId: payload.workspaceId }),
             };
         } catch {
             return null;

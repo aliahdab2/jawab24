@@ -244,7 +244,13 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                         const redirectOverride = adapter.postInstall
                             ? await adapter.postInstall(store, tokens, storeInfo, true, request.log)
                             : null;
-                        return reply.redirect(redirectOverride ?? `${frontendUrl}/login?${platform}_error=already_connected`);
+                        // A reactivation SUCCEEDED — onboarding is the honest
+                        // destination, not `already_connected` on a login page
+                        // (the login wall this whole flow exists to remove). The
+                        // override is normally set (Zid sends them to the framed
+                        // dashboard); this fallback only fires for a platform that
+                        // reactivates without its own post-install redirect.
+                        return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
                     }
                     if (existingStore.isActive) {
                         return reply.redirect(`${frontendUrl}/login?${platform}_error=already_connected`);

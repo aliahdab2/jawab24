@@ -52,25 +52,46 @@ after install and whenever they open it from their dashboard. Flow:
    Hermes resolves the real store/language from the merchant's own session, so the
    `store_id` and `lang` we send are placeholders.
 4. Zid frames our **Application URL** `https://jawab24.com/zid/embedded` with
-   `?token=<uuid>&language=<ar|en>`. The page trades the UUID at
-   `POST /zid/embedded/session` for a normal short-lived access token.
+   `?token=<uuid>&language=<ar|en>`. The page strips the UUID from the URL immediately,
+   then trades it at `POST /zid/embedded/session` (handled by the platform-agnostic
+   `backend/src/services/embeddedSession.ts`) for a **workspace-scoped, admin-stripped**
+   short-lived access token.
 5. Session transport inside the frame is a **Bearer token in `sessionStorage`**, not
    cookies: `SameSite=strict` cookies are never sent in a third-party frame, so
-   `/auth/refresh` cannot work there. `lib/embeddedSession.ts` re-mints from the UUID.
+   `/auth/refresh` cannot work there. `lib/embeddedSession.ts` re-mints from the UUID,
+   and falls back to an in-memory store when a partitioned frame blocks `sessionStorage`
+   (never a cookie session, which would 401 → `/login` inside the iframe).
 
 **Security properties, all deliberate:**
+- **The minted session is SCOPED** (`TokenScope`): pinned to the store's workspace and
+  stripped of admin. Authenticating as the owner is unavoidable (the store is theirs),
+  but the session cannot reach their other workspaces/pages/stores/billing or the admin
+  console. Enforced by `resolveWorkspace` (`WORKSPACE_SCOPE_DENIED`) and `requireAdmin`
+  in both `middleware/auth.ts` and `middleware/admin.ts`. This also bounds the
+  reinstall-for-owner path — a store collaborator who reinstalls gets a scoped session,
+  not the owner's account.
 - The UUID is a merchant credential (it opens a session). Only the digest is stored;
-  a new UUID is minted on every (re)install; uninstall AND merchant-side disconnect
-  revoke it at Zid and NULL the hash — revocation runs *before* `deactivateStore`/
-  `disconnectStore`, which blank the tokens the Zid call needs.
+  a new UUID is minted on every (re)install; it **idle-expires** after 30 days
+  (`embedded_token_last_used_at`, migration `0160`); uninstall AND merchant-side
+  disconnect revoke it at Zid and NULL the hash — revocation runs *before*
+  `deactivateStore`/`disconnectStore`, which blank the tokens the Zid call needs, and
+  `embeddedTokenHash` is also cleared whenever a store goes inactive (defense in depth).
+- **The credential never persists in the clear:** stripped from the URL on arrival,
+  nginx logs the path only for `/zid/embedded` (`log_format main_noquery`), and Sentry
+  `beforeSend` redacts `?token=`/`?embeddedToken=`/`?code=`.
 - Auto-provisioning **refuses** when the store email already belongs to a Jawab24
   account (case-insensitively) and falls back to claim-after-login. A store email is
-  attacker-settable, so a match is not proof of identity.
+  attacker-settable, so a match is not proof of identity. When it does provision, it
+  **guarantees a workspace** (bypassing the pending-invite skip — the merchant has no
+  login to accept an invite later) or refuses rather than return a half-built account.
 - Only a short-lived access token is ever minted for the frame — never a long-lived one.
 - `nginx.conf` drops `X-Frame-Options` (no allowlist form) in favour of CSP
-  `frame-ancestors 'self' dashboard.zid.sa web.zid.sa *.zid.dev`. **Shared
-  infrastructure — every response carries it.** `npm run check:nginx-routing` asserts
-  both the routing and these headers.
+  `frame-ancestors 'self' dashboard.zid.sa web.zid.sa`. The `*.zid.dev` sandbox is
+  **not** allowed in the production config. **Shared infrastructure — every response
+  carries it.** `npm run check:nginx-routing` asserts both the routing and these headers.
+- **Not built yet (blocks resubmission, not this change):** the seamless in-frame
+  Facebook connect. facebook.com refuses framing, so the embedded "connect a page"
+  empty-state breaks OUT to a top-level tab. See `docs/testing/ZID_TEST_PLAN.md` §L.
 
 ### Dual-credential storage
 The second credential is AES-256-GCM encrypted into new nullable columns

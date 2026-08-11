@@ -44,7 +44,7 @@ describe('Zid embedded entry page', () => {
             throw new Error(`Unexpected GET ${url}`);
         });
         mockedAxios.post.mockResolvedValue({
-            data: { token: 'session-token', defaultWorkspaceId: 'ws-1' },
+            data: { accessToken: 'session-token', workspaceId: 'ws-1' },
         });
     });
 
@@ -54,9 +54,10 @@ describe('Zid embedded entry page', () => {
         render(<ZidEmbedded />);
 
         await waitFor(() => {
+            // `embeddedToken` is the credential in — not `token`.
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 expect.stringContaining('/zid/embedded/session'),
-                { token: 'uuid-from-zid' },
+                { embeddedToken: 'uuid-from-zid' },
             );
         });
 
@@ -64,7 +65,21 @@ describe('Zid embedded entry page', () => {
         // making the merchant reopen the app.
         expect(setEmbeddedSession).toHaveBeenCalledWith('zid', 'uuid-from-zid', 'session-token');
         await waitFor(() => expect(mockSetAuth).toHaveBeenCalledWith(USER, 'session-token', ''));
-        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding'));
+        // Zid's language is honoured on the way into the app.
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding', undefined, { locale: 'ar' }));
+    });
+
+    it('strips the credential from the URL before doing anything else', async () => {
+        routerState.query = { token: 'uuid-from-zid' };
+        const replaceState = vi.spyOn(window.history, 'replaceState');
+
+        render(<ZidEmbedded />);
+
+        // The token rides the iframe src; it must not linger in history/referrer.
+        await waitFor(() => expect(replaceState).toHaveBeenCalled());
+        const [, , url] = replaceState.mock.calls[0];
+        expect(String(url)).not.toContain('uuid-from-zid');
+        replaceState.mockRestore();
     });
 
     it('persists the session BEFORE calling /auth/me — the api client reads its Bearer token from there', async () => {
@@ -137,7 +152,7 @@ describe('Zid embedded entry page', () => {
 
         render(<ZidEmbedded />);
 
-        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding'));
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding', undefined, undefined));
         expect(mockSetWorkspaces).not.toHaveBeenCalled();
     });
 });

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { Event as SentryEvent, StackFrame } from '@sentry/nextjs';
 import {
   isInAppBrowserInjectedEvent,
+  redactCredentialQuery,
+  scrubCredentialsFromEvent,
   IN_APP_BROWSER_MESSAGE_PATTERNS,
   IN_APP_BROWSER_SCRIPT_URL,
 } from '@/lib/sentryEventFilters';
@@ -19,6 +21,49 @@ function eventWithFrames(frames: StackFrame[], value = 'boom'): SentryEvent {
 function matchesIgnoreErrors(message: string): boolean {
   return IN_APP_BROWSER_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
 }
+
+describe('credential scrubbing (Zid embedded ?token=)', () => {
+  describe('redactCredentialQuery', () => {
+    it('redacts the token value but keeps the rest of the URL intact', () => {
+      expect(redactCredentialQuery('https://jawab24.com/zid/embedded?token=secret-uuid&language=ar'))
+        .toBe('https://jawab24.com/zid/embedded?token=REDACTED&language=ar');
+    });
+
+    it('redacts embeddedToken and an OAuth code too, case-insensitively', () => {
+      expect(redactCredentialQuery('/x?EmbeddedToken=abc')).toBe('/x?EmbeddedToken=REDACTED');
+      expect(redactCredentialQuery('/auth/callback?code=xyz&state=1')).toBe('/auth/callback?code=REDACTED&state=1');
+    });
+
+    it('leaves a URL with no sensitive param untouched', () => {
+      expect(redactCredentialQuery('/pricing?utm=abc')).toBe('/pricing?utm=abc');
+      expect(redactCredentialQuery('/plain')).toBe('/plain');
+    });
+  });
+
+  describe('scrubCredentialsFromEvent', () => {
+    it('redacts the request URL, transaction, and navigation/xhr breadcrumbs', () => {
+      const event: SentryEvent = {
+        request: { url: 'https://jawab24.com/zid/embedded?token=leak' },
+        transaction: '/zid/embedded?token=leak',
+        breadcrumbs: [
+          { type: 'navigation', data: { from: '/a?token=leak', to: '/zid/embedded?token=leak' } },
+          { type: 'http', category: 'xhr', data: { url: '/zid/embedded/session?token=leak' } },
+        ],
+      };
+
+      const out = scrubCredentialsFromEvent(event);
+
+      expect(out.request?.url).not.toContain('leak');
+      expect(out.transaction).not.toContain('leak');
+      expect(JSON.stringify(out.breadcrumbs)).not.toContain('leak');
+    });
+
+    it('returns the same event object (mutates in place) and tolerates a bare event', () => {
+      const bare: SentryEvent = {};
+      expect(scrubCredentialsFromEvent(bare)).toBe(bare);
+    });
+  });
+});
 
 describe('isInAppBrowserInjectedEvent', () => {
   describe('real events that reached production Sentry', () => {

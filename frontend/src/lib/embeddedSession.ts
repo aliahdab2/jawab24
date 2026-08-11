@@ -7,12 +7,20 @@
  * the refresh cookie — simply do not work there. The embedded surface therefore
  * runs on Bearer tokens, exactly like the native app does.
  *
- * The durable credential is the UUID Zid hands us in the iframe URL
+ * The durable credential is the UUID the platform hands us in the iframe URL
  * (docs.zid.sa/embedded-apps): the page trades it at `POST /zid/embedded/session`
- * for the SAME short-lived access token a normal login issues, and trades it
- * again when that token expires. No long-lived bearer token is ever minted, and
- * nothing is written to `localStorage` — `sessionStorage` keeps the credential
- * scoped to this tab, so closing the dashboard tab ends the session.
+ * for the SAME short-lived, workspace-scoped access token, and trades it again
+ * when that token expires. No long-lived bearer token is ever minted.
+ *
+ * STORAGE. Preferred store is `sessionStorage` — scoped to this tab, so closing
+ * the dashboard tab ends the session, and never `localStorage` (the credential
+ * must not outlive the tab). But a third-party frame may PARTITION or BLOCK
+ * storage entirely; there, reading storage throws or returns null. When that
+ * happens we fall back to a module-level object so the session still works for
+ * the life of the page. The one thing we must never do is silently no-op the
+ * write and then let a later request fall through to a cookie session that a
+ * cross-site frame cannot send — that produced a 401 → /login redirect INSIDE
+ * the iframe, i.e. the exact "sign-in prompt" this whole feature removes.
  */
 
 const TOKEN_KEY = 'jawab24:embedded:token';
@@ -21,30 +29,64 @@ const CREDENTIAL_KEY = 'jawab24:embedded:credential';
 
 export type EmbeddedPlatform = 'zid';
 
-function safeSessionStorage(): Storage | null {
+// Last-resort store when the frame denies sessionStorage. Lives only for the
+// life of the page (a reload clears it) — acceptable, and far better than
+// falling through to a cookie session that does not exist in this frame.
+const memoryStore: Record<string, string | undefined> = {};
+
+/** True once we have proven sessionStorage is unusable in this frame. */
+let sessionStorageBlocked = false;
+
+function trySessionStorage(): Storage | null {
     if (typeof window === 'undefined') return null;
+    if (sessionStorageBlocked) return null;
     try {
-        return window.sessionStorage;
+        // Touch it — access alone throws in some partitioned frames.
+        const s = window.sessionStorage;
+        const probe = '__jawab24_probe__';
+        s.setItem(probe, '1');
+        s.removeItem(probe);
+        return s;
     } catch {
-        // Partitioned/blocked storage in a third-party frame — callers degrade
-        // to a session that lasts only as long as the page is not reloaded.
+        sessionStorageBlocked = true;
         return null;
     }
 }
 
+function readKey(key: string): string | null {
+    const storage = trySessionStorage();
+    if (storage) return storage.getItem(key);
+    return memoryStore[key] ?? null;
+}
+
+function writeKey(key: string, value: string): void {
+    const storage = trySessionStorage();
+    if (storage) {
+        storage.setItem(key, value);
+        return;
+    }
+    memoryStore[key] = value;
+}
+
+function removeKey(key: string): void {
+    const storage = trySessionStorage();
+    if (storage) storage.removeItem(key);
+    delete memoryStore[key];
+}
+
 /** True when this tab is running as an embedded app inside a platform dashboard. */
 export function isEmbeddedSession(): boolean {
-    return !!safeSessionStorage()?.getItem(PLATFORM_KEY);
+    return !!readKey(PLATFORM_KEY);
 }
 
 export function getEmbeddedPlatform(): EmbeddedPlatform | null {
-    const value = safeSessionStorage()?.getItem(PLATFORM_KEY);
+    const value = readKey(PLATFORM_KEY);
     return value === 'zid' ? value : null;
 }
 
 /** The Bearer token used for API calls in the embedded surface. */
 export function getEmbeddedToken(): string | null {
-    return safeSessionStorage()?.getItem(TOKEN_KEY) ?? null;
+    return readKey(TOKEN_KEY);
 }
 
 /**
@@ -53,23 +95,19 @@ export function getEmbeddedToken(): string | null {
  * without asking the merchant to reopen the app.
  */
 export function setEmbeddedSession(platform: EmbeddedPlatform, credential: string, token: string): void {
-    const storage = safeSessionStorage();
-    if (!storage) return;
-    storage.setItem(PLATFORM_KEY, platform);
-    storage.setItem(CREDENTIAL_KEY, credential);
-    storage.setItem(TOKEN_KEY, token);
+    writeKey(PLATFORM_KEY, platform);
+    writeKey(CREDENTIAL_KEY, credential);
+    writeKey(TOKEN_KEY, token);
 }
 
 export function setEmbeddedToken(token: string): void {
-    safeSessionStorage()?.setItem(TOKEN_KEY, token);
+    writeKey(TOKEN_KEY, token);
 }
 
 export function clearEmbeddedSession(): void {
-    const storage = safeSessionStorage();
-    if (!storage) return;
-    storage.removeItem(PLATFORM_KEY);
-    storage.removeItem(CREDENTIAL_KEY);
-    storage.removeItem(TOKEN_KEY);
+    removeKey(PLATFORM_KEY);
+    removeKey(CREDENTIAL_KEY);
+    removeKey(TOKEN_KEY);
 }
 
 /**
@@ -82,8 +120,7 @@ export function clearEmbeddedSession(): void {
  * interceptor is what calls this, and routing it back through would recurse.
  */
 export async function refreshEmbeddedToken(apiUrl: string): Promise<string | null> {
-    const storage = safeSessionStorage();
-    const credential = storage?.getItem(CREDENTIAL_KEY);
+    const credential = readKey(CREDENTIAL_KEY);
     const platform = getEmbeddedPlatform();
     if (!credential || !platform) return null;
 
@@ -91,13 +128,15 @@ export async function refreshEmbeddedToken(apiUrl: string): Promise<string | nul
         const response = await fetch(`${apiUrl}/${platform}/embedded/session`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: credential }),
+            // `embeddedToken` is the credential in; `accessToken` is the session
+            // out. Distinct names so the two can't be wired backwards.
+            body: JSON.stringify({ embeddedToken: credential }),
         });
         if (!response.ok) return null;
-        const data = (await response.json()) as { token?: string };
-        if (!data.token) return null;
-        setEmbeddedToken(data.token);
-        return data.token;
+        const data = (await response.json()) as { accessToken?: string };
+        if (!data.accessToken) return null;
+        setEmbeddedToken(data.accessToken);
+        return data.accessToken;
     } catch {
         return null;
     }

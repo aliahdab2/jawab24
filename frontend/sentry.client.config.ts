@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import {
     isInAppBrowserInjectedEvent,
+    scrubCredentialsFromEvent,
     IN_APP_BROWSER_MESSAGE_PATTERNS,
     IN_APP_BROWSER_SCRIPT_URL,
 } from '@/lib/sentryEventFilters';
@@ -81,6 +82,8 @@ Sentry.init({
         if (isInAppBrowserInjectedEvent(event)) {
             return null;
         }
-        return event;
+        // Redact any live bearer credential in a URL (the Zid embedded-app
+        // `?token=` is the standing case) before the event leaves the browser.
+        return scrubCredentialsFromEvent(event);
     },
 });

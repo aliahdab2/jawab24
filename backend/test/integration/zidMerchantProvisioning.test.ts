@@ -14,9 +14,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { createTestUser, testDb } from './setup';
+import { createTestUser, createTestWorkspace, testDb } from './setup';
 import { AuthService } from '../../src/services/auth';
-import { users, workspaces, workspaceMembers, subscriptions, plans } from '../../src/db/schema';
+import { users, workspaces, workspaceMembers, workspaceInvites, subscriptions, plans } from '../../src/db/schema';
 
 const authService = new AuthService();
 
@@ -35,10 +35,12 @@ async function removeSeedPlan() {
 }
 
 beforeAll(async () => {
-    await removeSeedPlan();
+    // Idempotent by slug: the row outlives a crashed run (nothing truncates
+    // `plans`), so tolerate an existing one rather than delete-then-insert,
+    // which races a prior run's leftover and fails on the unique constraint.
     await testDb.insert(plans).values({
         name: 'Trial', slug: PLAN_SLUG, price: 0, isDefault: true, isActive: true,
-    });
+    }).onConflictDoNothing({ target: plans.slug });
 });
 
 afterAll(removeSeedPlan);
@@ -113,6 +115,33 @@ describe('provisionEcommerceMerchantUser', () => {
 
     it('returns null for a blank email rather than creating an identity-less account', async () => {
         expect(await authService.provisionEcommerceMerchantUser('   ', 'Store', 'zid')).toBeNull();
+    });
+
+    it('GUARANTEES a workspace even when a pending invite matches the email (no-login self-heal is impossible here)', async () => {
+        // The ordinary provisionUserWorkspace path SKIPS creation when a pending
+        // invite exists, expecting the user to accept it on their next login.
+        // An auto-provisioned merchant has no login, so a skip would strand them
+        // with a NULL-workspace store forever. Set the trap, then prove it holds.
+        const email = `invited-${Date.now()}@zid.store`;
+
+        const inviter = await createTestUser({ email: `inviter-${Date.now()}@x.com`, name: 'Inviter' });
+        const inviterWs = await createTestWorkspace(inviter.id);
+        await testDb.insert(workspaceInvites).values({
+            workspaceId: inviterWs.id,
+            email,
+            tokenHash: `hash-${Date.now()}`,
+            status: 'pending',
+            createdBy: inviter.id,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        const user = await authService.provisionEcommerceMerchantUser(email, 'Invited Store', 'zid');
+
+        expect(user).not.toBeNull();
+        const memberships = await testDb.select().from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, user!.id));
+        expect(memberships).toHaveLength(1);
+        expect(memberships[0].role).toBe('owner');
     });
 
     it('records the signup activation event attributed to the platform', async () => {

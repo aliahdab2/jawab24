@@ -37,6 +37,23 @@ export const users = pgTable('users', {
     // App-level invariant: at least one identity anchor must be non-null —
     // facebookId, phone, or (for auto-provisioned e-commerce merchants, whose
     // sign-in path is the platform's embedded entry) email.
+}, (table) => {
+    return {
+        // Supports the case-insensitive lookup that guards e-commerce
+        // auto-provisioning (authService.provisionEcommerceMerchantUser). That
+        // guard runs on a PUBLIC install callback and would otherwise sequential-
+        // scan `users` on every App Market install.
+        //
+        // Deliberately NOT unique. A unique index is the structurally correct
+        // answer to the check-then-insert race, but `users.email` has never been
+        // constrained, so pre-existing duplicates would fail this migration
+        // mid-deploy — a worse outcome than the race. The race itself is closed
+        // instead by a transaction-scoped advisory lock in the provisioning path.
+        // TODO(JAWAB24-ZID-EMAIL-UNIQ): audit `select lower(email), count(*) from
+        // users where email is not null group by 1 having count(*) > 1` in
+        // production, de-duplicate, then promote this to a partial unique index.
+        emailLowerIdx: index('idx_users_email_lower').on(sql`lower(${table.email})`),
+    };
 });
 
 // OTP Codes Table — for phone number verification
@@ -1214,11 +1231,18 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
     // Zid Embedded Apps (docs.zid.sa/embedded-apps): SHA-256 hex of the UUID we
     // register with Zid via POST /v1/managers/embedded-apps-token. Zid passes the
     // UUID back as ?token= when the merchant opens the app inside the dashboard
-    // iframe, and GET /zid/embedded resolves it to a session. The UUID is a bearer
-    // credential (it opens a merchant session), so only its hash is stored — a DB
-    // leak must not leak live dashboard access. Null for Shopify/Salla and for
-    // stores installed before the embedded flow; rotated on every (re)install.
+    // iframe, and POST /zid/embedded/session (services/embeddedSession.ts)
+    // resolves it to a session. The UUID is a bearer credential (it opens a
+    // merchant session), so only its hash is stored — a DB leak must not leak
+    // live dashboard access. Null for Shopify/Salla and for stores installed
+    // before the embedded flow; rotated on every (re)install.
     embeddedTokenHash: varchar('embedded_token_hash', { length: 64 }),
+    // Last time the embedded credential was successfully exchanged for a
+    // session. Two jobs: it bounds the credential's life (an idle one stops
+    // working after EMBEDDED_TOKEN_IDLE_MS instead of living forever), and it
+    // is the only way to answer "when was this last used" during an incident.
+    // Null means never exchanged since it was minted — the install stamps it.
+    embeddedTokenLastUsedAt: timestamp('embedded_token_last_used_at'),
 
     // Sync state
     lastSyncAt: timestamp('last_sync_at'),

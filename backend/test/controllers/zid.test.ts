@@ -74,6 +74,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     registerWebhooksWithPersist: (...args: unknown[]) => mockRegisterWebhooksWithPersist(...args as [string, string, () => Promise<unknown>]),
     setEmbeddedTokenHash: (...args: unknown[]) => mockSetEmbeddedTokenHash(...args),
     getStoreByEmbeddedTokenHash: (...args: unknown[]) => mockGetStoreByEmbeddedTokenHash(...args),
+    touchEmbeddedTokenUse: vi.fn().mockResolvedValue(undefined),
     // Imported by the REAL services/zid module (kept real via importOriginal).
     updateStoreTokens: vi.fn(),
     markStoreNeedsReauth: vi.fn(),
@@ -81,6 +82,21 @@ vi.mock('../../src/services/ecommerce', () => ({
     applySyncedStoreInfo: vi.fn(),
     PRODUCT_SAFETY_CAP: 5000,
 }));
+
+// The embedded-session exchange lives in its own service (shared with future
+// platforms) and is unit-tested directly in test/services/embeddedSession.test.ts.
+// Here we mock it so the CONTROLLER test proves only what the controller owns:
+// it delegates, maps ok→{accessToken,workspaceId}, and collapses every failure
+// to one opaque 401. hashEmbeddedToken is kept REAL — the controller still uses
+// it to register a token on install.
+const mockExchangeEmbeddedCredential = vi.fn();
+vi.mock('../../src/services/embeddedSession', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/services/embeddedSession')>();
+    return {
+        ...actual,
+        exchangeEmbeddedCredential: (...args: unknown[]) => mockExchangeEmbeddedCredential(...args),
+    };
+});
 
 const mockVerifyToken = vi.fn();
 const mockProvisionMerchantUser = vi.fn();
@@ -1282,97 +1298,60 @@ describe('Zid Controller', () => {
         });
     });
 
-    // --- Embedded Apps: direct merchant access from the Zid dashboard ---
+    // --- Embedded Apps: the controller is a thin delegate over the shared
+    //     exchange service. Exchange internals (hash lookup, scoping, owner /
+    //     workspace guards, idle-clock) are proven in
+    //     test/services/embeddedSession.test.ts.
 
     describe('embeddedSession', () => {
-        const STORE = {
-            id: 'store-1',
-            userId: 'owner-1',
-            workspaceId: 'ws-1',
-            storeName: 'My Zid Store',
-        };
-        // SHA-256 of 'uuid-abc' — pinned so a change to the hashing scheme (which
-        // would silently invalidate every merchant's dashboard entry) fails here.
-        const UUID = 'uuid-abc';
-        const UUID_SHA256 = 'f882fa969acc48a6f894cf5d848a464e781e088f197ce25b265d6724c9083c6a';
-
-        it('trades a valid embedded token for a session scoped to the store owner', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce(STORE);
-            mockGetUserById.mockResolvedValueOnce({ id: 'owner-1', isAdmin: false });
-
-            const req = mockRequest({ body: { token: UUID } });
+        it('delegates to the exchange with platform "zid" and the request-body credential', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({
+                ok: true, session: { accessToken: 'minted.access.token', workspaceId: 'ws-1', storeId: 'store-1' },
+            });
+            const req = mockRequest({ body: { embeddedToken: 'uuid-abc' } });
             const rep = mockReply();
 
             await embeddedSession(req, rep);
 
-            expect(mockGetStoreByEmbeddedTokenHash).toHaveBeenCalledWith('zid', UUID_SHA256);
-            expect(mockGenerateToken).toHaveBeenCalledWith({ id: 'owner-1', isAdmin: false });
+            expect(mockExchangeEmbeddedCredential).toHaveBeenCalledWith('zid', 'uuid-abc', expect.anything());
+        });
+
+        it('maps a successful exchange to { accessToken, workspaceId } and nothing else', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({
+                ok: true, session: { accessToken: 'minted.access.token', workspaceId: 'ws-1', storeId: 'store-1' },
+            });
+            const rep = mockReply();
+
+            await embeddedSession(mockRequest({ body: { embeddedToken: 'uuid-abc' } }), rep);
+
+            // storeId is deliberately NOT leaked to the frame — the session is
+            // the only thing the page needs.
+            expect(rep.send).toHaveBeenCalledWith({ accessToken: 'minted.access.token', workspaceId: 'ws-1' });
+        });
+
+        it.each([
+            ['missing-token'],
+            ['unknown-or-expired-credential'],
+            ['owner-missing'],
+            ['no-workspace'],
+        ])('collapses failure "%s" to one opaque 401 — never distinguishes the cause to the caller', async (reason) => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({ ok: false, reason });
+            const rep = mockReply();
+
+            await embeddedSession(mockRequest({ body: { embeddedToken: 'x' } }), rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
             expect(rep.send).toHaveBeenCalledWith({
-                token: 'minted.access.token',
-                defaultWorkspaceId: 'ws-1',
-                storeId: 'store-1',
-                storeName: 'My Zid Store',
+                error: { message: 'Embedded session could not be established', code: 'EMBEDDED_SESSION_INVALID' },
             });
         });
 
-        it('looks the token up by DIGEST, never by the raw value', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce(null);
-            await embeddedSession(mockRequest({ body: { token: UUID } }), mockReply());
+        it('reads the credential from `embeddedToken`, not `token` (which is the SESSION out)', async () => {
+            mockExchangeEmbeddedCredential.mockResolvedValueOnce({ ok: false, reason: 'missing-token' });
+            await embeddedSession(mockRequest({ body: { token: 'wrong-field' } }), mockReply());
 
-            const [, lookupArg] = mockGetStoreByEmbeddedTokenHash.mock.calls[0];
-            expect(lookupArg).not.toBe(UUID);
-            expect(lookupArg).toMatch(/^[0-9a-f]{64}$/);
-        });
-
-        it('rejects an unknown / rotated / revoked token with 401', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce(null);
-            const rep = mockReply();
-
-            await embeddedSession(mockRequest({ body: { token: 'stale-uuid' } }), rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
-            expect(mockGenerateToken).not.toHaveBeenCalled();
-        });
-
-        it('rejects a missing token with 400', async () => {
-            const rep = mockReply();
-            await embeddedSession(mockRequest({ body: {} }), rep);
-            expect(rep.status).toHaveBeenCalledWith(400);
-        });
-
-        it('does not mint a session when the store owner no longer exists', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce(STORE);
-            mockGetUserById.mockResolvedValueOnce(null);
-            const rep = mockReply();
-
-            await embeddedSession(mockRequest({ body: { token: UUID } }), rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
-            expect(mockGenerateToken).not.toHaveBeenCalled();
-        });
-
-        it('falls back to the resolved default workspace when the store has none', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce({ ...STORE, workspaceId: null });
-            mockGetUserById.mockResolvedValueOnce({ id: 'owner-1', isAdmin: false });
-            const rep = mockReply();
-
-            await embeddedSession(mockRequest({ body: { token: UUID } }), rep);
-
-            expect(rep.send).toHaveBeenCalledWith(expect.objectContaining({
-                defaultWorkspaceId: 'resolved_workspace_id',
-            }));
-        });
-
-        it('mints only a SHORT-LIVED token — never a long-lived embedded credential', async () => {
-            mockGetStoreByEmbeddedTokenHash.mockResolvedValueOnce(STORE);
-            mockGetUserById.mockResolvedValueOnce({ id: 'owner-1', isAdmin: false });
-
-            await embeddedSession(mockRequest({ body: { token: UUID } }), mockReply());
-
-            // One argument = the default ACCESS_TOKEN_EXPIRY. An explicit longer
-            // expiry here would hand the iframe a durable bearer token.
-            expect(mockGenerateToken).toHaveBeenCalledTimes(1);
-            expect(mockGenerateToken.mock.calls[0]).toHaveLength(1);
+            // The old field name must reach the exchange as undefined, not silently work.
+            expect(mockExchangeEmbeddedCredential).toHaveBeenCalledWith('zid', undefined, expect.anything());
         });
     });
 

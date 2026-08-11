@@ -5,7 +5,7 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, or, lt, gt, sql, desc, isNotNull, notInArray } from 'drizzle-orm';
+import { eq, and, or, lt, gt, sql, desc, isNull, isNotNull, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
@@ -434,28 +434,62 @@ export async function createStore(opts: CreateStoreOptions) {
 }
 
 /**
+ * How long an embedded-app credential may sit UNUSED before it stops opening
+ * sessions. It rides a URL (platform iframe src, and therefore access logs and
+ * browser history), so an unbounded lifetime means a single logged value is a
+ * permanent merchant session. 30 days is comfortably longer than any real gap
+ * between a merchant opening the app from their dashboard, and every successful
+ * exchange pushes it out again — an active merchant never notices it.
+ * An expired credential is not an error state: the platform re-frames the app,
+ * the merchant reinstalls or reopens, and a fresh one is minted.
+ */
+export const EMBEDDED_TOKEN_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
  * Persist (or clear, with null) the SHA-256 of a store's embedded-app lookup
  * UUID. Zid-only today: the UUID is registered with Zid and comes back as
  * `?token=` on the dashboard-iframe entry — see services/zid.ts
- * registerEmbeddedToken and controllers/zid.ts embeddedEntry.
+ * registerEmbeddedToken and services/embeddedSession.ts.
+ *
+ * Setting a hash also starts its idle clock; clearing it clears the clock, so
+ * the two can never disagree.
  */
 export async function setEmbeddedTokenHash(storeId: string, hash: string | null) {
     await db.update(ecommerceStores).set({
         embeddedTokenHash: hash,
+        embeddedTokenLastUsedAt: hash ? new Date() : null,
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
 }
 
-/** Resolve an ACTIVE store from an embedded-token hash (dashboard-iframe entry). */
+/**
+ * Resolve an ACTIVE store from an embedded-token hash (dashboard-iframe entry).
+ * Returns null for an unknown hash, an inactive store, or a credential idle
+ * past EMBEDDED_TOKEN_IDLE_MS — the caller cannot tell them apart on purpose
+ * (it answers a public endpoint), but it logs which one it was.
+ */
 export async function getStoreByEmbeddedTokenHash(platform: EcommercePlatform, hash: string) {
     const rows = await db.select().from(ecommerceStores)
         .where(and(
             eq(ecommerceStores.platform, platform),
             eq(ecommerceStores.embeddedTokenHash, hash),
             eq(ecommerceStores.isActive, true),
+            // A NULL last-used is a credential minted before this column existed;
+            // treat it as fresh rather than locking those merchants out on deploy.
+            or(
+                isNull(ecommerceStores.embeddedTokenLastUsedAt),
+                gt(ecommerceStores.embeddedTokenLastUsedAt, new Date(Date.now() - EMBEDDED_TOKEN_IDLE_MS)),
+            ),
         ))
         .limit(1);
     return rows[0] ?? null;
+}
+
+/** Push out the idle clock after a successful exchange. Never fails the caller. */
+export async function touchEmbeddedTokenUse(storeId: string) {
+    await db.update(ecommerceStores)
+        .set({ embeddedTokenLastUsedAt: new Date() })
+        .where(eq(ecommerceStores.id, storeId));
 }
 
 export async function updateStoreTokens(storeId: string, tokens: {
@@ -514,11 +548,20 @@ export async function updateStoreTokens(storeId: string, tokens: {
 // A reconnect overwrites all four via createStore's onConflictDoUpdate, and no code
 // path reads tokens for an inactive store (resolveStoreAccessToken + the sync/refresh
 // selectors all gate on isActive), so this is safe.
+//
+// The embedded-app credential is blanked here TOO, not only by the Zid
+// disconnect hook. The lookup already filters on isActive, so a surviving hash
+// is not exploitable today — but that makes the safety a property of one
+// selector rather than of the data. Clearing it at the single point where a
+// store goes inactive makes a live credential on a dead store impossible
+// instead of merely unreachable (AI_INSTRUCTIONS Rule 14).
 const BLANKED_TOKEN_FIELDS = {
     accessToken: '',
     accessTokenIv: '',
     refreshToken: null,
     refreshTokenIv: null,
+    embeddedTokenHash: null,
+    embeddedTokenLastUsedAt: null,
 } as const;
 
 export async function deactivateStore(platform: EcommercePlatform, storeDomain: string) {

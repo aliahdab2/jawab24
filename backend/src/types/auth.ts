@@ -20,10 +20,42 @@ export interface User {
     hasInstagramPermission?: boolean | null;
 }
 
+/**
+ * Platforms whose dashboard can host Jawab24 as an embedded app. A session
+ * minted for one of these is RESTRICTED — see TokenScope.
+ */
+export type EmbeddedPlatform = 'zid';
+
+/**
+ * Restrictions baked into an access token at mint time (RFC 6749 §3.3: the
+ * token carries its own scope; the resource server enforces it).
+ *
+ * Ordinary logins mint an UNSCOPED token and are unaffected. A scoped token is
+ * only ever issued to a surface we do not fully control — today the platform
+ * dashboard iframe, whose credential is a UUID the platform hands out. That
+ * credential proves "this is the store", never "this is the person", so the
+ * session it opens must not reach past the store:
+ *
+ * - `workspaceId` PINS the session. resolveWorkspace refuses any other
+ *   workspace, so the owner's other workspaces (other pages, other stores)
+ *   are unreachable even though the token authenticates as the owner.
+ * - `embeddedPlatform` marks the session restricted. requireAdmin rejects it
+ *   outright, and generateToken force-clears `isAdmin` so an owner who happens
+ *   to be a Jawab24 admin cannot reach the admin console from an iframe.
+ */
+export interface TokenScope {
+    embeddedPlatform: EmbeddedPlatform;
+    workspaceId: string;
+}
+
 // JWT payload — facebookId removed, phone is identity
 export interface JWTPayload {
     userId: string;
     isAdmin?: boolean;
+    /** Present only on restricted sessions — see TokenScope. */
+    embeddedPlatform?: EmbeddedPlatform;
+    /** Present only on restricted sessions — pins the workspace. */
+    workspaceId?: string;
     iat?: number;
     exp?: number;
 }

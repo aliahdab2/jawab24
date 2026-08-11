@@ -1185,3 +1185,38 @@ grow a parallel implementation.
 **Not addressed here.** The rejection's second bullet, "full data integration", needs the Zid
 billing PR (Subscription-App scenario 2, "subscribe to a plan, confirm it syncs" — specified
 in `ZID_TEST_PLAN.md` §H) plus a green §A–§F. Do not resubmit on this PR alone.
+
+### D-066 addendum (2026-08-11) — persona-review hardening
+
+The first cut authenticated the embedded frame as the store owner with an **unscoped** session
+and removed `X-Frame-Options` with `*.zid.dev` in the production allowlist. Review found the
+credential (a permanent UUID) rode the URL into logs/Sentry, a blocked-storage frame fell
+through to `/login` inside the iframe, and an auto-provisioned merchant could end up
+workspace-less with no recovery. Resolved, all in the same change:
+
+1. **The embedded session is workspace-SCOPED, not full-account** (`TokenScope`;
+   `generateToken(user, expiry, scope)`). A scoped token pins one workspace (`resolveWorkspace`
+   refuses any other, even via `X-Workspace-Id`) and is admin-stripped (`requireAdmin` in BOTH
+   `middleware/auth.ts` and `middleware/admin.ts` rejects it). A leaked UUID therefore grants
+   the store, never the owner's other pages/stores/billing/admin — which also bounds the
+   reinstall-for-owner path: a store collaborator who reinstalls lands in a scoped session, not
+   the owner's account.
+2. **The credential never persists in the clear**: the entry page strips `?token=` from the URL
+   on arrival, nginx logs path-only for `/zid/embedded` (`log_format main_noquery`), Sentry
+   `beforeSend` redacts it, and the UUID idle-expires (`embedded_token_last_used_at`, 30 days,
+   migration `0160`).
+3. **Blocked third-party storage** falls back to an in-memory store instead of silently
+   no-op-ing the write and dropping to a cookie session that a frame cannot send.
+4. **Auto-provisioning GUARANTEES a workspace** (bypassing the pending-invite skip, which only
+   made sense for accounts that can log in and accept the invite) and refuses rather than
+   returns a half-built account.
+5. **`*.zid.dev` dropped** from the production `frame-ancestors`; `check:nginx-routing` now
+   asserts its absence.
+6. The exchange is extracted to `services/embeddedSession.ts` (platform-agnostic, ready for
+   Salla) and every refusal is one opaque 401 with a distinct logged reason.
+
+**Still deferred (not blocking this PR, blocking the resubmission):** the seamless in-frame
+Facebook-connect. facebook.com refuses framing, and a scope-preserving break-out needs threading
+scope through the shared `/auth/browser-handoff` bridge — shared infra not touched here. The
+embedded empty-state now breaks OUT to a top-level tab instead of dead-ending, which is honest
+but not seamless. See `ZID_TEST_PLAN.md`.

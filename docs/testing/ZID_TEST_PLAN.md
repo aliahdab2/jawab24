@@ -395,13 +395,27 @@ If throttling appears, verify the sync retries rather than truncating (the old s
 | L-7 | Uninstall, then replay the OLD iframe URL | `POST /zid/embedded/session` → 401; `embedded_token_hash` is NULL in the DB | C15: the uninstall delivery |
 | L-8 | Disconnect from inside Jawab24 (Integrations → Disconnect), then replay the iframe URL | 401 — a merchant-side disconnect must close the dashboard entry too | — |
 | L-9 | **Takeover guard:** set the dev store's email to an address that already has a Jawab24 account, then install logged-out | NO auto-login. Falls back to the claim-after-login flow; the existing account is untouched | — |
-| L-10 | `curl -sI https://jawab24.com/zid/embedded` | No `X-Frame-Options` header; CSP `frame-ancestors` names dashboard.zid.sa | — |
+| L-10 | `curl -sI https://jawab24.com/zid/embedded` | No `X-Frame-Options` header; CSP `frame-ancestors` names dashboard.zid.sa + web.zid.sa, and does NOT contain `zid.dev` | — |
+| L-11 | **Scope:** inside the frame, try to reach the admin console or switch to another of the owner's workspaces (set `X-Workspace-Id` to a different one) | 403 `WORKSPACE_SCOPE_DENIED` / `ADMIN_REQUIRED`. The embedded session sees ONLY the store's workspace; even an owner who is a Jawab24 admin gets no admin surface | DevTools network tab |
+| L-12 | **Credential hygiene:** after the frame loads, inspect the address bar, `nginx` access log for `/zid/embedded`, and any Sentry event | No `?token=<uuid>` anywhere — stripped from the URL, path-only in the log, `REDACTED` in Sentry | — |
+| L-13 | **Idle expiry:** leave a store's embedded entry unused for >30 days (or set `embedded_token_last_used_at` back in the DB), then open it | 401 — the merchant reopens/reinstalls to mint a fresh UUID | — |
+| L-14 | **Workspace guarantee:** provision a merchant whose store email matches a *pending workspace invite*, then open the app | The merchant still owns a personal workspace (the invite does not suppress it); store reads do not 404 | — |
+| L-15 | **No pages yet:** open the freshly-provisioned app in the frame; on the "connect a page" step | An actionable **"Connect a Facebook page"** button (not a dead sentence); it opens Jawab24 in a NEW top-level tab (facebook.com cannot be framed) | C16: the new tab opening |
 
 **Shared-infrastructure re-check (§G-adjacent, MANDATORY).** Removing `X-Frame-Options`
 domain-wide is a change every response carries. Before publish, confirm on PROD that
 `frame-ancestors` is present and correct on a normal page (`/`, `/pricing`, `/dashboard`)
 — a CSP typo silently drops the whole header, taking clickjacking protection with it.
 `npm run check:nginx-routing` asserts both the routes and these headers.
+
+> **⚠️ Deferred — blocks the RESUBMISSION, not this PR.** The seamless in-frame Facebook
+> connect is NOT built. facebook.com refuses framing (`X-Frame-Options: DENY`), and a
+> scope-preserving break-out needs threading the embedded scope through the shared
+> `/auth/browser-handoff` bridge (shared infra, deliberately untouched here). Today L-15
+> breaks OUT to a top-level tab, where the merchant authenticates normally and connects a
+> page. Before resubmitting app 7367, either finish the scoped-handoff break-out or confirm
+> the top-level-tab flow is acceptable to the reviewer, and run §A–§F live plus the §H
+> billing scenario. Do not resubmit on the embedded flow alone.
 
 ---
 

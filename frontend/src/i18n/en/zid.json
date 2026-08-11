@@ -45,6 +45,8 @@
     "connectPage": "Connect Your Social Pages",
     "connectPageDesc": "Choose which Facebook or Instagram page Jawab24 should reply on using your product catalog.",
     "noPages": "No connected pages found. Make sure your pages are connected.",
+    "connectFacebookCta": "Connect a Facebook page",
+    "connectFacebookNewTabHint": "This opens Jawab24 in a new tab to sign in to Facebook, then return here.",
     "linkPage": "Link Page",
     "skipForNow": "Skip for now",
     "done": "You're All Set!",

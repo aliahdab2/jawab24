@@ -317,9 +317,10 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
 /**
  * Register the embedded-app lookup UUID with Zid. When the merchant opens the
  * app inside the Zid Merchant Dashboard, Zid loads our Application URL in an
- * iframe with this UUID as `?token=` — GET /zid/embedded resolves it back to
- * the store (via its SHA-256, stored on ecommerce_stores.embedded_token_hash)
- * and opens a session with no sign-in prompt. The docs mandate a short UUID
+ * iframe with this UUID as `?token=` — POST /zid/embedded/session
+ * (services/embeddedSession.ts) resolves it back to the store (via its SHA-256,
+ * stored on ecommerce_stores.embedded_token_hash) and opens a WORKSPACE-SCOPED
+ * session with no sign-in prompt. The docs mandate a short UUID
  * rather than the Authorization JWT (URL truncation) and a NEW UUID on every
  * reinstall (the old one goes stale at Zid's side).
  */

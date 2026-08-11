@@ -17,8 +17,12 @@ type Status = 'loading' | 'error';
  *
  * Zid loads this page with `?token=<uuid>&language=<ar|en>`. The UUID is the
  * credential: it is traded at `POST /zid/embedded/session` for a normal
- * short-lived access token, which the embedded surface then sends as a Bearer
- * header (third-party-frame cookies never arrive — see lib/embeddedSession.ts).
+ * short-lived, WORKSPACE-SCOPED access token, which the embedded surface then
+ * sends as a Bearer header (third-party-frame cookies never arrive — see
+ * lib/embeddedSession.ts).
+ *
+ * The credential is stripped from the URL the instant it is read: it rides the
+ * iframe src, so it would otherwise sit in browser history and any error report.
  *
  * Nothing here asks the merchant to sign in. A failure shows how to reopen the
  * app from the Zid dashboard; it must never render a login form, which is the
@@ -34,40 +38,44 @@ export default function ZidEmbedded() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
     const sessionRes = await axios.post<{
-      token: string;
-      defaultWorkspaceId: string | null;
-    }>(`${apiUrl}/zid/embedded/session`, { token: embeddedToken });
+      accessToken: string;
+      workspaceId: string;
+    }>(`${apiUrl}/zid/embedded/session`, { embeddedToken });
 
-    const { token, defaultWorkspaceId } = sessionRes.data;
-    if (!token) throw new Error('Embedded session response has no token');
+    const { accessToken, workspaceId } = sessionRes.data;
+    if (!accessToken) throw new Error('Embedded session response has no token');
 
     // Persist BEFORE any further call — the api client reads the Bearer token
-    // from here, and /auth/me below is the first request that needs it.
-    setEmbeddedSession('zid', embeddedToken, token);
+    // from here, and the requests below are the first that need it.
+    setEmbeddedSession('zid', embeddedToken, accessToken);
 
-    const userRes = await axios.get(`${apiUrl}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const authHeader = { headers: { Authorization: `Bearer ${accessToken}` } };
+
+    // /auth/me and /workspaces are independent — fetch them together so the
+    // frame is not blocked on two sequential round trips before first paint.
+    // The session is pinned to one workspace, so /workspaces is best-effort.
+    const [userRes, wsRes] = await Promise.all([
+      axios.get(`${apiUrl}/auth/me`, authHeader),
+      axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, authHeader).catch(() => null),
+    ]);
+
     const user = userRes.data;
     if (!user?.id) throw new Error('Failed to fetch user profile');
 
-    try {
-      const wsRes = await axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (wsRes.data?.length) setWorkspaces(wsRes.data, { defaultWorkspaceId });
-    } catch {
-      // Non-fatal — workspace middleware auto-selects when the user has one.
-    }
+    if (wsRes?.data?.length) setWorkspaces(wsRes.data, { defaultWorkspaceId: workspaceId });
 
-    setAuth(user, token, '');
+    setAuth(user, accessToken, '');
     return user;
   }, [setAuth, setWorkspaces]);
 
   useEffect(() => {
     if (!router.isReady) return;
 
-    const { token, expired } = router.query;
+    const { token, expired, language } = router.query;
+
+    // Zid tells us the merchant's dashboard language; honour it so the app is
+    // not pinned to the default locale inside the frame.
+    const locale = language === 'en' || language === 'ar' ? language : undefined;
 
     // Arrived from an embedded logout (session ended, credential cleared) —
     // there is nothing to exchange, so explain rather than spin.
@@ -81,11 +89,19 @@ export default function ZidEmbedded() {
       return;
     }
 
+    // Strip the credential from the URL before anything can log or store it —
+    // it rides the iframe src, so a back-nav, a reload, or an error report must
+    // not carry a live merchant credential. Silent (no re-render, no nav),
+    // exactly like auth/callback.tsx does for the OAuth code.
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
     establishSession(token)
       .then(() => {
         // Straight into the app. The merchant is authenticated and inside the
         // Zid dashboard iframe; onboarding self-skips once a page is linked.
-        router.replace('/zid/onboarding');
+        router.replace('/zid/onboarding', undefined, locale ? { locale } : undefined);
       })
       .catch((err) => {
         captureError(err, 'Zid embedded session failed', { tags: { page: 'zid-embedded' } });

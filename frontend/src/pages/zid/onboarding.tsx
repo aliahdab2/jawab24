@@ -16,15 +16,29 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { zidApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { getEmbeddedPlatform } from '@/lib/embeddedSession';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
 const TOTAL_STEPS = 4;
+
+/**
+ * Open a URL as a NEW top-level browser tab, escaping the platform iframe.
+ * `_blank` breaks out of the frame (a user gesture makes the popup allowed);
+ * `noopener` severs `window.opener`. Connecting a Facebook page needs the full
+ * first-party app — facebook.com sends `X-Frame-Options: DENY`, so the OAuth
+ * dialog cannot render inside the Zid frame.
+ */
+function openTopLevel(path: string): void {
+  if (typeof window === 'undefined') return;
+  window.open(path, '_blank', 'noopener');
+}
 
 export default function ZidOnboarding() {
   const router = useRouter();
   const t = useTranslations('zid');
   const tc = useTranslations('common');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [step, setStep] = useState(0);
   const [store, setStore] = useState<EcommerceStore | null>(null);
   const [storeLoading, setStoreLoading] = useState(true);
@@ -36,12 +50,19 @@ export default function ZidOnboarding() {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [linkedPageName, setLinkedPageName] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+  const isEmbedded = typeof window !== 'undefined' && getEmbeddedPlatform() !== null;
 
   useEffect(() => {
+    // Wait for persisted auth to rehydrate before judging the session — a bare
+    // `!isAuthenticated` on first paint races the async store and would bounce a
+    // freshly-authenticated merchant. And an EMBEDDED session must never be sent
+    // to /login: inside the platform dashboard that IS the sign-in prompt this
+    // flow exists to remove (the embedded entry re-mints instead). See M-5.
+    if (!hasHydrated || isEmbedded) return;
     if (!isAuthenticated) {
       router.replace('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [hasHydrated, isAuthenticated, isEmbedded, router]);
 
   useEffect(() => {
     async function fetchStore() {
@@ -109,7 +130,10 @@ export default function ZidOnboarding() {
     setLinking(false);
   };
 
-  if (!isAuthenticated) return null;
+  // Blank until authenticated — but never for an embedded tab mid-handoff
+  // (the embedded entry sets auth just before routing here; a race must not
+  // flash and it must not fall through to the /login redirect above).
+  if (!isAuthenticated && !isEmbedded) return null;
 
   const benefits = [
     t('onboarding.welcomeBenefit1'),
@@ -280,10 +304,40 @@ export default function ZidOnboarding() {
                       <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : pages.length === 0 ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-8 space-y-4">
                       <p className="text-muted-foreground text-sm">
                         {t('onboarding.noPages')}
                       </p>
+                      {/* Actionable, not a dead end. Connecting a Facebook page
+                          needs the full first-party app (facebook.com refuses to
+                          be framed), so from the embedded surface we break OUT to
+                          a new top-level tab; on the normal web we navigate in
+                          place. Either way the merchant has a way forward. */}
+                      <Button
+                        onClick={() => {
+                          // Land on the pages screen, whose own empty state
+                          // carries the connect-a-page action. Embedded: break
+                          // out to a top-level tab (facebook.com can't be framed);
+                          // web: navigate in place.
+                          if (isEmbedded) {
+                            openTopLevel('/pages');
+                          } else {
+                            router.push('/pages');
+                          }
+                        }}
+                        size="lg"
+                        className="bg-teal-700 hover:bg-teal-800 text-white rounded-2xl px-6"
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <span>{t('onboarding.connectFacebookCta')}</span>
+                          <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
+                        </div>
+                      </Button>
+                      {isEmbedded && (
+                        <p className="text-subtle text-xs">
+                          {t('onboarding.connectFacebookNewTabHint')}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-64 overflow-y-auto">

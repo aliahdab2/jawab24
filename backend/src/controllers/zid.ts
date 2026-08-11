@@ -6,10 +6,12 @@ import {
     deactivateStore,
     getStoreById,
     setEmbeddedTokenHash,
-    getStoreByEmbeddedTokenHash,
 } from '../services/ecommerce';
 import { authService } from '../services/auth';
-import { workspaceService } from '../services/workspace';
+import {
+    exchangeEmbeddedCredential,
+    hashEmbeddedToken,
+} from '../services/embeddedSession';
 import { captureError } from '../utils/sentryHelpers';
 import {
     dispatchOrderNotification,
@@ -47,24 +49,25 @@ function credsFromTokens(tokens: OAuthTokenResponse): zidService.ZidCredentials 
 // mechanism (docs.zid.sa/embedded-apps) is a UUID we generate, register with Zid,
 // and receive back as `?token=` when Zid frames our Application URL.
 //
-// Threat model: that UUID IS a merchant credential — anyone holding it can open a
-// session for the store. So we (a) store only its SHA-256, (b) mint a NEW one on
-// every (re)install so a leaked value dies at the next install, (c) revoke it at
-// Zid and clear the hash on uninstall, and (d) trade it only for the SAME
-// short-lived access token a normal login issues, never a long-lived one.
-
-/** SHA-256 hex of an embedded-app UUID — only the digest is ever persisted. */
-export function hashEmbeddedToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
-}
+// Threat model and the session rules that follow from it live with the exchange
+// itself, in services/embeddedSession.ts. This file owns only the Zid half:
+// minting the UUID, registering it with Zid, and revoking it.
 
 /**
  * Zid's post-install destination: the app opened INSIDE the merchant dashboard.
  * `store_id`/`language_code` may be any valid value — Zid's Hermes resolves the
  * real store and language from the merchant's dashboard session.
  */
-function zidDashboardEmbeddedUrl(merchantId: string | undefined): string {
-    const storeSegment = merchantId && merchantId.trim() ? encodeURIComponent(merchantId) : '1';
+function zidDashboardEmbeddedUrl(merchantId: string | undefined, log: FastifyRequest['log']): string {
+    const hasMerchantId = Boolean(merchantId && merchantId.trim());
+    if (!hasMerchantId) {
+        // Zid resolves the real store from the dashboard session, so a filler
+        // segment works today. Log it anyway: if Zid ever validates the segment
+        // this becomes a 404 on the merchant's ONLY way into the app, and a
+        // silent fallback is how the last Zid failure took eight days to name.
+        log.warn('Zid store profile carried no merchantId — using a filler store segment in the dashboard URL');
+    }
+    const storeSegment = hasMerchantId ? encodeURIComponent(merchantId as string) : '1';
     return `https://dashboard.zid.sa/ar-sa/stores/${storeSegment}/apps/${encodeURIComponent(config.zid.appId)}/embedded`;
 }
 
@@ -80,7 +83,20 @@ async function provisionEmbeddedToken(
     tokens: { accessToken: string; authorizationToken?: string },
     log: FastifyRequest['log'],
 ): Promise<boolean> {
-    if (!tokens.authorizationToken) return false;
+    if (!tokens.authorizationToken) {
+        // credsFromTokens throws on this and exchangeCodeForToken fails fast, so
+        // reaching here means a non-Zid token response was routed to the Zid
+        // adapter. Same degraded outcome as a rejected registration — and the
+        // same visibility, because a silent `return false` here looked identical
+        // to a healthy install while costing the merchant their dashboard entry.
+        captureError(
+            new Error('Zid embedded-token registration skipped: no Authorization token'),
+            'Zid embedded-token registration skipped',
+            { tags: { service: 'zid', action: 'register-embedded-token' }, extra: { storeId } },
+        );
+        log.error({ storeId }, 'Zid embedded-token registration skipped — token response carried no Authorization token');
+        return false;
+    }
     const embeddedToken = crypto.randomUUID();
     try {
         await zidService.registerEmbeddedToken(
@@ -106,14 +122,26 @@ async function provisionEmbeddedToken(
  * Revoke a store's embedded-app token — at Zid (best-effort) and locally
  * (always). Called on uninstall and on merchant-initiated disconnect.
  */
-export async function revokeEmbeddedToken(storeId: string, log: FastifyRequest['log']): Promise<void> {
+export async function revokeEmbeddedToken(
+    storeId: string,
+    log: FastifyRequest['log'],
+    reason: 'uninstall' | 'disconnect' = 'uninstall',
+): Promise<void> {
     try {
         const creds = await zidService.resolveZidCredentials(storeId);
         if (creds) await zidService.deleteEmbeddedToken(creds);
     } catch (error) {
-        // Expected when Zid has already invalidated the tokens at uninstall —
-        // log at debug-free level without Sentry noise, then clear ours anyway.
-        log.warn({ err: error, storeId }, 'Zid embedded-token revocation at Zid failed — clearing local hash anyway');
+        // On UNINSTALL this is expected — Zid invalidates our OAuth tokens as
+        // part of the uninstall, so the DELETE has nothing to authenticate with.
+        // On DISCONNECT the tokens are still live, so a failure means a usable
+        // credential survives at Zid's side and is worth a Sentry event.
+        if (reason === 'disconnect') {
+            captureError(error, 'Zid embedded-token revocation failed on merchant disconnect', {
+                tags: { service: 'zid', action: 'revoke-embedded-token' },
+                extra: { storeId },
+            });
+        }
+        log.warn({ err: error, storeId, reason }, 'Zid embedded-token revocation at Zid failed — clearing local hash anyway');
     }
     try {
         await setEmbeddedTokenHash(storeId, null);
@@ -132,37 +160,30 @@ export async function revokeEmbeddedToken(storeId: string, log: FastifyRequest['
  * PUBLIC by necessity: the request comes from our page running inside Zid's
  * dashboard iframe, a cross-site context where our SameSite=strict auth cookies
  * are not sent. The UUID is the credential, and it is exactly what Zid puts in
- * the iframe URL by design. Returns the same short-lived access token a normal
- * login issues; the page re-calls this endpoint when that token expires, so no
- * long-lived bearer token is ever created.
+ * the iframe URL by design. The exchange itself — including the scoping that
+ * keeps this session inside the store's workspace — is in
+ * services/embeddedSession.ts, shared with whatever platform adopts it next.
+ *
+ * Every refusal answers with the SAME opaque 401. A public endpoint must not
+ * tell an unknown caller whether a credential is unknown, revoked or expired;
+ * the reason is in the logs instead.
  */
 export async function embeddedSession(request: FastifyRequest, reply: FastifyReply) {
-    const { token } = (request.body ?? {}) as { token?: string };
-    if (!token || typeof token !== 'string') {
-        return reply.status(400).send({ error: 'Missing embedded token' });
+    const { embeddedToken } = (request.body ?? {}) as { embeddedToken?: string };
+
+    const result = await exchangeEmbeddedCredential('zid', embeddedToken, request.log);
+
+    if (!result.ok) {
+        return reply.status(401).send({
+            error: { message: 'Embedded session could not be established', code: 'EMBEDDED_SESSION_INVALID' },
+        });
     }
 
-    const store = await getStoreByEmbeddedTokenHash('zid', hashEmbeddedToken(token));
-    if (!store) {
-        // Unknown, rotated, or revoked (uninstalled) token.
-        return reply.status(401).send({ error: 'Invalid embedded token' });
-    }
-
-    const user = await authService.getUserById(store.userId);
-    if (!user) {
-        // Owner deleted while the store row survived — nothing to open a session as.
-        return reply.status(401).send({ error: 'Invalid embedded token' });
-    }
-
-    const accessToken = authService.generateToken(user);
-    const defaultWorkspaceId = store.workspaceId
-        ?? await workspaceService.resolveDefaultWorkspaceId(user.id);
-
+    // `accessToken`, not `token`: the request body's credential is also a
+    // "token", and naming both the same is how they get wired backwards.
     return reply.send({
-        token: accessToken,
-        defaultWorkspaceId,
-        storeId: store.id,
-        storeName: store.storeName,
+        accessToken: result.session.accessToken,
+        workspaceId: result.session.workspaceId,
     });
 }
 
@@ -364,7 +385,7 @@ export const {
     // bouncing them to a login page saying it is already connected.
     reinstallPolicy: 'reactivate-for-owner',
 
-    onDisconnect: revokeEmbeddedToken,
+    onDisconnect: (storeId, log) => revokeEmbeddedToken(storeId, log, 'disconnect'),
 
     postInstall: async (store, tokens, storeInfo, platformInitiated, log) => {
         const registered = await provisionEmbeddedToken(store.id, tokens, log);
@@ -376,7 +397,7 @@ export const {
         if (registered) {
             // Documented Zid flow: hand the merchant back to their dashboard,
             // which frames our app and authenticates it with the token above.
-            return zidDashboardEmbeddedUrl(storeInfo.merchantId);
+            return zidDashboardEmbeddedUrl(storeInfo.merchantId, log);
         }
         // No in-dashboard entry available — put them in the app in the browser
         // with a real session rather than a login wall or a dead iframe.

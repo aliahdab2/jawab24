@@ -11,13 +11,17 @@ import {
 
 describe('embeddedSession', () => {
     beforeEach(() => {
-        sessionStorage.clear();
-        localStorage.clear();
+        // A prior test may have stubbed a throwing sessionStorage — undo that
+        // before touching real storage.
+        vi.unstubAllGlobals();
+        try { sessionStorage.clear(); } catch { /* blocked-storage test */ }
+        try { localStorage.clear(); } catch { /* ignore */ }
         vi.restoreAllMocks();
     });
 
     afterEach(() => {
-        sessionStorage.clear();
+        try { sessionStorage.clear(); } catch { /* blocked-storage test */ }
+        vi.unstubAllGlobals();
     });
 
     it('reports no embedded session by default — the ordinary web app must be unaffected', () => {
@@ -59,17 +63,18 @@ describe('embeddedSession', () => {
         setEmbeddedSession('zid', 'uuid-1', 'old-token');
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
-            json: async () => ({ token: 'new-token' }),
+            json: async () => ({ accessToken: 'new-token' }),
         });
         vi.stubGlobal('fetch', fetchMock);
 
         const result = await refreshEmbeddedToken('https://api.test');
 
+        // `embeddedToken` is the credential IN; `accessToken` is the session OUT.
         expect(fetchMock).toHaveBeenCalledWith(
             'https://api.test/zid/embedded/session',
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ token: 'uuid-1' }),
+                body: JSON.stringify({ embeddedToken: 'uuid-1' }),
             }),
         );
         expect(result).toBe('new-token');
@@ -106,5 +111,41 @@ describe('embeddedSession', () => {
 
         expect(getEmbeddedToken()).toBe('token-2');
         expect(getEmbeddedPlatform()).toBe('zid');
+    });
+
+    // ── H-3: a third-party frame may block sessionStorage entirely. The session
+    //    must still work via an in-memory fallback — it must NOT silently no-op
+    //    the write and let a later request fall through to a (nonexistent)
+    //    cookie session, which produced a 401 → /login INSIDE the iframe.
+    it('falls back to in-memory storage when sessionStorage is blocked, and still re-mints', async () => {
+        vi.resetModules();
+        // Make every sessionStorage access throw, as a partitioned frame does.
+        vi.stubGlobal('sessionStorage', {
+            get length() { throw new DOMException('blocked'); },
+            getItem() { throw new DOMException('blocked'); },
+            setItem() { throw new DOMException('blocked'); },
+            removeItem() { throw new DOMException('blocked'); },
+            clear() { throw new DOMException('blocked'); },
+            key() { throw new DOMException('blocked'); },
+        } as unknown as Storage);
+
+        const mod = await import('../embeddedSession');
+        mod.setEmbeddedSession('zid', 'uuid-mem', 'token-mem');
+
+        // The write did NOT no-op: the session is readable from the fallback.
+        expect(mod.isEmbeddedSession()).toBe(true);
+        expect(mod.getEmbeddedPlatform()).toBe('zid');
+        expect(mod.getEmbeddedToken()).toBe('token-mem');
+
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ accessToken: 'fresh' }) });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const refreshed = await mod.refreshEmbeddedToken('https://api.test');
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://api.test/zid/embedded/session',
+            expect.objectContaining({ body: JSON.stringify({ embeddedToken: 'uuid-mem' }) }),
+        );
+        expect(refreshed).toBe('fresh');
+        expect(mod.getEmbeddedToken()).toBe('fresh');
     });
 });

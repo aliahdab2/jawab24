@@ -222,6 +222,15 @@ for host in "https://dashboard.zid.sa" "https://web.zid.sa"; do
     fi
 done
 
+# The production CSP must NOT allow Zid's *.zid.dev sandbox — a wildcard over a
+# dev domain would let any *.zid.dev subdomain frame the live dashboard.
+if printf '%s' "$headers" | grep -i '^content-security-policy:' | grep -q 'frame-ancestors[^;]*zid\.dev'; then
+    echo "WRONG  frame-ancestors allows a *.zid.dev sandbox host in production — drop it."
+    fails=$((fails + 1))
+else
+    echo "ok     frame-ancestors excludes the *.zid.dev sandbox"
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
     echo "FAIL: $fails route(s)/header(s) wrong."
