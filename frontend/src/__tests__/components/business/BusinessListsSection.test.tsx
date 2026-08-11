@@ -773,6 +773,88 @@ describe('BusinessListsSection', () => {
   // بطاقة» to EVERY page — institute vocabulary asserted at an outlet
   // directory that has neither, and is not laid out as cards. Nothing in this
   // engine knows a vertical; the copy must not either (owner catch 2026-08-10).
+  /**
+   * REGRESSION GUARD FOR THE OTHER MERCHANTS.
+   *
+   * Only four workspaces can reach /business (`isCatalogVisible`), and two of
+   * them are external merchants whose pages this branch never set out to
+   * change. Their shapes are reproduced here from the prod row counts measured
+   * 2026-08-11 — a keyed 213-row outlet directory that happens to contain a
+   * few duplicate pharmacy names, and small un-keyed lists with none — so that
+   * the name-grouping added for the owner's course list can never silently
+   * restyle a directory it was not meant to touch.
+   *
+   * The counts are scaled down; the SHAPE (keyed vs not, duplicate names or
+   * not, dated or not) is exactly theirs, and the shape is what the layout
+   * decisions read.
+   */
+  describe('the other merchants on the allowlist are left alone', () => {
+    /** Feras — «نقاط البيع»: keyed by المنطقة, 213 rows / 208 distinct names,
+     *  i.e. a handful of pharmacies share a name across areas. */
+    const ferasDirectory = (): FactCollectionWithRows => ({
+      id: 'coll-outlets', label: 'نقاط البيع', keyAttr: 'المنطقة', isComplete: true, rowCount: 4,
+      rows: [
+        { id: 'f1', name: 'صيدلية الحياة', attributes: [{ label: 'المنطقة', value: 'جنزور' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'f2', name: 'صيدلية الريان', attributes: [{ label: 'المنطقة', value: 'جنزور' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        // The duplicate name — same pharmacy brand in a different area.
+        { id: 'f3', name: 'صيدلية الحياة', attributes: [{ label: 'المنطقة', value: 'تاجوراء' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'f4', name: 'صيدلية الواحة', attributes: [{ label: 'المنطقة', value: 'تاجوراء' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    });
+
+    /** Feras — «أسعار حفاضات بامبو»: un-keyed, every name distinct, priced. */
+    const ferasPrices = (): FactCollectionWithRows => ({
+      id: 'coll-diapers', label: 'أسعار حفاضات بامبو', keyAttr: null, isComplete: true, rowCount: 3,
+      rows: [
+        { id: 'd1', name: 'حفاضات بامبو رقم 1', attributes: [{ label: 'النوع', value: 'عادي' }, { label: 'الوزن', value: '2-4 كيلو' }], price: '38.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'd2', name: 'حفاضات بامبو جامبو رقم 3', attributes: [{ label: 'النوع', value: 'جامبو' }, { label: 'الوزن', value: '4-8 كيلو' }], price: '70.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'd3', name: 'حفاضات بامبو للسباحة', attributes: [{ label: 'النوع', value: 'سباحة' }], price: '46.00', currency: 'د.ل', startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    });
+
+    it('Feras: a KEYED directory still groups by المنطقة — duplicate names never take over', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [ferasDirectory()] } } as any);
+      renderSection();
+
+      await screen.findByText('صيدلية الواحة');
+      // The area headers are the axis, exactly as before this branch.
+      expect(screen.getByText('جنزور')).toBeInTheDocument();
+      expect(screen.getByText('تاجوراء')).toBeInTheDocument();
+      // The duplicated pharmacy name appears under BOTH areas — never hoisted
+      // into a single name group that would break the area axis.
+      expect(screen.getAllByText('صيدلية الحياة')).toHaveLength(2);
+    });
+
+    it('Feras: an UN-KEYED price list with all-distinct names stays flat — no headers appear', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [ferasPrices()] } } as any);
+      renderSection();
+
+      await screen.findByText('حفاضات بامبو رقم 1');
+      // Every row keeps its own name inline; nothing became a group heading.
+      expect(screen.getByText('حفاضات بامبو جامبو رقم 3')).toBeInTheDocument();
+      expect(screen.getByText('حفاضات بامبو للسباحة')).toBeInTheDocument();
+      // No dates anywhere in his data → no date chips, no expiry copy.
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+      expect(screen.queryByText(new RegExp(en.lists.datesEnded.split('«')[0]))).toBeNull();
+    });
+
+    it('MES: small un-keyed lists render exactly as before — one row each, no grouping chrome', async () => {
+      const showrooms: FactCollectionWithRows = {
+        id: 'coll-showrooms', label: 'صالات الشركة', keyAttr: null, isComplete: null, rowCount: 2,
+        rows: [
+          { id: 's1', name: 'صالة أبو رمانة', attributes: [{ label: 'الهاتف', value: '0993301080' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+          { id: 's2', name: 'صالة المزة', attributes: [{ label: 'الهاتف', value: '0933222298' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        ],
+      };
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [showrooms] } } as any);
+      renderSection();
+
+      await screen.findByText('صالة أبو رمانة');
+      expect(screen.getByText('صالة المزة')).toBeInTheDocument();
+      expect(screen.queryAllByTitle(en.lists.startsLabel)).toHaveLength(0);
+    });
+  });
+
   describe('the section hint is derived from the page, not assumed', () => {
     const outletsOnly: FactCollectionWithRows = {
       id: 'coll-outlets', label: 'الصيدليات', keyAttr: 'المنطقة', isComplete: true, rowCount: 2,
