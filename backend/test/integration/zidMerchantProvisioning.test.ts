@@ -144,6 +144,37 @@ describe('provisionEcommerceMerchantUser', () => {
         expect(memberships[0].role).toBe('owner');
     });
 
+    // ------------------------------------------------------------------
+    // Column-width hardening (2026-08-11 incident class). The store title is
+    // platform-sourced free text; it feeds users.name AND workspaces.name, both
+    // varchar(255), on the SAME public callback that lost the reviewer's install
+    // to a 22001. Real Postgres, because the columns' widths ARE the assertion.
+    // ------------------------------------------------------------------
+
+    it('clamps an over-long store name instead of crashing the install (varchar 255)', async () => {
+        const email = `longname-${Date.now()}@zid.store`;
+        const longName = 'م'.repeat(400);
+
+        const user = await authService.provisionEcommerceMerchantUser(email, longName, 'zid');
+
+        expect(user).not.toBeNull();
+        expect(user!.name).toHaveLength(255);
+
+        // workspaces.name is the second consumer of the same value.
+        const memberships = await testDb.select().from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, user!.id));
+        const [workspace] = await testDb.select().from(workspaces)
+            .where(eq(workspaces.id, memberships[0].workspaceId));
+        expect(workspace.name).toHaveLength(255);
+    });
+
+    it('REFUSES an email longer than its column rather than truncating it — a truncated email is a different identity', async () => {
+        const email = `${'a'.repeat(250)}-${Date.now()}@zid.store`;
+
+        expect(email.length).toBeGreaterThan(255);
+        expect(await authService.provisionEcommerceMerchantUser(email, 'Store', 'zid')).toBeNull();
+    });
+
     it('records the signup activation event attributed to the platform', async () => {
         const email = `funnel-${Date.now()}@zid.store`;
         const user = await authService.provisionEcommerceMerchantUser(email, 'Store', 'zid');

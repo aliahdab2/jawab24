@@ -15,6 +15,7 @@ import { subscriptionsService } from './subscriptions';
 import { recordActivationEvent } from './activation';
 import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
+import { fitVarchar } from '../utils/columnText';
 import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
@@ -376,6 +377,20 @@ export class AuthService {
         const normalizedEmail = email.trim().toLowerCase();
         if (!normalizedEmail) return null;
 
+        // users.email is varchar(255): an address that cannot be stored cannot
+        // anchor an account. Refuse (→ claim-after-login), never crash the
+        // callback with Postgres 22001 — identity fields are refused, not
+        // clamped, because a truncated email is a DIFFERENT identity.
+        if (normalizedEmail.length > 255) return null;
+
+        // The display name, by contrast, IS clamped: it comes from the store
+        // profile the platform returned (Zid: the store `title`, free text a
+        // merchant controls), and it feeds users.name AND workspaces.name —
+        // both varchar(255). This runs UPSTREAM of createStore's fitStoreScalars
+        // on the very callback that failed on 2026-08-11; without it, an
+        // over-long title kills the install one insert earlier instead.
+        const safeName = fitVarchar(name, users.name) ?? undefined;
+
         // Case-INSENSITIVE on the column, not just on the input: accounts created
         // through other paths store the address as the user typed it, and a
         // `Store@x.com` row must still block a `store@x.com` install.
@@ -388,14 +403,14 @@ export class AuthService {
         // through a platform dialog, so the SELECT-then-INSERT window is
         // accepted (same tolerance as the workspace/subscription seeding).
         const [user] = await db.insert(users)
-            .values({ email: normalizedEmail, name: name ?? null })
+            .values({ email: normalizedEmail, name: safeName ?? null })
             .returning();
 
         void recordActivationEvent(user.id, 'signup', { method });
 
         await this.createSubscriptionForNewUser(user.id);
 
-        const hasWorkspace = await this.ensurePersonalWorkspace(user.id, name || 'My Workspace');
+        const hasWorkspace = await this.ensurePersonalWorkspace(user.id, safeName || 'My Workspace');
         if (!hasWorkspace) {
             // Genuine infra failure (createDefaultWorkspace already retried and
             // logged fatal). Do not hand back an account the merchant cannot use.

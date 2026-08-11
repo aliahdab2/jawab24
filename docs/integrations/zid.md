@@ -358,13 +358,29 @@ round-trip (D-020).
 1. **Boundary.** The profile response is now parsed with a Zod schema. `currency` accepts
    the object (reading `.code`) or a bare string. `id` is the only required field —
    identity is a hard failure; every descriptive field degrades to `undefined` via
-   `.catch()` rather than failing the parse and taking the install with it.
+   `.catch()` rather than failing the parse and taking the install with it. **Each drop is
+   reported to Sentry** (fingerprint `zid-profile-field-drop`, shape only — never the
+   value, which carries merchant PII): the drop is the correct handling, but a silent drop
+   is how this drift stayed invisible behind a green suite. Absence (`null`, missing,
+   empty string) is not drift and is not reported.
 2. **Storage.** `fitStoreScalars` coerces the four descriptive columns at the single
    choke point all three rails write through (`createStore` insert **and** conflict
    branches, plus `applySyncedStoreInfo`, which the 6-hourly sync uses). Widths are read
    from the Drizzle schema, so a future migration cannot leave a stale hardcoded limit.
    Unreadable shapes are dropped and reported to Sentry as a warning; they never abort a
    write and never overwrite a good stored value.
+
+The same review hardened the two writes UPSTREAM of the store on the same callback:
+`provisionEcommerceMerchantUser` clamps the platform-sourced display name before it
+feeds `users.name` and `workspaces.name` (both varchar(255)), and REFUSES an email
+longer than its column — identity is refused, never truncated, because a truncated
+email is a different identity. `createPendingInstall` clamps its display `storeName`
+(`merchant_id` is claim-matching identity and stays unclamped, fail-loud).
+
+**Replay suite:** `test/integration/zidInstallCallback.test.ts` re-runs the reviewer's
+exact install — real routes, real Postgres, the captured wire payloads — and also pins
+the retry-with-orphan path (→ `/login?zid_pending=true`, the reason the orphan cleanup
+SQL must run before Zid re-tests).
 
 **Confirmed facts from this capture** (previously all assumptions):
 

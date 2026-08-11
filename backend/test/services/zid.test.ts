@@ -624,6 +624,69 @@ describe('Zid Service', () => {
                 expect(info.storeCurrency).toBe('SAR');
             });
 
+            it('REPORTS a dropped field to Sentry — a silent drop is how the next drift stays invisible', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 77,
+                            title: { ar: 'متجر', en: 'Store' },
+                            currency: LIVE_CURRENCY,
+                            url: 'https://s.zid.store',
+                        },
+                    },
+                }));
+
+                await fetchStoreInfo(CREDS);
+
+                expect(mockCaptureError).toHaveBeenCalledTimes(1);
+                const [err, , context] = mockCaptureError.mock.calls[0] as [Error, string, Record<string, any>];
+                expect(err.message).toContain("'title'");
+                expect(context.level).toBe('warning');
+                expect(context.fingerprint).toEqual(['zid-profile-field-drop', 'title']);
+                // Shape only — profile fields carry merchant PII, the VALUE must
+                // never ship to Sentry.
+                expect(JSON.stringify(context.extra)).not.toContain('متجر');
+                expect(context.extra.receivedType).toBe('object');
+            });
+
+            it('reports a currency object it cannot read (no `code`) the same way', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 1, title: 'S', url: 'https://s.zid.store',
+                            currency: { id: 4, symbol: 'ر.س' },
+                        },
+                    },
+                }));
+
+                await fetchStoreInfo(CREDS);
+
+                expect(mockCaptureError).toHaveBeenCalledTimes(1);
+                const [, , context] = mockCaptureError.mock.calls[0] as [Error, string, Record<string, any>];
+                expect(context.fingerprint).toEqual(['zid-profile-field-drop', 'currency']);
+            });
+
+            it('does NOT report absence — null, missing, and empty-string fields are not drift', async () => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 1,
+                            title: 'S',
+                            name: null,          // JSON's "no value" — not drift
+                            email: '',           // emptiness — not a shape change
+                            currency: 'SAR',     // fine
+                            url: 'https://s.zid.store',
+                            // domain: absent entirely
+                        },
+                    },
+                }));
+
+                const info = await fetchStoreInfo(CREDS);
+
+                expect(info.storeName).toBe('S');
+                expect(mockCaptureError).not.toHaveBeenCalled();
+            });
+
             it('treats a missing store id as a hard failure — identity is not decorative', async () => {
                 mockFetch.mockResolvedValueOnce(jsonResponse({
                     user: { store: { title: 'No id', currency: LIVE_CURRENCY } },

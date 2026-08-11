@@ -38,6 +38,7 @@ vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 vi.mock('../../src/db', () => ({
     db: {
+        delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
         select: vi.fn().mockReturnValue({
             from: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({ limit: vi.fn(() => Promise.resolve(state.selectResult)) }),
@@ -54,6 +55,9 @@ vi.mock('../../src/db', () => ({
             values: vi.fn().mockImplementation((values: Record<string, unknown>) => {
                 state.capturedInsertValues = values;
                 return {
+                    // createStore chains .onConflictDoUpdate().returning();
+                    // createPendingInstall chains .returning() directly.
+                    returning: vi.fn().mockResolvedValue([{ id: 'pending-x' }]),
                     onConflictDoUpdate: vi.fn().mockImplementation((conf: { set?: Record<string, unknown> }) => {
                         state.capturedConflict = conf;
                         return { returning: vi.fn().mockResolvedValue([{ id: 'store-x' }]) };
@@ -210,6 +214,17 @@ describe('createStore / applySyncedStoreInfo — descriptive scalars can never b
         await createStore({
             userId: 'u', platform: 'salla', storeDomain: 'x.salla.sa', accessToken: 'a',
             shopInfo: { shopName: 'م'.repeat(400) },
+        });
+
+        expect(state.capturedInsertValues?.storeName).toHaveLength(255);
+    });
+
+    it('clamps the pending-install display name too — the Salla Easy-Mode webhook writes it raw', async () => {
+        const { createPendingInstall } = await import('../../src/services/ecommerce');
+
+        await createPendingInstall('salla', {
+            storeDomain: 'x.salla.sa', accessToken: 'a', nonce: '',
+            storeName: 'م'.repeat(400),
         });
 
         expect(state.capturedInsertValues?.storeName).toHaveLength(255);

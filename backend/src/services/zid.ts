@@ -270,13 +270,45 @@ export function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extra
  * (the webhook fallback key). Envelope read shape-tolerantly [provisional].
  */
 /**
+ * A profile field was dropped because its shape is unreadable. Reported, never
+ * thrown: the drop itself is the correct handling (cosmetic fields must not
+ * abort an install), but a SILENT drop is how the next envelope drift stays
+ * invisible until it breaks something that matters — the exact failure mode of
+ * the 2026-08-11 install (a green suite, a broken wire). The storage-layer
+ * guard (fitStoreScalars) can't see these: by the time it runs, the boundary
+ * has already collapsed the value to `undefined`.
+ *
+ * Absence is not drift: `null`/`undefined` are how JSON says "no value", and a
+ * bare/blank string failing the content rule is emptiness, not a shape change —
+ * neither is reported. Only the VALUE's type ships to Sentry, never the value:
+ * profile fields carry merchant PII (email).
+ */
+function reportProfileFieldDrop(field: string, input: unknown): void {
+    if (input === undefined || input === null || typeof input === 'string') return;
+    captureError(
+        new Error(`Zid profile field '${field}' has an unreadable shape — dropped`),
+        'Zid profile field drop',
+        {
+            level: 'warning',
+            fingerprint: ['zid-profile-field-drop', field],
+            tags: { service: 'zid', action: 'profile-parse' },
+            extra: { field, receivedType: Array.isArray(input) ? 'array' : typeof input },
+        },
+    );
+}
+
+/**
  * A descriptive (non-identity) profile field. Any shape we cannot read collapses
  * to `undefined` instead of failing the parse: these fields are cosmetic, and an
  * App Market install must never abort because a display value drifted. The
  * `.catch()` is what makes that structural rather than a promise — without it a
  * single unexpected object fails the whole `parse` and takes the install with it.
  */
-const zidOptionalText = z.string().trim().min(1).optional().catch(undefined);
+const zidOptionalText = (field: string) =>
+    z.string().trim().min(1).optional().catch(({ input }) => {
+        reportProfileFieldDrop(field, input);
+        return undefined;
+    });
 
 /**
  * Zid sends `currency` as an OBJECT — `{id, name, code, symbol, country}` —
@@ -289,7 +321,13 @@ const zidOptionalText = z.string().trim().min(1).optional().catch(undefined);
 const zidOptionalCurrencyCode = z.union([
     z.string().trim().min(1),
     z.object({ code: z.string().trim().min(1) }).transform((c) => c.code),
-]).optional().catch(undefined);
+]).optional().catch(({ input }) => {
+    // An object without a readable `code` is drift worth knowing about even
+    // though objects are now the expected envelope — the field still ends up
+    // empty for the merchant.
+    reportProfileFieldDrop('currency', input);
+    return undefined;
+});
 
 /**
  * The store node of `/v1/managers/account/profile`.
@@ -306,12 +344,12 @@ const zidOptionalCurrencyCode = z.union([
  */
 const ZidStoreProfileSchema = z.object({
     id: z.union([z.string(), z.number()]).transform(String),
-    title: zidOptionalText,
-    name: zidOptionalText,
-    email: zidOptionalText,
+    title: zidOptionalText('title'),
+    name: zidOptionalText('name'),
+    email: zidOptionalText('email'),
     currency: zidOptionalCurrencyCode,
-    url: zidOptionalText,
-    domain: zidOptionalText,
+    url: zidOptionalText('url'),
+    domain: zidOptionalText('domain'),
 }).passthrough();
 
 export async function fetchStoreInfo(creds: ZidCredentials) {
@@ -342,7 +380,7 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
         }
     }
 
-    const email = store.email ?? zidOptionalText.parse(user.email);
+    const email = store.email ?? zidOptionalText('user.email').parse(user.email);
 
     return {
         storeName: store.title || store.name || undefined,

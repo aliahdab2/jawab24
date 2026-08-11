@@ -1159,7 +1159,11 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
         tokenExpiresAt: data.tokenExpiresAt,
         scopes: data.scopes || null,
         merchantId: data.merchantId || null,
-        storeName: data.storeName || null,
+        // Display-only ("connect your store '<name>'") and platform-sourced, so
+        // clamped like the store scalars. merchantId above is NOT clamped — it
+        // is the claim-matching identity, and a truncated identity that silently
+        // matches nothing is worse than a loud insert failure.
+        storeName: fitVarchar(data.storeName, pendingEcommerceInstalls.storeName) || null,
         nonce: data.nonce,
         status: 'pending',
         expiresAt: new Date(Date.now() + (data.ttlMs ?? 30 * 60 * 1000)),
