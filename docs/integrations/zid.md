@@ -9,11 +9,71 @@
 > dev-store round-trip passes — that gate is D-020's and it still stands.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
 >
+> **Merged since the rebuild, all still unvalidated against a live store:** Embedded Apps
+> direct merchant access (#704/#708, D-066/D-067) and the App Market **billing rail**
+> (#711, D-070–D-073). Merged is not deployed and deployed is not validated — see
+> **What's next** immediately below for which of the three each item has reached.
+>
 > **Exception, deliberate:** as of 2026-08-07 four *public* surfaces already describe Zid
 > as a live integration (llms.txt, llms-full.txt, the `SoftwareApplication` schema, and the
 > `about` namespace). Owner decision, taken because the Partner application is submitted
 > and approval is expected imminently. See the ⚠️ note in the live-validation checklist
 > below before changing anything on either side of that disagreement.
+
+## What's next (updated 2026-08-11)
+
+### 🔴 One thing blocks everything
+
+**App 7367 is REJECTED, and a Rejected app cannot be installed.** A real install attempt
+on dev store 3195980 fails at Zid with `error_code=EC3` *before reaching our code*. So
+every unvalidated parser on this page — OAuth, products, orders, webhooks, and now the
+billing envelope — stays unvalidated until 7367 is back in review and approved. Nothing
+below step 4 can start before that.
+
+⛔ Do **not** re-read this as "waiting on the partnership agreement". The agreement is an
+**exit** condition (technical review passes → agreement countersigned), never an entry
+one. That misreading idled this work for eight days (2026-08-01 → 08-09).
+
+### The unblock path, in order
+
+| # | Step | Depends on | Owner |
+|---|------|-----------|-------|
+| 1 | **Deploy to production.** Embedded Apps (#704/#708) and the billing rail (#711) are merged to `main` but **not deployed**. This must happen FIRST — step 2 points Zid's reviewer at `https://jawab24.com/zid/embedded`, and if that URL 404s the resubmission fails for a second, avoidable reason. | — | us |
+| 2 | **Portal changes.** Tick the **Embedded App** toggle in 7367's General Settings and set the **Application URL** to `https://jawab24.com/zid/embedded`. Also delete the stray free plan **3956 «اختبار»** while you are in there (it is deliberately unmapped, so an install on it fails loud). | 1 deployed | us |
+| 3 | **Resubmit 7367 for review**, answering the rejection: *"Direct merchant access (no sign-in prompt)"* → the auto-provision + embedded session (D-066/D-067); *"Full data integration with Zid"* → the App Market billing rail (D-070). | 2 | us |
+| 4 | **Zid approves** → install on dev store 3195980. | 3 | ⏳ Zid |
+| 5 | **Run `docs/testing/ZID_TEST_PLAN.md` A→I, capturing every response.** This is the D-020 gate. §H (billing) is the newest and least-evidenced section — see "what the first capture must collapse" below. | 4 | us |
+| 6 | **Finalize the `[provisional]` parsers from the captures**, then flip the badge and the status tables (step 6 of the checklist below) and append the D-NNN that closes D-020. | 5 | us |
+
+### Owed in parallel — NOT blocked by EC3
+
+These can all be done today; none of them needs Zid to approve anything.
+
+| Item | Why it matters | Deadline |
+|------|----------------|----------|
+| **Frontend must consume `subscription.marketplaceBilling`** | The backend refuses Stripe for a Zid merchant (400 `ZID_BILLED`) on all six surfaces, but the UI still shows them the normal plan-select and top-up CTAs — `useSelectPlan` and `BuyTopUpCTA` only know `paymentMethod === 'shopify'` and `sallaBilled`. A Zid merchant therefore clicks upgrade and gets a generic error with no explanation and no destination. | **Before the listing goes live** — harmless while Zid is `coming_soon`, a dead end the moment it is not |
+| **Correct the `sallaBilled` claim from #711's review** | #711 states Salla's answer is "byte-for-byte unchanged" at the `getUsageSummary` choke point. It is not: a merchant with a live Shopify mirror *and* an active Salla store used to get `sallaBilled: true` and now gets `undefined`. The outcome is unchanged in practice (both consumers check `paymentMethod === 'shopify'` first), so this is a wording fix in D-073's consequences — but a false "unchanged" claim on a shared path is how the next one slips through unexamined. | Next Zid/billing PR |
+| **`ZID_APP_MARKET_URL`** | Ships unset on purpose — the URL shape is undocumented and unobserved, and a guessed link would send payers to a 404. Unset means "suppress Stripe, show no link", never "do not suppress". Set it from the first real install. | Step 5 capture |
+| **`ZID_APP_ID`: 7367 or 7192?** | Unresolved. It is the webhook `original_id` **and** the `app_id` on the subscription read, so getting it wrong breaks webhook registration and billing verification together. | Step 5 capture |
+| **D-072 pricing is PROVISIONAL** | 189/379 SAR pending withholding-tax confirmation. Editable in the Partner Dashboard until the app publishes — after that it is not. | Before step 6 |
+
+### What the first live capture must collapse
+
+The billing envelope is the least-evidenced thing on this page: `GET /v1/market/app/subscription`
+has never been called against a real store, so the parser tolerates four nestings and
+several field spellings. **Do not treat a green capture as "confirmed" and move on — use
+it to DELETE tolerances.** The three questions worth the most:
+
+1. **What does a genuine "no subscription" response look like?** Only an explicit empty
+   container (`{"data": null}`) is read as a positive "nobody is paying" and may pause a
+   merchant's mirror. Everything else unparseable is `unreadable` — writes nothing, raises
+   Sentry. Getting this backwards revokes a paying merchant, which is why it fails loud.
+2. **The real value set of `subscription_status`.** Anything outside the recognised sets
+   in `services/zidBilling.ts` resolves to `unknown_status` and writes nothing.
+3. **The exact `app.market.subscription.*` event names.** Matched by prefix today,
+   deliberately, so an unrecognised one still triggers a verify.
+
+Full detail in "`[provisional]` parsers" below and `ZID_TEST_PLAN.md` §H (H-1…H-11).
 
 ## Verified API contract (docs.zid.sa, fetched 2026-08-01)
 
@@ -264,6 +324,11 @@ describe titles (grep for it).
 > **Execution run-book: `docs/testing/ZID_TEST_PLAN.md`** (created 2026-08-01,
 > authoritative — captures C1–C11, billing spec, real-traffic soak, publish rehearsal).
 > The checklist below is the condensed summary.
+>
+> **For the ORDER these run in and what is blocking today, read "What's next" at the top
+> of this file.** This section is the detail — the per-item state and the history of how
+> each was resolved. It is deliberately not a second to-do list; when the two disagree,
+> "What's next" is the one that gets updated.
 
 Prereq — ✅ DONE 2026-08-01: Partner account exists (partner.zid.sa, founder), dev store
 **3195980 "Jawab24 Dev"** (https://h47p59.zid.store/ — take out of maintenance mode
