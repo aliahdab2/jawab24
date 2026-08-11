@@ -241,42 +241,44 @@ test.describe('/business — the Business Surface', () => {
   test.describe('deleting a list', () => {
     const deleteDoor = () =>
       t('business.lists.deleteListActionFor', { list: OUTLETS.label });
-    const confirmDoor = () =>
-      t('business.lists.deleteListConfirmFor', { list: OUTLETS.label });
+    /** The product's shared destructive dialog, not a bespoke in-menu confirm. */
+    const confirmDialog = (page: import('@playwright/test').Page) =>
+      page.getByRole('dialog').filter({ hasText: t('business.lists.deleteListTitle') });
 
-    test('the first tap arms and sends nothing', async ({ page }) => {
+    test('choosing delete opens the warning dialog and sends nothing', async ({ page }) => {
       await setupMockRoutes(page);
       await page.goto(`/en/business?page=${PAGE_ID}`);
 
       await openListMenu(page);
       await page.getByRole('button', { name: deleteDoor() }).click();
 
-      // Armed, and the confirm names the blast radius.
-      await expect(page.getByRole('button', { name: confirmDoor() })).toBeVisible();
+      // The dialog states the list, the row count, and that it cannot be undone.
+      const dialog = confirmDialog(page);
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(OUTLETS.label);
+      await expect(dialog).toContainText(String(OUTLETS.rows.length));
       expect(deletedCollectionUrls).toEqual([]);
     });
 
-    test('closing the menu DISARMS — a confirm never survives out of sight', async ({ page }) => {
+    test('cancelling destroys nothing', async ({ page }) => {
       await setupMockRoutes(page);
       await page.goto(`/en/business?page=${PAGE_ID}`);
 
       await openListMenu(page);
       await page.getByRole('button', { name: deleteDoor() }).click();
-      await page.keyboard.press('Escape');
-      await openListMenu(page);
+      await confirmDialog(page).getByRole('button', { name: t('common.cancel') }).click();
 
-      // Back to the unarmed action, not a live confirm from the last visit.
-      await expect(page.getByRole('button', { name: deleteDoor() })).toBeVisible();
+      await expect(confirmDialog(page)).toHaveCount(0);
       expect(deletedCollectionUrls).toEqual([]);
     });
 
-    test('the second tap deletes that collection, and only that one', async ({ page }) => {
+    test('confirming deletes that collection, and only that one', async ({ page }) => {
       await setupMockRoutes(page);
       await page.goto(`/en/business?page=${PAGE_ID}`);
 
       await openListMenu(page);
       await page.getByRole('button', { name: deleteDoor() }).click();
-      await page.getByRole('button', { name: confirmDoor() }).click();
+      await confirmDialog(page).getByRole('button', { name: t('business.lists.deleteListAction') }).click();
 
       await expect.poll(() => deletedCollectionUrls.length).toBe(1);
       expect(deletedCollectionUrls[0]).toContain(`/fact-collections/${OUTLETS.id}`);

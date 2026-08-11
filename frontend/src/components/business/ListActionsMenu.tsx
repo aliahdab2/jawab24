@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import * as Popover from '@radix-ui/react-popover';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ConfirmationModal } from '@/components/ui';
 import { getLocaleDirection } from '@/utils/locale';
 import type { FactCollectionWithRows } from '@/lib/api';
 
@@ -55,7 +56,6 @@ export function ListActionsMenu({
 
   const close = () => {
     setOpen(false);
-    setConfirmingDelete(false);
   };
 
   const itemClass =
@@ -64,12 +64,7 @@ export function ListActionsMenu({
   return (
     <Popover.Root
       open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        // Closing DISARMS: reopening the menu must never present a live
-        // confirm from a previous visit.
-        if (!next) setConfirmingDelete(false);
-      }}
+      onOpenChange={setOpen}
     >
       <Popover.Trigger asChild>
         <button
@@ -148,26 +143,33 @@ export function ListActionsMenu({
 
           <button
             type="button"
-            onClick={() => {
-              if (!confirmingDelete) { setConfirmingDelete(true); return; }
-              close();
-              onDelete();
-            }}
+            onClick={() => { close(); setConfirmingDelete(true); }}
             disabled={saving}
-            aria-label={confirmingDelete
-              ? t('lists.deleteListConfirmFor', { list: collection.label })
-              : t('lists.deleteListActionFor', { list: collection.label })}
-            className={confirmingDelete
-              ? 'w-full min-h-[40px] flex items-center gap-2 rounded-lg px-2.5 text-sm text-start font-semibold danger-zone-btn border'
-              : `${itemClass} hover:text-red-600`}
+            aria-label={t('lists.deleteListActionFor', { list: collection.label })}
+            className={`${itemClass} hover:text-red-600`}
           >
             <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-            {confirmingDelete
-              ? t('lists.deleteListConfirm', { count: collection.rows.length })
-              : t('lists.deleteListAction')}
+            {t('lists.deleteListAction')}
           </button>
         </Popover.Content>
       </Popover.Portal>
+
+      {/* The product's own destructive confirmation — the same dialog every
+          other delete in the app uses (danger icon, red action, its own z
+          tier). An in-menu two-tap was a THIRD confirm pattern for a thing
+          that destroys a merchant's whole list, and it hid the one number
+          that matters behind a hover: this states the row count in prose and
+          demands a deliberate second gesture (owner, 2026-08-11). */}
+      <ConfirmationModal
+        isOpen={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
+        variant="danger"
+        loading={saving}
+        title={t('lists.deleteListTitle')}
+        message={t('lists.deleteListMessage', { list: collection.label, count: collection.rows.length })}
+        confirmText={t('lists.deleteListAction')}
+      />
     </Popover.Root>
   );
 }
