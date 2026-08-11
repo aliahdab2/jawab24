@@ -1443,3 +1443,56 @@ the order is the part a copy gets subtly wrong.
 - A marketplace with no self-serve destination (Salla today; Zid until its App Market
   URL is observed rather than guessed) returns no `manageUrl`. Absent means "suppress,
   but show no link" — never "do not suppress".
+
+## D-068 · The customer's certain language wins; a merchant dialect instruction picks the dialect WITHIN that language
+
+**Date:** 2026-08-11 · **Status:** Accepted (ruling) — **implementation built and measured,
+NOT shipped**; it is held on branch `fix/persona-dialect-vs-customer-language` pending a PR.
+
+**Context.** A merchant's customer wrote an Arabic thread, then asked in English — "I would
+like to know your name" — and was answered in Arabic. Traced end-to-end on the deployed
+code: the detector returned `en@0.8`, the chain resolved `en / explicit / certain=true`,
+and the prompt carried the STRONGEST "You MUST reply in English" directive. The model
+replied Arabic anyway, 4/4 — deterministic, not a sampling tail. A control page with the
+same English question over an Arabic history answered English 5/5.
+
+So this was never a detector or language-chain bug. The difference between the two pages
+was the merchant's stored persona: «سارة، لهجة ليبية احترافية في المبيعات» — an **explicit
+dialect instruction**. The model was obeying the merchant's rule over ours. `KB_LANGUAGE_BAN`
+only bans choosing a reply language because the persona happens to be *written* in it; it
+never subordinated a directive that names a dialect outright. That is the precise gap, and
+it is a **precedence question**, not a detection one.
+
+**Ruling.**
+
+1. **The customer's certain message language decides the reply language.** Nothing a
+   merchant writes in their persona, brand voice, or Business Info overrides it. Where
+   detection is uncertain the existing soft directives are unchanged — this ruling governs
+   the certain branch, which is where the conflict was observed.
+2. **A merchant language or dialect instruction selects the dialect WITHIN its own
+   language.** «تحدث باللهجة الليبية» means: when replying in Arabic, reply in Libyan
+   Arabic. It does not mean: reply in Arabic. Tone and dialect are translated across the
+   language boundary; the language itself is not carried over.
+3. **This is not a licence to flatten merchant voice.** The counter-probes are part of the
+   ruling: an Arabic price question must still come back in Libyan Arabic with the facts
+   intact. A change that wins the language case by dulling the persona has failed.
+
+**Alternatives rejected.** *Merchant-rule-wins* (close as by-design) contradicts the
+shipped language spec and the industry standard — Intercom Fin makes an explicit customer
+language attribute win absolutely. *An explicit per-page reply-language override* is Gap A,
+owner-PARKED on 2026-07-29; it is a different feature and would not have fixed this thread,
+where the customer's language was already known with certainty.
+
+**Consequences.**
+- The fix is a **per-call prompt block — no `PROMPT_VERSION` bump**, so the semantic reply
+  cache is preserved (Rule 17.1). Any future strengthening of the certain branch must keep
+  that property.
+- **Demonstrations beat rules**, measured across four wording arms on the real-KB fixture
+  (8 reps each, production sampling): the rule text alone left it at 7/8 wrong; adding the
+  conflict clause after the BRAND VOICE NOTES block reached 2/8; disambiguating the static
+  IDENTITY rule's phrase "in the customer's own dialect" (`systemPrompt.ts`) reached 1/8;
+  an incident-shaped demonstration inside `KB_LANGUAGE_BAN` reached **0/16**.
+- The static prompt prefix is untouchable without a `PROMPT_VERSION` bump, so the IDENTITY
+  phrase is disambiguated from the per-call side rather than edited in place.
+- What this does NOT settle: the degraded-French gap (XGAP case #758) is a *detection*
+  failure, not a precedence one, and is unaffected. Gap A stays parked.

@@ -90,6 +90,48 @@ since 2026-08-02.
 "Get Started" / «بدء الاستخدام» openers are system phrases: they fire the greeting when
 enabled and are silently suppressed otherwise — they never reach the AI.
 
+## Test reply («اختبار الرد الذكي») — settings it applies
+
+`POST /pages/:id/test-reply` (`controllers/pages.ts` → `buildPlaygroundContext` →
+`replyGenerator.generateForPlayground`) exists to show the merchant the reply their
+customers would get. Anything the production pipeline applies that it omits is a lie to
+the merchant, so the settings below resolve from the **page's own workspace** — the same
+`workspaceSettingsService.getSettings(page.workspaceId)` object `messageProcessor` and
+`commentProcessor` read:
+
+| Setting | How the test reply resolves it |
+|---------|-------------------------------|
+| `brandVoiceNotes` / `brandVoiceNotesMulti` | `resolveBrandVoiceNotes(wsSettings, question)` — the same choke point `enrichPageContext` uses for production replies |
+| `replyStyle` | `wsSettings.replyStyle` (the ai-worker defaults to `professional` when absent) |
+| `defaultReplyLanguage`, `timezone` | `wsSettings` |
+| `commentReplyMode` + `dualReplyNudgeVariations` | the owner row, `settingsService.getSettings(page.userId)`. ⚠️ **Known drift** — see below |
+
+**Never resolve a pipeline field here from the owner row.** `settingsService.getSettings`
+overlays the pipeline fields (`services/pipelineFields.ts`) from
+`resolveWorkspaceId(userId)`, an **unordered `limit(1)`** over the user's workspace
+memberships. For a merchant who holds more than one workspace — a personal one beside a
+store one, which D-066 Zid installs auto-provision — that resolves an arbitrary workspace,
+so the merchant can be shown another workspace's persona, tone, or comment mode.
+`commentReplyMode` / `dualReplyNudgeVariations` still read it and carry that risk; they
+are left as tracked drift rather than folded in, because changing which comment mode the
+test reply previews moves eval baselines.
+
+**Admin overrides still win.** The admin playground (`services/admin/kb.ts`) and the eval
+harness may pass an explicit `brandVoiceNotes` / `replyStyle`; a supplied value is used
+verbatim and only an *absent* one falls back to the stored setting. A settings read that
+fails degrades to no persona — it never fails the test reply.
+
+> **Why this is called out:** until 2026-08-11 those two options were labelled "admin-only
+> overrides" and had no fallback, so the merchant test answered «تمام يهمني، نبي نجرب»
+> with a self-serve link while production — carrying the stored persona's "ask for the
+> customer's name and WhatsApp number" instruction — answered «تمام، ابعث لي اسمك ورقم
+> واتساب…». Pinned by `backend/test/services/reply/playgroundPersona.test.ts`.
+
+**Other known drift** (production applies, the test reply does not): the narrative
+`--- Business Info ---` block that `enrichPageContext` appends to the KB from
+`formatBusinessProfile(page.businessProfile)` (business type / about / website). Fixing it
+moves every eval baseline, so it is tracked separately rather than folded in here.
+
 ## Field reference (`UserSettings`, `backend/src/types/settings.ts`)
 
 | Field | Used by | Semantics |
@@ -108,8 +150,8 @@ enabled and are silently suppressed otherwise — they never reach the AI.
 | `commentEscalationMinutes` / `messageEscalationMinutes` | `escalation.ts` cron | Unanswered-thread thresholds (defaults 60 / 30) before Needs Attention escalation. |
 | `handoffPauseDurationMinutes` | gate 3 | How long a manual reply pauses the AI on that thread. |
 | `holdLowConfidence` | gate 6 | Park low-confidence replies for review. See lead-capture defect above. |
-| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. |
-| `replyStyle` | `ai.ts` context + reply-cache key | Sent to the ai-worker and part of the semantic cache key. Prompt-side use marked `[future]` in `pages.ts` — verify before building on it. |
+| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. Always resolved through `resolveBrandVoiceNotes(settings, message)` (`services/reply/contextEnricher.ts`) — it is also a reply-cache key segment (`bv:`), so a second copy of the language-pick rule strands warmed entries. |
+| `replyStyle` | prompt builder + `ai.ts` context + reply-cache key | `professional` / `casual` / `enthusiastic`. Selects the tone directive in the ai-worker's `styleMap` (`promptBuilder.ts:379`) and is part of the semantic cache key. (The `[future]` markers next to it in `services/pages.ts:537` are about wiring its *writer* into prompt-cache invalidation, NOT about whether the prompt reads it — it does, today.) |
 | `dashboardLanguage` | frontend | UI locale only — never reply language. |
 | `defaultReplyLanguage` + `supportedLanguages` + `autoDetectLanguage` | language resolution | Template/reply language pick (`resolveLanguage`). |
 | `notificationsEnabled` / `newLeadAlertsEnabled` | push/email | Notification toggles. |
