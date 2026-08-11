@@ -751,4 +751,93 @@ describe('Settings Service', () => {
             expect(result.commentsAutoReply).toBe(false);
         });
     });
+
+    /**
+     * The caller's workspace must win over `resolveWorkspaceId`, which is an
+     * UNORDERED `limit(1)` over the user's memberships and therefore arbitrary for
+     * anyone holding more than one (team invites, D-066 Zid installs, page transfer).
+     *
+     * On the write side this is an authorization boundary, not a preference: the
+     * route gates on `requireRole('admin')` against the workspace `resolveWorkspace`
+     * resolved, so a pipeline write routed anywhere else lands in a workspace whose
+     * role was never checked — and ignores the workspace pin a restricted embedded
+     * session carries (D-067). See `backend/docs/SETTINGS_RESOLUTION.md`.
+     *
+     * Throughout, `membershipRows` holds the workspace the ARBITRARY resolver would
+     * pick, and the explicit argument names a DIFFERENT one, so a regression cannot
+     * pass by coincidence.
+     */
+    describe('explicit workspace scoping', () => {
+        const ARBITRARY = 'ws_arbitrary';
+        const REQUESTED = 'ws_requested';
+
+        beforeEach(() => {
+            hoisted.membershipRows.length = 0;
+            hoisted.membershipRows.push({ workspaceId: ARBITRARY });
+        });
+
+        it('overlays from the workspace the caller names, not the arbitrary membership', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+            vi.mocked(workspaceSettingsService.getSettings).mockImplementation(async (id: string) =>
+                (id === REQUESTED ? { replyStyle: 'casual' } : { replyStyle: 'enthusiastic' }) as any);
+
+            const result = await settingsService.getSettings('user_123', REQUESTED);
+
+            expect(vi.mocked(workspaceSettingsService.getSettings)).toHaveBeenCalledWith(REQUESTED);
+            expect(result.replyStyle).toBe('casual');
+        });
+
+        it('honours the named workspace on the Redis cache-hit path too', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            // The cache stores the UN-overlaid legacy row, so the overlay still runs.
+            vi.mocked(redis.get).mockResolvedValueOnce(JSON.stringify({ ...baseSettings }));
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ replyStyle: 'casual' } as any);
+
+            const result = await settingsService.getSettings('user_123', REQUESTED);
+
+            expect(vi.mocked(workspaceSettingsService.getSettings)).toHaveBeenCalledWith(REQUESTED);
+            expect(result.replyStyle).toBe('casual');
+        });
+
+        it('syncs pipeline fields to the NAMED workspace — the authorization boundary', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({} as any);
+            const mockReturning = vi.fn().mockResolvedValue([{ ...baseSettings, commentsAutoReply: false }]);
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: mockReturning }) }),
+            } as any);
+
+            await settingsService.updateSettings('user_123', { commentsAutoReply: false }, REQUESTED);
+
+            expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
+                REQUESTED,
+                expect.objectContaining({ commentsAutoReply: false }),
+            );
+            expect(vi.mocked(workspaceSettingsService.updateSettings)).not.toHaveBeenCalledWith(
+                ARBITRARY,
+                expect.anything(),
+            );
+        });
+
+        it('still falls back to the membership when no workspace is named (login payload)', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ replyStyle: 'enthusiastic' } as any);
+
+            const result = await settingsService.getSettings('user_123');
+
+            expect(vi.mocked(workspaceSettingsService.getSettings)).toHaveBeenCalledWith(ARBITRARY);
+            expect(result.replyStyle).toBe('enthusiastic');
+        });
+    });
 });

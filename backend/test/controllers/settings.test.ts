@@ -46,6 +46,13 @@ describe('SettingsController', () => {
             query: {},
             params: {},
             body: {},
+            // Both routes run the `resolveWorkspace` preHandler, so a handler always
+            // sees a resolved workspace. Every settings read and write must be scoped
+            // to it — for the write it is the workspace `requireRole` authorized.
+            // See backend/docs/SETTINGS_RESOLUTION.md.
+            workspaceId: 'ws-123',
+            workspaceRole: 'admin',
+            workspaceOwnerId: 'user-123',
             log: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
         } as any;
     });
@@ -64,7 +71,8 @@ describe('SettingsController', () => {
 
             await settingsController.get(mockRequest as any, mockReply as any);
 
-            expect(settingsService.getSettings).toHaveBeenCalledWith('user-123');
+            // Scoped to the request's resolved workspace, not an arbitrary membership.
+            expect(settingsService.getSettings).toHaveBeenCalledWith('user-123', 'ws-123');
             // Response spreads settings + the server capability flag (object storage off in tests).
             expect(mockReply.send).toHaveBeenCalledWith({ ...settings, triggerImagesEnabled: false });
         });
@@ -102,7 +110,9 @@ describe('SettingsController', () => {
             (mockRequest as any).body = updates;
             await settingsController.update(mockRequest as any, mockReply as any);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', updates);
+            // The workspace argument is the authorization boundary — the pipeline write
+            // must land in the workspace requireRole checked, never a re-derived one.
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', updates, 'ws-123');
             expect(mockReply.send).toHaveBeenCalledWith(updatedSettings);
         });
 
@@ -139,7 +149,7 @@ describe('SettingsController', () => {
                     en: "Hello", // Auto-translated!
                     sourceLang: "ar"
                 })
-            }));
+            }), 'ws-123');
         });
 
         it('should return 400 when validation fails', async () => {

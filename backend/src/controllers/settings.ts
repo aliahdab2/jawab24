@@ -63,7 +63,10 @@ export class SettingsController {
             }
 
             const userId = request.user.userId;
-            const settings = await settingsService.getSettings(userId);
+            // Overlay the pipeline fields from the workspace THIS request resolved
+            // (`resolveWorkspace` middleware — token pin → X-Workspace-Id → default),
+            // not from an arbitrary membership. See docs/SETTINGS_RESOLUTION.md.
+            const settings = await settingsService.getSettings(userId, (request as WorkspaceRequest).workspaceId);
             // Server capability flag (not a stored setting): Post Reply image attachments
             // are available only when object storage is configured. The frontend gates
             // the image picker on this.
@@ -86,6 +89,11 @@ export class SettingsController {
             }
 
             const userId = request.user.userId;
+            // The workspace `resolveWorkspace` resolved and `requireRole('admin')`
+            // authorized. Every read and write below is scoped to it — re-deriving it
+            // from the userId would let the pipeline write land in a workspace whose
+            // role was never checked. See docs/SETTINGS_RESOLUTION.md.
+            const workspaceId = (request as WorkspaceRequest).workspaceId;
 
             // Validate request body
             const validation = validateSchema(UpdateSettingsSchema, request.body);
@@ -99,8 +107,9 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Fetch current settings for comparison
-            const currentSettings = await settingsService.getSettings(userId);
+            // Fetch current settings for comparison — same workspace as the write, so
+            // the translation diff and the activation edge below compare like with like.
+            const currentSettings = await settingsService.getSettings(userId, workspaceId);
 
             // --- Smart Auto-Translation Logic (JSONB) ---
             const supportedLanguages = currentSettings.supportedLanguages || ['ar', 'en'];
@@ -213,20 +222,19 @@ export class SettingsController {
             if (updates.brandVoiceNotesMulti !== undefined && updates.brandVoiceNotesMulti !== null) {
                 updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
             }
-            const settings = await settingsService.updateSettings(userId, updates);
+            const settings = await settingsService.updateSettings(userId, updates, workspaceId);
 
             // Activation funnel (D-026): a save that turns an auto-reply master ON
             // (comments or messages, false→true) is the real activation moment for
             // new signups — the page-level toggle no longer counts alone.
             // currentSettings is the effective (workspace-overlaid) state.
-            const wsReq = request as WorkspaceRequest;
             const prevOn = !!(currentSettings.commentsAutoReply || currentSettings.messagesAutoReply);
             const nextOn = !!((updates.commentsAutoReply ?? currentSettings.commentsAutoReply)
                 || (updates.messagesAutoReply ?? currentSettings.messagesAutoReply));
-            if (!prevOn && nextOn && wsReq.workspaceId) {
+            if (!prevOn && nextOn && workspaceId) {
                 void recordAutoreplyEnabledIfEffective(
-                    wsReq.workspaceOwnerId ?? userId,
-                    wsReq.workspaceId,
+                    (request as WorkspaceRequest).workspaceOwnerId ?? userId,
+                    workspaceId,
                     { source: 'settings' },
                 );
             }

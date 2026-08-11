@@ -16,6 +16,18 @@ vi.mock('../../src/utils/validation', () => ({
     UpdateSettingsSchema: {}
 }));
 
+/** The workspace `resolveWorkspace` puts on the request (see mockRequest below). */
+const WORKSPACE_ID = 'ws-123';
+
+/**
+ * Assert the translated payload AND that the write was scoped to the request's
+ * workspace. Every save must carry it: that is the workspace `requireRole` authorized,
+ * and re-deriving it from the userId would let the pipeline write land in a workspace
+ * whose role was never checked (backend/docs/SETTINGS_RESOLUTION.md).
+ */
+const expectUpdateWith = (payload: unknown) =>
+    expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', payload, WORKSPACE_ID);
+
 describe('SettingsController Auto-Translation Logic', () => {
     let mockRequest: any;
     let mockReply: any;
@@ -48,6 +60,11 @@ describe('SettingsController Auto-Translation Logic', () => {
         mockRequest = {
             user: { userId: 'user-123' },
             body: {},
+            // The route runs `resolveWorkspace` + `requireRole('admin')`, so a handler
+            // always sees a resolved workspace and must scope its write to it.
+            workspaceId: WORKSPACE_ID,
+            workspaceRole: 'admin',
+            workspaceOwnerId: 'user-123',
             log: { error: vi.fn(), info: vi.fn(), debug: vi.fn() }
         };
 
@@ -77,7 +94,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         await settingsController.update(mockRequest, mockReply);
 
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا 2',
                 en: 'مرحبا 2 [translated to en]',
@@ -125,7 +142,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         await settingsController.update(mockRequest, mockReply);
 
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا New',
                 en: 'Hello New',
@@ -148,7 +165,7 @@ describe('SettingsController Auto-Translation Logic', () => {
         await settingsController.update(mockRequest, mockReply);
 
         expect(translationService.translateText).not.toHaveBeenCalled();
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا',          // preserved — was manually written
                 en: 'Hello Edited',
@@ -171,7 +188,7 @@ describe('SettingsController Auto-Translation Logic', () => {
         // AR (the source) is preserved and sourceLang stays pointing at AR — the
         // language that still has manual content. Without this, the frontend
         // would render AR as "translated from EN" with placeholder styling.
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا',
                 en: '',
@@ -194,7 +211,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         // Since AR was the sourceLang and AR was cleared, all languages
         // reset to their defaults (not empty strings).
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'أهلاً بك! كيف يمكنني مساعدتك؟',
                 en: 'Welcome! How can I help you?',
@@ -213,7 +230,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         await settingsController.update(mockRequest, mockReply);
 
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+        expectUpdateWith(expect.objectContaining({
             awayMessageMulti: expect.objectContaining({
                 ar: 'مغلق',
                 en: 'مغلق [translated to en]',
@@ -237,7 +254,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 brandVoiceNotesMulti: expect.objectContaining({
                     ar: 'اذكر التوصيل المجاني',
                     en: 'اذكر التوصيل المجاني [translated to en]',
@@ -265,7 +282,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 brandVoiceNotesMulti: expect.objectContaining({
                     ar: 'Always mention free delivery and Ramadan Kareem [translated to ar]',
                     en: 'Always mention free delivery and Ramadan Kareem',
@@ -284,7 +301,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 brandVoiceNotesMulti: expect.objectContaining({
                     ar: 'ملاحظة عربية',
                     en: 'English note',
@@ -322,7 +339,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             // Both reset to defaults — EN was derived from AR
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
                     en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
@@ -356,7 +373,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             // Only EN cleared, AR (source) preserved. sourceLang stays 'ar' — pointing
             // at the language that still has manual content, not the cleared field.
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: 'نحن مغلقون الآن',
                     en: '',
@@ -388,7 +405,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             // Both reset to defaults
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 dualReplyNudgeMulti: expect.objectContaining({
                     ar: 'أرسلنا لك التفاصيل برسالة خاصة 📩',
                     en: 'Details sent via private message 📩',
@@ -421,7 +438,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             // sourceLang is undefined → currentSourceLang !== sourceLang ('ar') → non-source-cleared branch.
             // Only AR is cleared, EN preserved. sourceLang now points at EN — the language that still
             // has manual content — so the frontend doesn't render EN with placeholder styling.
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: '',
                     en: 'Old message',
@@ -451,7 +468,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             // Both reset to empty defaults (brandVoiceNotes has no default messages)
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 brandVoiceNotesMulti: expect.objectContaining({
                     ar: '',
                     en: '',
@@ -515,7 +532,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     ar: 'مرحبا يا أصدقاء',         // preserved
                     en: 'Welcome to my shop',
@@ -541,7 +558,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     ar: 'أهلاً وسهلاً',
                     en: 'Welcome to my shop',     // preserved
@@ -568,7 +585,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     ar: 'مرحبا يا أصدقاء',         // still preserved on second edit
                     en: 'Welcome v2',
@@ -594,7 +611,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: 'بنرد عليك بكرة الصبح',
                     en: 'Closed for the holiday',
@@ -620,7 +637,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 brandVoiceNotesMulti: expect.objectContaining({
                     ar: 'استخدم لهجة شامية',
                     en: 'Be casual and friendly',
@@ -648,7 +665,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     en: 'Welcome to my shop!',
                     ar: 'Welcome to my shop! [translated to ar]',
@@ -714,7 +731,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     ar: 'مرحبا بك في معهدنا', // preserved
                     en: '',
@@ -744,7 +761,7 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).not.toHaveBeenCalled();
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     ar: '',
                     en: 'Welcome to our institute',
@@ -770,7 +787,7 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            expectUpdateWith(expect.objectContaining({
                 greetingMessageMulti: expect.objectContaining({
                     sourceLang: 'default',
                 }),

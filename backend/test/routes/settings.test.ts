@@ -127,7 +127,9 @@ describe('Settings Routes', () => {
             expect(body.userId).toBe('user_123');
             expect(body.dashboardLanguage).toBe('ar');
             expect(body.commentReplyMode).toBe('public');
-            expect(settingsService.getSettings).toHaveBeenCalledWith('user_123');
+            // Scoped to the workspace `resolveWorkspace` put on the request, so the read
+            // reports the pipeline state of the workspace the client is actually viewing.
+            expect(settingsService.getSettings).toHaveBeenCalledWith('user_123', 'test_workspace_id');
         });
 
         it('should create default settings if none exist', async () => {
@@ -174,7 +176,7 @@ describe('Settings Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(settingsService.getSettings).toHaveBeenCalledWith('new_user');
+            expect(settingsService.getSettings).toHaveBeenCalledWith('new_user', 'test_workspace_id');
         });
 
         it('should return 401 without auth token', async () => {
@@ -253,9 +255,11 @@ describe('Settings Routes', () => {
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.body);
             expect(body.dashboardLanguage).toBe('en');
+            // Third argument = the workspace the middleware resolved and requireRole
+            // authorized. The pipeline write must land there and nowhere else.
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user_123', {
                 dashboardLanguage: 'en',
-            });
+            }, 'test_workspace_id');
         });
 
         it('should update comment reply mode to public', async () => {

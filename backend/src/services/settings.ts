@@ -54,8 +54,14 @@ export class SettingsService {
      * default to ON); for every converged workspace the overlay is an
      * identity function, because all legacy writers sync to the workspace
      * store and the drift-heal converges the rest.
+     *
+     * `workspaceId` names WHICH workspace to overlay from and should be supplied by
+     * every caller that has one — in a route handler that is `request.workspaceId`,
+     * already resolved and membership-checked by the `resolveWorkspace` middleware.
+     * Omitting it falls back to `resolveWorkspaceId`, an arbitrary membership; see the
+     * warning on that method and `docs/SETTINGS_RESOLUTION.md`.
      */
-    async getSettings(userId: string): Promise<UserSettings> {
+    async getSettings(userId: string, workspaceId?: string): Promise<UserSettings> {
         const key = cacheKey(userId);
 
         // Try cache first — fail open so a Redis outage never blocks replies
@@ -65,6 +71,7 @@ export class SettingsService {
                 return this.overlayWorkspacePipelineFields(
                     userId,
                     normalizeMultiFields(JSON.parse(cached) as UserSettings),
+                    workspaceId,
                 );
             }
         } catch {
@@ -97,17 +104,23 @@ export class SettingsService {
             // Redis unavailable — continue without caching
         }
 
-        return this.overlayWorkspacePipelineFields(userId, result);
+        return this.overlayWorkspacePipelineFields(userId, result, workspaceId);
     }
 
     /**
      * Serve pipeline fields from the workspace store (the pipeline's read
      * target) over the legacy row. Fails open to the legacy values — a
      * workspace-store hiccup must never break a settings read.
+     *
+     * `explicitWorkspaceId` is the caller's resolved workspace when it has one.
      */
-    private async overlayWorkspacePipelineFields(userId: string, result: UserSettings): Promise<UserSettings> {
+    private async overlayWorkspacePipelineFields(
+        userId: string,
+        result: UserSettings,
+        explicitWorkspaceId?: string,
+    ): Promise<UserSettings> {
         try {
-            const workspaceId = await this.resolveWorkspaceId(userId);
+            const workspaceId = explicitWorkspaceId ?? await this.resolveWorkspaceId(userId);
             if (!workspaceId) return result;
 
             const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
@@ -137,11 +150,18 @@ export class SettingsService {
      * Also syncs pipeline-relevant fields to workspaceSettings so the reply
      * pipeline (commentProcessor / messageProcessor) picks them up immediately,
      * regardless of whether this call comes from the HTTP controller or directly.
+     *
+     * `workspaceId` names WHICH workspace receives the pipeline fields, and an HTTP
+     * caller MUST pass `request.workspaceId`. That is the workspace `requireRole`
+     * authorized; re-deriving it here from the userId would let a write land in a
+     * workspace whose role was never checked, and would ignore the workspace pin on a
+     * restricted embedded session (D-067). See `docs/SETTINGS_RESOLUTION.md`.
      */
-    async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
+    async updateSettings(userId: string, updates: UpdateSettingsDTO, workspaceId?: string): Promise<UserSettings> {
         // Ensure settings exist; the effective (overlaid) state also feeds the
-        // aiEnabled clamp below.
-        const current = await this.getSettings(userId);
+        // aiEnabled clamp below — read from the SAME workspace this write targets,
+        // or the clamp compares against another workspace's channel state.
+        const current = await this.getSettings(userId, workspaceId);
 
         // D-029: aiEnabled is DERIVED (channels-OR) and the new UI has no
         // standalone master switch — but old clients (shipped mobile builds)
@@ -187,27 +207,23 @@ export class SettingsService {
         }
 
         // Sync pipeline fields to workspaceSettings so the reply pipeline sees them
-        await this.syncPipelineFieldsToWorkspace(userId, updates);
+        await this.syncPipelineFieldsToWorkspace(userId, updates, workspaceId);
 
         // Read-after-write consistency: the sync above is awaited, so the
         // workspace store already reflects this update (D-026).
-        return this.overlayWorkspacePipelineFields(userId, result);
+        return this.overlayWorkspacePipelineFields(userId, result, workspaceId);
     }
 
     /**
-     * Resolve the user's (single) workspace. Shared by the pipeline-field sync
-     * and the read-path overlay.
-     * Each user currently belongs to exactly one workspace (owner role).
-     * limit(1) is intentional — multi-workspace would require a separate migration.
-     */
-    /**
-     * In-process memo for the userId→workspaceId mapping. The mapping is
-     * effectively immutable (one workspace per user, created at signup), and
-     * since the overlay runs on EVERY settings read — including Redis cache
-     * hits — an uncached SELECT here would put a Postgres roundtrip on all hot
-     * auth/profile paths. Only non-null results are cached so a user whose
-     * workspace appears later isn't pinned to null; entries are one small
-     * string per active user, so unbounded growth is not a concern.
+     * In-process memo for the userId→workspaceId mapping, used only by the
+     * `resolveWorkspaceId` fallback below. Since the overlay runs on EVERY settings
+     * read — including Redis cache hits — an uncached SELECT there would put a
+     * Postgres roundtrip on all hot auth/profile paths. Only non-null results are
+     * cached so a user whose workspace appears later isn't pinned to null; entries are
+     * one small string per active user, so unbounded growth is not a concern.
+     *
+     * ⚠️ It also makes the fallback's arbitrary pick STICKY for the life of the
+     * process, and two processes can memo different workspaces for the same user.
      */
     private workspaceIdCache = new Map<string, string>();
 
@@ -217,6 +233,23 @@ export class SettingsService {
         this.workspaceIdCache.clear();
     }
 
+    /**
+     * ⚠️ LAST-RESORT resolver — pass an explicit `workspaceId` instead wherever one
+     * exists. This is an UNORDERED `limit(1)` over the user's memberships, so for a
+     * user who holds more than one it returns an ARBITRARY workspace. Multi-membership
+     * is reachable today: team invites (`workspaceService.addMember`), D-066 Zid
+     * installs provisioning a store workspace beside a personal one, and page transfer.
+     *
+     * It also knows nothing about the workspace pin on a restricted embedded session
+     * (D-067) or the `X-Workspace-Id` header, both of which `resolveWorkspace`
+     * (`middleware/workspace.ts`) honors — so anything HTTP-facing must use
+     * `request.workspaceId`, never this.
+     *
+     * Kept only for the callers that genuinely have no workspace in hand — the login
+     * payload (`controllers/auth.ts`), which runs before any workspace header exists
+     * and reads only `dashboardLanguage`, a field the overlay cannot change.
+     * Full map and the alternatives: `docs/SETTINGS_RESOLUTION.md`.
+     */
     private async resolveWorkspaceId(userId: string): Promise<string | null> {
         const cached = this.workspaceIdCache.get(userId);
         if (cached) return cached;
@@ -235,7 +268,11 @@ export class SettingsService {
      * the update payload into workspaceSettings.
      * Fire-and-forget: failures are logged but never surfaced to the caller.
      */
-    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO): Promise<void> {
+    private async syncPipelineFieldsToWorkspace(
+        userId: string,
+        updates: UpdateSettingsDTO,
+        explicitWorkspaceId?: string,
+    ): Promise<void> {
         try {
             const pipelineUpdates = Object.fromEntries(
                 PIPELINE_FIELDS
@@ -244,7 +281,7 @@ export class SettingsService {
             );
             if (Object.keys(pipelineUpdates).length === 0) return;
 
-            const workspaceId = await this.resolveWorkspaceId(userId);
+            const workspaceId = explicitWorkspaceId ?? await this.resolveWorkspaceId(userId);
             if (!workspaceId) return;
 
             await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);

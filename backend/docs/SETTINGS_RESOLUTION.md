@@ -109,9 +109,9 @@ Three reachable paths, all shipped:
 
 | Call site | Fields read | Verdict |
 |---|---|---|
-| `controllers/auth.ts:98/328/759`, `plugins/demo/index.ts:83` | full row for the login payload | ⚠️ Overlaid via resolver 3. Display-only, but see D-1 below |
-| `controllers/settings.ts:66` (GET `/settings`) | full row, overlaid | ❌ **D-1** — ignores `request.workspaceId` |
-| `controllers/settings.ts:103` + `settingsService.updateSettings` (PUT `/settings`) | full row; **writes** pipeline fields | ❌ **D-2** — ignores `request.workspaceId` on a write |
+| `controllers/auth.ts:98/328/759`, `plugins/demo/index.ts:83` | **only `dashboardLanguage`** — verified, it is the sole field consumed | ✅ Safe. `dashboardLanguage` is not a pipeline field, so resolver 3's pick cannot affect the answer. The overlay it triggers is pure waste on every login (a membership lookup + a workspace-settings read for a field the overlay never touches) — worth removing, but it is a performance item, not a correctness one |
+| `controllers/settings.ts` GET `/settings` | full row, overlaid | ✅ **fixed** — passes `request.workspaceId` |
+| `controllers/settings.ts` PUT `/settings` + `settingsService.updateSettings` | full row; **writes** pipeline fields | ✅ **fixed** — passes `request.workspaceId` |
 | `services/postSuggestions.ts:229` | `brandVoiceNotes` (legacy scalar) | ❌ **D-3** |
 | `scripts/warm-reply-cache.ts:128` | `commentReplyMode` | ⚠️ **D-4** |
 | `reply/playgroundContext.ts:94` | `commentReplyMode`, `dualReplyNudgeVariations` | ⚠️ **D-4** |
@@ -120,7 +120,7 @@ Three reachable paths, all shipped:
 
 ## 5. The defects, in severity order
 
-### D-2 — PUT `/settings` writes pipeline fields to a workspace whose role was never checked
+### D-2 — PUT `/settings` wrote pipeline fields to a workspace whose role was never checked ✅ FIXED
 
 The route already resolves the workspace correctly and gates on it:
 
@@ -130,10 +130,10 @@ routes/settings.ts:44   preHandler: requireRole('admin')  → checks request.wor
 ```
 
 `requireRole` gates on `request.workspaceRole` (`middleware/workspace.ts:177`) — the role
-in the **resolved** workspace. But the handler then calls
-`settingsService.updateSettings(userId, updates)`, which reaches
-`syncPipelineFieldsToWorkspace` → `resolveWorkspaceId(userId)` (**resolver 3**) and writes
-there (`settings.ts:247-250`). The resolved workspace is on the request and is discarded.
+in the **resolved** workspace. But the handler then called
+`settingsService.updateSettings(userId, updates)`, which reached
+`syncPipelineFieldsToWorkspace` → `resolveWorkspaceId(userId)` (**resolver 3**) and wrote
+there. The resolved workspace was on the request and was discarded.
 
 Consequences when resolver 3's arbitrary pick ≠ the resolved workspace:
 
@@ -148,18 +148,21 @@ Consequences when resolver 3's arbitrary pick ≠ the resolved workspace:
 - **Silent.** The write succeeds, the response returns the legacy row overlaid from the
   same wrong workspace, so the UI shows the save as applied.
 
-This is a change to a shared write path, so per the review rules it is Critical until
-someone demonstrates the two resolvers cannot disagree.
+**The fix:** `getSettings` and `updateSettings` take an explicit `workspaceId`, and the
+controller passes `request.workspaceId` — the workspace `requireRole` authorized. Pinned by
+`test/services/settings.test.ts` → "explicit workspace scoping", where the arbitrary
+membership and the named workspace are deliberately different so a regression cannot pass
+by coincidence.
 
-### D-1 — GET `/settings` can answer for a different workspace than the request asked for
+### D-1 — GET `/settings` could answer for a different workspace than the request asked for ✅ FIXED
 
 Same cause, read side. The client sends `X-Workspace-Id: A`; `resolveWorkspace` verifies
-membership and sets `request.workspaceId = A`; the handler calls
-`settingsService.getSettings(userId)`, whose overlay pulls pipeline fields from resolver
-3's pick. A merchant switching workspaces in the UI can be shown the other one's toggles.
+membership and sets `request.workspaceId = A`; the handler called
+`settingsService.getSettings(userId)`, whose overlay pulled pipeline fields from resolver
+3's pick. A merchant switching workspaces in the UI could be shown the other one's toggles.
 
-The same overlay runs inside the login payload (`controllers/auth.ts`), so a fresh login
-can seed the UI from the wrong workspace before any header exists.
+The login payload is **not** affected: all four login/demo call sites consume only
+`dashboardLanguage`, which is not a pipeline field.
 
 ### D-3 — Post suggestions use the *English* persona, on a live feature
 
@@ -214,18 +217,22 @@ Concretely:
    warmed entries. Never read `brandVoiceNotes` (the scalar) directly — it is the
    English-first legacy mirror.
 
-### The structural fix
+### Status
 
-Fixing the call sites one at a time leaves resolver 3 in place for the next one to reach
-for. The prevention-over-detection version (Rule 14) is to make the wrong thing
-unavailable:
-
-1. Give `settingsService.getSettings` / `updateSettings` an explicit `workspaceId`
-   parameter and have the settings controller pass `request.workspaceId`.
-2. Make `resolveWorkspaceId` private and use it only where no workspace can be supplied
-   (the login payload), with that exception named in a comment.
-3. Point `postSuggestions` at the workspace store (D-3).
-4. Fold `commentReplyMode` / nudge onto the workspace store with an eval mirror (D-4).
-
-Steps 1–2 are one contained change to a shared path and want their own PR, their own
-tests, and the integration suite — not a rider on a persona fix.
+1. ✅ **Done.** `settingsService.getSettings` / `updateSettings` take an explicit
+   `workspaceId`; the settings controller passes `request.workspaceId`. Resolver 3 is now
+   a documented last-resort fallback, kept only for callers that hold no workspace.
+2. ⬜ **Open — D-3.** Point `postSuggestions` at the workspace store, through
+   `resolveBrandVoiceNotes`. Small, local, and user-visible today.
+3. ⬜ **Open — D-4.** Fold `commentReplyMode` / the dual-reply nudge onto the workspace
+   store in `playgroundContext` and `warm-reply-cache`. Needs the Rule 19 eval mirror,
+   because it changes which comment mode the test reply previews.
+4. ⬜ **Open — cleanup.** Six user-scoped helpers on `SettingsService`
+   (`isCommentsAutoReplyEnabled`, `isMessagesAutoReplyEnabled`, `getAwayMessage`,
+   `getGreetingMessage`, `getLimitFallbackMessage`, `getReplyDelay`) have **no production
+   callers** — only tests. `workspaceSettings.ts` carries the workspace-scoped equivalents
+   that production actually uses. They are latent traps: each one routes through resolver
+   3, so the next caller inherits the bug. Delete them with their tests.
+5. ⬜ **Optional.** Drop the pointless overlay on the login path (see the table above) —
+   a membership lookup plus a workspace-settings read per login, for a field the overlay
+   cannot change.
