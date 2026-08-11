@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { authService, ACCESS_TOKEN_EXPIRY, MOBILE_DEEP_LINK_TOKEN_EXPIRY } from '../services/auth';
+import { authService, ACCESS_TOKEN_EXPIRY, MOBILE_DEEP_LINK_TOKEN_EXPIRY, EMBEDDED_BREAKOUT_TOKEN_EXPIRY } from '../services/auth';
 import { cookiesService } from '../services/cookies';
 import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
@@ -437,7 +437,17 @@ export class AuthController {
         if (!user) {
             return reply.status(404).send({ error: 'User not found' });
         }
-        return reply.send({ code: await authService.mintBrowserHandoffCode(user.id) });
+        // Carry the CALLER's restrictions into the code. A restricted embedded
+        // session reaches this endpoint like any other authenticated caller, so
+        // minting an unscoped code here would let the iframe trade its
+        // workspace-pinned, admin-stripped token for a full one.
+        const scope = request.user?.embeddedPlatform && request.user?.scopedWorkspaceId
+            ? {
+                embeddedPlatform: request.user.embeddedPlatform,
+                workspaceId: request.user.scopedWorkspaceId,
+            }
+            : undefined;
+        return reply.send({ code: await authService.mintBrowserHandoffCode(user.id, scope) });
     }
 
     /**
@@ -449,14 +459,32 @@ export class AuthController {
      * browser session outlives Meta's wizard instead of expiring mid-flow.
      */
     async browserHandoffExchange(request: FastifyRequest<{ Body: { code: string } }>, reply: FastifyReply) {
-        const userId = await authService.consumeBrowserHandoffCode(request.body.code);
-        if (!userId) {
+        const redeemed = await authService.consumeBrowserHandoffCode(request.body.code);
+        if (!redeemed) {
             return reply.status(401).send({ error: 'Invalid or expired code' });
         }
-        const user = await authService.getUserById(userId);
+        const user = await authService.getUserById(redeemed.userId);
         if (!user) {
             return reply.status(404).send({ error: 'User not found' });
         }
+
+        // A SCOPED handoff stays scoped. It exists so an embedded merchant can
+        // do the one thing no iframe can (facebook.com refuses framing) without
+        // meeting a login wall — not so the frame can buy itself a full session.
+        if (redeemed.scope) {
+            const scopedToken = authService.generateToken(
+                user, EMBEDDED_BREAKOUT_TOKEN_EXPIRY, redeemed.scope,
+            );
+            // Auth cookie only — NO refresh cookie. /auth/refresh rotates into an
+            // unscoped token, which would launder the restriction away one step
+            // later; the hour-long scoped token covers the round trip instead.
+            cookiesService.setAuthCookies(reply, scopedToken);
+            return reply.send({
+                token: scopedToken,
+                defaultWorkspaceId: redeemed.scope.workspaceId,
+            });
+        }
+
         const token = authService.generateToken(user);
         const refreshToken = await refreshTokenService.createRefreshToken(user.id);
         cookiesService.setAuthCookies(reply, token);

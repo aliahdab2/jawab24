@@ -89,9 +89,24 @@ after install and whenever they open it from their dashboard. Flow:
   `frame-ancestors 'self' dashboard.zid.sa web.zid.sa`. The `*.zid.dev` sandbox is
   **not** allowed in the production config. **Shared infrastructure — every response
   carries it.** `npm run check:nginx-routing` asserts both the routing and these headers.
-- **Not built yet (blocks resubmission, not this change):** the seamless in-frame
-  Facebook connect. facebook.com refuses framing, so the embedded "connect a page"
-  empty-state breaks OUT to a top-level tab. See `docs/testing/ZID_TEST_PLAN.md` §L.
+- **The break-out is SCOPE-PRESERVING (2026-08-11).** facebook.com refuses framing
+  (`X-Frame-Options: DENY`), so connecting a page must leave the iframe — that part is
+  unavoidable. What was broken is where it landed: an embedded session is a Bearer token
+  in the frame's `sessionStorage`, never a cookie, so `window.open('/pages')` opened a
+  tab with **no session** — and an auto-provisioned Zid merchant has no password, no
+  linked Facebook account and no phone, so the login page was a **dead end**. That is
+  the same "sign-in prompt" defect app 7367 was rejected for, one screen later. The tab
+  now mints a single-use handoff code first and lands on `/auth/sync`, arriving signed
+  in. Ruling **D-067**.
+- 🔴 **Escalation closed at the same seam.** `POST /auth/browser-handoff` stored only the
+  userId, and the exchange minted `generateToken(user)` — **unscoped, `isAdmin` intact,
+  plus a refresh cookie**. A restricted embedded session (or anyone holding the iframe
+  UUID) could therefore trade its workspace-pinned, admin-stripped token for a full one,
+  defeating `TokenScope` entirely. The code now carries the scope, the exchange re-mints
+  it scoped, and a scoped handoff gets **no refresh cookie** (a rotation through
+  `/auth/refresh` would launder the restriction away one step later). The WhatsApp
+  app-start bridge refuses scoped codes outright — it signs in a full session and hands
+  over workspace-level credential material.
 
 ### Dual-credential storage
 The second credential is AES-256-GCM encrypted into new nullable columns

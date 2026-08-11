@@ -1220,3 +1220,55 @@ Facebook-connect. facebook.com refuses framing, and a scope-preserving break-out
 scope through the shared `/auth/browser-handoff` bridge — shared infra not touched here. The
 embedded empty-state now breaks OUT to a top-level tab instead of dead-ending, which is honest
 but not seamless. See `ZID_TEST_PLAN.md`.
+
+---
+
+## D-067 · A restricted session's break-out stays restricted — the handoff carries its scope
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Extends:** D-066
+
+**Context.** D-066 gave embedded sessions a `TokenScope`: pinned to the store's workspace,
+`isAdmin` force-cleared, enforced in `resolveWorkspace` and `requireAdmin`. Two things were
+then found at the same seam.
+
+**1. The scope was escapable (security).** `POST /auth/browser-handoff` accepts any
+authenticated caller, and stored only the userId. `POST /auth/browser-handoff/exchange`
+turned that code into `generateToken(user)` — unscoped, `isAdmin` restored from the user
+row, plus a refresh cookie. So a restricted embedded session, or anyone holding the iframe
+UUID, could trade it for a full session and reach the owner's other workspaces and the
+admin console. The scoping added in D-066 was defeated by a bridge that predates it.
+
+**2. The break-out was a dead end (product).** facebook.com sends `X-Frame-Options: DENY`,
+so connecting a Facebook page cannot happen inside the frame — the tab is unavoidable.
+But the embedded session is a Bearer token in the frame's `sessionStorage`, never a
+cookie, so `window.open('/pages')` opened a tab with **no session**. An auto-provisioned
+Zid merchant has no password, no linked Facebook account and no phone, so that login page
+was unpassable. Every Zid merchant must connect a page — Jawab24 replies on Facebook,
+Instagram and WhatsApp, and the Zid store is a data source — so this was not an edge case;
+it was the product not working, and it was the same "sign-in prompt" defect Zid rejected
+app 7367 for, moved one screen later.
+
+**Ruling.**
+
+1. **The handoff code carries the minting session's scope.** Scope in, same scope out.
+2. **A scoped exchange re-mints a scoped token and gets NO refresh cookie.** `/auth/refresh`
+   issues an unscoped token, so a refresh cookie would launder the restriction away one
+   step later. Bounded by `EMBEDDED_BREAKOUT_TOKEN_EXPIRY` (1 hour) instead — long enough
+   to survive Meta's wizard, still workspace-pinned and admin-stripped.
+3. **The WhatsApp app-start bridge refuses scoped codes outright.** It signs the browser in
+   with a full session and hands over workspace-level WABA credential material; an iframe
+   credential must not be able to buy that. Embedded merchants connect WhatsApp from a
+   real login.
+4. **The embedded break-out mints a code and lands on `/auth/sync`**, so the tab arrives
+   signed in. The popup is opened synchronously inside the click handler (a popup opened
+   after an `await` has lost the user gesture and is blocked), with `opener` severed
+   manually — `noopener` makes `window.open` return null, leaving nothing to point at the
+   URL.
+
+**Backward compatibility.** `consumeBrowserHandoffCode` still accepts the previous bare-
+userId payload. Those codes live 60 seconds, which spans a rolling deploy; dropping them
+would 401 a merchant mid-flow. They redeem unscoped, which is what they were.
+
+**What this does NOT do.** It does not remove the extra tab — Meta's framing policy is not
+ours to change. It does not address the rejection's second bullet ("full data integration"),
+which still needs the Zid billing PR and a green §A–§F.

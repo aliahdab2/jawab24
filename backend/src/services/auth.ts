@@ -36,6 +36,17 @@ export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
 // token via deep link and has no refresh-token round trip. Native mobile login uses
 // ACCESS_TOKEN_EXPIRY + refresh-token rotation; do not use this anywhere else.
 export const MOBILE_DEEP_LINK_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Expiry for a SCOPED break-out session (embedded frame → top-level tab, e.g.
+ * connecting a Facebook page, which facebook.com refuses to be framed for).
+ *
+ * Longer than ACCESS_TOKEN_EXPIRY because the tab leaves for Meta's wizard and
+ * comes back, and a scoped handoff deliberately gets NO refresh cookie — a
+ * refresh would rotate into an unscoped token, re-opening the escalation this
+ * scope exists to close. Bounded instead: one hour, still workspace-pinned and
+ * admin-stripped, so the blast radius stays a single workspace.
+ */
+export const EMBEDDED_BREAKOUT_TOKEN_EXPIRY = 60 * 60 * 1000;
 
 export class AuthService {
     /** Encrypt token only when FACEBOOK_TOKEN_ENCRYPTION_KEY is configured. */
@@ -448,16 +459,41 @@ export class AuthService {
         return `${payloadStr}.${signature}`;
     }
 
-    /** Mint a single-use app→browser handoff code (60 s TTL, opaque). */
-    async mintBrowserHandoffCode(userId: string): Promise<string> {
+    /**
+     * Mint a single-use app→browser handoff code (60 s TTL, opaque).
+     *
+     * The caller's SCOPE rides the code. This is load-bearing, not bookkeeping:
+     * a restricted embedded session can call the handoff endpoint like any other
+     * authenticated caller, and a code that carried only the userId would be
+     * redeemed for an UNSCOPED token — handing the iframe exactly the admin
+     * console and cross-workspace reach that TokenScope exists to deny. Scope in,
+     * same scope out.
+     */
+    async mintBrowserHandoffCode(userId: string, scope?: TokenScope): Promise<string> {
         const code = crypto.randomBytes(32).toString('base64url');
-        await issueSingleUse(browserHandoffKey(code), userId, BROWSER_HANDOFF_CODE_TTL_MS);
+        const value = JSON.stringify({ userId, ...(scope && { scope }) });
+        await issueSingleUse(browserHandoffKey(code), value, BROWSER_HANDOFF_CODE_TTL_MS);
         return code;
     }
 
-    /** Atomically consume a handoff code — a second consume returns null. */
-    async consumeBrowserHandoffCode(code: string): Promise<string | null> {
-        return consumeSingleUse(browserHandoffKey(code));
+    /**
+     * Atomically consume a handoff code — a second consume returns null.
+     *
+     * Tolerates the pre-scope payload (a bare userId string) so codes minted by
+     * the previous build are still redeemable during a rolling deploy; they are
+     * unscoped, which is what they were then.
+     */
+    async consumeBrowserHandoffCode(
+        code: string,
+    ): Promise<{ userId: string; scope?: TokenScope } | null> {
+        const stored = await consumeSingleUse(browserHandoffKey(code));
+        if (!stored) return null;
+        try {
+            const parsed = JSON.parse(stored) as { userId?: string; scope?: TokenScope };
+            return parsed.userId ? { userId: parsed.userId, scope: parsed.scope } : null;
+        } catch {
+            return { userId: stored };
+        }
     }
 
     /**

@@ -14,23 +14,59 @@ import {
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
-import { zidApi, pagesApi } from '@/lib/api';
+import { api, zidApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { getEmbeddedPlatform } from '@/lib/embeddedSession';
+import { captureError } from '@/lib/sentryHelpers';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
 const TOTAL_STEPS = 4;
 
 /**
- * Open a URL as a NEW top-level browser tab, escaping the platform iframe.
- * `_blank` breaks out of the frame (a user gesture makes the popup allowed);
- * `noopener` severs `window.opener`. Connecting a Facebook page needs the full
- * first-party app — facebook.com sends `X-Frame-Options: DENY`, so the OAuth
- * dialog cannot render inside the Zid frame.
+ * Open a path as a NEW top-level browser tab, escaping the platform iframe —
+ * with the merchant's session carried across.
+ *
+ * Connecting a Facebook page needs the full first-party app: facebook.com sends
+ * `X-Frame-Options: DENY`, so the OAuth dialog cannot render inside the Zid
+ * frame. Breaking out is therefore unavoidable.
+ *
+ * What is NOT acceptable is where the merchant lands. An embedded session lives
+ * as a Bearer token in the frame's `sessionStorage`, never as a cookie, so a
+ * plain `window.open('/pages')` opens a tab with no session — and an
+ * auto-provisioned Zid merchant has no password, no linked Facebook account and
+ * no phone, so the login page it lands on is a DEAD END. That is the same
+ * "sign-in prompt" defect app 7367 was rejected for, moved one screen later.
+ *
+ * So: mint a single-use handoff code first and land on `/auth/sync`, which
+ * trades it for a real browser session. The code carries the embedded SCOPE
+ * (backend: mintBrowserHandoffCode), so the tab is still pinned to this
+ * workspace and still admin-stripped — a break-out, not an escalation.
  */
-function openTopLevel(path: string): void {
+async function openTopLevelAuthenticated(path: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  window.open(path, '_blank', 'noopener');
+
+  // Opened SYNCHRONOUSLY inside the click handler: a popup opened after an
+  // `await` has lost the user gesture and is blocked by default. `noopener` is
+  // not passed because it makes window.open return null, leaving nothing to
+  // point at the URL — the opener is severed manually instead.
+  const tab = window.open('', '_blank');
+  if (tab) tab.opener = null;
+
+  const go = (url: string) => {
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+  };
+
+  try {
+    const { data } = await api.post<{ code: string }>('/auth/browser-handoff');
+    go(`/auth/sync?code=${encodeURIComponent(data.code)}&redirect=${encodeURIComponent(path)}`);
+  } catch (err) {
+    captureError(err, 'Embedded break-out handoff failed', { tags: { page: 'zid-onboarding' } });
+    // Last resort: the destination without a session. It shows a login wall the
+    // merchant may not be able to pass, so it is a reported failure, not a path
+    // we are happy with — but it beats leaving a blank tab open.
+    go(path);
+  }
 }
 
 export default function ZidOnboarding() {
@@ -317,10 +353,12 @@ export default function ZidOnboarding() {
                         onClick={() => {
                           // Land on the pages screen, whose own empty state
                           // carries the connect-a-page action. Embedded: break
-                          // out to a top-level tab (facebook.com can't be framed);
-                          // web: navigate in place.
+                          // out to a top-level tab that ARRIVES SIGNED IN
+                          // (facebook.com can't be framed, and this merchant has
+                          // no credentials to pass a login wall with); web:
+                          // navigate in place.
                           if (isEmbedded) {
-                            openTopLevel('/pages');
+                            void openTopLevelAuthenticated('/pages');
                           } else {
                             router.push('/pages');
                           }

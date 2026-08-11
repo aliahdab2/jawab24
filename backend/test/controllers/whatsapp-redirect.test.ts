@@ -276,7 +276,7 @@ function buildAppStartRequest(query: Record<string, string>) {
 }
 
 function primeAppStartHappy() {
-    vi.mocked(authService.consumeBrowserHandoffCode).mockResolvedValue('user-1');
+    vi.mocked(authService.consumeBrowserHandoffCode).mockResolvedValue({ userId: 'user-1' });
     vi.mocked(authService.getUserById).mockResolvedValue({ id: 'user-1' } as never);
     vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'owner' } as never);
     vi.mocked(workspaceService.getWorkspace).mockResolvedValue({ id: 'ws-1', ownerId: 'owner-1' } as never);
@@ -339,6 +339,26 @@ describe('WhatsAppRedirectController.appStart', () => {
 
         expect(reply.redirect).toHaveBeenCalledWith('https://jawab24.com/login');
         expect(refreshTokenService.createRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('REFUSES a code minted by a restricted embedded session — no full session, no WhatsApp credentials', async () => {
+        primeAppStartHappy();
+        vi.mocked(authService.consumeBrowserHandoffCode).mockResolvedValue({
+            userId: 'user-1',
+            scope: { embeddedPlatform: 'zid', workspaceId: 'ws-9' },
+        });
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), pageId: 'page-1', workspaceId: 'ws-9' }),
+            reply,
+        );
+
+        // This flow signs the browser in with a FULL session (refresh cookie and
+        // all) and hands over workspace-level WhatsApp credential material —
+        // exactly what an iframe credential must not be able to buy.
+        expect(refreshTokenService.createRefreshToken).not.toHaveBeenCalled();
+        // Arabic is the default locale and carries NO path prefix.
+        expect(reply.redirect).toHaveBeenCalledWith('https://jawab24.com/login');
     });
 
     it('plan gate → signed-in redirect to /pages?whatsappError=WHATSAPP_PLAN_REQUIRED', async () => {

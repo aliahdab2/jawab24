@@ -44,7 +44,9 @@ describe('authService browser-handoff code (single-use contract)', () => {
         // 32 random bytes base64url ≈ 43 chars — opaque, no claims to decode.
         expect(code.length).toBeGreaterThanOrEqual(40);
         expect(code).not.toContain('.');
-        expect(mockRedis.set).toHaveBeenCalledWith(`handoff:browser:${code}`, 'user-1', 'PX', 60_000);
+        expect(mockRedis.set).toHaveBeenCalledWith(
+            `handoff:browser:${code}`, JSON.stringify({ userId: 'user-1' }), 'PX', 60_000,
+        );
     });
 
     it('two mints never collide', async () => {
@@ -56,11 +58,34 @@ describe('authService browser-handoff code (single-use contract)', () => {
     it('consume returns the userId ONCE — the second consume gets null (replay dead)', async () => {
         const code = await authService.mintBrowserHandoffCode('user-1');
 
-        await expect(authService.consumeBrowserHandoffCode(code)).resolves.toBe('user-1');
+        await expect(authService.consumeBrowserHandoffCode(code)).resolves.toEqual({
+            userId: 'user-1',
+            scope: undefined,
+        });
         await expect(authService.consumeBrowserHandoffCode(code)).resolves.toBeNull();
     });
 
     it('consume of an unknown code returns null', async () => {
         await expect(authService.consumeBrowserHandoffCode('never-minted')).resolves.toBeNull();
+    });
+
+    it('round-trips the SCOPE so a restricted session cannot redeem an unrestricted one', async () => {
+        const scope = { embeddedPlatform: 'zid' as const, workspaceId: 'ws-9' };
+        const code = await authService.mintBrowserHandoffCode('user-1', scope);
+
+        await expect(authService.consumeBrowserHandoffCode(code)).resolves.toEqual({
+            userId: 'user-1',
+            scope,
+        });
+    });
+
+    it('still redeems a PRE-SCOPE payload (bare userId) — codes in flight during a rolling deploy', async () => {
+        // The previous build stored the userId as a bare string. Those codes live
+        // 60s, which spans a deploy; dropping them would 401 a merchant mid-flow.
+        store.set('handoff:browser:legacy-code', 'user-legacy');
+
+        await expect(authService.consumeBrowserHandoffCode('legacy-code')).resolves.toEqual({
+            userId: 'user-legacy',
+        });
     });
 });
