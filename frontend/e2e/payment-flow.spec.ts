@@ -147,7 +147,7 @@ test.describe('Payment Flow — Unauthenticated', () => {
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
-    // Click the Starter plan CTA (has trial → "Start Free for 30 Days")
+    // Click the Starter plan CTA (has trial → "Start Free for 7 Days")
     const starterBtn = page.locator('button').filter({ hasText: t('pricing.startTrial') }).first();
     await scrollIntoView(starterBtn);
     await expect(starterBtn).toBeVisible();
