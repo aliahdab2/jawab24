@@ -41,7 +41,7 @@ one. That misreading idled this work for eight days (2026-08-01 → 08-09).
 | # | Step | Depends on | Owner |
 |---|------|-----------|-------|
 | 1 | ✅ **DONE 2026-08-11.** Deployed to production: Embedded Apps (#704/#708) and the billing rail (#711). This had to go first — step 2 points Zid's reviewer at `https://jawab24.com/zid/embedded`, and a 404 there would fail the resubmission for a second, avoidable reason. That URL now serves. | — | us |
-| 2 | **Portal changes.** Tick the **Embedded App** toggle in 7367's General Settings and set the **Application URL** to `https://jawab24.com/zid/embedded`. Also delete the stray free plan **3956 «اختبار»** while you are in there (it is deliberately unmapped, so an install on it fails loud). | 1 deployed | us |
+| 2 | **Portal changes.** ✅ Mostly DONE 2026-08-11: the **Embedded App** toggle was already on and the **Application URL** already read `https://jawab24.com/zid/embedded` (verified, and the URL now serves 200). The nine `app.market.subscription.*` webhooks were **newly subscribed** — without them the billing rail would have depended entirely on the 6h reconciler, making a paying merchant wait up to six hours for activation. ⬜ **Still owed: delete the stray free plan 3956 «اختبار»** (it is deliberately unmapped, so an install on it fails loud rather than activating a guess). | 1 deployed | us |
 | 3 | **Resubmit 7367 for review**, answering the rejection: *"Direct merchant access (no sign-in prompt)"* → the auto-provision + embedded session (D-066/D-067); *"Full data integration with Zid"* → the App Market billing rail (D-070). | 2 | us |
 | 4 | **Zid approves** → install on dev store 3195980. | 3 | ⏳ Zid |
 | 5 | **Run `docs/testing/ZID_TEST_PLAN.md` A→I, capturing every response.** This is the D-020 gate. §H (billing) is the newest and least-evidenced section — see "what the first capture must collapse" below. | 4 | us |
@@ -71,9 +71,13 @@ it to DELETE tolerances.** The three questions worth the most:
    merchant's mirror. Everything else unparseable is `unreadable` — writes nothing, raises
    Sentry. Getting this backwards revokes a paying merchant, which is why it fails loud.
 2. **The real value set of `subscription_status`.** Anything outside the recognised sets
-   in `services/zidBilling.ts` resolves to `unknown_status` and writes nothing.
-3. **The exact `app.market.subscription.*` event names.** Matched by prefix today,
-   deliberately, so an unrecognised one still triggers a verify.
+   in `services/zidBilling.ts` resolves to `unknown_status` and writes nothing. The event
+   names below narrow the guess but do NOT settle it — see the ⚠️ under them.
+3. ✅ **RESOLVED 2026-08-11 — the exact `app.market.*` event names**, read off the Partner
+   Dashboard's Webhook Subscriptions dropdown. See "App lifecycle & subscription events"
+   below. Prefix matching is kept anyway: all nine subscription events match
+   `app.market.subscription`, and a tenth that Zid adds later would still trigger a verify
+   rather than be silently dropped.
 
 Full detail in "`[provisional]` parsers" below and `ZID_TEST_PLAN.md` §H (H-1…H-11).
 
@@ -213,6 +217,51 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
   is configured in the Zid **Partner Dashboard**, not via the API — the handler treats
   `app.market.application.uninstall` as the uninstall signal (→ `deactivateStore`). Zid
   invalidates our tokens at uninstall.
+
+#### App lifecycle & subscription events — the dashboard's full list (captured 2026-08-11)
+
+Read verbatim off **Webhook Management → Webhook Subscriptions** on app 7367. These are
+configured in the Partner Dashboard, NOT through `/v1/managers/webhooks`, so they never
+appear in `ZID_WEBHOOK_EVENTS` (`webhookTopicDrift` asserts that separation).
+
+**Subscription events — all nine subscribed 2026-08-11**, each to
+`https://jawab24.com/zid/webhooks?e=<event>`:
+
+| Event | Why it is subscribed |
+|---|---|
+| `app.market.subscription.active` | the activation trigger |
+| `app.market.subscription.warning` | ⚠️ see below |
+| `app.market.subscription.suspended` | entitlement should end |
+| `app.market.subscription.expired` | entitlement should end |
+| `app.market.subscription.renew` | period advance |
+| `app.market.subscription.upgrade` | plan change |
+| `app.market.subscription.refunded` | ⚠️ see below |
+| `app.market.subscription.usage_based.payment_success` | not our model (fixed monthly); subscribed for completeness — it costs one wasted verify |
+| `app.market.subscription.usage_based.payment_failure` | same |
+
+**Also offered, deliberately NOT subscribed:** `app.market.application.install` (our
+install signal is the OAuth callback), `app.market.application.rated`,
+`app.market.application.authorized`, `app.market.private.plan.request`.
+`app.market.application.uninstall` was already subscribed and is untouched.
+
+⚠️ **These are EVENT names, not `subscription_status` VALUES — do not copy them into
+`mapZidStatus` as if they were.** Nothing is read out of a delivery (D-070: webhooks are
+triggers, the API is the authority). They are the strongest hint we have about the status
+vocabulary, and two of them name states `mapZidStatus` does not recognise:
+
+- **`warning`** — ambiguous in the direction that matters. If it means "entitled but
+  payment is failing" the local equivalent is `past_due`; if it means "about to stop" it is
+  closer to inactive. Guessing wrong either strands a paying merchant or extends a dead
+  one. Currently → `unknown_status`, writes nothing, raises Sentry. That is the correct
+  conservative default until a real payload names the value.
+- **`refunded`** — probably means entitlement should end, but currently → `unknown_status`,
+  so a refunded merchant KEEPS entitlement until a human intervenes. Fails loud, which is
+  the safe direction, but it is a revenue leak worth closing once confirmed.
+
+⚠️ **There is NO trial event in the list**, although both our plans carry a 14-day trial.
+So how a trial subscription reports its status is an open question — if it arrives as
+`active` rather than a trial spelling, the mirror lands as `active` with `trialEndsAt`
+null and a trialing merchant reads as a full payer. Capture this at step 5.
 - Because the delivery envelope is not yet capture-confirmed, each subscription's
   `target_url` embeds routing hints: `https://<host>/zid/webhooks?e=<event>&sid=<storeId>`.
   The handler resolves store/event from the query string first, then falls back to body
