@@ -197,7 +197,7 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 ### Endpoints (base `https://api.zid.sa`)
 | Purpose | Endpoint | Notes |
 |---|---|---|
-| Store profile | `GET /v1/managers/account/profile` | `storeDomain` = hostname of the store `url` (fallback: store id); `merchantId` = `String(store.id)` |
+| Store profile | `GET /v1/managers/account/profile` | ✅ **live-confirmed 2026-08-11** — see below. `storeDomain` = hostname of the store `url` (fallback: store id); `merchantId` = `String(store.id)`; **`currency` is an OBJECT**, not a string |
 | Orders | `GET /v1/managers/store/orders?page=&per_page=&payload_type=default` | `per_page` ≤ 100; `payload_type=default` includes items; envelope `{orders: [...]}` |
 | Products | `GET /v1/products/?page_size=&page=` | NOT under `/managers`, but requires the dual headers **plus `Role: Manager`** |
 | Webhook subscribe | `POST /v1/managers/webhooks` | body `{event, target_url, original_id, username?, password?}` |
@@ -325,6 +325,81 @@ password, min 16 chars; prod-required with the client id). The old `ZID_SCOPES` 
 strings are hardcoded in `config/index.ts` and the Zid ones are provisional until the
 Partner app is created.
 
+## First live capture — 2026-08-11 (and the install it broke)
+
+The Zid App Market reviewer installed the app against production at **15:19 UTC**. It is
+the first time any Zid endpoint has been exercised by a real store, and it **failed**:
+
+```
+Zid auth callback failed — PostgresError 22001 (value too long for type character varying)
+```
+
+**Root cause.** `/v1/managers/account/profile` returns `currency` as an OBJECT:
+
+```json
+{ "id": 4, "name": "ريال سعودي", "code": "SAR", "symbol": " ر.س ",
+  "country": { "id": 184, "code": "SA", "country_code": "SAU", "…": "…" } }
+```
+
+`fetchStoreInfo` declared `currency?: string` and passed the object straight into
+`ecommerce_stores.store_currency` (`varchar(10)`). Postgres rejected the row, the callback
+threw, and the install aborted **after** the merchant account had already been
+provisioned — leaving an orphan user, no store, and a merchant who saw an error.
+
+**Why the unit suite was green the whole time.** Every fixture was written from
+docs.zid.sa, and every one of them sent `currency` as a string. A parser built from docs
+and tested against fixtures built from the same docs cannot discover that the docs are
+wrong. This is the concrete cost of shipping `[provisional]` parsers without a live
+round-trip (D-020).
+
+**Fixed in two layers** — see `services/zid.ts#fetchStoreInfo` and
+`services/ecommerce.ts#fitStoreScalars`:
+
+1. **Boundary.** The profile response is now parsed with a Zod schema. `currency` accepts
+   the object (reading `.code`) or a bare string. `id` is the only required field —
+   identity is a hard failure; every descriptive field degrades to `undefined` via
+   `.catch()` rather than failing the parse and taking the install with it. **Each drop is
+   reported to Sentry** (fingerprint `zid-profile-field-drop`, shape only — never the
+   value, which carries merchant PII): the drop is the correct handling, but a silent drop
+   is how this drift stayed invisible behind a green suite. Absence (`null`, missing,
+   empty string) is not drift and is not reported.
+2. **Storage.** `fitStoreScalars` coerces the four descriptive columns at the single
+   choke point all three rails write through (`createStore` insert **and** conflict
+   branches, plus `applySyncedStoreInfo`, which the 6-hourly sync uses). Widths are read
+   from the Drizzle schema, so a future migration cannot leave a stale hardcoded limit.
+   Unreadable shapes are dropped and reported to Sentry as a warning; they never abort a
+   write and never overwrite a good stored value.
+
+The same review hardened the two writes UPSTREAM of the store on the same callback:
+`provisionEcommerceMerchantUser` clamps the platform-sourced display name before it
+feeds `users.name` and `workspaces.name` (both varchar(255)), and REFUSES an email
+longer than its column — identity is refused, never truncated, because a truncated
+email is a different identity. `createPendingInstall` clamps its display `storeName`
+(`merchant_id` is claim-matching identity and stays unclamped, fail-loud).
+
+**Replay suite:** `test/integration/zidInstallCallback.test.ts` re-runs the reviewer's
+exact install — real routes, real Postgres, the captured wire payloads — and also pins
+the retry-with-orphan path (→ `/login?zid_pending=true`, the reason the orphan cleanup
+SQL must run before Zid re-tests).
+
+**Confirmed facts from this capture** (previously all assumptions):
+
+| Fact | Value |
+|---|---|
+| Profile nesting | `user.store` |
+| `store.currency` | **object** with `code` |
+| `store.url` | `https://a0xxorvfi5.zid.store` → `storeDomain` = `a0xxorvfi5.zid.store` |
+| `store.title` / `store.email` | plain strings (`Test`, `appmarket@zid.sa`) |
+| Token lifetime | `token_expires_at` ≈ **3 years** (2029-08-11) |
+| Reviewer identity | store `a0xxorvfi5.zid.store`, `merchantId` 130216 |
+
+⚠️ **The callback was made by a SERVER-side client** (`GuzzleHttp/7` from `54.77.8.197`),
+not a browser — both `/zid/auth` and `/zid/auth/callback`. If Zid drives the install
+server-side, the redirect `postInstall` returns is consumed by Zid's server rather than
+the merchant's browser, which would matter for the "direct merchant access" requirement
+that caused the 2026-08-10 rejection. **Not yet confirmed** — a single capture cannot
+distinguish an automated pre-check from the real install path. Verify before resubmitting.
+
 ## `[provisional]` parsers — finalize from live captures
 
 Everything below compiles, is unit-tested against plausible fixtures, and is written
@@ -336,7 +411,9 @@ describe titles (grep for it).
   Partner-Dashboard lifecycle events?) — mitigated by the `target_url` query hints.
 - Products list envelope (`results` vs `store_products` — both tolerated) + multilingual
   `name`/`description` objects (`{ar, en}` — Arabic preferred).
-- Profile envelope nesting (`user.store` vs `store` — both tolerated).
+- ~~Profile envelope nesting (`user.store` vs `store` — both tolerated).~~ ✅ **CONFIRMED
+  2026-08-11 by the first real App Market install** — see "First live capture" below. Zid
+  sent `user.store`. Both are still tolerated; the nesting is no longer a guess.
 - Orders search: **no confirmed search/filter param** — `lookupOrder`/`getShipmentTracking`
   scan up to 3 × 100 recent orders client-side behind the single `findOrderByCode` seam;
   swap in the real filter once confirmed. Same for `checkInventory`'s product search

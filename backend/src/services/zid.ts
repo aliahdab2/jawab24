@@ -19,6 +19,7 @@
  * live dev store are read shape-tolerantly and marked with [provisional] — the
  * live-validation phase (docs/integrations/zid.md) finalizes them from captures.
  */
+import { z } from 'zod';
 import { tracedExternalCall } from '../utils/tracing';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
@@ -268,6 +269,89 @@ export function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extra
  * key), falling back to the numeric store id; merchantId = String(store.id)
  * (the webhook fallback key). Envelope read shape-tolerantly [provisional].
  */
+/**
+ * A profile field was dropped because its shape is unreadable. Reported, never
+ * thrown: the drop itself is the correct handling (cosmetic fields must not
+ * abort an install), but a SILENT drop is how the next envelope drift stays
+ * invisible until it breaks something that matters — the exact failure mode of
+ * the 2026-08-11 install (a green suite, a broken wire). The storage-layer
+ * guard (fitStoreScalars) can't see these: by the time it runs, the boundary
+ * has already collapsed the value to `undefined`.
+ *
+ * Absence is not drift: `null`/`undefined` are how JSON says "no value", and a
+ * bare/blank string failing the content rule is emptiness, not a shape change —
+ * neither is reported. Only the VALUE's type ships to Sentry, never the value:
+ * profile fields carry merchant PII (email).
+ */
+function reportProfileFieldDrop(field: string, input: unknown): void {
+    if (input === undefined || input === null || typeof input === 'string') return;
+    captureError(
+        new Error(`Zid profile field '${field}' has an unreadable shape — dropped`),
+        'Zid profile field drop',
+        {
+            level: 'warning',
+            fingerprint: ['zid-profile-field-drop', field],
+            tags: { service: 'zid', action: 'profile-parse' },
+            extra: { field, receivedType: Array.isArray(input) ? 'array' : typeof input },
+        },
+    );
+}
+
+/**
+ * A descriptive (non-identity) profile field. Any shape we cannot read collapses
+ * to `undefined` instead of failing the parse: these fields are cosmetic, and an
+ * App Market install must never abort because a display value drifted. The
+ * `.catch()` is what makes that structural rather than a promise — without it a
+ * single unexpected object fails the whole `parse` and takes the install with it.
+ */
+const zidOptionalText = (field: string) =>
+    z.string().trim().min(1).optional().catch(({ input }) => {
+        reportProfileFieldDrop(field, input);
+        return undefined;
+    });
+
+/**
+ * Zid sends `currency` as an OBJECT — `{id, name, code, symbol, country}` —
+ * confirmed by the first live App Market install (2026-08-11, store
+ * a0xxorvfi5.zid.store). The previous code declared `currency?: string`, so the
+ * whole object was passed through to a `varchar(10)` and Postgres `22001`
+ * aborted the install. The docs implied a bare string, so both shapes are
+ * accepted and normalised to the ISO code.
+ */
+const zidOptionalCurrencyCode = z.union([
+    z.string().trim().min(1),
+    z.object({ code: z.string().trim().min(1) }).transform((c) => c.code),
+]).optional().catch(({ input }) => {
+    // An object without a readable `code` is drift worth knowing about even
+    // though objects are now the expected envelope — the field still ends up
+    // empty for the merchant.
+    reportProfileFieldDrop('currency', input);
+    return undefined;
+});
+
+/**
+ * The store node of `/v1/managers/account/profile`.
+ *
+ * `id` is the only REQUIRED field: it is the store's identity, it seeds
+ * `storeDomain` when no URL is present, and a store we cannot identify is a
+ * genuine hard failure (the pre-existing behaviour, preserved). Everything else
+ * degrades to `undefined` — validate at the boundary, but never let a decorative
+ * field decide whether a merchant can install.
+ *
+ * `passthrough()` keeps unknown keys rather than stripping them: Zid's envelope
+ * is still only partly captured, and a strict schema would turn every future
+ * field Zid adds into a silent loss.
+ */
+const ZidStoreProfileSchema = z.object({
+    id: z.union([z.string(), z.number()]).transform(String),
+    title: zidOptionalText('title'),
+    name: zidOptionalText('name'),
+    email: zidOptionalText('email'),
+    currency: zidOptionalCurrencyCode,
+    url: zidOptionalText('url'),
+    domain: zidOptionalText('domain'),
+}).passthrough();
+
 export async function fetchStoreInfo(creds: ZidCredentials) {
     const data = await zidApiGet<Record<string, unknown>>(
         'https://api.zid.sa/v1/managers/account/profile',
@@ -275,24 +359,19 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
     );
 
     // Docs show the profile under `user`, with the store object nested — but the
-    // exact nesting is unconfirmed. Try the plausible shapes in order.
+    // exact nesting is unconfirmed, so the plausible shapes are still tried in
+    // order here rather than encoded in the schema. Resolving the NODE is a
+    // lookup; validating its CONTENTS is the schema's job, below.
     const user = (data.user ?? data) as Record<string, unknown>;
-    const store = (user.store ?? data.store) as {
-        id?: string | number;
-        title?: string;
-        name?: string;
-        email?: string;
-        currency?: string;
-        url?: string;
-        domain?: string;
-    } | undefined;
+    const parsed = ZidStoreProfileSchema.safeParse(user.store ?? data.store);
 
-    if (!store || store.id === undefined || store.id === null) {
-        throw new Error('Zid profile response has no store object — cannot resolve store identity');
+    if (!parsed.success) {
+        throw new Error('Zid profile response has no usable store object — cannot resolve store identity');
     }
+    const store = parsed.data;
 
     const rawUrl = store.url || store.domain || '';
-    let storeDomain = String(store.id);
+    let storeDomain = store.id;
     if (rawUrl) {
         try {
             storeDomain = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`).hostname;
@@ -301,14 +380,14 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
         }
     }
 
-    const email = (store.email ?? (user.email as string | undefined));
+    const email = store.email ?? zidOptionalText('user.email').parse(user.email);
 
     return {
         storeName: store.title || store.name || undefined,
-        storeEmail: typeof email === 'string' ? email : undefined,
-        storeCurrency: store.currency || undefined,
+        storeEmail: email,
+        storeCurrency: store.currency,
         storeDomain,
-        merchantId: String(store.id),
+        merchantId: store.id,
     };
 }
 

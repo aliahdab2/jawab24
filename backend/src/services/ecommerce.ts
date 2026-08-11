@@ -12,6 +12,7 @@ import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceC
 import { isDemoStore } from './demoStore';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
+import { fitVarchar, wasDropped } from '../utils/columnText';
 import { redisScanDelete } from '../lib/redis';
 import { customerNotificationService } from './customerNotifications';
 import { workspaceSettingsService } from './workspaceSettings';
@@ -142,6 +143,107 @@ async function mergeStorePlatformData(storeId: string, patch: Record<string, unk
 }
 
 /**
+ * The four DESCRIPTIVE store columns. Every platform adapter writes them from
+ * unvalidated third-party JSON, through the two functions below.
+ */
+export interface StoreScalars {
+    storeName?: string | null;
+    storeEmail?: string | null;
+    storeCurrency?: string | null;
+    storeTimezone?: string | null;
+}
+
+/** Declared `unknown` on purpose — see fitStoreScalars. */
+export interface RawStoreScalars {
+    storeName?: unknown;
+    storeEmail?: unknown;
+    storeCurrency?: unknown;
+    storeTimezone?: unknown;
+}
+
+/**
+ * Coerce the descriptive store scalars into values their columns can physically
+ * hold, and report anything that had to be dropped or truncated.
+ *
+ * WHY THIS EXISTS — on 2026-08-11 the first live Zid App Market install failed
+ * outright: Zid returns `currency` as an object, the adapter's interface claimed
+ * `string`, and the object hit `varchar(10)` as Postgres `22001`. The install,
+ * the account, and the merchant's whole onboarding were lost to a field we only
+ * ever display. Adapters are hardened at their own boundary (see
+ * `services/zid.ts#fetchStoreInfo`), but every adapter parses unvalidated JSON,
+ * so the class of bug is closed HERE, at the one place all three rails write —
+ * prevention over detection. Identity columns (`storeDomain`, `platform`) are
+ * deliberately excluded: a malformed identity must still fail loudly.
+ *
+ * The input is typed `unknown` rather than `string` because a TypeScript
+ * annotation over third-party JSON is an assumption, not a guarantee — that
+ * assumption is exactly what broke. Semantics are preserved precisely:
+ * `undefined` omits the column (Drizzle leaves it untouched), `null` clears it
+ * (Shopify's GraphQL scalars send real nulls), and an unreadable shape omits it
+ * rather than overwriting a good stored value with junk.
+ */
+export function fitStoreScalars(
+    raw: RawStoreScalars,
+    context: { platform?: string; storeDomain?: string; storeId?: string } = {},
+): StoreScalars {
+    // Resolved at CALL time, never in a module-level constant. Dereferencing
+    // schema columns at import would make every transitive importer of this file
+    // depend on the whole schema module being materialised before it loads —
+    // real load-order coupling, and it breaks partial `vi.mock('db/schema')`
+    // factories in suites that have nothing to do with e-commerce.
+    const columns = {
+        storeName: ecommerceStores.storeName,
+        storeEmail: ecommerceStores.storeEmail,
+        storeCurrency: ecommerceStores.storeCurrency,
+        storeTimezone: ecommerceStores.storeTimezone,
+    } as const;
+
+    const fitted: StoreScalars = {};
+    const dropped: string[] = [];
+    const truncated: string[] = [];
+
+    for (const [field, column] of Object.entries(columns)) {
+        const key = field as keyof StoreScalars;
+        const value = raw[key];
+        const result = fitVarchar(value, column);
+
+        if (wasDropped(value, result)) {
+            dropped.push(key);
+            continue; // omit — never overwrite a stored value with a shape we cannot read
+        }
+        // Compared in CODE POINTS, the unit both Postgres and the clamp use — a
+        // UTF-16 comparison would misreport every Arabic or emoji value. `result`
+        // is only a string here when `value` was representable, so `String(value)`
+        // is safe (null/undefined already returned above).
+        if (typeof result === 'string'
+            && Array.from(result).length < Array.from(String(value).trim()).length) {
+            truncated.push(key);
+        }
+        fitted[key] = result;
+    }
+
+    if (dropped.length > 0 || truncated.length > 0) {
+        // A warning, not an error: the write succeeds and the merchant is
+        // unaffected. It is reported because a silent drop is how the NEXT
+        // envelope drift stays invisible until it breaks something that matters.
+        // Fingerprinted so a platform-wide shape change groups into one issue
+        // instead of one per store.
+        captureError(
+            new Error(`Store scalars did not fit their columns: ${[...dropped, ...truncated].join(', ')}`),
+            'Store scalar coercion',
+            {
+                level: 'warning',
+                fingerprint: ['store-scalar-coercion', context.platform ?? 'unknown', ...dropped, ...truncated],
+                tags: { context: 'ecommerce', action: 'fit-store-scalars', platform: context.platform ?? 'unknown' },
+                extra: { dropped, truncated, ...context },
+            },
+        );
+    }
+
+    return fitted;
+}
+
+/**
  * Persist refreshed store info from a platform sync. `platformData` is MERGED
  * (same read-modify-write as mergeStorePlatformData), never replaced: a full
  * sync must not wipe operational markers written by other flows — webhookStatus
@@ -151,14 +253,22 @@ async function mergeStorePlatformData(storeId: string, patch: Record<string, unk
  */
 export async function applySyncedStoreInfo(
     storeId: string,
-    info: { storeName?: string; storeEmail?: string | null; storeCurrency?: string | null; storeTimezone?: string | null },
+    info: RawStoreScalars,
     platformDataPatch: Record<string, unknown> = {},
 ): Promise<void> {
-    const [store] = await db.select({ platformData: ecommerceStores.platformData })
-        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+    // `platform` rides along on the SELECT this function already makes (no extra
+    // round trip) purely so a coercion warning names the drifting platform — an
+    // envelope change is platform-wide, and that is how it should group in Sentry.
+    const [store] = await db.select({
+        platformData: ecommerceStores.platformData,
+        platform: ecommerceStores.platform,
+    }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
     const existing = (store?.platformData as Record<string, unknown>) || {};
     await db.update(ecommerceStores).set({
-        ...info,
+        // Same guard as createStore: a 6-hourly sync writes these columns from the
+        // same unvalidated payloads, so an envelope drift would otherwise take out
+        // every sync for every store on that platform.
+        ...fitStoreScalars(info, { storeId, platform: store?.platform }),
         platformData: { ...existing, ...platformDataPatch },
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
@@ -377,17 +487,33 @@ export interface CreateStoreOptions {
     /** Zid only — the second credential (`Authorization` Bearer token). See db/schema.ts. */
     authorizationToken?: string;
     tokenExpiresAt?: Date;
+    /**
+     * Descriptive store info from the platform. Typed `unknown` for the reason
+     * given on fitStoreScalars: these values are third-party JSON, and declaring
+     * them `string` is an assumption the wire is free to break — it did, and it
+     * cost an install. They are coerced, never trusted.
+     */
     shopInfo?: {
-        shopName?: string;
-        shopEmail?: string;
-        shopCurrency?: string;
-        shopTimezone?: string;
+        shopName?: unknown;
+        shopEmail?: unknown;
+        shopCurrency?: unknown;
+        shopTimezone?: unknown;
     };
     platformData?: Record<string, unknown>;
     workspaceId?: string | null;
 }
 
 export async function createStore(opts: CreateStoreOptions) {
+    // Coerce ONCE, before either branch: the insert and the conflict-update write
+    // the same four columns, and a guard applied to only one of them would leave
+    // reinstall (the branch a returning merchant takes) still able to fail.
+    const scalars = fitStoreScalars({
+        storeName: opts.shopInfo?.shopName,
+        storeEmail: opts.shopInfo?.shopEmail,
+        storeCurrency: opts.shopInfo?.shopCurrency,
+        storeTimezone: opts.shopInfo?.shopTimezone,
+    }, { platform: opts.platform, storeDomain: opts.storeDomain });
+
     const { ciphertext: accessCiphertext, iv: accessIv } = encrypt(opts.accessToken);
     // Refresh token is optional — Salla/Zid have one, Shopify offline tokens don't.
     const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(opts.refreshToken);
@@ -406,10 +532,7 @@ export async function createStore(opts: CreateStoreOptions) {
         authorizationToken: authCiphertext,
         authorizationTokenIv: authIv,
         tokenExpiresAt: opts.tokenExpiresAt,
-        storeName: opts.shopInfo?.shopName,
-        storeEmail: opts.shopInfo?.shopEmail,
-        storeCurrency: opts.shopInfo?.shopCurrency,
-        storeTimezone: opts.shopInfo?.shopTimezone,
+        ...scalars,
         platformData: opts.platformData,
         installedAt: new Date(),
     }).onConflictDoUpdate({
@@ -424,10 +547,7 @@ export async function createStore(opts: CreateStoreOptions) {
             authorizationToken: authCiphertext,
             authorizationTokenIv: authIv,
             tokenExpiresAt: opts.tokenExpiresAt,
-            storeName: opts.shopInfo?.shopName,
-            storeEmail: opts.shopInfo?.shopEmail,
-            storeCurrency: opts.shopInfo?.shopCurrency,
-            storeTimezone: opts.shopInfo?.shopTimezone,
+            ...scalars,
             // MERGE platformData (don't replace) so existing keys — merchantId,
             // webhookStatus — survive a reconnect, and ALWAYS clear tokenHealth so
             // every reconnect path self-heals the needs-reauth flag. The claim path
@@ -446,9 +566,12 @@ export async function createStore(opts: CreateStoreOptions) {
     // that happens to open Settings, and better than the placeholder every
     // workspace inherits. Only adopted when the merchant has never set one
     // (see adoptTimezoneIfUnset); never fatal to a store connect.
-    if (opts.workspaceId && opts.shopInfo?.shopTimezone) {
+    // `scalars`, not the raw shopInfo: this writes the merchant's workspace
+    // timezone, so it must be the validated string, never whatever shape the
+    // platform happened to send.
+    if (opts.workspaceId && scalars.storeTimezone) {
         try {
-            await workspaceSettingsService.adoptTimezoneIfUnset(opts.workspaceId, opts.shopInfo.shopTimezone);
+            await workspaceSettingsService.adoptTimezoneIfUnset(opts.workspaceId, scalars.storeTimezone);
         } catch (err) {
             captureError(err, 'Failed to adopt store timezone', {
                 tags: { service: 'ecommerce', action: 'adopt-store-timezone' },
@@ -1036,7 +1159,11 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
         tokenExpiresAt: data.tokenExpiresAt,
         scopes: data.scopes || null,
         merchantId: data.merchantId || null,
-        storeName: data.storeName || null,
+        // Display-only ("connect your store '<name>'") and platform-sourced, so
+        // clamped like the store scalars. merchantId above is NOT clamped — it
+        // is the claim-matching identity, and a truncated identity that silently
+        // matches nothing is worse than a loud insert failure.
+        storeName: fitVarchar(data.storeName, pendingEcommerceInstalls.storeName) || null,
         nonce: data.nonce,
         status: 'pending',
         expiresAt: new Date(Date.now() + (data.ttlMs ?? 30 * 60 * 1000)),
