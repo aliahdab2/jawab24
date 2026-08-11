@@ -69,10 +69,21 @@ When the counter crosses the threshold (in a single atomic UPDATE):
 2. `auto_pause_reason = 'send_rejected'`
 3. `auto_paused_at = NOW()`
 4. A `page.auto_reply_toggled` audit event is emitted (`actor: 'system'`, `reason: 'auto_pause'`) via [logAutoReplyToggle](../backend/src/services/auditLog.ts) — a timestamped record of the pause in the `logs` table, distinct from the standing `auto_pause_reason` column. See [Audit trail](#audit-trail) below.
+5. **The merchant is notified.** An `auto_reply_paused` in-app + push notification to every workspace member (falling back to the page owner when the page has no workspace), and an email (`autoPausedEmailTemplate`, in the owner's dashboard language) to the **page owner** — the original connector, i.e. the one user whose re-auth can refresh a dead token. Added after 2026-08-10, when a real page auto-paused twice in one evening and the merchant learned about it from lost customers.
+
+   Three deliberate choices here, each of which was a bug first:
+
+   - **Awaited, not fire-and-forget.** Both callers already dispatch `recordSendFailure` with `void`, so awaiting costs the reply path nothing — and it keeps the notification's queries inside the caller's promise. The `void` version escaped the integration suite's per-test `TRUNCATE` (queries landing after the test that spawned them), which is a flaky-gate generator.
+   - **The email dedup fails OPEN.** One email per page per 24h via `notif:auto_pause_email:<pageId>`, so a merchant stuck in a toggle → re-pause loop isn't spammed. But if Redis is unreachable the email is sent anyway: the crossing guard already limits this to one email per pause cycle without Redis at all, so a Redis blip must not cost the merchant their most important alert.
+   - **The send result is checked.** `emailService.send` *resolves* with `{ success: false }` on a provider failure rather than throwing; unchecked, a Resend outage would silently consume the dedup window and the merchant would never be emailed. On failure the key is released so the next crossing retries, and the failure goes to Sentry.
+
+   The in-app notification is registered in [notificationUtils.ts](../frontend/src/components/ui/notificationUtils.ts) — route (`/pages`), icon, and account-health pin. **A notification type is only half-shipped when the backend can send it:** an unregistered type renders as a generic bell with no chevron and does nothing on tap, which strands the merchant on the one alert that demands an action. Pinned by `notificationUtils.test.ts`.
 
 ### Recovery
 
 The customer toggles auto-reply back on in the UI ([pages.ts toggleAutoReply](../backend/src/services/pages.ts)). The off → on transition clears all three columns, giving the page a fresh start. If the underlying Meta-side issue persists, the counter climbs back to the threshold and the page pauses again — no manual operator intervention required either way.
+
+**When the cause is an invalidated token** (Graph `code=190, subcode=460` — the merchant changed their Facebook password or Meta forced re-auth), toggling alone is a trap: the stored page token stays dead, so the page re-pauses within minutes and each cycle burns ~10 customer messages. The merchant must **reconnect the page in Jawab24 first** (a full Facebook dialog — signing in and out of facebook.com does nothing to our stored token), *then* toggle auto-reply back on. This exact loop happened in production on 2026-08-10, which is why the notification copy leads with the reconnect step.
 
 Disabling auto-reply (on → off) **preserves** the pause-reason audit trail so support can see "this page was auto-paused at X, then the customer toggled it off."
 
@@ -102,9 +113,11 @@ A bilingual banner on the Page card on the dashboard ([PageAccordionItem.tsx](..
 
 Translation keys: `pages.autoPausedSendRejected` (EN + AR).
 
+Plus, since 2026-08 (see step 5 above): an in-app + push notification to the workspace and an email to the page owner, both carrying the two-step fix (reconnect the page, then re-enable) and the explicit warning that a Facebook login/logout is not enough. Notification copy: `auto_reply_paused` in [notifications.ts](../backend/src/services/notifications.ts); email copy: `autoPaused*` keys in [backend/src/i18n](../backend/src/i18n/en.json).
+
 ## What this is NOT
 
-- **Not a token disconnect.** The page row stays connected; `access_token` is left intact. The token works fine; it's the Page that's misbehaving. Reconnecting won't help.
+- **Not a token disconnect.** The page row stays connected; `access_token` is left intact, `disconnect_reason` stays empty. ⚠️ That does **not** mean the token is healthy: a dead token (`our_fault`, e.g. Graph 190/460 after a Facebook password change) is one of the buckets that *causes* the pause, and in that case the DB row still looks fully connected — diagnose from the send-failure logs, not the row, and the fix **is** a reconnect. For Page-side causes (restricted, unpublished, lost permission) the token genuinely works and reconnecting won't help.
 - **Not a retry/backoff scheduler.** There's no background job that tries the page again. Recovery is explicit, customer-driven.
 - **Not a billing/usage fix.** The customer's smart-reply usage counter still counts AI generations (not deliveries). That's a separate decision tracked elsewhere.
 - **Not a substitute for the existing `disconnectReason` field.** `disconnectReason` is set when the token is revoked/dead. `autoPauseReason` is set when the token works but the Page rejects sends. Different states, separate columns.

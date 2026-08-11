@@ -102,6 +102,12 @@ export type NotificationType =
     // too thin to be a runway — "no interruption" would be a false promise.
     | 'ai_usage_topup_low'
     | 'auto_reply_paused_billing'
+    // The send-failure auto-pause tripped (services/pageAutoPause.ts): Facebook
+    // kept rejecting our sends, the page went quiet, and only a human re-enable
+    // brings it back. Without this the merchant's only signal is a dashboard
+    // banner they may not open for days (2026-08-10: a page paused twice in one
+    // evening; the merchant learned of it from lost customers).
+    | 'auto_reply_paused'
     | 'refund_processed'
     | 'topup_credited'
     | 'new_lead'
@@ -319,6 +325,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'Your subscription is {reason}. All auto-replies (Smart Replies, Post Replies, away messages) are paused until you renew. New comments and DMs will go unanswered.',
             ar: 'اشتراكك {reason}. تم إيقاف جميع الردود التلقائية (الردود الذكية وردود البوست ورسائل الغياب) حتى التجديد. لن يتم الرد على التعليقات والرسائل الجديدة.',
+        },
+    },
+    auto_reply_paused: {
+        titles: { en: 'Auto-reply paused for \'{pageName}\'', ar: 'توقف الرد التلقائي لصفحة {pageName}' },
+        bodies: {
+            en: 'Facebook kept rejecting replies on \'{pageName}\', so auto-reply was paused and your customers are not receiving answers. Reconnect the page from Jawab24 (signing in and out of Facebook is not enough), then turn auto-reply back on.',
+            ar: 'رفض فيسبوك بشكل متكرر إرسال الردود على صفحة {pageName}، فتوقف الرد التلقائي مؤقتاً ولن يتلقى عملاؤك ردوداً. أعد ربط الصفحة من Jawab24 (تسجيل الخروج والدخول في فيسبوك لا يكفي)، ثم فعّل الرد التلقائي من جديد.',
         },
     },
     refund_processed: {

@@ -65,7 +65,7 @@ export const ACCOUNT_HEALTH_TYPES = new Set<string>([
     'payment_failed', 'subscription_expiring', 'trial_ending', 'trial_ended', 'subscription_renewed',
     'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup',
     'ai_usage_topup_low',
-    'auto_reply_paused_billing', 'page_disconnected', 'page_trial_used', 'kb_gap', 'provider_failover',
+    'auto_reply_paused_billing', 'auto_reply_paused', 'page_disconnected', 'page_trial_used', 'kb_gap', 'provider_failover',
 ]);
 
 /**
@@ -97,6 +97,9 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     trial_ended:           { icon: Clock,         iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
     page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
+    // Red, not slate: unlike a disconnected page, a send-failure pause means the
+    // page is live and actively dropping customer messages until a human acts.
+    auto_reply_paused:     { icon: Unplug,        iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     page_trial_used:       { icon: CreditCard,    iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
     kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
     provider_failover:     { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
@@ -177,6 +180,11 @@ export function resolveNotificationRoute(
             // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
             return isIOSNative() ? '/dashboard' : '/pricing';
         case 'page_disconnected':
+        // The whole point of the auto-pause alert is "go reconnect this page and
+        // switch replies back on" — both live on /pages. A null route here would
+        // render the card unclickable (no chevron), stranding the merchant on the
+        // one notification that demands an action.
+        case 'auto_reply_paused':
         case 'kb_gap':
             return '/pages';
         // The scheduled post published under a different id, so the trigger is orphaned.

@@ -368,6 +368,54 @@ export function trialEndedEmailTemplate(params: {
 }
 
 /**
+ * Send-failure auto-pause notice — fired the moment services/pageAutoPause.ts
+ * pauses a page after PAUSE_THRESHOLD consecutive rejected sends. The page has
+ * gone silent and only a human re-enable brings it back, so this is the one
+ * email whose absence directly costs the merchant customers.
+ *
+ * The copy leads with the two-step fix (reconnect, then re-enable) and states
+ * explicitly that a Facebook login/logout is NOT enough — the exact
+ * misunderstanding that kept a real page dead for a whole evening (2026-08-10).
+ */
+export function autoPausedEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    pageName: string;
+    dashboardUrl: string;
+}): { subject: string; html: string } {
+    const { lang, pageName, dashboardUrl } = params;
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    // Same escaping contract as the trial lifecycle emails: translations are
+    // static, markup-free strings we control; the page name is merchant data.
+    const escPageName = escapeHtml(pageName);
+
+    const subject = t('autoPausedSubject', lang, { pageName });
+    const heading = t('autoPausedHeading', lang);
+    const intro = t('autoPausedIntro', lang).replace(/\{pageName\}/g, escPageName);
+    const fixSteps = t('autoPausedFixSteps', lang);
+    const passwordNote = t('autoPausedPasswordNote', lang);
+    const ctaLabel = t('autoPausedCta', lang);
+    const signoff = t('autoPausedSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              <p style="margin:0 0 16px 0;">${fixSteps}</p>
+              ${tealCallout(rtl, passwordNote)}
+              ${ctaButton(dashboardUrl, ctaLabel)}
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
  * Team invite email — sent when an owner/admin invites someone by email.
  *
  * Bilingual by design: the recipient may not have an account yet, so their
