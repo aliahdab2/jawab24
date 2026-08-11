@@ -33,9 +33,10 @@ describe('isCatalogVisible — business surface gate (admin OR allowlisted works
 });
 
 describe('isPostSuggestionsVisible — «بوست اليوم» pilot allowlist', () => {
-  it('shows for the founder workspace and the invited merchant tester', () => {
+  it('shows for the founder workspace and the invited merchant testers', () => {
     expect(isPostSuggestionsVisible(FOUNDER_WS)).toBe(true);
     expect(isPostSuggestionsVisible(MES_WS)).toBe(true);
+    expect(isPostSuggestionsVisible(WALEED_WS)).toBe(true);
   });
 
   it('hides for everyone else — the pilot must not leak to the fleet', () => {
