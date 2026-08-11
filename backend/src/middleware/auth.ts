@@ -6,7 +6,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { authService } from '../services/auth';
 import { csrfInvalidCaptureMessage } from '../lib/sentry';
-import type { EmbeddedPlatform } from '../types';
+import type { EmbeddedPlatform, TokenScope } from '../types';
 
 // In-memory throttle: avoid writing last_seen_at more than once per 2 minutes per user.
 // Capped at 10,000 entries to prevent unbounded growth on long-running instances.
@@ -39,6 +39,28 @@ export interface AuthenticatedRequest extends FastifyRequest {
         embeddedPlatform?: EmbeddedPlatform;
         scopedWorkspaceId?: string;
     };
+}
+
+/**
+ * The caller's restrictions, in the shape `generateToken` / `mintBrowserHandoffCode`
+ * take — or `undefined` for an ordinary unscoped session.
+ *
+ * EVERY endpoint that re-mints a token or a handoff code for the CURRENT caller
+ * must run its result through this. Dropping it silently upgrades a restricted
+ * session to a full one: `embeddedPlatform` and `workspaceId` leave the JWT, so
+ * `requireAdmin` and `resolveWorkspace` stop firing and `isAdmin` comes back from
+ * the user row. That is the escalation D-067 closes, and it has to be closed at
+ * every re-mint site, not just the handoff exchange — `/auth/facebook/link` is
+ * the terminus of the embedded break-out itself.
+ *
+ * Both fields are required: an embedded marker with no pinned workspace is not a
+ * usable scope, and building one from it would pin the session to `undefined`.
+ */
+export function callerScope(request: AuthenticatedRequest): TokenScope | undefined {
+    const { embeddedPlatform, scopedWorkspaceId } = request.user ?? {};
+    return embeddedPlatform && scopedWorkspaceId
+        ? { embeddedPlatform, workspaceId: scopedWorkspaceId }
+        : undefined;
 }
 
 /**

@@ -42,6 +42,7 @@ vi.mock('../../src/services/auth', () => ({
         createAuthResponse: vi.fn().mockReturnValue({ token: 'new-jwt', user: { id: 'user-1' } }),
     },
     ACCESS_TOKEN_EXPIRY: 900,
+    EMBEDDED_BREAKOUT_TOKEN_EXPIRY: 60 * 60 * 1000,
 }));
 
 vi.mock('../../src/services/facebook', () => ({
@@ -64,7 +65,9 @@ vi.mock('../../src/services/workspace', () => ({
 }));
 
 import { AuthController } from '../../src/controllers/auth';
-import { authService } from '../../src/services/auth';
+// Pulled from the module under mock so the assertion and the controller read one
+// declaration — a literal copied into the test would drift if the expiry changed.
+import { authService, ACCESS_TOKEN_EXPIRY, EMBEDDED_BREAKOUT_TOKEN_EXPIRY } from '../../src/services/auth';
 import { facebookService } from '../../src/services/facebook';
 import { pagesService } from '../../src/services/pages';
 import { workspaceService } from '../../src/services/workspace';
@@ -202,5 +205,78 @@ describe('AuthController - linkFacebook', () => {
         expect(mockReply.send).toHaveBeenCalledWith(
             expect.objectContaining({ error: 'server_error' })
         );
+    });
+
+    it('mints an UNSCOPED token for an ordinary session', async () => {
+        await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+        expect(authService.generateToken).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'user-1' }),
+            ACCESS_TOKEN_EXPIRY,
+        );
+    });
+
+    /**
+     * This endpoint is where the embedded break-out ENDS UP: the frame opens a
+     * top-level tab (facebook.com refuses framing) carrying a scoped handoff, and
+     * the merchant then connects a page — which lands here. Re-minting unscoped
+     * would hand the iframe credential a full admin-capable session one screen
+     * after the handoff carefully preserved the scope, defeating D-066/D-067.
+     */
+    describe('restricted (embedded) caller', () => {
+        const scopedRequest = () => makeRequest({
+            user: { userId: 'user-1', isAdmin: false, embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-9' },
+        } as Partial<AuthenticatedRequest>);
+
+        beforeEach(() => {
+            // The owner also holds workspaces the store install never proved.
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue(
+                [{ id: 'ws-1' }, { id: 'ws-9' }] as any,
+            );
+        });
+
+        it('re-mints a token that is STILL scoped — connecting a page is not an escalation', async () => {
+            await authController.linkFacebook(scopedRequest(), mockReply as FastifyReply);
+
+            expect(authService.generateToken).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'user-1' }),
+                EMBEDDED_BREAKOUT_TOKEN_EXPIRY,
+                { embeddedPlatform: 'zid', workspaceId: 'ws-9' },
+            );
+        });
+
+        it('syncs pages into the PINNED workspace, not workspaces[0]', async () => {
+            await authController.linkFacebook(scopedRequest(), mockReply as FastifyReply);
+
+            // workspaces[0] is 'ws-1' — a workspace this session cannot read back,
+            // so the merchant would connect a page and still see none.
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+                'ws-9', 'user-1', 'long-lived', undefined, expect.anything(),
+            );
+        });
+
+        it('skips the sync when the pinned workspace is not one the user belongs to', async () => {
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([{ id: 'ws-1' }] as any);
+
+            await authController.linkFacebook(scopedRequest(), mockReply as FastifyReply);
+
+            // This route runs on `authenticate` alone — no resolveWorkspace — so
+            // the pinned id must still be resolved through the membership list
+            // rather than trusted straight into a write.
+            expect(pagesService.syncFromFacebook).not.toHaveBeenCalled();
+        });
+
+        it('pins the workspace from the SCOPE and never consults the resolver', async () => {
+            await authController.linkFacebook(scopedRequest(), mockReply as FastifyReply);
+
+            expect(workspaceService.resolveDefaultWorkspaceId).not.toHaveBeenCalled();
+            expect(authService.createAuthResponse).toHaveBeenCalledWith(
+                expect.anything(), 'new-jwt', 'long-lived', undefined,
+                // Only the pinned workspace — shipping the full list renders a
+                // switcher whose every other entry 403s.
+                [{ id: 'ws-9' }],
+                'ws-9',
+            );
+        });
     });
 });

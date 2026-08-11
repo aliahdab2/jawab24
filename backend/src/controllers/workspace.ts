@@ -19,7 +19,15 @@ async function list(request: AuthenticatedRequest, reply: FastifyReply) {
             return reply.status(401).send({ error: true, message: 'Unauthorized' });
         }
         const workspaces = await workspaceService.getUserWorkspaces(request.user.userId);
-        return reply.send(workspaces);
+        // A PINNED session sees only the workspace it is pinned to. resolveWorkspace
+        // already refuses to ACT on the others, but listing them here still names the
+        // owner's other stores and pages to a credential that only ever proved one
+        // store — and the client renders them as a workspace switcher whose every
+        // entry 403s. D-066 says the rest are unreachable; enumerable is not that.
+        const scopedWorkspaceId = request.user.scopedWorkspaceId;
+        return reply.send(
+            scopedWorkspaceId ? workspaces.filter((w) => w.id === scopedWorkspaceId) : workspaces,
+        );
     } catch (error) {
         captureError(error, 'Failed to list workspaces', { tags: { context: 'workspace' } });
         return reply.status(500).send({ error: true, message: 'Failed to list workspaces' });

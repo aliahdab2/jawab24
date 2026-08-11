@@ -80,6 +80,25 @@ describe('WorkspaceController', () => {
             await workspaceController.list(makeRequest({ user: undefined }), reply);
             expect(reply.status).toHaveBeenCalledWith(401);
         });
+
+        it('shows a PINNED session only its own workspace', async () => {
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([
+                { id: 'ws-1', name: 'Personal', role: 'owner' },
+                { id: 'ws-9', name: 'Store', role: 'owner' },
+            ] as any);
+            const reply = makeReply();
+
+            await workspaceController.list(
+                makeRequest({ user: { userId: USER_ID, embeddedPlatform: 'zid', scopedWorkspaceId: 'ws-9' } }),
+                reply,
+            );
+
+            // resolveWorkspace already refuses to ACT on the others, but listing
+            // them names the owner's other stores and pages to a credential that
+            // only ever proved one store — and the client renders them as a
+            // switcher whose every other entry 403s.
+            expect(reply.send).toHaveBeenCalledWith([{ id: 'ws-9', name: 'Store', role: 'owner' }]);
+        });
     });
 
     // ── create ────────────────────────────────────────────────────────────

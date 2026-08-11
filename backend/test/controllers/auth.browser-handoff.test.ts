@@ -21,7 +21,9 @@ vi.mock('../../src/services/workspace', () => ({
     workspaceService: { resolveDefaultWorkspaceId: vi.fn() },
 }));
 vi.mock('../../src/services/cookies', () => ({
-    cookiesService: { setAuthCookies: vi.fn(), setRefreshTokenCookie: vi.fn() },
+    cookiesService: {
+        setAuthCookies: vi.fn(), setRefreshTokenCookie: vi.fn(), clearRefreshTokenCookie: vi.fn(),
+    },
     COOKIE_OPTIONS: {}, CSRF_COOKIE_OPTIONS: {}, REFRESH_COOKIE_OPTIONS: {},
 }));
 vi.mock('../../src/services/refreshToken', () => ({
@@ -128,6 +130,8 @@ describe('AuthController.browserHandoffExchange', () => {
         expect(refreshTokenService.createRefreshToken).toHaveBeenCalledWith('user-1');
         expect(cookiesService.setAuthCookies).toHaveBeenCalledWith(reply, 'session-token');
         expect(cookiesService.setRefreshTokenCookie).toHaveBeenCalledWith(reply, 'refresh-token');
+        // The scoped branch's cookie clearing must not leak into this one.
+        expect(cookiesService.clearRefreshTokenCookie).not.toHaveBeenCalled();
         expect(reply.send).toHaveBeenCalledWith({ token: 'session-token', defaultWorkspaceId: 'ws-1' });
     });
 
@@ -164,6 +168,18 @@ describe('AuthController.browserHandoffExchange', () => {
             expect(cookiesService.setRefreshTokenCookie).not.toHaveBeenCalled();
             // The auth cookie IS set — the tab has to work.
             expect(cookiesService.setAuthCookies).toHaveBeenCalledWith(reply, 'session-token');
+        });
+
+        it('CLEARS a pre-existing refresh cookie — not issuing one is not enough', async () => {
+            const reply = buildReply();
+            await authController.browserHandoffExchange({ body: { code: 'scoped-code' } } as never, reply);
+
+            // This tab shares a cookie jar with every other jawab24.com tab. A
+            // refresh cookie left from an EARLIER ordinary login on this browser
+            // is still there, and the client's 401 interceptor would rotate it
+            // into an unscoped token the moment the scoped one expires — the same
+            // laundering, just on a timer.
+            expect(cookiesService.clearRefreshTokenCookie).toHaveBeenCalledWith(reply);
         });
 
         it('pins the workspace from the SCOPE, never from the resolver', async () => {

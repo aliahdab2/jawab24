@@ -1272,3 +1272,67 @@ would 401 a merchant mid-flow. They redeem unscoped, which is what they were.
 **What this does NOT do.** It does not remove the extra tab — Meta's framing policy is not
 ours to change. It does not address the rejection's second bullet ("full data integration"),
 which still needs the Zid billing PR and a green §A–§F.
+
+---
+
+## D-069 · Scope survives EVERY re-mint, not just the handoff exchange
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Extends:** D-067
+
+**Context.** D-067 made the handoff code carry its minting session's scope, and the
+exchange re-mint it scoped. Review of that change found the invariant it states —
+"scope in, same scope out" — did not survive the break-out's own destination.
+
+The break-out exists so an embedded merchant can connect a Facebook page. That flow
+ends at `POST /auth/facebook/link`, which re-minted `generateToken(user,
+ACCESS_TOKEN_EXPIRY)` — **unscoped**. `embeddedPlatform` and `workspaceId` left the
+JWT, so `requireAdmin` and `resolveWorkspace` stopped firing and `isAdmin` came back
+from the user row; the response also shipped the user's FULL workspace list. So the
+scope was preserved through the handoff and then dropped one screen later, by the one
+action the break-out was built for. Anyone holding the iframe UUID could walk a normal
+Facebook dialog with their own account and receive a full, admin-capable session — and
+`linkFacebookToUser` wrote their `facebook_id` onto the victim's row, making it a
+durable takeover.
+
+Three sibling gaps at the same seam:
+- `/auth/refresh` was addressed only by NOT ISSUING a refresh cookie. A cookie left
+  from an earlier ordinary login on that browser was untouched, and the client's 401
+  interceptor would rotate it into an unscoped token on expiry.
+- `controllers/zid.ts` post-install fallback minted an **unscoped** code. With
+  `reinstallPolicy: 'reactivate-for-owner'` that user can be a pre-existing account
+  with other workspaces and possibly admin.
+- `GET /workspaces` was unfiltered, so a pinned session enumerated the owner's other
+  workspaces (unusable, but named) and the client rendered them as a switcher.
+
+**Ruling.**
+
+1. **Every endpoint that re-mints a token or a handoff code for the CURRENT caller runs
+   its scope through `callerScope(request)`** (`middleware/auth.ts`) — one reader, so a
+   new re-mint site cannot quietly invent its own rule. `/auth/facebook/link` re-mints
+   scoped at `EMBEDDED_BREAKOUT_TOKEN_EXPIRY`.
+2. **A scoped session acts only on its pinned workspace.** `/auth/facebook/link` syncs
+   pages into `scope.workspaceId`, never `workspaces[0]` — the old behaviour dropped a
+   freshly-connected page into a workspace the scoped session cannot read back, so the
+   merchant connected a page and still saw none (a merchant can hold both a personal
+   and a store workspace — ZID_TEST_PLAN L-14).
+3. **A scoped session sees only its pinned workspace.** `/auth/facebook/link` returns
+   just that one, and `GET /workspaces` filters to it. D-066 says the others are
+   unreachable; enumerable is not that.
+4. **The scoped exchange CLEARS any refresh cookie already in the jar**
+   (`cookiesService.clearRefreshTokenCookie`). Not issuing one is not enough: the tab
+   shares a cookie jar with every other jawab24.com tab. This costs that browser a
+   re-login when the scoped token expires — the right trade against laundering on a
+   timer.
+5. **The Zid post-install browser fallback mints a SCOPED code.** An install proves the
+   store, not the person. Where no workspace can be determined it hands out nothing
+   rather than an unscoped session — worse product, not an escalation.
+
+**Also.** The popup-blocked path in the break-out navigated `window.location`, which
+inside the frame navigates the FRAME — rendering `/pages` back inside the iframe and
+hitting facebook.com's `X-Frame-Options` one screen later, i.e. restoring the dead end.
+It now navigates `window.top`. The helper moved to `lib/embeddedBreakout.ts` so that
+branch could be pinned by a test at all.
+
+**What this does NOT do.** It does not settle whether a break-out token should live 15
+minutes or 60 (D-067 chose 60; `services/embeddedSession.ts` argues the opposite for the
+in-frame token). Both sites read one constant, so that ruling can be made in one place.
