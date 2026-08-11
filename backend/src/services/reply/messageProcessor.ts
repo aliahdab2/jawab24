@@ -6,7 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, shouldHoldReply, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
-import { WORST_CASE_ENRICHMENT_MS } from '../imageUnderstanding';
+import { WORST_CASE_ENRICHMENT_MS, WORST_CASE_ENRICHMENT_WHATSAPP_MS } from '../imageUnderstanding';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { redis } from '../../lib/redis';
@@ -74,14 +74,17 @@ const ATTACHMENT_PARK_DELAY_MS = 5_000;
  *  blind while the enrichment it waited for was still running. After the budget
  *  the job proceeds and replies without the pending row — degrading to today's
  *  "second reply", never a permanent no-reply. */
-const MAX_ATTACHMENT_RETRIES =
-    Math.ceil(WORST_CASE_ENRICHMENT_MS / ATTACHMENT_PARK_DELAY_MS) + 1;
+const worstCaseEnrichmentMs = (platform: string): number =>
+    platform === 'whatsapp' ? WORST_CASE_ENRICHMENT_WHATSAPP_MS : WORST_CASE_ENRICHMENT_MS;
+const maxAttachmentRetries = (platform: string): number =>
+    Math.ceil(worstCaseEnrichmentMs(platform) / ATTACHMENT_PARK_DELAY_MS) + 1;
 /** A 'pending' stub older than this is treated as NOT pending: the enricher must
  *  have crashed (webhook already ACKed, no redelivery), so no DM should wait on a
  *  corpse. Must stay ABOVE the worst case or a still-running enrichment gets
  *  mistaken for a corpse — hence derived, with a 50% margin. The stale stub stays
  *  replied=false and is surfaced by the escalation SLA cron. */
-const PENDING_ENRICHMENT_MAX_AGE_MS = Math.round(WORST_CASE_ENRICHMENT_MS * 1.5);
+const pendingEnrichmentMaxAgeMs = (platform: string): number =>
+    Math.round(worstCaseEnrichmentMs(platform) * 1.5);
 
 /**
  * Unified Message Processor
@@ -137,7 +140,7 @@ export class MessageProcessor {
         wasHandoffPaused: boolean = false,
         // How many times this job has already parked waiting for a sibling
         // attachment to finish enriching (store-then-enrich). Bounds the wait at
-        // MAX_ATTACHMENT_RETRIES so we never block a reply forever.
+        // maxAttachmentRetries(platform) so we never block a reply forever.
         attachmentRetries: number = 0,
         // Sender display name captured by the webhook itself (WhatsApp
         // `contacts[].profile.name`). WhatsApp has no profile API, so the
@@ -571,7 +574,7 @@ export class MessageProcessor {
             // if the stub isn't yet in this set, the text alone (blind). So we park:
             // re-enqueue this job with a short delay and let the attachment's own
             // finalize→enqueue (or this job's own retry) consolidate the real content.
-            //   • Age-gated: a 'pending' stub older than PENDING_ENRICHMENT_MAX_AGE_MS
+            //   • Age-gated: a 'pending' stub older than pendingEnrichmentMaxAgeMs(platform)
             //     means the enricher crashed (webhook already ACKed, no redelivery) —
             //     treat it as not-pending so no DM waits on a corpse.
             //   • Placed BEFORE `didReachConsolidation = true` so a parked return never
@@ -583,9 +586,9 @@ export class MessageProcessor {
             const pendingRows = unrepliedMessages.filter(m =>
                 m.enrichmentStatus === 'pending'
                 && m.createdAt
-                && now - new Date(m.createdAt).getTime() < PENDING_ENRICHMENT_MAX_AGE_MS,
+                && now - new Date(m.createdAt).getTime() < pendingEnrichmentMaxAgeMs(platform),
             );
-            if (pendingRows.length > 0 && attachmentRetries < MAX_ATTACHMENT_RETRIES) {
+            if (pendingRows.length > 0 && attachmentRetries < maxAttachmentRetries(platform)) {
                 pipelineMetrics.record(pipeline, 'attachment_park');
                 this.logger.info(`[${platform}] Attachment enrichment in flight — parking DM`, {
                     senderId, pageId: page.id, attachmentRetries, pendingCount: pendingRows.length,
@@ -1336,7 +1339,7 @@ export class MessageProcessor {
                 undefined,
                 undefined,
                 false,
-                MAX_ATTACHMENT_RETRIES,
+                maxAttachmentRetries(adapter.platform),
             );
         } catch (err) {
             this.logger.error(`[${adapter.platform}] orphan_recheck_failed`, {

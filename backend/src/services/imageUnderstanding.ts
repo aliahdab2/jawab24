@@ -31,7 +31,7 @@ const DOWNLOAD_TIMEOUT_MS = 10_000;
 /**
  * Max time for the vision call. High-detail vision is slower than Whisper's 15s.
  *
- * Raised 20s → 35s on 2026-08-11 against measured production data, not intuition.
+ * Raised 20s → 25s on 2026-08-11 against measured production data, not intuition.
  * Over 30 days, 852 SUCCESSFUL image enrichments ran p50 7.8s / p90 12.8s /
  * **p99 19.7s** — i.e. the old 20s budget sat exactly on the 99th percentile, with
  * no headroom at all. And that sample is survivors only (`enrichment_status='done'`);
@@ -41,32 +41,46 @@ const DOWNLOAD_TIMEOUT_MS = 10_000;
  * looks like: ~1% lost on an ordinary day, then a whole cluster the moment OpenAI
  * slowed down and the distribution shifted right (11 Aug: 8 of 10 attempts lost).
  *
- * TRADE-OFF, deliberately accepted: the worst case a customer waits before ANY
- * reply grows with this number, because the reply pipeline only runs after the
- * image is read (Rule 17 — reply speed is the product). 35s buys back the ~1.6%
- * of calls that were finishing between 18s and 20s. The real cure is making the
- * call faster rather than the deadline longer — `detail: 'high'` costs ~2,366
- * input tokens per image against ~85 for `low` — but that needs measuring on real
- * Arabic screenshots before it can be changed, since OCR needs the resolution.
+ * WHY 25s AND NOT MORE. This call is awaited inline while holding one of only ten
+ * global webhook slots (`MAX_CONCURRENT_WEBHOOK_PROCESSING`), and vision slowdowns
+ * are correlated by nature — so a longer deadline means the slow images arrive
+ * together, pin every slot, and the server starts 503-ing unrelated webhooks:
+ * texts, comments, WhatsApp, all merchants. 25s keeps the worst-case slot hold at
+ * ~35s, close to what it has always been, while still clearing the measured p99
+ * with headroom. A more generous deadline is only safe once the enrichment
+ * continuation is detached from the webhook slot; the stub is already persisted
+ * before vision runs, so that is feasible — but it changes a shared request path
+ * and belongs in its own change.
+ *
+ * The real cure is making the call faster rather than the deadline longer:
+ * `detail: 'high'` costs ~2,366 input tokens per image against ~85 for `low`.
+ * That needs measuring on real Arabic screenshots first, since OCR needs the
+ * resolution — `jawab24_vision_duration_seconds` now makes that measurable.
  */
-export const VISION_TIMEOUT_MS = 35_000;
+export const VISION_TIMEOUT_MS = 25_000;
+
+/** WABA media calls (getMediaInfo, downloadMedia) each carry this client timeout. */
+const WHATSAPP_MEDIA_TIMEOUT_MS = 15_000;
+
 /**
- * Worst-case wall time for ONE image enrichment, exported so the pipeline
- * budgets that wait on it derive from this number instead of restating it.
+ * Worst-case wall time for ONE image enrichment, PER PLATFORM, exported so the
+ * pipeline budgets that wait on it derive from these numbers instead of restating
+ * them.
  *
  * `messageProcessor`'s attachment park (a sibling text DM waiting for a photo to
  * be read) was sized by hand against "download 10s + vision 20s"; when the vision
- * deadline moved to 35s on 2026-08-11 that budget silently became too short, so a
- * parked reply would give up and answer blind at 40s while the vision call it was
- * waiting for was still legitimately running — reintroducing the blind-reply-plus-
- * second-reply defect for exactly the slow calls the raise was meant to rescue.
- * Deriving it makes that drift impossible rather than merely unlikely (Rule 14).
+ * deadline moved, that budget silently became too short and a parked reply would
+ * answer blind while the vision call it waited for was still legitimately running.
+ * Deriving it makes the drift impossible rather than merely unlikely (Rule 14).
  *
- * WhatsApp is the widest path: getMediaInfo + downloadMedia each carry the WABA
- * client's own 15s timeout before vision starts.
+ * Split by platform on purpose. WhatsApp is far the widest path — two WABA media
+ * calls before vision even starts — and charging Facebook and Instagram customers
+ * for that shape would make the majority of DMs park ~20s longer than their own
+ * worst case requires, which is a latency regression on the text path (Rule 17)
+ * paid to cover a channel the message isn't even on.
  */
-const WHATSAPP_MEDIA_TIMEOUT_MS = 15_000;
-export const WORST_CASE_ENRICHMENT_MS =
+export const WORST_CASE_ENRICHMENT_MS = DOWNLOAD_TIMEOUT_MS + VISION_TIMEOUT_MS;
+export const WORST_CASE_ENRICHMENT_WHATSAPP_MS =
     2 * WHATSAPP_MEDIA_TIMEOUT_MS + VISION_TIMEOUT_MS;
 
 /** Max image size (5MB) — matches the KB vision extractor's cap. */

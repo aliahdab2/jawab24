@@ -279,7 +279,7 @@ describe('handleNonTextMessage — story mentions carry no question', () => {
         vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(igPage as never);
     });
 
-    for (const attachmentType of ['story_mention', 'ig_story'] as const) {
+    for (const attachmentType of ['story_mention'] as const) {
         it(`stores a ${attachmentType} but sends NO nudge`, async () => {
             vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
                 message: { id: 'story-msg-uuid' } as never,
@@ -339,6 +339,22 @@ describe('handleNonTextMessage — story mentions carry no question', () => {
 
         expect(messagesService.markAsResolved).toHaveBeenCalledWith('story-msg-uuid');
         expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+    });
+
+    // ig_story is a customer REPLYING to the merchant's story — on Instagram that
+    // is how buying conversations open. Production shows «كم الواحد؟» / «السعر»
+    // arriving right after these rows, so suppressing them would swallow real
+    // questions AND hide them from Needs Attention. It stays on the nudge path.
+    it('still nudges an ig_story — a story REPLY is not a story mention', async () => {
+        await handleNonTextMessage(
+            'ig-page-id',
+            { senderId: 'user-1', messageId: 'msg-igstory', attachmentType: 'ig_story' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(instagramService.sendDirectMessage).toHaveBeenCalled();
+        expect(messagesService.markAsResolved).not.toHaveBeenCalled();
     });
 
     it('still nudges a video — the no-intent exemption is not a blanket opt-out', async () => {

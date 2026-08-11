@@ -96,7 +96,7 @@ you are investigating "why did this customer get no reply to their photo?", star
 |---|---|---|
 | **Our failure** — vision/download deadline fired, network broke, dead CDN link, empty download, failed cap lookup, no API key | silence | photo lands in the inbox; SLA sweep flags it unanswered |
 | **Daily image cap reached** | silence | `image_limit_reached` notification (deduped per UTC day) |
-| **No-intent attachment** — sticker, Instagram story mention (`story_mention` / `ig_story`) | silence | row stored and marked **resolved**, so it never reaches Needs Attention |
+| **No-intent attachment** — sticker, Instagram story mention (`story_mention`) | silence | row stored and marked **resolved**, so it never reaches Needs Attention |
 
 The rule: the nudge says «حالياً نستطيع الرد على الرسائل النصية والصوتية», which is a
 claim about our capability. Whenever the reason we failed is *ours*, that claim is
