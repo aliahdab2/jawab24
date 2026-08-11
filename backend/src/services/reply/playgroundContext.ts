@@ -41,10 +41,24 @@ interface PlaygroundContextOptions {
     /** Our own Facebook page ID — required to distinguish page-tags pointing at us
      *  (reply) from page-tags pointing elsewhere (skip). */
     ourFacebookPageId?: string;
-    /** Admin-only overrides (not available in customer-facing test) */
+    /** Prior turns of the thread (DM only). Supplied by BOTH the admin playground and
+     *  the customer-facing test reply. */
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+    /**
+     * Merchant persona and tone — OPTIONAL overrides, NOT admin-only inputs.
+     *
+     * When a caller omits them (the customer-facing test reply always does), they fall
+     * back to the values stored on the page's workspace, resolved the way production
+     * resolves them. They were originally modelled as admin experiment inputs with no
+     * fallback, which made the merchant's own «اختبار الرد الذكي» demo a reply their
+     * customers would never receive. An explicitly supplied value always wins, so the
+     * admin playground can still try a persona the merchant has not saved.
+     */
     replyStyle?: string;
     brandVoiceNotes?: string;
+    /** Admin-only experiment input: a synthetic returning-customer summary. The production
+     *  DM pipeline derives its own from conversation history inside the generator, so there
+     *  is no stored merchant value to fall back to. */
     customerContext?: string;
     /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
     senderName?: string;
@@ -69,22 +83,12 @@ export interface PlaygroundContext {
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
     const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source } = opts;
 
-    // 1. Fetch owner settings for comment reply mode + workspace settings for language fallback
+    // 1. Fetch owner settings for comment reply mode + workspace settings for the
+    //    language fallback and the merchant's stored persona.
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
     let nudgeText: string | null = null;
     let defaultReplyLanguage: string | undefined;
-    // The merchant's stored persona and tone, used ONLY when the caller passes none.
-    // Production takes both from the owner's settings (messageProcessor → enrichPageContext);
-    // the playground used to take them from the request body alone, so a merchant testing
-    // their own page got a reply built WITHOUT their persona and always in the default
-    // "professional" tone. That made the playground a poor witness for exactly the settings
-    // it is meant to demonstrate — a named persona («سارة») never introduced itself there,
-    // and the 10 merchants on casual/enthusiastic were previewed at the wrong tone.
-    // resolveBrandVoiceNotes is production's own resolver (it picks the language variant
-    // matching the customer's message), imported rather than re-implemented so the two
-    // paths cannot drift — the same single-choke-point rule the language work follows.
-    let storedBrandVoiceNotes: string | undefined;
-    let storedReplyStyle: string | undefined;
+    let timezone: string | undefined;
     if (page.userId) {
         try {
             const ownerSettings = await settingsService.getSettings(page.userId);
@@ -96,26 +100,45 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
                     qLang,
                 );
             }
-            storedBrandVoiceNotes = resolveBrandVoiceNotes(ownerSettings, question);
-            storedReplyStyle = ownerSettings.replyStyle || undefined;
         } catch {
             // Non-critical — fall back to defaults
+        }
+    }
+    // The merchant's stored persona and tone, used ONLY when the caller passes none.
+    // The playground used to take them from the request body alone, so a merchant testing
+    // their own page got a reply built WITHOUT their persona and always in the default
+    // "professional" tone. That made the playground a poor witness for exactly the settings
+    // it is meant to demonstrate — a named persona («سارة») never introduced itself there,
+    // and the 10 merchants on casual/enthusiastic were previewed at the wrong tone.
+    //
+    // Both are read from the PAGE'S OWN WORKSPACE, because that is the store production
+    // reads: messageProcessor and commentProcessor refuse a page with no workspace outright
+    // and then call workspaceSettingsService.getSettings(page.workspaceId). The owner row is
+    // NOT a substitute — settingsService.getSettings overlays the pipeline fields from
+    // resolveWorkspaceId(userId), an unordered `limit(1)` over the user's memberships, so a
+    // merchant who holds more than one workspace (a personal one beside a store one, which
+    // D-066 Zid installs auto-provision) can be previewed with another workspace's persona.
+    //
+    // resolveBrandVoiceNotes is production's own resolver (it picks the language variant
+    // matching the customer's message), imported rather than re-implemented so the two
+    // paths cannot drift — the same single-choke-point rule the language work follows.
+    let storedBrandVoiceNotes: string | undefined;
+    let storedReplyStyle: string | undefined;
+    if (page.workspaceId) {
+        try {
+            const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
+            defaultReplyLanguage = wsSettings.defaultReplyLanguage;
+            timezone = wsSettings.timezone;
+            storedBrandVoiceNotes = resolveBrandVoiceNotes(wsSettings, question);
+            storedReplyStyle = wsSettings.replyStyle || undefined;
+        } catch {
+            // Non-critical — fall back to default
         }
     }
     // An explicit caller value still wins: the admin console and the eval harness pass a
     // persona per request to try one the merchant has not saved.
     const effectiveBrandVoiceNotes = brandVoiceNotes ?? storedBrandVoiceNotes;
     const effectiveReplyStyle = replyStyle ?? storedReplyStyle;
-    let timezone: string | undefined;
-    if (page.workspaceId) {
-        try {
-            const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
-            defaultReplyLanguage = wsSettings.defaultReplyLanguage;
-            timezone = wsSettings.timezone;
-        } catch {
-            // Non-critical — fall back to default
-        }
-    }
 
     // 2. Enrich KB with e-commerce product/policy data
     let pageKB = page.knowledgeBase || undefined;
