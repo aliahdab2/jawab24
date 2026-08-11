@@ -5,6 +5,18 @@ import { AppSkeleton } from '@/components/ui';
 import { captureError } from '@/lib/sentryHelpers';
 
 /**
+ * The parameters a real bridge hand-off carries. Their PRESENCE is what makes a
+ * token-less arrival a defect worth alerting on rather than an ordinary visit.
+ *
+ * This URL is public and `noindex` does not stop anyone: a crawler, a link
+ * checker, or a human pasting it lands here with an empty query. Alerting on
+ * those reopened a resolved issue twice on 2026-08-11 (a HeadlessChrome scanner
+ * and a desktop visit), which is how a real stranded merchant stops being
+ * noticed — the alert that matters gets filed with the noise.
+ */
+const BRIDGE_PARAMS = ['token', 'fbToken', 'redirect', 'user'] as const;
+
+/**
  * Fallback page for Android App Links.
  *
  * Normally, Android intercepts https://jawab24.com/auth/app-sync and opens the native
@@ -32,7 +44,17 @@ export default function AuthAppSync() {
         window.location.href = `com.jawab24.app://auth/sync?redirect=${encodeURIComponent(redirectPath)}`;
         return;
       }
-      captureError(new Error('app-sync fallback: no token'), 'App-sync fallback reached without token', { tags: { page: 'auth-app-sync' } });
+      // Only a bridge that ARRIVED and could not be honoured is a defect. A
+      // query-less visit is a crawler or a typed URL — same destination, no
+      // alert. Note this deliberately still fires for a hand-off carrying an
+      // fbToken but no session token, and for a `redirect` rejected by the
+      // startsWith('/') check above: both are genuinely broken bridges.
+      if (BRIDGE_PARAMS.some(param => param in router.query)) {
+        captureError(new Error('app-sync fallback: no token'), 'App-sync fallback reached without token', {
+          tags: { page: 'auth-app-sync' },
+          extra: { params: Object.keys(router.query) },
+        });
+      }
       router.replace('/login');
       return;
     }
