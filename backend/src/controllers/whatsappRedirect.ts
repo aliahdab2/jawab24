@@ -422,13 +422,26 @@ export class WhatsAppRedirectController {
         const locale: 'ar' | 'en' = q.locale === 'en' ? 'en' : 'ar';
         const fail = (code: string) => reply.redirect(pagesRedirect(locale, { whatsappError: code }));
 
-        const userId = await authService.consumeBrowserHandoffCode(typeof q.code === 'string' ? q.code : '');
-        if (!userId) {
+        const redeemed = await authService.consumeBrowserHandoffCode(typeof q.code === 'string' ? q.code : '');
+        if (!redeemed) {
             // Expired/used code: the browser has no session to show an error
             // toast with — land on login, where a signed-in user bounces to
             // the dashboard anyway.
             return reply.redirect(`${config.frontendUrl}${localePath(locale)}/login`);
         }
+        // A restricted embedded session must not reach this flow at all. It signs
+        // the browser in with a FULL session below (refresh cookie included) and
+        // hands over workspace-level WhatsApp credential material — precisely what
+        // an iframe credential is not allowed to buy. Embedded merchants connect
+        // WhatsApp from a real login, not from the platform dashboard.
+        if (redeemed.scope) {
+            request.log.warn(
+                { embeddedPlatform: redeemed.scope.embeddedPlatform },
+                'WhatsApp app-start refused: handoff code was minted by a restricted embedded session',
+            );
+            return reply.redirect(`${config.frontendUrl}${localePath(locale)}/login`);
+        }
+        const userId = redeemed.userId;
         const user = await authService.getUserById(userId);
         if (!user) {
             return reply.redirect(`${config.frontendUrl}${localePath(locale)}/login`);

@@ -8,6 +8,7 @@ import {
     setEmbeddedTokenHash,
 } from '../services/ecommerce';
 import { authService } from '../services/auth';
+import { workspaceService } from '../services/workspace';
 import {
     exchangeEmbeddedCredential,
     hashEmbeddedToken,
@@ -401,9 +402,33 @@ export const {
         }
         // No in-dashboard entry available — put them in the app in the browser
         // with a real session rather than a login wall or a dead iframe.
+        //
+        // SCOPED, for the same reason the iframe's session is (D-066/D-067): what
+        // this branch has proved is the STORE, never the person. The store email
+        // Zid handed us is attacker-settable, and `reinstallPolicy:
+        // 'reactivate-for-owner'` means the owner may be a PRE-EXISTING Jawab24
+        // account with other workspaces and possibly admin. An unscoped code here
+        // redeems for a full, admin-capable session plus a 60-day refresh cookie —
+        // the exact escalation the handoff bridge was just fixed to refuse, at the
+        // sibling seam.
         const store_ = await getStoreById(store.id);
         if (!store_) return null;
-        const code = await authService.mintBrowserHandoffCode(store_.userId);
+        // `?? resolveDefaultWorkspaceId` covers legacy rows installed before stores
+        // carried a workspace — same fallback as embeddedSession.ts. With neither
+        // we hand out NOTHING rather than an unscoped session; the merchant meets
+        // the login page, which is worse product but not an escalation. The install
+        // guarantees a workspace, so this is a guard, not an expected path.
+        const workspaceId = store_.workspaceId
+            ?? await workspaceService.resolveDefaultWorkspaceId(store_.userId);
+        if (!workspaceId) {
+            log.error({ storeId: store.id, userId: store_.userId },
+                'Zid post-install handoff skipped: no workspace to scope the session to');
+            return null;
+        }
+        const code = await authService.mintBrowserHandoffCode(store_.userId, {
+            embeddedPlatform: 'zid',
+            workspaceId,
+        });
         return `${config.frontendUrl}/auth/sync?code=${encodeURIComponent(code)}&redirect=${encodeURIComponent('/zid/onboarding')}`;
     },
 });

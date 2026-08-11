@@ -16,7 +16,8 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { sallaApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import type { Page, EcommerceStore } from '@jawab24/shared';
+import { useEcommerceStoreSync } from '@/hooks/useEcommerceStoreSync';
+import type { Page } from '@jawab24/shared';
 
 
 
@@ -32,11 +33,10 @@ export default function SallaOnboarding() {
   // /login. Wait for _hasHydrated, matching DashboardLayout (AI_INSTRUCTIONS §12).
   const _hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [step, setStep] = useState(0);
-  const [store, setStore] = useState<EcommerceStore | null>(null);
-  const [storeLoading, setStoreLoading] = useState(true);
-  const [storeError, setStoreError] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
-  const [syncResult, setSyncResult] = useState<{ synced?: number }>({});
+  const {
+    store, storeLoading, storeError, syncStatus, syncResult,
+    retrySync: handleRetrySync,
+  } = useEcommerceStoreSync(sallaApi, isAuthenticated && step >= 1);
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -49,42 +49,6 @@ export default function SallaOnboarding() {
       router.replace('/login');
     }
   }, [_hasHydrated, isAuthenticated, router]);
-
-  // Fetch store info when moving past welcome
-  useEffect(() => {
-    async function fetchStore() {
-      try {
-        const res = await sallaApi.getStore();
-        setStore(res);
-        setStoreLoading(false);
-        setSyncStatus('syncing');
-        try {
-          const syncRes = await sallaApi.syncProducts();
-          setSyncResult(syncRes);
-          setSyncStatus('done');
-        } catch {
-          setSyncStatus('error');
-        }
-      } catch {
-        setStoreError(true);
-        setStoreLoading(false);
-      }
-    }
-    if (isAuthenticated && step >= 1) {
-      fetchStore();
-    }
-  }, [isAuthenticated, step >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRetrySync = useCallback(async () => {
-    setSyncStatus('syncing');
-    try {
-      const syncRes = await sallaApi.syncProducts();
-      setSyncResult(syncRes);
-      setSyncStatus('done');
-    } catch {
-      setSyncStatus('error');
-    }
-  }, []);
 
   const fetchPages = useCallback(async () => {
     setPagesLoading(true);

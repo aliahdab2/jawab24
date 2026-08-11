@@ -601,7 +601,7 @@ describe('Zid Controller', () => {
             mockGetStoreByDomain.mockResolvedValue(null);
             mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
             mockRegisterEmbeddedToken.mockRejectedValueOnce(new Error('Zid 500'));
-            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1' });
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1', workspaceId: 'ws-store' });
 
             const req = mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} });
             const rep = mockReply();
@@ -614,6 +614,55 @@ describe('Zid Controller', () => {
             expect(rep.redirect).toHaveBeenCalledWith(
                 'https://jawab24.com/auth/sync?code=handoff-code-xyz&redirect=%2Fzid%2Fonboarding',
             );
+        });
+
+        it('SCOPES that fallback session to the store workspace — an install proves the store, not the person', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            mockRegisterEmbeddedToken.mockRejectedValueOnce(new Error('Zid 500'));
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1', workspaceId: 'ws-store' });
+
+            await authCallback(mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} }), mockReply());
+
+            // An UNSCOPED code redeems at /auth/sync for a full, admin-capable
+            // session plus a 60-day refresh cookie. `reinstallPolicy:
+            // 'reactivate-for-owner'` means this userId can be a PRE-EXISTING
+            // account with other workspaces — the same escalation the handoff
+            // bridge refuses, at the sibling seam.
+            expect(mockMintBrowserHandoffCode).toHaveBeenCalledWith('new-merchant-1', {
+                embeddedPlatform: 'zid',
+                workspaceId: 'ws-store',
+            });
+        });
+
+        it('falls back to the resolver for a legacy store row carrying no workspace', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            mockRegisterEmbeddedToken.mockRejectedValueOnce(new Error('Zid 500'));
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1', workspaceId: null });
+
+            await authCallback(mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} }), mockReply());
+
+            expect(mockMintBrowserHandoffCode).toHaveBeenCalledWith('new-merchant-1', {
+                embeddedPlatform: 'zid',
+                workspaceId: 'resolved_workspace_id',
+            });
+        });
+
+        it('hands out NOTHING rather than an unscoped session when no workspace can be found', async () => {
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            mockRegisterEmbeddedToken.mockRejectedValueOnce(new Error('Zid 500'));
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', userId: 'new-merchant-1', workspaceId: null });
+            mockResolveDefaultWorkspaceId.mockResolvedValueOnce(null);
+
+            const rep = mockReply();
+            await authCallback(mockRequest({ query: { code: 'code123', state: 'zid_state' }, cookies: {} }), rep);
+
+            // Worse product (the merchant meets the login page) but not an
+            // escalation. The install guarantees a workspace, so this is a guard.
+            expect(mockMintBrowserHandoffCode).not.toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
         });
 
         it('should NOT register an embedded token or override the redirect for a merchant-initiated connect', async () => {

@@ -139,6 +139,18 @@ export class CookiesService {
     }
 
     /**
+     * Clear ONLY the refresh cookie, leaving the access session intact.
+     *
+     * For a session that is deliberately non-renewable: a scoped embedded
+     * break-out keeps its short-lived access token but must not be able to
+     * rotate through /auth/refresh, which mints UNSCOPED. Distinct from
+     * clearAuthCookies, which ends the session outright.
+     */
+    clearRefreshTokenCookie(reply: FastifyReply): void {
+        reply.clearCookie('refreshToken', { ...REFRESH_COOKIE_OPTIONS });
+    }
+
+    /**
      * Clear authentication cookies
      */
     clearAuthCookies(reply: FastifyReply): void {

@@ -400,7 +400,9 @@ If throttling appears, verify the sync retries rather than truncating (the old s
 | L-12 | **Credential hygiene:** after the frame loads, inspect the address bar, `nginx` access log for `/zid/embedded`, and any Sentry event | No `?token=<uuid>` anywhere — stripped from the URL, path-only in the log, `REDACTED` in Sentry | — |
 | L-13 | **Idle expiry:** leave a store's embedded entry unused for >30 days (or set `embedded_token_last_used_at` back in the DB), then open it | 401 — the merchant reopens/reinstalls to mint a fresh UUID | — |
 | L-14 | **Workspace guarantee:** provision a merchant whose store email matches a *pending workspace invite*, then open the app | The merchant still owns a personal workspace (the invite does not suppress it); store reads do not 404 | — |
-| L-15 | **No pages yet:** open the freshly-provisioned app in the frame; on the "connect a page" step | An actionable **"Connect a Facebook page"** button (not a dead sentence); it opens Jawab24 in a NEW top-level tab (facebook.com cannot be framed) | C16: the new tab opening |
+| L-15 | **No pages yet:** open the freshly-provisioned app in the frame; on the "connect a page" step | An actionable **"Connect a Facebook page"** button (not a dead sentence); it opens Jawab24 in a NEW top-level tab (facebook.com cannot be framed) **and that tab arrives SIGNED IN — never on `/login`**. Run it as a merchant with no password/Facebook/phone, which is every auto-provisioned merchant | C16: the new tab opening |
+| L-16 | **Escalation:** from the frame, call `POST /auth/browser-handoff`, redeem the code at `/auth/browser-handoff/exchange`, and decode the returned token | Token is STILL `embeddedPlatform=zid` + pinned `workspaceId`, `isAdmin=false`, and **no refresh cookie** is set. Then confirm the admin console and a second workspace are still refused with that token | — |
+| L-17 | **WhatsApp bridge:** redeem a frame-minted handoff code at `/whatsapp/app-start` | Redirect to `/login`; no session cookies, no refresh token, no WABA credential material | — |
 
 **Shared-infrastructure re-check (§G-adjacent, MANDATORY).** Removing `X-Frame-Options`
 domain-wide is a change every response carries. Before publish, confirm on PROD that
@@ -408,14 +410,14 @@ domain-wide is a change every response carries. Before publish, confirm on PROD 
 — a CSP typo silently drops the whole header, taking clickjacking protection with it.
 `npm run check:nginx-routing` asserts both the routes and these headers.
 
-> **⚠️ Deferred — blocks the RESUBMISSION, not this PR.** The seamless in-frame Facebook
-> connect is NOT built. facebook.com refuses framing (`X-Frame-Options: DENY`), and a
-> scope-preserving break-out needs threading the embedded scope through the shared
-> `/auth/browser-handoff` bridge (shared infra, deliberately untouched here). Today L-15
-> breaks OUT to a top-level tab, where the merchant authenticates normally and connects a
-> page. Before resubmitting app 7367, either finish the scoped-handoff break-out or confirm
-> the top-level-tab flow is acceptable to the reviewer, and run §A–§F live plus the §H
-> billing scenario. Do not resubmit on the embedded flow alone.
+> ✅ **Scoped break-out BUILT 2026-08-11 (D-067).** The tab still opens (facebook.com
+> refuses framing and always will), but it now arrives **signed in**, carrying the
+> embedded scope — previously it landed on `/login`, which an auto-provisioned merchant
+> has no way to pass. The same change closed a privilege escalation: the handoff dropped
+> the scope, so the frame could redeem a full, admin-capable session. See L-16/L-17.
+>
+> **Still required before resubmitting app 7367:** §A–§F live plus the §H billing
+> scenario. Do not resubmit on the embedded flow alone.
 
 ---
 

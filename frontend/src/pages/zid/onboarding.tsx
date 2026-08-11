@@ -17,21 +17,11 @@ import { useTranslations } from 'next-intl';
 import { zidApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { getEmbeddedPlatform } from '@/lib/embeddedSession';
-import type { Page, EcommerceStore } from '@jawab24/shared';
+import { openTopLevelAuthenticated } from '@/lib/embeddedBreakout';
+import { useEcommerceStoreSync } from '@/hooks/useEcommerceStoreSync';
+import type { Page } from '@jawab24/shared';
 
 const TOTAL_STEPS = 4;
-
-/**
- * Open a URL as a NEW top-level browser tab, escaping the platform iframe.
- * `_blank` breaks out of the frame (a user gesture makes the popup allowed);
- * `noopener` severs `window.opener`. Connecting a Facebook page needs the full
- * first-party app — facebook.com sends `X-Frame-Options: DENY`, so the OAuth
- * dialog cannot render inside the Zid frame.
- */
-function openTopLevel(path: string): void {
-  if (typeof window === 'undefined') return;
-  window.open(path, '_blank', 'noopener');
-}
 
 export default function ZidOnboarding() {
   const router = useRouter();
@@ -40,11 +30,10 @@ export default function ZidOnboarding() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [step, setStep] = useState(0);
-  const [store, setStore] = useState<EcommerceStore | null>(null);
-  const [storeLoading, setStoreLoading] = useState(true);
-  const [storeError, setStoreError] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
-  const [syncResult, setSyncResult] = useState<{ synced?: number }>({});
+  const {
+    store, storeLoading, storeError, syncStatus, syncResult,
+    retrySync: handleRetrySync,
+  } = useEcommerceStoreSync(zidApi, isAuthenticated && step >= 1);
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -63,41 +52,6 @@ export default function ZidOnboarding() {
       router.replace('/login');
     }
   }, [hasHydrated, isAuthenticated, isEmbedded, router]);
-
-  useEffect(() => {
-    async function fetchStore() {
-      try {
-        const res = await zidApi.getStore();
-        setStore(res);
-        setStoreLoading(false);
-        setSyncStatus('syncing');
-        try {
-          const syncRes = await zidApi.syncProducts();
-          setSyncResult(syncRes);
-          setSyncStatus('done');
-        } catch {
-          setSyncStatus('error');
-        }
-      } catch {
-        setStoreError(true);
-        setStoreLoading(false);
-      }
-    }
-    if (isAuthenticated && step >= 1) {
-      fetchStore();
-    }
-  }, [isAuthenticated, step >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRetrySync = useCallback(async () => {
-    setSyncStatus('syncing');
-    try {
-      const syncRes = await zidApi.syncProducts();
-      setSyncResult(syncRes);
-      setSyncStatus('done');
-    } catch {
-      setSyncStatus('error');
-    }
-  }, []);
 
   const fetchPages = useCallback(async () => {
     setPagesLoading(true);
@@ -317,10 +271,12 @@ export default function ZidOnboarding() {
                         onClick={() => {
                           // Land on the pages screen, whose own empty state
                           // carries the connect-a-page action. Embedded: break
-                          // out to a top-level tab (facebook.com can't be framed);
-                          // web: navigate in place.
+                          // out to a top-level tab that ARRIVES SIGNED IN
+                          // (facebook.com can't be framed, and this merchant has
+                          // no credentials to pass a login wall with); web:
+                          // navigate in place.
                           if (isEmbedded) {
-                            openTopLevel('/pages');
+                            void openTopLevelAuthenticated('/pages');
                           } else {
                             router.push('/pages');
                           }
