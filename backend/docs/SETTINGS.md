@@ -106,7 +106,9 @@ the merchant, so the settings below resolve from the **page's own workspace** �
 | `defaultReplyLanguage`, `timezone` | `wsSettings` |
 | `commentReplyMode` + `dualReplyNudgeVariations` | the owner row, `settingsService.getSettings(page.userId)`. ⚠️ **Known drift** — see below |
 
-**Never resolve a pipeline field here from the owner row.** `settingsService.getSettings`
+**Never resolve a pipeline field here from the owner row.** The full map of which surface
+reads which store, and the defects that come from getting it wrong, is
+[`SETTINGS_RESOLUTION.md`](./SETTINGS_RESOLUTION.md). In short: `settingsService.getSettings`
 overlays the pipeline fields (`services/pipelineFields.ts`) from
 `resolveWorkspaceId(userId)`, an **unordered `limit(1)`** over the user's workspace
 memberships. For a merchant who holds more than one workspace — a personal one beside a
