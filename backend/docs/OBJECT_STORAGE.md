@@ -70,53 +70,48 @@ Reuses the existing B2 account (already used for DB backups), so no new vendor.
 4. **Endpoint + region** come from the bucket's "Endpoint" (e.g.
    `s3.us-west-002.backblazeb2.com` → `S3_ENDPOINT=https://…`, `S3_REGION=us-west-002`).
 5. Set the 6 vars in prod `env/backend.env`. Redeploy. Never commit secrets.
-6. **Add a CORS rule to the bucket** — see §4b. A public bucket is NOT enough.
+6. No bucket CORS rule is needed — the app serves downloads through its own origin. See §4b.
 
 **Cost:** first 10 GB storage free, then $6/TB/mo; 3× storage free egress (free via
 Cloudflare). At one 2 MB image per post, realistic volume is effectively $0.
 
-## 4b. Browser access needs CORS **and** CSP — displaying ≠ downloading
+## 4b. Displaying ≠ downloading — and why downloads go through US
 
-Two independent gates stand between the browser and an object, and they are easy to
-confuse because one of them lets the image *look* fine:
+Two different browser operations, with different permission rules, and they are easy to
+confuse because one of them lets the image *look* perfectly fine:
 
-| Path | Gate | Where |
-|------|------|-------|
-| `<img src>` — previews | CSP `img-src` | `nginx/nginx.conf` |
-| `fetch()` — "Download image", share sheet | CSP `connect-src` **and** the bucket's `Access-Control-Allow-Origin` | nginx + bucket config |
+| Path | What the browser needs | Where |
+|------|------------------------|-------|
+| `<img src>` — previews | CSP `img-src` only. The bucket's consent is NOT required. | `nginx/nginx.conf` |
+| Saving the file | the bytes must be **readable**, not merely displayable | our own API |
 
-`downloadImage()` (`frontend/src/utils/imageDownload.ts`) fetches the object to hand a
-Blob to the share sheet, because a cross-origin `<a download>` navigates instead of
-downloading. So every download path needs both.
+Shipped broken (Sentry `JAWAB24-FRONTEND-31`): the frontend fetched the bucket URL
+directly to get a Blob for the share sheet, because a cross-origin `<a download>`
+navigates instead of downloading. The bucket serves no `Access-Control-Allow-Origin`, so
+**every** «حفظ الصورة» press threw `TypeError: Failed to fetch` from the day the feature
+shipped, while previews rendered normally and hid it.
 
-Shipped broken (Sentry `JAWAB24-FRONTEND-31`): the host was in `img-src` only and the
-bucket had no CORS rule, so post-suggestion previews rendered while every download threw
-`TypeError: Failed to fetch`. The CSP half is now pinned by
-`backend/src/__tests__/nginx-config.test.ts`. **The bucket half cannot be pinned by any
-test — it lives in provider config**, so it is the first thing to check when downloads
-fail and the previews look fine.
+**The fix is `GET /pages/:pageId/post-suggestions/:suggestionId/image`** — the app reads
+the object with `imageStorage.get()` and returns it from its own origin with
+`Content-Disposition: attachment`. Same-origin, so cross-origin permission never enters
+the picture.
 
-Required rule (both origins — the web app and the native WebView, which runs at
-`https://app.jawab24.com`):
+⛔ **Do not "fix" this by adding a bucket CORS rule.** That was the earlier plan and it is
+now the wrong one:
 
-```json
-[{
-  "corsRuleName": "browserDownloads",
-  "allowedOrigins": ["https://jawab24.com", "https://app.jawab24.com"],
-  "allowedOperations": ["s3_get", "s3_head"],
-  "allowedHeaders": ["*"],
-  "exposeHeaders": ["content-length", "content-type"],
-  "maxAgeSeconds": 3600
-}]
-```
+- it lives in **provider config, outside this repo** — no test can pin it, and it is lost
+  on a key rotation or a bucket move (§8);
+- it still would not be reliable in the Android WebView, whose cross-origin download
+  semantics are narrower than a desktop browser's;
+- it would put every merchant's media one guessable URL away from anyone, whereas the
+  route above checks workspace ownership before it reads a single byte.
 
-Apply with `b2 bucket update --cors-rules "$(cat cors.json)" <bucket> allPublic`, then
-verify from a machine that is not the browser:
+⭐ The storage key is **derived server-side** from (workspace, page, suggestion, take
+index). The route accepts a take INDEX and never a key or a URL — taking either would be
+an arbitrary read of the whole bucket behind one authenticated session.
 
-```bash
-curl -sSI -H "Origin: https://jawab24.com" "<S3_PUBLIC_BASE_URL>/<any-key>" | grep -i access-control
-# expect: access-control-allow-origin: https://jawab24.com
-```
+Note that CSP `connect-src` no longer needs the storage host for this feature; `img-src`
+still does, and stays pinned by `backend/src/__tests__/nginx-config.test.ts`.
 
 ## 5. Switching provider (the payoff — env-only, no code change)
 
@@ -173,12 +168,12 @@ S3_PUBLIC_BASE_URL=https://jawab24.com/media
 `forcePathStyle` is applied automatically whenever `S3_ENDPOINT` is set. Add the
 `minio-data` volume to your host backup routine (see §6).
 
-⚠️ **Env-only applies to CODE, not to the browser gates.** Any swap that changes the
-`S3_PUBLIC_BASE_URL` *host* also has to carry §4b with it: the new host in CSP
-`img-src` + `connect-src`, and a CORS rule on the new bucket. Nothing in the app fails
-at boot when you forget — previews keep working and only downloads break.
-The MinIO variant above is the exception: it serves from `https://jawab24.com/media`,
-which is same-origin, so it needs neither gate.
+⚠️ **Env-only applies to CODE, not to the CSP.** Any swap that changes the
+`S3_PUBLIC_BASE_URL` *host* also needs the new host added to CSP `img-src`, or previews
+go blank. Nothing in the app fails at boot when you forget. Downloads are unaffected —
+they are served from our own origin (§4b) and never touch the storage host from the
+browser. The MinIO variant above needs nothing at all: it serves from
+`https://jawab24.com/media`, which is already same-origin.
 
 ## 6. Backup & restore
 

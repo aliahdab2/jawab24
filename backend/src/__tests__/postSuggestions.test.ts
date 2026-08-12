@@ -21,7 +21,7 @@ import { POST_SUGGESTION_VARIANT_COUNT } from '@jawab24/shared';
 
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
-    mockIsConfigured, mockPut, mockRemove, mockComposePostCard, mockFetchRoundedLogo,
+    mockIsConfigured, mockPut, mockRemove, mockGetObject, mockComposePostCard, mockFetchRoundedLogo,
     mockRenderPosterBase, mockConfig, mockEnqueue,
 } = vi.hoisted(() => ({
     mockRenderPosterBase: vi.fn(),
@@ -33,6 +33,7 @@ const {
     mockIsConfigured: vi.fn(),
     mockPut: vi.fn(),
     mockRemove: vi.fn(),
+    mockGetObject: vi.fn(),
     mockComposePostCard: vi.fn(),
     mockFetchRoundedLogo: vi.fn(),
     mockConfig: {
@@ -62,7 +63,7 @@ vi.mock('../lib/dailyCap', () => ({
     claimDailyCapSlot: mockClaimDailyCapSlot,
 }));
 vi.mock('../services/imageStorage', () => ({
-    imageStorage: { isConfigured: mockIsConfigured, put: mockPut, remove: mockRemove },
+    imageStorage: { isConfigured: mockIsConfigured, put: mockPut, remove: mockRemove, get: mockGetObject },
 }));
 // The compositor has its own suite (imageCompose.test.ts) — here it is mocked
 // so the service tests pin the CONTRACT: pre-fetched logo passed in, null =
@@ -1352,5 +1353,82 @@ describe('post suggestions — fulfilment leaves no row behind', () => {
         // The guard is in the WHERE, so a row that DID finish can never be
         // clobbered by a late failure event for the same job.
         expect(referencesColumn(update?.where, postSuggestions.status)).toBe(true);
+    });
+});
+
+/**
+ * Serving the card from our OWN origin.
+ *
+ * The stored bucket URL is displayable but NOT fetchable — that host sends no
+ * CORS headers — so «حفظ الصورة» threw on every press from the day the feature
+ * shipped. The fix is to serve the bytes ourselves, and the security property
+ * that makes it safe is that the storage key is DERIVED from the row, never
+ * taken from the caller.
+ */
+describe('getVariantImage — the download path', () => {
+    const ROW = {
+        ...INSERTED,
+        selectedVariant: 1,
+        suggestedFor: '2026-08-09',
+        variants: [
+            { text: 'الأولى', headline: 'ه١', imageUrl: 'https://media/v1.jpg', imageKey: 'generated-posts/ws/v1.jpg' },
+            { text: 'الثانية', headline: 'ه٢', imageUrl: 'https://media/v2.jpg', imageKey: 'generated-posts/ws/v2.jpg' },
+        ],
+    };
+    const queueOwned = (row: Record<string, unknown> | null) =>
+        router.queue({ op: 'select', table: postSuggestions, rows: row ? [{ post_suggestions: row, pages: { id: PAGE } }] : [] });
+
+    beforeEach(() => {
+        mockGetObject.mockResolvedValue({ body: Buffer.from('jpeg-bytes'), contentType: 'image/jpeg' });
+    });
+
+    it('serves the REQUESTED take, reading the key off the row', async () => {
+        queueOwned(ROW);
+        const out = await postSuggestionsService.getVariantImage(WS, PAGE, 's1', 0);
+        expect(mockGetObject).toHaveBeenCalledWith('generated-posts/ws/v1.jpg');
+        expect(out?.body.toString()).toBe('jpeg-bytes');
+        expect(out?.contentType).toBe('image/jpeg');
+        // Dated, not id-named: this lands in the merchant's photo roll.
+        expect(out?.filename).toBe('jawab24-post-2026-08-09.jpg');
+    });
+
+    it('defaults to the take the merchant has SELECTED — what the sheet is showing them', async () => {
+        queueOwned(ROW);
+        await postSuggestionsService.getVariantImage(WS, PAGE, 's1');
+        expect(mockGetObject).toHaveBeenCalledWith('generated-posts/ws/v2.jpg');
+    });
+
+    it('a row outside this workspace is invisible — null, and NO storage read', async () => {
+        // The guard that matters: the caller names a suggestion id, and the key
+        // is only ever derived from a row this workspace owns. Without the join
+        // this route would read any object in the bucket.
+        queueOwned(null);
+        expect(await postSuggestionsService.getVariantImage(WS, PAGE, 's1', 0)).toBeNull();
+        expect(mockGetObject).not.toHaveBeenCalled();
+    });
+
+    it('an index the row cannot serve is null, and NO storage read', async () => {
+        queueOwned(ROW);
+        expect(await postSuggestionsService.getVariantImage(WS, PAGE, 's1', 7)).toBeNull();
+        expect(mockGetObject).not.toHaveBeenCalled();
+    });
+
+    it('a take with no stored image is null rather than an empty download', async () => {
+        queueOwned({ ...ROW, variants: [{ text: 'نص', headline: null, imageUrl: null, imageKey: null }], selectedVariant: 0 });
+        expect(await postSuggestionsService.getVariantImage(WS, PAGE, 's1', 0)).toBeNull();
+        expect(mockGetObject).not.toHaveBeenCalled();
+    });
+
+    it('a file already swept (superseded post) is null, not a crash', async () => {
+        queueOwned(ROW);
+        mockGetObject.mockResolvedValue(null);
+        expect(await postSuggestionsService.getVariantImage(WS, PAGE, 's1', 0)).toBeNull();
+    });
+
+    it('a pre-variants row still downloads — it projects to its one mirrored take', async () => {
+        queueOwned({ ...INSERTED, variants: null, selectedVariant: 0, imageKey: 'generated-posts/ws/x.png' });
+        const out = await postSuggestionsService.getVariantImage(WS, PAGE, 's1');
+        expect(mockGetObject).toHaveBeenCalledWith('generated-posts/ws/x.png');
+        expect(out).not.toBeNull();
     });
 });

@@ -1,32 +1,33 @@
 /**
  * Shared image download/share utility («بوست اليوم» image, first consumer).
  *
- * Content acquisition only — the platform delivery (native share sheet / iOS
- * Web Share / desktop anchor) is the shared `deliverFile` tail in
- * fileDelivery.ts, the ONE proven pattern for getting a file out of this app.
+ * Delivery only — the caller supplies the bytes. The platform half (native
+ * share sheet / iOS Web Share / desktop anchor) is the shared `deliverFile`
+ * tail in fileDelivery.ts, the ONE proven pattern for getting a file out of
+ * this app.
  *
- * The source is a URL (our media CDN), so delivery starts with a fetch —
- * a cross-origin <a download> would silently navigate instead of downloading.
+ * It takes a Blob rather than a URL, and that is the whole fix for a bug this
+ * feature shipped with: the images live on object storage that sends no CORS
+ * headers, so `fetch`-ing one from the browser always threw `TypeError: Failed
+ * to fetch` — even though the same URL renders fine in an `<img>`, which needs
+ * no permission. Acquiring the bytes now belongs to the API client, which reads
+ * them through our own origin (and carries the auth headers that route needs).
  */
 import { deliverFile } from './fileDelivery';
 
 /**
- * Download or share an image by URL.
+ * Download or share image bytes.
  * Returns `{ savedToFiles: true }` when handed to the native share sheet so the
  * caller can toast "saved to Files" vs "download started" (csvExport contract).
- * Throws on fetch failure — the caller owns the error toast.
  */
 export async function downloadImage(
-  url: string,
+  blob: Blob,
   filename: string,
 ): Promise<{ savedToFiles: boolean }> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
-  const blob = await response.blob();
   return deliverFile({
     blob,
     filename,
-    mime: blob.type || 'image/png',
+    mime: blob.type || 'image/jpeg',
     // Binary payload: base64 with NO encoding key (the corruption trap
     // deliverFile owns and documents).
     native: { format: 'base64FromBlob' },

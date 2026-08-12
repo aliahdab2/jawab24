@@ -235,6 +235,17 @@ export const postSuggestionsApi = {
   // postType: merchant-chosen angle; omitted = the server's variety picker.
   generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
     api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }),
+  // The card's bytes, from OUR origin. Deliberately not a direct fetch of the
+  // stored `imageUrl`: that host serves no CORS headers, so the browser can
+  // display it but never read it — which is why the download button threw on
+  // every press before this. Goes through `api` (not bare fetch) because the
+  // route is authenticated and only this client carries the Bearer + workspace
+  // headers.
+  downloadImage: (pageId: string, suggestionId: string, variantIndex?: number) =>
+    api.get<Blob>(`/pages/${pageId}/post-suggestions/${suggestionId}/image`, {
+      responseType: 'blob',
+      ...(variantIndex !== undefined ? { params: { variant: variantIndex } } : {}),
+    }),
   markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
     api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
   // Which take the merchant picked. Persisted so the dashboard card and any

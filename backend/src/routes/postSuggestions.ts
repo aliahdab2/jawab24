@@ -31,6 +31,23 @@ export default async function postSuggestionsRoutes(fastify: FastifyInstance) {
             schema: { tags: ['PostSuggestions'], summary: "Today's suggested post («بوست اليوم» pilot)", security: auth, params: pageParams },
         }, postSuggestionsController.getToday.bind(postSuggestionsController));
 
+        // Serves the card's bytes from our own origin so the browser can
+        // actually download it (a bucket URL is displayable but not fetchable
+        // without CORS). A READ of the merchant's own media — same audience as
+        // the rest of this block.
+        memberRoutes.get('/pages/:pageId/post-suggestions/:suggestionId/image', {
+            schema: {
+                tags: ['PostSuggestions'],
+                summary: "Download today's post image (same-origin, so it is fetchable)",
+                security: auth,
+                params: suggestionEventParams,
+                querystring: {
+                    type: 'object',
+                    properties: { variant: { type: 'integer', minimum: 0 } },
+                },
+            },
+        }, postSuggestionsController.getImage.bind(postSuggestionsController));
+
         memberRoutes.post('/pages/:pageId/post-suggestions/:suggestionId/events', {
             schema: { tags: ['PostSuggestions'], summary: 'Stamp a market-signal event (opened/copied/downloaded)', security: auth, params: suggestionEventParams },
         }, postSuggestionsController.markEvent.bind(postSuggestionsController));

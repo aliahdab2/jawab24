@@ -7,22 +7,24 @@ import type { PostSuggestionResponse } from '@/lib/api';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import { PostSuggestionSheet } from './PostSuggestionSheet';
 
-const { mockGenerate, mockGetToday, mockMarkEvent, mockSelectVariant, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
+const { mockGenerate, mockGetToday, mockMarkEvent, mockSelectVariant, mockDownloadApi, mockDeliver, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
   mockGenerate: vi.fn(),
   mockGetToday: vi.fn(),
   mockMarkEvent: vi.fn(),
   mockSelectVariant: vi.fn(),
+  mockDownloadApi: vi.fn(),
+  mockDeliver: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockCaptureError: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: mockGetToday, generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant },
+  postSuggestionsApi: { getToday: mockGetToday, generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant, downloadImage: mockDownloadApi },
 }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('sonner', () => ({ toast: { error: mockToastError, success: mockToastSuccess } }));
-vi.mock('@/utils/imageDownload', () => ({ downloadImage: vi.fn() }));
+vi.mock('@/utils/imageDownload', () => ({ downloadImage: mockDeliver }));
 
 const SUGGESTION: PostSuggestionDto = {
   id: 's1',
@@ -94,6 +96,8 @@ beforeEach(() => {
   mockMarkEvent.mockResolvedValue({});
   mockSelectVariant.mockResolvedValue({ data: { suggestion: SUGGESTION_3 } });
   mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 2, availableTypes: ['general'] } });
+  mockDownloadApi.mockResolvedValue({ data: new Blob(['bytes'], { type: 'image/jpeg' }) });
+  mockDeliver.mockResolvedValue({ savedToFiles: false });
   mockGenerate.mockResolvedValue({
     data: { suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'] },
   });
@@ -441,5 +445,39 @@ describe('PostSuggestionSheet — waiting on a generation that runs in a worker'
     renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
     await screen.findByText(enPostSuggestions.generating);
     expect(mockMarkEvent).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * «حفظ الصورة» never worked before this: the images sit on object storage that
+ * sends no CORS headers, so the browser could DISPLAY them but not fetch them —
+ * and downloading requires a fetch. It now goes through our own origin.
+ */
+describe('PostSuggestionSheet — downloading the card', () => {
+  it('asks OUR API for the bytes, by take index — never the storage URL', async () => {
+    renderSheet({ suggestion: SUGGESTION_3, remainingToday: 2, availableTypes: ['general'] });
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(enPostSuggestions.downloadImage) }));
+
+    await waitFor(() => expect(mockDownloadApi).toHaveBeenCalledWith('p1', 's1', 0));
+    // The delivered payload is what the API returned, not something re-fetched.
+    await waitFor(() => expect(mockDeliver).toHaveBeenCalledWith(expect.any(Blob), 'jawab24-post-2026-08-09.jpg'));
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it('downloads the take the merchant is LOOKING AT, not always the first', async () => {
+    renderSheet({ suggestion: SUGGESTION_3, remainingToday: 2, availableTypes: ['general'] });
+    fireEvent.click(takeTab(2));
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(enPostSuggestions.downloadImage) }));
+    await waitFor(() => expect(mockDownloadApi).toHaveBeenCalledWith('p1', 's1', 2));
+  });
+
+  it('stamps `downloaded` ONLY when the bytes actually arrived', async () => {
+    mockDownloadApi.mockRejectedValue(new Error('network'));
+    renderSheet({ suggestion: SUGGESTION_3, remainingToday: 2, availableTypes: ['general'] });
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(enPostSuggestions.downloadImage) }));
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalled());
+    // The pilot's success metric must never count a download that failed.
+    expect(mockMarkEvent.mock.calls.filter((c) => c[2] === 'downloaded')).toHaveLength(0);
   });
 });

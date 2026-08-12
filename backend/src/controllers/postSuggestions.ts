@@ -104,6 +104,52 @@ class PostSuggestionsController {
         return reply.send({ suggestion });
     }
 
+    /**
+     * GET /pages/:pageId/post-suggestions/:suggestionId/image — the card, served
+     * from OUR origin.
+     *
+     * The browser can DISPLAY a bucket URL without permission but cannot FETCH
+     * one without CORS headers, and downloading requires a fetch — so «حفظ
+     * الصورة» failed on every press from the day it shipped. Serving the bytes
+     * ourselves removes the cross-origin question instead of depending on bucket
+     * configuration that lives outside this repo.
+     */
+    async getImage(
+        request: FastifyRequest<{ Params: { pageId: string; suggestionId: string }; Querystring: { variant?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const { pageId, suggestionId } = request.params;
+        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+
+        const raw = request.query?.variant;
+        let variantIndex: number | undefined;
+        if (raw !== undefined) {
+            variantIndex = Number(raw);
+            if (!Number.isInteger(variantIndex) || variantIndex < 0) {
+                return reply.status(400).send({ error: 'variant must be a non-negative integer' });
+            }
+        }
+
+        const image = await postSuggestionsService.getVariantImage(req.workspaceId, pageId, suggestionId, variantIndex);
+        // One 404 for every miss — foreign row, no such take, file already
+        // swept. Distinguishing them would leak whether a row exists.
+        if (!image) return reply.status(404).send({ error: 'Not found' });
+
+        return reply
+            .header('Content-Type', image.contentType)
+            // `attachment` is what makes this a download rather than a
+            // navigation. The filename is server-composed from the row's own
+            // date — never from client input, which is how a header-injection
+            // or a path-traversal filename gets in.
+            .header('Content-Disposition', `attachment; filename="${image.filename}"`)
+            // Merchant media behind an auth check: never let a shared cache
+            // hold it. `immutable` is safe for the private copy — a card's
+            // bytes never change once written; a regenerate mints a new row.
+            .header('Cache-Control', 'private, max-age=86400, immutable')
+            .send(image.body);
+    }
+
     /** POST /pages/:pageId/post-suggestions/:suggestionId/events — market-signal stamps. */
     async markEvent(
         request: FastifyRequest<{ Params: { pageId: string; suggestionId: string }; Body: { event?: string } }>,

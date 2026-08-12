@@ -21,18 +21,14 @@ vi.mock('@capacitor/share', () => ({
   Share: { share },
 }));
 
-const URL_SRC = 'https://media.example.com/generated-posts/ws/x.png';
+/** Bytes the API client already fetched — this util no longer does any fetching. */
+const IMAGE_BLOB = () => new Blob(['fake-png-bytes'], { type: 'image/png' });
 
 function setNative(native: boolean) {
   (window as unknown as Record<string, unknown>).Capacitor = {
     isNativePlatform: () => native,
     getPlatform: () => (native ? 'android' : 'web'),
   };
-}
-
-function mockFetchOk() {
-  const blob = new Blob(['fake-png-bytes'], { type: 'image/png' });
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) }));
 }
 
 describe('downloadImage', () => {
@@ -43,7 +39,6 @@ describe('downloadImage', () => {
     writeFile.mockResolvedValue(undefined);
     getUri.mockResolvedValue({ uri: 'file:///cache/post.png' });
     share.mockResolvedValue(undefined);
-    mockFetchOk();
   });
 
   afterEach(() => {
@@ -57,7 +52,7 @@ describe('downloadImage', () => {
 
   it('native: writes binary (no encoding key) to Cache and hands to the share sheet', async () => {
     setNative(true);
-    const result = await downloadImage(URL_SRC, 'post.png');
+    const result = await downloadImage(IMAGE_BLOB(), 'post.png');
 
     expect(writeFile).toHaveBeenCalledWith(expect.objectContaining({ directory: 'CACHE', path: 'post.png' }));
     // No `encoding` → Filesystem decodes base64 to real bytes; passing UTF8 here
@@ -70,7 +65,7 @@ describe('downloadImage', () => {
   it('native: a dismissed share sheet is not a failure', async () => {
     setNative(true);
     share.mockRejectedValue(new Error('Share canceled'));
-    const result = await downloadImage(URL_SRC, 'post.png');
+    const result = await downloadImage(IMAGE_BLOB(), 'post.png');
     expect(result.savedToFiles).toBe(false);
   });
 
@@ -81,7 +76,7 @@ describe('downloadImage', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(click);
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
 
-    const result = await downloadImage(URL_SRC, 'بوست اليوم.png');
+    const result = await downloadImage(IMAGE_BLOB(), 'بوست اليوم.png');
 
     expect(click).toHaveBeenCalled();
     const anchor = appendChild.mock.calls.at(-1)?.[0] as HTMLAnchorElement;
@@ -89,9 +84,17 @@ describe('downloadImage', () => {
     expect(result.savedToFiles).toBe(false);
   });
 
-  it('throws on a failed fetch so the caller owns the error toast', async () => {
+  it('never fetches — acquiring the bytes belongs to the API client now', async () => {
+    // The regression this whole change exists for: the stored image host sends
+    // no CORS headers, so ANY fetch from the browser threw. If this util ever
+    // reaches for the network again, that bug is back.
     setNative(false);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-    await expect(downloadImage(URL_SRC, 'post.png')).rejects.toThrow('404');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(vi.fn());
+
+    await downloadImage(IMAGE_BLOB(), 'post.png');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

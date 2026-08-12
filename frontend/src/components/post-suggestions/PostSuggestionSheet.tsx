@@ -292,7 +292,11 @@ export function PostSuggestionSheet({
   const handleDownload = async () => {
     if (!activeImageUrl || !suggestion) return;
     try {
-      const { savedToFiles } = await downloadImage(activeImageUrl, `jawab24-post-${suggestion.suggestedFor}.jpg`);
+      // Fetched through our OWN origin, by take index — never from the stored
+      // bucket URL. That host answers `<img>` but refuses `fetch` (no CORS), so
+      // downloading straight from it failed on every press until this.
+      const res = await postSuggestionsApi.downloadImage(pageId, suggestion.id, activeIndex);
+      const { savedToFiles } = await downloadImage(res.data, `jawab24-post-${suggestion.suggestedFor}.jpg`);
       stamp(suggestion.id, 'downloaded');
       toast.success(savedToFiles ? t('imageSavedToFiles') : t('imageDownloadStarted'));
     } catch (err) {

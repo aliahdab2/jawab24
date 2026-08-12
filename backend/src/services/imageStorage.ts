@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 
@@ -101,4 +101,51 @@ export async function remove(key: string): Promise<boolean> {
     }
 }
 
-export const imageStorage = { isConfigured, put, remove };
+/** What a stored object's bytes came back as. */
+export interface FetchedObject {
+    body: Buffer;
+    /** The object's own content type, as stored. Null when the store omitted it. */
+    contentType: string | null;
+}
+
+/**
+ * Read an object's bytes by key. Null when it does not exist.
+ *
+ * Exists so the app can SERVE a stored image itself instead of sending the
+ * browser to the bucket. Displaying a bucket URL in an `<img>` needs no
+ * permission, but downloading one does — the browser must `fetch` it, and that
+ * requires CORS headers from the bucket. Ours sends none, so «حفظ الصورة» threw
+ * `TypeError: Failed to fetch` on every press since the feature shipped.
+ *
+ * Proxying through our own origin removes the question entirely, and keeps this
+ * module's promise: no presigned URLs and no provider quirks leak to callers
+ * (a bucket CORS rule would have been provider config living outside the code,
+ * lost on the next key rotation or bucket move — see OBJECT_STORAGE.md).
+ */
+export async function get(key: string): Promise<FetchedObject | null> {
+    try {
+        const res = await getClient().send(new GetObjectCommand({ Bucket: cfg().bucket, Key: key }));
+        if (!res.Body) return null;
+        // transformToByteArray is the SDK's own stream reader — it works the
+        // same in Node and in tests, unlike hand-rolled stream collection.
+        const bytes = await res.Body.transformToByteArray();
+        return { body: Buffer.from(bytes), contentType: res.ContentType ?? null };
+    } catch (error) {
+        // A missing object is an ordinary outcome (a superseded post's image is
+        // deleted on purpose), so it returns null rather than throwing. Anything
+        // else is worth seeing, but still resolves to null: the caller's answer
+        // is the same 404 either way.
+        const name = (error as { name?: string }).name;
+        if (name !== 'NoSuchKey' && name !== 'NotFound') {
+            captureError(error, 'ImageStorage: failed to read object', {
+                level: 'warning',
+                fingerprint: ['image-storage-get-failed'],
+                tags: { component: 'imageStorage' },
+                extra: { key },
+            });
+        }
+        return null;
+    }
+}
+
+export const imageStorage = { isConfigured, put, remove, get };

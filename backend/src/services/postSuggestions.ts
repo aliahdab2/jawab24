@@ -1260,6 +1260,55 @@ class PostSuggestionsService {
     }
 
     /**
+     * The bytes of one take's card, for serving from our OWN origin.
+     *
+     * ⛔ The storage key is DERIVED here from (workspace, page, suggestion,
+     * index) and never accepted from the caller. A route that took a key or a
+     * URL would be an arbitrary-object read of the whole bucket — every
+     * merchant's images — behind one authenticated session, and an SSRF if it
+     * took a URL. The client may only say WHICH TAKE it wants.
+     *
+     * Null covers every "you get a 404" case without distinguishing them:
+     * not this workspace's row, no such take, or the file is gone (a superseded
+     * post's images are deleted by design). Telling those apart would leak
+     * whether a row exists.
+     */
+    async getVariantImage(
+        workspaceId: string, pageId: string, suggestionId: string, variantIndex?: number,
+    ): Promise<{ body: Buffer; contentType: string; filename: string } | null> {
+        const [row] = await db.select()
+            .from(postSuggestions)
+            .innerJoin(pages, eq(pages.id, postSuggestions.pageId))
+            .where(and(
+                eq(postSuggestions.id, suggestionId),
+                eq(postSuggestions.pageId, pageId),
+                eq(pages.workspaceId, workspaceId),
+            ))
+            .limit(1);
+        if (!row) return null;
+
+        const suggestion = row.post_suggestions;
+        const variants = variantsOf(suggestion);
+        // Absent index = whichever take the merchant currently has selected,
+        // which is what the sheet is showing them.
+        const index = variantIndex ?? suggestion.selectedVariant;
+        if (!Number.isInteger(index) || index < 0 || index >= variants.length) return null;
+
+        const key = variants[index].imageKey;
+        if (!key) return null;
+        const object = await imageStorage.get(key);
+        if (!object) return null;
+
+        return {
+            body: object.body,
+            contentType: object.contentType || 'image/jpeg',
+            // Dated, not id-named: the merchant is saving "my post for the 12th"
+            // to their phone, and a uuid filename is meaningless there.
+            filename: `jawab24-post-${suggestion.suggestedFor}.jpg`,
+        };
+    }
+
+    /**
      * Resolve a row whose job died before `fulfilSuggestion` could report on
      * it. Called only from the worker's `failed` handler — the last chance to
      * keep the promise that a claimed slot always ends in something visible.
