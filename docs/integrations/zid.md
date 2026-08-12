@@ -62,10 +62,12 @@ one. That misreading idled this work for eight days (2026-08-01 → 08-09).
 
 These can all be done today; none of them needs Zid to approve anything.
 
+**Closed by #720** (both items previously listed here):
+- **The frontend now consumes `subscription.marketplaceBilling`.** `frontend/src/lib/marketplaceBilling.ts` is the single client-side home, and `useSelectPlan`, `pricing.tsx`, `pricing/scale.tsx` and `BuyTopUpCTA` all read the field the backend's guard computes — so the UI and the API can no longer disagree about who is billed where. A Zid merchant gets a named destination, or an explanatory notice while `ZID_APP_MARKET_URL` is unset, instead of a generic error toast. This was the item deadlined *before the listing goes live*.
+- **#711's `sallaBilled` claim is corrected in D-074.** #711 stated Salla's answer was "byte-for-byte unchanged" at the `getUsageSummary` choke point; it was not. `DECISIONS.md` is append-only, so the correction is a new entry rather than an edit to D-073.
+
 | Item | Why it matters | Deadline |
 |------|----------------|----------|
-| **Frontend must consume `subscription.marketplaceBilling`** | The backend refuses Stripe for a Zid merchant (400 `ZID_BILLED`) on all six surfaces, but the UI still shows them the normal plan-select and top-up CTAs — `useSelectPlan` and `BuyTopUpCTA` only know `paymentMethod === 'shopify'` and `sallaBilled`. A Zid merchant therefore clicks upgrade and gets a generic error with no explanation and no destination. | **Before the listing goes live** — harmless while Zid is `coming_soon`, a dead end the moment it is not |
-| **Correct the `sallaBilled` claim from #711's review** | #711 states Salla's answer is "byte-for-byte unchanged" at the `getUsageSummary` choke point. It is not: a merchant with a live Shopify mirror *and* an active Salla store used to get `sallaBilled: true` and now gets `undefined`. The outcome is unchanged in practice (both consumers check `paymentMethod === 'shopify'` first), so this is a wording fix in D-073's consequences — but a false "unchanged" claim on a shared path is how the next one slips through unexamined. | Next Zid/billing PR |
 | **`ZID_APP_MARKET_URL`** | Ships unset on purpose — the URL shape is undocumented and unobserved, and a guessed link would send payers to a 404. Unset means "suppress Stripe, show no link", never "do not suppress". Set it from the first real install. | Step 5 capture |
 | **`ZID_APP_ID`: 7367 or 7192?** | Unresolved. It is the webhook `original_id` **and** the `app_id` on the subscription read, so getting it wrong breaks webhook registration and billing verification together. | Step 5 capture |
 | **D-072 pricing is PROVISIONAL** | 189/379 SAR pending withholding-tax confirmation. Editable in the Partner Dashboard until the app publishes — after that it is not. | Before step 6 |

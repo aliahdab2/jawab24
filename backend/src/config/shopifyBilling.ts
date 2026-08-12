@@ -1,3 +1,4 @@
+import type { MarketplaceBilledCode } from '@jawab24/shared';
 import { config } from './index';
 
 /**
@@ -34,8 +35,10 @@ export type ShopifyBillablePlanSlug = (typeof SHOPIFY_BILLABLE_PLAN_SLUGS)[numbe
  */
 export const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
 
-/** Wire code returned to clients when a Stripe path is refused for a Shopify merchant. */
-export const SHOPIFY_BILLED_CODE = 'SHOPIFY_BILLED';
+/** Wire code returned to clients when a Stripe path is refused for a Shopify merchant.
+ *  Sourced from `@jawab24/shared` so the set of refusal codes has ONE definition
+ *  that clients can enumerate — see `marketplaceBilledCodes.ts` for why. */
+export const SHOPIFY_BILLED_CODE: MarketplaceBilledCode = 'SHOPIFY_BILLED';
 
 /**
  * Is this row a Shopify-billed relationship the D-G rule applies to?

@@ -51,12 +51,22 @@ describe('BuyTopUpCTA', () => {
      * it so they never reach that refusal.
      */
     it('is hidden for a Salla merchant (Article 5)', () => {
-        render(<BuyTopUpCTA planSlug="business" sallaBilled />);
+        render(<BuyTopUpCTA planSlug="business" marketplaceBilled />);
         expect(cta()).not.toBeInTheDocument();
     });
 
-    it('still renders for a Salla-connected merchant who is exempt (sallaBilled false)', () => {
-        render(<BuyTopUpCTA planSlug="business" sallaBilled={false} />);
+    /**
+     * The reason the prop was generalized: a Zid merchant used to fall through
+     * both old checks (`paymentMethod === 'shopify'` and `sallaBilled`) and see
+     * a CTA whose only possible ending was a 400 `ZID_BILLED`.
+     */
+    it('is hidden for a Zid merchant (App Market)', () => {
+        render(<BuyTopUpCTA planSlug="business" paymentMethod="zid" marketplaceBilled />);
+        expect(cta()).not.toBeInTheDocument();
+    });
+
+    it('still renders for a marketplace-connected merchant who is exempt (marketplaceBilled false)', () => {
+        render(<BuyTopUpCTA planSlug="business" marketplaceBilled={false} />);
         expect(cta()).toBeInTheDocument();
     });
 });

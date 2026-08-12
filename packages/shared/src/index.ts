@@ -99,6 +99,8 @@ export { reconcileCatalogProposals } from './catalogReconcile';
 export type { ReconcileExistingItem, ReconcileProposalItem, ReconcileKind, ReconcileResult } from './catalogReconcile';
 export { postsScanEligibility } from './catalogScanEligibility';
 export type { PostsScanBlocker, PostsScanEligibility, PostsScanEligibilityInput } from './catalogScanEligibility';
+export { MARKETPLACE_BILLED_CODES, isMarketplaceBilledCode } from './marketplaceBilledCodes';
+export type { MarketplaceBilledCode } from './marketplaceBilledCodes';
 // presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
 export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
@@ -835,7 +837,15 @@ export interface UsageSummary {
      * plan changes there and never into Stripe checkout/top-ups (D-G). */
     paymentMethod?: string;
     /** Deep link into Shopify admin plan management. Present only for
-     * shopify-billed workspaces when the app handle is configured. */
+     * shopify-billed workspaces when the app handle is configured.
+     *
+     * ⚠️ Superseded by `marketplaceBilling.manageUrl` and no longer read by any
+     * web frontend code — but deliberately still emitted, for the same reason as
+     * `sallaBilled` below: the mobile app ships a BUNDLED frontend that lags the
+     * web build by several releases, and an older build reads THIS field to build
+     * the Shopify deep link. Dropping it because "nothing uses it" would silently
+     * strand Shopify merchants on an old app with a banner and no way to manage
+     * their plan. Retire it only once no supported app build reads it. */
     shopifyManageUrl?: string;
     /** true = a Salla merchant, whose paid plans must be billed through Salla
      * (apps-policy Article 5). Every Stripe surface — plan select, checkout,

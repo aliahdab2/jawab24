@@ -1444,6 +1444,31 @@ the order is the part a copy gets subtly wrong.
   URL is observed rather than guessed) returns no `manageUrl`. Absent means "suppress,
   but show no link" — never "do not suppress".
 
+## D-074 · Erratum to D-073: Salla's answer was NOT "byte-for-byte unchanged"
+
+**Date:** 2026-08-12 · **Status:** Accepted · **Corrects:** D-073's first consequence
+
+**Context.** D-073's consequences open with *"Salla's answer is byte-for-byte unchanged."*
+That is false for one input. A merchant with a **live Shopify mirror AND an active Salla
+store** used to receive `sallaBilled: true`; after D-073 the resolver returns a single
+verdict and Shopify is asked first, so the same merchant receives `sallaBilled: undefined`.
+
+**Ruling.** The claim is withdrawn. The **outcome** is genuinely unchanged — every consumer
+checks the Shopify signal before the Salla one, so such a merchant was routed to Shopify
+before and still is — but "unchanged wire response" and "unchanged outcome" are different
+assertions, and only the second one held. D-073's own text is left intact per this file's
+append-only rule; this entry is the correction of record.
+
+**Why it is worth an entry.** D-073 changed a path every billing consumer reads. A false
+"unchanged" claim on shared infrastructure is exactly what makes the *next* such claim go
+unexamined — the reviewer's attention is the only gate that path has.
+
+**Consequences.**
+- When describing a change to `getUsageSummary` or `resolveMarketplaceBilling`, state
+  unchanged **outcomes** and changed **fields** separately. They are not interchangeable.
+- `sallaBilled` remains Salla-only and is still emitted for older bundled app builds
+  (D-073, unchanged). This erratum concerns the claim, not the field's contract.
+
 ## D-068 · The customer's certain language wins; a merchant dialect instruction picks the dialect WITHIN that language
 
 **Date:** 2026-08-11 · **Status:** Accepted (ruling) — **implementation built and measured,

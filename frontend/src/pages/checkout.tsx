@@ -26,7 +26,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { useIOSPaymentRedirect, useIsDarkMode } from '@/hooks';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
-import type { Plan } from '@jawab24/shared';
+import { isMarketplaceBilledCode, type Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent, getSarMonthlyEquivalent } from '@/utils/pricing';
 
 type TopupPack = '5k' | '10k';
@@ -491,13 +491,17 @@ function CheckoutPage() {
         return;
       }
 
-      // Shopify-billed workspaces must not reach Stripe (D-G) — the backend
-      // hard-blocks with this code (stale deep link / manual URL). Route the
-      // merchant back to /pricing, where the Shopify-managed banner and the
-      // admin deep link live.
-      // Same for Salla merchants (Article 5) — /pricing carries the
-      // Salla-managed banner explaining why no plan is selectable.
-      if (errorData?.code === 'SHOPIFY_BILLED' || errorData?.code === 'SALLA_BILLED') {
+      // A marketplace bills this account (D-073), and the merchant reached a
+      // Stripe surface anyway — a stale deep link, a bookmarked
+      // /checkout?planId=…, or a usage summary fetched before the mirror
+      // existed. Route them back to /pricing, which carries the per-rail
+      // managed banner and the manage-plan destination when there is one.
+      //
+      // Membership test against the SHARED code set, never a literal per rail:
+      // this line used to name Shopify and Salla only, so a Zid merchant landed
+      // on the generic failure banner instead — the exact dead end the guard
+      // exists to prevent, on the one surface a field-based check cannot cover.
+      if (isMarketplaceBilledCode(errorData?.code)) {
         router.replace('/pricing');
         return;
       }

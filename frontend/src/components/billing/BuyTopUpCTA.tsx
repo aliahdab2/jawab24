@@ -10,10 +10,17 @@ interface BuyTopUpCTAProps {
     userEmail?: string;
     /** Free plan users can't buy top-ups — hides the CTA entirely. */
     planSlug?: string;
-    /** Shopify-billed workspaces can't buy Stripe top-ups (D-G) — hides the CTA. */
     paymentMethod?: string;
-    /** Salla merchants can't buy Stripe top-ups (Article 5) — hides the CTA. */
-    sallaBilled?: boolean;
+    /**
+     * True when a MARKETPLACE owns this account's paid plans (D-073) — Shopify
+     * App Pricing, Salla Article 5, or the Zid App Market. Every Stripe top-up
+     * surface is hidden, because the backend refuses them all with a 400.
+     *
+     * Replaces the old `sallaBilled` + `paymentMethod === 'shopify'` pair, which
+     * knew nothing about Zid and so showed a Zid merchant a CTA that could only
+     * end in a generic error.
+     */
+    marketplaceBilled?: boolean;
     /** Override default 'primary' button variant. */
     variant?: 'primary' | 'secondary';
     size?: 'sm' | 'md';
@@ -30,14 +37,17 @@ interface BuyTopUpCTAProps {
  *   - The merchant came from Salla (Article 5: paid plans must be billed
  *     through Salla, so no Stripe top-up either)
  */
-export function BuyTopUpCTA({ userEmail, planSlug, paymentMethod, sallaBilled, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
+export function BuyTopUpCTA({ userEmail, planSlug, paymentMethod, marketplaceBilled, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
     const t = useTranslations('topup');
     const [isOpen, setIsOpen] = useState(false);
 
     if (isIOSNative()) return null;
     if (planSlug === 'free') return null;
+    // Kept alongside marketplaceBilled: a shopify mirror is a marketplace by
+    // definition, but this also covers a stale/undefined summary where the
+    // payment method is the only signal we have.
     if (paymentMethod === 'shopify') return null;
-    if (sallaBilled) return null;
+    if (marketplaceBilled) return null;
 
     return (
         <>

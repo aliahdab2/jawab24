@@ -125,7 +125,14 @@
   "planChangeError": "Could not change your plan. Please try again or contact support.",
   "shopifyManagedToast": "Your plan is managed from your Shopify admin.",
   "shopifyManagedBody": "This subscription was created through the Shopify App Store, so plan changes and cancellation are managed from your Shopify admin.",
-  "shopifyManagedCta": "Manage plan in Shopify",
+  "marketplaceManageCta": "Manage plan in {marketplace}",
+  "marketplaceNames": {
+    "shopify": "Shopify",
+    "salla": "Salla",
+    "zid": "Zid"
+  },
+  "zidManagedToast": "Paid plans for Zid stores are billed through the Zid App Market.",
+  "zidManagedBody": "Your store is connected through Zid, so your plan is billed through the Zid App Market — plan changes and cancellation are managed there.",
   "sallaManagedToast": "Paid plans for Salla stores are billed through Salla, and are coming soon.",
   "sallaManagedBody": "Your store is connected through Salla, so paid plans will be billed through Salla — they are coming soon. Until then you can keep using the free plan.",
   "scaleTitle": "Scale plans",
