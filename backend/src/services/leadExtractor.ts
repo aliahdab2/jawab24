@@ -12,7 +12,7 @@ import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL, unwrapBusinessProfile, whatsappNumbers } from '@jawab24/shared';
+import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL, unwrapBusinessProfile, whatsappNumbers, businessPhoneList } from '@jawab24/shared';
 import type { LeadExtractedData, LeadField, LeadStatus, StoredBusinessProfile } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
@@ -164,17 +164,66 @@ function stripForwardedPostBlocks(text: string): string {
 }
 
 /** URLs in a message body. `https?://…` and `www.…` runs — the shapes that carry
- *  long digit paths. Deliberately NOT bare domains: stripping `word.tld` risks
- *  eating customer-typed text, and no observed false lead came from one. */
+ *  long digit paths.
+ *
+ *  TWO deliberate bounds, both measured over 90 days of prod inbound traffic
+ *  (128,187 messages) rather than guessed:
+ *
+ *  - Bare domains are NOT matched. Stripping `word.tld` risks eating
+ *    customer-typed text, and no observed false lead came from one.
+ *  - Phone-BEARING deep links (`wa.me/<digits>`, `api.whatsapp.com/send?phone=`)
+ *    are NOT exempted, even though the digits in them are a real number. Only 5
+ *    inbound messages carried one in 90 days; 3 were already dropped by the
+ *    image / shared-post strips and none of the 5 produced a lead, so an
+ *    exemption would buy nothing and cost a hand-maintained host list. Revisit
+ *    if that count moves — the query is in the PR that added this.
+ *
+ *  Note the asymmetry this creates, which is CORRECT and load-bearing: the
+ *  business side (`getBusinessPhones`) does NOT strip URLs, so a merchant's own
+ *  `wa.me` line in their KB still lands in the exclusion set. Over-excluding a
+ *  business number is safe; under-excluding one dials the merchant. */
 const URL_RE = /(?:https?:\/\/|www\.)\S+/gi;
+
+/**
+ * Phone-shaped runs that exist ONLY inside a URL in this message — the
+ * machine-written counterpart to `forwardedPostText`, fed into the phone
+ * EXCLUSION set. Without it the strip below only closes the GATE: a message
+ * carrying both a real phone and a digit-bearing link opens the gate on the
+ * real number, and `aiResult.phone` — re-validated against `businessTexts`
+ * only — can still come back with the link's digits and OVERRIDE it (the model
+ * "occasionally drops a non-phone figure into the field", see the trust
+ * comment in maybeCaptureLead). Same both-halves contract as every other strip.
+ *
+ * `gateText` (URLs already stripped) is what makes this safe to apply
+ * unconditionally: a number the customer ALSO typed plainly is excluded from
+ * the exclusion, so a customer sharing their own `wa.me` link beside their
+ * number still becomes a lead. Every run this returns appears nowhere in the
+ * message except inside a link, so it can never be somebody's real contact.
+ */
+function urlOnlyPhoneTexts(
+    messageText: string,
+    gateText: string,
+    phoneOpts?: { defaultCountry?: string },
+): string[] {
+    const urls = (messageText.match(URL_RE) ?? []).join(' ');
+    if (!urls) return [];
+    const identity = (raw: string) => phoneDigitsTail(raw) || raw.replace(/\D/g, '');
+    const typedPlainly = new Set(extractPhones(gateText, phoneOpts).map(p => identity(p.raw)));
+    return extractPhones(urls, phoneOpts)
+        .filter(p => !typedPlainly.has(identity(p.raw)))
+        .map(p => p.raw);
+}
 
 /**
  * Remove URLs before the lead phone gate. A URL's path digits are not a phone
  * number, but they validate as one under the permissive fallback: 2026-08-11
  * prod (Shahin Resort), a vendor-spam DM's Behance portfolio link
  * `…/gallery/253941151/…` became a lead whose card, call button and WhatsApp
- * button all pointed at nine meaningless digits. Gate-only, like every strip
- * here: the AI extraction still sees the full message as intent context.
+ * button all pointed at nine meaningless digits. Two more prod leads carried
+ * the same junk — a Messenger channel id (`100090337535317`) and a spam
+ * tracker's `pid` (`917846361235145`). Gate-only, like every strip here: the AI
+ * extraction still sees the full message as intent context, which is why
+ * `urlText` feeds the exclusion set in parallel.
  */
 function stripUrls(text: string): string {
     return text.replace(URL_RE, ' ').trim();
@@ -194,6 +243,10 @@ function stripUrls(text: string): string {
  *   hospital: all three leads captured that day had an external doctor's or
  *   clinic's number OCR'd from a prescription photo stored as the customer's
  *   phone.)
+ * …and one shape the customer typed but that is not a phone:
+ * - URLs (`https?://…`, `www.…`) — path/query digit runs validate as phones
+ *   under the permissive fallback (see stripUrls). Their digits rejoin the
+ *   EXCLUSION set via `urlText`, so the AI can't lift them back out either.
  * Gate-only, like the shared-post strip: the AI extraction still sees the full
  * message in the conversation transcript as intent context.
  */
@@ -468,6 +521,21 @@ class LeadExtractorService {
             // already has the block stripped, but conversationText still shows it).
             const forwarded = forwardedPostText(messageText);
             if (forwarded) businessTexts.push(forwarded);
+
+            // Same both-halves contract for URLs: the gate text has them stripped,
+            // but conversationText still shows them, and the AI's phone is trusted
+            // over the gate phone whenever it re-validates. Without this a message
+            // carrying BOTH a real number and a digit-bearing link ("رقمي 09… وهاد
+            // البورتفوليو https://…/gallery/253941151/…") can still be saved with
+            // the link's digits as the lead's phone.
+            //
+            // Only URL-ONLY digits are excluded. A number the customer ALSO typed
+            // plainly stays capturable — otherwise sharing your own `wa.me` link
+            // beside your number would suppress your own lead, trading one silent
+            // defect for another. Nothing here can cost a lead: every excluded run
+            // exists nowhere in the message except inside a link.
+            const urlOnlyPhones = urlOnlyPhoneTexts(messageText, gateText, phoneOpts);
+            businessTexts.push(...urlOnlyPhones);
 
             // Real gate: the customer must share a phone that is THEIRS, not the
             // business's own number echoed from our replies or carried in a forwarded
@@ -790,11 +858,19 @@ class LeadExtractorService {
 
     /**
      * The business's own published phone numbers for a page, so lead capture never
-     * mistakes one for a customer contact. Read from `pages.knowledge_base` — the
-     * merchant's Business Info, the same source the reply pipeline uses, where they
-     * list their contact lines. Cached in Redis for an hour (the KB changes rarely
-     * and this runs on every phone-bearing message). Degrades to [] on any DB/Redis
-     * error: the conversation-scoped exclusion still applies and we never drop a lead.
+     * mistakes one for a customer contact.
+     *
+     * Sourced from the UNION of every surface the business authors its numbers on —
+     * the KB free text, the structured Business Info fields (phones + WhatsApp) and
+     * the fact-collection rows. Reading only one of them is how a number goes
+     * missing: until 2026-08-12 this read `pages.knowledge_base` alone, so the
+     * Business Surface migration moving a merchant's lines from prose into fact rows
+     * silently dropped them from the exclusion set. See the per-source notes below.
+     *
+     * Cached in Redis for an hour under a `kbVersion`-scoped key, so a merchant edit
+     * invalidates it immediately instead of serving stale numbers for up to an hour.
+     * Degrades to [] on any DB/Redis error: the conversation-scoped exclusion still
+     * applies and we never drop a lead.
      */
     private async getBusinessPhones(
         pageId: string,
@@ -849,8 +925,14 @@ class LeadExtractorService {
             const texts: string[] = [];
             if (page.kb) texts.push(page.kb);
 
+            // businessPhoneList / whatsappNumbers are THE readers of the two legacy
+            // dual shapes (`phones[]` vs `phone`, `whatsapp` string vs array). Going
+            // through them is what keeps "what the prompt PUBLISHES" and "what
+            // capture EXCLUDES" the same set — a local `phones ?? [phone]` reads an
+            // empty array as "no phones" where the prompt still publishes `phone`,
+            // which puts the merchant's own line back on a lead's call button.
             const merchant = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile).merchant ?? {};
-            for (const p of merchant.phones ?? (merchant.phone ? [merchant.phone] : [])) texts.push(p);
+            texts.push(...businessPhoneList(merchant));
             texts.push(...whatsappNumbers(merchant));
 
             const rows = await db

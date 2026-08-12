@@ -335,6 +335,94 @@ describe('business-number exclusion — beyond the KB text (real Postgres)', () 
     });
 });
 
+describe('URL digits and the AI phone (real Postgres)', () => {
+    /**
+     * Stripping URLs from the GATE text is only half the contract. The AI
+     * extractor still sees the full message, and its phone REPLACES the gate
+     * phone whenever it re-validates — so a message carrying both a real number
+     * and a digit-bearing link could still be saved with the link's digits.
+     * Every other strip in this file already feeds its removed text back into
+     * the exclusion set (`forwardedPostText`, `imageTurnTexts`); URLs now do too.
+     *
+     * Prod evidence for the shape (90 days of inbound, 2026-08-12): three leads
+     * were built from URL digits — a Behance gallery id, a Messenger channel id,
+     * and a spam tracker's `pid`.
+     */
+    let userId: string;
+    let workspaceId: string;
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        userId = user.id;
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, {
+            workspaceId,
+            knowledgeBase: 'منتجع سياحي. الحجز عبر الصفحة.',
+        });
+        pageId = page.id;
+        openaiCreateMock.mockReset();
+    });
+
+    it('the AI cannot save a URL gallery id as the lead phone', async () => {
+        // The model returns the Behance path digits instead of the number the
+        // customer actually typed — the documented "drops a non-phone figure into
+        // the field" failure. Before the URL exclusion this re-validated cleanly
+        // (9 digits, not a business number) and OVERRODE the real gate phone.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '253941151', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-url-ai', senderName: 'Real Phone Plus Link',
+            messageText: 'رقمي 0912345678 وهاد البورتفوليو https://www.behance.net/gallery/253941151/Tourism',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('912345678');
+        expect(rows[0].phone).not.toContain('253941151');
+    });
+
+    it('a customer sharing their OWN wa.me link beside their number is still captured', async () => {
+        // The exclusion covers URL-ONLY digits. The same number typed plainly is
+        // the customer's own contact and must survive — otherwise the fix for one
+        // silent defect would introduce another (a dropped lead).
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-wame', senderName: 'Own Link',
+            messageText: 'رقمي 0912345678 وهاد واتسابي https://wa.me/963912345678',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('912345678');
+    });
+
+    it('a link-only message creates no lead at all (gate stays shut)', async () => {
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-link-only', senderName: 'Spam Link',
+            messageText: 'https://www.messenger.com/channel/100090337535317/AbbiQQEXnBiNl0ky/',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+});
+
 describe('getLeadsByPage — server-side search (real Postgres)', () => {
     let pageId: string;
 

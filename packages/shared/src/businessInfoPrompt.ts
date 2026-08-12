@@ -103,10 +103,25 @@ function joinAddress(
     };
 }
 
-function joinPhones(p: BusinessProfile): string | null {
-    const phones = (p.phones && p.phones.length > 0)
+/** The merchant's call lines as a clean list. THE one reader of the
+ *  `phones` (array) / `phone` (legacy single) dual shape — every consumer goes
+ *  through this so the two never drift apart.
+ *
+ *  The fallback rule is the subtle part: an EMPTY `phones` array still falls
+ *  back to the legacy `phone`. A caller that writes `p.phones ?? [p.phone]`
+ *  gets this wrong (`[]` is not nullish), and the two halves disagreeing is a
+ *  real bug class here — the prompt PUBLISHES the legacy number to customers
+ *  while lead capture, reading it the other way, would not know to exclude it,
+ *  so the merchant's own line becomes a lead whose call button dials them
+ *  (`getBusinessPhones`, the June 2026 incident class). */
+export function businessPhoneList(p: BusinessProfile): string[] {
+    return (p.phones && p.phones.length > 0)
         ? p.phones.filter((s): s is string => !!s && s.trim() !== '')
-        : (p.phone ? [p.phone] : []);
+        : (p.phone && p.phone.trim() !== '' ? [p.phone] : []);
+}
+
+function joinPhones(p: BusinessProfile): string | null {
+    const phones = businessPhoneList(p);
     return phones.length > 0 ? phones.join(', ') : null;
 }
 
