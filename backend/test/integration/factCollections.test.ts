@@ -1017,3 +1017,147 @@ describe('fact collections — deterministic row gating', () => {
         }
     });
 });
+
+// ── A WEEKLY TIMETABLE IS THE CASE THAT MUST STAY UNKEYED ────────────────────
+// Port Said University Hospital (prod page 885b2b9e), migrated off free-text
+// Business Info 2026-08. Its outpatient timetable was the page's most-asked
+// topic and its worst answer: five patients asked for the eye clinic's days and
+// got five different answers on a KB that had not changed between them — two of
+// them naming a Sunday clinic that does not exist, one attributing a doctor to a
+// day he does not work.
+//
+// The obvious modelling instinct is to key that collection on «التخصص», because
+// most patients do name a specialty. These tests exist because that instinct is
+// WRONG for a timetable, and its failure is quiet rather than loud: row gating
+// fires only on keyed collections, and when the customer's text matches no key
+// value the gate withholds every ROW (factCollections.ts — `wanted.size === 0 ?
+// [] : …`). The coverage statement survives, so the model still knows WHICH
+// clinics exist — but the days and times live in the rows, and those are gone.
+//
+// So keying does not blank the answer; it does something more specific. Asked
+// «ايه المواعيد المتاحه» — one of the most common questions on this page, and
+// one that names no specialty — a keyed timetable can name every clinic and
+// state not one opening time. That is the whole content of the question.
+//
+// Unkeyed is affordable here for a reason worth writing down: ~31 clinic rows
+// sit far inside FACT_BLOCK_MAX_CHARS (12k), so there is nothing to buy by
+// gating. Keys earn their place on lists too large to show at once — the 236
+// pharmacies that motivated the gate — not on a list a page can always print in
+// full. The first test is the contract we ship; the second pins the trap, so
+// "patients name the clinic anyway, let's key it" cannot land without deleting
+// an explicit statement of what it costs.
+describe('fact collections — weekly timetables stay unkeyed (Port Said migration)', () => {
+    /** Transcribed from the page's live KB, kb_version 39. The eye clinic runs
+     *  FOUR days and neurosurgery opens at 8ص on Sunday — the two facts prod got
+     *  wrong. Trimmed to the rows those failures touched. */
+    const CLINICS = [
+        {
+            name: 'الرمد (العيون)',
+            attributes: [
+                { label: 'الأيام والمواعيد', value: 'الاثنين 8ص - ١٢م، الثلاثاء 8ص - ١٢م، الأربعاء 8ص - ١٢م، السبت ٩ص - ١٢م' },
+                { label: 'الطبيب', value: 'د/ إيهاب غنيم (الاثنين والثلاثاء)، أخصائي د/ عمرو طايل (الأربعاء والسبت)' },
+            ],
+        },
+        {
+            name: 'جراحة المخ والأعصاب',
+            attributes: [
+                { label: 'الأيام والمواعيد', value: 'الأحد 8ص - ٣م، الثلاثاء 8ص - 12م، الخميس ٩ص - ١٢م' },
+                { label: 'الطبيب', value: 'د/ أيمن جلهوم (الأحد)' },
+            ],
+        },
+        {
+            name: 'العظام',
+            attributes: [
+                { label: 'الأيام والمواعيد', value: 'الأحد 8ص - ١٢م، الاثنين 8ص - ١٢م، الثلاثاء 8ص - ١٢م، الأربعاء 8ص - ١٢م، السبت ١٢م - ٣م' },
+            ],
+        },
+    ];
+
+    const seedTimetable = async (keyAttr: string | null): Promise<string> => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'Hospital', knowledgeBase: 'مستشفى جامعي' });
+        await factCollectionsService.createCollection(page.id, {
+            label: 'جدول العيادات الخارجية',
+            keyAttr,
+            rows: keyAttr === null
+                ? CLINICS
+                // Keyed variant carries the specialty under the key on EVERY row, so
+                // `rowsMissingKey === 0` and the gate genuinely engages. Anything less
+                // would disable gating for an unrelated reason and prove nothing.
+                : CLINICS.map(c => ({ ...c, attributes: [...c.attributes, { label: keyAttr, value: c.name }] })),
+        });
+        return page.id;
+    };
+
+    /** The schedule detail — the actual answer to "when are you open". Asserted as
+     *  whole strings so a partial render cannot pass on a stray day name that the
+     *  coverage statement happens to carry. */
+    const EYE_HOURS = 'الاثنين 8ص - ١٢م، الثلاثاء 8ص - ١٢م، الأربعاء 8ص - ١٢م، السبت ٩ص - ١٢م';
+    const NEURO_HOURS = 'الأحد 8ص - ٣م';
+
+    it('unkeyed: a patient who names no specialty still gets every clinic AND its hours', async () => {
+        const pageId = await seedTimetable(null);
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'ايه المواعيد المتاحه', '2026-08-12');
+        expect(ctx.gated).toBe(false);
+        for (const clinic of CLINICS) expect(ctx.block).toContain(clinic.name);
+        expect(ctx.block).toContain(EYE_HOURS);
+        expect(ctx.block).toContain(NEURO_HOURS);
+    });
+
+    it('KEYED: the same question loses every opening time — why the timetable is unkeyed', async () => {
+        const pageId = await seedTimetable('التخصص');
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'ايه المواعيد المتاحه', '2026-08-12');
+        expect(ctx.gated).toBe(true);
+        // The coverage statement still names the clinics — the boundary is intact,
+        // and that is deliberate (the recoverable failure). But the schedule itself
+        // is withheld, and the schedule is the question.
+        expect(ctx.block).toContain('الرمد (العيون)');
+        expect(ctx.block).not.toContain(EYE_HOURS);
+        expect(ctx.block).not.toContain(NEURO_HOURS);
+    });
+
+    // The two facts production answered wrongly, now carried as data rather than
+    // re-derived from a table that lost its column alignment when it was pasted in.
+    it('carries the eye clinic\'s four days — prod answered this five ways', async () => {
+        const pageId = await seedTimetable(null);
+        const block = (await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'مواعيد عيادة الرمد', '2026-08-12')).block ?? '';
+        for (const day of ['الاثنين', 'الثلاثاء', 'الأربعاء', 'السبت']) {
+            expect(block).toContain(day);
+        }
+        // Sunday has no eye clinic. Prod invented one twice; the row never states it.
+        expect(block).toContain('الاثنين 8ص - ١٢م، الثلاثاء 8ص - ١٢م، الأربعاء 8ص - ١٢م، السبت ٩ص - ١٢م');
+    });
+
+    it('carries neurosurgery opening at 8ص, not the 12م prod twice reported', async () => {
+        const pageId = await seedTimetable(null);
+        const block = (await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'مواعيد دكتور ايمن جلهوم', '2026-08-12')).block ?? '';
+        expect(block).toContain('الأحد 8ص - ٣م');
+        expect(block).toContain('أيمن جلهوم');
+    });
+
+    // Saturday is the one prod actively denied («الجمعة والسبت عطلة») while three
+    // of these clinics were open. Nothing in the block may suggest it is closed.
+    it('shows Saturday clinics — prod told a patient Saturday was a holiday', async () => {
+        const pageId = await seedTimetable(null);
+        const block = (await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'المستشفى شغالة السبت؟', '2026-08-12')).block ?? '';
+        expect(block).toContain('السبت');
+        expect(block).toContain('السبت ١٢م - ٣م');
+    });
+
+    // isComplete stays unset until the merchant confirms it (D-038), and four
+    // timetable rows are still unresolved (a time with no specialty). Absence must
+    // therefore render as the honest "not in my list" form, NOT a confident denial
+    // — seeding a holey list as complete would turn today's guessing into
+    // authoritative wrong answers, which is worse than the defect being fixed.
+    it('keeps the honest absence wording while completeness is unconfirmed', async () => {
+        const pageId = await seedTimetable(null);
+        const block = (await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'عندكم عيادة تغذية؟', '2026-08-12')).block ?? '';
+        expect(block).toContain('غير مسجّل لدينا');
+    });
+});
