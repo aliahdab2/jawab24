@@ -129,6 +129,26 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
   });
 
   /**
+   * Displaying merchant media and DOWNLOADING it are two different CSP
+   * directives against the same URL. `downloadImage()`
+   * (frontend/src/utils/imageDownload.ts) fetches the object to hand a Blob to
+   * the share sheet, because a cross-origin <a download> navigates instead of
+   * downloading — and a fetch is governed by connect-src, not img-src.
+   *
+   * The host was listed only in img-src, so every post-suggestion image preview
+   * rendered while every download threw "TypeError: Failed to fetch" (Sentry
+   * JAWAB24-FRONTEND-31). Nothing else catches this: the CSP header is added by
+   * nginx, which unit and E2E tests never go through.
+   */
+  it('CSP connect-src allows fetching from the object-storage host', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+    const connectSrc = (csp.match(/connect-src\s+([^;]+)/) as RegExpMatchArray)[1];
+
+    expect(connectSrc).toContain('https://*.backblazeb2.com');
+  });
+
+  /**
    * WhatsApp Embedded Signup (`frontend/src/lib/whatsappSignup.ts`) injects the
    * Facebook JS SDK at runtime. The SDK was missing from script-src, so the
    * <script> was blocked, script.onerror fired, and every merchant clicking
