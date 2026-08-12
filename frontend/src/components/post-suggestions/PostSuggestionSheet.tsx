@@ -87,6 +87,9 @@ export function PostSuggestionSheet({
     setPendingType(postType ?? null);
     setLoading(true);
     setError(null);
+    // Remembered for the recovery below: the post that was on screen BEFORE
+    // this generation, so a recovered row can be told apart from it.
+    const priorId = suggestion?.id ?? null;
     try {
       const res = await postSuggestionsApi.generate(pageId, includeContact, postType);
       setSuggestion(res.data.suggestion);
@@ -104,14 +107,42 @@ export function PostSuggestionSheet({
       // clicking, distinct from the daily cap; never a Sentry event (the
       // server already fingerprints it on its side).
       else if (code === 'RATE_LIMIT_EXCEEDED') setError(t('errorRateLimit'));
-      else {
+      else if (!axiosErr.response) {
+        // NO HTTP RESPONSE — the connection died, which says nothing about
+        // whether the server finished. It usually DID: generation runs ~35s
+        // against nginx's 30s proxy_read_timeout on this route, so the socket
+        // closes while the work completes and commits. Reported live
+        // 2026-08-12: the merchant saw «حدث خطأ ما» while their post existed,
+        // with a capped attempt already spent on it.
+        //
+        // So ask before despairing. A row whose id differs from what was on
+        // screen is THIS generation's result — adopt it and there is no error
+        // to report. Same id (or none) means nothing landed, and the generic
+        // error is then the honest answer.
+        try {
+          const latest = await postSuggestionsApi.getToday(pageId);
+          const recovered = latest.data.suggestion;
+          if (recovered && recovered.id !== priorId) {
+            setSuggestion(recovered);
+            setRemaining(latest.data.remainingToday);
+            setDegradedReason(latest.data.imageDegraded);
+            if (latest.data.availableTypes) setAvailableTypes(latest.data.availableTypes);
+            onChanged(latest.data);
+            return;
+          }
+        } catch {
+          // Recovery is best-effort; fall through to the error below.
+        }
+        setError(t('errorGeneric'));
+        captureError(err, 'Post suggestion generation failed', { extra: { pageId, recovered: false } });
+      } else {
         setError(t('errorGeneric'));
         captureError(err, 'Post suggestion generation failed', { extra: { pageId } });
       }
     } finally {
       setLoading(false);
     }
-  }, [pageId, onChanged, t, includeContact]);
+  }, [pageId, onChanged, t, includeContact, suggestion]);
 
   // The take on screen, and the text the merchant sees for it (their edit if
   // they made one, the model's otherwise). One derivation — every consumer

@@ -7,8 +7,9 @@ import type { PostSuggestionResponse } from '@/lib/api';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import { PostSuggestionSheet } from './PostSuggestionSheet';
 
-const { mockGenerate, mockMarkEvent, mockSelectVariant, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
+const { mockGenerate, mockGetToday, mockMarkEvent, mockSelectVariant, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
   mockGenerate: vi.fn(),
+  mockGetToday: vi.fn(),
   mockMarkEvent: vi.fn(),
   mockSelectVariant: vi.fn(),
   mockToastError: vi.fn(),
@@ -17,7 +18,7 @@ const { mockGenerate, mockMarkEvent, mockSelectVariant, mockToastError, mockToas
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: vi.fn(), generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant },
+  postSuggestionsApi: { getToday: mockGetToday, generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant },
 }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('sonner', () => ({ toast: { error: mockToastError, success: mockToastSuccess } }));
@@ -77,6 +78,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockMarkEvent.mockResolvedValue({});
   mockSelectVariant.mockResolvedValue({ data: { suggestion: SUGGESTION_3 } });
+  mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 2, availableTypes: ['general'] } });
   mockGenerate.mockResolvedValue({
     data: { suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'] },
   });
@@ -185,6 +187,56 @@ describe('PostSuggestionSheet — text-only rows explain themselves from DATA', 
       availableTypes: ['general'],
     });
     expect(await screen.findByText(enPostSuggestions.textOnlyStorageOff)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Reported live on 2026-08-12: the merchant saw «حدث خطأ ما» while their post
+ * had in fact been created, and a capped attempt was already spent on it.
+ * Generation runs ~35s against nginx's 30s proxy_read_timeout on this route,
+ * so the socket dies while the server finishes and commits. A dead connection
+ * says nothing about whether the work landed — so ask, don't despair.
+ */
+describe('PostSuggestionSheet — a dead connection is not a failed generation', () => {
+  /** An axios network error / abort: no `response` at all. */
+  const networkError = () => Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+
+  it('recovers the post the server DID create instead of reporting an error', async () => {
+    mockGenerate.mockRejectedValue(networkError());
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: SUGGESTION_3, remainingToday: 1, availableTypes: ['general'] },
+    });
+    const onChanged = vi.fn();
+    render(
+      <PostSuggestionSheet pageId="p1" initial={null} canGenerate onClose={vi.fn()} onChanged={onChanged} />,
+    );
+
+    expect(await screen.findByDisplayValue('الصياغة الأولى')).toBeInTheDocument();
+    expect(screen.queryByText(enPostSuggestions.errorGeneric)).not.toBeInTheDocument();
+    // The dashboard card must learn about it too, or it keeps offering "generate".
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('still reports the error when nothing landed — same post as before means the work really was lost', async () => {
+    mockGenerate.mockRejectedValue(networkError());
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: SUGGESTION, remainingToday: 1, availableTypes: ['general'] },
+    });
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'] });
+    await screen.findByDisplayValue(SUGGESTION.text);
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+    expect(await screen.findByText(enPostSuggestions.errorGeneric)).toBeInTheDocument();
+  });
+
+  it('a server error WITH a response keeps its own message — recovery is only for dead connections', async () => {
+    mockGenerate.mockRejectedValue({ response: { status: 429, data: { code: 'daily_cap' } } });
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'] });
+    await screen.findByDisplayValue(SUGGESTION.text);
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+    expect(await screen.findByText(enPostSuggestions.errorDailyCap)).toBeInTheDocument();
+    expect(mockGetToday).not.toHaveBeenCalled();
   });
 });
 
