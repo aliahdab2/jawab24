@@ -118,6 +118,20 @@ const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
   // first lists from his KB: the per-city delivery-fee table and the بخور
   // price lists.
   '30c90e2c-6ede-4e20-9b9e-9c5cd308e25d',
+  // مستشفى جامعة بورسعيد (denadarwish392@gmail.com) — fifth external merchant
+  // (owner ruling 2026-08-12). Two collections were seeded that day, the
+  // outpatient timetable (31 rows) and the eye-clinic price list (41), after a
+  // before/after replay moved schedule answers 6/12 → 11/12 against a measured
+  // production baseline of 4/8.
+  //
+  // He is on the gate for a sharper reason than the others: he edits his KB
+  // almost daily (39 versions in his first 15 days), and the prose those two
+  // collections were transcribed from is still in it. Without the editor he
+  // cannot see what the assistant now answers from, cannot correct a row, and
+  // will keep revising text that duplicates it — two sources drifting apart.
+  // The prose cleanup that closes that gap is blocked on this flag (Feras
+  // precedent: never delete prose whose replacement the merchant cannot see).
+  '7027473d-88ac-41a2-ac9f-d9720f5ec9fe',
 ]);
 
 export function isCatalogVisible(
