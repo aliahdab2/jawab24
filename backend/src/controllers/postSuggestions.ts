@@ -78,6 +78,33 @@ class PostSuggestionsController {
         }
     }
 
+    /**
+     * PUT /pages/:pageId/post-suggestions/:suggestionId/selection — which take
+     * the merchant picked. PUT, not POST: setting the selection is idempotent
+     * and replaces the previous choice.
+     */
+    async selectVariant(
+        request: FastifyRequest<{ Params: { pageId: string; suggestionId: string }; Body: { variantIndex?: unknown } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const { pageId, suggestionId } = request.params;
+        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+
+        const variantIndex = request.body?.variantIndex;
+        if (typeof variantIndex !== 'number' || !Number.isInteger(variantIndex) || variantIndex < 0) {
+            return reply.status(400).send({ error: 'variantIndex must be a non-negative integer' });
+        }
+
+        // Null covers both "not this workspace's row" and "no such take" — the
+        // second is a 404 on purpose: an index this row cannot serve addresses
+        // nothing, and reporting it as a validation error would tell a caller
+        // how many takes a row it cannot see happens to have.
+        const suggestion = await postSuggestionsService.selectVariant(req.workspaceId, pageId, suggestionId, variantIndex);
+        if (!suggestion) return reply.status(404).send({ error: 'Not found' });
+        return reply.send({ suggestion });
+    }
+
     /** POST /pages/:pageId/post-suggestions/:suggestionId/events — market-signal stamps. */
     async markEvent(
         request: FastifyRequest<{ Params: { pageId: string; suggestionId: string }; Body: { event?: string } }>,

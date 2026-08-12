@@ -34,6 +34,12 @@ export default async function postSuggestionsRoutes(fastify: FastifyInstance) {
         memberRoutes.post('/pages/:pageId/post-suggestions/:suggestionId/events', {
             schema: { tags: ['PostSuggestions'], summary: 'Stamp a market-signal event (opened/copied/downloaded)', security: auth, params: suggestionEventParams },
         }, postSuggestionsController.markEvent.bind(postSuggestionsController));
+
+        // Picking a take costs nothing and changes no spend, so it sits with
+        // the member reads rather than behind requireRole('admin') like generate.
+        memberRoutes.put('/pages/:pageId/post-suggestions/:suggestionId/selection', {
+            schema: { tags: ['PostSuggestions'], summary: 'Choose which take of the generation to publish', security: auth, params: suggestionEventParams },
+        }, postSuggestionsController.selectVariant.bind(postSuggestionsController));
     });
 
     // --- Generation: workspace admin (paid LLM + image call) ---

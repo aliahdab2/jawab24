@@ -4,7 +4,7 @@ import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqu
 import { jsonb } from './jsonbColumn';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
-import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
+import type { LeadStagesConfig, LeadCustomFieldDef, PostSuggestionVariant } from '@jawab24/shared';
 import type { FacebookMessageTag } from '../utils/commentText';
 
 // 1. Users Table
@@ -1860,6 +1860,12 @@ export const waitlistEmailSends = pgTable('waitlist_email_sends', {
 // (FB_SCOPES has no pages_manage_posts). Pilot is env-gated to allowlisted
 // pages via config.postSuggestions; spend is bounded by an ABSOLUTE
 // 3-generations/day cap (cron consumes 1 of the 3).
+/**
+ * A stored take: the client-facing shape plus the storage handle the DTO must
+ * never carry (imageKey is what supersede/page-deletion sweep from S3).
+ */
+export type PostSuggestionVariantRow = PostSuggestionVariant & { imageKey: string | null };
+
 export const postSuggestions = pgTable('post_suggestions', {
     id: uuid('id').defaultRandom().primaryKey(),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
@@ -1869,6 +1875,19 @@ export const postSuggestions = pgTable('post_suggestions', {
     suggestedFor: isoDateString('suggested_for').notNull(),
     source: varchar('source', { length: 20 }).notNull(), // 'cron' | 'manual'
     postType: varchar('post_type', { length: 30 }), // 'promo' | 'product_spotlight' | 'faq_tip' | 'hours_reminder' | 'general'
+    // The generation's takes on the same subject: [{ text, headline, imageUrl,
+    // imageKey }]. ONE row per generation still — the cron partial-unique index
+    // and the daily cap both count GENERATIONS, and neither moved.
+    //
+    // text/imageUrl/imageKey below MIRROR the selected take and stay the
+    // columns of record. That is not redundancy: shipped mobile bundles know
+    // nothing about `variants` (Waleed's Android 2.0.26 predates even the
+    // feature gate), so they keep rendering the right post from the columns
+    // they already read, and every existing SQL consumer keeps working.
+    // Null on pre-migration rows = a single-take suggestion; readers rebuild a
+    // one-element list from `text` rather than branching on null everywhere.
+    variants: jsonb('variants').$type<PostSuggestionVariantRow[] | null>(),
+    selectedVariant: integer('selected_variant').notNull().default(0),
     text: text('text').notNull(),
     // Both nullable = text-only suggestion (image call failed / storage off /
     // image cleaned up after supersede). imageKey is the storage handle for

@@ -16,7 +16,8 @@
  * to the service can't silently feed rows to the wrong read.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Column } from 'drizzle-orm';
+import { Column, getTableName } from 'drizzle-orm';
+import { POST_SUGGESTION_VARIANT_COUNT } from '@jawab24/shared';
 
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
@@ -103,7 +104,9 @@ import {
     findUngroundedNumbers,
     pickImageMode,
     IMAGE_MODES,
+    parseTakes,
 } from '../services/postSuggestions';
+import { variantsOf, imageKeysOf } from '../lib/postSuggestionVariants';
 
 const PAGE = 'aaaaaaaa-0000-0000-0000-000000000001';
 const WS = 'bbbbbbbb-0000-0000-0000-000000000001';
@@ -857,5 +860,248 @@ describe('getToday', () => {
             expect.stringContaining('cap read failed'),
             expect.objectContaining({ level: 'warning', fingerprint: ['post-suggestions-cap-read'] }),
         );
+    });
+});
+
+/**
+ * VARIANTS — one generation, several takes, ONE paid image.
+ *
+ * The failure these exist for is real and dated: on 2026-08-11 a page made
+ * three generations in a day, the FIRST was the best post it produced, and the
+ * third silently destroyed it (supersede). Showing the takes together is what
+ * every comparable product does; the tests below pin the two properties that
+ * make it affordable and safe — the image model is called ONCE per generation
+ * however many takes come back, and every take's file is swept on supersede.
+ */
+describe('parseTakes — tolerant of what the model actually returns', () => {
+    it('reads the documented array shape', () => {
+        const takes = parseTakes({ posts: [{ text: 'أ', headline: 'ه1' }, { text: 'ب', headline: 'ه2' }] });
+        expect(takes).toEqual([{ text: 'أ', headline: 'ه1' }, { text: 'ب', headline: 'ه2' }]);
+    });
+
+    it('accepts the SINGLE-OBJECT shape — a model asked for N can still answer with one, and one usable post beats a failure that burns a slot', () => {
+        expect(parseTakes({ text: 'بوست واحد', headline: 'عنوان' })).toEqual([{ text: 'بوست واحد', headline: 'عنوان' }]);
+    });
+
+    it('caps at the requested count — an over-long list must not quietly change the UI budget', () => {
+        const posts = Array.from({ length: 9 }, (_, i) => ({ text: `t${i}`, headline: `h${i}` }));
+        expect(parseTakes({ posts })).toHaveLength(POST_SUGGESTION_VARIANT_COUNT);
+    });
+
+    it('skips entries with no usable text rather than storing a blank take', () => {
+        const takes = parseTakes({ posts: [{ text: '   ' }, { text: 'صالح' }, { headline: 'بلا نص' }] });
+        expect(takes).toEqual([{ text: 'صالح', headline: '' }]);
+    });
+
+    it('empty / malformed input yields NO takes (the caller treats that as a generation failure)', () => {
+        expect(parseTakes({ posts: [] })).toEqual([]);
+        expect(parseTakes(null)).toEqual([]);
+        expect(parseTakes({ posts: 'not-an-array' })).toEqual([]);
+    });
+});
+
+describe('variantsOf / imageKeysOf — one home for the legacy projection and the storage footprint', () => {
+    it('a pre-variants row (variants null) projects to the single take its columns describe', () => {
+        expect(variantsOf({ text: 'قديم', imageUrl: 'u', imageKey: 'k', variants: null }))
+            .toEqual([{ text: 'قديم', headline: null, imageUrl: 'u', imageKey: 'k' }]);
+    });
+
+    it('collects EVERY take\'s key — the leak this fixes left N-1 images behind', () => {
+        const keys = imageKeysOf({
+            imageKey: 'k0',
+            variants: [
+                { text: 'a', headline: null, imageUrl: 'u0', imageKey: 'k0' },
+                { text: 'b', headline: null, imageUrl: 'u1', imageKey: 'k1' },
+                { text: 'c', headline: null, imageUrl: 'u2', imageKey: 'k2' },
+            ],
+        });
+        expect(keys).toEqual(['k0', 'k1', 'k2']);
+    });
+
+    it('deduplicates the mirrored key so the selected take is never deleted twice', () => {
+        expect(imageKeysOf({ imageKey: 'k1', variants: [{ text: 'b', headline: null, imageUrl: 'u1', imageKey: 'k1' }] }))
+            .toEqual(['k1']);
+    });
+});
+
+describe('generateSuggestion — a set of takes costs ONE image', () => {
+    const THREE_TAKES = {
+        choices: [{ message: { content: JSON.stringify({
+            posts: [
+                { text: 'الصياغة الأولى', headline: 'عنوان ١' },
+                { text: 'الصياغة الثانية', headline: 'عنوان ٢' },
+                { text: 'الصياغة الثالثة', headline: 'عنوان ٣' },
+            ],
+            imageBrief: 'perfume bottle on marble',
+        }) } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        model: 'gpt-4.1-mini',
+    };
+
+    beforeEach(() => {
+        mockChatCreate.mockResolvedValue(THREE_TAKES);
+        let n = 0;
+        mockPut.mockImplementation(async () => {
+            n += 1;
+            return { url: `https://media/v${n}.jpg`, key: `generated-posts/ws/v${n}.jpg` };
+        });
+    });
+
+    it('calls the image model ONCE for three takes, and composites three cards from that one scene', async () => {
+        queueFullRun({ ...INSERTED, variants: null });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        // The whole point: three cards, one paid call.
+        expect(mockImagesGenerate).toHaveBeenCalledTimes(1);
+        expect(mockComposePostCard).toHaveBeenCalledTimes(3);
+        expect(mockPut).toHaveBeenCalledTimes(3);
+        // Each take's own headline is typeset over the shared base.
+        expect(mockComposePostCard.mock.calls.map(c => (c[1] as { headline: string }).headline))
+            .toEqual(['عنوان ١', 'عنوان ٢', 'عنوان ٣']);
+    });
+
+    it('stores every take and MIRRORS the first into the columns of record (what pre-variants clients read)', async () => {
+        queueFullRun({ ...INSERTED, variants: null });
+        await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        const inserted = router.calls.find(c => c.op === 'insert' && c.table === getTableName(postSuggestions));
+        const values = inserted?.values as {
+            variants: { text: string; imageKey: string }[]; selectedVariant: number;
+            text: string; imageUrl: string; imageKey: string;
+        };
+        expect(values.variants).toHaveLength(3);
+        expect(values.selectedVariant).toBe(0);
+        expect(values.text).toBe(values.variants[0].text);
+        expect(values.imageKey).toBe(values.variants[0].imageKey);
+        // Distinct files — a shared key would make supersede delete a live image.
+        expect(new Set(values.variants.map(v => v.imageKey)).size).toBe(3);
+    });
+
+    it('poster mode still makes NO image-model call — three posters are pure sharp work', async () => {
+        queueFullRun({ ...INSERTED, variants: null }, { previous: [{ postType: 'promo', imageBrief: null, imageMode: 'photo' }] });
+        await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(mockImagesGenerate).not.toHaveBeenCalled();
+        expect(mockRenderPosterBase).toHaveBeenCalledTimes(3);
+        // Each poster typesets its own take's headline.
+        expect(mockRenderPosterBase.mock.calls.map(c => c[3])).toEqual(['عنوان ١', 'عنوان ٢', 'عنوان ٣']);
+    });
+
+    it('a PARTIAL image failure is not reported as degraded — the merchant still has a card to publish', async () => {
+        let n = 0;
+        mockPut.mockImplementation(async () => {
+            n += 1;
+            if (n === 1) throw new Error('upload blew up');
+            return { url: `https://media/v${n}.jpg`, key: `generated-posts/ws/v${n}.jpg` };
+        });
+        queueFullRun({ ...INSERTED, variants: null });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.imageDegraded).toBeUndefined();
+    });
+
+    it('supersede sweeps EVERY take of the replaced row, not just the mirrored one', async () => {
+        queueFullRun({ ...INSERTED, variants: null }, {
+            stale: [{
+                id: 'old', imageKey: 'generated-posts/ws/old0.jpg',
+                variants: [
+                    { text: 'a', headline: null, imageUrl: 'u0', imageKey: 'generated-posts/ws/old0.jpg' },
+                    { text: 'b', headline: null, imageUrl: 'u1', imageKey: 'generated-posts/ws/old1.jpg' },
+                    { text: 'c', headline: null, imageUrl: 'u2', imageKey: 'generated-posts/ws/old2.jpg' },
+                ],
+            }],
+        });
+        await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(mockRemove.mock.calls.map(c => c[0]).sort()).toEqual([
+            'generated-posts/ws/old0.jpg', 'generated-posts/ws/old1.jpg', 'generated-posts/ws/old2.jpg',
+        ]);
+    });
+
+    it('the shadow figure check runs PER TAKE, so a bad figure is attributable to the take that wrote it', async () => {
+        mockChatCreate.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({
+                posts: [
+                    { text: 'بلا أرقام', headline: 'ه١' },
+                    { text: 'السعر 999 دينار', headline: 'ه٢' },
+                ],
+                imageBrief: 'scene',
+            }) } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+            model: 'gpt-4.1-mini',
+        });
+        queueFullRun({ ...INSERTED, variants: null });
+        await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        const shadow = log.warn.mock.calls.filter(c => String(c[0]).includes('shadow'));
+        expect(shadow).toHaveLength(1);
+        expect(shadow[0][1]).toMatchObject({ variantIndex: 1, ungrounded: ['999'] });
+    });
+
+    it('one generation is still ONE slot — a set of takes must not multiply the cap', async () => {
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueFullRun({ ...INSERTED, variants: null });
+        const r = await postSuggestionsService.generateSuggestion(WS, PAGE, 'manual');
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(mockClaimDailyCapSlot).toHaveBeenCalledTimes(1);
+        expect(r.remainingToday).toBe(2);
+    });
+});
+
+describe('selectVariant — the merchant\'s pick becomes the row of record', () => {
+    const ROW_WITH_TAKES = {
+        ...INSERTED,
+        selectedVariant: 0,
+        variants: [
+            { text: 'الأولى', headline: 'ه١', imageUrl: 'https://media/v1.jpg', imageKey: 'generated-posts/ws/v1.jpg' },
+            { text: 'الثانية', headline: 'ه٢', imageUrl: 'https://media/v2.jpg', imageKey: 'generated-posts/ws/v2.jpg' },
+        ],
+    };
+    // The ownership read is a join, so rows come back namespaced by table.
+    const queueOwnedSuggestion = (row: Record<string, unknown> | null) =>
+        router.queue({ op: 'select', table: postSuggestions, rows: row ? [{ post_suggestions: row, pages: { id: PAGE } }] : [] });
+
+    it('mirrors the chosen take into text/imageUrl/imageKey — that mirror IS what shipped app bundles render', async () => {
+        queueOwnedSuggestion(ROW_WITH_TAKES);
+        router.queue({ op: 'update', table: postSuggestions, rows: [{ ...ROW_WITH_TAKES, selectedVariant: 1, text: 'الثانية', imageUrl: 'https://media/v2.jpg', imageKey: 'generated-posts/ws/v2.jpg' }] });
+        const dto = await postSuggestionsService.selectVariant(WS, PAGE, 's1', 1);
+        expect(dto?.text).toBe('الثانية');
+        expect(dto?.selectedVariant).toBe(1);
+        const update = router.calls.find(c => c.op === 'update' && c.table === getTableName(postSuggestions));
+        expect(update?.set).toMatchObject({
+            selectedVariant: 1, text: 'الثانية',
+            imageUrl: 'https://media/v2.jpg', imageKey: 'generated-posts/ws/v2.jpg',
+        });
+    });
+
+    it('never leaks the storage handle to the client', async () => {
+        queueOwnedSuggestion(ROW_WITH_TAKES);
+        router.queue({ op: 'update', table: postSuggestions, rows: [ROW_WITH_TAKES] });
+        const dto = await postSuggestionsService.selectVariant(WS, PAGE, 's1', 0);
+        expect(dto?.variants.every(v => !('imageKey' in v))).toBe(true);
+    });
+
+    it('an index this row cannot serve is refused BEFORE any write', async () => {
+        queueOwnedSuggestion(ROW_WITH_TAKES);
+        expect(await postSuggestionsService.selectVariant(WS, PAGE, 's1', 7)).toBeNull();
+        expect(router.calls.some(c => c.op === 'update')).toBe(false);
+    });
+
+    it('a non-integer index is refused too (a fractional index addresses no take)', async () => {
+        queueOwnedSuggestion(ROW_WITH_TAKES);
+        expect(await postSuggestionsService.selectVariant(WS, PAGE, 's1', 1.5)).toBeNull();
+        expect(router.calls.some(c => c.op === 'update')).toBe(false);
+    });
+
+    it('a row outside this workspace is invisible — null, and no write', async () => {
+        queueOwnedSuggestion(null);
+        expect(await postSuggestionsService.selectVariant(WS, PAGE, 's1', 0)).toBeNull();
+        expect(router.calls.some(c => c.op === 'update')).toBe(false);
+    });
+
+    it('a pre-variants row still accepts index 0 — legacy rows project to one take', async () => {
+        queueOwnedSuggestion({ ...INSERTED, selectedVariant: 0, variants: null });
+        router.queue({ op: 'update', table: postSuggestions, rows: [{ ...INSERTED, selectedVariant: 0, variants: null }] });
+        const dto = await postSuggestionsService.selectVariant(WS, PAGE, 's1', 0);
+        expect(dto?.variants).toHaveLength(1);
+        expect(dto?.text).toBe(INSERTED.text);
     });
 });

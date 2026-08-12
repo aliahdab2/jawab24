@@ -1549,10 +1549,42 @@ export const POST_SYNC_QUEUE_NAME = 'post-sync-queue';
 // the backend service/controller and the frontend api client speak one shape.
 export type PostSuggestionPostType = 'promo' | 'product_spotlight' | 'faq_tip' | 'hours_reminder' | 'general';
 export type PostSuggestionEvent = 'opened' | 'copied' | 'downloaded';
+
+/** How many takes one generation produces. One paid image call serves them all. */
+export const POST_SUGGESTION_VARIANT_COUNT = 3;
+
+/**
+ * One take on the day's subject. A generation returns several and the merchant
+ * picks — the industry norm (Meta Business Suite drafts 3–5 captions; Copy.ai,
+ * Predis and Ocoya all return sets) and the fix for the failure observed in
+ * prod on 2026-08-11, where a page's best post of the day was destroyed by its
+ * own next regenerate.
+ *
+ * The takes differ in TEXT and HEADLINE only. They share one generated scene:
+ * the image model costs money and its steering is measured not to work on this
+ * model, while re-typesetting a headline over the same base is local sharp work
+ * at no cost — so three cards look distinct without three image calls.
+ */
+export interface PostSuggestionVariant {
+  text: string;
+  /** The 2–5 Arabic words typeset ON this take's card. Null = card shipped scrim-only. */
+  headline: string | null;
+  imageUrl: string | null;
+}
+
 export interface PostSuggestionDto {
   id: string;
+  /** The SELECTED take's text — also what pre-variants clients render. */
   text: string;
   imageUrl: string | null; // null = text-only (image degraded / cleaned up)
+  /**
+   * Every take of this generation, selected one included. Always at least one
+   * element: rows generated before variants shipped project to a single take,
+   * so clients never branch on "old row" vs "new row".
+   */
+  variants: PostSuggestionVariant[];
+  /** Index into `variants` — which take `text`/`imageUrl` currently mirror. */
+  selectedVariant: number;
   postType: PostSuggestionPostType;
   source: 'cron' | 'manual';
   suggestedFor: string; // ISO date (UTC day)
