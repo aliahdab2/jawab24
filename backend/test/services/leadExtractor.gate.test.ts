@@ -38,12 +38,41 @@ vi.mock('../../src/config', () => ({ config: { openai: { apiKey: 'test-key' } } 
 
 // Minimal fluent Drizzle stub. select() → no existing lead (isNew=true);
 // insert().values() captures the persisted row; returning() echoes it back.
+//
+// select() is routed by its FIELDS argument (schema objects can't be referenced
+// here — vi.mock factories hoist above imports):
+//   - `kb` in fields         → the getBusinessPhones page read. A row must exist
+//                              or the exclusion path bails out entirely (the
+//                              2026-08-12 rework reads the page FIRST so the
+//                              bizphones cache key can carry kbVersion).
+//   - `attributes` in fields → the getBusinessPhones fact-rows read (awaited
+//                              without .limit(), hence the thenable chain). Unit
+//                              scope: always empty — fact-row exclusion is
+//                              covered by test/integration/leadExtractor.test.ts.
+//   - anything else          → the upsert's existing-lead lookup (existingRows).
 vi.mock('../../src/db', () => {
-    const selectChain = {
-        from: () => selectChain,
-        where: () => selectChain,
-        limit: () => Promise.resolve(existingRows.slice()),
+    const PAGE_ROW = { kb: null, kbVersion: 1, businessProfile: null };
+    const makeSelect = (fields?: Record<string, unknown>) => {
+        const rows = () =>
+            fields && 'kb' in fields ? [{ ...PAGE_ROW }]
+                : fields && 'attributes' in fields ? []
+                    : existingRows.slice();
+        const chain: {
+            from: () => typeof chain;
+            innerJoin: () => typeof chain;
+            where: () => typeof chain;
+            limit: () => Promise<Array<Record<string, unknown>>>;
+            then: (res: (v: Array<Record<string, unknown>>) => unknown, rej?: (e: unknown) => unknown) => Promise<unknown>;
+        } = {
+            from: () => chain,
+            innerJoin: () => chain,
+            where: () => chain,
+            limit: () => Promise.resolve(rows()),
+            then: (res, rej) => Promise.resolve(rows()).then(res, rej),
+        };
+        return chain;
     };
+    const selectChain = makeSelect();
     const insertChain = {
         values: (v: Record<string, unknown>) => {
             capturedInserts.push(v);
@@ -68,7 +97,7 @@ vi.mock('../../src/db', () => {
     };
     return {
         db: {
-            select: () => selectChain,
+            select: (fields?: Record<string, unknown>) => (fields ? makeSelect(fields) : selectChain),
             insert: () => insertChain,
             update: () => updateChain,
         },

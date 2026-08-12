@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { db } from '../db';
-import { leads, pages } from '../db/schema';
+import { leads, pages, factCollections, factRows } from '../db/schema';
 import { eq, and, or, ilike, desc, count, min, sql } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
@@ -12,8 +12,8 @@ import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL } from '@jawab24/shared';
-import type { LeadExtractedData, LeadField, LeadStatus } from '@jawab24/shared';
+import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL, unwrapBusinessProfile, whatsappNumbers } from '@jawab24/shared';
+import type { LeadExtractedData, LeadField, LeadStatus, StoredBusinessProfile } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
 import { countryFromTimezone } from '../utils/phoneRegion';
@@ -163,6 +163,23 @@ function stripForwardedPostBlocks(text: string): string {
         .trim();
 }
 
+/** URLs in a message body. `https?://…` and `www.…` runs — the shapes that carry
+ *  long digit paths. Deliberately NOT bare domains: stripping `word.tld` risks
+ *  eating customer-typed text, and no observed false lead came from one. */
+const URL_RE = /(?:https?:\/\/|www\.)\S+/gi;
+
+/**
+ * Remove URLs before the lead phone gate. A URL's path digits are not a phone
+ * number, but they validate as one under the permissive fallback: 2026-08-11
+ * prod (Shahin Resort), a vendor-spam DM's Behance portfolio link
+ * `…/gallery/253941151/…` became a lead whose card, call button and WhatsApp
+ * button all pointed at nine meaningless digits. Gate-only, like every strip
+ * here: the AI extraction still sees the full message as intent context.
+ */
+function stripUrls(text: string): string {
+    return text.replace(URL_RE, ' ').trim();
+}
+
 /**
  * The customer-AUTHORED portion of a message body, for the lead phone gate.
  * Two machine-written shapes are removed:
@@ -182,7 +199,7 @@ function stripForwardedPostBlocks(text: string): string {
  */
 export function customerAuthoredGateText(messageText: string): string {
     if (isAnyImageMessage(messageText)) return '';
-    return stripForwardedPostBlocks(messageText);
+    return stripUrls(stripForwardedPostBlocks(messageText));
 }
 
 /**
@@ -783,7 +800,32 @@ class LeadExtractorService {
         pageId: string,
         phoneOpts?: { defaultCountry?: string },
     ): Promise<string[]> {
-        const cacheKey = `lead:bizphones:${pageId}`;
+        // The page row is read FIRST so the cache key can carry kbVersion: every
+        // write that can change the business's numbers — KB text, Business Info
+        // fields, fact-collection rows — already bumps kbVersion (updatePage /
+        // invalidatePageCaches), so a versioned key self-invalidates on the same
+        // discipline the reply caches ride. The pre-2026-08-12 unversioned key
+        // could serve numbers up to an hour stale after an edit; worse, the value
+        // itself came from the KB TEXT ONLY, so when a migration moved a
+        // merchant's numbers out of prose into fact rows (MES, 2026-08-08) they
+        // silently left the exclusion set — their own showroom lines became
+        // capturable as customer leads.
+        let page: { kb: string | null; kbVersion: number | null; businessProfile: unknown } | undefined;
+        try {
+            [page] = await db
+                .select({ kb: pages.knowledgeBase, kbVersion: pages.kbVersion, businessProfile: pages.businessProfile })
+                .from(pages)
+                .where(eq(pages.id, pageId))
+                .limit(1);
+        } catch (err) {
+            // Transient DB error — no caching, next call retries; the
+            // conversation-scoped exclusion still applies and we never drop a lead.
+            this.logger.warn('business-phone page lookup failed; conversation-scoped exclusion only', { err, pageId });
+            return [];
+        }
+        if (!page) return [];
+
+        const cacheKey = `lead:bizphones:${pageId}:v${page.kbVersion ?? 0}`;
         try {
             const cached = await redis.get(cacheKey);
             if (cached) return JSON.parse(cached) as string[];
@@ -793,18 +835,38 @@ class LeadExtractorService {
 
         let phones: string[];
         try {
-            const [page] = await db
-                .select({ kb: pages.knowledgeBase })
-                .from(pages)
-                .where(eq(pages.id, pageId))
-                .limit(1);
-            // A KB-less page has no business numbers — cache the empty result too,
-            // so it doesn't re-query on every phone-bearing message. (extractPhones
-            // already de-duplicates within a single text.)
-            phones = page?.kb ? extractPhones(page.kb, phoneOpts).map(p => p.raw) : [];
+            // Every text the business itself authored that can carry its own
+            // numbers, joined into one extraction pass (extractPhones dedupes):
+            //   1. the KB free text (the original source);
+            //   2. the structured Business Info fields — phones + WhatsApp. These
+            //      are prompt-injected, so a number living only here is published
+            //      to customers and must be excludable;
+            //   3. fact-collection rows — names and attribute values. Directory
+            //      lists («صالات الشركة», «أرقام الأقسام») carry the merchant's
+            //      lines as row attributes, and post-cleanup pages have them
+            //      NOWHERE else. Expired/unavailable rows are included on
+            //      purpose: a business's old number is still not a customer's.
+            const texts: string[] = [];
+            if (page.kb) texts.push(page.kb);
+
+            const merchant = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile).merchant ?? {};
+            for (const p of merchant.phones ?? (merchant.phone ? [merchant.phone] : [])) texts.push(p);
+            texts.push(...whatsappNumbers(merchant));
+
+            const rows = await db
+                .select({ name: factRows.name, attributes: factRows.attributes })
+                .from(factRows)
+                .innerJoin(factCollections, eq(factRows.collectionId, factCollections.id))
+                .where(eq(factCollections.pageId, pageId));
+            for (const row of rows) {
+                texts.push(row.name);
+                for (const attr of row.attributes ?? []) texts.push(attr.value);
+            }
+
+            phones = texts.length > 0 ? extractPhones(texts.join('\n'), phoneOpts).map(p => p.raw) : [];
         } catch (err) {
             // Transient DB error — return WITHOUT caching so the next call retries.
-            this.logger.warn('business-phone KB lookup failed; conversation-scoped exclusion only', { err, pageId });
+            this.logger.warn('business-phone lookup failed; conversation-scoped exclusion only', { err, pageId });
             return [];
         }
 
