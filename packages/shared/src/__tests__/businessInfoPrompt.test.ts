@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBusinessInfoPrompt } from '../businessInfoPrompt';
+import { formatBusinessInfoPrompt, businessPhoneList } from '../businessInfoPrompt';
 import type { BusinessProfile } from '../index';
 import type { MerchantProvenanceMap } from '../businessProfileMerge';
 
@@ -365,5 +365,43 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).toContain('Baramkeh, Damascus');
             expect(block).not.toContain('Syria');
         });
+    });
+});
+
+/**
+ * `businessPhoneList` is THE reader of the `phones[]` / legacy `phone` dual
+ * shape. It is shared rather than inlined because the two consumers must agree:
+ * the prompt PUBLISHES these numbers to customers, and lead capture EXCLUDES
+ * them so a customer echoing one back never becomes a lead whose call button
+ * dials the merchant. A local `p.phones ?? [p.phone]` reads an EMPTY array as
+ * "no phones" ([] is not nullish) while the prompt still publishes the legacy
+ * `phone` — the two halves disagreeing is exactly the bug class here.
+ */
+describe('businessPhoneList', () => {
+    it('returns the phones array when it has entries', () => {
+        expect(businessPhoneList({ phones: ['0911000210', '0911000220'] })).toEqual(['0911000210', '0911000220']);
+    });
+
+    it('falls back to the legacy single `phone` when `phones` is ABSENT', () => {
+        expect(businessPhoneList({ phone: '0933301022' })).toEqual(['0933301022']);
+    });
+
+    it('falls back to the legacy single `phone` when `phones` is an EMPTY array', () => {
+        // The divergence guard: `phones ?? [phone]` would return [] here and the
+        // merchant's published line would silently leave the exclusion set.
+        expect(businessPhoneList({ phones: [], phone: '0933301022' })).toEqual(['0933301022']);
+    });
+
+    it('prefers `phones` over the legacy `phone` when both are set', () => {
+        expect(businessPhoneList({ phones: ['0911000210'], phone: '0933301022' })).toEqual(['0911000210']);
+    });
+
+    it('drops blank and whitespace-only entries', () => {
+        expect(businessPhoneList({ phones: ['0911000210', '', '   '] })).toEqual(['0911000210']);
+        expect(businessPhoneList({ phones: [], phone: '   ' })).toEqual([]);
+    });
+
+    it('returns [] when the profile carries no phone at all', () => {
+        expect(businessPhoneList({})).toEqual([]);
     });
 });

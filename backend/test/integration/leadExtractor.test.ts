@@ -24,7 +24,8 @@ vi.mock('openai', () => ({
 import { randomUUID } from 'node:crypto';
 import { leadExtractorService } from '../../src/services/leadExtractor';
 import { createTestUser, createTestWorkspace, createTestPage, testDb } from './setup';
-import { leads, messages } from '../../src/db/schema';
+import { leads, messages, factCollections, factRows } from '../../src/db/schema';
+import { pagesService } from '../../src/services/pages';
 import { eq } from 'drizzle-orm';
 
 // The merchant lists their own contact lines in Business Info (the KB column).
@@ -190,6 +191,235 @@ describe('leadExtractor — business-number exclusion (real Postgres)', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].phone).toContain('915218888');
         expect(rows[0].phone).not.toContain('929453011');
+    });
+});
+
+describe('business-number exclusion — beyond the KB text (real Postgres)', () => {
+    /**
+     * The pre-2026-08-12 getBusinessPhones read pages.knowledge_base ONLY. When
+     * the Business Surface migration moved a merchant's numbers out of prose
+     * into fact rows (MES, 2026-08-08: «صالات الشركة» + «أرقام الأقسام»), their
+     * own showroom/department lines silently left the exclusion set — a customer
+     * pasting one back became capturable as a lead whose call button dialed the
+     * merchant themselves. These tests pin the union sources: fact rows, the
+     * structured Business Info phones, and WhatsApp — each with a KB that does
+     * NOT contain the number, so only the new source can be doing the work.
+     */
+    let userId: string;
+    let workspaceId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        userId = user.id;
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        openaiCreateMock.mockReset();
+    });
+
+    async function seedDepartmentList(pageId: string, phone: string): Promise<void> {
+        const [collection] = await testDb
+            .insert(factCollections)
+            .values({ pageId, label: 'أرقام الأقسام', keyAttr: null, source: 'editor' })
+            .returning();
+        await testDb.insert(factRows).values({
+            collectionId: collection.id,
+            name: 'مبيعات الجملة للسادة التجار',
+            attributes: [{ label: 'الهاتف', value: phone }],
+            sortOrder: 0,
+        });
+    }
+
+    it('a number living ONLY in fact rows is excluded (MES post-cleanup shape)', async () => {
+        const page = await createTestPage(userId, {
+            workspaceId,
+            knowledgeBase: 'وكيل معتمد للأجهزة الكهربائية. الأسعار تؤخذ من الصالات.',
+        });
+        await seedDepartmentList(page.id, '0911000212');
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId: page.id, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-factrow', senderName: 'Pasted Dept Line',
+            messageText: 'هاد رقمكم صح؟ 0911000212',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, page.id));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('a number living ONLY in the structured Business Info fields is excluded', async () => {
+        const page = await createTestPage(userId, {
+            workspaceId,
+            knowledgeBase: 'متجر أدوات منزلية. توصيل لكل المحافظات.',
+            businessProfile: {
+                merchant: { phones: ['0933301022'], channels: { whatsapp: ['0944402011'] } },
+            },
+        });
+
+        for (const [sender, ownNumber] of [['cust-bp-phone', '0933301022'], ['cust-bp-wa', '0944402011']] as const) {
+            await leadExtractorService.maybeCaptureLead({
+                pageId: page.id, userId, workspaceId,
+                sourceId: randomUUID(), sourceType: 'message',
+                senderId: sender, senderName: 'Echoes Field Number',
+                messageText: `بتردوا على هاد الرقم؟ ${ownNumber}`,
+            });
+        }
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, page.id));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('the customer STILL becomes a lead beside fact-row numbers (no overcorrection)', async () => {
+        const page = await createTestPage(userId, {
+            workspaceId,
+            knowledgeBase: 'وكيل معتمد للأجهزة الكهربائية.',
+        });
+        await seedDepartmentList(page.id, '0911000212');
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId: page.id, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-genuine', senderName: 'Genuine Customer',
+            messageText: 'جربت رقمكم 0911000212 وما حدا رد، رقمي 0966554433 دقولي',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, page.id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('966554433');
+        expect(rows[0].phone).not.toContain('911000212');
+    });
+
+    it('a fact-row number added AFTER a capture is picked up once the page caches bump', async () => {
+        // The bizphones cache key carries kbVersion, so it self-invalidates on the
+        // same discipline every fact/profile/KB write already rides
+        // (invalidatePageCaches). Sequence: number not yet the business's → lead
+        // captured; merchant adds it to a fact list (bump); the same number echoed
+        // by another customer is now excluded.
+        const page = await createTestPage(userId, {
+            workspaceId,
+            knowledgeBase: 'صالة عرض واحدة حاليًا.',
+        });
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId: page.id, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-before', senderName: 'Before Bump',
+            messageText: 'رقمي 0955667788',
+        });
+        expect(await testDb.select().from(leads).where(eq(leads.pageId, page.id))).toHaveLength(1);
+
+        await seedDepartmentList(page.id, '0955667788');
+        await pagesService.invalidatePageCaches(page.id);
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId: page.id, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-after', senderName: 'After Bump',
+            messageText: 'شفت الرقم 0955667788 عندكم بالصفحة',
+        });
+
+        // Still exactly the first lead: the echoed number is now the business's own.
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, page.id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].senderId).toBe('cust-before');
+    });
+});
+
+describe('URL digits and the AI phone (real Postgres)', () => {
+    /**
+     * Stripping URLs from the GATE text is only half the contract. The AI
+     * extractor still sees the full message, and its phone REPLACES the gate
+     * phone whenever it re-validates — so a message carrying both a real number
+     * and a digit-bearing link could still be saved with the link's digits.
+     * Every other strip in this file already feeds its removed text back into
+     * the exclusion set (`forwardedPostText`, `imageTurnTexts`); URLs now do too.
+     *
+     * Prod evidence for the shape (90 days of inbound, 2026-08-12): three leads
+     * were built from URL digits — a Behance gallery id, a Messenger channel id,
+     * and a spam tracker's `pid`.
+     */
+    let userId: string;
+    let workspaceId: string;
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        userId = user.id;
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, {
+            workspaceId,
+            knowledgeBase: 'منتجع سياحي. الحجز عبر الصفحة.',
+        });
+        pageId = page.id;
+        openaiCreateMock.mockReset();
+    });
+
+    it('the AI cannot save a URL gallery id as the lead phone', async () => {
+        // The model returns the Behance path digits instead of the number the
+        // customer actually typed — the documented "drops a non-phone figure into
+        // the field" failure. Before the URL exclusion this re-validated cleanly
+        // (9 digits, not a business number) and OVERRODE the real gate phone.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '253941151', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-url-ai', senderName: 'Real Phone Plus Link',
+            messageText: 'رقمي 0912345678 وهاد البورتفوليو https://www.behance.net/gallery/253941151/Tourism',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('912345678');
+        expect(rows[0].phone).not.toContain('253941151');
+    });
+
+    it('a customer sharing their OWN wa.me link beside their number is still captured', async () => {
+        // The exclusion covers URL-ONLY digits. The same number typed plainly is
+        // the customer's own contact and must survive — otherwise the fix for one
+        // silent defect would introduce another (a dropped lead).
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-wame', senderName: 'Own Link',
+            messageText: 'رقمي 0912345678 وهاد واتسابي https://wa.me/963912345678',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('912345678');
+    });
+
+    it('a link-only message creates no lead at all (gate stays shut)', async () => {
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-link-only', senderName: 'Spam Link',
+            messageText: 'https://www.messenger.com/channel/100090337535317/AbbiQQEXnBiNl0ky/',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
     });
 });
 

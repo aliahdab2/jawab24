@@ -77,10 +77,12 @@ Consequences the code must uphold:
 messageProcessor / commentProcessor  (after reply — fire-and-forget, NEVER awaited)
     └─ maybeCaptureLead()
          1. region hint      workspace timezone → defaultCountry (Redis-cached settings)
-         2. gate text        customerAuthoredGateText(messageText) — strips [Shared post: …] blocks;
-                             an image-message body ([Image: …]/[صورة: …]) contributes NO gate text
+         2. gate text        customerAuthoredGateText(messageText) — strips [Shared post: …] blocks
+                             and URLs (https?://…, www.…); an image-message body
+                             ([Image: …]/[صورة: …]) contributes NO gate text
          3. cheap pre-gate   extractPhones(gateText) empty? → maybeReextractLead() and stop
-         4. exclusion set    KB business phones + prior merchant turns + image-message turns
+         4. exclusion set    business phones (KB ∪ Business Info fields ∪ fact rows)
+                             + prior merchant turns + image-message turns + URL-only digits
                              (+ post text for comments)
          5. real gate        extractCustomerPhones(gateText, businessTexts)[0] — empty → re-extract path
          6. daily budget     leads:extraction:{ws}:{date} (Redis, fail-open)
@@ -113,11 +115,47 @@ matched cross-format (E.164 + last-9-digit tail). The exclusion set:
 
 | Source | Catches | Incident |
 |---|---|---|
-| KB business phones (`getBusinessPhones`, Redis 1 h) | customer pastes/types the merchant's published line | June 2026 — 8 bogus leads dialing the merchant |
+| Business phones (`getBusinessPhones`, Redis 1 h under a **`kbVersion`-scoped key**) — the UNION of the KB free text, the structured Business Info fields (`phones` + WhatsApp) and the fact-collection rows (names + attribute values) | customer pastes/types the merchant's published line, wherever the merchant happens to keep it | June 2026 — 8 bogus leads dialing the merchant · Aug 2026 — MES fact-row migration |
 | **Prior** merchant turns of this conversation (`priorBusinessTurns`) | customer pastes our earlier reply back (e.g. to translate it) | June 2026 — ICDL paste-back |
 | Forwarded `[Shared post: "…"]` blocks — stripped from gate text AND fed to the exclusion | customer forwards the merchant's own ad whose body ends with the merchant's number | June 2026 — Nourva ad forwards |
 | Image-message turns (`imageTurnTexts`) — the whole body is dropped from gate text AND every image turn in the history joins the exclusion | numbers OCR'd from a photo the customer shared (a doctor's prescription stamp, another clinic's flyer footer) — third-party contact lines, never the customer's | July 2026 — Port Said hospital, 3/3 leads |
+| URL-only digit runs (`urlOnlyPhoneTexts`) — URLs stripped from gate text AND their digits fed to the exclusion | a link's path/query digits (`…/gallery/253941151/…`, a Messenger channel id, a tracker's `pid`) validating as a phone under the permissive fallback | Aug 2026 — Shahin Resort, 3 junk leads in 90 days |
 | Comment path: the post text | merchant's number in their own post | — |
+
+**Every strip does BOTH halves.** Removing text from the gate is only half a
+guard: the AI extractor still receives the full message, and its phone
+*replaces* the gate phone whenever it re-validates (step 8). So each shape
+removed above is also pushed into `businessTexts`. A strip that skips the second
+half leaves the same junk reachable through the model.
+
+**Where the business's numbers live has changed, and the exclusion follows it.**
+`getBusinessPhones` read `pages.knowledge_base` alone until 2026-08-12. When the
+Business Surface migration moved a merchant's numbers out of prose into fact
+rows (MES, 2026-08-08: «صالات الشركة» + «أرقام الأقسام»), those lines silently
+left the exclusion set and his own wholesale department line was captured as a
+customer's phone. Any NEW surface that publishes a merchant number must be added
+to that union in the same PR. Expired/unavailable fact rows are included on
+purpose — a business's old number is still not a customer's.
+
+**The `phones[]` / legacy `phone` dual shape has ONE reader**, `businessPhoneList`
+(`packages/shared/src/businessInfoPrompt.ts`), shared with the prompt formatter.
+The set the prompt PUBLISHES and the set capture EXCLUDES must be identical; an
+inline `phones ?? [phone]` reads an empty array as "no phones" while the prompt
+still publishes the legacy value, which puts the merchant's own line back on a
+lead's call button. Same rule for `whatsappNumbers`.
+
+**Two bounds on the URL strip, both measured over 90 days of prod inbound (128,187
+messages), not guessed:**
+- **Bare domains are not stripped** — eating `word.tld` risks customer-typed text,
+  and no observed false lead came from one.
+- **Phone-bearing deep links (`wa.me/<digits>`) are not exempted.** 5 inbound
+  messages carried one; 3 were already dropped by the image / shared-post strips
+  and none of the 5 produced a lead, so an exemption buys nothing and costs a
+  hand-maintained host list. A number the customer *also typed plainly* is never
+  excluded, so sharing your own `wa.me` link beside your number still captures.
+- Note the deliberate asymmetry: `getBusinessPhones` does **not** strip URLs, so a
+  merchant's own `wa.me` line in their KB still lands in the exclusion set.
+  Over-excluding a business number is safe; under-excluding one dials the merchant.
 
 **The temporal cutoff is the subtle part.** `priorBusinessTurns` keeps only
 assistant turns *before* the customer's latest message. The reply we generated
@@ -225,6 +263,8 @@ call (~$0.0004; daily caps bound the damage).
 | 2026-07-02 | "Leads not caught" (Nourva) — cards missing post-phone details; search couldn't find lead #78 | one-shot extraction; client-side-only search | follow-up re-extraction + merge; server-side search (#390) |
 | 2026-07-25 | **Two-person lead mispaired** (الدمشقي): parent registered two daughters; card showed daughter A's name with daughter B's number on the buttons, daughter B's name lost entirely | `phone` column silently overwritten on conflict (the one destructive field in an otherwise non-destructive upsert); prompt had no multi-person convention, so `name` collapsed per-key | preserve displaced number as card field; prompt emits `name_N`/`phone_N` pairs per person; regression test from the real conversation |
 | 2026-07-29 | **Image-OCR numbers as lead phones** (Port Said hospital): all 3 leads captured that day had an external doctor's/clinic's number from a customer's prescription/flyer photo as `phone` — call buttons dialed a psychiatrist's personal mobile | vision stores the photo as `[صورة: <OCR>]` message text; the gate treated it as customer-typed, and the prompt's sender-ownership rule alone didn't hold (3/3) | `customerAuthoredGateText` drops image bodies from the gate; `imageTurnTexts` joins the exclusion set so the AI can't lift an image number from the transcript; explicit image-marker prompt rule; regression test from the real payloads |
+| 2026-08-08 | **The merchant's own department line captured as a customer lead** (MES): «مبيعات الجملة» was pasted back by a customer and became a lead whose call button dialed the merchant's own wholesale desk | `getBusinessPhones` read `pages.knowledge_base` ONLY. The Business Surface migration had moved his numbers out of prose into fact rows, so they left the exclusion set with no error and no log — the KB no longer contained them | `getBusinessPhones` now unions KB text ∪ Business Info fields (`businessPhoneList` + `whatsappNumbers`) ∪ fact-row names/attribute values; the Redis key carries `kbVersion` so a merchant edit invalidates it at once instead of serving stale numbers for an hour; integration tests seed each source in isolation |
+| 2026-08-11 | **URL digits as lead phones** (Shahin Resort): a vendor-spam DM's Behance link `…/gallery/253941151/…` became lead `04681bce`, its card, call and WhatsApp buttons all pointing at nine meaningless path digits. A 90-day sweep found 3 such leads (also a Messenger channel id and a spam tracker's `pid`) | a URL's path/query digit run validates as a phone under the permissive 9-digit fallback, and the gate treated the whole body as customer-typed | `stripUrls` removes `https?://…` / `www.…` from the gate text, and `urlOnlyPhoneTexts` feeds the removed digits into the exclusion set so the AI cannot lift them back out of the transcript; URL-only digits only, so a number typed plainly beside its own `wa.me` link still captures |
 
 ## Known gaps (open)
 

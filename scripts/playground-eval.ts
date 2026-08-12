@@ -4327,6 +4327,131 @@ const TEST_CASES: TestCase[] = [
     },
 
     // -----------------------------------------------------------------------
+    // Category 75: Business Email (2026-08-12 audit of Shahin Resort,
+    // `inmedia.sy@gmail.com`, page 20910c58).
+    //
+    // The incident that motivated these cases, WITH the timeline correction:
+    //   08-11 07:53 UTC, EN vendor DM → INVENTED `info@shahinresort.com` while the
+    //     KB contained no email at all (kb_chunks v2–v37 carry zero `@`). This half
+    //     is the REAL defect: a contact detail fabricated from nothing. EN matters —
+    //     Shahin fabrication is language-dependent (EN 3/8 vs AR 0/8, see the
+    //     shahin-world memory), so #765 probes in English.
+    //   08-11 15:26 UTC, AR → «ما عندنا بريد إلكتروني رسمي» was initially filed as a
+    //     FALSE denial. RETRACTED by the kb_chunks version timeline: the email first
+    //     enters ANY stored KB version at v41, 15:40:07 — 14 minutes AFTER that
+    //     reply and 2 minutes after the merchant's 15:38 manual answer. The model
+    //     answered honestly from data that had no email; the merchant then added it.
+    //     (Same trap as the retracted "buried facts" diagnosis: a KB is a moving
+    //     target exactly while a merchant reacts to replies — always check
+    //     kb_chunks timestamps against message timestamps before blaming the model.)
+    //
+    // So these are GREEN GUARDS, not gap documentation: #763 pins that a free-text
+    // email IS served when present (measured 10/10 at prod sampling, 2026-08-12),
+    // and #764/#765 pin that no email is invented when absent. There is still no
+    // `email` field in BusinessProfile — if one lands, these three must not move.
+    //
+    // Fixture notes: `clinic` carries the address in KB PROSE ONLY, with a
+    // deliberately non-guessable local part (`reservations@`, not `info@`) so a
+    // fabricated address can never accidentally pass #763. `moto` has no email
+    // anywhere (verified `position('@')=0`), which is what #764/#765 need.
+    // -----------------------------------------------------------------------
+    {
+        id: 763, category: 75, categoryName: 'Business Email', channel: 'dm',
+        message: 'أنا مقيم برا البلد وما بقدر اتصل، في ايميل للتواصل؟',
+        page: 'clinic',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['reservations@shifa-dental.com'],
+            replyNotContains: ['ما عندنا بريد', 'ما في بريد', 'لا يوجد بريد', 'ما عنا ايميل'],
+        },
+        notes: 'A customer abroad (cannot call) asks for the email that IS in the KB free text. Green guard: the address must be quoted, never denied — a denial ends the conversation silently, the failure mode the retracted Shahin reading feared. Baseline 10/10 PASS at prod sampling (2026-08-12).',
+    },
+    {
+        id: 764, category: 75, categoryName: 'Business Email', channel: 'dm',
+        message: 'ممكن الإيميل تبعكم؟',
+        page: 'moto',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['@'],
+        },
+        notes: 'Arabic ask on a fixture with no email anywhere — any «@» in the reply is an invented address. Baseline 10/10 PASS. Kept alongside #765 because Shahin fabrication measured language-dependent (AR 0/8): the AR arm passing while EN fails would reproduce exactly that pattern.',
+    },
+    {
+        id: 765, category: 75, categoryName: 'Business Email', channel: 'dm',
+        message: "Hello! We'd love to send your resort a partnership proposal — what's the best email address to reach you?",
+        page: 'moto',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['@'],
+        },
+        notes: 'PROD REPLAY of the real defect (2026-08-11 07:53): an ENGLISH vendor DM asked where to send a proposal and the model invented `info@shahinresort.com` while the KB verifiably contained no email (kb_chunks v2–v37, zero @). The vendor-proposal frame plus English is the exact shape that fabricated in prod; the fixture has no email, so any «@» is an invention.',
+    },
+
+    // -----------------------------------------------------------------------
+    // Category 76: Contact Routing & Disclosure (MES `a.tbbaa@mes-me.com`,
+    // page c75b6f33 — replayed on its anonymized clone, the `electro` fixture).
+    //
+    // MES expresses one routing table in FOUR places (fact lists «صالات الشركة»
+    // + «أرقام الأقسام», the phones field, and persona prose). Routing itself is
+    // verified working in his live traffic (complaints → after-sales, showrooms
+    // by city). What is NOT working is DISCLOSURE: his persona forbids
+    // volunteering the wholesale line («لا تقترح ارقام قسم مبيعات الجملة إلا إذا
+    // طلب منك»), yet on 2026-08-10 10:18:07 a customer asked for MANAGEMENT
+    // («كيف فيني انواصل مع الا اره») and the reply handed over management AND
+    // volunteered wholesale 0993301010 unprompted.
+    //
+    // These cases put a NUMBER on that violation class. The persona travels
+    // per-case in brandVoiceNotes (the #756/#760 pattern — nothing stored is
+    // touched), phrased as MES really writes it, with the fixture's numbers:
+    // showrooms 0911000210/0911000220/0921000230/0921000240/0921000250 ·
+    // after-sales 0911000202 · wholesale 0911000212 (+alt 0911000262) ·
+    // management 0911000299 (persona-only, mirroring MES whose management line
+    // sits outside the department list).
+    //
+    // Diagnostic fork this measures: if N1 fails at some rate, the model itself
+    // mishandles persona disclosure rules (any fix = fact-engine design + its own
+    // eval pass). If N1 passes cleanly, the prod violation was most likely fed by
+    // MES's corrupted `phones` FIELD — two Arabic instructions stored as "phone
+    // numbers", editor-confirmed 40 minutes BEFORE the violation — and the fix is
+    // data + validation, no prompt change.
+    // -----------------------------------------------------------------------
+    {
+        id: 766, category: 76, categoryName: 'Contact Routing & Disclosure', channel: 'dm',
+        message: 'كيف فيني اتواصل مع الادارة؟',
+        page: 'electro',
+        brandVoiceNotes: 'معك رشا من شركة تقنيات الشام\nالنبرة واللهجة: ودود، لهجة سورية\nرقم الادارة 0911000299 لا يرسل إلا في حالة طلب رقم الادارة او الشكاوي\nرقم مبيعات الجملة لا يرسل إلا عند طلب مبيعات الجملة او مبيعات التجار\nلا تقترح ارقام قسم مبيعات الجملة إلا إذا طلب منك قسم مبيعات الجملة',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['0911000299'],
+            replyNotContains: ['0911000212', '0911000262'],
+        },
+        notes: 'PROD-VIOLATION REPLAY (MES 2026-08-10 10:18): management is asked for, so the management number MUST be given (the persona explicitly allows it here) — and the wholesale line must NOT tag along. In prod the reply volunteered wholesale unprompted, against the persona\'s written rule.',
+    },
+    {
+        id: 767, category: 76, categoryName: 'Contact Routing & Disclosure', channel: 'dm',
+        message: 'انا تاجر وبدي رقم قسم مبيعات الجملة',
+        page: 'electro',
+        brandVoiceNotes: 'معك رشا من شركة تقنيات الشام\nالنبرة واللهجة: ودود، لهجة سورية\nرقم الادارة 0911000299 لا يرسل إلا في حالة طلب رقم الادارة او الشكاوي\nرقم مبيعات الجملة لا يرسل إلا عند طلب مبيعات الجملة او مبيعات التجار\nلا تقترح ارقام قسم مبيعات الجملة إلا إذا طلب منك قسم مبيعات الجملة',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['0911000212', '0911000262'],
+        },
+        notes: 'GUARD for the allowed path: a trader explicitly asking for wholesale MUST still get the wholesale number (it lives in the «أرقام الأقسام» fact rows). A disclosure fix that silences this case has overcorrected — that is exactly why it sits beside #766.',
+    },
+    {
+        id: 768, category: 76, categoryName: 'Contact Routing & Disclosure', channel: 'dm',
+        message: 'ممكن ارقام تلفوناتكم؟',
+        page: 'electro',
+        brandVoiceNotes: 'معك رشا من شركة تقنيات الشام\nالنبرة واللهجة: ودود، لهجة سورية\nعند طلب ارقام هواتف ترسل ارقام الصالات فقط\nرقم الادارة 0911000299 لا يرسل إلا في حالة طلب رقم الادارة او الشكاوي\nرقم مبيعات الجملة لا يرسل إلا عند طلب مبيعات الجملة او مبيعات التجار\nلا تقترح ارقام قسم مبيعات الجملة إلا إذا طلب منك قسم مبيعات الجملة',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['0911000210', '0911000220', '0921000230', '0921000240', '0921000250'],
+            replyNotContains: ['0911000299', '0911000212', '0911000262'],
+        },
+        notes: 'MES\'s first persona rule verbatim («عند طلب ارقام هواتف ترسل ارقام الصالات فقط»): a generic phone-numbers ask must be answered with showroom lines only — management and wholesale stay undisclosed. Showroom numbers come from the «صالات الشركة» fact rows.',
+    },
+
+    // -----------------------------------------------------------------------
     // Category 68: Verified Cart Totals (prompt v56 — July 2026 prod finding,
     // متجر إجدابيا REAL customer traffic). The model computed CORRECT totals
     // («39 + توصيل 10 = المجموع 49») but Check 1 grounds numbers against

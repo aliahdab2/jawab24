@@ -27,6 +27,7 @@ import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
     whatsappNumbers,
+    businessPhoneList,
     isRowLive,
     normalizeArabicIndic,
     DEFAULT_AI_MODEL,
@@ -109,7 +110,8 @@ export function buildContactSuffix(merchant: BusinessProfile | null | undefined)
     const lines: string[] = [];
     const address = [merchant.address, merchant.city].filter(Boolean).join('، ');
     if (address) lines.push(`📍 ${address}`);
-    const phone = merchant.phones?.[0] || merchant.phone;
+    // businessPhoneList is THE reader of the phones[]/phone legacy dual shape.
+    const phone = businessPhoneList(merchant)[0];
     if (phone) lines.push(`📞 ${phone}`);
     // whatsappNumbers is THE reader of the field's legacy string|array dual shape.
     const whatsapp = whatsappNumbers(merchant)[0];

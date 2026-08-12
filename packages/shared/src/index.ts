@@ -1844,7 +1844,7 @@ export interface WorkspaceSettings {
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
-export { formatBusinessInfoPrompt, whatsappNumbers, isFieldAuthoritative } from './businessInfoPrompt';
+export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneList, isFieldAuthoritative } from './businessInfoPrompt';
 export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
