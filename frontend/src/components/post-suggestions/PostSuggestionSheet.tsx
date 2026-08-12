@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Copy, Check, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import type { PostSuggestionDto, PostSuggestionImageDegraded, PostSuggestionPostType } from '@jawab24/shared';
@@ -9,6 +9,27 @@ import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
 import { downloadImage } from '@/utils/imageDownload';
 import { captureError } from '@/lib/sentryHelpers';
+
+/** First non-empty line, for the one-glance preview under the take tabs. */
+function firstLine(text: string): string {
+  return text.split('\n').map(l => l.trim()).find(Boolean) ?? '';
+}
+
+/**
+ * What each take LEADS WITH — the merchant's actual question when choosing.
+ *
+ * The generator is instructed to write take 1 opening on the concrete offer,
+ * take 2 on the customer's question, take 3 on the outcome, so the index IS
+ * the lens. Numbered tabs («صياغة ١/٢/٣») made a merchant open and read all
+ * three to learn something we already knew.
+ *
+ * Beyond the instructed three the label falls back to the number — a set that
+ * ever grows past them has no promised lens, and inventing one would be a
+ * claim about content we did not shape.
+ */
+function variantLens(index: number, t: (key: string, values?: Record<string, string | number | Date>) => string): string {
+  return index <= 2 ? t(`variantLens${index}`) : t('variantTab', { number: index + 1 });
+}
 
 /**
  * «بوست اليوم» viewer — today's suggested post: text to copy, image to
@@ -279,24 +300,39 @@ export function PostSuggestionSheet({
               // control: `surface-100` is synced to `--card` in dark mode, so a
               // track drawn with it disappears and takes the active pill's
               // contrast with it. Brand fill reads in both themes.
-              <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
-                {variants.map((_, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    role="tab"
-                    aria-selected={index === activeIndex}
-                    onClick={() => selectVariant(index)}
-                    className={clsx(
-                      'flex-1 min-h-[44px] rounded-xl px-2 text-xs font-semibold border transition-colors',
-                      index === activeIndex
-                        ? 'bg-brand-500 text-white border-brand-500'
-                        : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
-                    )}
-                  >
-                    {t('variantTab', { number: index + 1 })}
-                  </button>
-                ))}
+              <div>
+                <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
+                  {variants.map((variant, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      role="tab"
+                      aria-selected={index === activeIndex}
+                      // The visible label is the LENS; the accessible name adds
+                      // the take's own opening words, so a screen-reader user
+                      // gets the same "how do these differ" answer a sighted
+                      // one reads off the preview line below.
+                      aria-label={`${variantLens(index, t)} — ${firstLine(variant.text)}`}
+                      onClick={() => selectVariant(index)}
+                      className={clsx(
+                        'flex-1 min-h-[44px] rounded-xl px-2 text-xs font-semibold border transition-colors',
+                        index === activeIndex
+                          ? 'bg-brand-500 text-white border-brand-500'
+                          : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
+                      )}
+                    >
+                      {variantLens(index, t)}
+                    </button>
+                  ))}
+                </div>
+                {/* The takes really do differ — take 1 leads on the offer, 2 on
+                    the customer's question, 3 on the outcome — but numbered
+                    tabs hid that behind three taps of reading. The opening line
+                    of the SELECTED take is the honest one-glance answer: it is
+                    the content itself, not a claim about it. */}
+                <p dir="auto" className="mt-1.5 text-[11px] text-subtle line-clamp-1">
+                  {firstLine(activeText)}
+                </p>
               </div>
             )}
 
@@ -330,15 +366,23 @@ export function PostSuggestionSheet({
               </p>
             )}
 
-            {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version. */}
-            <textarea
-              dir="auto"
-              value={activeText}
-              onChange={(e) => setEditsByVariant((prev) => ({ ...prev, [activeIndex]: e.target.value }))}
-              aria-label={t('editTextLabel')}
-              rows={Math.min(10, Math.max(4, activeText.split('\n').length + 1))}
-              className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-brand-300"
-            />
+            {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version.
+                The label is not decoration: an outside reviewer read this sheet
+                and reported editing as MISSING, because a bordered grey block of
+                text reads as output, not as an input. Saying so costs one line. */}
+            <label className="block">
+              <span className="flex items-center gap-1.5 mb-1.5 text-xs font-medium text-muted-foreground">
+                <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('editTextLabel')}
+              </span>
+              <textarea
+                dir="auto"
+                value={activeText}
+                onChange={(e) => setEditsByVariant((prev) => ({ ...prev, [activeIndex]: e.target.value }))}
+                rows={Math.min(10, Math.max(4, activeText.split('\n').length + 1))}
+                className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-brand-300"
+              />
+            </label>
 
             <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
 
