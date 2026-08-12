@@ -263,6 +263,7 @@ Each service is independently deployable but shares:
      - Retries and error recovery
    - **ecommerceSyncWorker.ts** — Syncs Shopify/Salla/Zid product catalogs
    - **customerNotificationWorker.ts** — BullMQ worker consuming `customer-notifications` queue; sends SMS for order lifecycle events (confirmed, shipped, delivered, abandoned cart, review request); concurrency 10, rate limit 50/min
+   - **postSuggestionWorker.ts** — BullMQ worker consuming `post-suggestion-queue`; generates «بوست اليوم» (migration 0163). Concurrency 2, and ⛔ **`attempts: 1`, unlike every sibling queue** — a retry would re-run a PAID text call and a PAID image call against a daily-cap slot the merchant was charged for once, so the only safe retry is the one the merchant chooses. The row is created `pending` by the request BEFORE the job is queued, so a queue outage loses a job and never the merchant's place in the ledger; the worker always drives the row to `ready` or `failed`. Only the merchant path queues — the cron is already off the request path and fulfils inline so its per-page counters keep meaning something.
 
 8. **Integrations** (`src/integrations/`):
    - **Plugin architecture** via `EcommerceIntegration` interface

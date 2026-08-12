@@ -37,6 +37,7 @@ import {
     type PostSuggestionEvent,
     type PostSuggestionImageDegraded,
     type PostSuggestionPostType,
+    type PostSuggestionStatus,
 } from '@jawab24/shared';
 import { db } from '../db';
 import { pages, catalogItems, factCollections, factRows, postSuggestions, type PostSuggestionVariantRow } from '../db/schema';
@@ -45,6 +46,7 @@ import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { dailyCapKey, checkDailyCap, claimDailyCapSlot, type DailyCapStatus } from '../lib/dailyCap';
 import { variantsOf, imageKeysOf } from '../lib/postSuggestionVariants';
+import { enqueuePostSuggestion } from '../lib/postSuggestionQueue';
 import { imageStorage } from './imageStorage';
 import { composePostCard, fetchRoundedLogo, renderPosterBase } from './imageCompose';
 import { settingsService } from './settings';
@@ -130,7 +132,6 @@ export type GenerateResult =
         suggestion: PostSuggestionDto;
         /** null only on the suppressed-insert fallback when the cap store is unreachable. */
         remainingToday: number | null;
-        imageDegraded?: PostSuggestionImageDegraded;
         /** Post-generation availability — the response mirrors getToday's envelope (one shape). */
         availableTypes: PostSuggestionPostType[];
     }
@@ -182,6 +183,30 @@ async function fetchOwnedPage(workspaceId: string, pageId: string) {
         instagramProfilePicUrl: pages.instagramProfilePicUrl,
         facebookPageId: pages.facebookPageId,
     }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
+    return page ?? null;
+}
+
+/**
+ * The same page row, addressed by id alone.
+ *
+ * The worker fulfils a row whose ownership was already established by the
+ * request that created it, so re-checking the workspace there would be
+ * theatre — the id in hand came from our own table, not from a caller.
+ * Deliberately NOT exported: every externally-reachable path still goes
+ * through the workspace-scoped `fetchOwnedPage`.
+ */
+async function fetchPageById(pageId: string) {
+    const [page] = await db.select({
+        id: pages.id,
+        name: pages.name,
+        userId: pages.userId,
+        workspaceId: pages.workspaceId,
+        knowledgeBase: pages.knowledgeBase,
+        businessProfile: pages.businessProfile,
+        ecommerceStoreId: pages.ecommerceStoreId,
+        instagramProfilePicUrl: pages.instagramProfilePicUrl,
+        facebookPageId: pages.facebookPageId,
+    }).from(pages).where(eq(pages.id, pageId)).limit(1);
     return page ?? null;
 }
 
@@ -817,6 +842,8 @@ function toDto(row: typeof postSuggestions.$inferSelect): PostSuggestionDto {
     const selected = row.selectedVariant >= 0 && row.selectedVariant < variants.length ? row.selectedVariant : 0;
     return {
         id: row.id,
+        status: (row.status === 'pending' || row.status === 'failed' ? row.status : 'ready') as PostSuggestionStatus,
+        ...(row.imageDegraded ? { imageDegraded: row.imageDegraded as PostSuggestionImageDegraded } : {}),
         text: row.text,
         imageUrl: row.imageUrl,
         // imageKey is a storage handle, never client-facing.
@@ -872,11 +899,18 @@ class PostSuggestionsService {
 
         // Ownership is established above, so no pages join — and no
         // materializing the full pages row (KB text, accessToken) per card fetch.
+        //
+        // PENDING and FAILED rows are served too, not just ready ones: this read
+        // is what the client polls while the worker runs, so hiding a pending row
+        // would show "no post today" over work already paid for, and hiding a
+        // failed one would leave the merchant waiting on something that ended.
+        // `superseded` stays excluded — it is the only status that means
+        // "replaced", and the replacement is the row this returns instead.
         const [row] = await db.select().from(postSuggestions)
             .where(and(
                 eq(postSuggestions.pageId, pageId),
                 eq(postSuggestions.suggestedFor, today),
-                eq(postSuggestions.status, 'ready'),
+                inArray(postSuggestions.status, ['ready', 'pending', 'failed']),
             ))
             .orderBy(desc(postSuggestions.createdAt))
             .limit(1);
@@ -915,7 +949,7 @@ class PostSuggestionsService {
      * picker runs and the row records the type actually used); still
      * consumes a normal cap slot.
      */
-    async generateSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
+    async requestSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
         if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return { ok: false, reason: 'gated' };
 
         // ONE day for the whole call: cap key, DB count, supersede, and insert
@@ -974,154 +1008,39 @@ class PostSuggestionsService {
         }
         if (!claimed) return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: limit, limit } };
 
-        const bundle = await buildPageBundle(page, ownerId, pageWorkspaceId, today);
+        // The paid work does NOT run here. Generation takes ~35s — seven times
+        // the 5s past which the industry standard says return at once and
+        // notify — and nginx caps this route at 30s, so a synchronous shape
+        // could only ever fail in front of the merchant. It did, in production,
+        // on 2026-08-12: the socket closed at 35.25s, the post was created
+        // anyway, and they were shown «حدث خطأ ما» with a slot already spent.
+        //
+        // So the request stores a PENDING row — its cap slot already claimed
+        // above — and hands the work to the worker. What the merchant gets back
+        // is a real, addressable post that simply is not written yet.
+        const [pending] = await db.insert(postSuggestions).values({
+            pageId,
+            suggestedFor: today,
+            source,
+            // The REQUESTED angle. The worker overwrites it with the angle
+            // actually used, which may be downgraded when the page's data
+            // cannot deliver what was asked for.
+            postType: opts?.postType ?? null,
+            // A pending row has nothing to show yet. `text` is NOT NULL, so it
+            // holds the empty string rather than a placeholder sentence — a
+            // fake body would be copied by any client that ignores `status`.
+            text: '',
+            status: 'pending',
+        }).onConflictDoNothing({
+            target: [postSuggestions.pageId, postSuggestions.suggestedFor],
+            // Matches uq_post_suggestions_cron_once's predicate so Postgres
+            // infers the partial unique index as the arbiter.
+            where: sql`source = 'cron'`,
+        }).returning();
 
-        // Latest suggestion from ANY day: the variety picker must see
-        // yesterday's angle, or the cron (always the first row of its day)
-        // would open on the same first candidate every single morning.
-        // One query serves both memories: [0] is the previous angle, and the
-        // whole window feeds the image's anti-repetition list. Older rows are
-        // superseded and their image files deleted, but the BRIEF survives —
-        // which is the point of storing it.
-        const recent = await db.select({
-            postType: postSuggestions.postType,
-            imageBrief: postSuggestions.imageBrief,
-            imageMode: postSuggestions.imageMode,
-        }).from(postSuggestions)
-            .where(eq(postSuggestions.pageId, pageId))
-            .orderBy(desc(postSuggestions.createdAt))
-            .limit(RECENT_BRIEF_WINDOW);
-        const previous = recent[0];
-        const recentImageBriefs = recent
-            .map(r => r.imageBrief?.trim())
-            .filter((b): b is string => Boolean(b));
-        // Merchant-chosen angle wins ONLY when the page's data can actually
-        // deliver it — validated against the SAME flags the picker consumes
-        // (fetched-catalog truth, not the cheap advertisement; see the
-        // availability block's boundary note). The chips are already
-        // fail-closed, so an unavailable request here means chip/data drift
-        // or a raw API caller. Unavailable ⇒ DOWNGRADE to the variety picker
-        // rather than hard-fail: the cap slot is already claimed, and a
-        // generated post beats burning it on an error. The inserted row (and
-        // thereby the response DTO) carries the type actually used.
-        const requested = opts?.postType;
-        const deliverable = candidateTypes(computeAvailabilityFlags(bundle));
-        const postType = requested && (requested === 'general' || deliverable.includes(requested))
-            ? requested
-            : pickPostType(bundle, previous?.postType ?? null);
-        if (requested && postType !== requested) {
-            logger.info('[PostSuggestions] Requested angle unavailable — downgraded to variety picker', { pageId, requested, used: postType });
-        }
-
-        const generated = await generatePostText(bundle, postType, today, recentImageBriefs);
-        if (!generated) return { ok: false, reason: 'generation_failed' };
-        // Deterministic contact footer — appended in code, never model-written.
-        const includeContact = opts?.includeContact !== false;
-        const withContact = (text: string) => includeContact && bundle.contactSuffix
-            ? `${text}\n\n${bundle.contactSuffix}`
-            : text;
-
-        // Rotate the KIND of image off the last one. `recent.length` only varies
-        // the poster's geometry, never which mode is chosen — so the saturating
-        // window that froze the earlier attempt cannot freeze this.
-        const imageMode = pickImageMode(previous?.imageMode);
-        const images = await generatePostImages(
-            bundle, generated.imageBrief, generated.posts.map(p => p.headline), imageMode, recent.length,
-        );
-        const variants: PostSuggestionVariantRow[] = generated.posts.map((post, index) => ({
-            text: withContact(post.text),
-            headline: post.headline || null,
-            imageUrl: images[index]?.url ?? null,
-            imageKey: images[index]?.key ?? null,
-        }));
-
-        // Degraded only when NO take got a card. A partial failure still gives
-        // the merchant something to publish, and flagging the whole generation
-        // as degraded would misreport it.
-        const imageDegraded: PostSuggestionImageDegraded | undefined = variants.some(v => v.imageUrl)
-            ? undefined
-            : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
-
-        // ONE post per day, a regenerate REPLACES (owner ruling 2026-08-09) —
-        // and "replace" means the old row dies only when the new one exists.
-        // Insert FIRST, then supersede, in ONE transaction: a suppressed cron
-        // insert (blue/green race on the partial unique index) supersedes
-        // NOTHING, and a crash between the two statements rolls both back.
-        // Old images are removed only AFTER commit, per OBJECT_STORAGE.md's
-        // safe order (upload new → commit DB → delete old).
-        const staleKeys: string[] = [];
-        const row = await db.transaction(async (tx) => {
-            const [inserted] = await tx.insert(postSuggestions).values({
-                pageId,
-                suggestedFor: today,
-                source,
-                postType,
-                variants,
-                // A fresh generation always opens on the first take, and
-                // text/imageUrl/imageKey mirror it — see the schema note: the
-                // columns stay the record for every reader that predates
-                // variants (shipped app bundles, SQL consumers, the audit).
-                selectedVariant: 0,
-                text: variants[0].text,
-                imageUrl: variants[0].imageUrl,
-                imageKey: variants[0].imageKey,
-                // Stored even when the image call failed: the brief is what the
-                // NEXT generation must avoid repeating, and a failed render does
-                // not make the scene fresh again.
-                imageBrief: generated.imageBrief || null,
-                // Recorded even when the image failed: the next card rotates off
-                // the mode we ATTEMPTED, or a failing mode would be retried daily.
-                imageMode,
-                status: 'ready',
-            }).onConflictDoNothing({
-                target: [postSuggestions.pageId, postSuggestions.suggestedFor],
-                // Matches uq_post_suggestions_cron_once's predicate so Postgres
-                // infers the partial unique index as the arbiter.
-                where: sql`source = 'cron'`,
-            }).returning();
-            if (!inserted) return undefined;
-
-            const stale = await tx.select({
-                id: postSuggestions.id,
-                imageKey: postSuggestions.imageKey,
-                variants: postSuggestions.variants,
-            })
-                .from(postSuggestions)
-                .where(and(
-                    eq(postSuggestions.pageId, pageId),
-                    eq(postSuggestions.suggestedFor, today),
-                    eq(postSuggestions.status, 'ready'),
-                    ne(postSuggestions.id, inserted.id),
-                ));
-            if (stale.length > 0) {
-                await tx.update(postSuggestions)
-                    .set({ status: 'superseded', imageUrl: null, imageKey: null })
-                    .where(inArray(postSuggestions.id, stale.map(s => s.id)));
-                for (const s of stale) {
-                    // EVERY take's file, not just the mirrored one — a set left
-                    // N-1 images behind when only imageKey was swept, and the
-                    // orphan audit would have to find them later.
-                    staleKeys.push(...imageKeysOf(s));
-                    // The texts survive (same rule as `text`: a superseded row
-                    // is still the audit record of what was written), but their
-                    // image references must not — the files are about to go.
-                    const kept = s.variants?.map(v => ({ ...v, imageUrl: null, imageKey: null }));
-                    if (kept) {
-                        await tx.update(postSuggestions)
-                            .set({ variants: kept })
-                            .where(eq(postSuggestions.id, s.id));
-                    }
-                }
-            }
-            return inserted;
-        });
-        for (const staleKey of staleKeys) {
-            void imageStorage.remove(staleKey); // best-effort; audit script sweeps leftovers
-        }
-
-        // onConflictDoNothing only ever suppresses the CRON insert (partial unique
-        // index): the sibling deploy already generated today's row. Treat as done.
-        if (!row) {
+        // onConflictDoNothing only ever suppresses the CRON insert (partial
+        // unique index): the sibling deploy already claimed today's row.
+        if (!pending) {
             const existing = await this.getToday(workspaceId, pageId);
             if (existing?.suggestion) {
                 return { ok: true, suggestion: existing.suggestion, remainingToday: existing.remainingToday, availableTypes: existing.availableTypes };
@@ -1129,16 +1048,229 @@ class PostSuggestionsService {
             return { ok: false, reason: 'generation_failed' };
         }
 
-        // One envelope across routes: the generate response carries the SAME
-        // availability list getToday serves, computed AFTER generation so the
-        // chips track post-generation reality. Cheap — reuses the page row
-        // this request already fetched (indexed probes only).
+        // The cron is ALREADY off the request path, so it fulfils inline and
+        // keeps reporting real per-page outcomes in its counters. Only the
+        // merchant-facing path needs the queue — and it is the only one that
+        // was ever timing out.
+        if (source === 'cron') {
+            await this.fulfilSuggestion(pending.id, { includeContact: opts?.includeContact !== false });
+        } else {
+            try {
+                // The requested angle is NOT on the job: it is already on the
+                // row, and fulfilment reads it from there — one source, and no
+                // way for a replayed job to ask for a different angle than the
+                // row the merchant's slot actually bought.
+                await enqueuePostSuggestion({
+                    suggestionId: pending.id,
+                    pageId,
+                    includeContact: opts?.includeContact !== false,
+                });
+            } catch (err) {
+                // The queue is down. Mark the row failed rather than leaving it
+                // pending forever: the merchant's slot is spent either way, and
+                // a visible failure is the only honest report of that.
+                captureError(err, 'Post suggestion: enqueue failed', { tags: { service: 'post-suggestions' }, extra: { pageId, suggestionId: pending.id } });
+                await db.update(postSuggestions)
+                    .set({ status: 'failed', failureReason: 'enqueue_failed', fulfilledAt: new Date() })
+                    .where(eq(postSuggestions.id, pending.id));
+                return { ok: false, reason: 'generation_failed' };
+            }
+        }
+
+        // Re-read: the cron path has already filled the row in, and the queued
+        // path may have too if the worker was quick. Either way the client gets
+        // the row's CURRENT state rather than a stale pending snapshot.
+        const [current] = await db.select().from(postSuggestions)
+            .where(eq(postSuggestions.id, pending.id)).limit(1);
+
+        // One envelope across routes: the same availability list getToday
+        // serves. Cheap — reuses the page row this request already fetched.
         const availableTypes = await computeAvailableTypes(page, today);
 
-        // Remaining slots from the stricter of the two views, counting the
-        // slot this generation just consumed.
+        // Remaining slots from the stricter of the two views, counting the slot
+        // this request just consumed.
         const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
-        return { ok: true, suggestion: toDto(row), remainingToday: remaining, availableTypes, ...(imageDegraded ? { imageDegraded } : {}) };
+        return { ok: true, suggestion: toDto(current ?? pending), remainingToday: remaining, availableTypes };
+    }
+
+    /**
+     * Do the paid work for a pending row and drive it to a terminal state.
+     *
+     * Runs in the worker (or inline for the cron). It ALWAYS finishes the row:
+     * 'ready' with its takes, or 'failed' with a reason. Never leaving it
+     * pending is the contract that makes the merchant's spent slot honest — a
+     * row stuck pending reads as "still working" forever.
+     */
+    async fulfilSuggestion(suggestionId: string, opts?: { includeContact?: boolean }): Promise<void> {
+        const [row] = await db.select().from(postSuggestions)
+            .where(eq(postSuggestions.id, suggestionId)).limit(1);
+        if (!row) return;
+        // Anything already terminal is left alone: a duplicated job (redeploy,
+        // manual replay) must never regenerate — and re-pay for — a finished row.
+        if (row.status !== 'pending') return;
+
+        const fail = async (reason: string) => {
+            await db.update(postSuggestions)
+                .set({ status: 'failed', failureReason: reason, fulfilledAt: new Date() })
+                .where(eq(postSuggestions.id, suggestionId));
+        };
+
+        try {
+            const page = await fetchPageById(row.pageId);
+            if (!page?.userId || !page.workspaceId) return await fail('page_not_found');
+
+            const today = row.suggestedFor;
+            const bundle = await buildPageBundle(page, page.userId, page.workspaceId, today);
+
+            // Latest suggestion from ANY day: the variety picker must see
+            // yesterday's angle, or the cron (always the first row of its day)
+            // would open on the same first candidate every single morning. The
+            // pending row itself is excluded — it has no angle of its own yet.
+            const recent = await db.select({
+                postType: postSuggestions.postType,
+                imageBrief: postSuggestions.imageBrief,
+                imageMode: postSuggestions.imageMode,
+            }).from(postSuggestions)
+                .where(and(
+                    eq(postSuggestions.pageId, row.pageId),
+                    ne(postSuggestions.id, suggestionId),
+                    // Only rows that actually PRODUCED a post carry a usable
+                    // angle and scene. A pending or failed row's `post_type` is
+                    // whatever was requested (often null) and its brief is
+                    // empty, so letting either in here would make the variety
+                    // memory forget a real post because a later one failed.
+                    // 'superseded' stays in: it was a real post before it was
+                    // replaced, and legacy rows are all 'ready'.
+                    inArray(postSuggestions.status, ['ready', 'superseded']),
+                ))
+                .orderBy(desc(postSuggestions.createdAt))
+                .limit(RECENT_BRIEF_WINDOW);
+            const previous = recent[0];
+            const recentImageBriefs = recent
+                .map(r => r.imageBrief?.trim())
+                .filter((b): b is string => Boolean(b));
+
+            // Merchant-chosen angle wins ONLY when the page's data can actually
+            // deliver it — validated against the SAME flags the picker consumes
+            // (fetched-catalog truth, not the cheap advertisement). Unavailable
+            // ⇒ DOWNGRADE to the variety picker rather than fail: the cap slot
+            // is already claimed, and a generated post beats burning it on an
+            // error. The row records the type actually used.
+            const requested = row.postType as PostSuggestionPostType | null;
+            const deliverable = candidateTypes(computeAvailabilityFlags(bundle));
+            const postType = requested && (requested === 'general' || deliverable.includes(requested))
+                ? requested
+                : pickPostType(bundle, previous?.postType ?? null);
+            if (requested && postType !== requested) {
+                logger.info('[PostSuggestions] Requested angle unavailable — downgraded to variety picker', { pageId: row.pageId, requested, used: postType });
+            }
+
+            const generated = await generatePostText(bundle, postType, today, recentImageBriefs);
+            if (!generated) return await fail('generation_failed');
+
+            // Deterministic contact footer — appended in code, never model-written.
+            // Carried on the JOB, not the row: it is a property of the request,
+            // and a column for it would be one more thing to keep in step.
+            const includeContact = opts?.includeContact !== false;
+            const withContact = (text: string) => includeContact && bundle.contactSuffix
+                ? `${text}\n\n${bundle.contactSuffix}`
+                : text;
+
+            // Rotate the KIND of image off the last one. `recent.length` only
+            // varies the poster's geometry, never which mode is chosen.
+            const imageMode = pickImageMode(previous?.imageMode);
+            const images = await generatePostImages(
+                bundle, generated.imageBrief, generated.posts.map(p => p.headline), imageMode, recent.length,
+            );
+            const variants: PostSuggestionVariantRow[] = generated.posts.map((post, index) => ({
+                text: withContact(post.text),
+                headline: post.headline || null,
+                imageUrl: images[index]?.url ?? null,
+                imageKey: images[index]?.key ?? null,
+            }));
+
+            // Why this generation has no image, decided once and STORED. The
+            // request that triggered it has long returned by the time we get
+            // here, so a reason returned instead of recorded would reach nobody.
+            const imageDegraded: PostSuggestionImageDegraded | null = variants.some(v => v.imageUrl)
+                ? null
+                : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
+
+            // Fill THIS row in, then supersede the others — in one transaction.
+            // Supersede is gated on `status = 'ready'` on both sides: a pending
+            // row must never destroy the post the merchant is currently looking
+            // at, because it has nothing to replace it with yet. That is the
+            // async version of the same invariant the synchronous code kept by
+            // inserting before superseding.
+            const staleKeys: string[] = [];
+            await db.transaction(async (tx) => {
+                await tx.update(postSuggestions).set({
+                    postType,
+                    variants,
+                    selectedVariant: 0,
+                    text: variants[0].text,
+                    imageUrl: variants[0].imageUrl,
+                    imageKey: variants[0].imageKey,
+                    // Stored even when the image call failed: the brief is what
+                    // the NEXT generation must avoid repeating.
+                    imageBrief: generated.imageBrief || null,
+                    // Recorded even when the image failed: the next card rotates
+                    // off the mode we ATTEMPTED, or a failing mode repeats daily.
+                    imageMode,
+                    imageDegraded,
+                    status: 'ready',
+                    fulfilledAt: new Date(),
+                }).where(eq(postSuggestions.id, suggestionId));
+
+                const stale = await tx.select({
+                    id: postSuggestions.id,
+                    imageKey: postSuggestions.imageKey,
+                    variants: postSuggestions.variants,
+                })
+                    .from(postSuggestions)
+                    .where(and(
+                        eq(postSuggestions.pageId, row.pageId),
+                        eq(postSuggestions.suggestedFor, today),
+                        eq(postSuggestions.status, 'ready'),
+                        ne(postSuggestions.id, suggestionId),
+                    ));
+                if (stale.length > 0) {
+                    await tx.update(postSuggestions)
+                        .set({ status: 'superseded', imageUrl: null, imageKey: null })
+                        .where(inArray(postSuggestions.id, stale.map(s => s.id)));
+                    for (const s of stale) {
+                        // EVERY take's file, not just the mirrored one.
+                        staleKeys.push(...imageKeysOf(s));
+                        const kept = s.variants?.map(v => ({ ...v, imageUrl: null, imageKey: null }));
+                        if (kept) {
+                            await tx.update(postSuggestions)
+                                .set({ variants: kept })
+                                .where(eq(postSuggestions.id, s.id));
+                        }
+                    }
+                }
+            });
+            for (const staleKey of staleKeys) {
+                void imageStorage.remove(staleKey); // best-effort; audit script sweeps leftovers
+            }
+        } catch (err) {
+            captureError(err, 'Post suggestion: fulfilment failed', { tags: { service: 'post-suggestions' }, extra: { suggestionId } });
+            await fail('generation_failed');
+        }
+    }
+
+    /**
+     * Resolve a row whose job died before `fulfilSuggestion` could report on
+     * it. Called only from the worker's `failed` handler — the last chance to
+     * keep the promise that a claimed slot always ends in something visible.
+     *
+     * Guarded on `status = 'pending'` in the WHERE, so it can never overwrite a
+     * row that did finish (the handler also fires for post-completion errors).
+     */
+    async markFulfilmentAbandoned(suggestionId: string): Promise<void> {
+        await db.update(postSuggestions)
+            .set({ status: 'failed', failureReason: 'worker_abandoned', fulfilledAt: new Date() })
+            .where(and(eq(postSuggestions.id, suggestionId), eq(postSuggestions.status, 'pending')));
     }
 
     /**
@@ -1271,13 +1403,21 @@ class PostSuggestionsService {
                     continue;
                 }
 
-                const generated = await this.generateSuggestion(page.workspaceId, pageId, 'cron');
-                if (generated.ok) {
+                const generated = await this.requestSuggestion(page.workspaceId, pageId, 'cron');
+                // `ok` only means the REQUEST succeeded. The cron fulfils
+                // inline, and fulfilment reports failure by driving the row to
+                // 'failed' rather than by throwing — so counting `ok` alone
+                // would book every failed generation as a success and make
+                // these counters, the only per-page signal this job has, lie.
+                if (generated.ok && generated.suggestion.status === 'ready') {
                     result.generated++;
                     logger.info('[PostSuggestions] Cron generated', { pageId, postType: generated.suggestion.postType });
                 } else {
                     result.failed++;
-                    logger.warn('[PostSuggestions] Cron generation failed', { pageId, reason: generated.reason });
+                    logger.warn('[PostSuggestions] Cron generation failed', {
+                        pageId,
+                        reason: generated.ok ? `status:${generated.suggestion.status}` : generated.reason,
+                    });
                 }
             } catch (err) {
                 result.failed++;

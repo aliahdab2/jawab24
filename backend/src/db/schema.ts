@@ -1905,7 +1905,25 @@ export const postSuggestions = pgTable('post_suggestions', {
     // Read back to rotate the next one — the variety mechanism that works,
     // because code decides it rather than asking the model to vary.
     imageMode: varchar('image_mode', { length: 20 }),
-    status: varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'superseded'
+    // 'pending' | 'ready' | 'failed' | 'superseded'. A request claims its cap
+    // slot and stores a PENDING row, then a worker fills it in — generation is
+    // ~35s against nginx's 30s ceiling on this route, so it cannot run on the
+    // request. 'failed' is terminal and visible on purpose: the slot was spent,
+    // and a row left pending forever would misreport the merchant's balance.
+    status: varchar('status', { length: 20 }).notNull().default('ready'),
+    // Why a 'failed' row failed, as one of the service's own reason codes —
+    // never a raw error string, which would leak internals to the client.
+    failureReason: varchar('failure_reason', { length: 40 }),
+    // Why a READY row shipped without an image ('image_failed' | 'storage_off'),
+    // null = it has one. Stored rather than returned once: the generation that
+    // knows this now runs in a worker, so the only place the answer can reach
+    // the client is the row itself. It also fixes the dead-connection recovery,
+    // which re-reads today's row and until now always lost the notice.
+    imageDegraded: varchar('image_degraded', { length: 20 }),
+    // When the worker reached a terminal state. Null while pending — the pair
+    // (createdAt, fulfilledAt) is how generation latency gets measured at all,
+    // which today is guesswork off request logs.
+    fulfilledAt: timestamp('fulfilled_at'),
     // Market-signal stamps — the pilot's whole point is measuring these.
     // First-write-wins; null = the merchant never did it.
     openedAt: timestamp('opened_at'),

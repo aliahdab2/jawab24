@@ -56,6 +56,7 @@ import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
 import { startCustomerNotificationWorker, stopCustomerNotificationWorker, setCustomerNotificationWorkerLogger } from "./workers/customerNotificationWorker";
 import { startWebhookRetryWorker, stopWebhookRetryWorker, setWebhookRetryWorkerLogger } from "./workers/webhookRetryWorker";
+import { startPostSuggestionWorker, stopPostSuggestionWorker, setPostSuggestionWorkerLogger } from "./workers/postSuggestionWorker";
 import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
@@ -347,6 +348,14 @@ const start = async () => {
     setWebhookRetryWorkerLogger(workerLogger);
     startWebhookRetryWorker();
     console.log(`⚙️  Webhook retry worker started`);
+
+    // «بوست اليوم» generation. Started unconditionally, like its siblings: the
+    // feature's own gate decides whether anything is ever queued, and a worker
+    // that only starts for allowlisted workspaces would leave rows pending on
+    // the very deploy that widens the allowlist.
+    setPostSuggestionWorkerLogger(workerLogger);
+    startPostSuggestionWorker();
+    console.log(`⚙️  Post suggestion worker started`);
 
     // Start e-commerce integration workers (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
@@ -673,6 +682,10 @@ const gracefulShutdown = async (signal: string) => {
       stopWorker(),
       stopCustomerNotificationWorker(),
       stopWebhookRetryWorker(),
+      // Waits for an in-flight generation rather than killing it: the merchant's
+      // cap slot is already spent, so a job abandoned mid-flight during a deploy
+      // would leave a paid-for row stuck pending.
+      stopPostSuggestionWorker(),
       ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
     ]);
     console.log("✅ Workers stopped");

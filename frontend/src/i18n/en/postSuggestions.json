@@ -8,6 +8,7 @@
   "generating": "Writing your post…",
   "generatingAngle": "Writing a \"{angle}\" post…",
   "generatingHint": "Preparing the text and image — this can take up to a minute.",
+  "takingLonger": "This is taking longer than usual. Your post will appear here as soon as it is ready.",
   "copyText": "Copy text",
   "copied": "Copied",
   "copyFailed": "Couldn't copy — select the text and copy it manually.",

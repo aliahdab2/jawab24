@@ -225,11 +225,16 @@ export const catalogApi = {
 export const postSuggestionsApi = {
   getToday: (pageId: string) =>
     api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
-  // Text + image generation — the long-timeout override every AI endpoint uses.
+  // REQUESTS a generation — it does not wait for one. The call claims the
+  // merchant's daily slot, stores a `pending` row and returns in milliseconds;
+  // a worker does the ~35s of paid work and the client polls `getToday`. So no
+  // long-timeout override here, deliberately: the previous 60s one was never
+  // honoured anyway (nginx caps this route at 30s), and pretending otherwise is
+  // what produced «حدث خطأ ما» over a post that had actually been created.
   // includeContact: merchant toggle for the server-composed contact footer.
   // postType: merchant-chosen angle; omitted = the server's variety picker.
   generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
-    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }, { timeout: LONG_RUNNING_TIMEOUT }),
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }),
   markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
     api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
   // Which take the merchant picked. Persisted so the dashboard card and any

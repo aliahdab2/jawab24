@@ -48,7 +48,7 @@ class PostSuggestionsController {
             return reply.status(400).send({ error: `postType must be one of: ${POST_TYPES.join(', ')}` });
         }
 
-        const result = await postSuggestionsService.generateSuggestion(req.workspaceId, pageId, 'manual', {
+        const result = await postSuggestionsService.requestSuggestion(req.workspaceId, pageId, 'manual', {
             includeContact,
             ...(rawType ? { postType: rawType as PostSuggestionPostType } : {}),
         });
@@ -59,7 +59,6 @@ class PostSuggestionsController {
                 suggestion: result.suggestion,
                 remainingToday: result.remainingToday,
                 availableTypes: result.availableTypes,
-                ...(result.imageDegraded ? { imageDegraded: result.imageDegraded } : {}),
             };
             return reply.send(body);
         }

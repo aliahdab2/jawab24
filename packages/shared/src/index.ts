@@ -1537,6 +1537,23 @@ export interface EcommerceSyncJobData {
 // Redis queue key — value intentionally kept as 'shopify-sync-queue' for backward compatibility
 export const ECOMMERCE_SYNC_QUEUE_NAME = 'shopify-sync-queue';
 
+// --- Post Suggestion Queue («بوست اليوم» generation, off the request path) ---
+/**
+ * The row is created BEFORE the job is queued, so the job carries only its id
+ * plus what the request decided. Everything else the worker re-reads from the
+ * database — a job payload that duplicates page state would go stale the moment
+ * the merchant edits their Business Info between request and fulfilment.
+ */
+export interface PostSuggestionJobData {
+  suggestionId: string;
+  /** Carried purely so the queue is readable without a DB lookup. */
+  pageId: string;
+  /** Merchant toggle for the code-composed contact footer, as at request time. */
+  includeContact: boolean;
+}
+
+export const POST_SUGGESTION_QUEUE_NAME = 'post-suggestion-queue';
+
 // --- Post Sync Queue (Facebook Posts backfill) ---
 export interface PostSyncJobData {
   pageId: string; // Internal page UUID
@@ -1572,8 +1589,32 @@ export interface PostSuggestionVariant {
   imageUrl: string | null;
 }
 
+/**
+ * Where a generation is in its life.
+ *
+ * `pending` exists because the work takes ~35s — far past the 5s at which the
+ * industry standard says return at once and notify — and nginx cuts this route
+ * at 30s regardless. So the request now CLAIMS its slot, stores a pending row
+ * and returns; a worker fills it in. Clients render pending as "preparing"
+ * rather than blocking on a spinner that cannot outlive the proxy.
+ *
+ * `failed` is a terminal, visible outcome: the merchant's slot was spent, so
+ * silently leaving the row pending forever would be a lie about their balance.
+ */
+export type PostSuggestionStatus = 'pending' | 'ready' | 'failed';
+
 export interface PostSuggestionDto {
   id: string;
+  status: PostSuggestionStatus;
+  /**
+   * Why this generation shipped text-only, absent when it has an image.
+   *
+   * Lives on the SUGGESTION rather than the response envelope because the
+   * generation that knows it now finishes in a worker, long after the request
+   * that triggered it returned — so every route that can serve the row must be
+   * able to serve the reason with it, and there is exactly one source for it.
+   */
+  imageDegraded?: PostSuggestionImageDegraded;
   /** The SELECTED take's text — also what pre-variants clients render. */
   text: string;
   imageUrl: string | null; // null = text-only (image degraded / cleaned up)
@@ -1607,8 +1648,6 @@ export interface PostSuggestionResponse {
    * fail closed server-side; never conflate "unknown" with "exhausted".
    */
   remainingToday: number | null;
-  /** Present only on generate responses that shipped text-only. */
-  imageDegraded?: PostSuggestionImageDegraded;
   /**
    * Angles this page's data can deliver. Sent by BOTH routes; clients treat an
    * absent list as UNKNOWN and fail closed (only 'general' offered).

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { StrictMode } from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { PostSuggestionDto } from '@jawab24/shared';
 import type { PostSuggestionResponse } from '@/lib/api';
@@ -26,6 +26,7 @@ vi.mock('@/utils/imageDownload', () => ({ downloadImage: vi.fn() }));
 
 const SUGGESTION: PostSuggestionDto = {
   id: 's1',
+  status: 'ready',
   text: 'بوست تجريبي 🌟',
   imageUrl: 'https://media/x.jpg',
   variants: [{ text: 'بوست تجريبي 🌟', headline: 'عنوان', imageUrl: 'https://media/x.jpg' }],
@@ -193,11 +194,14 @@ describe('PostSuggestionSheet — text-only rows explain themselves from DATA', 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('storage_off keeps its distinct copy', async () => {
+  it('storage_off keeps its distinct copy — carried ON the suggestion, so a re-read keeps it', async () => {
     renderSheet({
-      suggestion: TEXT_ONLY,
+      // The reason travels with the row rather than on the response envelope:
+      // generation finishes in a worker, so a reason returned once would be
+      // lost by every later read (which is how the dead-connection recovery
+      // dropped this notice before).
+      suggestion: { ...TEXT_ONLY, imageDegraded: 'storage_off' },
       remainingToday: 1,
-      imageDegraded: 'storage_off',
       availableTypes: ['general'],
     });
     expect(await screen.findByText(enPostSuggestions.textOnlyStorageOff)).toBeInTheDocument();
@@ -338,5 +342,104 @@ describe('PostSuggestionSheet — choosing between takes', () => {
     renderSheet({ suggestion: legacy as PostSuggestionDto, remainingToday: 1, availableTypes: ['general'] });
     expect(await screen.findByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Generation moved off the request path: the POST returns a `pending` row in
+ * milliseconds and a worker fills it in ~35s later. The sheet therefore has to
+ * WAIT on the row rather than on the request — which is the whole fix for the
+ * 2026-08-12 production failure, where nginx cut the 35s request at 30s and a
+ * finished post was reported to the merchant as «حدث خطأ ما».
+ */
+describe('PostSuggestionSheet — waiting on a generation that runs in a worker', () => {
+  const PENDING: PostSuggestionDto = {
+    ...SUGGESTION,
+    id: 's-pending',
+    status: 'pending',
+    // A pending row carries no text by design — a placeholder would be copied
+    // by any client that ignores `status`.
+    text: '',
+    imageUrl: null,
+    variants: [{ text: '', headline: null, imageUrl: null }],
+  };
+
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('a PENDING row shows the working state and never the editor', async () => {
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
+    // The empty body must not reach a textarea the merchant could copy from.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('polls until the row is READY, then renders the post', async () => {
+    // A FRESH object per call: a shared fixture makes React bail out on an
+    // identical reference and hides exactly this kind of re-render bug.
+    mockGetToday.mockImplementation(() => Promise.resolve({
+      data: {
+        suggestion: { ...SUGGESTION, id: 's-pending' },
+        remainingToday: 1,
+        availableTypes: ['general'],
+      },
+    }));
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
+    expect(await screen.findByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
+    expect(screen.queryByText(enPostSuggestions.generating)).not.toBeInTheDocument();
+  });
+
+  it('a row that ends FAILED surfaces the error instead of spinning forever', async () => {
+    mockGetToday.mockImplementation(() => Promise.resolve({
+      data: {
+        suggestion: { ...PENDING, status: 'failed' as const },
+        remainingToday: 1,
+        availableTypes: ['general'],
+      },
+    }));
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
+    // The merchant's slot was spent, so the failure is shown rather than hidden.
+    expect(await screen.findByText(enPostSuggestions.errorGeneration)).toBeInTheDocument();
+  });
+
+  it('a poll blip is not a failure — the next tick still lands the post', async () => {
+    mockGetToday
+      .mockRejectedValueOnce(new Error('network blip'))
+      .mockImplementation(() => Promise.resolve({
+        data: {
+          suggestion: { ...SUGGESTION, id: 's-pending' },
+          remainingToday: 1,
+          availableTypes: ['general'],
+        },
+      }));
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(7_000); });
+    expect(await screen.findByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
+    expect(screen.queryByText(enPostSuggestions.errorGeneration)).not.toBeInTheDocument();
+  });
+
+  it('says it is TAKING LONGER rather than reporting a failure that did not happen', async () => {
+    // The worker owns the row and always resolves it, so a still-pending row
+    // here means slow — never lost.
+    mockGetToday.mockImplementation(() => Promise.resolve({
+      data: { suggestion: { ...PENDING }, remainingToday: 1, availableTypes: ['general'] },
+    }));
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(125_000); });
+    expect(await screen.findByText(enPostSuggestions.takingLonger)).toBeInTheDocument();
+    expect(screen.queryByText(enPostSuggestions.errorGeneration)).not.toBeInTheDocument();
+  });
+
+  it('does NOT stamp `opened` on a pending row — the metric counts posts actually seen', async () => {
+    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    await screen.findByText(enPostSuggestions.generating);
+    expect(mockMarkEvent).not.toHaveBeenCalled();
   });
 });

@@ -194,3 +194,66 @@ describe('postSuggestions Arabic plural — all six CLDR forms compile and the d
     expect(screen.getByText('محاولتان متبقيتان اليوم')).toBeInTheDocument();
   });
 });
+
+/**
+ * A generation the merchant started can still be running when the dashboard
+ * renders — it takes ~35s in a worker. The card has to say so rather than
+ * preview a row whose text is deliberately empty.
+ */
+describe('PostSuggestionCard — a generation still in flight', () => {
+  const PENDING = {
+    id: 's-pending',
+    status: 'pending' as const,
+    text: '',
+    imageUrl: null,
+    variants: [{ text: '', headline: null, imageUrl: null }],
+    selectedVariant: 0,
+    postType: 'general' as const,
+    source: 'manual' as const,
+    suggestedFor: '2026-08-09',
+    createdAt: '2026-08-09T08:00:00Z',
+  };
+
+  it('announces the work instead of previewing an empty post', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    renderCard();
+    expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
+    // The angle chip describes a post that does not exist yet.
+    expect(screen.queryByText(enPostSuggestions.type_general)).not.toBeInTheDocument();
+  });
+
+  it('disables the action while pending, and offers to VIEW rather than to suggest', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    renderCard();
+    await screen.findByText(enPostSuggestions.generating);
+    // A post IS coming, so a disabled "suggest a post" would read as "you may
+    // not do this" rather than "this is nearly ready".
+    expect(screen.getByRole('button', { name: enPostSuggestions.cardOpen })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+  });
+
+  it('shows the post once the row turns ready', async () => {
+    // Fresh objects per call — a shared fixture would let React bail out on an
+    // identical reference and hide the very transition under test.
+    mockGetToday
+      .mockResolvedValueOnce({ data: { suggestion: { ...PENDING }, remainingToday: 2 } })
+      .mockResolvedValue({
+        data: {
+          suggestion: { ...PENDING, status: 'ready' as const, text: 'بوست جاهز' },
+          remainingToday: 2,
+        },
+      });
+    renderCard();
+    await screen.findByText(enPostSuggestions.generating);
+    // The card polls on its own while the sheet is closed.
+    expect(await screen.findByText('بوست جاهز', {}, { timeout: 6_000 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
+  });
+
+  it('a non-admin member sees the pending row too — it is their workspace\'s spent slot', async () => {
+    mockRole.isAdmin = false;
+    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    renderCard();
+    expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
+  });
+});
