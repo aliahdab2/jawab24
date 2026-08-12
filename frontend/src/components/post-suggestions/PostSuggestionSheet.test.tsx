@@ -67,6 +67,20 @@ function renderSheet(initial: PostSuggestionResponse | null, overrides: { canGen
   );
 }
 
+/**
+ * A take's tab, addressed by the LENS it leads with — never by position.
+ * The tab's accessible name is "<lens> — <that take's opening line>", so this
+ * matches the lens prefix and stays correct if the preview text changes.
+ */
+function takeTab(index: 0 | 1 | 2) {
+  const lens = [
+    enPostSuggestions.variantLens0,
+    enPostSuggestions.variantLens1,
+    enPostSuggestions.variantLens2,
+  ][index];
+  return screen.getByRole('tab', { name: new RegExp(lens) });
+}
+
 function setClipboard(writeText: ReturnType<typeof vi.fn> | undefined) {
   Object.defineProperty(navigator, 'clipboard', {
     value: writeText ? { writeText } : undefined,
@@ -259,7 +273,7 @@ describe('PostSuggestionSheet — choosing between takes', () => {
     expect(await screen.findByDisplayValue('الصياغة الأولى')).toBeInTheDocument();
     expect(screen.getByRole('img')).toHaveAttribute('src', 'https://media/v1.jpg');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    fireEvent.click(takeTab(1));
     expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
     expect(screen.getByRole('img')).toHaveAttribute('src', 'https://media/v2.jpg');
   });
@@ -268,7 +282,7 @@ describe('PostSuggestionSheet — choosing between takes', () => {
     mockSelectVariant.mockResolvedValue({ data: { suggestion: { ...SUGGESTION_3, selectedVariant: 1 } } });
     withTakes();
     await screen.findByDisplayValue('الصياغة الأولى');
-    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    fireEvent.click(takeTab(1));
     await waitFor(() => expect(mockSelectVariant).toHaveBeenCalledWith('p1', 's1', 1));
   });
 
@@ -282,10 +296,10 @@ describe('PostSuggestionSheet — choosing between takes', () => {
     const box = await screen.findByDisplayValue('الصياغة الأولى');
     fireEvent.change(box, { target: { value: 'نصي المعدّل' } });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    fireEvent.click(takeTab(1));
     expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Version 1' }));
+    fireEvent.click(takeTab(0));
     expect(await screen.findByDisplayValue('نصي المعدّل')).toBeInTheDocument();
   });
 
@@ -305,7 +319,7 @@ describe('PostSuggestionSheet — choosing between takes', () => {
     mockSelectVariant.mockRejectedValue(new Error('offline'));
     withTakes();
     await screen.findByDisplayValue('الصياغة الأولى');
-    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    fireEvent.click(takeTab(1));
     expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
     await waitFor(() => expect(mockCaptureError).toHaveBeenCalled());
     expect(mockToastError).not.toHaveBeenCalled();
