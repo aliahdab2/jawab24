@@ -30,6 +30,7 @@ import {
     isRowLive,
     normalizeArabicIndic,
     DEFAULT_AI_MODEL,
+    POST_SUGGESTION_VARIANT_COUNT,
     type BusinessProfile,
     type StoredBusinessProfile,
     type PostSuggestionDto,
@@ -38,11 +39,12 @@ import {
     type PostSuggestionPostType,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { pages, catalogItems, factCollections, factRows, postSuggestions } from '../db/schema';
+import { pages, catalogItems, factCollections, factRows, postSuggestions, type PostSuggestionVariantRow } from '../db/schema';
 import { config } from '../config';
 import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { dailyCapKey, checkDailyCap, claimDailyCapSlot, type DailyCapStatus } from '../lib/dailyCap';
+import { variantsOf, imageKeysOf } from '../lib/postSuggestionVariants';
 import { imageStorage } from './imageStorage';
 import { composePostCard, fetchRoundedLogo, renderPosterBase } from './imageCompose';
 import { settingsService } from './settings';
@@ -417,11 +419,46 @@ const POST_TYPE_INSTRUCTIONS: Record<PostSuggestionPostType, string> = {
     general: 'A warm engagement post: one relatable line about what the business does for its customers, then invite them to message with their questions or orders.',
 };
 
-interface GeneratedText {
+/** One take as the model returned it, before the contact footer is appended. */
+interface GeneratedTake {
     text: string;
-    imageBrief: string;
     /** 2–5 Arabic words the compositor typesets ON the image (we render it — never the image model). */
     headline: string;
+}
+
+interface GeneratedText {
+    /** 1..POST_SUGGESTION_VARIANT_COUNT takes — never empty (the caller treats empty as a failure). */
+    posts: GeneratedTake[];
+    /** ONE scene for the whole set: the takes share a single paid image. */
+    imageBrief: string;
+}
+
+/**
+ * Takes from a parsed model response, tolerantly.
+ *
+ * Accepts the single-object shape too (`{text, headline}`), because a model
+ * asked for N can still answer with one — and a merchant is far better served
+ * by one usable post than by a hard failure that burns a daily slot. Anything
+ * beyond the requested count is dropped rather than stored: the cap the owner
+ * set is on what we PAY for, but the UI budget is on what a merchant can
+ * actually compare, and an over-long list silently changes both.
+ */
+export function parseTakes(parsed: unknown): GeneratedTake[] {
+    const root = parsed as { posts?: unknown; text?: unknown; headline?: unknown } | null;
+    if (!root || typeof root !== 'object') return [];
+    const raw: unknown[] = Array.isArray(root.posts) ? root.posts : [root];
+    const takes: GeneratedTake[] = [];
+    for (const entry of raw) {
+        const take = entry as { text?: unknown; headline?: unknown } | null;
+        if (!take || typeof take !== 'object') continue;
+        if (typeof take.text !== 'string' || !take.text.trim()) continue;
+        takes.push({
+            text: take.text.trim(),
+            headline: typeof take.headline === 'string' ? take.headline.trim() : '',
+        });
+        if (takes.length === POST_SUGGESTION_VARIANT_COUNT) break;
+    }
+    return takes;
 }
 
 /**
@@ -472,6 +509,8 @@ ${blocks.join('\n\n')}
 
 Today's angle: ${postType} — ${POST_TYPE_INSTRUCTIONS[postType]}
 
+WRITE ${POST_SUGGESTION_VARIANT_COUNT} TAKES on that one angle, as "posts". The merchant reads them side by side and publishes ONE, so near-duplicates waste their time: the takes must differ in ANGLE OF ATTACK, not in wording. Take 1 opens on the concrete offer or fact (the figures, the date, the name). Take 2 opens on the customer's problem or question, and answers it. Take 3 opens on the outcome — what the customer walks away with. Each take stands alone as a complete post, draws on the SAME data, and obeys every rule below.
+
 CRAFT — how professionals write feed posts:
 - Line 1 is the HOOK: a question, a bold benefit, or a striking concrete detail that stops the scroll. Never open with the business name, a greeting, or "نقدم لكم".
 - Body: 2–4 SHORT lines, one idea per line, a blank line between thought groups. Concrete beats generic — name the real product, the real price, the real date from the data.
@@ -488,7 +527,7 @@ TRUTH — non-negotiable:
 - FIGURES: every number you write must be copied from the data above. If the data carries no price for something, the post does not state one — invite the customer to ask instead. A figure in a post is public and permanent, and reads as a commitment the merchant never made.
 - Carry only the figures TODAY'S ANGLE needs. A price belongs in a post whose subject is the offer; a post explaining how to choose a size is about the choosing, and a price bolted onto it reads as a sales pitch interrupting an answer. Fewer, well-placed numbers beat a caption that recites the data.
 
-Also return:
+For EACH take also return:
 - "headline": 2–5 Arabic words the platform will typeset ON the image — the poster line. The reader sees the poster and the caption AT ONCE, so the poster must not spend itself re-saying the caption's opening line.
   Test it: the headline must be a DIFFERENT KIND of line from the caption's opener. If the caption opens with a question, the headline is neither that question nor its direct answer — it is the RESULT the customer gets, or the reassurance, or the urgency. Rewording the same idea fails this test even though no words repeat.
     Caption «✨ هل تريد تحسين مهاراتك في الحاسوب؟ دورة ICDL تبدأ اليوم!»
@@ -498,10 +537,12 @@ Also return:
       ✗ «اختر مقاس طفلك بسهولة» — no words repeat, but it is the same idea reworded
       ✓ «المقاس الصحيح من أول مرة» — the outcome, not the question
   No emojis, no punctuation except «!».
+
+Then return ONE "imageBrief" for the WHOLE SET — not one per take. A single scene is photographed once and all ${POST_SUGGESTION_VARIANT_COUNT} cards are built from it, each with its own headline typeset over it. The scene must therefore fit every take: describe the ANGLE'S SUBJECT, never one take's particular hook.
 - "imageBrief": one English sentence describing a photographic scene that supports the post (subject, setting, mood, colors). The scene must work WITHOUT any text, letters, or numbers, and WITHOUT people or faces — products, places, and atmosphere only.
   Draw the scene from THIS business's own world — its goods, its materials, its workplace, the result its customers get. A generic desk with a laptop is the lazy default and says nothing about the business.${recentBriefsBlock}
 
-Return JSON: {"text": string, "headline": string, "imageBrief": string}`;
+Return JSON: {"posts": [{"text": string, "headline": string}] (exactly ${POST_SUGGESTION_VARIANT_COUNT}), "imageBrief": string}`;
 }
 
 /** Numeric tokens in a blob, normalised: Arabic-Indic → ASCII, separators dropped. */
@@ -593,12 +634,12 @@ async function generatePostText(
         return null;
     }
     try {
-        const parsed = JSON.parse(content) as Partial<GeneratedText>;
-        if (!parsed.text || typeof parsed.text !== 'string' || !parsed.text.trim()) {
+        const parsed = JSON.parse(content) as { imageBrief?: unknown };
+        const posts = parseTakes(parsed);
+        if (posts.length === 0) {
             recordAiFailedBeforeLog('post_generation', POST_TEXT_MODEL, 'AiEmptyReplyError');
             return null;
         }
-        const text = parsed.text.trim();
 
         // SHADOW ONLY — it logs, it never blocks. Figure invention has NOT been
         // observed here: the one case that looked like it (2026-08-10, «45 د»)
@@ -606,17 +647,22 @@ async function generatePostText(
         // query that selected only name/attributes. Blocking on an unobserved
         // failure would reject valid posts and burn a merchant's daily slot, so
         // this measures first. Promote to a hard gate only if the numbers say so.
-        const ungrounded = findUngroundedNumbers(text, buildGroundingCorpus(bundle, today));
-        if (ungrounded.length > 0) {
-            logger.warn('[PostSuggestions] Figures absent from the prompt inputs (shadow)', {
-                pageId: bundle.pageId, postType, ungrounded,
-            });
-        }
+        // Runs per take: one bad figure must be attributable to the take that
+        // wrote it, or the merchant could publish the clean one and still see
+        // the warning — or publish the bad one and see nothing.
+        const corpus = buildGroundingCorpus(bundle, today);
+        posts.forEach((post, index) => {
+            const ungrounded = findUngroundedNumbers(post.text, corpus);
+            if (ungrounded.length > 0) {
+                logger.warn('[PostSuggestions] Figures absent from the prompt inputs (shadow)', {
+                    pageId: bundle.pageId, postType, variantIndex: index, ungrounded,
+                });
+            }
+        });
 
         return {
-            text,
+            posts,
             imageBrief: typeof parsed.imageBrief === 'string' ? parsed.imageBrief.trim() : '',
-            headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
         };
     } catch {
         recordAiFailedBeforeLog('post_generation', POST_TEXT_MODEL, 'Other');
@@ -653,18 +699,19 @@ interface GeneratedImage {
  * suggestion): storage unconfigured, model refusal, timeout, undecodable
  * model output, or upload error.
  */
-async function generatePostImage(
+async function generatePostImages(
     bundle: PageBundle,
     imageBrief: string,
-    headline: string,
+    headlines: readonly string[],
     mode: ImageMode = 'photo',
     posterVariant = 0,
-): Promise<GeneratedImage | null> {
-    if (!imageStorage.isConfigured()) return null;
+): Promise<(GeneratedImage | null)[]> {
+    const none = headlines.map(() => null);
+    if (!imageStorage.isConfigured()) return none;
     // A poster needs no scene, so it needs neither a brief nor an API key; the
     // photographic modes need both.
     const apiKey = config.openai?.apiKey;
-    if (mode !== 'poster' && (!apiKey || !imageBrief)) return null;
+    if (mode !== 'poster' && (!apiKey || !imageBrief)) return none;
 
     // The logo depends only on the bundle, so its fetch (up to 5s at
     // graph.facebook.com) starts NOW and runs concurrently with the image
@@ -681,23 +728,31 @@ async function generatePostImage(
     // through the SAME compositor as a photograph, so the headline typesetting,
     // logo badge, encoding and failure handling are shared, not duplicated.
     if (mode === 'poster') {
-        const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
-        try {
-            // The poster typesets its OWN headline, large and centred, so the
-            // card's bottom-scrim headline layer is deliberately not used here.
-            const base = await renderPosterBase(1024, 1024, posterVariant, headline);
-            const designed = await composePostCard(base, { headline: null, logo: await logoPromise });
-            if (!designed) return null;
-            return await imageStorage.put(key, designed, 'image/jpeg');
-        } catch (err) {
-            captureError(err, 'Post suggestion: poster composition failed', { level: 'warning', tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
-            return null;
-        }
+        const logo = await logoPromise;
+        // Each take gets its OWN poster: the headline IS the poster, so sharing
+        // one base across takes would show the same words on all of them. Free
+        // to do — a poster is SVG + sharp, no model call, no spend.
+        return Promise.all(headlines.map(async (headline, index) => {
+            const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
+            try {
+                // The poster typesets its OWN headline, large and centred, so the
+                // card's bottom-scrim headline layer is deliberately not used here.
+                // Offset per take so three posters in one set differ in geometry
+                // as well as in words.
+                const base = await renderPosterBase(1024, 1024, posterVariant + index, headline);
+                const designed = await composePostCard(base, { headline: null, logo });
+                if (!designed) return null;
+                return await imageStorage.put(key, designed, 'image/jpeg');
+            } catch (err) {
+                captureError(err, 'Post suggestion: poster composition failed', { level: 'warning', tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId, variantIndex: index } });
+                return null;
+            }
+        }));
     }
 
     // Unreachable for the photographic modes (guarded above) — present so the
     // key narrows without an assertion.
-    if (!apiKey) return null;
+    if (!apiKey) return none;
     const client = makeTrackedOpenAI(apiKey, {
         userId: bundle.userId,
         pageId: bundle.pageId,
@@ -718,7 +773,7 @@ async function generatePostImage(
     } catch (err) {
         // Wrapper booked failed_before_log (timeout-classified via our signal).
         captureError(err, 'Post suggestion: image generation failed', { level: 'warning', tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId } });
-        return null;
+        return none;
     } finally {
         clearTimeout(timer);
     }
@@ -726,34 +781,47 @@ async function generatePostImage(
     if (!b64) {
         // Billed response with no image payload — returns was booked, no row will follow.
         recordAiFailedBeforeLog('post_image_generation', POST_IMAGE_MODEL, 'AiEmptyReplyError');
-        return null;
+        return none;
     }
 
-    // JPEG, not PNG: photographic card with no transparency — ~10× smaller on
-    // the market's mobile networks, and FB/IG accept JPEG for posts.
-    const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
-    try {
-        // Compose the DESIGNED card: brand scrim + typeset Arabic headline +
-        // logo badge (deterministic sharp layers, zero AI cost, best-effort —
-        // any LAYER failure ships whatever composed cleanly; an undecodable
-        // BASE returns null and the suggestion degrades to text-only).
-        const designed = await composePostCard(Buffer.from(b64, 'base64'), {
-            headline,
-            logo: await logoPromise,
-        });
-        if (!designed) return null;
-        return await imageStorage.put(key, designed, 'image/jpeg');
-    } catch (err) {
-        captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId, key } });
-        return null;
-    }
+    // ONE paid scene, N cards. The takes differ only in the headline typeset
+    // over the base, and compositing is local sharp work — so a set costs
+    // exactly what a single card used to. Decoded once, outside the loop: the
+    // base64 payload is ~1.5 MB and re-decoding it per take is pure waste.
+    const base = Buffer.from(b64, 'base64');
+    const logo = await logoPromise;
+    return Promise.all(headlines.map(async (headline, index) => {
+        // JPEG, not PNG: photographic card with no transparency — ~10× smaller on
+        // the market's mobile networks, and FB/IG accept JPEG for posts.
+        const key = `generated-posts/${bundle.workspaceId}/${randomUUID()}.jpg`;
+        try {
+            // Compose the DESIGNED card: brand scrim + typeset Arabic headline +
+            // logo badge (deterministic sharp layers, zero AI cost, best-effort —
+            // any LAYER failure ships whatever composed cleanly; an undecodable
+            // BASE returns null and that take degrades to text-only).
+            const designed = await composePostCard(base, { headline, logo });
+            if (!designed) return null;
+            return await imageStorage.put(key, designed, 'image/jpeg');
+        } catch (err) {
+            captureError(err, 'Post suggestion: image upload failed', { tags: { service: 'post-suggestions' }, extra: { pageId: bundle.pageId, key, variantIndex: index } });
+            return null;
+        }
+    }));
 }
 
 function toDto(row: typeof postSuggestions.$inferSelect): PostSuggestionDto {
+    const variants = variantsOf(row);
+    // Clamp: a selection can only be stored through the select route, which
+    // validates against the row's own length — but a hand-edited row must not
+    // be able to hand the client an index its `variants` array cannot serve.
+    const selected = row.selectedVariant >= 0 && row.selectedVariant < variants.length ? row.selectedVariant : 0;
     return {
         id: row.id,
         text: row.text,
         imageUrl: row.imageUrl,
+        // imageKey is a storage handle, never client-facing.
+        variants: variants.map(({ text, headline, imageUrl }) => ({ text, headline, imageUrl })),
+        selectedVariant: selected,
         postType: (row.postType ?? 'general') as PostSuggestionPostType,
         source: row.source as 'cron' | 'manual',
         suggestedFor: row.suggestedFor,
@@ -949,18 +1017,28 @@ class PostSuggestionsService {
         if (!generated) return { ok: false, reason: 'generation_failed' };
         // Deterministic contact footer — appended in code, never model-written.
         const includeContact = opts?.includeContact !== false;
-        const finalText = includeContact && bundle.contactSuffix
-            ? `${generated.text}\n\n${bundle.contactSuffix}`
-            : generated.text;
+        const withContact = (text: string) => includeContact && bundle.contactSuffix
+            ? `${text}\n\n${bundle.contactSuffix}`
+            : text;
 
         // Rotate the KIND of image off the last one. `recent.length` only varies
         // the poster's geometry, never which mode is chosen — so the saturating
         // window that froze the earlier attempt cannot freeze this.
         const imageMode = pickImageMode(previous?.imageMode);
-        const image = await generatePostImage(
-            bundle, generated.imageBrief, generated.headline, imageMode, recent.length,
+        const images = await generatePostImages(
+            bundle, generated.imageBrief, generated.posts.map(p => p.headline), imageMode, recent.length,
         );
-        const imageDegraded: PostSuggestionImageDegraded | undefined = image
+        const variants: PostSuggestionVariantRow[] = generated.posts.map((post, index) => ({
+            text: withContact(post.text),
+            headline: post.headline || null,
+            imageUrl: images[index]?.url ?? null,
+            imageKey: images[index]?.key ?? null,
+        }));
+
+        // Degraded only when NO take got a card. A partial failure still gives
+        // the merchant something to publish, and flagging the whole generation
+        // as degraded would misreport it.
+        const imageDegraded: PostSuggestionImageDegraded | undefined = variants.some(v => v.imageUrl)
             ? undefined
             : (imageStorage.isConfigured() ? 'image_failed' : 'storage_off');
 
@@ -978,9 +1056,15 @@ class PostSuggestionsService {
                 suggestedFor: today,
                 source,
                 postType,
-                text: finalText,
-                imageUrl: image?.url ?? null,
-                imageKey: image?.key ?? null,
+                variants,
+                // A fresh generation always opens on the first take, and
+                // text/imageUrl/imageKey mirror it — see the schema note: the
+                // columns stay the record for every reader that predates
+                // variants (shipped app bundles, SQL consumers, the audit).
+                selectedVariant: 0,
+                text: variants[0].text,
+                imageUrl: variants[0].imageUrl,
+                imageKey: variants[0].imageKey,
                 // Stored even when the image call failed: the brief is what the
                 // NEXT generation must avoid repeating, and a failed render does
                 // not make the scene fresh again.
@@ -997,7 +1081,11 @@ class PostSuggestionsService {
             }).returning();
             if (!inserted) return undefined;
 
-            const stale = await tx.select({ id: postSuggestions.id, imageKey: postSuggestions.imageKey })
+            const stale = await tx.select({
+                id: postSuggestions.id,
+                imageKey: postSuggestions.imageKey,
+                variants: postSuggestions.variants,
+            })
                 .from(postSuggestions)
                 .where(and(
                     eq(postSuggestions.pageId, pageId),
@@ -1010,7 +1098,19 @@ class PostSuggestionsService {
                     .set({ status: 'superseded', imageUrl: null, imageKey: null })
                     .where(inArray(postSuggestions.id, stale.map(s => s.id)));
                 for (const s of stale) {
-                    if (s.imageKey) staleKeys.push(s.imageKey);
+                    // EVERY take's file, not just the mirrored one — a set left
+                    // N-1 images behind when only imageKey was swept, and the
+                    // orphan audit would have to find them later.
+                    staleKeys.push(...imageKeysOf(s));
+                    // The texts survive (same rule as `text`: a superseded row
+                    // is still the audit record of what was written), but their
+                    // image references must not — the files are about to go.
+                    const kept = s.variants?.map(v => ({ ...v, imageUrl: null, imageKey: null }));
+                    if (kept) {
+                        await tx.update(postSuggestions)
+                            .set({ variants: kept })
+                            .where(eq(postSuggestions.id, s.id));
+                    }
                 }
             }
             return inserted;
@@ -1039,6 +1139,43 @@ class PostSuggestionsService {
         // slot this generation just consumed.
         const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
         return { ok: true, suggestion: toDto(row), remainingToday: remaining, availableTypes, ...(imageDegraded ? { imageDegraded } : {}) };
+    }
+
+    /**
+     * Persist which take the merchant picked, and mirror it into the columns of
+     * record so every reader — shipped app bundles, the dashboard card, SQL —
+     * sees the chosen post without knowing what a variant is.
+     *
+     * Returns null when the row isn't visible to this workspace (caller 404s)
+     * or the index doesn't address a take this row actually has.
+     */
+    async selectVariant(workspaceId: string, pageId: string, suggestionId: string, variantIndex: number): Promise<PostSuggestionDto | null> {
+        const [row] = await db.select()
+            .from(postSuggestions)
+            .innerJoin(pages, eq(pages.id, postSuggestions.pageId))
+            .where(and(
+                eq(postSuggestions.id, suggestionId),
+                eq(postSuggestions.pageId, pageId),
+                eq(pages.workspaceId, workspaceId),
+            ))
+            .limit(1);
+        if (!row) return null;
+
+        const suggestion = row.post_suggestions;
+        const variants = variantsOf(suggestion);
+        if (!Number.isInteger(variantIndex) || variantIndex < 0 || variantIndex >= variants.length) return null;
+        const chosen = variants[variantIndex];
+
+        const [updated] = await db.update(postSuggestions)
+            .set({
+                selectedVariant: variantIndex,
+                text: chosen.text,
+                imageUrl: chosen.imageUrl,
+                imageKey: chosen.imageKey,
+            })
+            .where(eq(postSuggestions.id, suggestionId))
+            .returning();
+        return updated ? toDto(updated) : null;
     }
 
     /** First-write-wins market-signal stamps. Returns false when the row isn't visible to this workspace. */

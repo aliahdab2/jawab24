@@ -7,16 +7,17 @@ import type { PostSuggestionResponse } from '@/lib/api';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import { PostSuggestionSheet } from './PostSuggestionSheet';
 
-const { mockGenerate, mockMarkEvent, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
+const { mockGenerate, mockMarkEvent, mockSelectVariant, mockToastError, mockToastSuccess, mockCaptureError } = vi.hoisted(() => ({
   mockGenerate: vi.fn(),
   mockMarkEvent: vi.fn(),
+  mockSelectVariant: vi.fn(),
   mockToastError: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockCaptureError: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: vi.fn(), generate: mockGenerate, markEvent: mockMarkEvent },
+  postSuggestionsApi: { getToday: vi.fn(), generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant },
 }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('sonner', () => ({ toast: { error: mockToastError, success: mockToastSuccess } }));
@@ -26,10 +27,31 @@ const SUGGESTION: PostSuggestionDto = {
   id: 's1',
   text: 'بوست تجريبي 🌟',
   imageUrl: 'https://media/x.jpg',
+  variants: [{ text: 'بوست تجريبي 🌟', headline: 'عنوان', imageUrl: 'https://media/x.jpg' }],
+  selectedVariant: 0,
   postType: 'general',
   source: 'manual',
   suggestedFor: '2026-08-09',
   createdAt: '2026-08-09T08:00:00Z',
+};
+
+/** Three takes on one generation — the shape the server ships after variants. */
+const SUGGESTION_3: PostSuggestionDto = {
+  ...SUGGESTION,
+  variants: [
+    { text: 'الصياغة الأولى', headline: 'ه١', imageUrl: 'https://media/v1.jpg' },
+    { text: 'الصياغة الثانية', headline: 'ه٢', imageUrl: 'https://media/v2.jpg' },
+    { text: 'الصياغة الثالثة', headline: 'ه٣', imageUrl: 'https://media/v3.jpg' },
+  ],
+  text: 'الصياغة الأولى',
+  imageUrl: 'https://media/v1.jpg',
+};
+
+/** No card at all — the mirrored column AND the take must agree, as the server keeps them. */
+const TEXT_ONLY: PostSuggestionDto = {
+  ...SUGGESTION,
+  imageUrl: null,
+  variants: [{ ...SUGGESTION.variants[0], imageUrl: null }],
 };
 
 function renderSheet(initial: PostSuggestionResponse | null, overrides: { canGenerate?: boolean } = {}) {
@@ -54,6 +76,7 @@ function setClipboard(writeText: ReturnType<typeof vi.fn> | undefined) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockMarkEvent.mockResolvedValue({});
+  mockSelectVariant.mockResolvedValue({ data: { suggestion: SUGGESTION_3 } });
   mockGenerate.mockResolvedValue({
     data: { suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'] },
   });
@@ -149,18 +172,105 @@ describe('PostSuggestionSheet — auto-generate fires ONCE (StrictMode regressio
 
 describe('PostSuggestionSheet — text-only rows explain themselves from DATA', () => {
   it('a text-only row arriving via getToday (no imageDegraded flag) still renders the notice', async () => {
-    renderSheet({ suggestion: { ...SUGGESTION, imageUrl: null }, remainingToday: 1, availableTypes: ['general'] });
+    renderSheet({ suggestion: TEXT_ONLY, remainingToday: 1, availableTypes: ['general'] });
     expect(await screen.findByText(enPostSuggestions.textOnlyNotice)).toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
   it('storage_off keeps its distinct copy', async () => {
     renderSheet({
-      suggestion: { ...SUGGESTION, imageUrl: null },
+      suggestion: TEXT_ONLY,
       remainingToday: 1,
       imageDegraded: 'storage_off',
       availableTypes: ['general'],
     });
     expect(await screen.findByText(enPostSuggestions.textOnlyStorageOff)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The takes are the whole point of the feature: on 2026-08-11 a real page's
+ * best post of the day was destroyed by its own next regenerate, because only
+ * one post could exist at a time. These pin that the merchant can move between
+ * takes without losing anything.
+ */
+describe('PostSuggestionSheet — choosing between takes', () => {
+  const withTakes = () => renderSheet({ suggestion: SUGGESTION_3, remainingToday: 2, availableTypes: ['general'] });
+
+  it('opens on the SELECTED take, not always the first', async () => {
+    renderSheet({ suggestion: { ...SUGGESTION_3, selectedVariant: 2 }, remainingToday: 2, availableTypes: ['general'] });
+    expect(await screen.findByDisplayValue('الصياغة الثالثة')).toBeInTheDocument();
+  });
+
+  it('switching takes swaps BOTH the text and the card', async () => {
+    withTakes();
+    expect(await screen.findByDisplayValue('الصياغة الأولى')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://media/v1.jpg');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://media/v2.jpg');
+  });
+
+  it('persists the choice so the dashboard card and older app bundles agree with what is on screen', async () => {
+    mockSelectVariant.mockResolvedValue({ data: { suggestion: { ...SUGGESTION_3, selectedVariant: 1 } } });
+    withTakes();
+    await screen.findByDisplayValue('الصياغة الأولى');
+    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    await waitFor(() => expect(mockSelectVariant).toHaveBeenCalledWith('p1', 's1', 1));
+  });
+
+  it('KEEPS a merchant edit when they switch away and come back — losing typed text is the bug this feature exists to stop', async () => {
+    // A FRESH object, as the server really answers. Returning the same
+    // reference makes React bail out of the re-render and hides the whole
+    // failure this pins: the save landing must not wipe the editor.
+    mockSelectVariant.mockImplementation(async (_p: string, _s: string, index: number) =>
+      ({ data: { suggestion: { ...SUGGESTION_3, variants: [...SUGGESTION_3.variants], selectedVariant: index } } }));
+    withTakes();
+    const box = await screen.findByDisplayValue('الصياغة الأولى');
+    fireEvent.change(box, { target: { value: 'نصي المعدّل' } });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Version 1' }));
+    expect(await screen.findByDisplayValue('نصي المعدّل')).toBeInTheDocument();
+  });
+
+  it('a REGENERATE does reset the editor — a new post is a new post, and keeping stale edits over it would be worse', async () => {
+    mockGenerate.mockResolvedValue({
+      data: { suggestion: { ...SUGGESTION_3, id: 's2', text: 'بوست جديد', variants: [{ text: 'بوست جديد', headline: 'ج', imageUrl: null }] }, remainingToday: 1, availableTypes: ['general'] },
+    });
+    withTakes();
+    const box = await screen.findByDisplayValue('الصياغة الأولى');
+    fireEvent.change(box, { target: { value: 'نصي المعدّل' } });
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+    expect(await screen.findByDisplayValue('بوست جديد')).toBeInTheDocument();
+  });
+
+  it('a failed save never blocks the merchant — the take is still on screen, the error goes to Sentry', async () => {
+    mockSelectVariant.mockRejectedValue(new Error('offline'));
+    withTakes();
+    await screen.findByDisplayValue('الصياغة الأولى');
+    fireEvent.click(screen.getByRole('tab', { name: 'Version 2' }));
+    expect(await screen.findByDisplayValue('الصياغة الثانية')).toBeInTheDocument();
+    await waitFor(() => expect(mockCaptureError).toHaveBeenCalled());
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it('a single-take suggestion shows NO switcher — nothing changes for rows generated before variants', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 1, availableTypes: ['general'] });
+    await screen.findByDisplayValue(SUGGESTION.text);
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('a response with NO variants field at all (old backend, mid blue/green deploy) still renders the post', async () => {
+    const legacy = { ...SUGGESTION } as Partial<PostSuggestionDto>;
+    delete legacy.variants;
+    delete legacy.selectedVariant;
+    renderSheet({ suggestion: legacy as PostSuggestionDto, remainingToday: 1, availableTypes: ['general'] });
+    expect(await screen.findByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 });

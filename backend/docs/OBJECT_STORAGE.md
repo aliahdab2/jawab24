@@ -204,10 +204,15 @@ its own decision.
   objects — never a live, referenced image.** Post-suggestion images follow the same
   safe order: a regenerate inserts the replacement row and supersedes the old one in ONE
   transaction, and only after commit best-effort deletes the old object — a live image is
-  never lost to a failed replacement. Page delete collects `post_suggestions.image_key`
-  alongside the trigger-image keys and removes the `generated-posts/` objects after the
-  cascade commits (`pagesService.deletePage`), so the "page delete drops all its images"
-  invariant holds for BOTH prefixes.
+  never lost to a failed replacement. Page delete removes the `generated-posts/` objects
+  after the cascade commits (`pagesService.deletePage`), so the "page delete drops all its
+  images" invariant holds for BOTH prefixes.
+  ⚠️ **A post-suggestion row owns SEVERAL objects, not one.** Since variants (migration
+  0162) a generation stores one card per take, and `image_key` mirrors only the SELECTED
+  take. Both sweeps — page delete and supersede — must therefore go through
+  `imageKeysOf(row)` (`lib/postSuggestionVariants.ts`), which unions the mirrored column
+  with every `variants[].imageKey` and deduplicates the overlap. Collecting `image_key`
+  alone silently leaks N-1 objects per row.
 - **Never hand a storage key to something that outlives it.** Deleting a replaced object is
   correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
   sent message must never embed the bucket URL. See §11. (Post-suggestion images are never

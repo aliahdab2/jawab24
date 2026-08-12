@@ -16,7 +16,7 @@ import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import { getEmbeddedToken } from './embeddedSession';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -232,6 +232,11 @@ export const postSuggestionsApi = {
     api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }, { timeout: LONG_RUNNING_TIMEOUT }),
   markEvent: (pageId: string, suggestionId: string, event: PostSuggestionEvent) =>
     api.post(`/pages/${pageId}/post-suggestions/${suggestionId}/events`, { event }),
+  // Which take the merchant picked. Persisted so the dashboard card and any
+  // other reader (including app bundles that predate variants) show the post
+  // they chose — the server mirrors it into the columns of record.
+  selectVariant: (pageId: string, suggestionId: string, variantIndex: number) =>
+    api.put<{ suggestion: PostSuggestionDto }>(`/pages/${pageId}/post-suggestions/${suggestionId}/selection`, { variantIndex }),
 };
 
 /** One row of a fact collection, as the API serves it. `price` is the numeric

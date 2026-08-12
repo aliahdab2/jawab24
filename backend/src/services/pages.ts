@@ -8,6 +8,7 @@ import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
+import { imageKeysOf } from '../lib/postSuggestionVariants';
 import { subscriptionsService } from './subscriptions';
 import { channelTrialService } from './channelTrial';
 import { logAutoReplyToggle, auditLog } from './auditLog';
@@ -882,11 +883,19 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
         if (!ownedPage) return;
 
+        // A post suggestion owns one file PER TAKE, so it contributes a list
+        // rather than a column — imageKeysOf is the single place that knows a
+        // row's full storage footprint (mirrored column + every take).
+        const suggestionRows = await db
+            .select({ imageKey: postSuggestions.imageKey, variants: postSuggestions.variants })
+            .from(postSuggestions).where(eq(postSuggestions.pageId, pageId));
         const imageKeys = [
-            ...(await db.select({ key: posts.triggerImageKey }).from(posts).where(eq(posts.pageId, pageId))),
-            ...(await db.select({ key: instagramMedia.triggerImageKey }).from(instagramMedia).where(eq(instagramMedia.pageId, pageId))),
-            ...(await db.select({ key: postSuggestions.imageKey }).from(postSuggestions).where(eq(postSuggestions.pageId, pageId))),
-        ].map(r => r.key).filter((k): k is string => !!k);
+            ...[
+                ...(await db.select({ key: posts.triggerImageKey }).from(posts).where(eq(posts.pageId, pageId))),
+                ...(await db.select({ key: instagramMedia.triggerImageKey }).from(instagramMedia).where(eq(instagramMedia.pageId, pageId))),
+            ].map(r => r.key).filter((k): k is string => !!k),
+            ...suggestionRows.flatMap(imageKeysOf),
+        ];
 
         await db
             .delete(pages)
