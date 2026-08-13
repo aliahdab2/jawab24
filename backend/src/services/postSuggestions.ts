@@ -698,7 +698,7 @@ export function buildRecentBriefsBlock(recentImageBriefs: readonly string[]): st
 // move for a page with a full history window. The real fix is structural — see
 // the note on buildRecentBriefsBlock's caller.
 
-function buildTextPrompt(
+export function buildTextPrompt(
     bundle: PageBundle,
     postType: PostSuggestionPostType,
     today: string,
@@ -740,6 +740,12 @@ A REQUEST NAMES A SUBJECT — it is NOT evidence the subject exists. They are te
   Data = an appliance importer's television catalogue. Request «بوست عن دورة اللغة الانكليزية»
     ✗ «ابدأ رحلتك مع تقنيات الشام وكن مستعدًا لكل تحديات اللغة» — the course does not exist; this invents a business line
     ✓ a post from the real catalogue, plus "unmetRequest": "دورة اللغة الإنكليزية — غير موجودة في معلومات النشاط التجاري"
+
+  ⛔ THE POST ITSELF NEVER MENTIONS THE GAP. "unmetRequest" is where you say it — it is read by the MERCHANT, not by their customers. The caption is written exactly as if they had asked only for the part you can support. A post that announces what the business does NOT sell is worse than a wrong post: it is unpublishable, and it spends their attempt telling their customers about something they do not do.
+    Same data, same request
+      ✗ «❓ هل توجد دورة لغة إنكليزية في تقنيات الشام؟ … نحن شركة متخصصة بالأجهزة الكهربائية فقط، ولا نقدم دورات» — grounded and honest, and NOBODY would publish it
+      ✗ «…لكن للأسف ليس لدينا دورة لتعليم اللغة الإنكليزية» — the apology is still the gap, moved to the middle of the post
+      ✓ «شاشات سمارت بضمان سنتين، وصلت فروعنا في دمشق وحلب…» — a normal post about the real catalogue. Not one word about courses.
   A fact they ASSERT is different from a subject they request: «عندنا خصم ٢٠٪ هالأسبوع» is the merchant telling you something true about their own business, and you may use it. «اكتب عن خصم» is not.
   Honoured in full ⇒ "unmetRequest": null.`
         : '';

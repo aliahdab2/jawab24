@@ -1766,4 +1766,14 @@ cancel, then resubmit.
 
 **Carried with it: the text/image timeouts go to 60s.** They were cut to 20s/35s to fit a 60s frontend budget back when generation ran inside the merchant's HTTP request. Migration 0163 moved it to a worker and nothing waits on them any more, but the 20s survived — and with `attempts: 1` an abort is not a delay, it is a lost generation the merchant paid a daily slot for (observed live 2026-08-12). A bigger prompt makes it worse, so it could not be left for later.
 
+**⭐ Measured on real pages before shipping, and the measurement changed the design.** Ground-and-flag was written, tested green, and was still wrong — visible only by running it. On تقنيات الشام (the television catalogue) with «بوست عن دورة اللغة الانكليزية», the first build produced no fabrication and a correct `unmetRequest`, and then wrote all three takes ABOUT THE ABSENCE:
+
+> «❓ هل توجد دورة لغة إنكليزية في تقنيات الشام؟ … نحن شركة متخصصة في الأجهزة الكهربائية والمنزلية فقط، **ولا نقدم دورات لغة إنكليزية**»
+
+Grounded, honest, and completely unpublishable — it spends the merchant's attempt telling their customers what they do not sell. The gap belongs in `unmetRequest`, which the MERCHANT reads; the caption is written as if only the supported part had been asked. Fixed with a demonstration rather than a rule (both the blunt negation and the softer «لكن للأسف ليس لدينا…» are shown as ✗, because the apology is the same defect moved to the middle of the post). Re-measured on the same page: `unmetRequest` unchanged, three normal posts about the real catalogue, **zero mentions of the course**.
+
+Second box, on معهد النور with the image box alone («بدي صورة فيها صبية محجبة حاملة كراس لغة انكليزية») and an empty text box: the scene reached the model verbatim in intent (`imageBrief` = "A young woman in a hijab holding an English language notebook…"), the requested person forced `mode=photo`, `unmetRequest` stayed null, and the caption stayed about the courses rather than about the picture — the three intents of a separate image box, confirmed rather than asserted.
+
+**The byte-identical claim is pinned, not asserted.** `buildTextPrompt` is exported solely so a test can prove that a merchant who fills in nothing gets a prompt identical to the pre-change one, that each box adds only its own contract, and that the injection warning is stated exactly once when both are filled. That claim was written into this entry before the test existed and was caught in self-review — it is now backed.
+
 **Still open, deliberately not decided here.** Whether an image-only request should also rewrite the caption. Shipped behaviour: it does not — the image box governs the picture, and unless the text box says otherwise the caption's subject is still today's angle. That is the least surprising reading of two separate fields, not a measured ruling.
