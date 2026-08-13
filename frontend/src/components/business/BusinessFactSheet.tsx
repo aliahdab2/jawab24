@@ -272,22 +272,45 @@ export function BusinessFactSheet({
     [initialEntries],
   );
 
-  /** A row whose number slot holds something that is not a number — the class
-   *  that let «رقم الجملة فقط يطلب مبيعات جملة» be stored AS a phone and
-   *  published in every prompt. `isUsablePhoneEntry` is the only judge (NOT
-   *  `extractPhones`, whose 9-digit prose floor rejected a real landline). */
+  /**
+   * A row whose number slot holds something that is not a number — the class
+   * that let «رقم الجملة فقط يطلب مبيعات جملة» be stored AS a phone and
+   * published in every prompt. `isUsablePhoneEntry` is the only judge (NOT
+   * `extractPhones`, whose 9-digit prose floor rejected a real landline).
+   *
+   * ⭐⭐ MARKING and BLOCKING are two different questions, and collapsing them is
+   * how the first cut of the grandfathering fix traded a loud bug for a silent
+   * one. Grandfathering the row out of THIS set unblocked Save and also removed
+   * its red border, its `aria-invalid` and its inline message — so the merchant
+   * had no indication that a line of prose was still being published to their
+   * customers as a phone number. The lockout was gone and so was the warning.
+   *
+   * ⇒ `invalidIndexes` answers "is this row wrong?" and includes grandfathered
+   * rows, so they stay VISIBLE. `blockingIndexes` answers "may Save proceed?" and
+   * excludes them. Marked but not blocked is strictly better than either of the
+   * two states this code has been in, and it is where PR B's «انقله إلى الوصف»
+   * hint lands.
+   */
   const invalidIndexes = useMemo(() => {
     const bad = new Set<number>();
     if (!isMulti) return bad;
     entries.forEach((e, i) => {
       const v = e.value.trim();
-      if (!v || isUsablePhoneEntry(v)) return;
-      if (grandfatheredNumbers.has(v)) return;
-      bad.add(i);
+      if (v && !isUsablePhoneEntry(v)) bad.add(i);
     });
     return bad;
-  }, [entries, isMulti, grandfatheredNumbers]);
-  const hasInvalid = invalidIndexes.size > 0;
+  }, [entries, isMulti]);
+
+  /** Of those, the ones the merchant is ADDING or CHANGING — the only rows that
+   *  may hold Save back. Mirrors the server's grandfathering exactly. */
+  const blockingIndexes = useMemo(() => {
+    const blocking = new Set<number>();
+    invalidIndexes.forEach((i) => {
+      if (!grandfatheredNumbers.has(entries[i].value.trim())) blocking.add(i);
+    });
+    return blocking;
+  }, [invalidIndexes, entries, grandfatheredNumbers]);
+  const hasInvalid = blockingIndexes.size > 0;
 
   /** Same SIM typed twice — blocks Save and marks the later row. Without this
    *  a duplicate also renders the WhatsApp mark on both copies in the row list. */

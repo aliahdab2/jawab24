@@ -297,6 +297,29 @@ describe('BusinessFactSheet — the number slot must hold a number', () => {
     expect(screen.getByText('Save').closest('button')).toBeDisabled();
   });
 
+  /**
+   * ⭐⭐ An ALREADY-STORED bad row is marked but does NOT hold Save back — the two
+   * questions are separate, and collapsing them has now failed in both
+   * directions. Blocking on it was the lockout (one row Facebook wrote could stop
+   * the merchant editing their address forever). Grandfathering it out of the
+   * marking too was the opposite defect: Save worked and the merchant had no
+   * indication that a line of prose was still being published to their customers
+   * as a phone number. Marked-but-not-blocked is the only correct state.
+   */
+  it('marks an already-STORED bad row but still lets an unrelated edit save', () => {
+    // Both rows are stored (they arrive via initialEntries), so the prose row is
+    // grandfathered exactly as the server grandfathers it.
+    renderSheet('phone', `${INSTRUCTION},0911000210`);
+    // Make the sheet dirty by editing the OTHER row — the merchant's real intent.
+    fireEvent.change(screen.getByRole('textbox', { name: 'phone 2' }), { target: { value: '0911000299' } });
+
+    // Still visible: border, aria-invalid and the inline message.
+    expect(screen.getByRole('textbox', { name: 'phone 1' })).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent(/doesn't look like a phone number/);
+    // But not blocking.
+    expect(screen.getByText('Save').closest('button')).not.toBeDisabled();
+  });
+
   it('accepts a number with prose beside it — never lock out a real line', () => {
     const onSave = renderSheet('phone', '0911000210');
     fireEvent.change(screen.getByRole('textbox', { name: 'phone 1' }), {
