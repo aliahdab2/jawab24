@@ -64,6 +64,18 @@ const MAIN_FORMATTER_PATH = '../packages/shared/src/__mainBusinessInfoPrompt';
 interface Scenario {
     key: string;
     merchant: string;
+    /**
+     * The page's knowledge base for this scenario.
+     *
+     * ⚠️ Load-bearing, learned the hard way on the first run: overriding only
+     * `business_profile` left the carrier page's ELECTRONICS knowledge base in
+     * place while the persona described a resort. The model answered «معك سارة
+     * من تقنيات الشام للأجهزة الكهربائية» to «بدي احجز غرفة» and the arms both
+     * "failed" — a defect of the instrument, not of either arm. A probe whose
+     * fixture contradicts itself measures nothing; swap the whole page identity
+     * or do not run the scenario.
+     */
+    knowledgeBase: string;
     /** What the merchant has TODAY, verbatim in shape. */
     today: { profile: BusinessProfile; provenance?: MerchantProvenanceMap; persona: string };
     /** The same business expressed through the contact standard. */
@@ -82,6 +94,17 @@ const SCENARIOS: Scenario[] = [
     {
         key: 'contaminated-phones-field',
         merchant: 'Electronics importer — instructions typed INTO the phones field',
+        knowledgeBase: `تقنيات الشام للأجهزة الكهربائية والمنزلية
+
+من نحن
+شركة سورية متخصصة باستيراد وتوزيع الأجهزة الكهربائية والمنزلية. نخدم قطاعي المفرق والجملة، ولدينا صالات عرض في دمشق وحلب.
+
+الكفالة وخدمة ما بعد البيع
+جميع منتجاتنا مكفولة كفالة وكيل رسمية. لتسجيل طلب صيانة يرجى الاتصال بقسم خدمة ما بعد البيع.
+
+تعليمات للمساعد
+- لا تخترع أرقاماً غير مذكورة.
+- رد باختصار وبأسلوب ودود واحترافي.`,
         today: {
             // Verbatim shape from the real editor-confirmed profile: two of the
             // three "phone numbers" are Arabic instruction sentences, and the
@@ -125,6 +148,20 @@ const SCENARIOS: Scenario[] = [
     {
         key: 'routing-table-in-persona',
         merchant: 'Resort — 8-number routing table inside the 800-char persona',
+        knowledgeBase: `منتجع الواحة السياحي
+
+من نحن
+منتجع سياحي يضم غرفاً وأجنحة وشققاً فندقية، مع مسبح وصالة أعراس وصالة مؤتمرات.
+
+الإقامة
+غرف وأجنحة وشقق فندقية بإطلالات مختلفة. تثبيت الحجز يتم هاتفياً فقط، ولا يتم عبر وسائل التواصل الاجتماعي.
+
+المرافق
+مسبح مع خدمات حجوزات خاصة للجاكوزي، صالة أعراس، وصالة مؤتمرات.
+
+تعليمات للمساعد
+- لا تخترع أرقاماً أو أسعاراً غير مذكورة.
+- رد باختصار وبأسلوب ودود.`,
         today: {
             // Nothing structured at all: every number lives in the identity
             // field, at the cap, invisible to every system that reads contact
@@ -268,14 +305,16 @@ async function measuredHalf(sql: postgres.Sql): Promise<void> {
     console.log('\n═══ PART 2 — the replies a customer would get (measured) ═══\n');
 
     const [page] = await sql`
-        SELECT id, business_profile FROM pages WHERE facebook_page_id = ${CARRIER_PAGE} LIMIT 1
+        SELECT id, business_profile, knowledge_base
+        FROM pages WHERE facebook_page_id = ${CARRIER_PAGE} LIMIT 1
     `;
     if (!page) {
         console.log(`⚠️  carrier page ${CARRIER_PAGE} not found — skipping.`);
         return;
     }
     process.env.PROBE_PAGE_ID = page.id;
-    const original = page.business_profile;
+    const originalProfile = page.business_profile;
+    const originalKb = page.knowledge_base;
 
     try {
         for (const s of SCENARIOS) {
@@ -287,7 +326,10 @@ async function measuredHalf(sql: postgres.Sql): Promise<void> {
             const replies: Record<string, string[]> = {};
 
             for (const arm of arms) {
-                // Bump both version counters: the profile is prompt-injected,
+                // The KB travels with the profile: a page whose prose describes
+                // a different business than the persona produces replies that
+                // measure the contradiction, not the change under test.
+                // Bump both version counters — the profile is prompt-injected,
                 // so a stale page cache would answer from the previous arm.
                 await sql`
                     UPDATE pages
@@ -295,6 +337,7 @@ async function measuredHalf(sql: postgres.Sql): Promise<void> {
                         merchant: arm.cfg.profile,
                         merchantProvenance: arm.cfg.provenance ?? {},
                     } as never)},
+                        knowledge_base = ${s.knowledgeBase},
                         kb_version = kb_version + 1,
                         kb_active_version = kb_active_version + 1
                     WHERE id = ${page.id}
@@ -315,15 +358,17 @@ async function measuredHalf(sql: postgres.Sql): Promise<void> {
             });
         }
     } finally {
-        // Always put the carrier page back the way it was found.
+        // Always put the carrier page back the way it was found — profile AND
+        // knowledge base, or the next eval run scores a resort's prose.
         await sql`
             UPDATE pages
-            SET business_profile = ${sql.json(original as never)},
+            SET business_profile = ${sql.json(originalProfile as never)},
+                knowledge_base = ${originalKb},
                 kb_version = kb_version + 1,
                 kb_active_version = kb_active_version + 1
             WHERE id = ${page.id}
         `;
-        console.log('↩︎  carrier page restored to its original profile.');
+        console.log('↩︎  carrier page restored (profile + knowledge base).');
     }
 }
 

@@ -4466,7 +4466,7 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['0911000210', '0911000220', '0921000230', '0921000240', '0921000250'],
             replyNotContains: ['0911000299', '0911000212', '0911000262'],
         },
-        notes: 'MES\'s first persona rule verbatim («عند طلب ارقام هواتف ترسل ارقام الصالات فقط»): a generic phone-numbers ask must be answered with showroom lines only — management and wholesale stay undisclosed. Showroom numbers come from the «صالات الشركة» fact rows.',
+        notes: 'MES\'s first persona rule verbatim («عند طلب ارقام هواتف ترسل ارقام الصالات فقط»): a generic phone-numbers ask must be answered with showroom lines only — management and wholesale stay undisclosed. Showroom numbers come from the «صالات الشركة» fact rows. ⚠️ SAMPLING NOTE 2026-08-13: measured 5 PASS / 1 PARTIAL over 6 runs after the fixture gained a structured `phones` entry for management. The one miss leaked 0911000299 on this generic ask. Plausible mechanism, and it is a real property of the change rather than noise to wave away: a number in the AUTHORITATIVE BUSINESS_INFO block is more salient than the same number buried in persona prose, so structuring makes a line more reliably served when asked (#769) AND slightly more eager when not (here). Re-measure at higher N before treating either direction as settled.',
     },
     // ---- The contact standard: the DESCRIPTION does the routing, with NO
     // persona at all. #766-768 above each carry the merchant's routing rules as
@@ -4496,6 +4496,22 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'CONTACT STANDARD — routing by description, no persona. A maintenance ask must reach the «خدمة ما بعد البيع» line, and the on-request-only management line must NOT tag along. This is the thesis of the whole feature: the purpose beside the number does the work the persona was doing, so a merchant at their persona cap does not have to choose between identity and routing.',
     },
+    // ⚠️ THE HONEST BOUND on «the description does the routing», measured
+    // 2026-08-13 with scripts/contact-standard-probe.ts and NOT pinned here on
+    // purpose. A DESCRIPTION IS A LABEL, NOT A DIRECTIVE:
+    //   · question directly asks for a contact («بدي رقم الادارة», «بدي صيانة»)
+    //     → the description routes correctly, no persona needed (#769/#770).
+    //   · question is TOPICAL and only implies one («بدي استفسر عن المسبح»)
+    //     → an IMPERATIVE volunteers the number («لخدمات المسبح الاتصال على …»,
+    //       3/3 in the probe) while a description alone does not (0/3).
+    // An XGAP case was written for this and DELETED after it passed: the
+    // `electro` KB already carries «لتسجيل طلب صيانة يرجى الاتصال بقسم خدمة ما
+    // بعد البيع», so the case went green on the KB's imperative rather than on
+    // the description — a pin that passes for the wrong reason is worse than no
+    // pin. Reproducing the gap needs a fixture with NO imperative anywhere,
+    // which is what the probe's resort scenario is for. Closing it would mean
+    // the PROMPT treating a described number as an offerable routing hint —
+    // owner-approved and measured on its own, never bundled into a data change.
 
     // -----------------------------------------------------------------------
     // Category 68: Verified Cart Totals (prompt v56 — July 2026 prod finding,
