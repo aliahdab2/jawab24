@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores, customerNotificationsLog, emailSends } from '../db/schema';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores, customerNotificationsLog, emailSends, messages, comments, instagramComments } from '../db/schema';
 import { lt, eq, and, ne, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
@@ -208,6 +208,59 @@ export async function cleanupEmailBodies(daysOld: number = EMAIL_BODY_RETENTION_
 }
 
 /**
+ * Days a Needs-Attention item stays in the merchant's queue before it is auto-resolved.
+ *
+ * Measured on production (2026-08-13, 90 days, 1,057 resolved items): **93% of everything
+ * a merchant ever resolves is resolved within 7 days** — the median is 4 hours. Past that
+ * the item is not pending, it is abandoned: the open queue was 23,660 items with 68% older
+ * than 30 days, spread across paying pages (Nourva 7,900, الفريق الدمشقي 2,489), not one
+ * dead account. A 7-day window clears ~94% of that backlog and gives up 7.1% of historical
+ * resolutions.
+ */
+export const ATTENTION_QUEUE_RETENTION_DAYS = 7;
+
+/**
+ * Auto-resolve Needs-Attention items older than the window, across every page.
+ *
+ * ⚠️ This RESOLVES, it never deletes, and it deliberately leaves `needs_attention` and
+ * `flag_reason` untouched — exactly what the merchant's own "resolve" button writes
+ * (`messagesService.markAsResolved`, `commentsService.resolveComment`). That distinction is
+ * load-bearing: the queue is what the merchant works, but the flags and their stored customer
+ * questions (`flag_meta`) are what WE measure reply quality from. Clearing the queue must not
+ * cost us the evidence — on Port Said (2026-08-12) 60% of a 188-item queue turned out to be one
+ * fixable KB gap, and it was only visible because the flags survived.
+ *
+ * Age is taken from `created_at`: a flag ages from when the customer wrote, not from the last
+ * time some unrelated write touched the row.
+ */
+export async function expireStaleAttentionItems(
+    daysOld: number = ATTENTION_QUEUE_RETENTION_DAYS,
+): Promise<CleanupResult> {
+    const cutoff = daysAgo(daysOld);
+    let total = 0;
+    try {
+        for (const table of [messages, comments, instagramComments] as const) {
+            const result = await db.update(table)
+                .set({ resolved: true, updatedAt: new Date() })
+                .where(and(
+                    eq(table.needsAttention, true),
+                    eq(table.resolved, false),
+                    lt(table.createdAt, cutoff),
+                ))
+                .returning({ id: table.id });
+            total += result.length;
+        }
+        return { table: 'attention_queue', deletedCount: total };
+    } catch (error) {
+        return {
+            table: 'attention_queue',
+            deletedCount: total,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+}
+
+/**
  * Run all cleanup tasks
  * @param options - Configuration options including retention days
  * @param logger - Optional logger (pass Fastify request.log for proper logging)
@@ -220,6 +273,7 @@ export async function runAllCleanupTasks(
         inactiveStoreDays?: number;
         customerNotificationDays?: number;
         emailBodyDays?: number;
+        attentionQueueDays?: number;
     },
     logger: Logger = noopLogger
 ): Promise<CleanupResult[]> {
@@ -230,6 +284,7 @@ export async function runAllCleanupTasks(
         inactiveStoreDays = INACTIVE_STORE_RETENTION_DAYS,
         customerNotificationDays = CUSTOMER_NOTIFICATION_RETENTION_DAYS,
         emailBodyDays = EMAIL_BODY_RETENTION_DAYS,
+        attentionQueueDays = ATTENTION_QUEUE_RETENTION_DAYS,
     } = options || {};
 
     logger.info('[Cleanup] Starting database cleanup tasks...');
@@ -244,6 +299,7 @@ export async function runAllCleanupTasks(
         cleanupInactiveEcommerceStores(inactiveStoreDays),
         cleanupCustomerNotificationLogs(customerNotificationDays),
         cleanupEmailBodies(emailBodyDays),
+        expireStaleAttentionItems(attentionQueueDays),
     ]);
     
     // Log results

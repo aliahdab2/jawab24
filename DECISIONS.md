@@ -1625,3 +1625,41 @@ the fields makes "a failed attempt is the post" unrepresentable.
 
 **What this does NOT change.** The ruling, the seed model, the no-retry policy, the frozen route
 URL, and the daily cap all stand exactly as D-077 states them.
+
+---
+
+## D-078 · The Needs-Attention queue expires after 7 days — it resolves, it never deletes
+
+**Ruling (owner, 2026-08-13).** A flagged item auto-resolves 7 days after the customer wrote it,
+on every page, with no per-merchant setting. The queue is a work list, not an archive.
+
+**Why 7, measured before building.** Over 90 days of production (1,057 resolved items, excluding
+that day's manual clear): the median item is resolved in **4 hours**, 93% within **7 days**, 96%
+within 14. Past a week an item is not pending, it is abandoned. Meanwhile the open queue stood at
+**23,660 items with 68% older than 30 days**, spread across paying pages (Nourva 7,900, الفريق
+الدمشقي 2,489) — so accumulation is fleet behaviour, not one dead account. The 7-day window gives
+up **7.1%** of historical resolutions, and the owner took that trade explicitly over the 14-day
+(3.7%) and 30-day (2.2%) alternatives.
+
+**⭐ It RESOLVES, it never deletes — and it must never clear the flag.** `expireStaleAttentionItems`
+writes exactly what the merchant's own resolve button writes (`resolved = true, updated_at`), and
+deliberately leaves `needs_attention` and `flag_reason` in place. The queue is what the MERCHANT
+works; the flags and their stored customer questions (`flag_meta`) are what WE measure reply
+quality from. Emptying the first must not cost the second. The precedent that forced this split:
+on Port Said the same day, a 188-item queue was cleared and **60% of it turned out to be one
+fixable KB gap** — visible only because the 115 flags and 171 stored questions survived the clear.
+
+**Age is taken from `created_at`, not `updated_at`.** A flag ages from when the customer wrote,
+not from the last unrelated write that touched the row. (`updated_at` is also why the 7.1% figure
+is a bound rather than an exact number — it is the only proxy for "resolved at" the schema has
+today. A real `resolved_at` column would make the next measurement of this rule exact.)
+
+**Scope.** Applies to `messages`, `comments` and `instagram_comments` alike, and to urgent flags
+too — complaints and angry customers are only 5.6% of the backlog and **89% of them are already
+older than 14 days**, i.e. merchants do not work them either. Excluding a flag class later is a
+one-line change to the predicate.
+
+**⚠️ What this does NOT fix.** Expiry hides the symptom, not the cause. A queue that empties
+itself can make a real, growing problem invisible — which is precisely why the flags stay
+queryable. Any future "the queue is small, so quality is fine" claim must be read off the flags,
+never off the queue.
