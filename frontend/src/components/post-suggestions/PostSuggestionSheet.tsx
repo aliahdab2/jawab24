@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import type { PostSuggestionDto, PostSuggestionHistoryItem, PostSuggestionInFlight, PostSuggestionPostType } from '@jawab24/shared';
+import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto, type PostSuggestionHistoryItem, type PostSuggestionInFlight } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -91,10 +92,23 @@ export function PostSuggestionSheet({
   // generation finishes in a worker, so the reason has to live on the row to
   // reach anyone. Reading it straight off `suggestion` also means the notice
   // can no longer disagree with the post it describes.
-  // Angles this page's data can deliver. null = UNKNOWN ⇒ chips FAIL CLOSED
-  // (only 'general' enabled) — never offer an angle that may burn one of the
-  // capped attempts on nothing. Updated from every response that carries it.
-  const [availableTypes, setAvailableTypes] = useState<PostSuggestionPostType[] | null>(initial?.availableTypes ?? null);
+  // What the merchant is asking THIS generation for: what the post should say,
+  // and what the picture should show. Two boxes rather than one because they
+  // steer different halves and are routinely wanted apart — «صورة فيها صبية
+  // محجبة» says nothing about the caption's argument.
+  //
+  // Deliberately NOT cleared after a generation. The merchant's second attempt
+  // is nearly always a TWEAK of the first request, and blanking the box makes
+  // them retype it; the disclosure below stays open whenever either box has
+  // content, so what will be sent is never hidden from them.
+  const [brief, setBrief] = useState('');
+  const [imageRequest, setImageRequest] = useState('');
+  // Whether the request panel is expanded. Post-first (owner ruling): the post
+  // is already written when the sheet opens, so read→copy→leave is the common
+  // visit and asking is the exception — it gets one quiet row, not the top of
+  // the sheet. Forced open when either box has content so a request can never
+  // be sent from a panel the merchant cannot see.
+  const [requestOpen, setRequestOpen] = useState(false);
   // The posts this page made before the current one. Creating another used to
   // DELETE the one it replaced (text and image); they are kept now, so the
   // merchant can go back to one they preferred. `[]` = none yet; an absent
@@ -115,9 +129,6 @@ export function PostSuggestionSheet({
   // Merchant's local edits, PER TAKE — switching away and back must not throw
   // away what they typed. Keyed by index, reset per suggestion.
   const [editsByVariant, setEditsByVariant] = useState<Record<number, string>>({});
-  // Which angle the merchant just asked for — echoed in the loading state so a
-  // ~30s generation never feels like a dead click (dogfood feedback 08-09).
-  const [pendingType, setPendingType] = useState<PostSuggestionPostType | null>(null);
   const stampedOpen = useRef(false);
   // Auto-generate must fire ONCE per sheet open: StrictMode double-mounts
   // effects in dev, and each paid call consumes a daily-cap slot — caught
@@ -136,21 +147,19 @@ export function PostSuggestionSheet({
     });
   }, [pageId]);
 
-  const generate = useCallback(async (postType?: PostSuggestionPostType) => {
-    setPendingType(postType ?? null);
+  const generate = useCallback(async () => {
     setLoading(true);
     setError(null);
     // Remembered for the recovery below: the post that was on screen BEFORE
     // this generation, so a recovered row can be told apart from it.
     const priorId = suggestion?.id ?? null;
     try {
-      const res = await postSuggestionsApi.generate(pageId, includeContact, postType);
+      const res = await postSuggestionsApi.generate(pageId, includeContact, brief, imageRequest);
       // The response carries the post the merchant already had (unchanged
       // until the worker finishes) plus the row this click claimed.
       setSuggestion(res.data.suggestion);
       setInFlight(res.data.inFlight ?? null);
       setRemaining(res.data.remainingToday);
-      if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
       // No history here by design — generate answers with a pending row, so the
       // strip keeps what it has until the poll below returns the settled list.
       onChanged(res.data);
@@ -184,7 +193,6 @@ export function PostSuggestionSheet({
             setSuggestion(recovered);
             setInFlight(running);
             setRemaining(latest.data.remainingToday);
-            if (latest.data.availableTypes) setAvailableTypes(latest.data.availableTypes);
             if (latest.data.history) setHistory(latest.data.history);
             // A row that already ENDED in failure is a real failure to report —
             // but as the generation error, not the "we have no idea" one.
@@ -204,7 +212,7 @@ export function PostSuggestionSheet({
     } finally {
       setLoading(false);
     }
-  }, [pageId, onChanged, t, includeContact, suggestion]);
+  }, [pageId, onChanged, t, includeContact, suggestion, brief, imageRequest]);
 
   // The take on screen, and the text the merchant sees for it (their edit if
   // they made one, the model's otherwise). One derivation — every consumer
@@ -296,7 +304,6 @@ export function PostSuggestionSheet({
           setSuggestion(res.data.suggestion);
           setInFlight(next);
           setRemaining(res.data.remainingToday);
-          if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
           if (res.data.history) setHistory(res.data.history);
           setError(next?.status === 'failed' ? t('errorGeneration') : null);
           onChanged(res.data);
@@ -391,8 +398,15 @@ export function PostSuggestionSheet({
         {working && (
           <div className="py-10 text-center space-y-2" aria-busy="true" aria-live="polite">
             <RefreshCw className="w-6 h-6 mx-auto animate-spin motion-reduce:animate-none text-brand-500" aria-hidden="true" />
-            <p className="text-sm font-semibold text-foreground">
-              {pendingType ? t('generatingAngle', { angle: t(`type_${pendingType}`) }) : t('generating')}
+            {/* The request being written is echoed back, so a ~30s wait never
+                feels like a dead click AND the merchant can see we heard them.
+                Read off the IN-FLIGHT ROW, not local state: a merchant who
+                closed the sheet and reopened it still gets their own words.
+                `dir="auto"` because it is their text, in their script. */}
+            <p className="text-sm font-semibold text-foreground" dir="auto">
+              {inFlight?.brief
+                ? t('generatingBrief', { brief: inFlight.brief })
+                : t('generating')}
             </p>
             <p className="text-xs text-muted-foreground">
               {/* Still running, not lost: the worker owns the row and always
@@ -510,8 +524,33 @@ export function PostSuggestionSheet({
               // so a cron row, a re-read and a fresh degrade all explain
               // themselves the same way.
               <p className="text-xs text-muted-foreground">
-                {suggestion.imageDegraded === 'storage_off' ? t('textOnlyStorageOff') : t('textOnlyNotice')}
+                {suggestion.imageDegraded === 'storage_off'
+                  ? t('textOnlyStorageOff')
+                  // A REFUSAL is the merchant's to act on — the provider declined
+                  // the scene THEY described, and only they can rewrite it.
+                  // `image_failed` is ours and retrying may fix it, so the two
+                  // must not share one «no image today» that teaches nothing.
+                  : suggestion.imageDegraded === 'image_refused'
+                    ? t('textOnlyRefused')
+                    : t('textOnlyNotice')}
               </p>
+            )}
+
+            {/* GROUND-AND-FLAG (D-082). The merchant asked for something their
+                Business Info does not carry, so the post was written from what
+                the data DOES support and the gap is named rather than filled.
+                Refusing to invent is only half an answer: silently writing about
+                something else reads as the box ignoring them — which is exactly
+                how an appliance importer got a post about an invented English
+                course. Naming it turns a bad generation into an instruction.
+                `dir="auto"`: the string quotes the merchant's own subject. */}
+            {suggestion.unmetRequest && (
+              <div className="alert-warning rounded-xl p-3 text-xs space-y-1.5" dir="auto">
+                <p>{t('unmetRequestNotice', { what: suggestion.unmetRequest })}</p>
+                <Link href="/pages?openKb=true" className="inline-block font-medium underline underline-offset-2">
+                  {t('unmetRequestCta')}
+                </Link>
+              </div>
             )}
 
             {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version.
@@ -535,56 +574,88 @@ export function PostSuggestionSheet({
             <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
 
             {canRegenerate && (
-              <>
-                {/* Angle chooser — regenerate with a specific type (consumes a slot).
-                    An angle the page's DATA can't deliver is disabled, never hidden:
-                    the merchant sees what exists and what filling their Business
-                    Info would unlock (complete-your-profile pattern). */}
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1.5">{t('tryAngle')}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'] as const).map((type) => {
-                      // FAIL CLOSED: unknown availability offers only 'general'
-                      // — a chip must never burn a capped attempt on an angle
-                      // the page's data can't deliver (dogfood 08-09).
-                      const enabled = availableTypes ? availableTypes.includes(type) : type === 'general';
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          disabled={!enabled}
-                          title={enabled ? undefined : t('angleNeedsData')}
-                          onClick={() => void generate(type)}
-                          className={clsx(
-                            // 44px: these were ~28px tall, against a close
-                            // button in the same header that already pins 44.
-                            'min-h-[44px] px-4 rounded-full text-xs font-medium border transition-colors',
-                            !enabled && 'opacity-40 cursor-not-allowed',
-                            suggestion.postType === type
-                              ? 'bg-brand-500 text-white border-brand-500'
-                              : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',
-                          )}
-                        >
-                          {t(`type_${type}`)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {(!availableTypes || availableTypes.length < 5) && (
-                    <p className="text-[11px] text-subtle mt-1.5">{t('angleNeedsDataHint')}</p>
-                  )}
-                </div>
+              /* ASK — post-first (owner ruling 2026-08-13). The post is already
+                 written when the sheet opens, so read→copy→leave is the common
+                 visit; asking is the exception and gets ONE quiet row that
+                 expands. This replaced the five angle chips, which the owner
+                 removed as «مالها لازمة»: a free-text request is a strictly more
+                 expressive duplicate of a preset angle, and the request already
+                 outranks the angle server-side.
 
-                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={includeContact}
-                    onChange={(e) => setIncludeContact(e.target.checked)}
-                    className="rounded border-theme-border accent-brand-500"
-                  />
-                  {t('includeContactToggle')}
-                </label>
-              </>
+                 <details> rather than a hand-rolled toggle: native disclosure
+                 gets keyboard, screen-reader and open-state behaviour right for
+                 free. `open` is CONTROLLED so a box with content can never be
+                 collapsed out of sight while it is still what would be sent. */
+              <details
+                open={requestOpen || Boolean(brief || imageRequest)}
+                className="rounded-xl border border-theme-border bg-card"
+              >
+                {/* The native toggle is SUPPRESSED and the state owned here.
+                    A <details> whose `open` is a prop is only half-controlled:
+                    the browser flips the DOM attribute itself on click, and
+                    React then skips the reconcile because its own value never
+                    changed — so a panel forced open by having content collapses
+                    anyway and stays collapsed. preventDefault on every click
+                    makes this component the single writer. */}
+                <summary
+                  onClick={(e) => {
+                    e.preventDefault();
+                    // A live request must never be hidden: while either box has
+                    // content the panel only opens, it does not close.
+                    if (brief || imageRequest) { setRequestOpen(true); return; }
+                    setRequestOpen((open) => !open);
+                  }}
+                  className="flex items-center gap-2 min-h-[44px] px-3 text-xs font-medium text-muted-foreground cursor-pointer select-none"
+                >
+                  <Pencil className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  {t('askLabel')}
+                </summary>
+
+                <div className="px-3 pb-3 space-y-3">
+                  {/* What the post should SAY. */}
+                  <label className="block">
+                    <span className="block mb-1.5 text-xs font-medium text-muted-foreground">{t('briefLabel')}</span>
+                    <textarea
+                      dir="auto"
+                      value={brief}
+                      onChange={(e) => setBrief(e.target.value)}
+                      maxLength={POST_SUGGESTION_BRIEF_MAX}
+                      rows={2}
+                      placeholder={t('briefPlaceholder')}
+                      className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </label>
+
+                  {/* What the PICTURE should show — its own box (owner's call).
+                      One field for what the post says, one for what the picture
+                      shows: they are routinely wanted apart, and a single box
+                      made the scene compete with the subject. */}
+                  <label className="block">
+                    <span className="block mb-1.5 text-xs font-medium text-muted-foreground">{t('imageRequestLabel')}</span>
+                    <textarea
+                      dir="auto"
+                      value={imageRequest}
+                      onChange={(e) => setImageRequest(e.target.value)}
+                      maxLength={POST_SUGGESTION_BRIEF_MAX}
+                      rows={2}
+                      placeholder={t('imageRequestPlaceholder')}
+                      className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    />
+                  </label>
+
+                  <p className="text-[11px] text-subtle">{t('askHint')}</p>
+
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeContact}
+                      onChange={(e) => setIncludeContact(e.target.checked)}
+                      className="rounded border-theme-border accent-brand-500"
+                    />
+                    {t('includeContactToggle')}
+                  </label>
+                </div>
+              </details>
             )}
 
             {/* null = unknown — assert neither a count nor "exhausted". */}

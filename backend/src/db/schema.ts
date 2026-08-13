@@ -1920,10 +1920,41 @@ export const postSuggestions = pgTable('post_suggestions', {
     // merchant's history strip is built from these rows, images included. Only
     // ONE row per page is 'ready' at a time, and that is the current post.
     status: varchar('status', { length: 20 }).notNull().default('ready'),
+    // What the merchant asked this generation to SAY, in their own words.
+    // Null = they asked for nothing and the angle picker decided, which is every
+    // row written before the request boxes shipped.
+    //
+    // Stored rather than passed through: the generation runs in a worker long
+    // after the request returned, so the row is the only place the request can
+    // still be read from — by fulfilment, and by the UI that has to say WHICH
+    // request it is still writing.
+    brief: text('brief'),
+    // What the merchant asked the PICTURE to show, in their own words. Null =
+    // they described no scene, and the model draws one from the post's subject.
+    //
+    // ⚠️ NOT the same column as `imageBrief` above, and the pair is easy to
+    // misread: `imageBrief` is the English scene the MODEL wrote and the image
+    // provider was sent; this is the Arabic scene the MERCHANT asked for, which
+    // is an input to that. Keeping them apart is what lets the anti-repetition
+    // memory keep reading model scenes without ever replaying a merchant's words
+    // back at them as if we had chosen them.
+    imageRequest: text('image_request'),
+    // What `brief`/`imageRequest` asked for that this page's data could NOT
+    // support, in Arabic and in the merchant's terms. Null = fully honoured, and
+    // always null on a generation with no request.
+    //
+    // This is the visible half of the no-fabrication rule. Refusing to invent an
+    // unsupported claim is only half an answer — writing about something else
+    // without saying so reads as the box ignoring them, which is how an
+    // appliance importer got a post about an invented English course on
+    // 2026-08-12. Stored for the same reason as `imageDegraded`: the worker
+    // learns it long after the request returned.
+    unmetRequest: text('unmet_request'),
     // Why a 'failed' row failed, as one of the service's own reason codes —
     // never a raw error string, which would leak internals to the client.
     failureReason: varchar('failure_reason', { length: 40 }),
-    // Why a READY row shipped without an image ('image_failed' | 'storage_off'),
+    // Why a READY row shipped without an image ('image_failed' | 'image_refused'
+    // | 'storage_off'),
     // null = it has one. Stored rather than returned once: the generation that
     // knows this now runs in a worker, so the only place the answer can reach
     // the client is the row itself. It also fixes the dead-connection recovery,
