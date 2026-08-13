@@ -130,6 +130,22 @@ function UsageProgress({ label, used, limit, percent, overLimitCta, coveredByTop
 // Key for localStorage to track if onboarding was completed
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
+/**
+ * The filter behind the Smart Status banner — shared by BOTH its lists so they cannot
+ * drift apart.
+ *
+ * `resolved: false` is load-bearing, not decoration. The banner's COUNT comes from the
+ * stats endpoints, which count `needs_attention = true AND resolved = false`
+ * (`backend/src/services/messages.ts` getStats). A list without the same filter shows
+ * items the count excludes.
+ *
+ * That divergence used to be invisible because few rows were ever resolved-while-flagged.
+ * D-078 changed that: the Needs-Attention queue now auto-resolves at 7 days, so every
+ * page accumulates resolved-but-still-flagged rows continuously. The messages list was
+ * missing the filter and would have shown a week-old backlog under a count of zero.
+ */
+const ATTENTION_BANNER_FILTER = { needsAttention: true, resolved: false } as const;
+
 // Map plan names from backend to existing translation keys
 type PlanTranslationKey = 'starter.name' | 'business.name' | 'pro.name';
 const PLAN_NAME_KEYS: Record<string, PlanTranslationKey> = {
@@ -316,7 +332,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: needsActionComments } = useQuery({
     queryKey: ['dashboard-needs-action-comments'],
     queryFn: async () => {
-      const res = await commentsApi.getAll({ needsAttention: true, resolved: false, limit: 5 });
+      const res = await commentsApi.getAll({ ...ATTENTION_BANNER_FILTER, limit: 5 });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -326,7 +342,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: recentMessages } = useQuery({
     queryKey: ['dashboard-recent-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ needsAttention: true, limit: 20, direction: 'incoming' });
+      const res = await messagesApi.getAll({ ...ATTENTION_BANNER_FILTER, limit: 20, direction: 'incoming' });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
