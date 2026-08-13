@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Column, getTableName } from 'drizzle-orm';
-import { POST_SUGGESTION_VARIANT_COUNT } from '@jawab24/shared';
+import { POST_SUGGESTION_VARIANT_COUNT, type PostSuggestionDto } from '@jawab24/shared';
 
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
@@ -111,6 +111,7 @@ import {
     pickImageMode,
     IMAGE_MODES,
     parseTakes,
+    type GenerateResult,
 } from '../services/postSuggestions';
 import { variantsOf, imageKeysOf } from '../lib/postSuggestionVariants';
 
@@ -167,8 +168,43 @@ const queuePrevious = (rows: unknown[] = []) =>
     router.queue({ op: 'select', table: postSuggestions, fields: ['postType'], rows });
 const queueInsert = (rows: unknown[]) =>
     router.queue({ op: 'insert', table: postSuggestions, rows });
-const queueStale = (rows: unknown[] = []) =>
-    router.queue({ op: 'select', table: postSuggestions, fields: ['imageKey'], rows });
+/**
+ * The supersede probe inside fulfilment's transaction.
+ *
+ * Selects only `id` now. It used to pull `imageKey`/`variants` too, because it
+ * then DELETED those files; posts accumulate since 2026-08-13, so the probe
+ * only needs to know which rows to re-label.
+ */
+const queueSuperseded = (rows: unknown[] = []) =>
+    router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows });
+/** The earlier-posts read on the getCurrent path. */
+const queueHistory = (rows: unknown[] = []) =>
+    router.queue({ op: 'select', table: postSuggestions, fields: ['id', 'text', 'imageUrl', 'postType', 'createdAt'], rows });
+/**
+ * The "is anything in flight?" probe — the page's newest live row, id + status.
+ *
+ * Its whole job is to keep a PENDING or FAILED row out of `suggestion`. A
+ * failed generation supersedes nothing, so it lands newer than the intact post
+ * it did not replace; serving "the newest live row" as the post is what made a
+ * failure mask it (and, day scope gone, mask it permanently).
+ */
+const queueInFlight = (rows: unknown[] = []) =>
+    router.queue({ op: 'select', table: postSuggestions, fields: ['id', 'status'], rows });
+
+/**
+ * The POST from an ok generate result — fails the test if there is none.
+ *
+ * `suggestion` is nullable since the split: it is the page's current post, and
+ * a first-ever (or failed) generation has none. Most tests here assert on a
+ * post that must exist, so they say so once, here.
+ */
+function postOf(r: GenerateResult): PostSuggestionDto {
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('expected ok:true');
+    expect(r.suggestion).not.toBeNull();
+    if (!r.suggestion) throw new Error('expected a current post');
+    return r.suggestion;
+}
 
 /** The pending row a request stores before any paid work happens. */
 const PENDING = {
@@ -226,7 +262,7 @@ function queueFullRun(
     queueDatedCatalog(dated);                                  // buildPageBundle → hasLiveDatedRow
     if (dated.length === 0) queueCollections([]);              // only probed when no live dated row
     queuePrevious(opts.previous ?? []);                        // variety picker + recent briefs
-    queueStale(opts.stale ?? []);                              // supersede probe, inside the tx
+    queueSuperseded(opts.stale ?? []);                          // supersede probe, inside the tx
 
     // --- request half again: re-read, then the availability envelope ---
     router.queue({ op: 'select', table: postSuggestions, rows: [opts.readyRow ?? { ...PENDING, ...insertedRow, status: 'ready' }] });
@@ -239,10 +275,23 @@ function queueFullRun(
     if (dated.length === 0) queueCollections([]);
 }
 
-/** Queue a getToday read set (used directly and by the suppressed-insert fallback). */
-function queueGetToday(suggestionRows: unknown[]) {
+/**
+ * Queue a getCurrent read set (used directly and by the suppressed-insert
+ * fallback).
+ *
+ * `currentRows` is the CURRENT POST read (ready rows only). `opts.latest` is
+ * the newest live row of any status — it defaults to the current post itself,
+ * which is the settled case: nothing in flight. Pass it explicitly to model a
+ * generation that is running or one that failed.
+ */
+function queueGetCurrent(
+    currentRows: unknown[],
+    opts: { latest?: unknown[]; history?: unknown[] } = {},
+) {
     queueOwnedPage([PAGE_ROW]);
-    router.queue({ op: 'select', table: postSuggestions, rows: suggestionRows }); // full-row select
+    router.queue({ op: 'select', table: postSuggestions, rows: currentRows });     // readCurrentPost (full row)
+    queueInFlight(opts.latest ?? currentRows.map(r => ({ id: (r as { id: string }).id, status: 'ready' })));
+    queueHistory(opts.history ?? []);                                             // the earlier posts
     router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] }); // availability probe
     queueDatedCatalog([]);
     queueCollections([]);
@@ -430,8 +479,11 @@ describe('generateSuggestion — spend guards run before any paid call', () => {
         queueDatedCatalog([]);
         queueCollections([]);
         queuePrevious([]);
-        // Re-read + availability envelope.
+        // Re-read, then the CURRENT-POST read (the settled row is not a post,
+        // so the envelope falls back to whatever the page already had — none
+        // here), then the availability envelope.
         router.queue({ op: 'select', table: postSuggestions, rows: [{ ...PENDING, status: 'failed', failureReason: 'generation_failed' }] });
+        router.queue({ op: 'select', table: postSuggestions, rows: [] });
         router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] });
         queueDatedCatalog([]);
         queueCollections([]);
@@ -443,7 +495,12 @@ describe('generateSuggestion — spend guards run before any paid call', () => {
         // left pending would misreport the merchant's balance as unspent.
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        expect(r.suggestion.status).toBe('failed');
+        // ⭐ The failure is IN FLIGHT, never the post. A failed row used to come
+        // back as `suggestion` — an empty-text "post" the client rendered with
+        // Copy/Download over nothing, and which masked whatever real post the
+        // page had until the day rolled over. On demand, nothing rolls over.
+        expect(r.inFlight).toEqual({ id: 's1', status: 'failed' });
+        expect(r.suggestion).toBeNull();
         const failed = router.calls.find(
             c => c.op === 'update' && (c.set as { status?: string } | undefined)?.status === 'failed',
         );
@@ -457,8 +514,10 @@ describe('generateSuggestion — happy path and degrades', () => {
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        expect(r.suggestion.text).toBe('بوست تجريبي 🌟');
-        expect(r.suggestion.imageUrl).toBe('https://media/x.png');
+        expect(postOf(r).text).toBe('بوست تجريبي 🌟');
+        expect(postOf(r).imageUrl).toBe('https://media/x.png');
+        // Fulfilled inline, so the row IS the post — nothing left in flight.
+        expect(r.inFlight).toBeNull();
         expect(fulfilledValues()?.imageDegraded).toBeNull();
         expect(r.remainingToday).toBe(2);
         // One envelope across routes: generate carries the availability list too.
@@ -480,9 +539,7 @@ describe('generateSuggestion — happy path and degrades', () => {
         mockImagesGenerate.mockRejectedValue(new Error('image api down'));
         queueFullRun({ ...INSERTED, imageUrl: null, imageKey: null });
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
-        expect(r.ok).toBe(true);
-        if (!r.ok) return;
-        expect(r.suggestion.imageUrl).toBeNull();
+        expect(postOf(r).imageUrl).toBeNull();
         expect(fulfilledValues()?.imageDegraded).toBe('image_failed');
     });
 
@@ -499,16 +556,14 @@ describe('generateSuggestion — happy path and degrades', () => {
         mockComposePostCard.mockResolvedValue(null);
         queueFullRun({ ...INSERTED, imageUrl: null, imageKey: null });
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
-        expect(r.ok).toBe(true);
-        if (!r.ok) return;
-        expect(r.suggestion.imageUrl).toBeNull();
+        expect(postOf(r).imageUrl).toBeNull();
         expect(fulfilledValues()?.imageDegraded).toBe('image_failed');
         expect(mockPut).not.toHaveBeenCalled();
     });
 
     it('a STORED degrade reason is served back by getToday — the notice survives the request that caused it', async () => {
-        queueGetToday([{ ...PENDING, status: 'ready', text: 'بوست', imageDegraded: 'storage_off' }]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
+        queueGetCurrent([{ ...PENDING, status: 'ready', text: 'بوست', imageDegraded: 'storage_off' }]);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r?.suggestion?.imageDegraded).toBe('storage_off');
     });
 });
@@ -722,20 +777,35 @@ describe('generateSuggestion — logo badge (pre-fetched, parallel, never fatal)
     });
 });
 
-describe('generateSuggestion — supersede is transactional (replace = old dies only when new exists)', () => {
-    it('supersedes the old ready row INSIDE the tx and removes its image only AFTER commit', async () => {
-        queueFullRun(INSERTED, { stale: [{ id: 'old1', imageKey: 'generated-posts/ws/old.png' }] });
+describe('generateSuggestion — the previous post is kept, not destroyed', () => {
+    it('⭐ relabels the old ready row INSIDE the tx and DELETES NOTHING — its image and text survive', async () => {
+        queueFullRun(INSERTED, { stale: [{ id: 'old1' }] });
         mockRemove.mockImplementation((key: string) => {
             router.events.push(`remove:${key}`);
             return Promise.resolve();
         });
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
         expect(r.ok).toBe(true);
-        expect(mockRemove).toHaveBeenCalledWith('generated-posts/ws/old.png');
 
-        // The replacement is written BEFORE the old row is retired, and both
+        // ⭐ THE pin for the data-loss fix (owner ruling 2026-08-13). Creating
+        // another post used to null imageUrl/imageKey on the replaced row and
+        // every take, then delete the files — production, 11 Aug: three
+        // attempts, the first was the best one, the third erased it. Nothing is
+        // removed from storage now, and nothing on the old row is blanked.
+        expect(mockRemove).not.toHaveBeenCalled();
+
+        const supersedeUpdate = router.calls.find(
+            c => c.op === 'update'
+                && c.table === getTableName(postSuggestions)
+                && (c.set as { status?: string } | undefined)?.status === 'superseded',
+        );
+        expect(supersedeUpdate).toBeDefined();
+        const setFields = Object.keys((supersedeUpdate?.set ?? {}) as Record<string, unknown>);
+        expect(setFields).toEqual(['status']); // status ONLY — no imageUrl/imageKey wipe
+
+        // The replacement is written BEFORE the old row is relabelled, and both
         // land in the same transaction — the invariant that stops a generation
-        // from destroying the post the merchant is looking at with nothing to
+        // from displacing the post the merchant is looking at with nothing to
         // put in its place. (Pre-async this read as insert-then-update; the row
         // now already exists as `pending`, so it is update-then-update.)
         const updates = router.calls.filter(
@@ -746,23 +816,18 @@ describe('generateSuggestion — supersede is transactional (replace = old dies 
 
         const events = router.events;
         const commitIdx = events.indexOf('tx:commit');
-        const removeIdx = events.indexOf('remove:generated-posts/ws/old.png');
         const inTxUpdates = events
             .map((e, i) => (e === 'update:post_suggestions' ? i : -1))
             .filter(i => i > events.indexOf('tx:start') && i < commitIdx);
         expect(inTxUpdates.length).toBeGreaterThanOrEqual(2);
-        // S3 delete last (OBJECT_STORAGE.md: upload new → commit DB → delete old).
-        expect(removeIdx).toBeGreaterThan(commitIdx);
     });
 
     it('a suppressed cron insert (blue/green race) supersedes NOTHING and returns the surviving row', async () => {
         queueFullRun(null); // partial unique index suppressed the insert
         const ready = { ...INSERTED, id: 'sibling', source: 'cron' };
-        queueGetToday([ready]); // fallback read finds the sibling's row
+        queueGetCurrent([ready]); // fallback read finds the sibling's row
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
-        expect(r.ok).toBe(true);
-        if (!r.ok) return;
-        expect(r.suggestion.id).toBe('sibling');
+        expect(postOf(r).id).toBe('sibling');
         // The surviving row and its image are untouched.
         expect(router.events).not.toContain('update:post_suggestions');
         expect(mockRemove).not.toHaveBeenCalled();
@@ -849,73 +914,56 @@ describe('generateSuggestion — server-side availability enforcement (one deriv
     });
 });
 
-describe('runDailyPostSuggestions — cron pre-generation', () => {
-    const emptyResult = { eligible: 0, generated: 0, skippedExisting: 0, skippedWasteGuard: 0, failed: 0 };
+describe('seedFirstPostSuggestions — one post per page, ever', () => {
+    const emptyResult = { eligible: 0, seeded: 0, skippedExisting: 0, failed: 0 };
 
-    it('EMPTY workspace allowlist generates for nobody (stricter than the endpoint) and says so in the log', async () => {
+    it('EMPTY workspace allowlist seeds nobody (stricter than the endpoint) and says so in the log', async () => {
         mockConfig.postSuggestions.workspaceIds = [];
-        const result = await postSuggestionsService.runDailyPostSuggestions();
+        const result = await postSuggestionsService.seedFirstPostSuggestions();
         expect(result).toEqual(emptyResult);
         expect(mockCheckDailyCap).not.toHaveBeenCalled();
-        expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Daily run skipped'));
+        expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Seed sweep skipped'));
     });
 
-    it('skips a page when ANY of today\'s rows exist — manual included (never supersede the merchant\'s post)', async () => {
+    it('a page that has ANY row is never seeded again — the sweep can tick daily forever without spending', async () => {
         mockConfig.postSuggestions.workspaceIds = [WS];
         router.queue({ op: 'select', table: pages, fields: ['workspaceId'], rows: [{ id: PAGE, workspaceId: WS }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [{ id: 'manual-row' }] });
-        const result = await postSuggestionsService.runDailyPostSuggestions();
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [{ id: 'some-old-row' }] });
+        const result = await postSuggestionsService.seedFirstPostSuggestions();
         expect(result).toEqual({ ...emptyResult, eligible: 1, skippedExisting: 1 });
         expect(makeTrackedOpenAI).not.toHaveBeenCalled();
 
-        // Regression pin: the pre-check is source-BLIND (the old source='cron'
-        // filter let a post-deploy tick replace a same-day manual post).
+        // ⭐ THE pin for this change. The pre-check must be blind to BOTH the
+        // day and the source, or the sweep degenerates back into the daily
+        // pre-generation cron it replaced: scoped to today, a page with rows
+        // from yesterday looks unseeded every single morning.
         const existingCall = router.calls.find(c => c.op === 'select' && c.table === 'post_suggestions' && c.fields?.includes('id'));
         expect(existingCall).toBeDefined();
+        expect(referencesColumn(existingCall?.where, postSuggestions.suggestedFor)).toBe(false);
         expect(referencesColumn(existingCall?.where, postSuggestions.source)).toBe(false);
+        expect(referencesColumn(existingCall?.where, postSuggestions.status)).toBe(false);
 
         // Observability pin: one structured run-complete heartbeat.
         expect(log.info).toHaveBeenCalledWith(
-            '[PostSuggestions] Daily run complete',
-            expect.objectContaining({ eligible: 1, skippedExisting: 1, generated: 0, failed: 0 }),
+            '[PostSuggestions] Seed sweep complete',
+            expect.objectContaining({ eligible: 1, skippedExisting: 1, seeded: 0, failed: 0 }),
         );
     });
 
-    it('waste guard trips at WARN after 3 unopened cron rows with no engagement anywhere', async () => {
+    it('seeds a page that has never had a post, so the merchant meets the feature with something finished in it', async () => {
         mockConfig.postSuggestions.workspaceIds = [WS];
         router.queue({ op: 'select', table: pages, fields: ['workspaceId'], rows: [{ id: PAGE, workspaceId: WS }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] }); // no row today
-        router.queue({ op: 'select', table: postSuggestions, fields: ['lastEngagedAt'], rows: [{ lastEngagedAt: null }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['openedAt'], rows: [{ openedAt: null }, { openedAt: null }, { openedAt: null }] });
-        const result = await postSuggestionsService.runDailyPostSuggestions();
-        expect(result).toEqual({ ...emptyResult, eligible: 1, skippedWasteGuard: 1 });
-        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
-        expect(log.warn).toHaveBeenCalledWith(
-            '[PostSuggestions] Waste guard tripped — skipping pre-generation',
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
+        queueFullRun({ ...INSERTED, id: 'seed1', source: 'cron' });
+        const result = await postSuggestionsService.seedFirstPostSuggestions();
+        expect(result).toEqual({ ...emptyResult, eligible: 1, seeded: 1 });
+        expect(log.info).toHaveBeenCalledWith(
+            '[PostSuggestions] Seeded first post',
             expect.objectContaining({ pageId: PAGE }),
         );
     });
 
-    it('waste guard SELF-HEALS: an engagement stamp restarts the streak window and pre-generation resumes', async () => {
-        mockConfig.postSuggestions.workspaceIds = [WS];
-        router.queue({ op: 'select', table: pages, fields: ['workspaceId'], rows: [{ id: PAGE, workspaceId: WS }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] }); // no row today
-        // Merchant engaged (opened/copied/downloaded something) after the old
-        // unopened streak → only cron rows created since then count: none.
-        router.queue({ op: 'select', table: postSuggestions, fields: ['lastEngagedAt'], rows: [{ lastEngagedAt: '2026-08-08T09:00:00.000Z' }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['openedAt'], rows: [] });
-        queueFullRun({ ...INSERTED, id: 'cron1', source: 'cron' });
-        const result = await postSuggestionsService.runDailyPostSuggestions();
-        expect(result).toEqual({ ...emptyResult, eligible: 1, generated: 1 });
-
-        // Regression pin for the permanent latch: with a stamp present the
-        // streak query is bounded by createdAt > lastEngagedAt.
-        const streakCall = router.calls.find(c => c.op === 'select' && c.table === 'post_suggestions' && c.fields?.includes('openedAt'));
-        expect(streakCall).toBeDefined();
-        expect(referencesColumn(streakCall?.where, postSuggestions.createdAt)).toBe(true);
-    });
-
-    it('a generation that FAILS counts as failed, not generated — the counters are this job\'s only per-page signal', async () => {
+    it('a seed that FAILS counts as failed, not seeded — the counters are this job\'s only per-page signal', async () => {
         // Regression pin for the async split: fulfilment reports failure by
         // driving the row to 'failed', NOT by throwing, so `requestSuggestion`
         // still returns ok:true. Counting `ok` alone booked every failed
@@ -924,8 +972,6 @@ describe('runDailyPostSuggestions — cron pre-generation', () => {
         mockConfig.postSuggestions.workspaceIds = [WS];
         router.queue({ op: 'select', table: pages, fields: ['workspaceId'], rows: [{ id: PAGE, workspaceId: WS }] });
         router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['lastEngagedAt'], rows: [{ lastEngagedAt: null }] });
-        router.queue({ op: 'select', table: postSuggestions, fields: ['openedAt'], rows: [] });
         // Request half, then fulfilment up to the failing text call.
         queueOwnedPage([PAGE_ROW]);
         queueCapCount(0);
@@ -936,31 +982,32 @@ describe('runDailyPostSuggestions — cron pre-generation', () => {
         queueCollections([]);
         queuePrevious([]);
         router.queue({ op: 'select', table: postSuggestions, rows: [{ ...PENDING, status: 'failed', failureReason: 'generation_failed' }] });
+        router.queue({ op: 'select', table: postSuggestions, rows: [] }); // readCurrentPost — a seeded page has no earlier post
         router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] });
         queueDatedCatalog([]);
         queueCollections([]);
 
-        const result = await postSuggestionsService.runDailyPostSuggestions();
+        const result = await postSuggestionsService.seedFirstPostSuggestions();
         expect(result).toEqual({ ...emptyResult, eligible: 1, failed: 1 });
         expect(log.warn).toHaveBeenCalledWith(
-            '[PostSuggestions] Cron generation failed',
+            '[PostSuggestions] Seed generation failed',
             expect.objectContaining({ pageId: PAGE, reason: 'status:failed' }),
         );
     });
 });
 
-describe('getToday', () => {
+describe('getCurrent', () => {
     it('foreign/unknown page: null (controller 404s) BEFORE any cap read', async () => {
         queueOwnedPage([]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r).toBeNull();
         expect(mockCheckDailyCap).not.toHaveBeenCalled();
     });
 
     it('returns the ready suggestion, remaining, and availableTypes from ONE page read', async () => {
         mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 1, limit: 3 });
-        queueGetToday([INSERTED]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
+        queueGetCurrent([INSERTED]);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r).not.toBeNull();
         if (!r) return;
         expect(r.suggestion?.id).toBe('s1');
@@ -972,8 +1019,8 @@ describe('getToday', () => {
 
     it('cap-read failure degrades to NULL (= unknown, never a false "exhausted") AND is captured with a stable fingerprint', async () => {
         mockCheckDailyCap.mockRejectedValue(new Error('redis down'));
-        queueGetToday([]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
+        queueGetCurrent([]);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r).not.toBeNull();
         if (!r) return;
         expect(r.suggestion).toBeNull();
@@ -983,6 +1030,63 @@ describe('getToday', () => {
             expect.stringContaining('cap read failed'),
             expect.objectContaining({ level: 'warning', fingerprint: ['post-suggestions-cap-read'] }),
         );
+    });
+
+    it('⭐ serves a post made on an EARLIER DAY — the read is not scoped to today', async () => {
+        // The pin for the on-demand model (owner ruling 2026-08-13). Nothing
+        // generates on its own after the first seed, so a day-scoped read would
+        // hand an empty sheet to every merchant whose last post predates
+        // midnight — and nothing would ever fill it.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueGetCurrent([{ ...INSERTED, suggestedFor: '2026-07-30' }]);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.suggestion?.id).toBe('s1');
+        expect(r?.suggestion?.suggestedFor).toBe('2026-07-30');
+
+        // Structural pin, not just a behavioural one: the row read must not
+        // mention suggested_for at all. It is the FIRST post_suggestions select
+        // this path issues (the in-flight probe and the history read follow it).
+        const rowCall = router.calls.filter(
+            c => c.op === 'select' && c.table === 'post_suggestions',
+        )[0];
+        expect(rowCall).toBeDefined();
+        expect(referencesColumn(rowCall?.where, postSuggestions.suggestedFor)).toBe(false);
+    });
+
+    it('returns the earlier posts as history — kept, never deleted', async () => {
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueGetCurrent([INSERTED], {
+            history: [
+                { id: 'old2', text: 'الأحدث بين القديمة', imageUrl: 'https://media/o2.png', postType: 'promo', createdAt: new Date('2026-08-11T10:00:00Z') },
+                { id: 'old1', text: 'الأقدم', imageUrl: null, postType: null, createdAt: new Date('2026-08-10T10:00:00Z') },
+            ],
+        });
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.history).toEqual([
+            { id: 'old2', text: 'الأحدث بين القديمة', imageUrl: 'https://media/o2.png', postType: 'promo', createdAt: '2026-08-11T10:00:00.000Z' },
+            // A pre-typing row still projects to a usable entry rather than
+            // rendering an empty angle label.
+            { id: 'old1', text: 'الأقدم', imageUrl: null, postType: 'general', createdAt: '2026-08-10T10:00:00.000Z' },
+        ]);
+
+        // History is the SUPERSEDED rows only — a failed row has no post in it
+        // to go back to, and the current one is served as `suggestion`.
+        const historyCall = router.calls.find(
+            c => c.op === 'select' && c.table === 'post_suggestions' && c.fields?.includes('text'),
+        );
+        expect(historyCall).toBeDefined();
+        expect(referencesColumn(historyCall?.where, postSuggestions.status)).toBe(true);
+        expect(referencesColumn(historyCall?.where, postSuggestions.suggestedFor)).toBe(false);
+    });
+
+    it('a page with no earlier posts reports an EMPTY history, never a missing one', async () => {
+        // `[]` and absent must stay distinguishable: the client keeps whatever
+        // it last held when the field is absent, so conflating them would
+        // strand a stale strip on screen forever.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueGetCurrent([INSERTED]);
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.history).toEqual([]);
     });
 });
 
@@ -1123,7 +1227,11 @@ describe('generateSuggestion — a set of takes costs ONE image', () => {
         expect(fulfilledValues()?.imageDegraded).toBeNull();
     });
 
-    it('supersede sweeps EVERY take of the replaced row, not just the mirrored one', async () => {
+    it('EVERY take of the replaced row keeps its image — a set of takes is three images the merchant paid for', async () => {
+        // The inverse of what this used to assert. It pinned that supersede
+        // swept every take's file from storage; posts accumulate now, so the
+        // pin is that a multi-take row survives INTACT — losing the two
+        // unselected takes would quietly discard two thirds of a generation.
         queueFullRun({ ...INSERTED, variants: null }, {
             stale: [{
                 id: 'old', imageKey: 'generated-posts/ws/old0.jpg',
@@ -1135,9 +1243,14 @@ describe('generateSuggestion — a set of takes costs ONE image', () => {
             }],
         });
         await postSuggestionsService.requestSuggestion(WS, PAGE, 'cron');
-        expect(mockRemove.mock.calls.map(c => c[0]).sort()).toEqual([
-            'generated-posts/ws/old0.jpg', 'generated-posts/ws/old1.jpg', 'generated-posts/ws/old2.jpg',
-        ]);
+        // All three files survive. Named explicitly rather than just asserting
+        // "remove was never called": this test exists because the old code swept
+        // EVERY take, so the regression it guards is a per-key one.
+        const removed = mockRemove.mock.calls.map(c => c[0]);
+        expect(removed).not.toContain('generated-posts/ws/old0.jpg');
+        expect(removed).not.toContain('generated-posts/ws/old1.jpg');
+        expect(removed).not.toContain('generated-posts/ws/old2.jpg');
+        expect(mockRemove).not.toHaveBeenCalled();
     });
 
     it('the shadow figure check runs PER TAKE, so a bad figure is attributable to the take that wrote it', async () => {
@@ -1241,29 +1354,49 @@ describe('selectVariant — the merchant\'s pick becomes the row of record', () 
  * post created and a daily slot already spent on it.
  */
 describe('post suggestions — the async hand-off', () => {
-    /** Request half only: the merchant path stops after storing the pending row. */
-    const queueRequestOnly = (pendingRow: Record<string, unknown> = PENDING) => {
+    /**
+     * Request half only: the merchant path stops after storing the pending row.
+     *
+     * `previous` is the post the page ALREADY had — the row the envelope keeps
+     * showing while the worker writes the new one. Empty by default (a page's
+     * first ever generation).
+     */
+    const queueRequestOnly = (pendingRow: Record<string, unknown> = PENDING, previous: unknown[] = []) => {
         queueOwnedPage([PAGE_ROW]);
         queueCapCount(0);
         queueInsert([pendingRow]);
         router.queue({ op: 'select', table: postSuggestions, rows: [pendingRow] }); // re-read
+        router.queue({ op: 'select', table: postSuggestions, rows: previous });     // readCurrentPost
         router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] });
         queueDatedCatalog([]);
         queueCollections([]);
     };
 
-    it('a MERCHANT request returns a pending row and does NO paid work on the request', async () => {
+    it('a MERCHANT request returns the claimed row as IN FLIGHT and does NO paid work on the request', async () => {
         queueRequestOnly();
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        // Returned at once, with a real addressable post that is not written yet.
-        expect(r.suggestion.status).toBe('pending');
-        expect(r.suggestion.text).toBe('');
+        // Returned at once, with a real addressable row that is not written yet
+        // — as `inFlight`, never as the post. A pending row served as the post
+        // is an empty-text body the client renders Copy/Download over.
+        expect(r.inFlight).toEqual({ id: 's1', status: 'pending' });
+        expect(r.suggestion).toBeNull(); // this page has never made one
         // The whole point: nothing paid happened inside the request.
         expect(mockChatCreate).not.toHaveBeenCalled();
         expect(mockImagesGenerate).not.toHaveBeenCalled();
         expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('⭐ the post already on screen SURVIVES the request that replaces it', async () => {
+        // The merchant clicks «أنشئ منشوراً آخر» and waits ~35s. Answering with
+        // the pending row alone blanked the sheet for that whole window — and
+        // if the generation then failed, permanently, because nothing supersedes
+        // on failure and the read is no longer scoped to a day.
+        queueRequestOnly(PENDING, [{ ...INSERTED, id: 'previous' }]);
+        const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
+        expect(postOf(r).id).toBe('previous');
+        expect(r.ok && r.inFlight).toEqual({ id: 's1', status: 'pending' });
     });
 
     it('the job carries the row id and the contact toggle — and NOT the angle, which lives on the row', async () => {
@@ -1318,16 +1451,59 @@ describe('post suggestions — the async hand-off', () => {
         expect(mockChatCreate).not.toHaveBeenCalled();
     });
 
-    it('getToday serves the PENDING row — the client polls this, so hiding it would show "no post" over paid work', async () => {
-        queueGetToday([PENDING]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
-        expect(r?.suggestion?.status).toBe('pending');
+    it('the read reports a PENDING row — the client polls this, so hiding it would show "nothing happening" over paid work', async () => {
+        queueGetCurrent([], { latest: [{ id: 'p1', status: 'pending' }] });
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.inFlight).toEqual({ id: 'p1', status: 'pending' });
     });
 
-    it('getToday serves a FAILED row too — a merchant waiting on something that ended is the worse lie', async () => {
-        queueGetToday([{ ...PENDING, status: 'failed', failureReason: 'generation_failed' }]);
-        const r = await postSuggestionsService.getToday(WS, PAGE);
-        expect(r?.suggestion?.status).toBe('failed');
+    it('the read reports a FAILED row too — a merchant waiting on something that ended is the worse lie', async () => {
+        queueGetCurrent([], { latest: [{ id: 'f1', status: 'failed' }] });
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.inFlight).toEqual({ id: 'f1', status: 'failed' });
+    });
+
+    it('⭐ a FAILED attempt does not become the post — the one the merchant has survives it', async () => {
+        // THE regression this split exists for. A failed generation supersedes
+        // nothing, so its row is NEWER than the intact post it did not replace.
+        // Served as "the newest live row", that failure took the post's place —
+        // and `history` could not hand it back either, being superseded rows
+        // only. Day-scoped it cleared at midnight; on demand nothing clears it,
+        // so the merchant's post was gone until they happened to generate again.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 1, limit: 3 });
+        queueGetCurrent([INSERTED], { latest: [{ id: 'failed-after', status: 'failed' }] });
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.suggestion?.id).toBe('s1');
+        expect(r?.suggestion?.status).toBe('ready');
+        expect(r?.inFlight).toEqual({ id: 'failed-after', status: 'failed' });
+
+        // Structural pin: the CURRENT-POST read filters on status, and the
+        // status it filters on is 'ready'. Without that the query degenerates
+        // back into "newest live row" and the bug returns.
+        const postCall = router.calls.filter(
+            c => c.op === 'select' && c.table === 'post_suggestions',
+        )[0];
+        expect(referencesColumn(postCall?.where, postSuggestions.status)).toBe(true);
+        expect(referencesColumn(postCall?.where, postSuggestions.suggestedFor)).toBe(false);
+    });
+
+    it('a page whose only row is a failed SEED reports no post at all — the client must offer to create one', async () => {
+        // The seed predicate is "this page has any row", so a failed seed is
+        // never retried. Reporting that row as the post left the merchant's
+        // first contact with the feature an empty card, permanently.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 1, limit: 3 });
+        queueGetCurrent([], { latest: [{ id: 'seed-failed', status: 'failed' }] });
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.suggestion).toBeNull();
+        expect(r?.inFlight).toEqual({ id: 'seed-failed', status: 'failed' });
+    });
+
+    it('nothing in flight once the attempt BECAME the post — a settled page reports inFlight null', async () => {
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 1, limit: 3 });
+        queueGetCurrent([INSERTED]); // latest defaults to the post itself
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.suggestion?.id).toBe('s1');
+        expect(r?.inFlight).toBeNull();
     });
 });
 

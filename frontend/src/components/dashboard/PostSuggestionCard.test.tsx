@@ -14,7 +14,7 @@ const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
+  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
 }));
 vi.mock('@/lib/featureFlags', () => ({ isPostSuggestionsVisible: mockIsVisible }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));
@@ -201,12 +201,14 @@ describe('postSuggestions Arabic plural — all six CLDR forms compile and the d
  * preview a row whose text is deliberately empty.
  */
 describe('PostSuggestionCard — a generation still in flight', () => {
-  const PENDING = {
-    id: 's-pending',
-    status: 'pending' as const,
-    text: '',
+  /** The row the worker owns — reported apart from the post, never as one. */
+  const RUNNING = { id: 's-pending', status: 'pending' as const };
+  const READY = {
+    id: 's-ready',
+    status: 'ready' as const,
+    text: 'بوست جاهز',
     imageUrl: null,
-    variants: [{ text: '', headline: null, imageUrl: null }],
+    variants: [{ text: 'بوست جاهز', headline: null, imageUrl: null }],
     selectedVariant: 0,
     postType: 'general' as const,
     source: 'manual' as const,
@@ -215,7 +217,7 @@ describe('PostSuggestionCard — a generation still in flight', () => {
   };
 
   it('announces the work instead of previewing an empty post', async () => {
-    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, inFlight: RUNNING, remainingToday: 2 } });
     renderCard();
     expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
     // The angle chip describes a post that does not exist yet.
@@ -223,7 +225,7 @@ describe('PostSuggestionCard — a generation still in flight', () => {
   });
 
   it('disables the action while pending, and offers to VIEW rather than to suggest', async () => {
-    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, inFlight: RUNNING, remainingToday: 2 } });
     renderCard();
     await screen.findByText(enPostSuggestions.generating);
     // A post IS coming, so a disabled "suggest a post" would read as "you may
@@ -236,13 +238,8 @@ describe('PostSuggestionCard — a generation still in flight', () => {
     // Fresh objects per call — a shared fixture would let React bail out on an
     // identical reference and hide the very transition under test.
     mockGetToday
-      .mockResolvedValueOnce({ data: { suggestion: { ...PENDING }, remainingToday: 2 } })
-      .mockResolvedValue({
-        data: {
-          suggestion: { ...PENDING, status: 'ready' as const, text: 'بوست جاهز' },
-          remainingToday: 2,
-        },
-      });
+      .mockResolvedValueOnce({ data: { suggestion: null, inFlight: { ...RUNNING }, remainingToday: 2 } })
+      .mockResolvedValue({ data: { suggestion: { ...READY }, inFlight: null, remainingToday: 2 } });
     renderCard();
     await screen.findByText(enPostSuggestions.generating);
     // The card polls on its own while the sheet is closed.
@@ -252,8 +249,31 @@ describe('PostSuggestionCard — a generation still in flight', () => {
 
   it('a non-admin member sees the pending row too — it is their workspace\'s spent slot', async () => {
     mockRole.isAdmin = false;
-    mockGetToday.mockResolvedValue({ data: { suggestion: PENDING, remainingToday: 2 } });
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, inFlight: RUNNING, remainingToday: 2 } });
     renderCard();
     expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
+  });
+
+  it('⭐ a FAILED attempt offers to create one — it is not previewed as a post', async () => {
+    // The failure this fix is about. A failed row counted as "has a post", so
+    // the card rendered an empty preview line under a "View your post" button —
+    // and because the seed predicate is "page has any row", a page whose seed
+    // failed sat in that state forever.
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: null, inFlight: { id: 'seed-failed', status: 'failed' as const }, remainingToday: 2 },
+    });
+    renderCard();
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCta })).toBeEnabled();
+    expect(screen.getByText(enPostSuggestions.cardDesc)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardOpen })).not.toBeInTheDocument();
+  });
+
+  it('⭐ a FAILED attempt keeps the post the page already had on the card', async () => {
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: READY, inFlight: { id: 'later-failed', status: 'failed' as const }, remainingToday: 2 },
+    });
+    renderCard();
+    expect(await screen.findByText('بوست جاهز')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
   });
 });

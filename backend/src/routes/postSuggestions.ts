@@ -28,8 +28,10 @@ export default async function postSuggestionsRoutes(fastify: FastifyInstance) {
         memberRoutes.addHook('preHandler', resolveWorkspace);
 
         memberRoutes.get('/pages/:pageId/post-suggestions/today', {
-            schema: { tags: ['PostSuggestions'], summary: "Today's suggested post («بوست اليوم» pilot)", security: auth, params: pageParams },
-        }, postSuggestionsController.getToday.bind(postSuggestionsController));
+            // The PATH is frozen (shipped bundles call it); the summary is not a
+            // client contract, so it says what the route actually returns.
+            schema: { tags: ['PostSuggestions'], summary: "The page's current suggested post, what is in flight, and earlier posts («إنشاء منشور» pilot)", security: auth, params: pageParams },
+        }, postSuggestionsController.getCurrent.bind(postSuggestionsController));
 
         // Serves the card's bytes from our own origin so the browser can
         // actually download it (a bucket URL is displayable but not fetchable

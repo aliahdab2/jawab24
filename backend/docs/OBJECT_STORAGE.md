@@ -238,7 +238,7 @@ its own decision.
 - **Key schemes (one per writer):**
   - `trigger-images/{workspaceId}/{uuid}.{ext}` — Post Reply trigger images
     (`postsService.updateTrigger`).
-  - `generated-posts/{workspaceId}/{uuid}.jpg` — «بوست اليوم» AI-suggested post images
+  - `generated-posts/{workspaceId}/{uuid}.jpg` — «إنشاء منشور» AI-suggested post images
     (`services/postSuggestions.ts`, pilot 2026-08; JPEG q88 — photographic cards, ~10×
     smaller than PNG). The reuse the door was left open for (§1) — same three-method
     surface, no new abstraction.
@@ -247,18 +247,34 @@ its own decision.
   (`postsService.updateTrigger`, safe-order: upload new → commit DB → delete old, so a
   live image is never lost). Page delete drops all its images
   (`pagesService.deletePage`). **Age-based expiry targets ONLY orphaned/non-current
-  objects — never a live, referenced image.** Post-suggestion images follow the same
-  safe order: a regenerate inserts the replacement row and supersedes the old one in ONE
-  transaction, and only after commit best-effort deletes the old object — a live image is
-  never lost to a failed replacement. Page delete removes the `generated-posts/` objects
-  after the cascade commits (`pagesService.deletePage`), so the "page delete drops all its
-  images" invariant holds for BOTH prefixes.
+  objects — never a live, referenced image.**
+  ⚠️ **Post-suggestion images do NOT follow the reference-based lifecycle — they are
+  KEPT (changed 2026-08-13, D-077).** Until then a regenerate superseded the old row and
+  best-effort deleted its objects after commit. That destroyed the merchant's work — in
+  production on 11 Aug a page's three attempts produced its best post FIRST and the third
+  erased it — and it was backwards economically, an image costing ~$0.0064 to generate
+  and a fraction of a cent a year to store. So **a `superseded` row is a LIVE, REFERENCED
+  row**: it keeps `image_url` / `image_key` and every `variants[].imageKey`, and the
+  merchant's history strip renders those objects. Supersede is now a status relabel and
+  touches storage not at all.
+  Consequences to respect:
+  - **Nothing but page delete removes a `generated-posts/` object.** There is no other
+    sweep, and there must not be an age-based one — every row that names a key is live.
+  - **The orphan audit's meaning is unchanged but its input grew**: bucket objects with
+    no DB row are still safe-to-clean; objects named by a superseded row are NOT.
+  - Rows written before 2026-08-13 were gutted by the old path — they carry
+    `image_url = NULL` with their files already deleted, and render text-only in the
+    strip. That is history, not a bug to repair.
+  Page delete still removes the `generated-posts/` objects after the cascade commits
+  (`pagesService.deletePage`), so the "page delete drops all its images" invariant holds
+  for BOTH prefixes.
   ⚠️ **A post-suggestion row owns SEVERAL objects, not one.** Since variants (migration
   0162) a generation stores one card per take, and `image_key` mirrors only the SELECTED
-  take. Both sweeps — page delete and supersede — must therefore go through
-  `imageKeysOf(row)` (`lib/postSuggestionVariants.ts`), which unions the mirrored column
-  with every `variants[].imageKey` and deduplicates the overlap. Collecting `image_key`
-  alone silently leaks N-1 objects per row.
+  take. The page-delete sweep must therefore go through `imageKeysOf(row)`
+  (`lib/postSuggestionVariants.ts`), which unions the mirrored column with every
+  `variants[].imageKey` and deduplicates the overlap. Collecting `image_key` alone
+  silently leaks N-1 objects per row. (Supersede used to be the second caller; it is not
+  a caller at all any more, which is why the leak it once risked cannot recur there.)
 - **Never hand a storage key to something that outlives it.** Deleting a replaced object is
   correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
   sent message must never embed the bucket URL. See §11. (Post-suggestion images are never

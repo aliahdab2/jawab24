@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import type { PostSuggestionDto, PostSuggestionPostType } from '@jawab24/shared';
+import type { PostSuggestionDto, PostSuggestionHistoryItem, PostSuggestionInFlight, PostSuggestionPostType } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -33,15 +33,26 @@ function variantLens(index: number, t: (key: string, values?: Record<string, str
 }
 
 /**
- * «بوست اليوم» viewer — today's suggested post: text to copy, image to
- * save/share, capped regenerate. No publishing: the merchant reviews and
- * posts manually (the review line is deliberate — industry norm is
- * AI-drafted, human-approved).
+ * «إنشاء منشور» viewer — the page's current post: text to copy, image to
+ * save/share, capped create-another, and the earlier posts underneath. No
+ * publishing: the merchant reviews and posts manually (the review line is
+ * deliberate — industry norm is AI-drafted, human-approved).
  *
- * Opened with `initial` when the dashboard already fetched today's
- * suggestion; opened with null it generates immediately (the card's CTA
- * path). Every user signal (open/copy/download) is stamped fire-and-forget —
- * those stamps ARE the pilot's success metric.
+ * ⚠️ The post is no longer "today's". A daily cron used to write one every
+ * morning; since 2026-08-13 exactly one post is seeded when a page first meets
+ * the feature and every one after it is created on demand, so what this shows
+ * is simply the most recent post — which may have been made last week.
+ *
+ * ⭐ `suggestion` and `inFlight` are separate for a reason: the post the
+ * merchant HAS must stay on screen while a new one is written, and must not be
+ * replaced by an attempt that FAILED. Both were once the same field, so a
+ * failure blanked the sheet — permanently, once the read stopped being scoped
+ * to a day.
+ *
+ * Opened with `initial` when the dashboard already fetched the current post;
+ * opened with null it generates immediately (the card's CTA path). Every user
+ * signal (open/copy/download) is stamped fire-and-forget — those stamps ARE the
+ * pilot's success metric.
  */
 export function PostSuggestionSheet({
   pageId,
@@ -60,9 +71,19 @@ export function PostSuggestionSheet({
 }) {
   const t = useTranslations('postSuggestions');
   const tc = useTranslations('common');
+  // Dates in the history strip are formatted in the merchant's own locale —
+  // never a hardcoded 'ar'/'en' ternary, and never the browser default, which
+  // ignores the language they chose in the app.
+  const locale = useLocale();
   const { copied, copy } = useCopyToClipboard();
 
   const [suggestion, setSuggestion] = useState<PostSuggestionDto | null>(initial?.suggestion ?? null);
+  // What is HAPPENING, kept apart from what the merchant HAS. Both used to be
+  // `suggestion`, so a failed attempt — newer than the post it did not replace
+  // — took the post's place on screen and, once the read stopped being
+  // day-scoped, never gave it back. The post now stays put while a generation
+  // runs and while one fails; this only drives the spinner and the error.
+  const [inFlight, setInFlight] = useState<PostSuggestionInFlight | null>(initial?.inFlight ?? null);
   // null = UNKNOWN (cap store degraded server-side) — never treated as 0:
   // regenerate stays enabled and the generate route fails closed on its own.
   const [remaining, setRemaining] = useState<number | null>(initial?.remainingToday ?? null);
@@ -74,6 +95,15 @@ export function PostSuggestionSheet({
   // (only 'general' enabled) — never offer an angle that may burn one of the
   // capped attempts on nothing. Updated from every response that carries it.
   const [availableTypes, setAvailableTypes] = useState<PostSuggestionPostType[] | null>(initial?.availableTypes ?? null);
+  // The posts this page made before the current one. Creating another used to
+  // DELETE the one it replaced (text and image); they are kept now, so the
+  // merchant can go back to one they preferred. `[]` = none yet; an absent
+  // field on the response leaves whatever we already had rather than blanking
+  // the strip on a payload that simply didn't carry it.
+  const [history, setHistory] = useState<PostSuggestionHistoryItem[]>(initial?.history ?? []);
+  // Earlier posts whose thumbnail failed to load (a missing object) — they fall
+  // back to the brand tile instead of a broken frame, same as the card.
+  const [failedThumbs, setFailedThumbs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
@@ -115,9 +145,14 @@ export function PostSuggestionSheet({
     const priorId = suggestion?.id ?? null;
     try {
       const res = await postSuggestionsApi.generate(pageId, includeContact, postType);
+      // The response carries the post the merchant already had (unchanged
+      // until the worker finishes) plus the row this click claimed.
       setSuggestion(res.data.suggestion);
+      setInFlight(res.data.inFlight ?? null);
       setRemaining(res.data.remainingToday);
       if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
+      // No history here by design — generate answers with a pending row, so the
+      // strip keeps what it has until the poll below returns the settled list.
       onChanged(res.data);
     } catch (err) {
       const axiosErr = err as { response?: { status?: number; data?: { code?: string } } };
@@ -137,17 +172,23 @@ export function PostSuggestionSheet({
         // 2026-08-12: the merchant saw «حدث خطأ ما» while their post existed,
         // with a capped attempt already spent on it.
         //
-        // So ask before despairing. A row whose id differs from what was on
-        // screen is THIS generation's result — adopt it and there is no error
-        // to report. Same id (or none) means nothing landed, and the generic
-        // error is then the honest answer.
+        // So ask before despairing. A row IN FLIGHT, or a post whose id differs
+        // from what was on screen, is THIS generation's result — adopt it and
+        // the poll takes over. Nothing new means nothing landed, and the
+        // generic error is then the honest answer.
         try {
-          const latest = await postSuggestionsApi.getToday(pageId);
+          const latest = await postSuggestionsApi.getCurrent(pageId);
+          const running = latest.data.inFlight ?? null;
           const recovered = latest.data.suggestion;
-          if (recovered && recovered.id !== priorId) {
+          if (running || (recovered && recovered.id !== priorId)) {
             setSuggestion(recovered);
+            setInFlight(running);
             setRemaining(latest.data.remainingToday);
             if (latest.data.availableTypes) setAvailableTypes(latest.data.availableTypes);
+            if (latest.data.history) setHistory(latest.data.history);
+            // A row that already ENDED in failure is a real failure to report —
+            // but as the generation error, not the "we have no idea" one.
+            if (running?.status === 'failed') setError(t('errorGeneration'));
             onChanged(latest.data);
             return;
           }
@@ -195,18 +236,22 @@ export function PostSuggestionSheet({
   useEffect(() => {
     setEditsByVariant({});
     setVariantIndex(suggestion?.selectedVariant ?? 0);
-    // A PENDING row is not something the merchant can open — it has no text
-    // yet. Stamping it would break the pilot's own metric, which counts posts
-    // that were actually seen; the poll below stamps once it becomes ready.
-    if (suggestion && suggestion.status !== 'pending' && !stampedOpen.current) {
+    // `suggestion` is only ever a finished post now (a running or failed
+    // attempt is `inFlight`), so there is no pending row to guard against
+    // stamping — which would have broken the pilot's own metric, that counts
+    // posts actually seen.
+    if (suggestion && !stampedOpen.current) {
       stampedOpen.current = true;
       stamp(suggestion.id, 'opened');
-    } else if (!suggestion && !loading && !error && canGenerate && !autoGenerated.current) {
+    } else if (!suggestion && !inFlight && !loading && !error && canGenerate && !autoGenerated.current) {
+      // Nothing to show AND nothing already running. The `!inFlight` guard is
+      // what stops a sheet opened over a generation someone else started (or
+      // one the merchant left running) from spending a second capped slot.
       autoGenerated.current = true;
       void generate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + new-suggestion only
-  }, [suggestionId, suggestion?.status]);
+  }, [suggestionId]);
 
   /**
    * Wait out a generation that is running in a worker.
@@ -221,8 +266,10 @@ export function PostSuggestionSheet({
    * asking forever if that contract is broken.
    */
   const [pollTimedOut, setPollTimedOut] = useState(false);
+  // The row this poll is waiting on — null when nothing is running.
+  const waitingOn = inFlight?.status === 'pending' ? inFlight.id : null;
   useEffect(() => {
-    if (suggestion?.status !== 'pending') return;
+    if (!waitingOn) return;
     setPollTimedOut(false);
     let cancelled = false;
     const startedAt = Date.now();
@@ -233,16 +280,25 @@ export function PostSuggestionSheet({
         if (!cancelled) setPollTimedOut(true);
         return;
       }
-      void postSuggestionsApi.getToday(pageId)
+      void postSuggestionsApi.getCurrent(pageId)
         .then((res) => {
-          // Only adopt the row this poll is waiting on: a regenerate started
-          // meanwhile mints a new id, and its own effect run owns it.
-          if (cancelled || res.data.suggestion?.id !== suggestionId) return;
-          if (res.data.suggestion.status === 'pending') return;
+          // A regenerate started meanwhile re-runs this effect with a new id;
+          // this run's cleanup has already flipped `cancelled`, so a reply that
+          // lands afterwards must not write over it.
+          if (cancelled) return;
+          const next = res.data.inFlight ?? null;
+          // Still the same attempt, still running → keep waiting.
+          if (next?.id === waitingOn && next.status === 'pending') return;
+          // Settled — either it became the post (inFlight null) or it failed.
+          // A DIFFERENT row in flight (a second admin on the same page) is
+          // adopted too: the effect re-runs and waits on that one instead.
+          clearInterval(id);
           setSuggestion(res.data.suggestion);
+          setInFlight(next);
           setRemaining(res.data.remainingToday);
           if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
-          if (res.data.suggestion.status === 'failed') setError(t('errorGeneration'));
+          if (res.data.history) setHistory(res.data.history);
+          setError(next?.status === 'failed' ? t('errorGeneration') : null);
           onChanged(res.data);
         })
         // A blip mid-poll is not a failure — the next tick asks again, and the
@@ -251,12 +307,12 @@ export function PostSuggestionSheet({
     }, POST_SUGGESTION_POLL_MS);
 
     return () => { cancelled = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one poll per pending row
-  }, [suggestionId, suggestion?.status, pageId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one poll per in-flight row
+  }, [waitingOn, pageId]);
 
   // Busy = this click is in flight OR the worker still owns the row. One
   // derivation, so the spinner cannot disagree with what the server is doing.
-  const working = loading || suggestion?.status === 'pending';
+  const working = loading || inFlight?.status === 'pending';
 
   // Unknown remaining (null) keeps regenerate ENABLED — only a confirmed 0
   // disables it; the generate route fails closed server-side regardless.
@@ -349,6 +405,35 @@ export function PostSuggestionSheet({
 
         {!working && error && (
           <div className="alert-error rounded-xl p-4 text-sm" role="alert">{error}</div>
+        )}
+
+        {/* No post yet — the page's first generation failed, or its one-time
+            SEED did. Until this existed the sheet rendered the failed row as if
+            it were a post: an empty body with Copy/Download over nothing, and
+            no way to start another. The seed predicate is "has any row", so
+            that state never resolved on its own.
+
+            Gated on there being a REASON for the emptiness (an attempt that
+            ended, an error, or no permission to generate) rather than on
+            `!suggestion` alone: the CTA path opens the sheet empty and
+            auto-generates in an effect, i.e. one frame later — an ungated CTA
+            would flash there, and a click landing in that frame would spend a
+            second capped slot on top of the one the effect is about to. */}
+        {!working && !suggestion && (inFlight || error || !canGenerate) && (
+          <div className="py-8 text-center space-y-3">
+            <Sparkles className="w-6 h-6 mx-auto text-brand-500" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">{t('cardDesc')}</p>
+            {canGenerate && (
+              remaining === 0
+                ? <p className="text-xs text-subtle">{t('noRemaining')}</p>
+                : (
+                  <Button size="sm" className="min-h-[44px]" onClick={() => void generate()}>
+                    <Sparkles className="w-4 h-4 me-1.5" aria-hidden="true" />
+                    {t('cardCta')}
+                  </Button>
+                )
+            )}
+          </div>
         )}
 
         {!working && suggestion && (
@@ -508,7 +593,67 @@ export function PostSuggestionSheet({
                 {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}
               </p>
             )}
+
           </>
+        )}
+
+        {/* The posts this page made before the current one.
+            Creating another used to DESTROY the one it replaced — text and
+            image both — with no way back (production, 11 Aug: three
+            attempts, the first was the best one, the third erased it).
+            They are kept now, so this is simply a list of them.
+
+            A SIBLING of the post block, not a child: a strip the merchant can
+            still copy from must not disappear because the newest attempt left
+            nothing to show above it.
+
+            <details> rather than a click-to-swap viewer on purpose: the
+            merchant's job here is "copy the one I preferred", and native
+            disclosure gets keyboard, screen-reader and open-state
+            behaviour right without a second view mode to keep in sync. */}
+        {!working && history.length > 0 && (
+          <section className="border-t border-theme-border pt-3">
+            <h3 className="text-xs font-medium text-muted-foreground">{t('historyTitle')}</h3>
+            <p className="text-[11px] text-subtle mt-0.5">{t('historyHint')}</p>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {history.map((item) => (
+                <li key={item.id}>
+                  <details className="rounded-xl border border-theme-border bg-card">
+                    <summary className="flex items-center gap-2.5 p-2 cursor-pointer list-none min-h-[44px] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+                      {item.imageUrl && !failedThumbs.includes(item.id) ? (
+                        // Plain <img>: these are small, below the fold and
+                        // behind a disclosure, and next/image would demand
+                        // a remote-pattern entry per storage host.
+                        <img
+                          src={item.imageUrl}
+                          alt={t('historyImageAlt')}
+                          loading="lazy"
+                          // Same fallback the dashboard card uses: an object
+                          // that has gone missing shows the brand tile rather
+                          // than a broken frame.
+                          onError={() => setFailedThumbs((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))}
+                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <span className="w-10 h-10 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center flex-shrink-0">
+                          <Sparkles className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span dir="auto" className="block text-xs text-foreground truncate">{firstLine(item.text)}</span>
+                        <span className="block text-[11px] text-subtle">
+                          {t('historyItemLabel', { date: new Date(item.createdAt).toLocaleDateString(locale) })}
+                        </span>
+                      </span>
+                    </summary>
+                    <p dir="auto" className="whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground leading-relaxed">
+                      {item.text}
+                    </p>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </div>
 

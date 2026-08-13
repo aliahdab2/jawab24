@@ -1636,12 +1636,79 @@ export interface PostSuggestionDto {
 export type PostSuggestionImageDegraded = 'image_failed' | 'storage_off';
 
 /**
+ * An earlier post of the same page — kept, not destroyed.
+ *
+ * Creating another post used to gut the one before it: the row was flipped to
+ * `superseded` and its image FILES were deleted from storage. That lost the
+ * merchant's work (production, 11 Aug: three attempts, the first was the best,
+ * the third erased it) and it was backwards economically — an image costs
+ * ~$0.0064 to generate and a fraction of a cent a year to keep.
+ *
+ * Deliberately NOT a full `PostSuggestionDto`: history is a list to pick from,
+ * not a set of rows to operate on, so it carries only what the strip renders.
+ * Anything needing more re-reads the row by id.
+ */
+export interface PostSuggestionHistoryItem {
+  id: string;
+  /** The selected take's text at the time it was superseded. */
+  text: string;
+  imageUrl: string | null; // null = text-only (image failed / storage off)
+  postType: PostSuggestionPostType;
+  createdAt: string; // ISO timestamp
+}
+
+/**
+ * The most recent generation attempt that is NOT a post — still running, or
+ * finished without producing one.
+ *
+ * Split out from `suggestion` on 2026-08-13. Both used to be the same field:
+ * the read served the newest row of any non-superseded status, so a `failed`
+ * row — newer than the post it did not replace — became "the current post".
+ * With the day scope gone that is permanent: the merchant's real post is
+ * masked (and absent from `history`, which is superseded rows only) until they
+ * happen to generate again, and a page whose one-time SEED failed shows an
+ * empty card forever, since the seed predicate is "has any row".
+ *
+ * So the two questions are answered separately: `suggestion` is what you HAVE,
+ * this is what is HAPPENING. Null when the newest row is the post itself.
+ *
+ * Carries only what a client acts on — the id to poll and the state to render.
+ * `failureReason` is deliberately absent: the UI shows one generic message (a
+ * reason code is an operator's signal, and it is already in the row + logs).
+ */
+export interface PostSuggestionInFlight {
+  id: string;
+  status: 'pending' | 'failed';
+}
+
+/**
  * The ONE response envelope both GET /today and POST (generate) return — the
  * backend controller and the frontend api client type against THIS, so the two
  * hand-assembled shapes can never drift apart silently.
  */
 export interface PostSuggestionResponse {
+  /**
+   * The page's current post — always a READY row, or null if it has never
+   * produced one. Never a pending or failed row: those are `inFlight`.
+   *
+   * Older shipped bundles read only this field, so the split degrades in the
+   * safe direction for them — while a generation runs they keep showing the
+   * previous post instead of the empty-text pending row, and a failed attempt
+   * leaves that post on screen instead of replacing it with nothing.
+   *
+   * ⚠️ The one cost of that: a client which cannot see `inFlight` also cannot
+   * see that a generation is RUNNING, so during a blue/green window it may
+   * offer to start another and spend a second capped slot. Bounded by the
+   * daily cap and by the length of the window; accepted rather than served a
+   * pending row as a post, which is the defect this split exists to remove.
+   */
   suggestion: PostSuggestionDto | null;
+  /**
+   * The latest attempt, when it is not (yet) a post. Sent by BOTH routes —
+   * generate answers with the pending row it just claimed. Absent/null means
+   * the newest row IS the post above.
+   */
+  inFlight?: PostSuggestionInFlight | null;
   /**
    * Slots left today. `null` = unknown (the read path's cap store was
    * unreachable) — clients keep regenerate enabled and let the generate path
@@ -1653,6 +1720,19 @@ export interface PostSuggestionResponse {
    * absent list as UNKNOWN and fail closed (only 'general' offered).
    */
   availableTypes?: PostSuggestionPostType[];
+  /**
+   * The page's earlier posts, newest first — capped, because this rides on the
+   * card fetch.
+   *
+   * ⚠️ READ ROUTE ONLY, on purpose. Generate answers with a PENDING row and the
+   * worker supersedes the previous post seconds afterwards, so a list built at
+   * generate time is one behind by construction; the client is already polling
+   * the read route, which answers it correctly. Absent therefore means "this
+   * response doesn't carry history", NEVER "this page has none" — an empty
+   * array means that, and the two must not be confusable. Clients keep whatever
+   * they last held when the field is absent.
+   */
+  history?: PostSuggestionHistoryItem[];
 }
 
 // --- Leads Types ---

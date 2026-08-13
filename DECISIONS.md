@@ -1521,3 +1521,107 @@ where the customer's language was already known with certainty.
   phrase is disambiguated from the per-call side rather than edited in place.
 - What this does NOT settle: the degraded-French gap (XGAP case #758) is a *detection*
   failure, not a precedence one, and is unaffected. Gap A stays parked.
+
+---
+
+## D-077 · «بوست اليوم» becomes «إنشاء منشور»: one seeded post, then on demand, and posts accumulate
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner ruling) — **implementation built, gates green,
+NOT merged**; held on local branch `feat/post-creation-on-demand`.
+
+> **Numbering note.** D-075 and D-076 are claimed by the merchant-brief work on
+> `feat/post-suggestion-brief`, which is committed but unmerged. This entry takes D-077 so the
+> two branches cannot collide in an append-only file. (The earlier D-077, written for the
+> reverted «منشوراتك» page, was removed before it ever landed.)
+
+**Context.** The feature generated one post per page every morning via cron, whether or not the
+merchant ever opened it, and «اقترح غيره» destroyed the post it replaced — text kept, but the
+image files deleted from storage. Both properties produced real problems that were being
+*managed* rather than removed: an unopened-streak waste guard that only measured *unopened* (a
+merchant who looked daily and used nothing kept consuming paid images), a cron/allowlist coupling
+where an empty allowlist silently killed pre-generation, an auto-fire that spent one of three
+daily attempts before the merchant typed anything, and — observed in production on 2026-08-11 —
+a page whose three attempts produced its best post FIRST and whose third attempt erased it.
+
+**Ruling (owner, in their own words).**
+- «ما عاد ملزمين نولد بوست كل يوم» — stop generating daily.
+- «اول مرة بتظهر الميزة عند التاجر منعمل بوست و بس. بعدين التاجر لازم يفتح و يعمل توليد ليشوف
+  بوست جديد، او يضغط على انشئ منشوراً اخر» — exactly ONE post is generated unprompted, the first
+  time a page meets the feature; everything after it is created on demand.
+- Posts **accumulate**. Creating another never destroys the one before it.
+
+**Consequences.**
+- The daily cron is replaced by a seed sweep whose predicate is "this page has no rows at all".
+  Rows are never deleted, so a seeded page can never be seeded again however often it ticks —
+  repeat spend is impossible by construction rather than guarded (Rule 14). The unopened-streak
+  waste guard is therefore DELETED, not retuned: it existed to stop a daily job dripping spend,
+  and there is no daily job. The schedule remains only as a POLL INTERVAL, because eligibility
+  arrives over time (a page connects, a workspace joins the allowlist).
+- Supersede stops deleting images. `superseded` changes meaning from "replaced and gutted" to
+  "an earlier post, intact", and the sheet gains a history strip built from those rows. The
+  deletion was also backwards economically: an image costs ~$0.0064 to generate and roughly
+  $0.0004 to store for a year.
+- **The read stops being day-scoped.** This is forced by the ruling, not a separate choice: with
+  nothing generating on its own, a day-scoped read would show an empty sheet to every merchant
+  whose last post predates midnight, and the seeded post would vanish overnight — making the
+  seed pointless. The daily CAP does not move; the day stopped deciding what a merchant can SEE,
+  not how much they can MAKE.
+- The name stops lying (nothing arrives daily any more) and drops an English loanword: «بوست» is
+  a borrowing where «منشور» exists, which our own Arabic-register rule prefers. Two i18n strings
+  that promised «بوست جديد يصلك غداً» — a promise only a cron can keep — were corrected.
+- The route URL stays `/post-suggestions/today` even though the wording is now wrong. Shipped
+  mobile bundles call it and cannot be redeployed; a URL is a contract with clients we do not
+  control, so it outlives the name.
+
+**What this does NOT settle.** The trade is real and one-way: the daily post was also a *reason
+to open the app*, and once the cron is gone we can no longer measure what it was worth — the copy
+metric was broken for the entire pilot, so it was never measured while it existed. Every other
+part of this ruling is reversible; that part is not. Watch opens-per-week after the switch. A
+periodic no-cost nudge («جاهز نعمل منشور جديد؟») is the parked idea that would restore the habit
+loop without restoring the spend; it is NOT part of this change.
+
+### D-077a · Addendum (2026-08-13, review): the read must separate the POST from the ATTEMPT
+
+Found reviewing the D-077 implementation, before merge. Not a change of ruling — a defect the
+ruling's own goal ("creating another never destroys the one before it") was not actually
+delivering.
+
+**The defect.** The read served "the page's newest row with status in (ready, pending, failed)"
+as `suggestion`. Supersede only runs on a SUCCESSFUL fulfilment, so a generation that fails
+supersedes nothing and its row is newer than the intact post it did not replace. That failed row
+therefore became "the current post": an empty-text body the client rendered with Copy/Download
+over nothing, while the merchant's real post was invisible — and unreachable through `history`
+too, which is superseded rows only.
+
+Day-scoped, that state cleared at midnight and the cron replaced it. **Removing the day scope
+made it permanent**, and the seed made it worse: the seed predicate is "this page has any row",
+so a page whose one-time seed FAILED kept a failed row forever, was never seeded again, and
+showed an empty card as the merchant's first contact with the feature — the opposite of the
+"arrive to something finished" the seed exists for. D-077's text says such a merchant "lands on
+the create button"; they did not, because the card counted a failed row as a post.
+
+**The fix.** The envelope answers the two questions separately — `suggestion` is what the
+merchant HAS (newest `ready` row, or null), `inFlight` is what is HAPPENING (newest row when it
+is `pending`/`failed`, else null). The post stays on screen while a generation runs and while one
+fails; a page with genuinely no post gets a create CTA instead of a rendered blank.
+
+**Why this shape rather than re-scoping the read to a day.** A day scope would only have made the
+masking self-heal overnight, which is detection-by-calendar, not prevention (Rule 14) — and it
+would have reintroduced exactly the empty-sheet-after-midnight problem D-077 removed. Separating
+the fields makes "a failed attempt is the post" unrepresentable.
+
+**Also settled here.**
+- Storage retention is now DOCUMENTED where it is owed: a `superseded` row is live and
+  referenced, page delete is the only sweep that may remove a `generated-posts/` object, and
+  there must be no age-based expiry on that prefix (`backend/docs/OBJECT_STORAGE.md` §9). D-077
+  changed this behaviour without changing that doc, which claimed the deletion still happened.
+- `idx_post_suggestions_page_created` (migration 0164). Going day-blind took `suggested_for` out
+  of every post-suggestion read while nothing deletes rows any more, so all three reads sorted
+  the page's whole row set on the highest-frequency fetch the feature has. They now issue as one
+  parallel round trip.
+- ABSENT ≠ EMPTY is enforced in the CACHE as well, not just in the component: writing the
+  history-less generate response into the query cache wholesale erased the strip a layer below
+  the component that honoured the rule (`mergePostSuggestionResponse`).
+
+**What this does NOT change.** The ruling, the seed model, the no-retry policy, the frozen route
+URL, and the daily cap all stand exactly as D-077 states them.

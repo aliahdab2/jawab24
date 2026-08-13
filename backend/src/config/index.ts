@@ -158,8 +158,8 @@ export const config = {
         // aliahdab@gmail.com workspace»). The default IS the founder's prod
         // workspace, so enabling the pilot needs only POST_SUGGESTIONS_ENABLED
         // — override the list for local dev or a wider rollout. EMPTY = every
-        // workspace (the eventual GA path); the cron never runs fleet-wide
-        // regardless (see runDailyPostSuggestions).
+        // workspace (the eventual GA path); the seed sweep never runs
+        // fleet-wide regardless (see seedFirstPostSuggestions).
         workspaceIds: (process.env.POST_SUGGESTIONS_WORKSPACE_IDS
             || [
                 'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)

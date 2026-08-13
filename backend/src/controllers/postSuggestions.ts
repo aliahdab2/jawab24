@@ -16,8 +16,18 @@ const POST_TYPES: readonly PostSuggestionPostType[] = ['promo', 'product_spotlig
  * page 404s (never 403 — don't leak existence).
  */
 class PostSuggestionsController {
-    /** GET /pages/:pageId/post-suggestions/today */
-    async getToday(
+    /**
+     * GET /pages/:pageId/post-suggestions/today
+     *
+     * ⚠️ The PATH still says `today`; the behaviour no longer does. It returns
+     * the page's current post whenever it was made, whatever attempt is in
+     * flight, and the earlier posts (owner ruling 2026-08-13 — generation on
+     * demand). The URL is kept because
+     * shipped mobile bundles call it: Waleed's Android 2.0.26 predates even the
+     * feature gate, and renaming a live path would 404 every one of them. A URL
+     * is a contract with clients we cannot redeploy, so it outlives the wording.
+     */
+    async getCurrent(
         request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply,
     ) {
@@ -25,7 +35,7 @@ class PostSuggestionsController {
         const { pageId } = request.params;
         if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
-        const result = await postSuggestionsService.getToday(req.workspaceId, pageId);
+        const result = await postSuggestionsService.getCurrent(req.workspaceId, pageId);
         // Null = the page isn't in this workspace — same 404 the sibling
         // routes return (never leak a foreign page's cap counter).
         if (!result) return reply.status(404).send({ error: 'Not found' });
@@ -53,10 +63,14 @@ class PostSuggestionsController {
             ...(rawType ? { postType: rawType as PostSuggestionPostType } : {}),
         });
         if (result.ok) {
-            // Same envelope as getToday — typed against the shared shape so the
-            // two routes can never drift apart silently.
+            // Same envelope as getCurrent — typed against the shared shape so
+            // the two routes can never drift apart silently.
+            // No `history`: this route answers with a pending row, so the list
+            // would be one behind by construction. The client polls the read
+            // route, which answers it correctly.
             const body: PostSuggestionResponse = {
                 suggestion: result.suggestion,
+                inFlight: result.inFlight,
                 remainingToday: result.remainingToday,
                 availableTypes: result.availableTypes,
             };

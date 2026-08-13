@@ -425,12 +425,19 @@ const start = async () => {
       logError: logJobError,
     });
 
-    // «بوست اليوم» pilot cron — once per day, pre-generates the suggested post
-    // for EXPLICITLY allowlisted pages only (empty allowlist = cron does
-    // nothing; pre-generation is spend no user asked for). Idempotent: the
-    // partial unique index on (page_id, suggested_for) WHERE source='cron'
-    // makes a blue/green double-tick a no-op, and each generation consumes the
-    // same absolute 3/day cap as the merchant's button.
+    // «إنشاء منشور» seed sweep — NOT a daily generator. It gives a page its
+    // FIRST post, once, so a merchant meets the feature with something finished
+    // in it; every post after that is generated on demand (owner ruling
+    // 2026-08-13). It stays on a schedule only because eligibility arrives over
+    // time — a page connects, a workspace joins the allowlist — and this is how
+    // those pages get seeded without a separate event hook.
+    //
+    // Seeding is self-limiting: the predicate is "this page has no rows at
+    // all", and rows are never deleted, so a seeded page can never be seeded
+    // again no matter how often this ticks. EXPLICITLY allowlisted pages only
+    // (empty allowlist = seeds nothing; an unprompted generation is spend no
+    // user asked for), and each seed consumes the same absolute 3/day cap as
+    // the merchant's own button.
     setPostSuggestionsLogger(workerLogger);
     if (config.postSuggestions.enabled && !imageStorage.isConfigured()) {
       // Without object storage every generation silently ships TEXT-ONLY
@@ -442,10 +449,12 @@ const start = async () => {
     scheduleRecurringJob({
       label: '[PostSuggestions]',
       tag: 'post_suggestions',
+      // Daily is a POLL INTERVAL now, not a generation cadence: it only bounds
+      // how long a newly-eligible page waits for its one seed.
       intervalMs: DAILY_MS,
       // Staggered 2 min behind the trial-ended sweep so the daily jobs don't share a tick
       initialDelayMs: 11 * 60 * 1000,
-      run: () => postSuggestionsService.runDailyPostSuggestions(),
+      run: () => postSuggestionsService.seedFirstPostSuggestions(),
       logError: logJobError,
     });
 
