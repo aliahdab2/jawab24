@@ -29,7 +29,7 @@ export default async function postSuggestionsRoutes(fastify: FastifyInstance) {
 
         memberRoutes.get('/pages/:pageId/post-suggestions/today', {
             schema: { tags: ['PostSuggestions'], summary: "Today's suggested post («بوست اليوم» pilot)", security: auth, params: pageParams },
-        }, postSuggestionsController.getToday.bind(postSuggestionsController));
+        }, postSuggestionsController.getCurrent.bind(postSuggestionsController));
 
         // Serves the card's bytes from our own origin so the browser can
         // actually download it (a bucket URL is displayable but not fetchable

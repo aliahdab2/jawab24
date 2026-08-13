@@ -56,9 +56,9 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const pageId = selectedPage?.id ?? null;
 
   const { data, isError } = useQuery({
-    queryKey: ['post-suggestion-today', pageId],
+    queryKey: ['post-suggestion-current', pageId],
     queryFn: async () => {
-      const res = await postSuggestionsApi.getToday(pageId as string);
+      const res = await postSuggestionsApi.getCurrent(pageId as string);
       return res.data;
     },
     enabled: Boolean(pageId),
@@ -203,7 +203,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           initial={current}
           canGenerate={isAdmin}
           onClose={() => setOpen(false)}
-          onChanged={(latest) => queryClient.setQueryData(['post-suggestion-today', pageId], latest)}
+          onChanged={(latest) => queryClient.setQueryData(['post-suggestion-current', pageId], latest)}
         />
       )}
     </>

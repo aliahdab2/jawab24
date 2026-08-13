@@ -1636,6 +1636,28 @@ export interface PostSuggestionDto {
 export type PostSuggestionImageDegraded = 'image_failed' | 'storage_off';
 
 /**
+ * An earlier post of the same page — kept, not destroyed.
+ *
+ * Creating another post used to gut the one before it: the row was flipped to
+ * `superseded` and its image FILES were deleted from storage. That lost the
+ * merchant's work (production, 11 Aug: three attempts, the first was the best,
+ * the third erased it) and it was backwards economically — an image costs
+ * ~$0.0064 to generate and a fraction of a cent a year to keep.
+ *
+ * Deliberately NOT a full `PostSuggestionDto`: history is a list to pick from,
+ * not a set of rows to operate on, so it carries only what the strip renders.
+ * Anything needing more re-reads the row by id.
+ */
+export interface PostSuggestionHistoryItem {
+  id: string;
+  /** The selected take's text at the time it was superseded. */
+  text: string;
+  imageUrl: string | null; // null = text-only (image failed / storage off)
+  postType: PostSuggestionPostType;
+  createdAt: string; // ISO timestamp
+}
+
+/**
  * The ONE response envelope both GET /today and POST (generate) return — the
  * backend controller and the frontend api client type against THIS, so the two
  * hand-assembled shapes can never drift apart silently.
@@ -1653,6 +1675,19 @@ export interface PostSuggestionResponse {
    * absent list as UNKNOWN and fail closed (only 'general' offered).
    */
   availableTypes?: PostSuggestionPostType[];
+  /**
+   * The page's earlier posts, newest first — capped, because this rides on the
+   * card fetch.
+   *
+   * ⚠️ READ ROUTE ONLY, on purpose. Generate answers with a PENDING row and the
+   * worker supersedes the previous post seconds afterwards, so a list built at
+   * generate time is one behind by construction; the client is already polling
+   * the read route, which answers it correctly. Absent therefore means "this
+   * response doesn't carry history", NEVER "this page has none" — an empty
+   * array means that, and the two must not be confusable. Clients keep whatever
+   * they last held when the field is absent.
+   */
+  history?: PostSuggestionHistoryItem[];
 }
 
 // --- Leads Types ---

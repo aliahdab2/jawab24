@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import type { PostSuggestionDto, PostSuggestionPostType } from '@jawab24/shared';
+import type { PostSuggestionDto, PostSuggestionHistoryItem, PostSuggestionPostType } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -33,15 +33,20 @@ function variantLens(index: number, t: (key: string, values?: Record<string, str
 }
 
 /**
- * «بوست اليوم» viewer — today's suggested post: text to copy, image to
- * save/share, capped regenerate. No publishing: the merchant reviews and
- * posts manually (the review line is deliberate — industry norm is
- * AI-drafted, human-approved).
+ * «إنشاء منشور» viewer — the page's current post: text to copy, image to
+ * save/share, capped create-another, and the earlier posts underneath. No
+ * publishing: the merchant reviews and posts manually (the review line is
+ * deliberate — industry norm is AI-drafted, human-approved).
  *
- * Opened with `initial` when the dashboard already fetched today's
- * suggestion; opened with null it generates immediately (the card's CTA
- * path). Every user signal (open/copy/download) is stamped fire-and-forget —
- * those stamps ARE the pilot's success metric.
+ * ⚠️ The post is no longer "today's". A daily cron used to write one every
+ * morning; since 2026-08-13 exactly one post is seeded when a page first meets
+ * the feature and every one after it is created on demand, so what this shows
+ * is simply the most recent post — which may have been made last week.
+ *
+ * Opened with `initial` when the dashboard already fetched the current post;
+ * opened with null it generates immediately (the card's CTA path). Every user
+ * signal (open/copy/download) is stamped fire-and-forget — those stamps ARE the
+ * pilot's success metric.
  */
 export function PostSuggestionSheet({
   pageId,
@@ -60,6 +65,10 @@ export function PostSuggestionSheet({
 }) {
   const t = useTranslations('postSuggestions');
   const tc = useTranslations('common');
+  // Dates in the history strip are formatted in the merchant's own locale —
+  // never a hardcoded 'ar'/'en' ternary, and never the browser default, which
+  // ignores the language they chose in the app.
+  const locale = useLocale();
   const { copied, copy } = useCopyToClipboard();
 
   const [suggestion, setSuggestion] = useState<PostSuggestionDto | null>(initial?.suggestion ?? null);
@@ -74,6 +83,12 @@ export function PostSuggestionSheet({
   // (only 'general' enabled) — never offer an angle that may burn one of the
   // capped attempts on nothing. Updated from every response that carries it.
   const [availableTypes, setAvailableTypes] = useState<PostSuggestionPostType[] | null>(initial?.availableTypes ?? null);
+  // The posts this page made before the current one. Creating another used to
+  // DELETE the one it replaced (text and image); they are kept now, so the
+  // merchant can go back to one they preferred. `[]` = none yet; an absent
+  // field on the response leaves whatever we already had rather than blanking
+  // the strip on a payload that simply didn't carry it.
+  const [history, setHistory] = useState<PostSuggestionHistoryItem[]>(initial?.history ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
@@ -118,6 +133,8 @@ export function PostSuggestionSheet({
       setSuggestion(res.data.suggestion);
       setRemaining(res.data.remainingToday);
       if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
+      // No history here by design — generate answers with a pending row, so the
+      // strip keeps what it has until the poll below returns the settled list.
       onChanged(res.data);
     } catch (err) {
       const axiosErr = err as { response?: { status?: number; data?: { code?: string } } };
@@ -142,12 +159,13 @@ export function PostSuggestionSheet({
         // to report. Same id (or none) means nothing landed, and the generic
         // error is then the honest answer.
         try {
-          const latest = await postSuggestionsApi.getToday(pageId);
+          const latest = await postSuggestionsApi.getCurrent(pageId);
           const recovered = latest.data.suggestion;
           if (recovered && recovered.id !== priorId) {
             setSuggestion(recovered);
             setRemaining(latest.data.remainingToday);
             if (latest.data.availableTypes) setAvailableTypes(latest.data.availableTypes);
+            if (latest.data.history) setHistory(latest.data.history);
             onChanged(latest.data);
             return;
           }
@@ -233,7 +251,7 @@ export function PostSuggestionSheet({
         if (!cancelled) setPollTimedOut(true);
         return;
       }
-      void postSuggestionsApi.getToday(pageId)
+      void postSuggestionsApi.getCurrent(pageId)
         .then((res) => {
           // Only adopt the row this poll is waiting on: a regenerate started
           // meanwhile mints a new id, and its own effect run owns it.
@@ -242,6 +260,7 @@ export function PostSuggestionSheet({
           setSuggestion(res.data.suggestion);
           setRemaining(res.data.remainingToday);
           if (res.data.availableTypes) setAvailableTypes(res.data.availableTypes);
+          if (res.data.history) setHistory(res.data.history);
           if (res.data.suggestion.status === 'failed') setError(t('errorGeneration'));
           onChanged(res.data);
         })
@@ -507,6 +526,57 @@ export function PostSuggestionSheet({
               <p className="text-xs text-subtle">
                 {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}
               </p>
+            )}
+
+            {/* The posts this page made before the current one.
+                Creating another used to DESTROY the one it replaced — text and
+                image both — with no way back (production, 11 Aug: three
+                attempts, the first was the best one, the third erased it).
+                They are kept now, so this is simply a list of them.
+
+                <details> rather than a click-to-swap viewer on purpose: the
+                merchant's job here is "copy the one I preferred", and native
+                disclosure gets keyboard, screen-reader and open-state
+                behaviour right without a second view mode to keep in sync. */}
+            {history.length > 0 && (
+              <section className="border-t border-theme-border pt-3">
+                <h3 className="text-xs font-medium text-muted-foreground">{t('historyTitle')}</h3>
+                <p className="text-[11px] text-subtle mt-0.5">{t('historyHint')}</p>
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {history.map((item) => (
+                    <li key={item.id}>
+                      <details className="group rounded-xl border border-theme-border bg-card">
+                        <summary className="flex items-center gap-2.5 p-2 cursor-pointer list-none min-h-[44px] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+                          {item.imageUrl ? (
+                            // Plain <img>: these are small, below the fold and
+                            // behind a disclosure, and next/image would demand
+                            // a remote-pattern entry per storage host.
+                            <img
+                              src={item.imageUrl}
+                              alt={t('historyImageAlt')}
+                              loading="lazy"
+                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <span className="w-10 h-10 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center flex-shrink-0">
+                              <Sparkles className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span dir="auto" className="block text-xs text-foreground truncate">{firstLine(item.text)}</span>
+                            <span className="block text-[11px] text-subtle">
+                              {t('historyItemLabel', { date: new Date(item.createdAt).toLocaleDateString(locale) })}
+                            </span>
+                          </span>
+                        </summary>
+                        <p dir="auto" className="whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground leading-relaxed">
+                          {item.text}
+                        </p>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
           </>
         )}

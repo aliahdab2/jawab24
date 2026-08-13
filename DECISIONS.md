@@ -1521,3 +1521,61 @@ where the customer's language was already known with certainty.
   phrase is disambiguated from the per-call side rather than edited in place.
 - What this does NOT settle: the degraded-French gap (XGAP case #758) is a *detection*
   failure, not a precedence one, and is unaffected. Gap A stays parked.
+
+---
+
+## D-077 · «بوست اليوم» becomes «إنشاء منشور»: one seeded post, then on demand, and posts accumulate
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner ruling) — **implementation built, gates green,
+NOT merged**; held on local branch `feat/post-creation-on-demand`.
+
+> **Numbering note.** D-075 and D-076 are claimed by the merchant-brief work on
+> `feat/post-suggestion-brief`, which is committed but unmerged. This entry takes D-077 so the
+> two branches cannot collide in an append-only file. (The earlier D-077, written for the
+> reverted «منشوراتك» page, was removed before it ever landed.)
+
+**Context.** The feature generated one post per page every morning via cron, whether or not the
+merchant ever opened it, and «اقترح غيره» destroyed the post it replaced — text kept, but the
+image files deleted from storage. Both properties produced real problems that were being
+*managed* rather than removed: an unopened-streak waste guard that only measured *unopened* (a
+merchant who looked daily and used nothing kept consuming paid images), a cron/allowlist coupling
+where an empty allowlist silently killed pre-generation, an auto-fire that spent one of three
+daily attempts before the merchant typed anything, and — observed in production on 2026-08-11 —
+a page whose three attempts produced its best post FIRST and whose third attempt erased it.
+
+**Ruling (owner, in their own words).**
+- «ما عاد ملزمين نولد بوست كل يوم» — stop generating daily.
+- «اول مرة بتظهر الميزة عند التاجر منعمل بوست و بس. بعدين التاجر لازم يفتح و يعمل توليد ليشوف
+  بوست جديد، او يضغط على انشئ منشوراً اخر» — exactly ONE post is generated unprompted, the first
+  time a page meets the feature; everything after it is created on demand.
+- Posts **accumulate**. Creating another never destroys the one before it.
+
+**Consequences.**
+- The daily cron is replaced by a seed sweep whose predicate is "this page has no rows at all".
+  Rows are never deleted, so a seeded page can never be seeded again however often it ticks —
+  repeat spend is impossible by construction rather than guarded (Rule 14). The unopened-streak
+  waste guard is therefore DELETED, not retuned: it existed to stop a daily job dripping spend,
+  and there is no daily job. The schedule remains only as a POLL INTERVAL, because eligibility
+  arrives over time (a page connects, a workspace joins the allowlist).
+- Supersede stops deleting images. `superseded` changes meaning from "replaced and gutted" to
+  "an earlier post, intact", and the sheet gains a history strip built from those rows. The
+  deletion was also backwards economically: an image costs ~$0.0064 to generate and roughly
+  $0.0004 to store for a year.
+- **The read stops being day-scoped.** This is forced by the ruling, not a separate choice: with
+  nothing generating on its own, a day-scoped read would show an empty sheet to every merchant
+  whose last post predates midnight, and the seeded post would vanish overnight — making the
+  seed pointless. The daily CAP does not move; the day stopped deciding what a merchant can SEE,
+  not how much they can MAKE.
+- The name stops lying (nothing arrives daily any more) and drops an English loanword: «بوست» is
+  a borrowing where «منشور» exists, which our own Arabic-register rule prefers. Two i18n strings
+  that promised «بوست جديد يصلك غداً» — a promise only a cron can keep — were corrected.
+- The route URL stays `/post-suggestions/today` even though the wording is now wrong. Shipped
+  mobile bundles call it and cannot be redeployed; a URL is a contract with clients we do not
+  control, so it outlives the name.
+
+**What this does NOT settle.** The trade is real and one-way: the daily post was also a *reason
+to open the app*, and once the cron is gone we can no longer measure what it was worth — the copy
+metric was broken for the entire pilot, so it was never measured while it existed. Every other
+part of this ruling is reversible; that part is not. Watch opens-per-week after the switch. A
+periodic no-cost nudge («جاهز نعمل منشور جديد؟») is the parked idea that would restore the habit
+loop without restoring the spend; it is NOT part of this change.

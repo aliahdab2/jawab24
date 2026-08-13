@@ -218,16 +218,19 @@ export const catalogApi = {
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
 
-/** «بوست اليوم» pilot. Server 404s every route for non-allowlisted pages
+/** «إنشاء منشور» pilot. Server 404s every route for non-allowlisted pages
  *  (dark feature) — callers treat 404 as "pilot off", never as an error.
  *  Response envelope: the shared `PostSuggestionResponse` (one shape for
- *  getToday AND generate — re-exported above for component imports). */
+ *  getCurrent AND generate — re-exported above for component imports). */
 export const postSuggestionsApi = {
-  getToday: (pageId: string) =>
+  // ⚠️ The PATH still says `today`, the behaviour does not: it returns the
+  // page's current post whenever it was made, plus the earlier ones. The URL is
+  // frozen because shipped mobile bundles call it and cannot be redeployed.
+  getCurrent: (pageId: string) =>
     api.get<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions/today`),
   // REQUESTS a generation — it does not wait for one. The call claims the
   // merchant's daily slot, stores a `pending` row and returns in milliseconds;
-  // a worker does the ~35s of paid work and the client polls `getToday`. So no
+  // a worker does the ~35s of paid work and the client polls `getCurrent`. So no
   // long-timeout override here, deliberately: the previous 60s one was never
   // honoured anyway (nginx caps this route at 30s), and pretending otherwise is
   // what produced «حدث خطأ ما» over a post that had actually been created.

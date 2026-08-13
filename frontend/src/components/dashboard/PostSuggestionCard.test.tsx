@@ -14,7 +14,7 @@ const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
+  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
 }));
 vi.mock('@/lib/featureFlags', () => ({ isPostSuggestionsVisible: mockIsVisible }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));

@@ -20,7 +20,7 @@ const { mockGenerate, mockGetToday, mockMarkEvent, mockSelectVariant, mockDownlo
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getToday: mockGetToday, generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant, downloadImage: mockDownloadApi },
+  postSuggestionsApi: { getCurrent: mockGetToday, generate: mockGenerate, markEvent: mockMarkEvent, selectVariant: mockSelectVariant, downloadImage: mockDownloadApi },
 }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('sonner', () => ({ toast: { error: mockToastError, success: mockToastSuccess } }));
@@ -192,7 +192,7 @@ describe('PostSuggestionSheet — auto-generate fires ONCE (StrictMode regressio
 });
 
 describe('PostSuggestionSheet — text-only rows explain themselves from DATA', () => {
-  it('a text-only row arriving via getToday (no imageDegraded flag) still renders the notice', async () => {
+  it('a text-only row arriving via getCurrent (no imageDegraded flag) still renders the notice', async () => {
     renderSheet({ suggestion: TEXT_ONLY, remainingToday: 1, availableTypes: ['general'] });
     expect(await screen.findByText(enPostSuggestions.textOnlyNotice)).toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
@@ -479,5 +479,62 @@ describe('PostSuggestionSheet — downloading the card', () => {
     await waitFor(() => expect(mockToastError).toHaveBeenCalled());
     // The pilot's success metric must never count a download that failed.
     expect(mockMarkEvent.mock.calls.filter((c) => c[2] === 'downloaded')).toHaveLength(0);
+  });
+});
+
+/**
+ * The earlier posts. Creating another used to DESTROY the one it replaced —
+ * text and image both — with no way back (production, 11 Aug: three attempts,
+ * the first was the best one, the third erased it). They are kept since
+ * 2026-08-13, and this strip is where the merchant reaches them.
+ */
+describe('PostSuggestionSheet — earlier posts', () => {
+  const HISTORY = [
+    { id: 'old2', text: 'العنوان الأول\nبقية المنشور الأحدث', imageUrl: 'https://media/o2.jpg', postType: 'promo' as const, createdAt: '2026-08-11T10:00:00Z' },
+    { id: 'old1', text: 'أقدم منشور', imageUrl: null, postType: 'general' as const, createdAt: '2026-08-10T10:00:00Z' },
+  ];
+
+  it('lists them under the post, each openable to its full text', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
+
+    expect(await screen.findByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
+
+    // The SUMMARY carries just the opening line — the strip has to stay
+    // scannable when a post runs long.
+    expect(screen.getByText('العنوان الأول')).toBeInTheDocument();
+    // …and the full text sits inside the disclosure, so a merchant can read and
+    // copy the one they preferred.
+    expect(screen.getByText(/بقية المنشور الأحدث/)).toBeInTheDocument();
+    expect(screen.getAllByText('أقدم منشور').length).toBeGreaterThan(0);
+  });
+
+  it('shows the KEPT image of an earlier post — that it survived is the whole point', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
+
+    const thumbs = await screen.findAllByAltText(enPostSuggestions.historyImageAlt);
+    expect(thumbs[0]).toHaveAttribute('src', 'https://media/o2.jpg');
+    // Exactly one: the text-only earlier post must NOT invent a thumbnail.
+    expect(thumbs).toHaveLength(1);
+  });
+
+  it('renders no section at all when the page has no earlier posts', () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: [] });
+    expect(screen.queryByText(enPostSuggestions.historyTitle)).not.toBeInTheDocument();
+  });
+
+  it('keeps the strip when a response carries NO history field', async () => {
+    // `undefined` means "this response does not carry history" — the generate
+    // route never does — NOT "there are none". Conflating the two would wipe
+    // the strip the moment the merchant creates another post.
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
+    expect(await screen.findByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
+
+    mockGenerate.mockResolvedValue({
+      data: { suggestion: { ...SUGGESTION, id: 's2' }, remainingToday: 1, availableTypes: ['general'] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
+    expect(screen.getByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
   });
 });

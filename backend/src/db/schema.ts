@@ -1910,6 +1910,12 @@ export const postSuggestions = pgTable('post_suggestions', {
     // ~35s against nginx's 30s ceiling on this route, so it cannot run on the
     // request. 'failed' is terminal and visible on purpose: the slot was spent,
     // and a row left pending forever would misreport the merchant's balance.
+    //
+    // ⚠️ 'superseded' changed meaning on 2026-08-13. It used to mean "replaced
+    // and GUTTED" — the row's imageUrl/imageKey were nulled and the files
+    // deleted from storage. It now means simply "an earlier post, intact": the
+    // merchant's history strip is built from these rows, images included. Only
+    // ONE row per page is 'ready' at a time, and that is the current post.
     status: varchar('status', { length: 20 }).notNull().default('ready'),
     // Why a 'failed' row failed, as one of the service's own reason codes —
     // never a raw error string, which would leak internals to the client.
