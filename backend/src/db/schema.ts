@@ -1889,17 +1889,20 @@ export const postSuggestions = pgTable('post_suggestions', {
     variants: jsonb('variants').$type<PostSuggestionVariantRow[] | null>(),
     selectedVariant: integer('selected_variant').notNull().default(0),
     text: text('text').notNull(),
-    // Both nullable = text-only suggestion (image call failed / storage off /
-    // image cleaned up after supersede). imageKey is the storage handle for
-    // delete + the generated-posts/ orphan audit; imageUrl is what the UI shows.
+    // Both nullable = text-only suggestion (image call failed / storage off).
+    // ⚠️ NOT "cleaned up after supersede" any more — since 2026-08-13 a
+    // superseded row keeps its image, so a null here means the generation never
+    // produced one. imageKey is the storage handle for delete + the
+    // generated-posts/ orphan audit; imageUrl is what the UI shows.
     imageUrl: text('image_url'),
     imageKey: text('image_key'),
     // The English scene description sent to the image model. Stored for TWO
     // reasons, both learned the hard way: it is the anti-repetition input (the
     // generator reads the page's recent briefs so it stops drawing the same
-    // desk every day), and it is the only way to AUDIT visual variety after the
-    // fact — a superseded row's image file is deleted, so without this the
-    // day's visual output is unmeasurable the moment it is replaced.
+    // desk every day), and it makes visual variety auditable as TEXT, which is
+    // what a query can group and diff. (It used to be the only audit at all,
+    // because a superseded row's image file was deleted; since 2026-08-13 the
+    // images survive too, so the output itself is inspectable as well.)
     imageBrief: text('image_brief'),
     // Which KIND of image this card used ('photo' | 'poster' | 'conceptual').
     // Read back to rotate the next one — the variety mechanism that works,
@@ -1938,6 +1941,14 @@ export const postSuggestions = pgTable('post_suggestions', {
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
     pageDateIdx: index('idx_post_suggestions_page_date').on(table.pageId, table.suggestedFor),
+    // Every read this feature serves is now "this page's newest row, filtered
+    // by status" — the current post, the in-flight attempt, the history strip.
+    // Dropping the day scope on 2026-08-13 took `suggested_for` out of all
+    // three, leaving the index above unable to do more than the page prefix
+    // while rows accumulate forever (nothing is deleted any more). This is the
+    // one that serves them, and it rides the card fetch — the highest-frequency
+    // read in the feature.
+    pageCreatedIdx: index('idx_post_suggestions_page_created').on(table.pageId, table.createdAt.desc()),
     // Cron idempotency at the DB level: blue+green can both tick the daily
     // job; the second INSERT (onConflictDoNothing) is a no-op. Manual rows
     // are exempt — regenerates create several rows per day by design.

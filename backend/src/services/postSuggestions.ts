@@ -36,6 +36,7 @@ import {
     type StoredBusinessProfile,
     type PostSuggestionDto,
     type PostSuggestionHistoryItem,
+    type PostSuggestionInFlight,
     type PostSuggestionEvent,
     type PostSuggestionImageDegraded,
     type PostSuggestionPostType,
@@ -141,7 +142,15 @@ export type GenerateFailure =
 export type GenerateResult =
     | {
         ok: true;
-        suggestion: PostSuggestionDto;
+        /**
+         * The post the merchant HAS while this one is written — null on a
+         * page's first ever generation. Same meaning as getCurrent's field, so
+         * a claimed request leaves the previous post on screen instead of
+         * blanking it for the ~35s the worker takes.
+         */
+        suggestion: PostSuggestionDto | null;
+        /** The row this call just claimed, until it becomes the post above. */
+        inFlight: PostSuggestionInFlight | null;
         /** null only on the suppressed-insert fallback when the cap store is unreachable. */
         remainingToday: number | null;
         /** Post-generation availability — the response mirrors getCurrent's envelope (one shape). */
@@ -196,6 +205,56 @@ async function fetchOwnedPage(workspaceId: string, pageId: string) {
         facebookPageId: pages.facebookPageId,
     }).from(pages).where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId))).limit(1);
     return page ?? null;
+}
+
+/**
+ * The page's CURRENT post — the newest `ready` row, or null if it never made
+ * one.
+ *
+ * ⛔ Status-filtered, NOT "the newest row". Reading the newest row of any
+ * non-superseded status is what let a `failed` row become the answer: a
+ * generation that fails supersedes nothing, so it lands NEWER than the intact
+ * post it did not replace. Day-scoped that self-healed at midnight; on-demand
+ * it is permanent — the post is masked, and `history` cannot reach it either
+ * (that is superseded rows only). What is happening is `readInFlight`'s job.
+ *
+ * Ownership is NOT checked here — callers resolve it via fetchOwnedPage first,
+ * and re-checking would mean a second pages read on the highest-frequency fetch
+ * in the feature.
+ */
+async function readCurrentPost(pageId: string) {
+    const [row] = await db.select().from(postSuggestions)
+        .where(and(
+            eq(postSuggestions.pageId, pageId),
+            eq(postSuggestions.status, 'ready'),
+        ))
+        .orderBy(desc(postSuggestions.createdAt))
+        .limit(1);
+    return row ?? null;
+}
+
+/**
+ * The latest attempt, when it is not (yet) a post — else null.
+ *
+ * PENDING and FAILED are both served: this is what the client polls, so hiding
+ * a pending row would report "nothing happening" over work already paid for,
+ * and hiding a failed one would leave the merchant waiting on something that
+ * ended. Ordering over all three live statuses (not just the two) is what makes
+ * "null" mean *settled*: once the attempt becomes the newest `ready` row there
+ * is nothing in flight, and the failed rows underneath it stay history the
+ * merchant never has to look at.
+ */
+async function readInFlight(pageId: string): Promise<PostSuggestionInFlight | null> {
+    const [latest] = await db.select({ id: postSuggestions.id, status: postSuggestions.status })
+        .from(postSuggestions)
+        .where(and(
+            eq(postSuggestions.pageId, pageId),
+            inArray(postSuggestions.status, ['ready', 'pending', 'failed']),
+        ))
+        .orderBy(desc(postSuggestions.createdAt))
+        .limit(1);
+    if (!latest || latest.status === 'ready') return null;
+    return { id: latest.id, status: latest.status as 'pending' | 'failed' };
 }
 
 /**
@@ -936,7 +995,16 @@ async function computeAvailableTypes(page: OwnedPage, today: string): Promise<Po
 
 class PostSuggestionsService {
     /**
-     * The page's CURRENT post, plus the earlier ones it replaced.
+     * The page's CURRENT post, what is in flight, and the earlier posts.
+     *
+     * ⭐ `suggestion` is always a READY row. It used to be "the newest row of
+     * any live status", which conflated the post the merchant HAS with the
+     * attempt that is HAPPENING — and a failed attempt is newer than the post
+     * it did not replace, so it took its place. Day-scoped that cleared at
+     * midnight; on-demand nothing clears it, so the post stayed masked (and
+     * unreachable via `history`, which is superseded rows only) and a page
+     * whose one-time seed failed showed an empty card forever. The two
+     * questions are answered separately now — see `PostSuggestionInFlight`.
      *
      * ⚠️ Deliberately NOT scoped to today. It used to be, because a cron wrote a
      * post every morning and the calendar day was the unit of the product. With
@@ -953,7 +1021,7 @@ class PostSuggestionsService {
      * its counter. The same page row feeds computeAvailableTypes, so KB/profile
      * are fetched exactly once.
      */
-    async getCurrent(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; remainingToday: number | null; availableTypes: PostSuggestionPostType[]; history: PostSuggestionHistoryItem[] } | null> {
+    async getCurrent(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; inFlight: PostSuggestionInFlight | null; remainingToday: number | null; availableTypes: PostSuggestionPostType[]; history: PostSuggestionHistoryItem[] } | null> {
         const today = todayIso();
         const page = await fetchOwnedPage(workspaceId, pageId);
         if (!page) return null;
@@ -961,41 +1029,44 @@ class PostSuggestionsService {
         // Ownership is established above, so no pages join — and no
         // materializing the full pages row (KB text, accessToken) per card fetch.
         //
-        // PENDING and FAILED rows are served too, not just ready ones: this read
-        // is what the client polls while the worker runs, so hiding a pending row
-        // would show "no post yet" over work already paid for, and hiding a
-        // failed one would leave the merchant waiting on something that ended.
-        // `superseded` stays excluded — it is the only status meaning "an
-        // earlier one", and those come back in `history` instead.
-        const [row] = await db.select().from(postSuggestions)
-            .where(and(
-                eq(postSuggestions.pageId, pageId),
-                inArray(postSuggestions.status, ['ready', 'pending', 'failed']),
-            ))
-            .orderBy(desc(postSuggestions.createdAt))
-            .limit(1);
+        // ⭐ Four INDEPENDENT reads, so they cost one round trip rather than
+        // four (Rule 17.3 — never a sequential hop where a parallel one works).
+        // This runs on every dashboard render of the card, which is the
+        // highest-frequency fetch the feature has; the row reads are served by
+        // idx_post_suggestions_page_created, added with this split because
+        // dropping the day scope left `suggested_for` — the only indexed
+        // discriminator either query had — out of both of them.
+        const [current, inFlight, history, remainingToday] = await Promise.all([
+            readCurrentPost(pageId),
+            readInFlight(pageId),
+            readPostHistory(pageId),
+            this.readRemainingToday(pageId, today),
+        ]);
+        const availableTypes = await computeAvailableTypes(page, today);
+        return { suggestion: current ? toDto(current) : null, inFlight, remainingToday, availableTypes, history };
+    }
 
-        const history = await readPostHistory(pageId);
-
-        let remainingToday: number | null = null;
+    /**
+     * Slots left today, or NULL when the cap store cannot say.
+     *
+     * Null is UNKNOWN, never 0 — a false "exhausted" would hide the create UI
+     * for the duration of a Redis incident, and the generate path fails closed
+     * on its own anyway. Captured (fingerprinted) so an incident on the
+     * highest-frequency cap read stays visible instead of silently degrading.
+     */
+    private async readRemainingToday(pageId: string, today: string): Promise<number | null> {
         try {
             const cap = await checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), config.postSuggestions.dailyCapPerPage);
-            remainingToday = Math.max(0, cap.limit - cap.used);
+            return Math.max(0, cap.limit - cap.used);
         } catch (err) {
-            // Redis down: remaining stays NULL (= unknown) — never report a
-            // false "exhausted" that hides the regenerate UI for the incident's
-            // duration; the generate path fails closed on its own. Captured
-            // (fingerprinted) so a Redis incident on the highest-frequency cap
-            // read is visible, not silently degraded.
             captureError(err, 'Post suggestion: getCurrent cap read failed', {
                 level: 'warning',
                 tags: { service: 'post-suggestions' },
                 fingerprint: ['post-suggestions-cap-read'],
                 extra: { pageId },
             });
+            return null;
         }
-        const availableTypes = await computeAvailableTypes(page, today);
-        return { suggestion: row ? toDto(row) : null, remainingToday, availableTypes, history };
     }
 
     /**
@@ -1104,8 +1175,8 @@ class PostSuggestionsService {
         // unique index): the sibling deploy already claimed today's row.
         if (!pending) {
             const existing = await this.getCurrent(workspaceId, pageId);
-            if (existing?.suggestion) {
-                return { ok: true, suggestion: existing.suggestion, remainingToday: existing.remainingToday, availableTypes: existing.availableTypes };
+            if (existing?.suggestion || existing?.inFlight) {
+                return { ok: true, suggestion: existing.suggestion, inFlight: existing.inFlight, remainingToday: existing.remainingToday, availableTypes: existing.availableTypes };
             }
             return { ok: false, reason: 'generation_failed' };
         }
@@ -1144,9 +1215,13 @@ class PostSuggestionsService {
         // the row's CURRENT state rather than a stale pending snapshot.
         const [current] = await db.select().from(postSuggestions)
             .where(eq(postSuggestions.id, pending.id)).limit(1);
+        const settled = current ?? pending;
 
-        // One envelope across routes: the same availability list getCurrent
-        // serves. Cheap — reuses the page row this request already fetched.
+        // One envelope across routes: same split, same availability list
+        // getCurrent serves. A row that is already `ready` (the inline seed
+        // path, or a very fast worker) IS the post; anything else is in flight
+        // and the merchant keeps looking at the post they already had — which
+        // is why the previous one is read rather than sending them null.
         //
         // ⛔ History is deliberately NOT returned here. This route answers with
         // a PENDING row — the worker supersedes the previous post seconds
@@ -1154,12 +1229,22 @@ class PostSuggestionsService {
         // client is already polling getCurrent, which answers correctly. Sending
         // a knowingly-stale list would buy a paid-path query for a value the
         // very next request overwrites.
-        const availableTypes = await computeAvailableTypes(page, today);
+        const settledIsPost = settled.status === 'ready';
+        const [previous, availableTypes] = await Promise.all([
+            settledIsPost ? Promise.resolve(null) : readCurrentPost(pageId),
+            computeAvailableTypes(page, today),
+        ]);
 
         // Remaining slots from the stricter of the two views, counting the slot
         // this request just consumed.
         const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
-        return { ok: true, suggestion: toDto(current ?? pending), remainingToday: remaining, availableTypes };
+        return {
+            ok: true,
+            suggestion: settledIsPost ? toDto(settled) : (previous ? toDto(previous) : null),
+            inFlight: settledIsPost ? null : { id: settled.id, status: settled.status as 'pending' | 'failed' },
+            remainingToday: remaining,
+            availableTypes,
+        };
     }
 
     /**
@@ -1510,14 +1595,16 @@ class PostSuggestionsService {
                 // 'failed' rather than by throwing — so counting `ok` alone
                 // would book every failed generation as a success and make
                 // these counters, the only per-page signal this job has, lie.
-                if (generated.ok && generated.suggestion.status === 'ready') {
+                // Nothing in flight after an INLINE fulfilment is exactly "the
+                // row became the post"; a failed one comes back as inFlight.
+                if (generated.ok && !generated.inFlight && generated.suggestion) {
                     result.seeded++;
                     logger.info('[PostSuggestions] Seeded first post', { pageId, postType: generated.suggestion.postType });
                 } else {
                     result.failed++;
                     logger.warn('[PostSuggestions] Seed generation failed', {
                         pageId,
-                        reason: generated.ok ? `status:${generated.suggestion.status}` : generated.reason,
+                        reason: generated.ok ? `status:${generated.inFlight?.status ?? 'no_post'}` : generated.reason,
                     });
                 }
             } catch (err) {

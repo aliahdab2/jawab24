@@ -189,6 +189,62 @@ describe('PostSuggestionSheet — auto-generate fires ONCE (StrictMode regressio
     // effect — the ref guard must keep it at ONE.
     expect(mockGenerate).toHaveBeenCalledTimes(1);
   });
+
+  it('shows NO create button on the way in — the auto-generate owns that click', async () => {
+    // The empty state added for a failed seed must not appear on the CTA path.
+    // Auto-generate fires in an effect, i.e. one frame after the first paint,
+    // so an ungated button would flash — and a click landing in that frame
+    // would spend a second capped slot on top of the one about to be spent.
+    render(<PostSuggestionSheet pageId="p1" initial={null} canGenerate onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: new RegExp(enPostSuggestions.cardCta) })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalledTimes(1));
+  });
+});
+
+/**
+ * The state a failed attempt leaves behind, when the page has no post to fall
+ * back on — a first generation that failed, or the one-time SEED.
+ *
+ * It used to be unreachable-by-design: the failed row came back as the
+ * `suggestion`, so the sheet rendered its empty text as a post, with Copy and
+ * Download over nothing and no way to start another. The seed predicate is
+ * "this page has any row", so nothing ever retried it either.
+ */
+describe('PostSuggestionSheet — no post, and the last attempt failed', () => {
+  const FAILED = { id: 'seed-failed', status: 'failed' as const };
+
+  it('⭐ offers to create one instead of rendering an empty post', async () => {
+    renderSheet({ suggestion: null, inFlight: FAILED, remainingToday: 2, availableTypes: ['general'] });
+    expect(await screen.findByRole('button', { name: new RegExp(enPostSuggestions.cardCta) })).toBeEnabled();
+    // No editor, no Copy over an empty body.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: new RegExp(enPostSuggestions.copyText) })).not.toBeInTheDocument();
+  });
+
+  it('the CTA starts a generation, and does NOT auto-fire on open', async () => {
+    renderSheet({ suggestion: null, inFlight: FAILED, remainingToday: 2, availableTypes: ['general'] });
+    const cta = await screen.findByRole('button', { name: new RegExp(enPostSuggestions.cardCta) });
+    // An automatic retry over a failed row is exactly the unattended spend the
+    // on-demand model removes — the merchant asks.
+    expect(mockGenerate).not.toHaveBeenCalled();
+    fireEvent.click(cta);
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalledTimes(1));
+  });
+
+  it('says the day is spent rather than offering a button that would 429', async () => {
+    renderSheet({ suggestion: null, inFlight: FAILED, remainingToday: 0, availableTypes: ['general'] });
+    expect(await screen.findByText(enPostSuggestions.noRemaining)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: new RegExp(enPostSuggestions.cardCta) })).not.toBeInTheDocument();
+  });
+
+  it('a member who may not generate sees the explanation and no button', async () => {
+    renderSheet(
+      { suggestion: null, inFlight: FAILED, remainingToday: 2, availableTypes: ['general'] },
+      { canGenerate: false },
+    );
+    expect(await screen.findByText(enPostSuggestions.cardDesc)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: new RegExp(enPostSuggestions.cardCta) })).not.toBeInTheDocument();
+  });
 });
 
 describe('PostSuggestionSheet — text-only rows explain themselves from DATA', () => {
@@ -357,22 +413,21 @@ describe('PostSuggestionSheet — choosing between takes', () => {
  * finished post was reported to the merchant as «حدث خطأ ما».
  */
 describe('PostSuggestionSheet — waiting on a generation that runs in a worker', () => {
-  const PENDING: PostSuggestionDto = {
-    ...SUGGESTION,
-    id: 's-pending',
-    status: 'pending',
-    // A pending row carries no text by design — a placeholder would be copied
-    // by any client that ignores `status`.
-    text: '',
-    imageUrl: null,
-    variants: [{ text: '', headline: null, imageUrl: null }],
-  };
+  /**
+   * A generation the worker still owns.
+   *
+   * It is an `inFlight` row, NOT a `suggestion`: what the merchant HAS and what
+   * is HAPPENING are separate fields since 2026-08-13, because a pending row
+   * served as the post rendered an empty body — and a FAILED one took the
+   * place of a real post permanently, the read no longer being day-scoped.
+   */
+  const RUNNING = { id: 's-pending', status: 'pending' as const };
 
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('a PENDING row shows the working state and never the editor', async () => {
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+  it('a row IN FLIGHT shows the working state and never the editor', async () => {
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
     expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
     // The empty body must not reach a textarea the merchant could copy from.
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -384,11 +439,12 @@ describe('PostSuggestionSheet — waiting on a generation that runs in a worker'
     mockGetToday.mockImplementation(() => Promise.resolve({
       data: {
         suggestion: { ...SUGGESTION, id: 's-pending' },
+        inFlight: null,
         remainingToday: 1,
         availableTypes: ['general'],
       },
     }));
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
     expect(await screen.findByText(enPostSuggestions.generating)).toBeInTheDocument();
 
     await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
@@ -399,16 +455,38 @@ describe('PostSuggestionSheet — waiting on a generation that runs in a worker'
   it('a row that ends FAILED surfaces the error instead of spinning forever', async () => {
     mockGetToday.mockImplementation(() => Promise.resolve({
       data: {
-        suggestion: { ...PENDING, status: 'failed' as const },
+        suggestion: null,
+        inFlight: { id: 's-pending', status: 'failed' as const },
         remainingToday: 1,
         availableTypes: ['general'],
       },
     }));
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
     // The merchant's slot was spent, so the failure is shown rather than hidden.
     expect(await screen.findByText(enPostSuggestions.errorGeneration)).toBeInTheDocument();
+  });
+
+  it('⭐ a failure leaves the post the merchant ALREADY had on screen', async () => {
+    // The regression this split exists for. A failed generation supersedes
+    // nothing, so its row is newer than the post it did not replace — served as
+    // "the newest live row" it blanked the sheet, and with the day scope gone
+    // it never gave the post back.
+    mockGetToday.mockImplementation(() => Promise.resolve({
+      data: {
+        suggestion: { ...SUGGESTION },
+        inFlight: { id: 's-pending', status: 'failed' as const },
+        remainingToday: 1,
+        availableTypes: ['general'],
+      },
+    }));
+    renderSheet({ suggestion: SUGGESTION, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_500); });
+    expect(await screen.findByText(enPostSuggestions.errorGeneration)).toBeInTheDocument();
+    // …and the post is still right there to copy.
+    expect(screen.getByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
   });
 
   it('a poll blip is not a failure — the next tick still lands the post', async () => {
@@ -417,11 +495,12 @@ describe('PostSuggestionSheet — waiting on a generation that runs in a worker'
       .mockImplementation(() => Promise.resolve({
         data: {
           suggestion: { ...SUGGESTION, id: 's-pending' },
+          inFlight: null,
           remainingToday: 1,
           availableTypes: ['general'],
         },
       }));
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(7_000); });
     expect(await screen.findByDisplayValue(SUGGESTION.text)).toBeInTheDocument();
@@ -432,19 +511,29 @@ describe('PostSuggestionSheet — waiting on a generation that runs in a worker'
     // The worker owns the row and always resolves it, so a still-pending row
     // here means slow — never lost.
     mockGetToday.mockImplementation(() => Promise.resolve({
-      data: { suggestion: { ...PENDING }, remainingToday: 1, availableTypes: ['general'] },
+      data: { suggestion: null, inFlight: { ...RUNNING }, remainingToday: 1, availableTypes: ['general'] },
     }));
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(125_000); });
     expect(await screen.findByText(enPostSuggestions.takingLonger)).toBeInTheDocument();
     expect(screen.queryByText(enPostSuggestions.errorGeneration)).not.toBeInTheDocument();
   });
 
-  it('does NOT stamp `opened` on a pending row — the metric counts posts actually seen', async () => {
-    renderSheet({ suggestion: PENDING, remainingToday: 1, availableTypes: ['general'] });
+  it('does NOT stamp `opened` while a generation is in flight — the metric counts posts actually seen', async () => {
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
     await screen.findByText(enPostSuggestions.generating);
     expect(mockMarkEvent).not.toHaveBeenCalled();
+  });
+
+  it('does NOT auto-generate over a generation that is already running', async () => {
+    // Opening the sheet with nothing to show used to mean "start one". With
+    // `inFlight` split out, "nothing to show" is also the state of a page whose
+    // generation is mid-flight — and starting a second would spend a second
+    // capped slot on work already paid for.
+    renderSheet({ suggestion: null, inFlight: RUNNING, remainingToday: 1, availableTypes: ['general'] });
+    await screen.findByText(enPostSuggestions.generating);
+    expect(mockGenerate).not.toHaveBeenCalled();
   });
 });
 

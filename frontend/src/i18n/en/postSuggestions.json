@@ -38,7 +38,7 @@
   "reviewBeforePosting": "Review the post before publishing — you know your business best.",
   "postImageAlt": "Suggested image for your post",
   "historyTitle": "Your earlier posts",
-  "historyHint": "Your earlier posts are kept — creating a new one no longer deletes them.",
+  "historyHint": "Kept here with their text and images. Open any one to copy it.",
   "historyItemLabel": "Post from {date}",
   "historyImageAlt": "Earlier post image",
   "errorDailyCap": "Daily limit reached. You can create a new post tomorrow.",
