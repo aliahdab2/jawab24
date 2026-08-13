@@ -1,3 +1,21 @@
+> # ⛔ SUPERSEDED — HISTORICAL ONLY. DO NOT FOLLOW.
+>
+> This is the **April 2026** one-off task brief for the very first submission (build
+> `1.1.1 (3)`). It is kept for history. Several of its instructions are now **wrong** and
+> following them would cause a rejection or a policy breach:
+>
+> | This brief says | Actual, as of 2026-08-13 |
+> |---|---|
+> | Build `1.1.1 (3)`, upload via Transporter | **2.0.33 (10)**; uploads go via `altool` / the ASC API |
+> | Age Rating **17+** | **4+** — and "Messaging and Chat" must be **Yes** (Apple's 2.3.6 rejection, 2026-08-13; answering Yes keeps it at 4+) |
+> | Contact `ali.ahdab@telavox.com` | `aliahdab@gmail.com`. ⛔ The Telavox account must never be used for Jawab24 |
+> | Review notes text (as quoted) | Fully replaced — the current notes argue **Guideline 3.1.3(f)** |
+> | *(silent on payments)* | The 3.1.1 posture is the single most rejection-prone part of this app. See **D-064** and **D-079** |
+>
+> **Current source of truth:** `DECISIONS.md` D-064 + **D-079**, the "Mobile / Capacitor"
+> table in `SYSTEM_ANALYSIS.md`, and the launch plan at
+> `~/.claude/plans/ios-app-store-launch-2026-08.md`.
+
 Task: Publish Jawab24 iOS app to App Store Connect / TestFlight
 
 Context you need
