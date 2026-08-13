@@ -123,12 +123,22 @@ export function businessPhoneEntries(p: BusinessProfile): BusinessPhoneEntry[] {
 
     return entries
         .map((e) => {
-            if (typeof e === 'string') return { number: e.trim() };
+            // ⚠️ A bare string is passed through VERBATIM, blanks aside. It is
+            // tempting to `.trim()` here, and it would even be tidier — but a
+            // merchant storing « 0911000210 » would then get a different
+            // BUSINESS_INFO line than they get today, which retires their
+            // semantic reply-cache keys and re-opens reply behaviour that is
+            // currently settled. Byte-identity for existing data beats tidiness;
+            // trimming belongs at the WRITE boundary (`normalizePhoneEntries`),
+            // where it changes what is stored rather than what is published.
+            if (typeof e === 'string') return { number: e };
             if (!e || typeof e.number !== 'string') return { number: '' };
+            // Entry objects are new in this format, so there is no prior render
+            // to preserve — they are normalized on write and read back clean.
             const description = e.description?.trim();
             return description ? { number: e.number.trim(), description } : { number: e.number.trim() };
         })
-        .filter((e) => e.number !== '');
+        .filter((e) => e.number.trim() !== '');
 }
 
 /** The merchant's call lines as bare numbers. Semantics are unchanged from

@@ -433,6 +433,13 @@ describe('businessPhoneEntries', () => {
             .toEqual([{ number: '0911000210' }]);
     });
 
+    it('does NOT trim a bare string — the published value must not change', () => {
+        // Trimming here would alter the prompt of any merchant whose stored
+        // number carries padding. Normalization belongs on the WRITE path.
+        expect(businessPhoneEntries({ phones: ['  0911000210  '] })).toEqual([{ number: '  0911000210  ' }]);
+        expect(businessPhoneList({ phones: ['  0911000210  '] })).toEqual(['  0911000210  ']);
+    });
+
     it('businessPhoneList stays numbers-only over described entries', () => {
         // Every caller that dials, excludes, or string-compares a number reads
         // through this. If it ever returned objects, `texts.join()` in lead
@@ -532,6 +539,42 @@ describe('byte-identical render — profiles without descriptions or email', () 
     it('an empty profile still yields no block at all', () => {
         expect(formatBusinessInfoPrompt({})).toBeNull();
         expect(formatBusinessInfoPrompt({ phones: [] })).toBeNull();
+    });
+
+    it('passes a padded legacy string through VERBATIM — the one input class that nearly drifted', () => {
+        // Caught in review: the tri-shape reader originally trimmed every
+        // entry. Tidier, but a merchant storing « 0911000210 » would have got a
+        // different line than they get today — a silent prompt change, and with
+        // it a retired reply-cache key, for data nobody edited. The other
+        // fixtures here are all unpadded, so nothing else in this file would
+        // have noticed.
+        expect(formatBusinessInfoPrompt({ phones: ['  0911000210  ', '0911000220'] })).toBe(
+            `${HEADER}\n`
+            + '- Address / العنوان / الموقع: [NOT_PROVIDED]\n'
+            + '- Phones / الهاتف / الأرقام:   0911000210  , 0911000220\n'
+            + '- Hours / أوقات الدوام: [NOT_PROVIDED]\n'
+            + '- Policies / السياسات: [NOT_PROVIDED]',
+        );
+    });
+
+    it('drops a whitespace-only entry, exactly as before', () => {
+        expect(formatBusinessInfoPrompt({ phones: ['   ', '0911000210'] })).toBe(
+            `${HEADER}\n`
+            + '- Address / العنوان / الموقع: [NOT_PROVIDED]\n'
+            + '- Phones / الهاتف / الأرقام: 0911000210\n'
+            + '- Hours / أوقات الدوام: [NOT_PROVIDED]\n'
+            + '- Policies / السياسات: [NOT_PROVIDED]',
+        );
+    });
+
+    it('passes the legacy singular `phone` through verbatim too', () => {
+        expect(formatBusinessInfoPrompt({ phone: ' 0933301022 ' })).toBe(
+            `${HEADER}\n`
+            + '- Address / العنوان / الموقع: [NOT_PROVIDED]\n'
+            + '- Phones / الهاتف / الأرقام:  0933301022 \n'
+            + '- Hours / أوقات الدوام: [NOT_PROVIDED]\n'
+            + '- Policies / السياسات: [NOT_PROVIDED]',
+        );
     });
 });
 
