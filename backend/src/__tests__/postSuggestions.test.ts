@@ -499,7 +499,7 @@ describe('generateSuggestion — spend guards run before any paid call', () => {
         // back as `suggestion` — an empty-text "post" the client rendered with
         // Copy/Download over nothing, and which masked whatever real post the
         // page had until the day rolled over. On demand, nothing rolls over.
-        expect(r.inFlight).toEqual({ id: 's1', status: 'failed' });
+        expect(r.inFlight).toEqual({ id: 's1', status: 'failed', brief: null });
         expect(r.suggestion).toBeNull();
         const failed = router.calls.find(
             c => c.op === 'update' && (c.set as { status?: string } | undefined)?.status === 'failed',
@@ -1380,7 +1380,7 @@ describe('post suggestions — the async hand-off', () => {
         // Returned at once, with a real addressable row that is not written yet
         // — as `inFlight`, never as the post. A pending row served as the post
         // is an empty-text body the client renders Copy/Download over.
-        expect(r.inFlight).toEqual({ id: 's1', status: 'pending' });
+        expect(r.inFlight).toEqual({ id: 's1', status: 'pending', brief: null });
         expect(r.suggestion).toBeNull(); // this page has never made one
         // The whole point: nothing paid happened inside the request.
         expect(mockChatCreate).not.toHaveBeenCalled();
@@ -1396,7 +1396,7 @@ describe('post suggestions — the async hand-off', () => {
         queueRequestOnly(PENDING, [{ ...INSERTED, id: 'previous' }]);
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
         expect(postOf(r).id).toBe('previous');
-        expect(r.ok && r.inFlight).toEqual({ id: 's1', status: 'pending' });
+        expect(r.ok && r.inFlight).toEqual({ id: 's1', status: 'pending', brief: null });
     });
 
     it('the job carries the row id and the contact toggle — and NOT the angle, which lives on the row', async () => {
@@ -1454,13 +1454,13 @@ describe('post suggestions — the async hand-off', () => {
     it('the read reports a PENDING row — the client polls this, so hiding it would show "nothing happening" over paid work', async () => {
         queueGetCurrent([], { latest: [{ id: 'p1', status: 'pending' }] });
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
-        expect(r?.inFlight).toEqual({ id: 'p1', status: 'pending' });
+        expect(r?.inFlight).toEqual({ id: 'p1', status: 'pending', brief: null });
     });
 
     it('the read reports a FAILED row too — a merchant waiting on something that ended is the worse lie', async () => {
         queueGetCurrent([], { latest: [{ id: 'f1', status: 'failed' }] });
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
-        expect(r?.inFlight).toEqual({ id: 'f1', status: 'failed' });
+        expect(r?.inFlight).toEqual({ id: 'f1', status: 'failed', brief: null });
     });
 
     it('⭐ a FAILED attempt does not become the post — the one the merchant has survives it', async () => {
@@ -1475,7 +1475,7 @@ describe('post suggestions — the async hand-off', () => {
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r?.suggestion?.id).toBe('s1');
         expect(r?.suggestion?.status).toBe('ready');
-        expect(r?.inFlight).toEqual({ id: 'failed-after', status: 'failed' });
+        expect(r?.inFlight).toEqual({ id: 'failed-after', status: 'failed', brief: null });
 
         // Structural pin: the CURRENT-POST read filters on status, and the
         // status it filters on is 'ready'. Without that the query degenerates
@@ -1495,7 +1495,7 @@ describe('post suggestions — the async hand-off', () => {
         queueGetCurrent([], { latest: [{ id: 'seed-failed', status: 'failed' }] });
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r?.suggestion).toBeNull();
-        expect(r?.inFlight).toEqual({ id: 'seed-failed', status: 'failed' });
+        expect(r?.inFlight).toEqual({ id: 'seed-failed', status: 'failed', brief: null });
     });
 
     it('nothing in flight once the attempt BECAME the post — a settled page reports inFlight null', async () => {

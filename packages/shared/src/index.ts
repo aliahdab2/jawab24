@@ -1603,9 +1603,37 @@ export interface PostSuggestionVariant {
  */
 export type PostSuggestionStatus = 'pending' | 'ready' | 'failed';
 
+/**
+ * How long each of the merchant's two request boxes may be.
+ *
+ * A cap, not a limit on ambition: a request is a topic («عرض العيد على دورة
+ * المكياج»), not a draft. It also bounds what an injection attempt can carry and
+ * keeps the prompt's shape stable across generations.
+ */
+export const POST_SUGGESTION_BRIEF_MAX = 500;
+
 export interface PostSuggestionDto {
   id: string;
   status: PostSuggestionStatus;
+  /**
+   * What the merchant asked this post to SAY, in their own words. Null = they
+   * asked for nothing and the angle picker decided.
+   *
+   * Client-facing because the work finishes in a worker: a merchant who closed
+   * the sheet and came back needs to see WHICH request is still being written,
+   * not just that something is.
+   */
+  brief: string | null;
+  /**
+   * What the merchant asked the PICTURE to show, in their own words. Null = they
+   * described no scene and the model draws one from the post's subject.
+   *
+   * Separate from `brief` because they steer different halves and a merchant
+   * routinely wants one without the other — «صورة فيها صبية محجبة» says nothing
+   * about what the caption should argue, and folding both into one box made the
+   * scene description compete with the subject for the model's attention.
+   */
+  imageRequest: string | null;
   /**
    * Why this generation shipped text-only, absent when it has an image.
    *
@@ -1615,6 +1643,21 @@ export interface PostSuggestionDto {
    * able to serve the reason with it, and there is exactly one source for it.
    */
   imageDegraded?: PostSuggestionImageDegraded;
+  /**
+   * What the merchant's request asked for that their Business Info could not
+   * support, in Arabic and in their terms — absent when the request was fully
+   * honoured (and always absent without a request).
+   *
+   * This is the visible half of the no-fabrication rule. Refusing to invent an
+   * unsupported claim is only half an answer: silently writing about something
+   * else reads as the box ignoring them. Naming the gap turns a bad generation
+   * into an instruction — add it to Business Info and ask again.
+   *
+   * On the SUGGESTION rather than the response envelope, exactly like
+   * `imageDegraded`: the worker learns it long after the request returned, so
+   * every route that serves the row must serve the reason with it.
+   */
+  unmetRequest?: string;
   /** The SELECTED take's text — also what pre-variants clients render. */
   text: string;
   imageUrl: string | null; // null = text-only (image degraded / cleaned up)
@@ -1632,8 +1675,17 @@ export interface PostSuggestionDto {
   createdAt: string; // ISO timestamp
 }
 
-/** Why a suggestion shipped text-only: the image call failed vs. object storage is off. */
-export type PostSuggestionImageDegraded = 'image_failed' | 'storage_off';
+/**
+ * Why a suggestion shipped text-only.
+ *
+ * `image_refused` is split out from `image_failed` because the two ask
+ * different things of the merchant: a failure is ours and retrying may work,
+ * while a refusal is the image provider declining the scene THEY described —
+ * only they can rewrite it. Merchant-described scenes made this common enough
+ * to be worth telling apart (before that, every refusal read as a generic
+ * "no image today" and taught them nothing).
+ */
+export type PostSuggestionImageDegraded = 'image_failed' | 'image_refused' | 'storage_off';
 
 /**
  * An earlier post of the same page — kept, not destroyed.
@@ -1679,6 +1731,16 @@ export interface PostSuggestionHistoryItem {
 export interface PostSuggestionInFlight {
   id: string;
   status: 'pending' | 'failed';
+  /**
+   * What the merchant asked this attempt to be about. Null = they asked for
+   * nothing.
+   *
+   * Here as well as on the DTO because this is the ROW BEING WRITTEN, and the
+   * wait is the moment the answer matters most: a merchant who closed the sheet
+   * and reopened it mid-generation has no local state left, so without this the
+   * spinner can only say "writing…" — never "writing the one you asked for".
+   */
+  brief: string | null;
 }
 
 /**

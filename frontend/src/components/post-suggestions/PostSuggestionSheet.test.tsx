@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { StrictMode } from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { PostSuggestionDto } from '@jawab24/shared';
+import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto } from '@jawab24/shared';
 import type { PostSuggestionResponse } from '@/lib/api';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import { PostSuggestionSheet } from './PostSuggestionSheet';
@@ -29,6 +29,8 @@ vi.mock('@/utils/imageDownload', () => ({ downloadImage: mockDeliver }));
 const SUGGESTION: PostSuggestionDto = {
   id: 's1',
   status: 'ready',
+  brief: null,
+  imageRequest: null,
   text: 'بوست تجريبي 🌟',
   imageUrl: 'https://media/x.jpg',
   variants: [{ text: 'بوست تجريبي 🌟', headline: 'عنوان', imageUrl: 'https://media/x.jpg' }],
@@ -107,30 +109,83 @@ afterEach(() => {
   setClipboard(undefined);
 });
 
-describe('PostSuggestionSheet — angle chips fail CLOSED', () => {
-  it('missing availableTypes = UNKNOWN: only the general chip is enabled, and the data hint shows', async () => {
-    // Envelope without availableTypes (e.g. an old cached response) — the
-    // chips must NOT fail open to all five angles (the burn-a-slot dogfood bug).
+describe('PostSuggestionSheet — the merchant can say what they want', () => {
+  /** The two request boxes, by their labels — the merchant's only way in. */
+  const briefBox = () => screen.getByRole('textbox', { name: enPostSuggestions.briefLabel });
+  const imageBox = () => screen.getByRole('textbox', { name: enPostSuggestions.imageRequestLabel });
+
+  it('sends BOTH boxes, trimmed, on the next generation', async () => {
+    mockGenerate.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 1 } });
     renderSheet({ suggestion: SUGGESTION, remainingToday: 2 });
 
-    expect(await screen.findByRole('button', { name: enPostSuggestions.type_general })).toBeEnabled();
-    for (const name of [
-      enPostSuggestions.type_promo,
-      enPostSuggestions.type_product_spotlight,
-      enPostSuggestions.type_faq_tip,
-      enPostSuggestions.type_hours_reminder,
-    ]) {
-      expect(screen.getByRole('button', { name })).toBeDisabled();
-    }
-    expect(screen.getByText(enPostSuggestions.angleNeedsDataHint)).toBeInTheDocument();
+    fireEvent.change(await screen.findByRole('textbox', { name: enPostSuggestions.briefLabel }), {
+      target: { value: '  عرض العيد على دورة المكياج  ' },
+    });
+    fireEvent.change(imageBox(), { target: { value: 'صورة فيها فتاة محجبة' } });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+
+    // The api client trims; the component must hand over what was typed, and
+    // BOTH fields — an image request that silently never leaves the browser is
+    // the exact failure the second box exists to avoid.
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalledWith(
+      'p1', true, '  عرض العيد على دورة المكياج  ', 'صورة فيها فتاة محجبة',
+    ));
   });
 
-  it('a response carrying availableTypes enables exactly those chips', async () => {
-    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general', 'faq_tip'] });
+  it('an untouched panel sends NOTHING — the unrequested path must stay byte-identical', async () => {
+    mockGenerate.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 1 } });
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2 });
 
-    expect(await screen.findByRole('button', { name: enPostSuggestions.type_faq_tip })).toBeEnabled();
-    expect(screen.getByRole('button', { name: enPostSuggestions.type_general })).toBeEnabled();
-    expect(screen.getByRole('button', { name: enPostSuggestions.type_promo })).toBeDisabled();
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalledWith('p1', true, '', ''));
+  });
+
+  it('a box with content cannot be collapsed out of sight', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2 });
+    const panel = (await screen.findByText(enPostSuggestions.askLabel)).closest('details') as HTMLDetailsElement;
+
+    fireEvent.change(briefBox(), { target: { value: 'عرض العيد' } });
+    // Collapsing it would hide what is still about to be sent — the request
+    // must never be invisible while it is live.
+    fireEvent.click(screen.getByText(enPostSuggestions.askLabel));
+    expect(panel.open).toBe(true);
+  });
+
+  it('caps each box at the shared server limit rather than letting the POST 400', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2 });
+    expect(await screen.findByRole('textbox', { name: enPostSuggestions.briefLabel }))
+      .toHaveAttribute('maxlength', String(POST_SUGGESTION_BRIEF_MAX));
+    expect(imageBox()).toHaveAttribute('maxlength', String(POST_SUGGESTION_BRIEF_MAX));
+  });
+});
+
+describe('PostSuggestionSheet — ground-and-flag (D-082)', () => {
+  it('names what the data could not support, and links to Business Info', async () => {
+    renderSheet({
+      suggestion: { ...SUGGESTION, unmetRequest: 'دورة اللغة الإنكليزية — غير موجودة في معلومات النشاط التجاري' },
+      remainingToday: 2,
+    });
+
+    // The merchant's OWN subject, quoted back. Refusing to invent is only half
+    // an answer — silently writing about something else reads as being ignored.
+    expect(await screen.findByText(/دورة اللغة الإنكليزية/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: enPostSuggestions.unmetRequestCta }))
+      .toHaveAttribute('href', '/pages?openKb=true');
+  });
+
+  it('says nothing when the request was honoured in full', async () => {
+    renderSheet({ suggestion: SUGGESTION, remainingToday: 2 });
+    await screen.findByRole('button', { name: new RegExp(enPostSuggestions.copyText) });
+    expect(screen.queryByRole('link', { name: enPostSuggestions.unmetRequestCta })).not.toBeInTheDocument();
+  });
+
+  it('a REFUSED image is told apart from a failed one — only the merchant can fix theirs', async () => {
+    renderSheet({
+      suggestion: { ...TEXT_ONLY, imageDegraded: 'image_refused' },
+      remainingToday: 2,
+    });
+    expect(await screen.findByText(enPostSuggestions.textOnlyRefused)).toBeInTheDocument();
+    expect(screen.queryByText(enPostSuggestions.textOnlyNotice)).not.toBeInTheDocument();
   });
 });
 

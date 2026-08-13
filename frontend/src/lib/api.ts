@@ -16,7 +16,7 @@ import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import { getEmbeddedToken } from './embeddedSession';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionResponse } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -235,9 +235,22 @@ export const postSuggestionsApi = {
   // honoured anyway (nginx caps this route at 30s), and pretending otherwise is
   // what produced «حدث خطأ ما» over a post that had actually been created.
   // includeContact: merchant toggle for the server-composed contact footer.
-  // postType: merchant-chosen angle; omitted = the server's variety picker.
-  generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
-    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }),
+  // brief / imageRequest: what the merchant asked the post to SAY and the
+  // picture to SHOW, in their own words. Each omitted when empty so an untouched
+  // box is indistinguishable from a client that predates the field — which is
+  // what keeps the unrequested prompt byte-identical to what shipped.
+  //
+  // `postType` is deliberately gone: the five angle chips were removed (owner
+  // ruling 2026-08-13) because a free-text request is a strictly more expressive
+  // duplicate of a preset angle. The SERVER still accepts and honours postType
+  // for shipped mobile bundles that predate this — dropping it here is a client
+  // change, not a contract break.
+  generate: (pageId: string, includeContact = true, brief?: string, imageRequest?: string) =>
+    api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, {
+      includeContact,
+      ...(brief?.trim() ? { brief: brief.trim() } : {}),
+      ...(imageRequest?.trim() ? { imageRequest: imageRequest.trim() } : {}),
+    }),
   // The card's bytes, from OUR origin. Deliberately not a direct fetch of the
   // stored `imageUrl`: that host serves no CORS headers, so the browser can
   // display it but never read it — which is why the download button threw on

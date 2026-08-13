@@ -1,10 +1,37 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import type { PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionEvent, type PostSuggestionPostType, type PostSuggestionResponse } from '@jawab24/shared';
 import { postSuggestionsService, isPostSuggestionsEnabledForWorkspace } from '../services/postSuggestions';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 const EVENTS: readonly PostSuggestionEvent[] = ['opened', 'copied', 'downloaded'];
 const POST_TYPES: readonly PostSuggestionPostType[] = ['promo', 'product_spotlight', 'faq_tip', 'hours_reminder', 'general'];
+
+/**
+ * One of the merchant's free-text request boxes, validated.
+ *
+ * Shared by both boxes rather than written twice: they have identical rules, and
+ * two copies is how one of them silently loses its length cap. The field NAME is
+ * deferred to the error thunk so the message can still say which box failed.
+ */
+function readRequestField(raw: unknown): {
+    value: string;
+    error: ((field: string) => { error: string; code?: string }) | null;
+} {
+    if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+        return { value: '', error: (field) => ({ error: `${field} must be a string` }) };
+    }
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (value.length > POST_SUGGESTION_BRIEF_MAX) {
+        return {
+            value: '',
+            error: (field) => ({
+                error: `${field} must be at most ${POST_SUGGESTION_BRIEF_MAX} characters`,
+                code: 'brief_too_long',
+            }),
+        };
+    }
+    return { value, error: null };
+}
 
 /**
  * «بوست اليوم» pilot — /pages/:pageId/post-suggestions.
@@ -45,7 +72,7 @@ class PostSuggestionsController {
 
     /** POST /pages/:pageId/post-suggestions — generate or regenerate today's post. */
     async generate(
-        request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean; postType?: string } | null }>,
+        request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean; postType?: string; brief?: unknown; imageRequest?: unknown } | null }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
@@ -58,9 +85,23 @@ class PostSuggestionsController {
             return reply.status(400).send({ error: `postType must be one of: ${POST_TYPES.join(', ')}` });
         }
 
+        // What the merchant asked this post to say, and what they asked the
+        // picture to show. Validated for TYPE and LENGTH only — the content is
+        // free text by design and is defended at the prompt boundary (its own
+        // delimited block), not by trying to sanitise natural language, which
+        // does not work.
+        const brief = readRequestField(request.body?.brief);
+        if (brief.error) return reply.status(400).send(brief.error('brief'));
+        const imageRequest = readRequestField(request.body?.imageRequest);
+        if (imageRequest.error) return reply.status(400).send(imageRequest.error('imageRequest'));
+
         const result = await postSuggestionsService.requestSuggestion(req.workspaceId, pageId, 'manual', {
             includeContact,
             ...(rawType ? { postType: rawType as PostSuggestionPostType } : {}),
+            // Omitted when empty so an untouched box is indistinguishable from
+            // a client that predates the field.
+            ...(brief.value ? { brief: brief.value } : {}),
+            ...(imageRequest.value ? { imageRequest: imageRequest.value } : {}),
         });
         if (result.ok) {
             // Same envelope as getCurrent — typed against the shared shape so

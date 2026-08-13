@@ -1,0 +1,42 @@
+-- The merchant can finally say what the post should be about, and what the
+-- picture should show.
+--
+-- Until now the only steering was five preset angle chips: the merchant could
+-- edit the text AFTER it was written but could not ask for anything before it
+-- was. These columns hold their request in their own words.
+--
+-- TWO request columns, not one. They steer different halves and a merchant
+-- routinely wants one without the other — «صورة فيها صبية محجبة حاملة كراس»
+-- says nothing about what the caption should argue. Folding both into a single
+-- box made the scene description compete with the subject for the model's
+-- attention, which is how a request for a person produced a post about people.
+--
+-- ⚠️ `image_request` is NOT `image_brief`. `image_brief` (migration 0158) is the
+-- English scene the MODEL wrote and the image provider was sent; this is the
+-- Arabic scene the MERCHANT asked for, which is an input to that. They are kept
+-- apart so the anti-repetition memory keeps reading model scenes and never
+-- replays a merchant's own words back at them as if we had chosen them.
+--
+-- Stored, not passed through: generation runs in a worker long after the request
+-- returned (migration 0163), so the row is the only place the request can still
+-- be read from — by fulfilment when it builds the prompt, and by the UI, which
+-- has to be able to say WHICH request it is still writing while the merchant
+-- waits or comes back later.
+--
+-- `unmet_request` is the disclosure half of the no-fabrication rule. Letting
+-- them ask does not teach the generator what to do when the answer is not in
+-- their Business Info. On 2026-08-12 an appliance importer asked for a post
+-- about an English language course and got one — complete with an invented
+-- course line, on a page whose catalogue is televisions. Nothing in the data
+-- supported it and nothing said so. The rule is now ground-and-flag, the settled
+-- standard for grounded generation: never assert what the retrieved context does
+-- not carry, and disclose the gap rather than fill it. Text rather than a code,
+-- and Arabic, because it names the merchant's OWN subject («دورة اللغة
+-- الإنكليزية — غير موجودة في معلومات النشاط التجاري»), which no fixed enum could
+-- enumerate.
+--
+-- All three nullable with no backfill: null means "asked for nothing" and
+-- "fully honoured, or never asked" — exactly what every pre-existing row means.
+ALTER TABLE "post_suggestions" ADD COLUMN "brief" text;--> statement-breakpoint
+ALTER TABLE "post_suggestions" ADD COLUMN "image_request" text;--> statement-breakpoint
+ALTER TABLE "post_suggestions" ADD COLUMN "unmet_request" text;
