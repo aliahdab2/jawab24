@@ -24,6 +24,10 @@ vi.mock('../../src/db/schema', () => ({
     instagramComments: { id: 'ig_comments.id', createdAt: 'ig_comments.created_at', needsAttention: 'ig_comments.needs_attention', resolved: 'ig_comments.resolved' },
 }));
 
+vi.mock('../../src/services/statsCache', () => ({
+    invalidateEndpointStatsCaches: vi.fn(),
+}));
+
 vi.mock('drizzle-orm', () => ({
     lt: vi.fn((a: any, b: any) => ({ op: 'lt', field: a, value: b })),
     eq: vi.fn((a: any, b: any) => ({ op: 'eq', field: a, value: b })),
@@ -34,6 +38,7 @@ vi.mock('drizzle-orm', () => ({
 
 import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, cleanupCustomerNotificationLogs, cleanupEmailBodies, expireStaleAttentionItems, ATTENTION_QUEUE_RETENTION_DAYS, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
+import { invalidateEndpointStatsCaches } from '../../src/services/statsCache';
 import { lt, ne, eq } from 'drizzle-orm';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../../src/services/kb/semantic-cache';
 
@@ -230,47 +235,66 @@ describe('cleanup utilities', () => {
     });
 
     describe('expireStaleAttentionItems', () => {
-        // One update per table (messages, comments, instagram_comments), so the mock must
-        // hand back a DIFFERENT batch per call — a shared batch would triple the count and
-        // hide a table that was never swept.
-        function mockPerTableUpdate(batches: Array<Array<{ id: string }>>) {
-            let call = 0;
+        function mockAttentionUpdate(rows: Array<{ workspaceId: string | null }>) {
             const sets: unknown[] = [];
-            const mockReturning = vi.fn(() => Promise.resolve(batches[call++] ?? []));
+            const mockReturning = vi.fn(() => Promise.resolve(rows));
             const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
             const mockSet = vi.fn((v: unknown) => { sets.push(v); return { where: mockWhere }; });
             vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
-            return { sets, mockWhere };
+            return { sets };
         }
 
-        it('resolves stale items across all three queues and sums them', async () => {
-            mockPerTableUpdate([[{ id: 'm-1' }, { id: 'm-2' }], [{ id: 'c-1' }], []]);
+        it('sweeps all three queues and sums them', async () => {
+            mockAttentionUpdate([{ workspaceId: 'w1' }, { workspaceId: 'w1' }]);
 
             const result = await expireStaleAttentionItems(7);
 
             expect(db.update).toHaveBeenCalledTimes(3);
             expect(result.table).toBe('attention_queue');
-            expect(result.deletedCount).toBe(3);
+            expect(result.deletedCount).toBe(6);   // 2 rows × 3 tables
             expect(result.error).toBeUndefined();
         });
 
-        it('RESOLVES only — it must never clear needs_attention or flag_reason', async () => {
-            const { sets } = mockPerTableUpdate([[], [], []]);
+        it('isolates each queue — one table failing must not skip the others', async () => {
+            // The first release shared one try/catch across all three, so a messages error
+            // silently skipped comments (57% of the volume) on every run, forever.
+            let call = 0;
+            const mockReturning = vi.fn(() => Promise.resolve([{ workspaceId: 'w9' }]));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockImplementation(() => {
+                if (call++ === 0) throw new Error('messages exploded');
+                return { set: mockSet } as any;
+            });
+
+            const result = await expireStaleAttentionItems(7);
+
+            expect(db.update).toHaveBeenCalledTimes(3);       // it kept going
+            expect(result.deletedCount).toBe(2);              // the other two queues swept
+            expect(result.error).toContain('messages: messages exploded');
+            expect(result.workspaceIds).toEqual(['w9']);
+        });
+
+        it('never clears the flag AND never writes updated_at', async () => {
+            const { sets } = mockAttentionUpdate([]);
 
             await expireStaleAttentionItems(7);
 
-            // The evidence (flags + flag_meta questions) is what reply quality is measured
-            // from; emptying the queue must not cost us it.
             for (const s of sets) {
                 expect(s).toHaveProperty('resolved', true);
-                expect(s).toHaveProperty('updatedAt');
+                // The evidence (flags + flag_meta questions) is what reply quality is
+                // measured from; emptying the queue must not cost us it.
                 expect(s).not.toHaveProperty('needsAttention');
                 expect(s).not.toHaveProperty('flagReason');
+                // updated_at is the schema's ONLY proxy for "resolved at". Stamping it
+                // made sweep-resolved rows indistinguishable from merchant-resolved ones
+                // and destroyed the measurement D-078 promised to repeat.
+                expect(s).not.toHaveProperty('updatedAt');
             }
         });
 
         it('ages from created_at, defaults to the 7-day window, and skips already-resolved rows', async () => {
-            mockPerTableUpdate([[], [], []]);
+            mockAttentionUpdate([]);
 
             await expireStaleAttentionItems();
 
@@ -284,20 +308,26 @@ describe('cleanup utilities', () => {
             expect(vi.mocked(eq)).toHaveBeenCalledWith('messages.resolved', false);
         });
 
-        it('surfaces DB errors and keeps the partial count from tables already swept', async () => {
-            let call = 0;
-            const mockReturning = vi.fn(() => Promise.resolve([{ id: 'm-1' }]));
-            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
-            vi.mocked(db.update).mockImplementation(() => {
-                if (call++ === 1) throw new Error('update failed');
-                return { set: mockSet } as any;
-            });
+        it('returns the affected workspaces, deduped across queues, for cache invalidation', async () => {
+            mockAttentionUpdate([
+                { workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w1' }, { workspaceId: null },
+            ]);
 
             const result = await expireStaleAttentionItems(7);
 
-            expect(result.error).toBe('update failed');
-            expect(result.deletedCount).toBe(1);
+            expect(result.workspaceIds.sort()).toEqual(['w1', 'w2']);
+        });
+
+        it('reports every queue that failed, and claims no rows it never resolved', async () => {
+            vi.mocked(db.update).mockImplementation(() => { throw new Error('update failed'); });
+
+            const result = await expireStaleAttentionItems(7);
+
+            expect(result.error).toContain('messages: update failed');
+            expect(result.error).toContain('comments: update failed');
+            expect(result.error).toContain('instagram_comments: update failed');
+            expect(result.deletedCount).toBe(0);
+            expect(result.workspaceIds).toEqual([]);
         });
     });
 
@@ -314,6 +344,41 @@ describe('cleanup utilities', () => {
             expect(results).toHaveLength(10);
             expect(results.map(r => r.table)).toContain('attention_queue');
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
+        });
+
+        it('invalidates the stats caches of every workspace the sweep touched', async () => {
+            mockDeleteChain([[]]);
+            // The last task in the Promise.all is the attention sweep; its rows carry the
+            // workspace ids. Without this the Needs-Attention chip keeps a stale count over
+            // an emptied list, and that chip has no polling fallback to self-heal.
+            mockUpdateChain([{ workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w1' }] as any);
+
+            await runAllCleanupTasks(undefined, { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as any);
+
+            expect(vi.mocked(invalidateEndpointStatsCaches)).toHaveBeenCalledWith('w1');
+            expect(vi.mocked(invalidateEndpointStatsCaches)).toHaveBeenCalledWith('w2');
+            expect(vi.mocked(invalidateEndpointStatsCaches)).toHaveBeenCalledTimes(2);
+        });
+
+        it('on a PARTIAL sweep failure it logs the error AND the rows it did resolve', async () => {
+            // Per-queue isolation makes "failed on one table, resolved thousands on the
+            // others" a legitimate outcome. An if/else would report only the failure and
+            // hide the work — which is exactly the observability the sweep is judged by.
+            mockDeleteChain([[]]);
+            let call = 0;
+            const mockReturning = vi.fn(() => Promise.resolve([{ workspaceId: 'w1' }]));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockImplementation(() => {
+                if (call++ === 0) throw new Error('messages exploded');
+                return { set: mockSet } as any;
+            });
+            const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
+
+            await runAllCleanupTasks(undefined, logger);
+
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('messages: messages exploded'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('rows from attention_queue'));
         });
 
         it('should log errors for failed tasks', async () => {

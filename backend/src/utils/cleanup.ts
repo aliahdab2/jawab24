@@ -9,6 +9,7 @@ import { lt, eq, and, ne, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../services/kb/semantic-cache';
+import { invalidateEndpointStatsCaches } from '../services/statsCache';
 
 /**
  * Delete rows matching a condition in batches to avoid long-running transactions.
@@ -210,54 +211,100 @@ export async function cleanupEmailBodies(daysOld: number = EMAIL_BODY_RETENTION_
 /**
  * Days a Needs-Attention item stays in the merchant's queue before it is auto-resolved.
  *
- * Measured on production (2026-08-13, 90 days, 1,057 resolved items): **93% of everything
- * a merchant ever resolves is resolved within 7 days** — the median is 4 hours. Past that
- * the item is not pending, it is abandoned: the open queue was 23,660 items with 68% older
- * than 30 days, spread across paying pages (Nourva 7,900, الفريق الدمشقي 2,489), not one
- * dead account. A 7-day window clears ~94% of that backlog and gives up 7.1% of historical
- * resolutions.
+ * Measured on production `messages` (2026-08-13, 90 days, 1,057 individually resolved
+ * items): **93% of everything a merchant ever resolves is resolved within 7 days** — the
+ * median is 4 hours. Past that the item is not pending, it is abandoned: the open message
+ * queue was 23,660 with 68% older than 30 days, spread across paying pages (Nourva 7,900,
+ * الفريق الدمشقي 2,489), not one dead account. The 7-day window gives up 7.1% of historical
+ * message resolutions — the trade the owner took explicitly over 14 days (3.7%) and 30 (2.2%).
+ *
+ * ⚠️ Those figures are `messages`. Comments share the window on a much thinner and weaker
+ * measurement — see the scope note on the function before citing 7.1% for them.
  */
 export const ATTENTION_QUEUE_RETENTION_DAYS = 7;
 
 /**
  * Auto-resolve Needs-Attention items older than the window, across every page.
  *
- * ⚠️ This RESOLVES, it never deletes, and it deliberately leaves `needs_attention` and
- * `flag_reason` untouched — exactly what the merchant's own "resolve" button writes
- * (`messagesService.markAsResolved`, `commentsService.resolveComment`). That distinction is
- * load-bearing: the queue is what the merchant works, but the flags and their stored customer
- * questions (`flag_meta`) are what WE measure reply quality from. Clearing the queue must not
- * cost us the evidence — on Port Said (2026-08-12) 60% of a 188-item queue turned out to be one
- * fixable KB gap, and it was only visible because the flags survived.
+ * ## Scope: all three queues, but comments on their OWN measurement (D-080)
  *
- * Age is taken from `created_at`: a flag ages from when the customer wrote, not from the last
- * time some unrelated write touched the row.
+ * D-078's numbers described `messages` only, while the shipped sweep also resolved
+ * `comments` and `instagram_comments` — 31,885 comment rows to messages' 24,243, i.e. the
+ * ruling governed 43% of what it was measured on. Comments were measured separately
+ * afterwards and behave differently: excluding the sweep's own bulk minute, only **146
+ * comments had ever been individually resolved in 90 days**, and just 57.5% of those within
+ * 7 days (messages: 93%).
+ *
+ * Proportionally that is a ~42% give-up rather than 7.1%. In absolute terms — the number the
+ * owner ruled on — it is **62 comments over 90 days, ~21 a month across all 122 pages**,
+ * against a comment queue that had accumulated 31,885 rows. Merchants effectively do not work
+ * the comment queue at all: 30 comments were flagged in the last 7 days and 20 are open.
+ *
+ * ⚠️ So the two tables share a window for different reasons, and the comment half rests on a
+ * 146-row sample. If comment-resolution behaviour ever changes, this is the assumption to
+ * re-measure first.
+ *
+ * ## It RESOLVES; it never deletes, never clears the flag, and never touches updated_at
+ *
+ * `needs_attention` and `flag_reason` survive because the queue is what the MERCHANT works
+ * while the flags and their stored customer questions (`flag_meta`) are what reply quality
+ * is measured from — on Port Said (2026-08-12), 60% of a 188-item queue proved to be one
+ * fixable KB gap, visible only because the flags outlived the clear.
+ *
+ * ⚠️ `updated_at` is deliberately NOT written, which is where this stops mirroring the
+ * merchant's own resolve button. That column is the schema's only proxy for "resolved at"
+ * (`services/admin/metrics.ts`), and the first release stamped it on 56,147 rows — making
+ * sweep-resolved rows indistinguishable from merchant-resolved ones and destroying the very
+ * measurement D-078 promised to repeat. Leaving it alone preserves the proxy AND makes an
+ * expired row identifiable (resolved, but `updated_at` still back at its original write).
+ * Nothing reads these columns for behaviour, so omitting the write is free.
+ *
+ * Age is taken from `created_at`: a flag ages from when the customer wrote, not from the
+ * last unrelated write that touched the row.
+ *
+ * Returns the affected workspace ids so the caller can invalidate their stats caches —
+ * `services/statsCache.ts` requires every mutation of these counts to do so, and the
+ * Needs-Attention chip has no polling fallback.
  */
 export async function expireStaleAttentionItems(
     daysOld: number = ATTENTION_QUEUE_RETENTION_DAYS,
-): Promise<CleanupResult> {
+): Promise<CleanupResult & { workspaceIds: string[] }> {
     const cutoff = daysAgo(daysOld);
+    const workspaces = new Set<string>();
+    const errors: string[] = [];
     let total = 0;
-    try {
-        for (const table of [messages, comments, instagramComments] as const) {
-            const result = await db.update(table)
-                .set({ resolved: true, updatedAt: new Date() })
+
+    // Each queue is swept in its OWN try/catch. A single shared catch meant one table's
+    // failure silently skipped the rest on every run forever — and comments alone were 57%
+    // of the volume, so the largest queue could have gone unswept behind a messages error
+    // nobody attributed to it.
+    for (const [name, table] of [
+        ['messages', messages],
+        ['comments', comments],
+        ['instagram_comments', instagramComments],
+    ] as const) {
+        try {
+            const rows = await db.update(table)
+                .set({ resolved: true })
                 .where(and(
                     eq(table.needsAttention, true),
                     eq(table.resolved, false),
                     lt(table.createdAt, cutoff),
                 ))
-                .returning({ id: table.id });
-            total += result.length;
+                .returning({ workspaceId: table.workspaceId });
+            total += rows.length;
+            for (const r of rows) if (r.workspaceId) workspaces.add(r.workspaceId);
+        } catch (error) {
+            errors.push(`${name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-        return { table: 'attention_queue', deletedCount: total };
-    } catch (error) {
-        return {
-            table: 'attention_queue',
-            deletedCount: total,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
     }
+
+    return {
+        table: 'attention_queue',
+        deletedCount: total,
+        workspaceIds: [...workspaces],
+        ...(errors.length ? { error: errors.join('; ') } : {}),
+    };
 }
 
 /**
@@ -289,7 +336,12 @@ export async function runAllCleanupTasks(
 
     logger.info('[Cleanup] Starting database cleanup tasks...');
 
-    const results = await Promise.all([
+    // The attention sweep is destructured by NAME rather than picked out of the results
+    // array by position — it is the only task whose result carries extra fields, and a
+    // positional read would silently attach to the wrong task the moment anyone appends
+    // one here.
+    const [attention, ...otherResults] = await Promise.all([
+        expireStaleAttentionItems(attentionQueueDays),
         cleanupAiCache(aiCacheDays),
         cleanupSemanticCache(),
         cleanupLogs(logsDays),
@@ -299,14 +351,26 @@ export async function runAllCleanupTasks(
         cleanupInactiveEcommerceStores(inactiveStoreDays),
         cleanupCustomerNotificationLogs(customerNotificationDays),
         cleanupEmailBodies(emailBodyDays),
-        expireStaleAttentionItems(attentionQueueDays),
     ]);
-    
-    // Log results
+    const results: CleanupResult[] = [...otherResults, attention];
+
+    // The sweep mutates the Needs-Attention counts, so it owes the same cache invalidation
+    // every resolve/unresolve controller path performs. Skipping it leaves the chip showing
+    // a stale number over an already-emptied list — the chip-shows-N/list-shows-0 defect
+    // `services/statsCache.ts` exists to prevent, and that chip has no polling fallback.
+    // Runs on partial failure too: workspaces whose queue WAS swept still need it.
+    for (const workspaceId of attention.workspaceIds) {
+        invalidateEndpointStatsCaches(workspaceId);
+    }
+
+    // Log results. Error and count are reported INDEPENDENTLY: the attention sweep isolates
+    // each queue, so a run can legitimately both fail on one table and resolve thousands of
+    // rows on the others. An if/else here would hide the work behind the failure.
     for (const result of results) {
         if (result.error) {
             logger.error(`[Cleanup] Error cleaning ${result.table}: ${result.error}`);
-        } else {
+        }
+        if (result.deletedCount > 0 || !result.error) {
             logger.info(`[Cleanup] Cleaned ${result.deletedCount} rows from ${result.table}`);
         }
     }

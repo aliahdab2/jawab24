@@ -221,22 +221,43 @@ retry (handoff re-enqueue) or ones the merchant is expected to resolve by
 reactivating subscription. Every other failure resolves or flags — never
 leaves a ghost "Waiting to reply" card.
 
-### The Needs-Attention queue expires after 7 days (D-078)
+### The Needs-Attention queue expires after 7 days (D-078, corrected by D-080)
 
 A flagged item auto-resolves 7 days after the **customer wrote it**
 (`expireStaleAttentionItems`, part of the existing `[Cleanup]` sweep in
 `backend/src/utils/cleanup.ts`, every 6h, fleet-wide, no per-merchant setting).
-Measured before shipping: 93% of everything a merchant ever resolves is resolved
-within 7 days (median 4 hours), while the open queue had reached 23,660 items
-with 68% older than 30 days.
+It covers `messages`, `comments` and `instagram_comments`, each swept in its own
+`try`/`catch` so one queue failing cannot skip the others.
 
-⭐ **It resolves; it never deletes, and it never clears the flag.** It writes
-exactly what the merchant's own resolve button writes — `resolved = true` — and
-leaves `needs_attention` and `flag_reason` in place. The queue is what the
-MERCHANT works; the flags and their stored customer questions (`flag_meta`) are
-what reply quality is measured from, and emptying the first must not cost the
+Measured on messages before shipping: 93% of everything a merchant ever resolves
+is resolved within 7 days (median 4 hours), while the open message queue had
+reached 23,660 with 68% older than 30 days.
+
+⚠️ **Comments share the window on their own, much thinner evidence.** Only 146
+comments had ever been individually resolved in 90 days — 57.5% within 7 days
+against 93% for messages, i.e. a ~42% give-up rather than 7.1%. The owner ruled
+on the absolute instead: **62 comments over 90 days, ~21 a month fleet-wide**,
+against a comment queue that had reached 31,885. Never quote 7.1% for comments,
+and treat that 146-row sample as the first thing to re-measure if comment
+behaviour changes.
+
+⭐ **It resolves; it never deletes, and it never clears the flag.** `resolved =
+true`, with `needs_attention` and `flag_reason` left in place. The queue is what
+the MERCHANT works; the flags and their stored customer questions (`flag_meta`)
+are what reply quality is measured from, and emptying the first must not cost the
 second. So a small queue is **not** evidence of good replies: read quality off
 the flags, never off the queue.
+
+⚠️ **It does not write `updated_at`** — the one place it deliberately differs
+from the merchant's own resolve button. That column is the schema's only proxy
+for "resolved at", and stamping it (as the first release did, on 56,147 rows)
+makes sweep-resolved rows indistinguishable from merchant-resolved ones. Leaving
+it alone preserves the proxy and marks an expired row: resolved, but `updated_at`
+still back at its original write.
+
+It also calls `invalidateEndpointStatsCaches` for every workspace it touched —
+required of any mutation of these counts, because the Needs-Attention chip has no
+polling fallback.
 
 ---
 

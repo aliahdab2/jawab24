@@ -1717,3 +1717,27 @@ renders, but the page has zero textareas, zero contenteditable nodes and no Repl
 button). Cancelling is unavoidable — a rejected submission holds
 `appStoreVersionForReview` and blocks resubmission — so the order is: reply, then
 cancel, then resubmit.
+
+---
+
+## D-080 · Erratum to D-078: the queue-expiry ruling was measured on 43% of the rows it governed, and the sweep destroyed its own evidence
+
+**D-078 stands as a ruling; three of its supporting statements were wrong.** Recorded here rather than by editing D-078, which is append-only.
+
+**1. The blast radius was stated 2.3x low, and the evidence covered messages only.** Every figure quoted in D-078 — median 4 h, 93% within 7 days, "gives up 7.1%", "23,660 open, 68% older than 30 days" — was measured on `messages` alone. The shipped sweep also resolved `comments` and `instagram_comments`. Actual affected rows: **31,885 comments to 24,243 messages** — the ruling was made on **43%** of what it governed, and the first run resolved ~53,000 rows rather than 23,660.
+
+**2. Re-measured, comments do not support the window.** Excluding the sweep own bulk minute (31,305 rows at 2026-08-13 07:54), only **146 comments had ever been individually resolved in 90 days** — median 1.99 d, **57.5% within 7 days**, against 93% for messages. On comments the 7-day window therefore gives up roughly **40%**, not 7.1%. And 146 rows is not a mandate.
+**Owner ruling on that re-measurement: comments keep the 7-day window.** The percentage is the wrong denominator to rule on. In absolute terms the give-up is **62 comments over 90 days — about 21 a month across all 122 pages** — set against a comment queue that had reached 31,885 rows. Merchants barely touch that queue at all: 30 comments were flagged in the last 7 days and 20 are open right now. So the sweep covers all three queues, but the two halves rest on different evidence, and the comment half rests on a **146-row sample** — the first assumption to re-measure if comment behaviour ever changes.
+
+(Methodology matters here and D-078 named none: the answer swings on how bulk-resolve minutes are treated, because `messagesService.resolveConversation` makes "many rows in one minute" a legitimate merchant action.)
+
+**Per-queue isolation, forced by the same review.** Each table is now swept in its own `try`/`catch` with its own error reported. The first release shared one catch across all three, so a `messages` failure silently skipped the rest on every run forever — and comments were 57% of the volume, i.e. the largest queue could have gone unswept behind an error attributed to another table.
+
+**3. ⭐ The sweep destroyed the proxy D-078 promised to re-measure with.** `updated_at` is the schema only stand-in for "resolved at" (`services/admin/metrics.ts`), and the first release stamped it on **56,147 rows**. Sweep-resolved rows became indistinguishable from merchant-resolved ones, so the next measurement of this rule was not made *inexact* — it was made **impossible**, and with it merchant-engagement analysis ("does anyone work the queue?") and support ability to tell "you resolved this" from "we expired it".
+⇒ **The sweep no longer writes `updated_at`.** Nothing reads these columns for behaviour, so the omission is free, it preserves the proxy, and it makes an expired row identifiable (resolved, but `updated_at` still at its original write). This deliberately breaks D-078 "writes exactly what the resolve button writes" — the same reasoning D-078 already used for refusing to clear the flags: mirroring the button matters less than keeping the evidence.
+
+**Also corrected.** The sweep now calls `invalidateEndpointStatsCaches` for every workspace it touched. `services/statsCache.ts` requires this of every mutation of these counts because the Needs-Attention chip has no polling fallback; all four resolve/unresolve controller paths comply and the sweep — the largest such mutation — did not, leaving a stale chip over an emptied list.
+
+**Still open, deliberately not fixed here.** The UPDATE is unbounded rather than batched. It mattered for the 53k first run; steady state is ~17 rows per pass, so it is a latent risk, not a live one. Related and worth its own change: `batchDelete` `batchSize` never reaches the query at all (Drizzle PG delete takes no LIMIT), so the batching in this file has always been decorative. Fixing that is a separate PR against a pre-existing defect.
+
+**What did NOT change.** The 7-day window for messages, the resolve-don-t-delete rule, keeping `needs_attention` and `flag_reason`, and ageing from `created_at` all stand exactly as D-078 states them — the message evidence (1,057 resolutions, 93% within 7 days) is unaffected by any of the above.
