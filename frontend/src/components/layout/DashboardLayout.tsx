@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useWorkspacesRefresh, useNavBadgeCounts, aggregateNavBadge, type NavBadge } from '@/hooks';
+import { useWorkspaceRole, useWorkspacesRefresh, useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge } from '@/hooks';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
@@ -497,6 +497,10 @@ function MobileMenuOverlay({
       .filter((item) => !BOTTOM_NAV_PATHS.includes(item.href))
       .map((item) => ({
         path: item.href,
+        // Where the tile navigates, which is not always its `path`: a badged
+        // tile follows its badge to the filtered view. `path` stays the bare
+        // pathname so the active-state comparison below keeps working.
+        navigateTo: resolveNavHref(item.href, badgeCounts[item.href]),
         icon: item.icon,
         label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
         badge: badgeCounts[item.href] ?? null,
@@ -504,7 +508,7 @@ function MobileMenuOverlay({
     // Admin dashboard — mobile entry only for allow-listed operator accounts
     // (desktop sidebar shows it for all admins). Page still enforces isAdmin.
     ...(isAdmin && isMobileAdminEmail(user?.email)
-      ? [{ path: '/admin/customers', icon: Shield, label: tAdmin('title'), badge: null }]
+      ? [{ path: '/admin/customers', navigateTo: '/admin/customers', icon: Shield, label: tAdmin('title'), badge: null }]
       : []),
   ];
 
@@ -633,7 +637,7 @@ function MobileMenuOverlay({
               {menuItems.map((item) => (
                 <button
                   key={item.path}
-                  onClick={() => handleNavigate(item.path)}
+                  onClick={() => handleNavigate(item.navigateTo)}
                   className={clsx(
                     "flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200",
                     "bg-muted hover:bg-brand-50 dark:hover:bg-brand-950/30 border border-theme-border hover:border-brand-200 dark:hover:border-brand-800",
@@ -656,7 +660,7 @@ function MobileMenuOverlay({
               {menuItems.map((item) => (
                 <button
                   key={item.path}
-                  onClick={() => handleNavigate(item.path)}
+                  onClick={() => handleNavigate(item.navigateTo)}
                   className={clsx(
                     "flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-200",
                     "bg-card border border-theme-border/60",

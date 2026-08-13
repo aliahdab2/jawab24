@@ -205,8 +205,10 @@ export class LeadsController {
     /**
      * GET /leads/count?pageId=
      * With pageId: that page's `new` count (legacy per-page shape).
-     * Without: workspace-wide summary { count, latestName, latestAt } — feeds
-     * the dashboard attention row + the nav badge.
+     * Without: workspace-wide summary { count, latestName, latestAt, oldestAt,
+     * byPage } — feeds the dashboard attention row + the nav badge, and
+     * `byPage` (longest-waiting page first) tells the badge's deep link which
+     * page to open so it never lands on an empty list.
      */
     async getCount(
         request: FastifyRequest<{

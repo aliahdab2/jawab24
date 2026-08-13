@@ -23,7 +23,9 @@ push notification on capture, daily digest email.
 
 **Visibility of the standing queue (Aug 2026).** Three surfaces read ONE number —
 the workspace-wide count of leads at `status = 'new'`, from `GET /leads/count`
-with no `pageId` (`{ count, latestName, latestAt, oldestAt }`):
+with no `pageId` (`{ count, latestName, latestAt, oldestAt, byPage }`, where
+`byPage` splits the same queue per page, longest-waiting page first, and `count`
+/ `oldestAt` are derived from it so they cannot disagree):
 
 | Surface | Notes |
 |---|---|
@@ -42,6 +44,28 @@ but the sheet behind it drew icon + label only, so a merchant who tapped it face
 grid of identical tiles with nothing pointing at Leads (2026-08-05, 29 waiting). A
 badge on a container is a promise that something inside needs attention — the item
 that owns the count repeats it, in both the portrait grid and the landscape row.
+
+**Resolving the badge (Aug 2026).** Surviving the visit is only half the bargain:
+a badge that never resolves into the thing it counts is one merchants learn to
+ignore, and this one could not be resolved at all — `/leads` opened on **All**,
+scoped to **one page**, so a badge of 9 led to a mixed list of a single page's
+leads and no view in the product showed the 9. Three parts, all keyed off the
+same summary:
+
+- **The badge routes to `/leads?status=new`** — `NavBadge.targetHref`, applied by
+  `resolveNavHref` on every nav surface, so the sidebar and the More sheet cannot
+  disagree about where one badge leads. Only while `count > 0`; on an empty queue
+  the link stays `/leads`, because a filtered view would be empty.
+- **The page honours `?status=`** (`parseStatusFilter`, `frontend/src/utils/leadsView.ts`)
+  and the chips write back to it, so a reload, a shared link, and the back button
+  all reproduce the view. Unknown values are rejected rather than cast — a filter
+  no chip can show would leave every chip unselected over a filtered list.
+- **It lands on a page that HAS waiting leads** (`pickWaitingPage`, from `byPage`).
+  The merchant's own page wins whenever it is waiting; otherwise the longest-waiting
+  page is opened. Without this the deep link is a regression for multi-page
+  merchants: an empty list under a badge of 9. The page picker also labels every
+  entry that has waiting leads with its share, which is where the workspace total
+  becomes legible as a set (9 = 4 + 5) instead of a number shown nowhere.
 
 ## Data model (`leads` table, `backend/src/db/schema.ts`)
 

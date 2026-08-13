@@ -1281,21 +1281,36 @@ class LeadExtractorService {
      *     digest, which keys its age trigger on the oldest lead.
      *   - `latestName` — who turned up most recently, a human hook for the row.
      *
-     * `min(created_at)` rides the same aggregate as the count, so this is still
-     * two round trips, not three.
+     * `byPage` breaks the same queue down per page, ordered LONGEST-WAITING
+     * FIRST. The badge is workspace-wide but the leads list is scoped to one
+     * page, so tapping a badge of 9 could open a page holding none of them —
+     * an empty list under a non-zero badge, which reads as broken. The deep
+     * link picks its landing page from this, and the page picker labels each
+     * entry with its share, so the workspace total is legible as a set.
+     *
+     * `count` and `oldestAt` are DERIVED from `byPage` rather than selected
+     * alongside it: one aggregate cannot disagree with itself, and it keeps
+     * this at two round trips.
      */
     async getNewLeadsSummaryForWorkspace(
         workspaceId: string,
-    ): Promise<{ count: number; latestName: string | null; latestAt: Date | null; oldestAt: Date | null }> {
+    ): Promise<{
+        count: number;
+        latestName: string | null;
+        latestAt: Date | null;
+        oldestAt: Date | null;
+        byPage: Array<{ pageId: string; count: number; oldestAt: Date | null }>;
+    }> {
         const newLeadsOfWorkspace = and(
             eq(pages.workspaceId, workspaceId),
             eq(leads.status, 'new'),
         );
-        const [[totals], [latest]] = await Promise.all([
-            db.select({ value: count(), oldestAt: min(leads.createdAt) })
+        const [perPage, [latest]] = await Promise.all([
+            db.select({ pageId: leads.pageId, value: count(), oldestAt: min(leads.createdAt) })
                 .from(leads)
                 .innerJoin(pages, eq(pages.id, leads.pageId))
-                .where(newLeadsOfWorkspace),
+                .where(newLeadsOfWorkspace)
+                .groupBy(leads.pageId),
             db.select({ senderName: leads.senderName, createdAt: leads.createdAt })
                 .from(leads)
                 .innerJoin(pages, eq(pages.id, leads.pageId))
@@ -1303,14 +1318,28 @@ class LeadExtractorService {
                 .orderBy(desc(leads.createdAt))
                 .limit(1),
         ]);
+
+        const byPage = perPage
+            .map((row) => ({
+                pageId: row.pageId,
+                count: row.value,
+                // `min()` is typed as string|null by drizzle for timestamp columns
+                // (raw driver reads bypass the Date parser — the 0.45 upgrade trap),
+                // so normalize to a Date here rather than at every call site.
+                oldestAt: row.oldestAt ? new Date(row.oldestAt) : null,
+            }))
+            // Longest-waiting page first: urgency, not volume, is what should
+            // decide where a merchant lands — the same stance the attention row
+            // takes by showing `oldestAt` instead of `latestAt`. A grouped row
+            // always covers >= 1 lead, so a null min is defensive only.
+            .sort((a, b) => (a.oldestAt?.getTime() ?? Infinity) - (b.oldestAt?.getTime() ?? Infinity));
+
         return {
-            count: totals?.value ?? 0,
+            count: byPage.reduce((sum, page) => sum + page.count, 0),
             latestName: latest?.senderName ?? null,
             latestAt: latest?.createdAt ?? null,
-            // `min()` is typed as string|null by drizzle for timestamp columns
-            // (raw driver reads bypass the Date parser — the 0.45 upgrade trap),
-            // so normalize to a Date here rather than at every call site.
-            oldestAt: totals?.oldestAt ? new Date(totals.oldestAt) : null,
+            oldestAt: byPage[0]?.oldestAt ?? null,
+            byPage,
         };
     }
 

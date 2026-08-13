@@ -260,6 +260,7 @@ describe('Leads Routes', () => {
             const oldestAt = new Date('2026-07-25T09:21:00Z');
             vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
                 count: 19, latestName: 'عبدالخالق عامر', latestAt, oldestAt,
+                byPage: [{ pageId: 'page_2', count: 12, oldestAt }, { pageId: 'page_1', count: 7, oldestAt: latestAt }],
             });
 
             const res = await app.inject({ method: 'GET', url: '/leads/count' });
@@ -268,6 +269,13 @@ describe('Leads Routes', () => {
             expect(JSON.parse(res.body)).toEqual({
                 count: 19, latestName: 'عبدالخالق عامر',
                 latestAt: latestAt.toISOString(), oldestAt: oldestAt.toISOString(),
+                // Reaches the client intact: the nav badge's deep link picks the
+                // page it opens from this, so dropping it in the response layer
+                // would land a badge of 19 on whatever page was stored last.
+                byPage: [
+                    { pageId: 'page_2', count: 12, oldestAt: oldestAt.toISOString() },
+                    { pageId: 'page_1', count: 7, oldestAt: latestAt.toISOString() },
+                ],
             });
             // Must NOT fall back to the per-page path.
             expect(leadExtractorService.getNewLeadsCount).not.toHaveBeenCalled();
@@ -275,7 +283,7 @@ describe('Leads Routes', () => {
 
         it('workspace summary is scoped to the caller workspace', async () => {
             vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
-                count: 0, latestName: null, latestAt: null, oldestAt: null,
+                count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [],
             });
 
             await app.inject({ method: 'GET', url: '/leads/count' });

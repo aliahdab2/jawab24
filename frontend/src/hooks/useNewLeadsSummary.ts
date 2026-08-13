@@ -2,6 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { leadsApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 
+/** One page's share of the workspace queue. */
+export interface NewLeadsPageShare {
+  pageId: string;
+  count: number;
+  oldestAt: string | null;
+}
+
 export interface NewLeadsSummary {
   /** `new`-status leads across EVERY page in the workspace. */
   count: number;
@@ -14,9 +21,18 @@ export interface NewLeadsSummary {
    * whose worst case has waited ten days.
    */
   oldestAt: string | null;
+  /**
+   * `count` split per page, LONGEST-WAITING FIRST (the server's ordering).
+   *
+   * The badge counts the whole workspace while the leads list shows one page,
+   * so this is what stops the badge's deep link from opening a page that holds
+   * none of the waiting leads — and what lets the page picker show where the
+   * work actually is.
+   */
+  byPage: NewLeadsPageShare[];
 }
 
-const EMPTY: NewLeadsSummary = { count: 0, latestName: null, latestAt: null, oldestAt: null };
+const EMPTY: NewLeadsSummary = { count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [] };
 
 /**
  * Coerce whatever the endpoint actually returned into the declared shape.
@@ -44,7 +60,29 @@ function normalize(data: unknown): NewLeadsSummary {
     latestName: typeof raw.latestName === 'string' ? raw.latestName : null,
     latestAt: typeof raw.latestAt === 'string' ? raw.latestAt : null,
     oldestAt: typeof raw.oldestAt === 'string' ? raw.oldestAt : null,
+    // Absent on a backend older than the breakdown — an empty list simply means
+    // "no idea where the queue is", which the consumers already handle by
+    // leaving the merchant's own page selection alone.
+    byPage: normalizeByPage(raw.byPage),
   };
+}
+
+function normalizeByPage(value: unknown): NewLeadsPageShare[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const raw = entry as Partial<Record<keyof NewLeadsPageShare, unknown>>;
+    if (typeof raw.pageId !== 'string' || !raw.pageId) return [];
+    const count = typeof raw.count === 'number' && Number.isFinite(raw.count)
+      ? Math.max(0, Math.trunc(raw.count))
+      : 0;
+    if (count === 0) return [];
+    return [{
+      pageId: raw.pageId,
+      count,
+      oldestAt: typeof raw.oldestAt === 'string' ? raw.oldestAt : null,
+    }];
+  });
 }
 
 /**

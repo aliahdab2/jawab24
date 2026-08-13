@@ -20,7 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useNavBadgeCounts, type NavBadge } from '@/hooks';
+import { useWorkspaceRole, useNavBadgeCounts, resolveNavHref, type NavBadge } from '@/hooks';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -488,7 +488,7 @@ export const Sidebar = memo(function Sidebar() {
                 return (
                   <NavItem
                     key={item.key}
-                    href={item.href}
+                    href={resolveNavHref(item.href, badge)}
                     icon={item.icon}
                     label={resolveItemKey(item.key)}
                     isActive={router.pathname === item.href || router.pathname.startsWith(item.href + '/')}
