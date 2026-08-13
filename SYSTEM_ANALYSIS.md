@@ -1222,6 +1222,58 @@ Products synced from Shopify/Salla
 
 ## English
 
+### Contact data — the merchant contact standard (2026-08-13)
+
+A merchant's phone number can carry **what it is for**, and a page can carry an
+**email**. `BusinessProfile.phones` entries are `string | {number, description}`
+and `BusinessProfile.email` is a single address; both are provenance-tracked like
+every other field and render into the authoritative BUSINESS_INFO block —
+`- Phones …: 0911000299 (الإدارة — عند الطلب فقط), 0911000210` and a
+present-only `- Email / البريد الإلكتروني: …` (no `[NOT_PROVIDED]` counterpart,
+same reasoning as WhatsApp).
+
+**Why it exists.** Content with no first-class home migrates into whatever free
+text accepts it. Measured, on two of the most engaged pages: one merchant typed
+Arabic *instructions* into the structured `phones` field
+(«رقم الجملة فقط يطلب مبيعات جملة» stored AS a phone number, editor-confirmed,
+published in every prompt as one); another put an 8-number routing table with
+conditions into the 800-char persona field, at the cap. The purpose beside the
+number is the slot both were missing. Eval cases #769/#770 prove the description
+alone does that routing **with no persona at all**.
+
+**Rules for anyone touching it:**
+- ⭐ **Canonical form:** an entry is a bare string IFF it has no non-empty
+  description. Enforced by `normalizePhoneEntries` (`packages/shared/src/businessPhone.ts`)
+  at BOTH write boundaries. The editor sends a full-replace patch on every save,
+  so a shape that is remembered rather than derived makes an untouched echo read
+  as a change to `valueEquals` and stamps merchant provenance on an unconfirmed
+  fb_sync number — the laundering bug fixed 2026-08-08, fleet-wide.
+- **Two readers, never a third:** `businessPhoneList` (bare numbers — what lead
+  exclusion, the post contact suffix and WhatsApp marks use) and
+  `businessPhoneEntries` (with descriptions). Iterating `merchant.phones`
+  directly is how an object reaches a `.join()` and silently empties the
+  lead-capture exclusion set.
+- **The guard is split on purpose.** `MerchantBusinessProfileSchema` (editor PUT
+  only) rejects an entry with no extractable phone — `extractPhones` is the sole
+  judge, no keyword list. The base `BusinessProfileSchema` stays unguarded
+  because `buildBusinessProfile` validates FACEBOOK-SYNCED profiles with it and
+  reports failures to Sentry; machine data must not be judged by a rule written
+  for merchant typing. An entry that *does* contain a number saves even with
+  prose beside it.
+- **Boundary with fact lists:** the field serves the business's own few contact
+  lines. Tables of contact-bearing entities (branches, departments, showrooms —
+  an entity with several attributes) stay in fact collections; MES's
+  «أرقام الأقسام» rows did not move.
+- **Reply safety:** for a page with neither a description nor an email the block
+  is character-identical to before — pinned by the byte-identical `.toBe()` suite
+  and the shape-equivalence suite in `businessInfoPrompt.test.ts`. No
+  `PROMPT_VERSION` bump, no reply-cache retirement.
+
+🔴 **Open:** persona text is still absent from the lead-capture exclusion union,
+so numbers a merchant keeps in «الشخصية ونبرة العلامة» can become leads that dial
+the merchant. See `docs/leads.md` — the trap is that the persona is settings-scoped
+while that cache key is `kbVersion`-scoped.
+
 ### How Knowledge Flows Through the System
 
 ```
