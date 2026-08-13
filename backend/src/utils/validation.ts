@@ -3,6 +3,9 @@ import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
     MAX_ROWS_PER_COLLECTION,
     MAX_LIST_LABEL_LENGTH,
+    MAX_PHONE_DESCRIPTION_LENGTH,
+    normalizePhoneEntries,
+    isUsablePhoneEntry,
     parseMerchantPrice,
 } from '@jawab24/shared';
 import type { CatalogVertical } from '@jawab24/shared';
@@ -92,8 +95,36 @@ export const BusinessProfileSchema = z.object({
     /** @deprecated Stage 2.6 — use `phones[]`. Coerced on next FB sync. */
     phone: z.string().max(50).optional(),
     /** Stage 2.6 — ordered list of contact numbers. Primary first.
-     * Empty string entries stripped server-side; nulls and undefined dropped. */
-    phones: z.array(z.string().min(3).max(40)).max(10).optional(),
+     * Empty string entries stripped server-side; nulls and undefined dropped.
+     *
+     * An entry may carry a free-text `description` of what the line is for
+     * («الإدارة — عند الطلب فقط»). The preprocess canonicalizes BEFORE the
+     * shape is validated, which is what makes the stored value a pure function
+     * of (number, description) — see the canonical-form invariant in
+     * `businessPhone.ts`. Without it, a shape flip on the editor's
+     * full-replace echo would stamp merchant provenance on an untouched
+     * Facebook-synced number. */
+    phones: z.array(z.union([
+        z.string().min(3).max(40),
+        z.object({
+            number: z.string().min(3).max(40),
+            description: z.string().max(MAX_PHONE_DESCRIPTION_LENGTH).optional(),
+        }).strict(),
+    ])).max(10).optional()
+        // Canonicalize at the boundary — the server, not the client, decides
+        // the stored shape. Also sanitizes each description (newlines out, so a
+        // merchant cannot forge a BUSINESS_INFO field line).
+        .transform((v) => (v === undefined ? undefined : normalizePhoneEntries(v))),
+    /** The business's contact email (schema.org `ContactPoint.email`). Strict
+     *  validation is safe here because no producer wrote this field before it
+     *  existed — there is no legacy garbage for a full-replace echo to trip on.
+     *  254 = the RFC 5321 forward-path maximum. */
+    email: z.union([
+        // Clearing the field in the editor sends '' — that is "unset", not a
+        // malformed address, so it must not 400.
+        z.literal(''),
+        z.string().trim().email().max(254),
+    ]).optional().transform((v) => (v ? v : undefined)),
     website: z.string().max(500).optional(),
     address: z.string().max(500).optional(), // widened from 255 — Damascus-style multi-line addresses overflowed
     city: z.string().max(100).optional(),
@@ -124,6 +155,39 @@ export const BusinessProfileSchema = z.object({
 }).passthrough(); // Allow extra fields from Facebook API without breaking
 
 export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
+
+/**
+ * The merchant-editor boundary: everything above, PLUS the rule that a phone
+ * slot must hold a phone.
+ *
+ * ⚠️ Deliberately a SEPARATE schema rather than a refinement on
+ * `BusinessProfileSchema`, because that schema has a second caller —
+ * `buildBusinessProfile` validates the FACEBOOK-SYNCED profile with it
+ * (`services/pages.ts`), and a failure there reports to Sentry and returns the
+ * profile unvalidated. Machine-sourced data must not be judged by a rule
+ * written for merchant typing: a Facebook page whose `phone` libphonenumber
+ * cannot resolve would spam Sentry on every sync and half-validate the result.
+ *
+ * The rejected class is narrow and real: a page stored
+ * «رقم الجملة فقط يطلب مبيعات جملة» AS a phone number, editor-confirmed, and
+ * every prompt then published it to customers as one. `extractPhones` is the
+ * only judge — no keyword list. An entry that DOES contain a number keeps
+ * saving even with prose beside it; that case is redirected in the editor by a
+ * hint, never blocked, so no real contact line can be locked out.
+ */
+export const MerchantBusinessProfileSchema = BusinessProfileSchema.superRefine((profile, ctx) => {
+    const phones = profile.phones ?? [];
+    phones.forEach((entry, i) => {
+        const number = typeof entry === 'string' ? entry : entry.number;
+        if (!isUsablePhoneEntry(number)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['phones', i],
+                message: 'PHONE_ENTRY_NOT_A_NUMBER',
+            });
+        }
+    });
+});
 
 // ==========================================
 // Native catalog (merchant-authored offerings)

@@ -14,7 +14,7 @@ import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
-import { BusinessProfileSchema, validateSchema } from '../utils/validation';
+import { MerchantBusinessProfileSchema, validateSchema } from '../utils/validation';
 import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
@@ -151,7 +151,10 @@ export class PagesController {
         try {
             // Validate businessProfile if present
             if (request.body.businessProfile !== undefined) {
-                const validation = validateSchema(BusinessProfileSchema, request.body.businessProfile);
+                // The MERCHANT schema — it adds the "a phone slot holds a phone"
+                // rule on top of the shared shape. Facebook sync keeps using the
+                // base schema (see the comment on MerchantBusinessProfileSchema).
+                const validation = validateSchema(MerchantBusinessProfileSchema, request.body.businessProfile);
                 if (!validation.success) {
                     return reply.status(400).send({ error: 'Invalid business profile', errors: validation.errors });
                 }

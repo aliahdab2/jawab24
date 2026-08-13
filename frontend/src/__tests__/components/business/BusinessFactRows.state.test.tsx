@@ -37,16 +37,17 @@ describe('BusinessFactRows — state badges', () => {
     expect(screen.queryByText('Missing')).not.toBeInTheDocument();
   });
 
-  // Only SCORED facts read Missing. Phone and website sit outside
+  // Only SCORED facts read Missing. Phone, website and email sit outside
   // READINESS_AREAS, and an amber «ناقص» on a row the counter ignores is the
   // two-scoreboards contradiction this module family exists to prevent — those
   // rows read a neutral Optional instead.
   it('marks empty scored facts Missing and unscored ones Optional', () => {
     renderRows(makePage());
     expect(screen.getAllByText('Missing')).toHaveLength(4);
-    expect(screen.getAllByText('Optional')).toHaveLength(2);
+    expect(screen.getAllByText('Optional')).toHaveLength(3);
     expect(within(row('Phone')).getByText('Optional')).toBeInTheDocument();
     expect(within(row('Website')).getByText('Optional')).toBeInTheDocument();
+    expect(within(row('Email')).getByText('Optional')).toBeInTheDocument();
     expect(screen.queryByText('Complete')).not.toBeInTheDocument();
   });
 
@@ -111,7 +112,7 @@ describe('BusinessFactRows — action affordance', () => {
   it('keeps the WHOLE row as the single tap target', () => {
     renderRows(makePage(FILLED));
     // One control per row — the "Edit" pill must not be a second one.
-    expect(screen.getAllByRole('button')).toHaveLength(6);
+    expect(screen.getAllByRole('button')).toHaveLength(7);
     expect(within(row('Address')).getByRole('button')).toHaveClass('w-full');
   });
 

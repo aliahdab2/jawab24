@@ -3,6 +3,8 @@
 import type { MerchantProvenanceMap } from './businessProfileMerge';
 import type { PresentFields } from './catalogKbMatch';
 import { matchStructuredFieldLinesInKb } from './catalogKbMatch';
+import { businessPhoneList } from './businessInfoPrompt';
+import type { BusinessPhone } from './businessPhone';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
 export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
@@ -227,8 +229,21 @@ export interface BusinessProfile {
   about?: string;
   /** @deprecated since Stage 2.6 — use `phones[0]`. Coerced on next sync. */
   phone?: string;
-  /** Ordered, primary first. v1 enforces length ≤ 10 server-side. */
-  phones?: string[];
+  /**
+   * Ordered, primary first. v1 enforces length ≤ 10 server-side.
+   *
+   * An entry is a bare string when it has no description, and a
+   * `{number, description}` object when the merchant said what the line is for
+   * («الإدارة — عند الطلب فقط»). That "iff" is the CANONICAL-FORM INVARIANT —
+   * read `businessPhone.ts` before touching either shape, and never write this
+   * field without `normalizePhoneEntries`.
+   *
+   * Read it with `businessPhoneEntries` (entries) or `businessPhoneList`
+   * (numbers only) — never destructure the raw array.
+   */
+  phones?: BusinessPhone[];
+  /** The business's contact email. schema.org `ContactPoint.email`. */
+  email?: string;
   website?: string;
   address?: string;
   city?: string;
@@ -340,11 +355,15 @@ export function mergedBusinessProfile(stored: StoredBusinessProfile): BusinessPr
  */
 export function presentFieldsFromProfile(stored: StoredBusinessProfile): PresentFields {
   const { merchant = {} } = unwrapBusinessProfile(stored);
+  // Guard blank contents: [''] / [' '] is not a real phone, {sat:[]} is not
+  // real hours — treat them as absent (matches the address `.trim()` check).
+  // `businessPhoneList` already drops blanks and normalizes every phone shape,
+  // so this reads through it rather than re-deriving the rule (the two used to
+  // disagree: this one ignored the legacy singular `phone` entirely).
+  const phoneNumbers = businessPhoneList(merchant);
   return {
     address: !!merchant.address?.trim(),
-    // Guard blank contents: [''] / [' '] is not a real phone, {sat:[]} is not
-    // real hours — treat them as absent (matches the address `.trim()` check).
-    phone: !!merchant.phones?.some((p) => p?.trim()),
+    phone: phoneNumbers.length > 0,
     hours: !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0),
   };
 }
@@ -1924,7 +1943,10 @@ export interface WorkspaceSettings {
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
-export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneList, isFieldAuthoritative } from './businessInfoPrompt';
+export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative } from './businessInfoPrompt';
+// --- Merchant contact standard: number + optional free-text description ---
+export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
+export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';
 export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---

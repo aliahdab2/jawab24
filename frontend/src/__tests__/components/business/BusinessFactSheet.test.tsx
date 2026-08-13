@@ -44,6 +44,12 @@ function renderSheet(
       factKey={factKey}
       label={factKey}
       initialValue={initialValue}
+      // `phone` edits entries, not a joined string. The comma form is kept in
+      // these tests as a compact way to express "these numbers, no
+      // descriptions" — exactly what a legacy stored profile holds.
+      initialEntries={initialValue
+        ? initialValue.split(/[,،]/).map((n) => ({ number: n.trim() })).filter((e) => e.number)
+        : []}
       initialWhatsapp={initialWhatsapp}
       storeAnswered={storeAnswered}
       saving={false}
@@ -53,6 +59,12 @@ function renderSheet(
   );
   return onSave;
 }
+
+/** The phones payload Save hands back. */
+const phones = (entries: Array<string | { number: string; description: string }>, whatsapp: string[] = []) =>
+  ({ kind: 'phones', entries, whatsapp });
+/** Every other fact's payload. */
+const text = (value: string) => ({ kind: 'text', value });
 
 describe('BusinessFactSheet — voice input scope', () => {
   // Voice appends, and the auto-growing textarea shows what landed — so every
@@ -87,7 +99,7 @@ describe('BusinessFactSheet — WhatsApp marks', () => {
     const onSave = renderSheet('phone', '0988888888, 0935924400', vi.fn(), '0988888888');
     fireEvent.click(screen.getAllByRole('checkbox', { name: /Also on WhatsApp/ })[1]);
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('0988888888, 0935924400', ['0988888888', '0935924400']);
+    expect(onSave).toHaveBeenCalledWith(phones(['0988888888', '0935924400'], ['0988888888', '0935924400']));
   });
 
   it('pre-marks numbers from legacy single-string storage', () => {
@@ -108,7 +120,7 @@ describe('BusinessFactSheet — WhatsApp marks', () => {
     const onSave = renderSheet('phone', '0988888888', vi.fn(), '0988888888');
     fireEvent.click(screen.getByRole('checkbox', { name: /Also on WhatsApp/ }));
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('0988888888', []);
+    expect(onSave).toHaveBeenCalledWith(phones(['0988888888']));
   });
 
   // The flag must follow the NUMBER, not the row position.
@@ -118,7 +130,108 @@ describe('BusinessFactSheet — WhatsApp marks', () => {
     // Non-empty rows arm first — the second tap confirms.
     fireEvent.click(screen.getByText('Confirm delete'));
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('0935924400', ['0935924400']);
+    expect(onSave).toHaveBeenCalledWith(phones(['0935924400'], ['0935924400']));
+  });
+});
+
+/**
+ * The purpose beside the number — the slot whose absence pushed merchants to
+ * type roles into the number itself, into the persona, and into the KB.
+ */
+describe('BusinessFactSheet — phone descriptions', () => {
+  it('round-trips a stored description and saves it with its number', () => {
+    const onSave = vi.fn();
+    render(
+      <BusinessFactSheet
+        factKey="phone"
+        label="phone"
+        initialValue=""
+        initialEntries={[{ number: '0911000299', description: 'الإدارة' }, { number: '0911000210' }]}
+        saving={false}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+    const desc = screen.getByRole('textbox', { name: /What is this number for\? — phone 1/ });
+    expect(desc).toHaveValue('الإدارة');
+
+    fireEvent.change(desc, { target: { value: 'الإدارة — عند الطلب فقط' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith(phones([
+      { number: '0911000299', description: 'الإدارة — عند الطلب فقط' },
+      // Canonical form: no description ⇒ a bare string, so an untouched echo
+      // can never read as a change and launder provenance.
+      '0911000210',
+    ]));
+  });
+
+  it('offers translated suggestions that fill the field but never lock it', () => {
+    const onSave = renderSheet('phone', '0911000299');
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }));
+    const desc = screen.getByRole('textbox', { name: /What is this number for\? — phone 1/ });
+    expect(desc).toHaveValue('Management');
+    // The merchant's own words always win.
+    fireEvent.change(desc, { target: { value: 'Head office' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith(phones([{ number: '0911000299', description: 'Head office' }]));
+  });
+
+  it('keeps the WhatsApp mark on a described number', () => {
+    const onSave = vi.fn();
+    render(
+      <BusinessFactSheet
+        factKey="phone"
+        label="phone"
+        initialValue=""
+        initialEntries={[{ number: '0911000299', description: 'الإدارة' }]}
+        initialWhatsapp={['0911000299']}
+        saving={false}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+    // The mark belongs to the NUMBER — a string-vs-entry compare would have
+    // silently unchecked it here.
+    expect(screen.getByRole('checkbox', { name: /Also on WhatsApp/ })).toBeChecked();
+  });
+
+  it('opens clean — a stored description must not read as an unsaved edit', () => {
+    render(
+      <BusinessFactSheet
+        factKey="phone"
+        label="phone"
+        initialValue=""
+        initialEntries={[{ number: '0911000299', description: 'الإدارة' }]}
+        saving={false}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Save').closest('button')).toBeDisabled();
+  });
+});
+
+describe('BusinessFactSheet — the number slot must hold a number', () => {
+  // Verbatim from an editor-confirmed production profile: stored AS a phone
+  // number and published in every prompt as one.
+  const INSTRUCTION = 'اعطيهم ارقام الصالات فقط';
+
+  it('flags an instruction typed into the number slot and blocks Save', () => {
+    renderSheet('phone', '0911000210');
+    fireEvent.change(screen.getByRole('textbox', { name: 'phone 1' }), { target: { value: INSTRUCTION } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/doesn't look like a phone number/);
+    expect(screen.getByRole('textbox', { name: 'phone 1' })).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Save').closest('button')).toBeDisabled();
+  });
+
+  it('accepts a number with prose beside it — never lock out a real line', () => {
+    const onSave = renderSheet('phone', '0911000210');
+    fireEvent.change(screen.getByRole('textbox', { name: 'phone 1' }), {
+      target: { value: 'رقم الادارة 0911000299' },
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalled();
   });
 });
 
@@ -162,7 +275,7 @@ describe('BusinessFactSheet — not-applicable presets', () => {
     const onSave = renderSheet('website');
     fireEvent.click(screen.getByText('We do not have a website'));
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('We do not have a website');
+    expect(onSave).toHaveBeenCalledWith(text('We do not have a website'));
   });
 
   it('fills the field with the negative, editable not locked', () => {
@@ -171,7 +284,7 @@ describe('BusinessFactSheet — not-applicable presets', () => {
     // The «no» answer lands in the plain textarea, still editable.
     expect(screen.getByDisplayValue('We do not deliver')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('We do not deliver');
+    expect(onSave).toHaveBeenCalledWith(text('We do not deliver'));
   });
 
   // A preset goes verbatim into BUSINESS_INFO and is then told to customers as
@@ -207,7 +320,7 @@ describe('BusinessFactSheet — structured first fill', () => {
     });
     fireEvent.click(screen.getByText('Save'));
     expect(onSave).toHaveBeenCalledWith(
-      'We offer delivery.\nDelivery areas: All Damascus districts\nDelivery cost: 5,000',
+      text('We offer delivery.\nDelivery areas: All Damascus districts\nDelivery cost: 5,000'),
     );
   });
 
@@ -220,7 +333,7 @@ describe('BusinessFactSheet — structured first fill', () => {
     });
     fireEvent.click(screen.getByText('Save'));
     expect(onSave).toHaveBeenCalledWith(
-      'Payment methods: Cash and Bank transfer\nCash on delivery available',
+      text('Payment methods: Cash and Bank transfer\nCash on delivery available'),
     );
   });
 

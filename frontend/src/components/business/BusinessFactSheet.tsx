@@ -7,10 +7,12 @@ import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
+import { normalizePhoneEntries, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from '@jawab24/shared';
+import type { BusinessPhone, BusinessPhoneEntry } from '@jawab24/shared';
 
 /** Facts editable through the single-field sheet. `hours` is NOT here — it is a
  *  structured Record<day, ranges[]> and needs the Phase-D day/range editor. */
-export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment';
+export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment' | 'email';
 
 /** Multi-line facts get a textarea; the rest a single-line input. `address`
  *  is here because a real one runs long — «دمشق، البرامكة، فوق مكتبة الحافظ،
@@ -57,9 +59,10 @@ const PRESETS: Partial<Record<EditableFactKey, readonly string[]>> = {
 /** Facts that hold MULTIPLE values — rendered as one input per value. */
 const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
 
-const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'text'>> = {
+const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'email' | 'text'>> = {
   phone: 'tel',
   website: 'url',
+  email: 'email',
 };
 
 /** `type="tel"` (not just `inputMode`) so mobile keyboards, autofill and
@@ -83,11 +86,33 @@ const INPUT_TYPE: Partial<Record<EditableFactKey, 'tel'>> = { phone: 'tel' };
 const PAYMENT_METHODS = ['cash', 'transfer', 'card', 'cod'] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+/** Starting points for «what is this line for?», sourced from i18n so they are
+ *  translated rather than a hand-maintained Arabic list. Purposes that recur
+ *  across verticals — a merchant with anything else just types it. */
+const PHONE_DESCRIPTION_SUGGESTIONS = [
+  'management', 'sales', 'support', 'complaints', 'bookings', 'wholesale',
+] as const;
+
+/**
+ * What Save hands back. `phone` is its own variant because a number carries a
+ * description and a WhatsApp mark — squeezing that through the single text
+ * field the other facts use would mean inventing a separator that a merchant's
+ * own description could contain.
+ */
+export type FactSavePayload =
+  | { kind: 'text'; value: string }
+  /** Already canonical (see `normalizePhoneEntries`) — bare strings for lines
+   *  with no description, objects for the rest. */
+  | { kind: 'phones'; entries: BusinessPhone[]; whatsapp: string[] };
+
 interface BusinessFactSheetProps {
   factKey: EditableFactKey;
   /** Localized field label — the sheet title. */
   label: string;
+  /** Every fact except `phone`, which uses `initialEntries`. */
   initialValue: string;
+  /** `phone` only: the stored contact lines, each with its description. */
+  initialEntries?: BusinessPhoneEntry[];
   /** `phone` only: which listed numbers are on WhatsApp. Legacy data may hold
    *  a single string — any subset of the numbers is valid. */
   initialWhatsapp?: string | string[];
@@ -103,8 +128,7 @@ interface BusinessFactSheetProps {
    *  modal tier (z-45 < z-50) so they can never block a footer again — which
    *  also means a toast can no longer carry this message. */
   saveError?: string | null;
-  /** `whatsapp` is passed for `phone` only — the numbers flagged in the sheet. */
-  onSave: (value: string, whatsapp?: string[]) => void;
+  onSave: (payload: FactSavePayload) => void;
   onClose: () => void;
 }
 
@@ -126,6 +150,7 @@ export function BusinessFactSheet({
   factKey,
   label,
   initialValue,
+  initialEntries,
   initialWhatsapp,
   storeAnswered = false,
   fbSuggested = false,
@@ -146,13 +171,17 @@ export function BusinessFactSheet({
   // independently of the others — the old single-mark model made tapping the
   // badge on one number silently clear it from another (radio semantics the
   // merchant never asked for).
-  const [entries, setEntries] = useState<{ value: string; wa: boolean }[]>(() => {
+  const [entries, setEntries] = useState<{ value: string; description: string; wa: boolean }[]>(() => {
     const wa = (Array.isArray(initialWhatsapp) ? initialWhatsapp : initialWhatsapp ? [initialWhatsapp] : [])
       .map((n) => n.trim())
       .filter(Boolean);
-    const parts = initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean);
-    const rows = parts.map((p) => ({ value: p, wa: wa.includes(p) }));
-    return rows.length ? rows : [{ value: '', wa: false }];
+    const rows = (initialEntries ?? []).map((e) => ({
+      value: e.number,
+      description: e.description ?? '',
+      // The mark belongs to the NUMBER, never to the entry object.
+      wa: wa.includes(e.number),
+    }));
+    return rows.length ? rows : [{ value: '', description: '', wa: false }];
   });
 
   /** Two-tap delete: first tap arms this row, second executes. A number is one
@@ -185,12 +214,15 @@ export function BusinessFactSheet({
     if (isMultiline && !isMulti && !intake) autoResize();
   }, [value, isMultiline, isMulti, intake, autoResize]);
 
-  const joined = entries.map((e) => e.value.trim()).filter(Boolean).join(', ');
-  // Through the SAME split/trim/join as `entries`, so legacy spacing or a
-  // stored duplicate can't make the sheet open already-dirty.
-  const initialJoined = useMemo(
-    () => initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean).join(', '),
-    [initialValue],
+  /** What Save would store — canonicalized here so "did anything change?" is
+   *  asked against the exact value the server will hold, not the raw rows. */
+  const phoneEntries = useMemo(
+    () => normalizePhoneEntries(entries.map((e) => ({ number: e.value, description: e.description }))),
+    [entries],
+  );
+  const initialPhoneEntries = useMemo(
+    () => normalizePhoneEntries(initialEntries ?? []),
+    [initialEntries],
   );
   const waList = entries.filter((e) => e.wa && e.value.trim()).map((e) => e.value.trim());
   const initialWaList = useMemo(() => {
@@ -200,9 +232,23 @@ export function BusinessFactSheet({
     // Only marks on numbers the sheet can show count as the baseline — a
     // legacy mark on an unlisted number is not representable here and would
     // otherwise hold the sheet permanently dirty.
-    const listed = initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean);
+    const listed = (initialEntries ?? []).map((e) => e.number);
     return wa.filter((n) => listed.includes(n));
-  }, [initialWhatsapp, initialValue]);
+  }, [initialWhatsapp, initialEntries]);
+
+  /** A row whose number slot holds something that is not a number — the class
+   *  that let «رقم الجملة فقط يطلب مبيعات جملة» be stored AS a phone and
+   *  published in every prompt. `extractPhones` is the only judge. */
+  const invalidIndexes = useMemo(() => {
+    const bad = new Set<number>();
+    if (!isMulti) return bad;
+    entries.forEach((e, i) => {
+      const v = e.value.trim();
+      if (v && !isUsablePhoneEntry(v)) bad.add(i);
+    });
+    return bad;
+  }, [entries, isMulti]);
+  const hasInvalid = invalidIndexes.size > 0;
 
   /** Same SIM typed twice — blocks Save and marks the later row. Without this
    *  a duplicate also renders the WhatsApp mark on both copies in the row list. */
@@ -242,7 +288,7 @@ export function BusinessFactSheet({
   };
 
   const dirty = isMulti
-    ? joined !== initialJoined
+    ? JSON.stringify(phoneEntries) !== JSON.stringify(initialPhoneEntries)
       || JSON.stringify([...waList].sort()) !== JSON.stringify([...initialWaList].sort())
     : intake
       ? composed().trim() !== ''
@@ -272,7 +318,7 @@ export function BusinessFactSheet({
 
   const addEntry = () => {
     setConfirmingDelete(null);
-    setEntries((prev) => [...prev, { value: '', wa: false }]);
+    setEntries((prev) => [...prev, { value: '', description: '', wa: false }]);
   };
 
   const removeEntry = (i: number) => {
@@ -284,7 +330,12 @@ export function BusinessFactSheet({
     setConfirmingDelete(null);
     // Clearing a number clears its mark too — a checked-but-disabled box on
     // an empty row claimed a WhatsApp number that no longer exists.
-    setEntries((prev) => prev.map((e, j) => (j === i ? { value: v, wa: v.trim() ? e.wa : false } : e)));
+    setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, value: v, wa: v.trim() ? e.wa : false } : e)));
+  };
+
+  const setEntryDescription = (i: number, v: string) => {
+    setConfirmingDelete(null);
+    setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, description: v } : e)));
   };
 
   const toggleWa = (i: number) =>
@@ -298,10 +349,10 @@ export function BusinessFactSheet({
   };
 
   const submit = () => {
-    if (saving || !dirty || hasDuplicates) return;
-    if (isMulti) onSave(joined, waList);
-    else if (intake) onSave(composed().trim());
-    else onSave(value.trim());
+    if (saving || !dirty || hasDuplicates || hasInvalid) return;
+    if (isMulti) onSave({ kind: 'phones', entries: phoneEntries, whatsapp: waList });
+    else if (intake) onSave({ kind: 'text', value: composed().trim() });
+    else onSave({ kind: 'text', value: value.trim() });
   };
 
   const intakeFieldClass =
@@ -388,11 +439,16 @@ export function BusinessFactSheet({
                     autoFocus={i === 0}
                     placeholder={t(`facts.placeholder_${factKey}`)}
                     aria-label={`${label} ${i + 1}`}
-                    aria-invalid={duplicateIndexes.has(i) || undefined}
-                    aria-describedby={duplicateIndexes.has(i) ? `${inputId}-dup-${i}` : undefined}
+                    aria-invalid={duplicateIndexes.has(i) || invalidIndexes.has(i) || undefined}
+                    aria-describedby={clsx(
+                      duplicateIndexes.has(i) && `${inputId}-dup-${i}`,
+                      invalidIndexes.has(i) && `${inputId}-invalid-${i}`,
+                    ) || undefined}
                     className={clsx(
                       'flex-1 min-w-0 min-h-[44px] rounded-xl border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500',
-                      duplicateIndexes.has(i) ? 'border-red-400 dark:border-red-700' : 'border-theme-border',
+                      duplicateIndexes.has(i) || invalidIndexes.has(i)
+                        ? 'border-red-400 dark:border-red-700'
+                        : 'border-theme-border',
                     )}
                   />
                   {entries.length > 1 && (
@@ -424,6 +480,43 @@ export function BusinessFactSheet({
                   <p id={`${inputId}-dup-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
                     {t('facts.duplicateNumber')}
                   </p>
+                )}
+                {invalidIndexes.has(i) && (
+                  <p id={`${inputId}-invalid-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
+                    {t('facts.phoneInvalid')}
+                  </p>
+                )}
+
+                {/* What this line is FOR. Optional, and the reason the guard
+                    above can be strict: instructions and roles have their own
+                    slot instead of being squeezed into the number. */}
+                <input
+                  type="text"
+                  value={e.description}
+                  onChange={(ev) => setEntryDescription(i, ev.target.value)}
+                  onKeyDown={submitOnEnter}
+                  dir="auto"
+                  maxLength={MAX_PHONE_DESCRIPTION_LENGTH}
+                  placeholder={t('facts.phoneDescriptionPlaceholder')}
+                  aria-label={`${t('facts.phoneDescription')} — ${label} ${i + 1}`}
+                  className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {/* Suggestions, not an enum: one tap fills the field and the
+                    merchant can rewrite every character. schema.org models
+                    contactType the same way — free text WITH suggested values. */}
+                {!e.description.trim() && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {PHONE_DESCRIPTION_SUGGESTIONS.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setEntryDescription(i, t(`facts.phoneDesc_${key}`))}
+                        className="min-h-[32px] rounded-full border border-theme-border bg-card px-2.5 text-xs text-muted-foreground hover:bg-surface-100 hover:text-foreground"
+                      >
+                        {t(`facts.phoneDesc_${key}`)}
+                      </button>
+                    ))}
+                  </div>
                 )}
                 {/* A real checkbox, not a status pill: each number carries its
                     own independent flag, and the box makes "this is tappable"
@@ -690,7 +783,7 @@ export function BusinessFactSheet({
           loading={saving}
           // An fb-suggested prefill may be saved UNCHANGED — that save is the
           // merchant's explicit confirmation, which is the whole point.
-          disabled={(!dirty && !fbSuggested) || hasDuplicates}
+          disabled={(!dirty && !fbSuggested) || hasDuplicates || hasInvalid}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >

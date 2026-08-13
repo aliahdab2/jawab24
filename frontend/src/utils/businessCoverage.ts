@@ -1,4 +1,5 @@
-import { unwrapBusinessProfile, whatsappNumbers, isFieldAuthoritative } from '@jawab24/shared';
+import { unwrapBusinessProfile, whatsappNumbers, businessPhoneEntries, isFieldAuthoritative } from '@jawab24/shared';
+import type { BusinessPhoneEntry } from '@jawab24/shared';
 import type { Page, BusinessProfile } from '@jawab24/shared';
 
 /**
@@ -22,7 +23,7 @@ import type { Page, BusinessProfile } from '@jawab24/shared';
  */
 
 /** Facts with a row in `BusinessFactRows`. */
-export type BusinessFactKey = 'hours' | 'address' | 'phone' | 'delivery' | 'payment' | 'website';
+export type BusinessFactKey = 'hours' | 'address' | 'phone' | 'delivery' | 'payment' | 'website' | 'email';
 
 /**
  * The areas the readiness score is computed over.
@@ -30,9 +31,9 @@ export type BusinessFactKey = 'hours' | 'address' | 'phone' | 'delivery' | 'paym
  * Deliberately NOT the same set as the fact rows:
  *  - `products` has a chip but no row — a store-linked page cannot type items
  *    (the catalog API rejects manual writes with 409 PAGE_HAS_STORE).
- *  - `phone` and `website` have a row but are not scored — nobody messages a
- *    shop to ask whether it has a website, so a missing one is not a gap that
- *    makes Jawab fail a customer.
+ *  - `phone`, `website` and `email` have a row but are not scored — nobody
+ *    messages a shop to ask whether it has a website, so a missing one is not a
+ *    gap that makes Jawab fail a customer.
  * The card names its own denominator («{covered} من {total}» plus a sentence
  * listing exactly which areas are missing), so the ring is reconcilable without
  * the reader having to count rows.
@@ -75,14 +76,17 @@ export interface BusinessFactValues {
   hours: Record<string, string[]> | null;
   /** Address and city joined for display; null when neither is set. */
   address: string | null;
-  /** Non-blank contact numbers, in the merchant's order. */
-  phones: string[];
-  /** The numbers that are also on WhatsApp — any subset of `phones` (legacy
-   *  single-string values are normalized to a one-entry list). */
+  /** Non-blank contact lines, in the merchant's order, each with the purpose
+   *  they gave it (if any). */
+  phones: BusinessPhoneEntry[];
+  /** The NUMBERS that are also on WhatsApp — any subset of `phones` numbers
+   *  (legacy single-string values are normalized to a one-entry list). Compare
+   *  against `entry.number`, never the entry itself. */
   whatsapp: string[];
   delivery: string | null;
   payment: string | null;
   website: string | null;
+  email: string | null;
 }
 
 export interface ReadinessScore {
@@ -101,7 +105,7 @@ export interface ReadinessScore {
  *  «+971556087128» UAE phone (MES, 2026-08-08) sat invisible in the profile
  *  until an unrelated save laundered it into replies. */
 export type SuggestedFactValues = Partial<
-  Pick<BusinessFactValues, 'hours' | 'address' | 'phones' | 'delivery' | 'payment' | 'website'>
+  Pick<BusinessFactValues, 'hours' | 'address' | 'phones' | 'delivery' | 'payment' | 'website' | 'email'>
 >;
 
 export interface BusinessFactCoverage {
@@ -148,8 +152,12 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
 
   const week = (h: BusinessProfile['hours']) =>
     h && Object.values(h).some((v) => Array.isArray(v) && v.length > 0) ? h : null;
-  const phoneList = (p: BusinessProfile['phones']) =>
-    (p ?? []).filter((v): v is string => !!v?.trim()).map((v) => v.trim());
+  // Entries, not bare numbers: the row prints each number WITH the purpose the
+  // merchant gave it. Read through the shared reader — a local re-derivation
+  // here used to silently ignore the legacy singular `phone` that the prompt
+  // publishes, and would now also have to re-learn the entry shape.
+  const phoneEntries = (p: BusinessProfile) =>
+    authoritative('phones') ? businessPhoneEntries(p) : [];
   // City counts. `formatBusinessInfoPrompt` joins address/city/country into
   // one "Address" line, so a merchant who gave only «دمشق» HAS given Jawab an
   // answer to «وين محلكم؟» — and the row displays it. Calling that ناقص would
@@ -167,8 +175,9 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
       authoritative('address') ? merchant.address : null,
       authoritative('city') ? merchant.city : null,
     ]),
-    phones: authoritative('phones') ? phoneList(merchant.phones) : [],
+    phones: phoneEntries(merchant),
     whatsapp: authoritative('channels') ? whatsappNumbers(merchant) : [],
+    email: authoritative('email') ? text(merchant.email) : null,
     delivery: authoritative('policies') ? text(merchant.policies?.shipping) : null,
     payment: authoritative('policies') ? text(merchant.policies?.payment) : null,
     website: authoritative('website') ? text(merchant.website) : null,
@@ -187,7 +196,7 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
     if (addr) suggested.address = addr;
   }
   if (values.phones.length === 0) {
-    const p = phoneList(merchant.phones);
+    const p = businessPhoneEntries(merchant);
     if (p.length && !authoritative('phones')) suggested.phones = p;
   }
   if (!values.delivery && !authoritative('policies')) {
@@ -201,6 +210,10 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
   if (!values.website && !authoritative('website')) {
     const w = text(merchant.website);
     if (w) suggested.website = w;
+  }
+  if (!values.email && !authoritative('email')) {
+    const e = text(merchant.email);
+    if (e) suggested.email = e;
   }
 
   // `storeAnswersPolicies` is server-derived (store is active AND synced policy
@@ -225,6 +238,7 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
     delivery: values.delivery !== null || storeAnswered.delivery,
     payment: values.payment !== null || storeAnswered.payment,
     website: values.website !== null,
+    email: values.email !== null,
   };
 
   return { values, suggested, covered, storeAnswered };
