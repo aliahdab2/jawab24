@@ -41,6 +41,78 @@ export interface SetupState {
   allDone: boolean;
 }
 
+/**
+ * How long the setup panel keeps the dashboard's hero slot. After this it demotes
+ * to a one-line row (still one tap from the steps) instead of holding the top of
+ * the dashboard forever for a merchant who never finished and never dismissed it.
+ *
+ * Deliberately a DURATION, not an impression count: a localStorage view-counter
+ * is per-device (phone + desktop = two independent counts), resets when site data
+ * is cleared, and — worst — would delete the only activation path on the dashboard
+ * for exactly the merchants who haven't activated. Demote, never remove.
+ */
+export const SETUP_CHECKLIST_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** The three merchant-actionable Smart-Reply milestones, for "1/3"-style progress. */
+export const SETUP_CHECKLIST_TOTAL_STEPS = 3;
+
+/** How many of the three actionable milestones are done. */
+export function countSetupStepsDone(setup: SetupState): number {
+  return [setup.pageConnected, setup.kbFilled, setup.autoReplyOn].filter(Boolean).length;
+}
+
+function toMillis(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * When this merchant's setup clock started — the earliest evidence we have that
+ * the panel has been in front of them. Two complementary anchors, both already
+ * loaded on the dashboard, so this needs no new column, no impression counter,
+ * and behaves identically on every device:
+ *
+ *  - `onboardingCompletedAt` (settings) — written when the welcome wizard is
+ *    finished or skipped. Covers the merchant with no page yet, since the wizard
+ *    only runs while `pages.length === 0`.
+ *  - the oldest page's `createdAt` — the moment the Business-Info and auto-reply
+ *    steps became actionable at all. Covers legacy accounts whose
+ *    `onboardingCompletedAt` was never backfilled (that backfill also only runs
+ *    while `pages.length === 0`, so an old account WITH pages keeps a null).
+ *
+ * Disconnected pages count here, unlike in `deriveSetupState`: a revoked page is
+ * still proof the merchant has been around, even though it contributes nothing to
+ * progress. The two functions answer different questions.
+ *
+ * Returns null when neither anchor exists — a genuinely brand-new merchant, who
+ * should get the expanded panel.
+ */
+export function resolveSetupClockStart(
+  pages: Page[],
+  onboardingCompletedAt?: string | Date | null,
+): number | null {
+  const candidates = [
+    toMillis(onboardingCompletedAt),
+    ...pages.map((p) => toMillis(p.createdAt)),
+  ].filter((ms): ms is number => ms !== null);
+  return candidates.length > 0 ? Math.min(...candidates) : null;
+}
+
+/**
+ * True while the panel should still render expanded. No anchor (brand-new
+ * merchant) also counts as within the window — we only demote on positive
+ * evidence that the account is old.
+ */
+export function isWithinSetupGrace(
+  pages: Page[],
+  onboardingCompletedAt?: string | Date | null,
+  now: number = Date.now(),
+): boolean {
+  const start = resolveSetupClockStart(pages, onboardingCompletedAt);
+  return start === null || now - start < SETUP_CHECKLIST_GRACE_MS;
+}
+
 export function deriveSetupState(
   pages: Page[],
   usage: UsageSummary | null,

@@ -644,8 +644,9 @@ test.describe('Dashboard Page', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
 
     // Click the dismiss button (desktop X)
-    // Target the SmartStatusBanner's dismiss specifically — the setup-checklist
-    // card adds its own bare "Dismiss" button, so /dismiss/i is now ambiguous.
+    // Target the SmartStatusBanner's dismiss by its exact label — several
+    // dashboard surfaces carry a close control, so /dismiss/i is not specific
+    // enough. (The setup-checklist card's control is now "Collapse".)
     const dismissButton = page.getByRole('button', { name: t('dashboard.smartBanner.dismissLabel') });
     await dismissButton.click();
 
@@ -669,8 +670,9 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Dismiss the banner
-    // Target the SmartStatusBanner's dismiss specifically — the setup-checklist
-    // card adds its own bare "Dismiss" button, so /dismiss/i is now ambiguous.
+    // Target the SmartStatusBanner's dismiss by its exact label — several
+    // dashboard surfaces carry a close control, so /dismiss/i is not specific
+    // enough. (The setup-checklist card's control is now "Collapse".)
     const dismissButton = page.getByRole('button', { name: t('dashboard.smartBanner.dismissLabel') });
     await dismissButton.click();
     await expect(page.getByText(/items need your attention/i)).not.toBeVisible({ timeout: 5000 });

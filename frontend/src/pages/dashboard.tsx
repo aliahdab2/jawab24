@@ -45,8 +45,8 @@ const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDe
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
 import { useWorkspaceRole, useSubscriptionUsage, useNewLeadsSummary } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { deriveSetupState } from '@/utils/setupChecklist';
-import { SETUP_CHECKLIST_DISMISS_KEY, SETUP_CHECKLIST_DISMISS_MS } from '@/components/dashboard/SetupChecklistCard';
+import { deriveSetupState, isWithinSetupGrace } from '@/utils/setupChecklist';
+import { SETUP_CHECKLIST_COLLAPSE_KEY, SETUP_CHECKLIST_COLLAPSE_MS } from '@/components/dashboard/SetupChecklistCard';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -272,14 +272,14 @@ const DashboardPage: NextPageWithLayout = () => {
   });
 
   // Two-path setup panel visibility — computed here (not inside the card) because
-  // it also SUPPRESSES the AutoReplyStatusCard warning: while onboarding is visible
-  // it owns the "not enabled yet" message; a warning banner saying "auto-reply
-  // disabled!" on top of it is the same fact twice with an alarming tone a brand-new
-  // merchant hasn't earned. The banner resumes its watchdog role the moment the
-  // panel is gone (dismissed or a path live).
-  const setupDismiss = useTimedDismiss({
-    key: SETUP_CHECKLIST_DISMISS_KEY,
-    durationMs: SETUP_CHECKLIST_DISMISS_MS,
+  // the EXPANDED form also SUPPRESSES the AutoReplyStatusCard warning: while it is
+  // expanded it owns the "not enabled yet" message; a warning banner saying
+  // "auto-reply disabled!" on top of it is the same fact twice with an alarming tone
+  // a brand-new merchant hasn't earned. The banner resumes its watchdog role as soon
+  // as the panel collapses to its one-line row (or a path goes live).
+  const setupCollapse = useTimedDismiss({
+    key: SETUP_CHECKLIST_COLLAPSE_KEY,
+    durationMs: SETUP_CHECKLIST_COLLAPSE_MS,
   });
   // Single source for the workspace masters passed to every setup-derived
   // surface (setupState, checklist card, Post Reply nudge). The `?? true`
@@ -296,12 +296,20 @@ const DashboardPage: NextPageWithLayout = () => {
     () => deriveSetupState(pages, usage ?? null, masters),
     [pages, usage, masters],
   );
-  const setupPanelVisible =
+  // The panel exists at all — expanded OR as its one-line collapsed row. Setup is
+  // unfinished, so the activation path must stay reachable either way.
+  const setupPanelPresent =
     !pagesLoading &&
     userSettings !== undefined &&
     !setupState.coreSetupDone &&
-    !setupState.postReplyConfigured &&
-    !setupDismiss.dismissed;
+    !setupState.postReplyConfigured;
+  // ...and it owns the "not enabled yet" message only while EXPANDED. This is the
+  // derived default the card starts from; re-expanding the row is a local, unlifted
+  // choice, so it deliberately does NOT move the AutoReplyStatusCard.
+  const setupPanelExpanded =
+    setupPanelPresent &&
+    isWithinSetupGrace(pages, userSettings?.onboardingCompletedAt) &&
+    !setupCollapse.dismissed;
 
   const { data: analytics, isError: analyticsError } = useQuery({
     queryKey: ['dashboard-analytics'],
@@ -618,9 +626,9 @@ const DashboardPage: NextPageWithLayout = () => {
       />
 
       {/* Smart status message — the post-setup watchdog. Suppressed while the
-          two-path setup panel is visible: during onboarding the panel owns the
-          "not enabled yet" message (see setupPanelVisible above). */}
-      {userSettings && !setupPanelVisible && (
+          two-path setup panel is EXPANDED: during onboarding the panel owns the
+          "not enabled yet" message (see setupPanelExpanded above). */}
+      {userSettings && !setupPanelExpanded && (
         <AutoReplyStatusCard
           activePages={statsData.activePages}
           totalPages={pages.length}
@@ -652,18 +660,19 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Two-path onboarding panel — "Start replying automatically". Visibility is
-          lifted (setupPanelVisible) so the AutoReplyStatusCard suppression above can
-          never disagree with the panel; the shared setupDismiss instance makes the
-          banner reappear the moment the panel is dismissed. */}
-      {setupPanelVisible && (
+      {/* Two-path onboarding panel — "Start replying automatically". Both booleans are
+          lifted so the AutoReplyStatusCard suppression above can never disagree with
+          the panel: `present` keeps the activation path reachable while setup is
+          unfinished, `expanded` decides which of the two forms renders. */}
+      {setupPanelPresent && (
         <SetupChecklistCard
           pages={pages}
           usage={usage ?? null}
           masters={masters}
           onTryPostReply={postReplySetup.openPicker}
-          dismissed={setupDismiss.dismissed}
-          onDismiss={setupDismiss.dismiss}
+          onboardingCompletedAt={userSettings?.onboardingCompletedAt}
+          expanded={setupPanelExpanded}
+          onCollapse={setupCollapse.dismiss}
         />
       )}
 
