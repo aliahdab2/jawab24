@@ -384,6 +384,42 @@ describe('buildContactSuffix — code-composed, never model-written (a mangled d
         expect(buildContactSuffix(null)).toBeUndefined();
         expect(buildContactSuffix({})).toBeUndefined();
     });
+
+    /**
+     * Once a contact point can say what it is FOR, the first number is no longer
+     * automatically the publishable one. A post is PUBLIC and UNCONDITIONAL, so
+     * publishing «الإدارة — عند الطلب فقط» on one contradicts the merchant's own
+     * stated restriction — honoured by the reply prompt, silently dropped here.
+     */
+    it('prefers an UNCONDITIONAL number over a restricted one, whatever the order', () => {
+        expect(buildContactSuffix({
+            phones: [
+                { number: '0993301022', description: 'الإدارة — عند الطلب فقط' },
+                '0993301002',
+            ],
+        })).toBe('📞 0993301002');
+    });
+
+    it('carries the purpose when EVERY line has one, rather than dropping the condition', () => {
+        expect(buildContactSuffix({
+            phones: [{ number: '0993301022', description: 'الإدارة — عند الطلب فقط' }],
+        })).toBe('📞 0993301022 (الإدارة — عند الطلب فقط)');
+    });
+
+    it('a bare stored string is still the unconditional case (canonical-form invariant)', () => {
+        expect(buildContactSuffix({ phones: ['0912345678', { number: '0919', description: 'الشكاوى' }] }))
+            .toBe('📞 0912345678');
+    });
+
+    it('collapses whatsapp against a PADDED stored number instead of publishing it twice', () => {
+        // businessPhoneEntries publishes a bare stored string verbatim to keep
+        // BUSINESS_INFO byte-identical, while whatsappNumbers trims — so the
+        // equality check used to miss and the same line appeared as 📞 and واتساب.
+        expect(buildContactSuffix({
+            phones: ['  0912345678  '],
+            channels: { whatsapp: '0912345678' },
+        })).toBe('📞 0912345678');
+    });
 });
 
 describe('generateSuggestion — spend guards run before any paid call', () => {
