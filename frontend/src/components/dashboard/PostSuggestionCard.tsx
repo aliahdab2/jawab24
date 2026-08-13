@@ -5,11 +5,12 @@ import dynamic from 'next/dynamic';
 import { Sparkles, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui';
-import { postSuggestionsApi } from '@/lib/api';
+import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { isPostSuggestionsVisible } from '@/lib/featureFlags';
 import { useAuthStore } from '@/lib/store';
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import { POST_SUGGESTION_POLL_MS } from '@/components/post-suggestions/polling';
+import { mergePostSuggestionResponse } from '@/components/post-suggestions/mergeResponse';
 import type { Page } from '@jawab24/shared';
 
 // Lazy: the sheet is founder-only during the pilot and renders only when
@@ -70,7 +71,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
     // foreground poll and writes through to this same cache entry, and two
     // pollers on one key would race each other's writes for no benefit.
     refetchInterval: (query) =>
-      (!open && query.state.data?.suggestion?.status === 'pending' ? POST_SUGGESTION_POLL_MS : false),
+      (!open && query.state.data?.inFlight?.status === 'pending' ? POST_SUGGESTION_POLL_MS : false),
   });
 
   if (!pageId || isError) return null;
@@ -79,12 +80,16 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   // written through to it (below), so day rollover and other admins' refetches
   // win naturally — no shadow copy that outlives the server state.
   const current = data ?? null;
+  // `suggestion` is the page's POST; a row still being written — or one that
+  // ended in failure — is `inFlight` and never a post to preview (its text is
+  // empty by design, since a placeholder sentence would be copied by any client
+  // that ignores `status`). The card announces the work instead, and a FAILED
+  // attempt leaves the previous post on the card rather than replacing it with
+  // an empty preview line that no longer clears (the day scope used to clear
+  // it; on-demand nothing does).
   const suggestion = current?.suggestion ?? null;
-  // A row still being written by the worker is NOT a post to preview: its text
-  // is empty by design (a placeholder sentence would be copied by any client
-  // that ignores `status`). The card announces the work instead.
-  const pending = suggestion?.status === 'pending';
-  const hasPost = Boolean(suggestion) && !pending;
+  const pending = current?.inFlight?.status === 'pending';
+  const hasPost = Boolean(suggestion);
   // Nothing to show and nothing this member may do about it → no card.
   if (!hasPost && !pending && !isAdmin) return null;
 
@@ -203,7 +208,13 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           initial={current}
           canGenerate={isAdmin}
           onClose={() => setOpen(false)}
-          onChanged={(latest) => queryClient.setQueryData(['post-suggestion-current', pageId], latest)}
+          // MERGED, not replaced — see mergePostSuggestionResponse: the
+          // generate route deliberately carries no `history`, and writing its
+          // response wholesale blanked the strip in the cache.
+          onChanged={(latest) => queryClient.setQueryData<PostSuggestionResponse>(
+            ['post-suggestion-current', pageId],
+            (prev) => mergePostSuggestionResponse(prev, latest),
+          )}
         />
       )}
     </>

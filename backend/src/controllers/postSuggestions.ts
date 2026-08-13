@@ -20,8 +20,9 @@ class PostSuggestionsController {
      * GET /pages/:pageId/post-suggestions/today
      *
      * ⚠️ The PATH still says `today`; the behaviour no longer does. It returns
-     * the page's current post whenever it was made, plus the earlier ones
-     * (owner ruling 2026-08-13 — generation on demand). The URL is kept because
+     * the page's current post whenever it was made, whatever attempt is in
+     * flight, and the earlier posts (owner ruling 2026-08-13 — generation on
+     * demand). The URL is kept because
      * shipped mobile bundles call it: Waleed's Android 2.0.26 predates even the
      * feature gate, and renaming a live path would 404 every one of them. A URL
      * is a contract with clients we cannot redeploy, so it outlives the wording.
@@ -69,6 +70,7 @@ class PostSuggestionsController {
             // route, which answers it correctly.
             const body: PostSuggestionResponse = {
                 suggestion: result.suggestion,
+                inFlight: result.inFlight,
                 remainingToday: result.remainingToday,
                 availableTypes: result.availableTypes,
             };

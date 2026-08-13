@@ -13,6 +13,15 @@
     appearance: none;
   }
 
+  /* `list-style: none` on a <summary> (Tailwind's `list-none`) only hides the
+     disclosure triangle from Safari 17 onwards. We ship inside WKWebView via
+     Capacitor, so on an older iOS the marker draws anyway — next to our own
+     thumbnail, in a row laid out as flex. This is the WebKit-specific opt-out
+     that has always worked, and it is inert everywhere else. */
+  summary.list-none::-webkit-details-marker {
+    display: none;
+  }
+
   :root {
     /* ═══════════════════════════════════════════════════════════════════
        LAYOUT STRATEGY - Single source of truth for all spacing

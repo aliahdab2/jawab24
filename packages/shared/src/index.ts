@@ -1658,12 +1658,57 @@ export interface PostSuggestionHistoryItem {
 }
 
 /**
+ * The most recent generation attempt that is NOT a post — still running, or
+ * finished without producing one.
+ *
+ * Split out from `suggestion` on 2026-08-13. Both used to be the same field:
+ * the read served the newest row of any non-superseded status, so a `failed`
+ * row — newer than the post it did not replace — became "the current post".
+ * With the day scope gone that is permanent: the merchant's real post is
+ * masked (and absent from `history`, which is superseded rows only) until they
+ * happen to generate again, and a page whose one-time SEED failed shows an
+ * empty card forever, since the seed predicate is "has any row".
+ *
+ * So the two questions are answered separately: `suggestion` is what you HAVE,
+ * this is what is HAPPENING. Null when the newest row is the post itself.
+ *
+ * Carries only what a client acts on — the id to poll and the state to render.
+ * `failureReason` is deliberately absent: the UI shows one generic message (a
+ * reason code is an operator's signal, and it is already in the row + logs).
+ */
+export interface PostSuggestionInFlight {
+  id: string;
+  status: 'pending' | 'failed';
+}
+
+/**
  * The ONE response envelope both GET /today and POST (generate) return — the
  * backend controller and the frontend api client type against THIS, so the two
  * hand-assembled shapes can never drift apart silently.
  */
 export interface PostSuggestionResponse {
+  /**
+   * The page's current post — always a READY row, or null if it has never
+   * produced one. Never a pending or failed row: those are `inFlight`.
+   *
+   * Older shipped bundles read only this field, so the split degrades in the
+   * safe direction for them — while a generation runs they keep showing the
+   * previous post instead of the empty-text pending row, and a failed attempt
+   * leaves that post on screen instead of replacing it with nothing.
+   *
+   * ⚠️ The one cost of that: a client which cannot see `inFlight` also cannot
+   * see that a generation is RUNNING, so during a blue/green window it may
+   * offer to start another and spend a second capped slot. Bounded by the
+   * daily cap and by the length of the window; accepted rather than served a
+   * pending row as a post, which is the defect this split exists to remove.
+   */
   suggestion: PostSuggestionDto | null;
+  /**
+   * The latest attempt, when it is not (yet) a post. Sent by BOTH routes —
+   * generate answers with the pending row it just claimed. Absent/null means
+   * the newest row IS the post above.
+   */
+  inFlight?: PostSuggestionInFlight | null;
   /**
    * Slots left today. `null` = unknown (the read path's cap store was
    * unreachable) — clients keep regenerate enabled and let the generate path

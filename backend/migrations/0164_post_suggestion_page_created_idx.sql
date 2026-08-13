@@ -1,0 +1,13 @@
+-- The index every post-suggestion read now needs.
+--
+-- Going on-demand (D-077) took `suggested_for` out of all of them: the current
+-- post, the in-flight attempt and the history strip are each "this page's
+-- newest row, filtered by status", so idx_post_suggestions_page_date could only
+-- serve the page prefix and Postgres sorted the rest — on a table that grows
+-- forever now that supersede stops deleting.
+--
+-- Plain CREATE INDEX, not CONCURRENTLY: post_suggestions is a gated pilot table
+-- (three allowlisted workspaces, tens of rows), so the ACCESS EXCLUSIVE lock is
+-- sub-millisecond, and drizzle runs migrations inside a transaction, which
+-- CONCURRENTLY cannot join.
+CREATE INDEX "idx_post_suggestions_page_created" ON "post_suggestions" USING btree ("page_id","created_at" DESC NULLS LAST);

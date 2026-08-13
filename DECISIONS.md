@@ -1579,3 +1579,49 @@ metric was broken for the entire pilot, so it was never measured while it existe
 part of this ruling is reversible; that part is not. Watch opens-per-week after the switch. A
 periodic no-cost nudge («جاهز نعمل منشور جديد؟») is the parked idea that would restore the habit
 loop without restoring the spend; it is NOT part of this change.
+
+### D-077a · Addendum (2026-08-13, review): the read must separate the POST from the ATTEMPT
+
+Found reviewing the D-077 implementation, before merge. Not a change of ruling — a defect the
+ruling's own goal ("creating another never destroys the one before it") was not actually
+delivering.
+
+**The defect.** The read served "the page's newest row with status in (ready, pending, failed)"
+as `suggestion`. Supersede only runs on a SUCCESSFUL fulfilment, so a generation that fails
+supersedes nothing and its row is newer than the intact post it did not replace. That failed row
+therefore became "the current post": an empty-text body the client rendered with Copy/Download
+over nothing, while the merchant's real post was invisible — and unreachable through `history`
+too, which is superseded rows only.
+
+Day-scoped, that state cleared at midnight and the cron replaced it. **Removing the day scope
+made it permanent**, and the seed made it worse: the seed predicate is "this page has any row",
+so a page whose one-time seed FAILED kept a failed row forever, was never seeded again, and
+showed an empty card as the merchant's first contact with the feature — the opposite of the
+"arrive to something finished" the seed exists for. D-077's text says such a merchant "lands on
+the create button"; they did not, because the card counted a failed row as a post.
+
+**The fix.** The envelope answers the two questions separately — `suggestion` is what the
+merchant HAS (newest `ready` row, or null), `inFlight` is what is HAPPENING (newest row when it
+is `pending`/`failed`, else null). The post stays on screen while a generation runs and while one
+fails; a page with genuinely no post gets a create CTA instead of a rendered blank.
+
+**Why this shape rather than re-scoping the read to a day.** A day scope would only have made the
+masking self-heal overnight, which is detection-by-calendar, not prevention (Rule 14) — and it
+would have reintroduced exactly the empty-sheet-after-midnight problem D-077 removed. Separating
+the fields makes "a failed attempt is the post" unrepresentable.
+
+**Also settled here.**
+- Storage retention is now DOCUMENTED where it is owed: a `superseded` row is live and
+  referenced, page delete is the only sweep that may remove a `generated-posts/` object, and
+  there must be no age-based expiry on that prefix (`backend/docs/OBJECT_STORAGE.md` §9). D-077
+  changed this behaviour without changing that doc, which claimed the deletion still happened.
+- `idx_post_suggestions_page_created` (migration 0164). Going day-blind took `suggested_for` out
+  of every post-suggestion read while nothing deletes rows any more, so all three reads sorted
+  the page's whole row set on the highest-frequency fetch the feature has. They now issue as one
+  parallel round trip.
+- ABSENT ≠ EMPTY is enforced in the CACHE as well, not just in the component: writing the
+  history-less generate response into the query cache wholesale erased the strip a layer below
+  the component that honoured the rule (`mergePostSuggestionResponse`).
+
+**What this does NOT change.** The ruling, the seed model, the no-retry policy, the frozen route
+URL, and the daily cap all stand exactly as D-077 states them.
