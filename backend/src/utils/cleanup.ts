@@ -336,7 +336,12 @@ export async function runAllCleanupTasks(
 
     logger.info('[Cleanup] Starting database cleanup tasks...');
 
-    const results = await Promise.all([
+    // The attention sweep is destructured by NAME rather than picked out of the results
+    // array by position — it is the only task whose result carries extra fields, and a
+    // positional read would silently attach to the wrong task the moment anyone appends
+    // one here.
+    const [attention, ...otherResults] = await Promise.all([
+        expireStaleAttentionItems(attentionQueueDays),
         cleanupAiCache(aiCacheDays),
         cleanupSemanticCache(),
         cleanupLogs(logsDays),
@@ -346,24 +351,26 @@ export async function runAllCleanupTasks(
         cleanupInactiveEcommerceStores(inactiveStoreDays),
         cleanupCustomerNotificationLogs(customerNotificationDays),
         cleanupEmailBodies(emailBodyDays),
-        expireStaleAttentionItems(attentionQueueDays),
     ]);
+    const results: CleanupResult[] = [...otherResults, attention];
 
-    // The attention sweep mutates the Needs-Attention counts, so it owes the same cache
-    // invalidation every resolve/unresolve controller path performs. Skipping it leaves
-    // the chip showing a stale number over an already-emptied list — the exact
-    // chip-shows-N/list-shows-0 defect `services/statsCache.ts` exists to prevent, and the
-    // chip query has no polling fallback to self-heal.
-    const attention = results[results.length - 1] as CleanupResult & { workspaceIds?: string[] };
-    for (const workspaceId of attention.workspaceIds ?? []) {
+    // The sweep mutates the Needs-Attention counts, so it owes the same cache invalidation
+    // every resolve/unresolve controller path performs. Skipping it leaves the chip showing
+    // a stale number over an already-emptied list — the chip-shows-N/list-shows-0 defect
+    // `services/statsCache.ts` exists to prevent, and that chip has no polling fallback.
+    // Runs on partial failure too: workspaces whose queue WAS swept still need it.
+    for (const workspaceId of attention.workspaceIds) {
         invalidateEndpointStatsCaches(workspaceId);
     }
 
-    // Log results
+    // Log results. Error and count are reported INDEPENDENTLY: the attention sweep isolates
+    // each queue, so a run can legitimately both fail on one table and resolve thousands of
+    // rows on the others. An if/else here would hide the work behind the failure.
     for (const result of results) {
         if (result.error) {
             logger.error(`[Cleanup] Error cleaning ${result.table}: ${result.error}`);
-        } else {
+        }
+        if (result.deletedCount > 0 || !result.error) {
             logger.info(`[Cleanup] Cleaned ${result.deletedCount} rows from ${result.table}`);
         }
     }

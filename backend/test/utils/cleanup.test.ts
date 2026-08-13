@@ -360,6 +360,27 @@ describe('cleanup utilities', () => {
             expect(vi.mocked(invalidateEndpointStatsCaches)).toHaveBeenCalledTimes(2);
         });
 
+        it('on a PARTIAL sweep failure it logs the error AND the rows it did resolve', async () => {
+            // Per-queue isolation makes "failed on one table, resolved thousands on the
+            // others" a legitimate outcome. An if/else would report only the failure and
+            // hide the work — which is exactly the observability the sweep is judged by.
+            mockDeleteChain([[]]);
+            let call = 0;
+            const mockReturning = vi.fn(() => Promise.resolve([{ workspaceId: 'w1' }]));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockImplementation(() => {
+                if (call++ === 0) throw new Error('messages exploded');
+                return { set: mockSet } as any;
+            });
+            const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
+
+            await runAllCleanupTasks(undefined, logger);
+
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('messages: messages exploded'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('rows from attention_queue'));
+        });
+
         it('should log errors for failed tasks', async () => {
             vi.mocked(db.delete).mockImplementation(() => {
                 throw new Error('disk full');
