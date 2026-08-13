@@ -19,6 +19,9 @@ vi.mock('../../src/db/schema', () => ({
     ecommerceStores: { id: 'ecommerce_stores.id', isActive: 'ecommerce_stores.is_active', uninstalledAt: 'ecommerce_stores.uninstalled_at' },
     customerNotificationsLog: { id: 'customer_notifications_log.id', createdAt: 'customer_notifications_log.created_at' },
     emailSends: { id: 'email_sends.id', createdAt: 'email_sends.created_at', htmlBody: 'email_sends.html_body' },
+    messages: { id: 'messages.id', createdAt: 'messages.created_at', needsAttention: 'messages.needs_attention', resolved: 'messages.resolved' },
+    comments: { id: 'comments.id', createdAt: 'comments.created_at', needsAttention: 'comments.needs_attention', resolved: 'comments.resolved' },
+    instagramComments: { id: 'ig_comments.id', createdAt: 'ig_comments.created_at', needsAttention: 'ig_comments.needs_attention', resolved: 'ig_comments.resolved' },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -29,9 +32,9 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({ strings, values })),
 }));
 
-import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, cleanupCustomerNotificationLogs, cleanupEmailBodies, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, cleanupCustomerNotificationLogs, cleanupEmailBodies, expireStaleAttentionItems, ATTENTION_QUEUE_RETENTION_DAYS, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
-import { lt, ne } from 'drizzle-orm';
+import { lt, ne, eq } from 'drizzle-orm';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../../src/services/kb/semantic-cache';
 
 function mockDeleteChain(batches: Array<Array<{ id: string }>>) {
@@ -226,6 +229,78 @@ describe('cleanup utilities', () => {
         });
     });
 
+    describe('expireStaleAttentionItems', () => {
+        // One update per table (messages, comments, instagram_comments), so the mock must
+        // hand back a DIFFERENT batch per call — a shared batch would triple the count and
+        // hide a table that was never swept.
+        function mockPerTableUpdate(batches: Array<Array<{ id: string }>>) {
+            let call = 0;
+            const sets: unknown[] = [];
+            const mockReturning = vi.fn(() => Promise.resolve(batches[call++] ?? []));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn((v: unknown) => { sets.push(v); return { where: mockWhere }; });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+            return { sets, mockWhere };
+        }
+
+        it('resolves stale items across all three queues and sums them', async () => {
+            mockPerTableUpdate([[{ id: 'm-1' }, { id: 'm-2' }], [{ id: 'c-1' }], []]);
+
+            const result = await expireStaleAttentionItems(7);
+
+            expect(db.update).toHaveBeenCalledTimes(3);
+            expect(result.table).toBe('attention_queue');
+            expect(result.deletedCount).toBe(3);
+            expect(result.error).toBeUndefined();
+        });
+
+        it('RESOLVES only — it must never clear needs_attention or flag_reason', async () => {
+            const { sets } = mockPerTableUpdate([[], [], []]);
+
+            await expireStaleAttentionItems(7);
+
+            // The evidence (flags + flag_meta questions) is what reply quality is measured
+            // from; emptying the queue must not cost us it.
+            for (const s of sets) {
+                expect(s).toHaveProperty('resolved', true);
+                expect(s).toHaveProperty('updatedAt');
+                expect(s).not.toHaveProperty('needsAttention');
+                expect(s).not.toHaveProperty('flagReason');
+            }
+        });
+
+        it('ages from created_at, defaults to the 7-day window, and skips already-resolved rows', async () => {
+            mockPerTableUpdate([[], [], []]);
+
+            await expireStaleAttentionItems();
+
+            expect(ATTENTION_QUEUE_RETENTION_DAYS).toBe(7);
+            // A flag ages from when the CUSTOMER wrote, not from the last unrelated row write.
+            const cutoff = vi.mocked(lt).mock.calls.find(c => c[0] === 'messages.created_at');
+            expect(cutoff).toBeDefined();
+            const daysBack = (Date.now() - (cutoff![1] as Date).getTime()) / 86_400_000;
+            expect(daysBack).toBeCloseTo(ATTENTION_QUEUE_RETENTION_DAYS, 1);
+            expect(vi.mocked(eq)).toHaveBeenCalledWith('messages.needs_attention', true);
+            expect(vi.mocked(eq)).toHaveBeenCalledWith('messages.resolved', false);
+        });
+
+        it('surfaces DB errors and keeps the partial count from tables already swept', async () => {
+            let call = 0;
+            const mockReturning = vi.fn(() => Promise.resolve([{ id: 'm-1' }]));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockImplementation(() => {
+                if (call++ === 1) throw new Error('update failed');
+                return { set: mockSet } as any;
+            });
+
+            const result = await expireStaleAttentionItems(7);
+
+            expect(result.error).toBe('update failed');
+            expect(result.deletedCount).toBe(1);
+        });
+    });
+
     describe('runAllCleanupTasks', () => {
         it('should run all cleanup tasks and log results', async () => {
             mockDeleteChain([[]]);
@@ -235,8 +310,9 @@ describe('cleanup utilities', () => {
             const results = await runAllCleanupTasks(undefined, logger);
 
             // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes,
-            // ecommerceStores, customerNotificationsLog, emailSends
-            expect(results).toHaveLength(9);
+            // ecommerceStores, customerNotificationsLog, emailSends, attentionQueue
+            expect(results).toHaveLength(10);
+            expect(results.map(r => r.table)).toContain('attention_queue');
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 

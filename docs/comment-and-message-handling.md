@@ -221,6 +221,23 @@ retry (handoff re-enqueue) or ones the merchant is expected to resolve by
 reactivating subscription. Every other failure resolves or flags — never
 leaves a ghost "Waiting to reply" card.
 
+### The Needs-Attention queue expires after 7 days (D-078)
+
+A flagged item auto-resolves 7 days after the **customer wrote it**
+(`expireStaleAttentionItems`, part of the existing `[Cleanup]` sweep in
+`backend/src/utils/cleanup.ts`, every 6h, fleet-wide, no per-merchant setting).
+Measured before shipping: 93% of everything a merchant ever resolves is resolved
+within 7 days (median 4 hours), while the open queue had reached 23,660 items
+with 68% older than 30 days.
+
+⭐ **It resolves; it never deletes, and it never clears the flag.** It writes
+exactly what the merchant's own resolve button writes — `resolved = true` — and
+leaves `needs_attention` and `flag_reason` in place. The queue is what the
+MERCHANT works; the flags and their stored customer questions (`flag_meta`) are
+what reply quality is measured from, and emptying the first must not cost the
+second. So a small queue is **not** evidence of good replies: read quality off
+the flags, never off the queue.
+
 ---
 
 ## Where the logic lives
