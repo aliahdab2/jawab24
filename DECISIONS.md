@@ -1741,3 +1741,69 @@ cancel, then resubmit.
 **Still open, deliberately not fixed here.** The UPDATE is unbounded rather than batched. It mattered for the 53k first run; steady state is ~17 rows per pass, so it is a latent risk, not a live one. Related and worth its own change: `batchDelete` `batchSize` never reaches the query at all (Drizzle PG delete takes no LIMIT), so the batching in this file has always been decorative. Fixing that is a separate PR against a pre-existing defect.
 
 **What did NOT change.** The 7-day window for messages, the resolve-don-t-delete rule, keeping `needs_attention` and `flag_reason`, and ageing from `created_at` all stand exactly as D-078 states them — the message evidence (1,057 resolutions, 93% within 7 days) is unaffected by any of the above.
+
+## D-081 · A phone number can say what it is for; a description can never say what to DO with it
+
+**Ruling (owner-approved 2026-08-13, PR #733).** `BusinessProfile.phones` entries carry an
+optional free-text `description` — schema.org `ContactPoint`, purpose as free text with suggested
+values, never an enum — plus one page-level `BusinessProfile.email` (`Organization.email`). Scope
+is settled: **ship this and add nothing.** Two attempts to grow it were stopped and the data agreed
+both times.
+
+**1. No `rule` / priority / visibility field. Measured twice.** Across all 122 pages with a KB, 61
+keep a phone in free text and 13 label it by purpose — that is what `description` covers — while
+exactly **2** (MES, Feras) have phone-routing rules. 2-in-122 is an exception, not a feature.
+
+**⭐⭐ And it would not work anyway — the reusable finding.** `BUSINESS_INFO` renders as **facts**;
+the persona renders as **instructions**. *A field that describes cannot command.* The same sentence
+scored **8/8 in the persona vs 5/8 in the `description`**, where the model PRINTED the restriction
+to the customer and gave the number anyway — leaking both the number and the internal policy.
+**Never encode behaviour as data.**
+
+**2. ⛔ The standard is SAFE, not BETTER — corrected after a confound was found.** The
+«7/8 → 8/8» improvement first attributed to the restructure was measured against an arm that moved
+FOUR things at once. A TYPO-ONLY control — the merchant's data and persona with one character
+changed («إلى»→«إلا») — reaches the same **8.0/8**, 5 runs each, both stable. The entire measured
+gain was a merchant typo. So this work buys structure, a shorter persona and an editable field; it
+does not buy reply quality, and must never be presented as if it did. (Reply-quality claims from
+single runs are not claims: the arms that fail are also the arms that flip.)
+
+**3. The canonical-form invariant is the safety argument.** An entry is stored as a bare `string`
+IFF it has no non-empty description. The editor sends a FULL-REPLACE patch, so if the shape were
+remembered rather than derived, an untouched echo would read as a change and stamp
+`{source:'editor'}` on an unconfirmed Facebook-synced number — laundering it into the authoritative
+block. That bug shipped once (2026-08-08). Deriving the shape makes the round trip a pure function.
+⇒ Never "objects after the first edit"; one `normalizePhoneEntries` at BOTH write boundaries.
+
+**4. ⭐ A false REJECT in a phone slot is a LOCKOUT, and the two costs are not comparable.**
+Because the editor full-replaces, anything the merchant schema rejects blocks a no-op save — so one
+bad row 400s edits to hours, address, everything. Three rules follow, all of them learned by
+shipping the opposite:
+- `isUsablePhoneEntry` asks "is this FIELD's content a phone?" and must not reuse `extractPhones`,
+  which asks "is a phone hidden in this PROSE?" and carries a 9-digit floor that is correct there
+  and rejected a real 7-digit Syrian landline here.
+- **Already-stored numbers are GRANDFATHERED.** The supply of unjudgeable stored entries is
+  continuous — `fb_sync` and the KB extractor write through the BASE schema *by design* — so
+  without this, something Facebook wrote could lock a merchant out of their own hours field
+  permanently. Judged only when ADDED or CHANGED.
+- Canonicalization is a `z.preprocess`, not a `.transform()`: an over-long description truncates
+  and an unknown key is dropped, rather than 400-ing a save.
+
+**5. Where department numbers live.** Contact points for phones the PAGE owns; a phone belonging to
+another ENTITY (a showroom with its own address) stays a row on that entity's fact list. MES's
+«أرقام الأقسام» moved; «صالات الشركة» did not.
+
+**6. A public post must not publish a restricted line.** `buildContactSuffix` prefers the first
+UNCONDITIONAL number (by the invariant, a bare string) and carries the purpose when every line has
+one. Taking `[0]` bare published «الإدارة — عند الطلب فقط» to everyone with the condition stripped —
+honoured by the reply prompt, dropped on posts.
+
+**7. Sanitize at the RENDER boundary too, not only on write.** Write-only sanitization is safe
+exactly as long as every producer goes through it, which is not an invariant the formatter can
+check. Idempotent, so no already-clean line moves.
+
+**Reply-safety method worth reusing:** prove byte-identity by extracting the file from
+`origin/main`, importing BOTH versions into one process, and diffing the rendered output over every
+real production profile — 122/122 identical here, plus the lead-exclusion invariant. Rendering is a
+pure function, so byte-equal input means the reply cannot differ: no sampling, no error bar. Gates:
+`scripts/fleet-prompt-identity.ts`, `scripts/fleet-save-lockout.ts`.
