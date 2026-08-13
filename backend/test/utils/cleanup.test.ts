@@ -244,18 +244,35 @@ describe('cleanup utilities', () => {
             return { sets };
         }
 
-        it('sweeps MESSAGES ONLY — comments were never measured (D-079)', async () => {
+        it('sweeps all three queues and sums them', async () => {
             mockAttentionUpdate([{ workspaceId: 'w1' }, { workspaceId: 'w1' }]);
 
             const result = await expireStaleAttentionItems(7);
 
-            // One statement, not three. The first release also swept comments and
-            // instagram_comments, which were 31,885 of the affected rows to messages'
-            // 24,243 — governed by a ruling measured on messages alone.
-            expect(db.update).toHaveBeenCalledTimes(1);
+            expect(db.update).toHaveBeenCalledTimes(3);
             expect(result.table).toBe('attention_queue');
-            expect(result.deletedCount).toBe(2);
+            expect(result.deletedCount).toBe(6);   // 2 rows × 3 tables
             expect(result.error).toBeUndefined();
+        });
+
+        it('isolates each queue — one table failing must not skip the others', async () => {
+            // The first release shared one try/catch across all three, so a messages error
+            // silently skipped comments (57% of the volume) on every run, forever.
+            let call = 0;
+            const mockReturning = vi.fn(() => Promise.resolve([{ workspaceId: 'w9' }]));
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockImplementation(() => {
+                if (call++ === 0) throw new Error('messages exploded');
+                return { set: mockSet } as any;
+            });
+
+            const result = await expireStaleAttentionItems(7);
+
+            expect(db.update).toHaveBeenCalledTimes(3);       // it kept going
+            expect(result.deletedCount).toBe(2);              // the other two queues swept
+            expect(result.error).toContain('messages: messages exploded');
+            expect(result.workspaceIds).toEqual(['w9']);
         });
 
         it('never clears the flag AND never writes updated_at', async () => {
@@ -291,7 +308,7 @@ describe('cleanup utilities', () => {
             expect(vi.mocked(eq)).toHaveBeenCalledWith('messages.resolved', false);
         });
 
-        it('returns the affected workspaces, deduped, so their stats caches can be invalidated', async () => {
+        it('returns the affected workspaces, deduped across queues, for cache invalidation', async () => {
             mockAttentionUpdate([
                 { workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w1' }, { workspaceId: null },
             ]);
@@ -301,12 +318,14 @@ describe('cleanup utilities', () => {
             expect(result.workspaceIds.sort()).toEqual(['w1', 'w2']);
         });
 
-        it('surfaces DB errors without claiming rows it never resolved', async () => {
+        it('reports every queue that failed, and claims no rows it never resolved', async () => {
             vi.mocked(db.update).mockImplementation(() => { throw new Error('update failed'); });
 
             const result = await expireStaleAttentionItems(7);
 
-            expect(result.error).toBe('update failed');
+            expect(result.error).toContain('messages: update failed');
+            expect(result.error).toContain('comments: update failed');
+            expect(result.error).toContain('instagram_comments: update failed');
             expect(result.deletedCount).toBe(0);
             expect(result.workspaceIds).toEqual([]);
         });

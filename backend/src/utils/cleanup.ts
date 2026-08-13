@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores, customerNotificationsLog, emailSends, messages } from '../db/schema';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores, customerNotificationsLog, emailSends, messages, comments, instagramComments } from '../db/schema';
 import { lt, eq, and, ne, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
@@ -209,7 +209,7 @@ export async function cleanupEmailBodies(daysOld: number = EMAIL_BODY_RETENTION_
 }
 
 /**
- * Days a Needs-Attention MESSAGE stays in the merchant's queue before it is auto-resolved.
+ * Days a Needs-Attention item stays in the merchant's queue before it is auto-resolved.
  *
  * Measured on production `messages` (2026-08-13, 90 days, 1,057 individually resolved
  * items): **93% of everything a merchant ever resolves is resolved within 7 days** — the
@@ -218,22 +218,31 @@ export async function cleanupEmailBodies(daysOld: number = EMAIL_BODY_RETENTION_
  * الفريق الدمشقي 2,489), not one dead account. The 7-day window gives up 7.1% of historical
  * message resolutions — the trade the owner took explicitly over 14 days (3.7%) and 30 (2.2%).
  *
- * ⚠️ Those figures describe `messages` ONLY. See the scope note on the function.
+ * ⚠️ Those figures are `messages`. Comments share the window on a much thinner and weaker
+ * measurement — see the scope note on the function before citing 7.1% for them.
  */
 export const ATTENTION_QUEUE_RETENTION_DAYS = 7;
 
 /**
- * Auto-resolve Needs-Attention MESSAGES older than the window, across every page.
+ * Auto-resolve Needs-Attention items older than the window, across every page.
  *
- * ## Scope: messages only, deliberately (correction to D-078, see D-079)
+ * ## Scope: all three queues, but comments on their OWN measurement (D-080)
  *
- * The first version also swept `comments` and `instagram_comments`. The evidence never
- * covered them: comments were 31,885 of the affected rows to messages' 24,243, so the
- * ruling was made on 43% of what it governed. Re-measured afterwards, and excluding the
- * sweep's own bulk minute, only **146 comments had ever been individually resolved in 90
- * days** — 57.5% of them within 7 days, against 93% for messages. On that evidence the
- * window costs ~40% of comment resolutions, not 7.1%, and 146 rows is no mandate at all.
- * Comments therefore stay out until they are measured on their own terms.
+ * D-078's numbers described `messages` only, while the shipped sweep also resolved
+ * `comments` and `instagram_comments` — 31,885 comment rows to messages' 24,243, i.e. the
+ * ruling governed 43% of what it was measured on. Comments were measured separately
+ * afterwards and behave differently: excluding the sweep's own bulk minute, only **146
+ * comments had ever been individually resolved in 90 days**, and just 57.5% of those within
+ * 7 days (messages: 93%).
+ *
+ * Proportionally that is a ~42% give-up rather than 7.1%. In absolute terms — the number the
+ * owner ruled on — it is **62 comments over 90 days, ~21 a month across all 122 pages**,
+ * against a comment queue that had accumulated 31,885 rows. Merchants effectively do not work
+ * the comment queue at all: 30 comments were flagged in the last 7 days and 20 are open.
+ *
+ * ⚠️ So the two tables share a window for different reasons, and the comment half rests on a
+ * 146-row sample. If comment-resolution behaviour ever changes, this is the assumption to
+ * re-measure first.
  *
  * ## It RESOLVES; it never deletes, never clears the flag, and never touches updated_at
  *
@@ -261,25 +270,41 @@ export async function expireStaleAttentionItems(
     daysOld: number = ATTENTION_QUEUE_RETENTION_DAYS,
 ): Promise<CleanupResult & { workspaceIds: string[] }> {
     const cutoff = daysAgo(daysOld);
-    try {
-        const rows = await db.update(messages)
-            .set({ resolved: true })
-            .where(and(
-                eq(messages.needsAttention, true),
-                eq(messages.resolved, false),
-                lt(messages.createdAt, cutoff),
-            ))
-            .returning({ workspaceId: messages.workspaceId });
-        const workspaceIds = [...new Set(rows.map(r => r.workspaceId).filter((w): w is string => !!w))];
-        return { table: 'attention_queue', deletedCount: rows.length, workspaceIds };
-    } catch (error) {
-        return {
-            table: 'attention_queue',
-            deletedCount: 0,
-            workspaceIds: [],
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
+    const workspaces = new Set<string>();
+    const errors: string[] = [];
+    let total = 0;
+
+    // Each queue is swept in its OWN try/catch. A single shared catch meant one table's
+    // failure silently skipped the rest on every run forever — and comments alone were 57%
+    // of the volume, so the largest queue could have gone unswept behind a messages error
+    // nobody attributed to it.
+    for (const [name, table] of [
+        ['messages', messages],
+        ['comments', comments],
+        ['instagram_comments', instagramComments],
+    ] as const) {
+        try {
+            const rows = await db.update(table)
+                .set({ resolved: true })
+                .where(and(
+                    eq(table.needsAttention, true),
+                    eq(table.resolved, false),
+                    lt(table.createdAt, cutoff),
+                ))
+                .returning({ workspaceId: table.workspaceId });
+            total += rows.length;
+            for (const r of rows) if (r.workspaceId) workspaces.add(r.workspaceId);
+        } catch (error) {
+            errors.push(`${name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
+
+    return {
+        table: 'attention_queue',
+        deletedCount: total,
+        workspaceIds: [...workspaces],
+        ...(errors.length ? { error: errors.join('; ') } : {}),
+    };
 }
 
 /**
