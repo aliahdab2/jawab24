@@ -312,3 +312,43 @@ After PR opens, decision is whether to deploy Stage 1 alone or wait until Stage 
 If you decide to deploy Stage 1 alone after merge: standard pipeline (PR merge → tag → Jenkins → gitops). Migrations 0106 + 0107 are both safe ADD COLUMN operations with `IF NOT EXISTS`-equivalent semantics (fail-fast if already applied). Local dev DB has them; production DB needs them.
 
 If anything in the strategy plan feels wrong in light of what you actually find in the code, **update the plan**, don't silently improvise.
+
+---
+
+## 2026-08-13 — Contact standard (PR #733 + predicate fix) — a DESCENDANT of Stage 2.6.1
+
+**Everything above predates this by ~2.5 months. Read this before assuming the state above is current.**
+
+The merchant **contact standard** builds directly on Stage 2.6.1 / Option B. It extends
+`business_profile.merchant.phones` from bare strings to `string | {number, description}`
+(schema.org `ContactPoint`), adds `merchant.email`, and relies on the `merchantProvenance`
+sidecar this plan introduced — provenance gating (D-008/D-010) is what decides whether a
+migrated number reaches the authoritative BUSINESS_INFO block at all.
+
+Full rollout plan: `~/.claude/plans/cuddly-singing-backus.md`.
+
+**Why it concerns THIS plan specifically: its Phase 2 DELETES KB prose.** Merchants keep their
+contact routing in up to three places at once — the `phones` field, the persona, and the KB —
+and the migration collapses that to one. Measured on the two most engaged pages: Shahin's KB
+repeats his persona's routing table verbatim (9 lines); MES's «✦ قواعد:» block repeats his four
+persona rules, typo included.
+
+⛔ **The Feras precedent applies and is a hard gate:** never delete prose whose structured
+replacement the merchant cannot see. Each Phase-2 merchant must be on
+`BUSINESS_SURFACE_WORKSPACE_IDS` (`frontend/src/lib/featureFlags.ts`) first. Verified for
+Shahin `d06ed500`, MES `9b6ba279`, Feras `c54202c9`.
+
+**Measured before any of it ships:**
+- **122/122 production profiles render byte-identical** through `origin/main`'s BUSINESS_INFO
+  formatter and the branch's ⇒ the code cannot change any merchant's replies; only a merchant's
+  DATA moving does. Tooling: `scripts/fleet-prompt-identity.ts`.
+- Every stored number still returns from `businessPhoneList` on all 122 — the reader that feeds
+  lead-capture exclusion AND the post-reply contact suffix. Verified for the post-migration
+  object shape too, so no `[object Object]` can empty the exclusion set.
+- Prose stripped + persona cleaned: **Shahin 7/7**, **MES 8/8** on real harvested customer
+  questions. So the prose deletion this plan's cleanup workstream wants is safe for them.
+
+⚠️ **Doc defect found here:** `featureFlags.ts:105` cites `.planning/MES_CLEANUP_REVIEW.md`,
+which does not exist — and `.planning/` is gitignored, so a code comment can never reliably
+reference anything inside it. Either the doc needs writing somewhere tracked, or that citation
+should be dropped.
