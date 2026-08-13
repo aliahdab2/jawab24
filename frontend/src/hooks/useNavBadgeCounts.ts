@@ -10,6 +10,17 @@ export interface NavBadge {
   color: NavBadgeColor;
   /** Announced to screen readers — the pill itself is `aria-hidden`. */
   srLabel: string;
+  /**
+   * Where the nav item should go WHILE it is wearing this badge, when that is
+   * somewhere narrower than the destination's default view.
+   *
+   * A badge is a promise that something specific is waiting; landing on a view
+   * that doesn't show it breaks the promise, and a badge that never resolves
+   * into the thing it counts is one merchants learn to ignore. Only meaningful
+   * when `count > 0` — with an empty queue the filtered view would be empty
+   * too, so callers fall back to the plain href.
+   */
+  targetHref?: string;
 }
 
 export type NavBadgeMap = Record<string, NavBadge>;
@@ -52,10 +63,28 @@ export function useNavBadgeCounts(): NavBadgeMap {
         count: newLeads,
         color: 'brand' as const,
         srLabel: tNav('badgeNewLeads', { count: newLeads }),
+        // Leads is the one destination whose badge does NOT clear by being
+        // looked at — it counts unworked leads, so it survives the visit by
+        // design. That makes landing on the right view load-bearing rather
+        // than a nicety: the page otherwise opens on "all", and the merchant
+        // is left to find the counted leads inside a mixed list.
+        targetHref: '/leads?status=new',
       },
     }),
     [unreadComments, unreadMessages, newLeads, tNav],
   );
+}
+
+/**
+ * Where a nav item should send the merchant right now: its badge's narrower
+ * target while something is waiting there, its own destination otherwise.
+ *
+ * Shared by every nav surface (desktop sidebar, mobile "More" overlay) for the
+ * same reason the counts themselves are — so one badge cannot lead somewhere
+ * different depending on which surface it was tapped from.
+ */
+export function resolveNavHref(href: string, badge?: NavBadge | null): string {
+  return badge && badge.count > 0 && badge.targetHref ? badge.targetHref : href;
 }
 
 /**
@@ -68,6 +97,10 @@ export function useNavBadgeCounts(): NavBadgeMap {
  * destination contributes, its own label is announced ("29 new leads") rather
  * than the vaguer roll-up wording — that is today's only case, and the specific
  * label is the more useful one.
+ *
+ * No `targetHref` is rolled up: the container this badge sits on opens the
+ * overlay rather than navigating, and the tiles inside carry their own badges
+ * (and their own targets) already.
  *
  * Returns null when nothing is waiting, so callers can render nothing at all
  * instead of a zero pill.

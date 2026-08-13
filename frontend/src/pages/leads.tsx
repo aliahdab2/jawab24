@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
-import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
+import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce, useNewLeadsSummary } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import * as Popover from '@radix-ui/react-popover';
@@ -33,16 +33,13 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale, getLocaleDirection } from '@/utils/locale';
 import { isPageAutoReplyEnabled } from '@/utils/page';
+import { parseStatusFilter, pickWaitingPage, type StatusFilter } from '@/utils/leadsView';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
-
-// 'returning' is a cross-status filter (a lead that came back — needsFollowUp),
-// not a pipeline stage; it overlaps new/contacted/converted.
-type StatusFilter = LeadStatus | 'all' | 'returning';
 
 // Page size for the infinite-scroll list. Matches MESSAGES_PER_PAGE / COMMENTS_PER_PAGE
 // so all three list pages have consistent paging behaviour.
@@ -494,6 +491,11 @@ const LeadsPage: NextPageWithLayout = () => {
   // merchant actually WORKS a lead (status change / delete), not when they glance
   // at the list. Merely looking used to silence the signal while the whole queue
   // sat untouched — found live 2026-08-04 (19 unworked leads, no signal anywhere).
+  //
+  // The other half of that bargain is HERE: a badge that outlives the visit has
+  // to be resolvable, so the badge deep-links to `?status=new` and this page
+  // opens on exactly the leads it counted (see applyStatusFilter and the
+  // waiting-page landing effect below).
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [exporting, setExporting] = useState(false);
@@ -571,12 +573,70 @@ const LeadsPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.page, syncFromUrl]);
 
-  // Default to first valid page when nothing is stored and active pages have loaded.
+  // Same treatment for the status chips: restore from `?status=` so a deep link,
+  // a reload, and the back button all reproduce the view they describe.
   useEffect(() => {
+    if (!router.isReady) return;
+    const fromUrl = parseStatusFilter(router.query.status);
+    if (fromUrl) setStatusFilter(fromUrl);
+  }, [router.isReady, router.query.status]);
+
+  // One writer for the filter — state and URL move together. Going through
+  // `setStatusFilter` alone would leave the URL describing the previous view,
+  // which then gets restored over the merchant's choice by the effect above the
+  // next time anything else touches the query string.
+  const applyStatusFilter = useCallback((next: StatusFilter) => {
+    setStatusFilter(next);
+    const params = new URLSearchParams(window.location.search);
+    // 'all' is the default view — an explicit `?status=all` is just noise.
+    if (next === 'all') params.delete('status');
+    else params.set('status', next);
+    router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
+  }, [router]);
+
+  // Where the workspace's waiting leads actually are, longest-waiting page first.
+  // Already in the React Query cache: the sidebar badge mounts the same query
+  // with the same key, so this resolves on first render rather than a tick later.
+  const { byPage: waitingByPage } = useNewLeadsSummary();
+
+  // Arriving from the nav badge, make sure the page we open is one that HAS
+  // waiting leads. The badge counts the whole workspace while this list shows a
+  // single page, so a stored selection pointing at a quiet page would answer a
+  // badge of 9 with an empty list — a worse answer than the mixed list it
+  // replaced. Skipped when the URL names a page: that is the merchant's own
+  // choice (a shared link, the back button), not a default to override.
+  const [badgeLandingDone, setBadgeLandingDone] = useState(false);
+  // Both queries have to be in before this can decide: the pages list arrives
+  // separately from the summary, and resolving against an empty picker would
+  // find no selectable page, mark itself done, and hand the choice back to the
+  // plain default — silently losing the landing on the slower load order.
+  const badgeLandingReady =
+    router.isReady &&
+    !badgeLandingDone &&
+    !router.query.page &&
+    parseStatusFilter(router.query.status) === 'new' &&
+    waitingByPage.length > 0 &&
+    validPages.length > 0;
+
+  useEffect(() => {
+    if (!badgeLandingReady) return;
+    const target = pickWaitingPage(waitingByPage, validPages.map((p) => p.id), selectedPageId);
+    // Resolved once per arrival: working through the queue empties `byPage`
+    // page by page, and re-running would yank the merchant to another page
+    // mid-flow the moment they cleared the last lead on this one.
+    setBadgeLandingDone(true);
+    if (target && target !== selectedPageId) setSelectedPageId(target);
+  }, [badgeLandingReady, waitingByPage, selectedPageId, validPages, setSelectedPageId]);
+
+  // Default to first valid page when nothing is stored and active pages have loaded.
+  // Held back while the badge deep-link is deciding, so we don't fetch one page's
+  // leads only to switch away from it in the same breath.
+  useEffect(() => {
+    if (badgeLandingReady) return;
     if (!selectedPageId && validPages.length > 0) {
       setSelectedPageId(validPages[0].id);
     }
-  }, [validPages, selectedPageId, setSelectedPageId]);
+  }, [badgeLandingReady, validPages, selectedPageId, setSelectedPageId]);
 
   // Effective lead config for the selected page = its override ?? workspace
   // default (resolved by the shared helpers, so backend validation matches what
@@ -871,6 +931,10 @@ const LeadsPage: NextPageWithLayout = () => {
                     // stays selectable — marked so two entries don't read as active.
                     const paused = !isPageAutoReplyEnabled(p);
                     const active = p.id === selectedPageId;
+                    // The nav badge's workspace-wide number, broken down where the
+                    // merchant can act on it: without this, a badge of 9 over a
+                    // one-page list is a total that appears nowhere in the product.
+                    const waiting = waitingByPage.find((w) => w.pageId === p.id)?.count ?? 0;
                     return (
                       <Popover.Close asChild key={p.id}>
                         <button
@@ -885,6 +949,11 @@ const LeadsPage: NextPageWithLayout = () => {
                         >
                           <Check className={clsx('w-4 h-4 flex-shrink-0', active ? 'text-brand-600' : 'opacity-0')} aria-hidden="true" />
                           <span className="truncate min-w-0 flex-1">{p.name}</span>
+                          {waiting > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-500 text-white flex-shrink-0">
+                              {t('newLeadsBadge', { count: waiting })}
+                            </span>
+                          )}
                           {paused && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-foreground/70 flex-shrink-0">
                               {t('pagePaused')}
@@ -972,7 +1041,7 @@ const LeadsPage: NextPageWithLayout = () => {
             return (
               <button
                 key={tab.key}
-                onClick={() => setStatusFilter(tab.key)}
+                onClick={() => applyStatusFilter(tab.key)}
                 aria-pressed={active}
                 className={clsx(
                   'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
@@ -998,7 +1067,7 @@ const LeadsPage: NextPageWithLayout = () => {
               card badge. Tapping it again clears it. */}
           <button
             type="button"
-            onClick={() => setStatusFilter(returningActive ? 'all' : 'returning')}
+            onClick={() => applyStatusFilter(returningActive ? 'all' : 'returning')}
             aria-pressed={returningActive}
             className={clsx(
               'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
@@ -1085,7 +1154,7 @@ const LeadsPage: NextPageWithLayout = () => {
             action={
               <button
                 type="button"
-                onClick={() => setStatusFilter('all')}
+                onClick={() => applyStatusFilter('all')}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 transition-colors"
               >
                 {t('showAllLeads')}

@@ -84,7 +84,7 @@ describe('useNewLeadsSummary', () => {
 
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [] });
     });
 
     // A 200 carrying the WRONG body — an older/newer backend, a proxy, a test
@@ -109,7 +109,7 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [] });
     });
 
     it('rejects a non-numeric count and a non-string latestName', async () => {
@@ -120,7 +120,7 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [] });
     });
 
     it('clamps a negative or fractional count', async () => {
@@ -138,6 +138,64 @@ describe('useNewLeadsSummary', () => {
         const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
 
         await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
-        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null });
+        expect(result.current).toEqual({ count: 0, latestName: null, latestAt: null, oldestAt: null, byPage: [] });
+    });
+
+    // `byPage` decides which page the badge's deep link opens. A malformed entry
+    // that survived normalization would send the merchant to a page id that does
+    // not exist — a 404 list under a non-zero badge.
+    describe('byPage', () => {
+        it('keeps the server order — longest-waiting page first', async () => {
+            getNewSummaryMock.mockResolvedValue({
+                data: {
+                    count: 9, latestName: null, latestAt: null, oldestAt: null,
+                    byPage: [
+                        { pageId: 'page_b', count: 4, oldestAt: '2026-08-02T09:00:00.000Z' },
+                        { pageId: 'page_a', count: 5, oldestAt: '2026-08-11T09:00:00.000Z' },
+                    ],
+                },
+            });
+
+            const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
+
+            await waitFor(() => expect(result.current.byPage).toHaveLength(2));
+            expect(result.current.byPage.map((p) => p.pageId)).toEqual(['page_b', 'page_a']);
+        });
+
+        it('drops entries that could not name a page to land on', async () => {
+            getNewSummaryMock.mockResolvedValue({
+                data: {
+                    count: 3, latestName: null, latestAt: null, oldestAt: null,
+                    byPage: [
+                        { pageId: '', count: 2, oldestAt: null },
+                        { pageId: 'page_a', count: '4', oldestAt: null },
+                        { pageId: 'page_b', count: 0, oldestAt: null },
+                        null,
+                        { pageId: 'page_c', count: 3, oldestAt: null },
+                    ],
+                },
+            });
+
+            const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
+
+            await waitFor(() => expect(getNewSummaryMock).toHaveBeenCalled());
+            // A page with nothing waiting is as useless a landing target as a
+            // nameless one, so both go.
+            await waitFor(() => expect(result.current.byPage).toEqual([
+                { pageId: 'page_c', count: 3, oldestAt: null },
+            ]));
+        });
+
+        it('treats a backend that sends no breakdown as "no idea where the queue is"', async () => {
+            getNewSummaryMock.mockResolvedValue({
+                data: { count: 19, latestName: 'Feras', latestAt: null, oldestAt: null },
+            });
+
+            const { result } = renderHook(() => useNewLeadsSummary(), { wrapper });
+
+            // The count still shows; the page selection is simply left alone.
+            await waitFor(() => expect(result.current.count).toBe(19));
+            expect(result.current.byPage).toEqual([]);
+        });
     });
 });

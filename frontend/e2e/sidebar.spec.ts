@@ -260,6 +260,29 @@ test.describe('Sidebar', () => {
     await expect(page.locator('aside').locator('span.bg-brand-500')).toHaveCount(0);
   });
 
+  // A badge that outlives the visit (leads clear by being WORKED, not by being
+  // seen) has to be resolvable, or merchants learn to ignore it: the badged link
+  // opens the leads it counted, not the unfiltered list.
+  test('the badged leads link opens the new-leads view', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, BASE_USER, { newLeads: 19 });
+    await gotoWithSidebar(page);
+
+    await expect(page.locator('aside').getByRole('link', { name: t('nav.leads') }))
+      .toHaveAttribute('href', /\/leads\?status=new$/);
+  });
+
+  test('an empty queue leaves the leads link on the plain list', async ({ page }) => {
+    // Filtering to "new" with nothing waiting would answer a tap with an empty
+    // list — the merchant asked for leads, not for proof there are none.
+    await setupAuth(page);
+    await mockAPIs(page, BASE_USER, { newLeads: 0 });
+    await gotoWithSidebar(page);
+
+    await expect(page.locator('aside').getByRole('link', { name: t('nav.leads') }))
+      .toHaveAttribute('href', /\/leads$/);
+  });
+
   /* ------------------------------------------------------------------ */
   /*  Logout                                                              */
   /* ------------------------------------------------------------------ */
