@@ -1663,3 +1663,57 @@ one-line change to the predicate.
 itself can make a real, growing problem invisible — which is precisely why the flags stay
 queryable. Any future "the queue is small, so quality is fine" claim must be read off the flags,
 never off the queue.
+
+## D-079 · The iOS no-IAP exemption is Guideline 3.1.3(f), NOT 3.1.3(b) — D-064's citation was wrong and it cost a rejection
+
+Correction to D-064, forced by Apple's rejection of 2026-08-13 (submission `7272f32e`,
+version 2.0.33 build 10). **D-064's ruling stands — web-only billing, no IAP before
+launch. Only its legal citation is corrected here.**
+
+**What was wrong.** D-064 claimed the model "is Guideline 3.1.3(b) (Multiplatform
+Services)". That clause says the opposite of what we need. Apple's text:
+
+> **(b) Multiplatform Services:** Apps that operate across multiple platforms may allow
+> users to access content, subscriptions, or features they have acquired in your app on
+> other platforms or your web site … **provided those items are also available as
+> in-app purchases within the app.**
+
+3.1.3(b) *requires* IAP. It is an allowance for apps that already sell via IAP, not an
+exemption from it. The App Review Notes repeated the claim verbatim, and the reviewer
+quoted that same sentence back as the rejection rationale. We supplied the reasoning
+that rejected us.
+
+**The correct clause is 3.1.3(f), Free Stand-alone Apps:**
+
+> **(f) Free Stand-alone Apps:** Free apps acting as a stand-alone companion to a paid
+> web based tool (i.e. VoIP, Cloud Storage, Email Services, Web Hosting) do not need to
+> use in-app purchase, provided there is no purchasing inside the app, or calls to
+> action for purchase outside of the app.
+
+Jawab24's iOS app is exactly this shape, and an audit on 2026-08-13 confirmed the build
+already satisfies both conditions: `dashboard.tsx` removes the whole plan/billing card
+on iOS (only the quota bar renders), `UpgradeCTA` / `BuyTopUpCTA` /
+`PaymentsUnavailableNotice` all return `null`, `settings.tsx` has no billing section,
+the `*IOS` copy keys are factual with no CTA/URL/phone number, and `/pricing`,
+`/checkout`, `/payment/*` are both stripped from the bundle and refused at runtime by
+`useIOSRouteGuard`. **The code was compliant; the paperwork was not.**
+
+**Standing discipline (extends D-064's).** Never describe Jawab24 to App Review as
+"multiplatform", "cross-platform", or "also on Android". That vocabulary is what pulls a
+reviewer into 3.1.3(b). The claim to make is always 3.1.3(f): a *free stand-alone
+companion to a paid web-based tool*, with no purchasing and no purchase CTA inside the
+app.
+
+**Verify lettering before citing it.** The sub-clause letters were confirmed live from
+developer.apple.com on 2026-08-13, not recalled: (a) Reader, (b) Multiplatform,
+(c) Enterprise, (d) Person-to-Person, (e) Goods and Services Outside of the App,
+(f) Free Stand-alone, (g) Advertising Management. Apple renumbers these.
+
+**Operational lesson, recorded because it cost us the reply channel.** Post the
+Resolution Center reply **before** cancelling a rejected submission. Apple's reply box
+exists only on an actionable rejection; once the submission is cancelled it shows
+`Removed` and the thread becomes read-only (verified in the ASC UI: the message still
+renders, but the page has zero textareas, zero contenteditable nodes and no Reply
+button). Cancelling is unavoidable — a rejected submission holds
+`appStoreVersionForReview` and blocks resubmission — so the order is: reply, then
+cancel, then resubmit.

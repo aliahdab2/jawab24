@@ -935,7 +935,8 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **Framework** | Capacitor 8 (native wrapper around Next.js) |
 | **Platforms** | iOS (`frontend/ios/`) + Android (`frontend/android/`) |
 | **Native features** | Push notifications, voice recording, biometric auth guards |
-| **Published** | Not yet — pending Facebook App Review + app store submissions |
+| **Published** | **Android: live** on Google Play (production 2.0.34). **iOS: not live** — 2.0.33 (build 10) resubmitted to App Review 2026-08-13 and `Waiting for Review`; release is MANUAL, so approval alone does not publish |
+| **iOS billing posture** | Free stand-alone companion under App Store Guideline **3.1.3(f)** — no IAP, no purchase UI, no external purchase CTA. Enforced by `useIOSRouteGuard` + the `isIOSNative()` / `iosOr()` gates, not by convention. See D-064 (the ruling) and **D-079** (the corrected citation — it is NOT 3.1.3(b)) |
 
 ### Comments UI
 
