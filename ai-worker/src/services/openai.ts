@@ -54,6 +54,30 @@ function addTokens(a?: number, b?: number): number | undefined {
     return a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
 }
 
+/**
+ * Sum the usage of attempts we threw away. Both retries below discard a call that
+ * OpenAI already billed, so `ai_usage_log` and the admin cost panel must still see
+ * that spend — otherwise a retry looks free and per-merchant cost under-reports.
+ */
+function mergeUsage(
+    a?: OpenAI.CompletionUsage,
+    b?: OpenAI.CompletionUsage,
+): OpenAI.CompletionUsage | undefined {
+    if (!a) return b;
+    if (!b) return a;
+    return {
+        ...a,
+        total_tokens: (a.total_tokens ?? 0) + (b.total_tokens ?? 0),
+        prompt_tokens: (a.prompt_tokens ?? 0) + (b.prompt_tokens ?? 0),
+        completion_tokens: (a.completion_tokens ?? 0) + (b.completion_tokens ?? 0),
+        prompt_tokens_details: {
+            ...(a.prompt_tokens_details ?? {}),
+            cached_tokens: (a.prompt_tokens_details?.cached_tokens ?? 0)
+                + (b.prompt_tokens_details?.cached_tokens ?? 0),
+        },
+    };
+}
+
 export class OpenAIService {
     private client: OpenAI | null = null;
 
@@ -106,7 +130,12 @@ export class OpenAIService {
             // empty-reply throw below flag the message exactly as before.
             // Applies regardless of whether the cut content happens to parse:
             // a parseable-but-cut reply is still a cut reply.
-            let truncatedUsage: OpenAI.CompletionUsage | undefined;
+            //
+            // Usage of every discarded attempt (truncation retry AND refusal retry).
+            // `wasTruncated` is tracked separately because only truncation earns the
+            // `reply_shortened` badge — a refusal retry shortens nothing.
+            let discardedUsage: OpenAI.CompletionUsage | undefined;
+            let wasTruncated = false;
             let finishReason = completion.choices[0]?.finish_reason;
             if (finishReason === 'length') {
                 console.log(JSON.stringify({
@@ -115,7 +144,8 @@ export class OpenAIService {
                     model: config.openai.model,
                     tokensOut: completion.usage?.completion_tokens,
                 }));
-                truncatedUsage = completion.usage;
+                discardedUsage = mergeUsage(discardedUsage, completion.usage);
+                wasTruncated = true;
                 completion = await this.createCompletion(
                     [...messages, TRUNCATION_RETRY_MESSAGE],
                     request.context?.pipeline,
@@ -127,11 +157,50 @@ export class OpenAIService {
             // *after* — they fire recordAiFailedBeforeLog explicitly because
             // the OpenAI call was billed but the content is unusable.
 
-            // Structured-output refusal — model declined the request (policy violation).
-            // Non-transient: same input → same refusal. Throw with the refusal reason so
-            // backend can flag needs_attention immediately + notify the merchant who can
-            // adjust KB / brand voice / post content tripping the policy gate.
-            const refusal = completion.choices[0]?.message?.refusal;
+            // Structured-output refusal — RETRY ONCE before believing it.
+            //
+            // The old code threw here immediately, on the premise written in this very
+            // comment: "Non-transient: same input → same refusal." That premise was
+            // measured FALSE on 2026-08-13:
+            //   - all 512 stored refusal texts from 90 days of production were read
+            //     one by one. NOT ONE was a refusal — every one was a normal, correct
+            //     reply, median 82 chars, in the merchant's own voice and dialect;
+            //   - 20 of them were replayed against their real page data, 3 samples each,
+            //     on a page whose KB and settings were provably unchanged since the
+            //     refusal fired. 60 replays, 60 normal replies, 0 refusals.
+            //
+            // The mechanism, visible in 4 of the 512: the reply text carries a trailing
+            // second `{"reply":…}` envelope, an `</ai_reply>` tag, or a stray
+            // `</assistant` token. The model emits the answer and then keeps going. That
+            // breaks the `strict: true` schema contract, and the structured-output layer
+            // surfaces the text under `refusal` instead of `content`. So the ENVELOPE is
+            // malformed — the content never was refused. Same root defect as the doubled
+            // JSON documented on `createCompletion`'s penalty settings (eval #46,
+            // 2026-05-20); it is stochastic, which is exactly why a retry clears it.
+            //
+            // Cost of throwing instead: ~170 discarded replies a month, ~33 customers
+            // left with total silence.
+            //
+            // The guard is not weakened — it is finally accurate. A GENUINE policy
+            // refusal is deterministic by nature, so it refuses on the retry too and
+            // still throws, flags and notifies exactly as before. After this, reaching
+            // AiRefusalError means the model really did decline.
+            //
+            // ⛔ The refusal text itself is never used as a reply: only the retry's
+            // `content` is. A real refusal can therefore never reach a customer.
+            let refusal = completion.choices[0]?.message?.refusal;
+            if (refusal) {
+                console.log(JSON.stringify({
+                    event: 'structured_refusal_retry',
+                    pipeline: request.context?.pipeline,
+                    model: config.openai.model,
+                    refusalChars: refusal.length,
+                }));
+                discardedUsage = mergeUsage(discardedUsage, completion.usage);
+                completion = await this.createCompletion(messages, request.context?.pipeline);
+                finishReason = completion.choices[0]?.finish_reason;
+                refusal = completion.choices[0]?.message?.refusal;
+            }
             if (refusal) {
                 Sentry.addBreadcrumb({
                     category: 'openai',
@@ -222,7 +291,7 @@ export class OpenAIService {
             // alarm flag) so the merchant can see their Business Info produces
             // over-long replies. Riding the flags array persists it through both
             // AI caches for free (cached copies ARE the shortened text).
-            const responseFlags = truncatedUsage
+            const responseFlags = wasTruncated
                 ? [...(validated.flags ?? []), 'reply_shortened']
                 : validated.flags;
 
@@ -233,13 +302,13 @@ export class OpenAIService {
                 // Token counts include the truncated first attempt when a retry
                 // happened — both calls were billed, and ai_usage_log / the admin
                 // cost panel must see the real spend.
-                tokensUsed: addTokens(completion.usage?.total_tokens, truncatedUsage?.total_tokens),
-                tokensIn: addTokens(completion.usage?.prompt_tokens, truncatedUsage?.prompt_tokens),
+                tokensUsed: addTokens(completion.usage?.total_tokens, discardedUsage?.total_tokens),
+                tokensIn: addTokens(completion.usage?.prompt_tokens, discardedUsage?.prompt_tokens),
                 tokensInCached: addTokens(
                     completion.usage?.prompt_tokens_details?.cached_tokens,
-                    truncatedUsage?.prompt_tokens_details?.cached_tokens,
+                    discardedUsage?.prompt_tokens_details?.cached_tokens,
                 ),
-                tokensOut: addTokens(completion.usage?.completion_tokens, truncatedUsage?.completion_tokens),
+                tokensOut: addTokens(completion.usage?.completion_tokens, discardedUsage?.completion_tokens),
                 intent: validated.intent,
                 confidence: validated.confidence,
                 flags: responseFlags,
