@@ -62,11 +62,26 @@ describe('BusinessFactRows — state badges', () => {
     expect(within(row('Address')).getByText('Missing')).toBeInTheDocument();
   });
 
-  it('explains all three dot colours in a legend', () => {
+  it('carries no colour legend — the badge above already says it in words', () => {
+    // The row badges render the state as TEXT beside the colour (see the test
+    // above), so a legend explaining the colour restated a meaning the badge
+    // was never carrying alone. Two of its three lines were pure restatement
+    // («Missing — needs your input»), permanently on screen for something a
+    // merchant reads at most once.
+    //
+    // It also removed a hand-maintained pairing: the swatches were literal
+    // emerald/amber that had to be kept in step with `status-success` /
+    // `status-warning`, which are 50/700 background+text pairs with no
+    // solid-fill token to borrow.
+    //
+    // Nothing is lost for colour-blind readers — the swatches were aria-hidden
+    // and the label always did the accessible work.
     renderRows(makePage());
-    expect(screen.getByText('Complete — Jawab uses it')).toBeInTheDocument();
-    expect(screen.getByText('Missing — needs your input')).toBeInTheDocument();
-    expect(screen.getByText('Optional — add it if you have one')).toBeInTheDocument();
+    for (const gloss of [/Jawab uses it/, /needs your input/, /add it if you have one/]) {
+      expect(screen.queryByText(gloss), String(gloss)).not.toBeInTheDocument();
+    }
+    // The states themselves stay visible, per row.
+    expect(within(row('Address')).getByText('Missing')).toBeInTheDocument();
   });
 
   // Any listed number can be on WhatsApp — the mark is per-number, not a

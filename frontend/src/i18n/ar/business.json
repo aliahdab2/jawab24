@@ -22,9 +22,6 @@
     "covered": "مكتمل",
     "missing": "ناقص",
     "optional": "اختياري",
-    "legendCovered": "مكتمل — يستخدمه جواب",
-    "legendMissing": "ناقص — يحتاج إدخالك",
-    "legendOptional": "اختياري — أضِفه إن توفّر",
     "reviewNeeded": "بحاجة إلى مراجعة"
   },
   "products": {
@@ -104,21 +101,15 @@
     "paymentNotePlaceholder": "مثال: محفظة إلكترونية محلية، أو دفعة مقدمة",
     "paymentQuestion": "كيف يدفع عملاؤك؟",
     "phone": "الهاتف",
-    "phoneDesc_bookings": "الحجوزات",
-    "phoneDesc_complaints": "الشكاوى",
-    "phoneDesc_management": "الإدارة",
-    "phoneDesc_sales": "المبيعات",
-    "phoneDesc_support": "خدمة العملاء",
-    "phoneDesc_wholesale": "مبيعات الجملة",
     "phoneDescription": "ما الغرض من هذا الرقم؟",
     "phoneDescriptionPlaceholder": "ما الغرض من هذا الرقم؟ (اختياري)",
-    "phoneInvalid": "هذا لا يبدو رقم هاتف. اكتب الرقم هنا، والغرض منه في الحقل أدناه. وإن كان رقماً محلياً قصيراً فأضف رمز الدولة.",
+    "phoneInvalid": "هذا لا يبدو رقم هاتف. ضع الرقم هنا، والغرض منه في حقل الغرض.",
     "phoneIsWhatsapp": "هذا الرقم على واتساب",
     "placeholder_address": "المدينة، الحي، وأقرب معلم معروف",
     "placeholder_delivery": "إلى أين توصّل، وكم التكلفة والمدة؟",
     "placeholder_email": "name@example.com",
     "placeholder_payment": "الطرق التي تقبلها من عملائك",
-    "placeholder_phone": "الرقم",
+    "placeholder_phone": "09XX XXX XXX",
     "placeholder_website": "example.com",
     "presetNoDelivery": "لا نقدّم خدمة التوصيل",
     "presetNoWebsite": "لا يوجد لدينا موقع إلكتروني",
@@ -128,7 +119,8 @@
     "storeAnsweredHint": "متجرك المتصل يجيب عن هذا تلقائيًا. اكتب هنا فقط إذا أردت إجابة مخصّصة.",
     "title": "معلومات أساسية",
     "website": "الموقع الإلكتروني",
-    "whatsapp": "واتساب"
+    "whatsapp": "واتساب",
+    "addNumberSamePurpose": "رقم آخر لنفس الغرض"
   },
   "info": {
     "title": "معلومات إضافية",

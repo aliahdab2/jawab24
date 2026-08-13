@@ -165,15 +165,88 @@ describe('BusinessFactSheet — phone descriptions', () => {
     ]));
   });
 
-  it('offers translated suggestions that fill the field but never lock it', () => {
-    const onSave = renderSheet('phone', '0911000299');
-    fireEvent.click(screen.getByRole('button', { name: 'Management' }));
-    const desc = screen.getByRole('textbox', { name: /What is this number for\? — phone 1/ });
-    expect(desc).toHaveValue('Management');
-    // The merchant's own words always win.
-    fireEvent.change(desc, { target: { value: 'Head office' } });
+  it('offers NO vendor-supplied purpose vocabulary', () => {
+    // A curated list of six shipped here once («Management, Sales, Customer
+    // support, Complaints, Bookings, Wholesale»). Measured across the 16
+    // labelled contact lines in the whole fleet, THREE matched nothing at all,
+    // and the three commonest real labels — «للتواصل» (5), «واتساب» (4),
+    // «للاستفسار» (4) — were none of them.
+    //
+    // A fixed taxonomy is right only where the vocabulary is UNIVERSAL: iOS and
+    // Google Contacts ship Home/Work/Mobile because every human has those.
+    // Ours is per-business — «صالة الأعراس», «قسم المشاريع», «العيادات
+    // الخارجية» — which is Notion's Select case: free text whose options come
+    // from the user's own data, never a list maintained in the product.
+    // schema.org agrees: `contactType`'s suggested values illustrate the
+    // concept, they are not a taxonomy to ship as UI.
+    //
+    // The costs are asymmetric too. A missing suggestion costs seconds of
+    // typing; a WRONG one invites «Sales» where the merchant meant «قسم
+    // المشاريع» — a mislabelled number, the exact defect this standard repairs.
+    renderSheet('phone', '0911000299');
+    for (const preset of ['Management', 'Sales', 'Wholesale', 'Complaints', 'Customer support']) {
+      expect(screen.queryByRole('button', { name: preset }), preset).toBeNull();
+    }
+    // The placeholder still carries the concept — a short purpose, not a sentence.
+    expect(screen.getByPlaceholderText(/What is this number for/)).toBeTruthy();
+  });
+
+  it('puts the purpose BEFORE its number', () => {
+    // Every labelled contact line in the fleet is written that way — 16 of 16
+    // («للشكاوي : 0931671111», «📞 الإدارة: 0126543210»). The only number-first
+    // string anywhere is `0993301022 الادارة`, written that way because the
+    // number field forced it — i.e. the old order produced the very entry this
+    // migration exists to clean up.
+    render(
+      <BusinessFactSheet
+        factKey="phone"
+        label="phone"
+        initialValue=""
+        initialEntries={[{ number: '0911000299', description: 'الإدارة' }]}
+        saving={false}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const values = (screen.getAllByRole('textbox') as HTMLInputElement[]).map((b) => b.value);
+    expect(values.indexOf('الإدارة')).toBeLessThan(values.indexOf('0911000299'));
+  });
+
+  it('shows a shared purpose once, with both numbers under it', () => {
+    // Real shape: 2 of MES's 3 departments carry a «هاتف بديل», and Shahin's KB
+    // gives two lines for booking confirmation. Storage stays FLAT — two
+    // entries with the same description — so the canonical form is untouched;
+    // the grouping is derived for display.
+    const onSave = vi.fn();
+    render(
+      <BusinessFactSheet
+        factKey="phone"
+        label="phone"
+        initialValue=""
+        initialEntries={[
+          { number: '0911000299', description: 'الإدارة' },
+          { number: '0911000210', description: 'الإدارة' },
+        ]}
+        saving={false}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByDisplayValue('الإدارة')).toHaveLength(1);
+    // Editing the shared purpose rewrites it on every number that carries it.
+    fireEvent.change(screen.getByDisplayValue('الإدارة'), { target: { value: 'المكتب' } });
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith(phones([{ number: '0911000299', description: 'Head office' }]));
+    expect(onSave).toHaveBeenCalledWith(phones([
+      { number: '0911000299', description: 'المكتب' },
+      { number: '0911000210', description: 'المكتب' },
+    ]));
+  });
+
+  it('keeps unnamed contacts separate rather than merging them', () => {
+    // Two blank purposes are two contacts not yet labelled, not one contact
+    // with two numbers — grouping them would silently merge unrelated lines.
+    renderSheet('phone', '0911000299,0911000210');
+    expect(screen.getAllByRole('textbox')).toHaveLength(4);
   });
 
   it('keeps the WhatsApp mark on a described number', () => {

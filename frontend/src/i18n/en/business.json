@@ -22,9 +22,6 @@
     "covered": "Complete",
     "missing": "Missing",
     "optional": "Optional",
-    "legendCovered": "Complete — Jawab uses it",
-    "legendMissing": "Missing — needs your input",
-    "legendOptional": "Optional — add it if you have one",
     "reviewNeeded": "Needs review"
   },
   "products": {
@@ -104,21 +101,15 @@
     "paymentNotePlaceholder": "e.g. a local wallet app, or a deposit up front",
     "paymentQuestion": "How can customers pay?",
     "phone": "Phone",
-    "phoneDesc_bookings": "Bookings",
-    "phoneDesc_complaints": "Complaints",
-    "phoneDesc_management": "Management",
-    "phoneDesc_sales": "Sales",
-    "phoneDesc_support": "Customer support",
-    "phoneDesc_wholesale": "Wholesale",
     "phoneDescription": "What is this number for?",
     "phoneDescriptionPlaceholder": "What is this number for? (optional)",
-    "phoneInvalid": "This doesn't look like a phone number. Write the number here, and what it's for in the field below. For a short local line, add the country code.",
+    "phoneInvalid": "This doesn't look like a phone number. Put the number here, and what it's for in the purpose field.",
     "phoneIsWhatsapp": "Also on WhatsApp",
     "placeholder_address": "City, district, and a nearby landmark",
     "placeholder_delivery": "Where you deliver, the cost, and how long it takes",
     "placeholder_email": "name@example.com",
     "placeholder_payment": "The methods you accept from customers",
-    "placeholder_phone": "Number",
+    "placeholder_phone": "09XX XXX XXX",
     "placeholder_website": "example.com",
     "presetNoDelivery": "We do not deliver",
     "presetNoWebsite": "We do not have a website",
@@ -128,7 +119,8 @@
     "storeAnsweredHint": "Your connected store already answers this. Write here only if you want a custom answer.",
     "title": "Business facts",
     "website": "Website",
-    "whatsapp": "WhatsApp"
+    "whatsapp": "WhatsApp",
+    "addNumberSamePurpose": "Another number, same purpose"
   },
   "info": {
     "title": "Additional information",
