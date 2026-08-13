@@ -36,6 +36,7 @@
 
 import type { BusinessProfile } from './index';
 import type { BusinessPhoneEntry } from './businessPhone';
+import { sanitizePhoneDescription } from './businessPhone';
 import type { MerchantProvenanceMap } from './businessProfileMerge';
 import { SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN } from './businessHours';
 
@@ -149,11 +150,33 @@ export function businessPhoneList(p: BusinessProfile): string[] {
     return businessPhoneEntries(p).map((e) => e.number);
 }
 
-/** One entry as the prompt states it. A description is an aside in parentheses:
+/**
+ * One entry as the prompt states it. A description is an aside in parentheses:
  *  the descriptions merchants write contain dashes of their own
- *  («الإدارة — عند الطلب فقط»), and `', '` already separates entries. */
+ *  («الإدارة — عند الطلب فقط»), and `', '` already separates entries.
+ *
+ * ⭐ Sanitized HERE as well as on write, and the duplication is the point. This
+ * string is interpolated into the AUTHORITATIVE BUSINESS_INFO block, so a
+ * newline in a description could forge an extra `- Label: value` line and a bidi
+ * control could reorder one — i.e. this is a rendering boundary, and a rendering
+ * boundary defends itself (OWASP: sanitize where the value is USED, not only
+ * where it arrived).
+ *
+ * Sanitizing only on write was safe ONLY as long as every producer went through
+ * `normalizePhoneEntries`, and that is not an invariant this function can check:
+ * `fb_sync` and the KB fact extractor write through the BASE schema, a stored
+ * row predates any given version of the write path, and a direct SQL edit
+ * bypasses all of it. "Unreached" is not "impossible".
+ *
+ * Free of byte-identity risk because `sanitizePhoneDescription` is idempotent —
+ * on a value that already came through the write boundary it returns the same
+ * string, so no existing rendered line can move. (And it renders the number
+ * verbatim, unchanged: see the note in `businessPhoneEntries`.)
+ */
 function renderPhoneEntry(e: BusinessPhoneEntry): string {
-    return e.description ? `${e.number} (${e.description})` : e.number;
+    if (!e.description) return e.number;
+    const description = sanitizePhoneDescription(e.description);
+    return description ? `${e.number} (${description})` : e.number;
 }
 
 function joinPhones(p: BusinessProfile): string | null {
