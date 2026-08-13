@@ -104,17 +104,31 @@ export const BusinessProfileSchema = z.object({
      * `businessPhone.ts`. Without it, a shape flip on the editor's
      * full-replace echo would stamp merchant provenance on an untouched
      * Facebook-synced number. */
-    phones: z.array(z.union([
-        z.string().min(3).max(40),
-        z.object({
-            number: z.string().min(3).max(40),
-            description: z.string().max(MAX_PHONE_DESCRIPTION_LENGTH).optional(),
-        }).strict(),
-    ])).max(10).optional()
-        // Canonicalize at the boundary — the server, not the client, decides
-        // the stored shape. Also sanitizes each description (newlines out, so a
-        // merchant cannot forge a BUSINESS_INFO field line).
-        .transform((v) => (v === undefined ? undefined : normalizePhoneEntries(v))),
+    // ⭐ PREPROCESS, not `.transform()`. Zod runs a transform AFTER validation,
+    // which made the comment above a lie and had a real cost: a 41-character
+    // description hit `max(MAX_PHONE_DESCRIPTION_LENGTH)` and returned 400,
+    // instead of `sanitizePhoneDescription` truncating it to 40 — contradicting
+    // that function's own contract ("everything here REPLACES rather than
+    // rejects; a merchant must never be blocked from saving over punctuation").
+    // Canonicalizing FIRST also means the length and digit bounds below are
+    // checked against the value that will actually be STORED, not the raw one:
+    // « 12 » is now correctly rejected on its 2 trimmed digits rather than
+    // passing on 6 raw characters.
+    //
+    // `undefined` must pass straight through. Sending it to normalizePhoneEntries
+    // would return `[]`, turning "this patch does not mention phones" into
+    // "clear the phones" — and since the editor sends a full-replace patch, that
+    // is the difference between leaving a field alone and wiping it.
+    phones: z.preprocess(
+        (v) => (v === undefined ? undefined : normalizePhoneEntries(v)),
+        z.array(z.union([
+            z.string().min(3).max(40),
+            z.object({
+                number: z.string().min(3).max(40),
+                description: z.string().max(MAX_PHONE_DESCRIPTION_LENGTH).optional(),
+            }).strict(),
+        ])).max(10).optional(),
+    ),
     /** The business's contact email (schema.org `ContactPoint.email`). Strict
      *  validation is safe here because no producer wrote this field before it
      *  existed — there is no legacy garbage for a full-replace echo to trip on.
@@ -180,23 +194,56 @@ export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
  * imported its 9-digit floor — correct for "is a phone hidden in this prose?",
  * wrong for "is this field's content a phone?" — and rejected a real 7-digit
  * landline, blocking every Business Info save for that merchant. See the note on
- * `isUsablePhoneEntry` in `@jawab24/shared`. Because the editor sends a
- * FULL-REPLACE patch, anything this schema rejects blocks a no-op save too, so a
- * false reject here is a lockout, never a warning.
+ * `isUsablePhoneEntry` in `@jawab24/shared`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ⭐⭐ GRANDFATHERING, and why the predicate alone was not enough (review, 2026-08-13)
+ *
+ * The editor sends a FULL-REPLACE patch, so this schema re-judges every STORED
+ * entry on every save. Making the predicate correct fixed the false rejects; it
+ * did NOT fix the shape of the failure. One genuinely-bad stored entry still
+ * 400s a save that only touched the address — and the merchant sees a generic
+ * error naming nothing.
+ *
+ * That is not a data problem to be cleaned up once, because the bad entry does
+ * not arrive through here. `buildBusinessProfile` writes Facebook-synced values
+ * through the BASE schema **by design** (see above), the KB fact extractor does
+ * the same, and a stored row can predate any version of this code. So the supply
+ * of unvalidatable stored entries is CONTINUOUS, and a merchant can be locked
+ * out of their own hours field by something Facebook wrote.
+ *
+ * The fix makes the lockout impossible rather than unlikely (Rule 14): an entry
+ * whose number is ALREADY STORED on this page is grandfathered — it can be kept
+ * or removed, but it can never block an unrelated edit. Only numbers the
+ * merchant is genuinely ADDING or CHANGING are judged. Compared on the trimmed
+ * number because the incoming value is canonicalized (trimmed) by the preprocess
+ * above while the stored one may not be, and a padding difference must not read
+ * as a new entry.
+ *
+ * ⚠️ Callers that have no prior state (machine producers, tests asserting the
+ * strict rule) pass nothing and get the strict behaviour.
  */
-export const MerchantBusinessProfileSchema = BusinessProfileSchema.superRefine((profile, ctx) => {
-    const phones = profile.phones ?? [];
-    phones.forEach((entry, i) => {
-        const number = typeof entry === 'string' ? entry : entry.number;
-        if (!isUsablePhoneEntry(number)) {
+export function merchantBusinessProfileSchema(storedNumbers: readonly string[] = []) {
+    const grandfathered = new Set(storedNumbers.map((n) => n.trim()).filter(Boolean));
+    return BusinessProfileSchema.superRefine((profile, ctx) => {
+        const phones = profile.phones ?? [];
+        phones.forEach((entry, i) => {
+            const number = typeof entry === 'string' ? entry : entry.number;
+            if (isUsablePhoneEntry(number)) return;
+            // Already on the page ⇒ the merchant is not introducing it here.
+            if (grandfathered.has(number.trim())) return;
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ['phones', i],
                 message: 'PHONE_ENTRY_NOT_A_NUMBER',
+                // The offending text, so the client can name the row instead of
+                // failing with a generic "save failed". It is the merchant's own
+                // input echoed back to them.
+                params: { value: number },
             });
-        }
+        });
     });
-});
+}
 
 // ==========================================
 // Native catalog (merchant-authored offerings)
@@ -519,7 +566,18 @@ export function formatValidationErrors(errors: z.ZodError): { field: string; mes
 /**
  * Validate and parse data with schema
  */
-export function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; errors: { field: string; message: string }[] } {
+/**
+ * Parse `data` and return either the validated value or formatted errors.
+ *
+ * Generic over OUTPUT and INPUT separately, with `In` defaulting to `Out` so
+ * every existing caller is unaffected. The distinction matters for any schema
+ * carrying a `z.preprocess` (e.g. `phones`, which canonicalizes before the shape
+ * is checked): there Input ≠ Output, and the old `z.ZodSchema<T>` signature —
+ * which is `ZodType<T, ZodTypeDef, T>`, i.e. "input equals output" — bound `T` to
+ * the INPUT, so the returned `data` was typed as the raw shape rather than the
+ * parsed one. Casting at the call site would have hidden that; this states it.
+ */
+export function validateSchema<Out, In = Out>(schema: z.ZodType<Out, z.ZodTypeDef, In>, data: unknown): { success: true; data: Out } | { success: false; errors: { field: string; message: string }[] } {
     const result = schema.safeParse(data);
     if (result.success) {
         return { success: true, data: result.data };

@@ -14,8 +14,8 @@ import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
-import { MerchantBusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
+import { merchantBusinessProfileSchema, validateSchema } from '../utils/validation';
+import { canonicalizeHoursWeek, removeKbLines, businessPhoneList, unwrapBusinessProfile } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -153,8 +153,23 @@ export class PagesController {
             if (request.body.businessProfile !== undefined) {
                 // The MERCHANT schema — it adds the "a phone slot holds a phone"
                 // rule on top of the shared shape. Facebook sync keeps using the
-                // base schema (see the comment on MerchantBusinessProfileSchema).
-                const validation = validateSchema(MerchantBusinessProfileSchema, request.body.businessProfile);
+                // base schema (see the comment on merchantBusinessProfileSchema).
+                //
+                // ⭐ The already-stored numbers are GRANDFATHERED. The editor
+                // sends a full-replace patch, so without this one bad stored
+                // entry — which Facebook sync or the KB extractor is free to
+                // write, both bypassing this rule by design — would 400 a save
+                // that only touched the address, forever. The merchant may keep
+                // or delete such a row; it can never block an unrelated edit.
+                // Only numbers being ADDED or CHANGED here are judged.
+                const existing = await pagesService.getPage(req.workspaceId, id);
+                const storedNumbers = businessPhoneList(
+                    unwrapBusinessProfile(existing?.businessProfile as never).merchant ?? {},
+                );
+                const validation = validateSchema(
+                    merchantBusinessProfileSchema(storedNumbers),
+                    request.body.businessProfile,
+                );
                 if (!validation.success) {
                     return reply.status(400).send({ error: 'Invalid business profile', errors: validation.errors });
                 }

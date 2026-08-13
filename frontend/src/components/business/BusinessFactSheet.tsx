@@ -257,18 +257,36 @@ export function BusinessFactSheet({
     return wa.filter((n) => listed.includes(n));
   }, [initialWhatsapp, initialEntries]);
 
+  /**
+   * Numbers ALREADY STORED when this sheet opened — grandfathered, exactly as
+   * the server grandfathers them (`merchantBusinessProfileSchema`).
+   *
+   * Without this the two sides disagree in the worst direction: the server would
+   * accept the save and the UI would still refuse to send it, so a merchant with
+   * one bad legacy row — which Facebook sync or the KB extractor can write, both
+   * bypassing the merchant rule by design — could never edit their address again.
+   * They can delete such a row or leave it; it must not disable Save.
+   */
+  const grandfatheredNumbers = useMemo(
+    () => new Set((initialEntries ?? []).map((e) => e.number.trim()).filter(Boolean)),
+    [initialEntries],
+  );
+
   /** A row whose number slot holds something that is not a number — the class
    *  that let «رقم الجملة فقط يطلب مبيعات جملة» be stored AS a phone and
-   *  published in every prompt. `extractPhones` is the only judge. */
+   *  published in every prompt. `isUsablePhoneEntry` is the only judge (NOT
+   *  `extractPhones`, whose 9-digit prose floor rejected a real landline). */
   const invalidIndexes = useMemo(() => {
     const bad = new Set<number>();
     if (!isMulti) return bad;
     entries.forEach((e, i) => {
       const v = e.value.trim();
-      if (v && !isUsablePhoneEntry(v)) bad.add(i);
+      if (!v || isUsablePhoneEntry(v)) return;
+      if (grandfatheredNumbers.has(v)) return;
+      bad.add(i);
     });
     return bad;
-  }, [entries, isMulti]);
+  }, [entries, isMulti, grandfatheredNumbers]);
   const hasInvalid = invalidIndexes.size > 0;
 
   /** Same SIM typed twice — blocks Save and marks the later row. Without this
