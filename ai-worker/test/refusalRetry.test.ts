@@ -104,4 +104,49 @@ describe('structured-output refusal retry', () => {
 
         expect(create).toHaveBeenCalledTimes(1);
     });
+
+    /**
+     * The interaction the first version of this fix got wrong. When a TRUNCATION retry is
+     * itself refused, resending the original messages drops the brevity instruction that
+     * was added because the reply overflowed — so the third call can truncate again and the
+     * customer ends up with nothing after three billed attempts.
+     */
+    it('after a truncation retry, resends the BREVITY-instructed messages — not the original', async () => {
+        const truncated = {
+            choices: [{ message: { content: '{"reply":"a very long cut' }, finish_reason: 'length' }],
+            usage: { total_tokens: 150, prompt_tokens: 100, completion_tokens: 50 },
+        };
+        const refusedAfterTruncation = {
+            choices: [{ message: { refusal: 'تمام، بنستناك بكرا!' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 25, prompt_tokens: 20, completion_tokens: 5 },
+        };
+        const shortGood = {
+            choices: [{
+                message: {
+                    content: JSON.stringify({
+                        reply: 'تمام، بنستناك بكرا!', intent: 'QUESTION', confidence: 'high', flags: [],
+                    }),
+                },
+                finish_reason: 'stop',
+            }],
+            usage: { total_tokens: 40, prompt_tokens: 30, completion_tokens: 10 },
+        };
+        const create = vi.fn()
+            .mockResolvedValueOnce(truncated)
+            .mockResolvedValueOnce(refusedAfterTruncation)
+            .mockResolvedValueOnce(shortGood);
+        mockOpenAI(create);
+
+        const { OpenAIService } = await import('../src/services/openai');
+        const result = await new OpenAIService().generateReply({ comment: 'بتفتحوا بكرا؟' });
+
+        expect(create).toHaveBeenCalledTimes(3);
+        const thirdCallMessages = create.mock.calls[2][0].messages;
+        expect(thirdCallMessages[thirdCallMessages.length - 1].content).toContain('cut off');
+        expect(result.reply).toContain('بنستناك');
+        // Truncation still earns the badge; a refusal retry on its own does not.
+        expect(result.flags ?? []).toContain('reply_shortened');
+        // All three attempts were billed.
+        expect(result.tokensUsed).toBe(215);   // 150 + 25 + 40
+    });
 });

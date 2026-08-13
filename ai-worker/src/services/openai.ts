@@ -136,6 +136,12 @@ export class OpenAIService {
             // `reply_shortened` badge — a refusal retry shortens nothing.
             let discardedUsage: OpenAI.CompletionUsage | undefined;
             let wasTruncated = false;
+            // The message list that produced the CURRENT completion. The refusal retry below
+            // must resend THIS, not the original `messages`: when a truncation retry is itself
+            // refused, resending the original drops the brevity instruction that was added
+            // because the reply overflowed — so the third call can truncate again and the
+            // customer ends up with nothing after three billed attempts.
+            let activeMessages: OpenAI.ChatCompletionMessageParam[] = messages;
             let finishReason = completion.choices[0]?.finish_reason;
             if (finishReason === 'length') {
                 console.log(JSON.stringify({
@@ -146,10 +152,8 @@ export class OpenAIService {
                 }));
                 discardedUsage = mergeUsage(discardedUsage, completion.usage);
                 wasTruncated = true;
-                completion = await this.createCompletion(
-                    [...messages, TRUNCATION_RETRY_MESSAGE],
-                    request.context?.pipeline,
-                );
+                activeMessages = [...messages, TRUNCATION_RETRY_MESSAGE];
+                completion = await this.createCompletion(activeMessages, request.context?.pipeline);
                 finishReason = completion.choices[0]?.finish_reason;
             }
             // recordAiReturn emitted inside withAiMetrics on success. The
@@ -197,7 +201,7 @@ export class OpenAIService {
                     refusalChars: refusal.length,
                 }));
                 discardedUsage = mergeUsage(discardedUsage, completion.usage);
-                completion = await this.createCompletion(messages, request.context?.pipeline);
+                completion = await this.createCompletion(activeMessages, request.context?.pipeline);
                 finishReason = completion.choices[0]?.finish_reason;
                 refusal = completion.choices[0]?.message?.refusal;
             }
