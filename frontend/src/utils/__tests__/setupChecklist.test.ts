@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { Page, UsageSummary } from '@jawab24/shared';
-import { deriveSetupState } from '../setupChecklist';
+import {
+  countSetupStepsDone,
+  deriveSetupState,
+  isWithinSetupGrace,
+  resolveSetupClockStart,
+  SETUP_CHECKLIST_GRACE_MS,
+} from '../setupChecklist';
 
 const LONG_KB = 'x'.repeat(80);
 
@@ -136,5 +142,88 @@ describe('deriveSetupState', () => {
       const s = deriveSetupState([page({ hasPostReplyTrigger: true, isConnected: false })], usage(0));
       expect(s.postReplyConfigured).toBe(false);
     });
+  });
+});
+
+// The setup clock decides when the dashboard panel demotes from its full card to
+// a one-line row. `now` is injectable, so none of this needs fake timers.
+describe('resolveSetupClockStart', () => {
+  const T0 = Date.parse('2026-08-13T12:00:00Z');
+  const at = (ms: number) => new Date(T0 - ms).toISOString();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('returns null when there is no anchor at all (brand-new merchant)', () => {
+    expect(resolveSetupClockStart([], null)).toBeNull();
+    expect(resolveSetupClockStart([], undefined)).toBeNull();
+  });
+
+  it('uses onboardingCompletedAt when there are no pages', () => {
+    expect(resolveSetupClockStart([], at(5 * DAY))).toBe(T0 - 5 * DAY);
+  });
+
+  it('uses the oldest page createdAt when onboardingCompletedAt is null', () => {
+    const pages = [page({ id: 'a', createdAt: at(2 * DAY) }), page({ id: 'b', createdAt: at(9 * DAY) })];
+    expect(resolveSetupClockStart(pages, null)).toBe(T0 - 9 * DAY);
+  });
+
+  it('takes the EARLIEST of the two anchors', () => {
+    const pages = [page({ createdAt: at(2 * DAY) })];
+    expect(resolveSetupClockStart(pages, at(40 * DAY))).toBe(T0 - 40 * DAY);
+  });
+
+  // A revoked page still proves the merchant has been around, even though
+  // deriveSetupState deliberately ignores it for progress.
+  it('counts disconnected pages', () => {
+    const pages = [page({ isConnected: false, createdAt: at(30 * DAY) })];
+    expect(resolveSetupClockStart(pages, null)).toBe(T0 - 30 * DAY);
+  });
+
+  it('accepts Date objects as well as ISO strings', () => {
+    expect(resolveSetupClockStart([], new Date(T0 - DAY))).toBe(T0 - DAY);
+  });
+
+  it('ignores unparseable and null timestamps rather than throwing', () => {
+    const pages = [page({ createdAt: 'not-a-date' }), page({ id: 'b', createdAt: null })];
+    expect(resolveSetupClockStart(pages, 'garbage')).toBeNull();
+    expect(resolveSetupClockStart([...pages, page({ id: 'c', createdAt: at(DAY) })], null)).toBe(T0 - DAY);
+  });
+});
+
+describe('isWithinSetupGrace', () => {
+  const T0 = Date.parse('2026-08-13T12:00:00Z');
+  const at = (ms: number) => new Date(T0 - ms).toISOString();
+
+  it('is true with no anchor — only demote on positive evidence of age', () => {
+    expect(isWithinSetupGrace([], null, T0)).toBe(true);
+  });
+
+  it('is true just inside the window and false just outside it', () => {
+    expect(isWithinSetupGrace([], at(SETUP_CHECKLIST_GRACE_MS - 1000), T0)).toBe(true);
+    expect(isWithinSetupGrace([], at(SETUP_CHECKLIST_GRACE_MS + 1000), T0)).toBe(false);
+  });
+
+  it('is false exactly at the boundary (window is exclusive)', () => {
+    expect(isWithinSetupGrace([], at(SETUP_CHECKLIST_GRACE_MS), T0)).toBe(false);
+  });
+});
+
+describe('countSetupStepsDone', () => {
+  it('counts only the three actionable milestones', () => {
+    expect(countSetupStepsDone(deriveSetupState([], usage(0)))).toBe(0);
+    expect(countSetupStepsDone(deriveSetupState([page()], usage(0)))).toBe(1);
+    expect(countSetupStepsDone(deriveSetupState([page({ knowledgeBase: LONG_KB })], usage(0)))).toBe(2);
+    const allOn = deriveSetupState(
+      [page({ knowledgeBase: LONG_KB, autoReplyEnabled: true })],
+      usage(0),
+      { commentsAutoReply: true, messagesAutoReply: true },
+    );
+    expect(countSetupStepsDone(allOn)).toBe(3);
+  });
+
+  // firstReplySent is passive and must not inflate the merchant's progress.
+  it('ignores the passive firstReplySent milestone', () => {
+    const s = deriveSetupState([page({ repliesCount: 12 })], usage(50));
+    expect(s.firstReplySent).toBe(true);
+    expect(countSetupStepsDone(s)).toBe(1);
   });
 });

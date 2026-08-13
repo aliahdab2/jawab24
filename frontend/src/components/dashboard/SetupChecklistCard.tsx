@@ -1,11 +1,18 @@
+import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import clsx from 'clsx';
-import { CheckCircle2, Circle, ChevronRight, Rocket, X, Zap, Sparkles } from 'lucide-react';
+import { CheckCircle2, Circle, ChevronDown, ChevronRight, Rocket, X, Zap, Sparkles } from 'lucide-react';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import { Card, Button } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { deriveSetupState, type AutoReplyMasters } from '@/utils/setupChecklist';
+import {
+  countSetupStepsDone,
+  deriveSetupState,
+  isWithinSetupGrace,
+  SETUP_CHECKLIST_TOTAL_STEPS,
+  type AutoReplyMasters,
+} from '@/utils/setupChecklist';
 import { KB_DEEP_LINK } from '@/utils/kb';
 import { isRTLLocale } from '@/utils/locale';
 
@@ -16,24 +23,29 @@ interface SetupChecklistCardProps {
   masters?: AutoReplyMasters | null;
   /** Opens the Post Reply post picker (usePostReplySetup on the dashboard). */
   onTryPostReply?: () => void;
+  /** Settings' `onboardingCompletedAt` — one of the two setup-clock anchors. */
+  onboardingCompletedAt?: string | Date | null;
   /**
-   * Optional lifted dismissal state — the dashboard shares one useTimedDismiss
-   * instance between this panel and its AutoReplyStatusCard suppression rule
-   * (the warning banner must reappear the moment the panel is dismissed).
-   * Omitted → the card manages its own dismissal (standalone/tests).
+   * Optional lifted "render expanded" state — the dashboard shares it with its
+   * AutoReplyStatusCard suppression rule (that warning must resume the moment
+   * this panel stops owning the "not enabled yet" message). Omitted → the card
+   * derives it itself (standalone/tests).
    */
-  dismissed?: boolean;
-  onDismiss?: () => void;
+  expanded?: boolean;
+  /** Persist the collapse (merchant pressed the collapse control). */
+  onCollapse?: () => void;
 }
 
-// 14 days: a dismissed-but-unfinished panel gently re-surfaces. Once either
-// setup path is live the card hides regardless of dismissal, so a set-up
-// merchant never sees it again. No `count` param — we don't want completing
-// a step to un-dismiss the card mid-session. Exported so the dashboard can
-// share the same dismissal state (banner-suppression rule).
-export const SETUP_CHECKLIST_DISMISS_KEY = 'setupChecklistDismissedAt';
-export const SETUP_CHECKLIST_DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
-const DISMISS_DURATION_MS = SETUP_CHECKLIST_DISMISS_MS;
+// Persisted collapse. 365 days, matching the other long-lived dashboard nudges —
+// with the grace window doing the automatic demotion, this only has to outlive
+// the first few days, after which the window collapses the panel anyway.
+//
+// ⚠️ The storage STRING is deliberately the old `...DismissedAt` name: every
+// merchant who already pressed the old dismiss button has that key set, and
+// "collapsed" is exactly what they asked for. Renaming the string would replay
+// the expanded card at them.
+export const SETUP_CHECKLIST_COLLAPSE_KEY = 'setupChecklistDismissedAt';
+export const SETUP_CHECKLIST_COLLAPSE_MS = 365 * 24 * 60 * 60 * 1000;
 
 /**
  * "Start replying automatically" — the first-onboarding panel. Shows a brand-new
@@ -48,35 +60,95 @@ const DISMISS_DURATION_MS = SETUP_CHECKLIST_DISMISS_MS;
  * Reply discovery nudge takes this slot for smart-path merchants (see
  * PostReplyNudgeBanner). Before any page is connected it collapses to the
  * single "connect your page" step.
+ *
+ * Two presentations, never a third "gone" state while setup is unfinished:
+ *
+ *   EXPANDED     the full panel, for the first `SETUP_CHECKLIST_GRACE_MS` of the
+ *                merchant's setup clock, or until they collapse it.
+ *   COLLAPSED    one row — icon, label, `n/3` progress, chevron — that expands
+ *                on tap. This is where the panel lands afterwards.
+ *
+ * Collapsing rather than deleting is the point: this panel is the dashboard's
+ * only activation path, so the merchant who has ignored it for days is precisely
+ * the one who still needs it reachable.
  */
 export function SetupChecklistCard({
   pages,
   usage,
   masters,
   onTryPostReply,
-  dismissed: dismissedProp,
-  onDismiss,
+  onboardingCompletedAt,
+  expanded: expandedProp,
+  onCollapse,
 }: SetupChecklistCardProps) {
   const t = useTranslations('dashboard');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
 
-  // Internal fallback — used only when the host doesn't lift the dismissal
-  // state (hooks must run unconditionally).
-  const internalDismiss = useTimedDismiss({
-    key: SETUP_CHECKLIST_DISMISS_KEY,
-    durationMs: DISMISS_DURATION_MS,
+  // Internal fallback — used only when the host doesn't lift the expanded state
+  // (hooks must run unconditionally).
+  const internalCollapse = useTimedDismiss({
+    key: SETUP_CHECKLIST_COLLAPSE_KEY,
+    durationMs: SETUP_CHECKLIST_COLLAPSE_MS,
   });
-  const dismissed = dismissedProp ?? internalDismiss.dismissed;
-  const dismiss = onDismiss ?? internalDismiss.dismiss;
+  const collapse = onCollapse ?? internalCollapse.dismiss;
+
+  // Tapping the collapsed row expands it for the rest of the session.
+  // Deliberately NOT persisted and NOT lifted to the dashboard: re-expanding
+  // must not shove the AutoReplyStatusCard around above it.
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
 
   // Shared source of truth so this panel and the Post Reply nudge banner never
   // disagree about whether setup is finished.
   const setup = deriveSetupState(pages, usage, masters);
 
-  // Hide once either path is live, or when dismissed. `firstReplySent` is
+  // Hide ONLY when a path is live — collapsing never hides. `firstReplySent` is
   // passive and never keeps the panel alive.
-  if (setup.coreSetupDone || setup.postReplyConfigured || dismissed) return null;
+  if (setup.coreSetupDone || setup.postReplyConfigured) return null;
+
+  const defaultExpanded =
+    expandedProp ??
+    (isWithinSetupGrace(pages, onboardingCompletedAt) && !internalCollapse.dismissed);
+  const expanded = manualExpanded ?? defaultExpanded;
+
+  if (!expanded) {
+    const stepsDone = countSetupStepsDone(setup);
+    // Keeps `.card`'s border, unlike the expanded panel: a single row needs the
+    // outline to read as a distinct element rather than floating text.
+    return (
+      <Card className="bg-card" padding="none">
+        <button
+          type="button"
+          onClick={() => setManualExpanded(true)}
+          aria-expanded={false}
+          className="w-full flex items-center gap-3 p-3 sm:px-4 text-start rounded-[1.5rem] hover:bg-muted/50 transition-colors"
+        >
+          <span
+            className="icon-bg-brand w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            aria-hidden="true"
+          >
+            <Rocket className="w-4 h-4" />
+          </span>
+          <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
+            {t('setupChecklist.collapsedTitle')}
+          </span>
+          {/* Digits stay LTR in both locales — a bare "1/3" must not be reordered. */}
+          <span
+            dir="ltr"
+            className="text-xs font-bold text-brand-600 dark:text-brand-400 flex-shrink-0 tabular-nums"
+          >
+            {stepsDone}/{SETUP_CHECKLIST_TOTAL_STEPS}
+          </span>
+          <ChevronDown className="w-4 h-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </Card>
+    );
+  }
+
+  const handleCollapse = () => {
+    setManualExpanded(false);
+    collapse();
+  };
 
   const chevron = (
     <ChevronRight
@@ -107,8 +179,9 @@ export function SetupChecklistCard({
         </div>
         <button
           type="button"
-          onClick={dismiss}
-          aria-label={t('setupChecklist.dismiss')}
+          onClick={handleCollapse}
+          aria-expanded={true}
+          aria-label={t('setupChecklist.collapse')}
           className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
         >
           <X className="w-4 h-4" aria-hidden="true" />
