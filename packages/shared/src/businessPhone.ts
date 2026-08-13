@@ -40,7 +40,7 @@
  * `string[]`, which is already canonical. They need no changes.
  */
 
-import { extractPhones } from './utils/validation';
+import { digitCount, preNormalizeForPhones } from './utils/validation';
 
 /** A contact line with an optional purpose. schema.org `ContactPoint` reduced
  *  to what a merchant actually types. */
@@ -143,24 +143,54 @@ export function phoneEntryDescription(entry: BusinessPhone): string {
     return typeof entry === 'string' ? '' : (entry.description ?? '');
 }
 
+/** Below this, the content is not a number at all — it is prose or punctuation.
+ *  3 because the shortest dialable numbers in existence are emergency/short
+ *  codes (911, 112, 999); nothing shorter is a phone anywhere. */
+const MIN_ENTRY_DIGITS = 3;
+/** E.164's maximum. Above it, the content is not one phone number. */
+const MAX_ENTRY_DIGITS = 15;
+
 /**
  * Is this string usable as a phone number at all?
  *
- * `extractPhones` is the ONLY judge — no keyword list, no vocabulary, nothing
- * language-specific. It runs libphonenumber against real numbering plans and
- * falls back to a permissive ≥9-digit scan, so it accepts every national format
- * our merchants type (`0911000210`, `+963…`, Arabic-Indic digits, spaced or
- * dashed) while rejecting an instruction sentence that sits in the number slot.
+ * ⚠️ This asks a DIFFERENT QUESTION from `extractPhones`, and conflating the two
+ * is what made this guard lock a paying merchant out of Business Info entirely.
  *
- * ⚠️ Deliberately region-LESS. The frontend runs this predicate inline to
- * disable Save, and it cannot obtain the workspace timezone without gating the
- * editor behind a settings fetch; a predicate that disagreed between the two
- * sides would be worse than a slightly permissive one. The residual gap is a
- * short local landline with no area code, which a merchant can still save by
- * writing the country code — the error copy says so. If that ever bites, the
- * upgrade is threading `defaultCountry` from `workspaceSettingsService` into
- * BOTH call sites together, never one of them.
+ *   `extractPhones`      — "is a phone hidden somewhere in this PROSE?"
+ *                          Used by lead capture on customer messages. Its
+ *                          `FALLBACK_DIGIT_MIN = 9` floor is CORRECT there and
+ *                          must not be lowered: it is what stops prices, dates
+ *                          and sizes from reading as phone numbers.
+ *   `isUsablePhoneEntry` — "is what the merchant typed in the phone FIELD a
+ *                          phone?" The merchant already declared intent by using
+ *                          the slot; there is no prose to disambiguate from, so
+ *                          importing the 9-digit floor imports a constraint this
+ *                          question never had.
+ *
+ * Measured 2026-08-13 over the whole fleet — all 44 entries on 40 pages, the
+ * population and not a sample: 41 pass either way, 2 are correctly rejected
+ * (instruction sentences with ZERO digits, a real editor-confirmed profile), and
+ * exactly 1 was wrongly rejected — `0189955`, a real 7-digit Syrian landline on a
+ * paying page. Because a no-op Save re-validates every stored entry, that one
+ * false reject blocked EVERY Business Info save for that merchant, including
+ * edits to unrelated fields.
+ *
+ * ⭐ The floor errs permissive on purpose, and the asymmetry is the reason: a
+ * false ACCEPT is a data-quality nit the merchant can see in their own editor and
+ * fix, and PR B's inline hint offers to move stray prose into the description. A
+ * false REJECT is a LOCKOUT. Those costs are not comparable, so the guard is
+ * narrow by design — it rejects only content with no number in it at all.
+ *
+ * Region-LESS by design, unchanged: the frontend runs this inline to disable
+ * Save and cannot obtain the workspace timezone without gating the editor behind
+ * a settings fetch, and a predicate that disagreed between the two sides would be
+ * worse than a permissive one. Digits are region-free, so this now holds without
+ * the `defaultCountry` caveat the previous implementation needed.
  */
 export function isUsablePhoneEntry(value: string): boolean {
-    return extractPhones(value).length > 0;
+    // preNormalizeForPhones strips the bidi marks Facebook wraps RTL numbers in
+    // and folds Arabic-Indic digits to ASCII, so «٠٩١١٠٠٠٢١٠» counts like
+    // «0911000210». Shared with extractPhones rather than re-implemented.
+    const digits = digitCount(preNormalizeForPhones(value));
+    return digits >= MIN_ENTRY_DIGITS && digits <= MAX_ENTRY_DIGITS;
 }

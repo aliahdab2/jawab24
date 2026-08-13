@@ -130,6 +130,76 @@ describe('MerchantBusinessProfileSchema — a phone slot must hold a phone', () 
   });
 });
 
+/**
+ * CAN THE TWO MERCHANTS THIS WORK CAME FROM ACTUALLY SAVE?
+ *
+ * The predicate alone is not the answer — the editor's PUT runs this SCHEMA, and
+ * because the editor sends a FULL-REPLACE patch, a no-op Save re-validates every
+ * ALREADY-STORED entry. So "can they edit?" means "does their stored profile
+ * pass this schema?", both as it stands today and in the shape the migration
+ * leaves it in. Both shapes are pinned here, verbatim from production.
+ */
+describe('MerchantBusinessProfileSchema — the real merchants can still save', () => {
+  it('Shahin saves TODAY — the short-landline lockout is gone', () => {
+    // Verbatim from page 20910c58. `0189955` is a real 7-digit Syrian landline.
+    // It was REJECTED before the fix (isUsablePhoneEntry inherited extractPhones'
+    // 9-digit floor), and because a no-op Save re-validates stored entries, that
+    // one row blocked EVERY Business Info save he made — including edits to
+    // unrelated fields. This is the regression test for that lockout.
+    const stored = { phones: ['+963982414141', '0189955'] };
+    expect(MerchantBusinessProfileSchema.safeParse(stored).success).toBe(true);
+  });
+
+  it('Shahin saves AFTER migrating to the contact standard', () => {
+    expect(MerchantBusinessProfileSchema.safeParse({
+      phones: [
+        { number: '0982414141', description: 'الحجوزات والأسعار' },
+        { number: '0995008336', description: 'خدمات المسبح والجاكوزي' },
+        { number: '0931671111', description: 'الشكاوى' },
+        { number: '098996402', description: 'صالة الأعراس' },   // 9 digits, real
+        { number: '0189955', description: 'الهاتف الأرضي' },     // 7 digits, real
+      ],
+      email: 'sales@shahinresort.com',
+    }).success).toBe(true);
+  });
+
+  it('MES is still BLOCKED today — and the schema names both offending rows', () => {
+    // Verbatim from page c75b6f33, editor-confirmed 2026-08-10. Two of the three
+    // "numbers" are instruction sentences with ZERO digits. Rejecting them is the
+    // guard working, NOT a regression — but it does mean his data must be cleaned
+    // BEFORE this ships, or he meets an error he cannot interpret on a change we
+    // made. That ordering is the plan's prerequisite.
+    const stored = {
+      phones: [
+        'اعطيهم ارقام الصالات فقط',
+        'رقم الجملة فقط  يطلب مبيعات جملة',
+        '0993301022 الادارة',
+      ],
+    };
+    const parsed = MerchantBusinessProfileSchema.safeParse(stored);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      // Both rows flagged, and the third — a real number with a label welded on —
+      // must NOT be flagged: it saves, and the editor hint moves the label.
+      expect(parsed.error.errors.map((e) => e.path)).toEqual([
+        ['phones', 0],
+        ['phones', 1],
+      ]);
+    }
+  });
+
+  it('MES saves AFTER the cleanup the plan requires', () => {
+    expect(MerchantBusinessProfileSchema.safeParse({
+      phones: [
+        { number: '0993301002', description: 'خدمة ما بعد البيع' },
+        { number: '0993301010', description: 'مبيعات الجملة' },
+        { number: '0993301055', description: 'قسم المشاريع' },
+        { number: '0993301022', description: 'الإدارة' },
+      ],
+    }).success).toBe(true);
+  });
+});
+
 describe('BusinessProfileSchema — email', () => {
   it('accepts a valid address and trims it', () => {
     const r = BusinessProfileSchema.safeParse({ email: '  sales@example.com ' });

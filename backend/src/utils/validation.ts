@@ -170,10 +170,19 @@ export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
  *
  * The rejected class is narrow and real: a page stored
  * «رقم الجملة فقط يطلب مبيعات جملة» AS a phone number, editor-confirmed, and
- * every prompt then published it to customers as one. `extractPhones` is the
- * only judge — no keyword list. An entry that DOES contain a number keeps
- * saving even with prose beside it; that case is redirected in the editor by a
- * hint, never blocked, so no real contact line can be locked out.
+ * every prompt then published it to customers as one. `isUsablePhoneEntry` is
+ * the only judge — no keyword list, nothing language-specific. An entry that
+ * DOES contain a number keeps saving even with prose beside it; that case is
+ * redirected in the editor by a hint, never blocked, so no real contact line can
+ * be locked out.
+ *
+ * ⚠️ That predicate deliberately does NOT reuse `extractPhones`. Doing so once
+ * imported its 9-digit floor — correct for "is a phone hidden in this prose?",
+ * wrong for "is this field's content a phone?" — and rejected a real 7-digit
+ * landline, blocking every Business Info save for that merchant. See the note on
+ * `isUsablePhoneEntry` in `@jawab24/shared`. Because the editor sends a
+ * FULL-REPLACE patch, anything this schema rejects blocks a no-op save too, so a
+ * false reject here is a lockout, never a warning.
  */
 export const MerchantBusinessProfileSchema = BusinessProfileSchema.superRefine((profile, ctx) => {
     const phones = profile.phones ?? [];

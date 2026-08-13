@@ -147,8 +147,10 @@ function stripFormatting(s: string): string {
   return s.replace(/[\s\-().]/g, '');
 }
 
-/** Count digits only — the phone-plausibility bound is on digits, not characters. */
-function digitCount(s: string): number {
+/** Count digits only — the phone-plausibility bound is on digits, not characters.
+ *  Exported for `isUsablePhoneEntry`, which asks a DIFFERENT question of the same
+ *  text (see `businessPhone.ts`) and must not re-implement the count. */
+export function digitCount(s: string): number {
   return (s.match(/\d/g) ?? []).length;
 }
 
@@ -158,7 +160,7 @@ const BIDI_MARKS_REGEX = /[‎‏‪-‮⁦-⁩]/g;
 /** Normalise text before phone matching: drop bidi marks, Arabic-Indic→ASCII,
  *  and rewrite a leading `00<cc>` international prefix to `+<cc>` (libphonenumber's
  *  findNumbers ignores a bare `00`). */
-function preNormalizeForPhones(text: string): string {
+export function preNormalizeForPhones(text: string): string {
   let t = text.replace(BIDI_MARKS_REGEX, '');
   t = normalizeArabicIndic(t);
   t = t.replace(/(?<![\d+])00(\d{7,})/g, '+$1');
