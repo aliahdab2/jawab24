@@ -141,7 +141,13 @@ vi.mock('../../src/services/kb/embedding', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+        // getUserDetail asks the gate whether replies are actually flowing, so the
+        // console can stop deriving that from `subscriptions.status`. The verdict's
+        // own semantics are covered in subscriptionExpiry / adminHealth tests; here
+        // it only has to exist so the route can render.
+        checkSubscriptionStatus: vi.fn(() => ({ allowed: true })),
     },
+    resolveEntitlementEnd: vi.fn(() => null),
 }));
 
 vi.mock('../../src/services/kb/gap-detector', () => ({

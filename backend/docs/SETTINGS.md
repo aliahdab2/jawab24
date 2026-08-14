@@ -54,7 +54,7 @@ equivalents in `commentProcessor`:
 | # | Gate | Setting read | Customer sees when it blocks |
 |---|------|--------------|------------------------------|
 | 1 | **Page master switch** | `pages.auto_reply_enabled` | **Nothing, ever.** Page OFF = Jawab24 invisible: no reply, no flag, no notification. Kills Smart Reply, Post Reply, away AND greeting. Messages are still stored; comments are NOT. |
-| 2 | **Subscription gate** | subscription status. The 3-day grace applies only to **externally-billed** `past_due` (Stripe/Shopify card-retry); a trial-origin subscription (`payment_method IS NULL`) hard-stops at `trial_ends_at` — the lazy `trialing → past_due` flip no longer inherits the grace (2026-08-04: it used to hand every expiring trial ~4 free days; one merchant sent 760 replies through it). | Nothing. Merchant gets a one-per-24h "replies frozen" notification; an expiring trial additionally gets the one-time proactive `trial_ended` notice (in-app + email, daily cron). |
+| 2 | **Subscription gate** | `subscriptionsService.checkSubscriptionStatus` — **the one entitlement predicate**; never `subscriptions.status`. The 3-day grace applies only to **externally-billed** `past_due` (Stripe/Shopify card-retry); a trial-origin subscription (`payment_method IS NULL`) hard-stops at `trial_ends_at` — the lazy `trialing → past_due` flip no longer inherits the grace (2026-08-04: it used to hand every expiring trial ~4 free days; one merchant sent 760 replies through it). A **manual** (cash/transfer) plan holds `status = 'active'` forever and lapses at `resolveEntitlementEnd` = **UTC midnight of the period-end day** — up to ~24h before the raw `current_period_end`. | Nothing. Merchant gets a one-per-24h "replies frozen" notification, plus a pinned red dashboard banner with a renew CTA; an expiring trial additionally gets the one-time proactive `trial_ended` notice (in-app + email, daily cron). |
 | 3 | **Handoff pause** | `handoffPauseDurationMinutes` | Nothing while a human is handling the thread; stale backlog is dropped on resume. |
 | 4 | **Rate limit** | per (page, sender) | Nothing beyond the limit. |
 | 5 | **Channel enabled check** | `messagesAutoReply` / `commentsAutoReply` **folded with** `businessHoursOnly` + hours + `timezone` (`isAutoReplyEnabledFromSettings`) | See the away-message matrix below — this one branch serves two very different states. |
@@ -62,6 +62,39 @@ equivalents in `commentProcessor`:
 
 **D-027:** Post Reply is exempt from the **workspace** `commentsAutoReply` toggle only —
 the page master switch (gate 1) still kills it.
+
+### Gate 2 must be READ from the gate, never re-derived
+
+Every surface that answers "is this account replying?" reads
+`checkSubscriptionStatus` — the same call `enforceAutoReplyGate` blocks on:
+
+| Surface | Field | Served by |
+|---------|-------|-----------|
+| Merchant dashboard banner | `usage.subscription.autoReply.allowed` | `getUsageSummary` → `GET /subscription/usage` |
+| Merchant "covered until" copy | `usage.subscription.entitlementEndsAt` | same (snapped; **not** `renewsAt`) |
+| Admin console status badge | `subscription.autoReply.allowed` | `getUserDetail` |
+| Admin health flag `subscription_inactive` | `HealthInput.subscription.autoReplyAllowed` | `computeHealthFlags` |
+
+History (2026-08-14, the owner's own account): all four surfaces derived their own
+answer, and all four were wrong at once. A manual plan lapsed at 00:00 UTC; the usage
+window closed at the same instant, so `getCurrentUsage` matched no row and `used` read
+**0 of 4,500** — which the quota-only banner classified as healthy and therefore *hid
+itself*. The admin console read `subscriptions.status`, still `'active'`, and showed
+🟢 نشط beside «الرد التلقائي مفعل». The only surviving signal was one in-app bell row
+(`auto_reply_paused_billing`) — there is **no email on this path**, and push requires a
+registered FCM token. Net effect: replies frozen, every dashboard green.
+
+Two rules follow, and both are load-bearing:
+
+1. **A closed usage window reports `used = 0`.** That zero is an artifact, not a fresh
+   allowance. Never infer health from a quota number without first asking the gate.
+2. **`current_period_end` is not when coverage ends.** For a manual plan it is up to a
+   full day late. Print `resolveEntitlementEnd`, and print it *with a time* — a bare
+   date on a 00:00 boundary reads as the whole of that day.
+
+A top-up does **not** lift this gate: `enforceAutoReplyGate` → `canAutoReply` consults
+status only and never reaches the top-up fallback in `canUseAiReplies`. The paused
+banner therefore suppresses its top-up CTA and offers renewal instead.
 
 ### Gate 5 is TWO states in one boolean — never conflate them
 

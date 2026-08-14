@@ -24,7 +24,7 @@ import type { Subscription, Plan } from '@jawab24/shared';
 
 vi.mock('../db', () => ({ db: {} }));
 
-import { subscriptionsService } from '../services/subscriptions';
+import { subscriptionsService, resolveEntitlementEnd } from '../services/subscriptions';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -218,5 +218,69 @@ describe('canUseAiReplies — manual sliver does not hand out a free refill', ()
 
         expect(result.allowed).toBe(true);
         expect(result.usingTopup).toBe(true);
+    });
+
+    it('blocks the AUTO-REPLY path regardless of top-up balance', () => {
+        // canAutoReply (what enforceAutoReplyGate calls) consults status only —
+        // it never reaches the top-up fallback above. Pinned because the dashboard
+        // banner suppresses its top-up CTA on the strength of this: offering credits
+        // that cannot unblock a reply would be taking money for nothing.
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({ paymentMethod: 'manual', currentPeriodEnd: new Date('2026-07-17T18:52:00.000Z') }),
+        );
+        expect(result.allowed).toBe(false);
+    });
+});
+
+/**
+ * The DISPLAY side of the same boundary.
+ *
+ * Enforcement was always correct here; what shipped broken was that no surface
+ * could say so. Every UI printed the raw `currentPeriodEnd`, which for a manual
+ * plan is up to ~24h AFTER entitlement actually lapses — so a merchant blocked
+ * since 00:00 was reading "14 August" and concluding they still had the day.
+ * `resolveEntitlementEnd` is the one boundary both sides now read.
+ */
+describe('resolveEntitlementEnd — one boundary for enforcement and display', () => {
+    it('snaps a manual plan back to UTC midnight of the period-end day', () => {
+        expect(
+            resolveEntitlementEnd({
+                paymentMethod: 'manual',
+                currentPeriodEnd: new Date('2026-08-14T16:26:00.000Z'),
+            })?.toISOString(),
+        ).toBe('2026-08-14T00:00:00.000Z');
+    });
+
+    it('leaves every other rail on its exact instant', () => {
+        for (const paymentMethod of ['stripe', 'shopify', null]) {
+            expect(
+                resolveEntitlementEnd({
+                    paymentMethod,
+                    currentPeriodEnd: new Date('2026-08-14T16:26:00.000Z'),
+                })?.toISOString(),
+            ).toBe('2026-08-14T16:26:00.000Z');
+        }
+    });
+
+    it('returns null when nothing bounds the subscription in time', () => {
+        expect(resolveEntitlementEnd({ paymentMethod: 'manual', currentPeriodEnd: null })).toBeNull();
+    });
+
+    it('agrees with the gate at every hour around the boundary', () => {
+        // The invariant that makes the bug unrepeatable: whatever the gate decides,
+        // the date shown to the merchant must be able to explain it. Walking the
+        // whole sliver catches a one-sided change to either function.
+        const currentPeriodEnd = new Date('2026-08-14T16:26:00.000Z');
+        const entitlementEnd = resolveEntitlementEnd({ paymentMethod: 'manual', currentPeriodEnd });
+        if (!entitlementEnd) throw new Error('expected a bounded entitlement end');
+
+        for (let hour = 0; hour < 48; hour++) {
+            const now = new Date(Date.UTC(2026, 7, 13, hour));
+            vi.setSystemTime(now);
+            const allowed = subscriptionsService.checkSubscriptionStatus(
+                sub({ paymentMethod: 'manual', currentPeriodEnd }),
+            ).allowed;
+            expect(allowed).toBe(entitlementEnd >= now);
+        }
     });
 });
