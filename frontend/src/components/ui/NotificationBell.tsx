@@ -41,6 +41,9 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const isDark = variant === 'dark';
     const { isAuthenticated } = useAuthStore();
     const t = useTranslations('notifications');
+    // «تراجع» moved to `common`: it is a generic UI word shared with the
+    // post-suggestion card's toast, not copy belonging to either feature.
+    const tc = useTranslations('common');
     const locale = useLocale();
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
@@ -176,7 +179,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         toast(t('dismissed'), {
             duration: 4000,
             action: {
-                label: t('undo'),
+                label: tc('undo'),
                 onClick: () => {
                     undone = true;
                     clearTimeout(apiTimer);

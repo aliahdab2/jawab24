@@ -42,6 +42,9 @@ const PostSuggestionSheet = dynamic(
  */
 export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const t = useTranslations('postSuggestions');
+  // «تراجع» is a generic UI word, not this feature's copy — it lives in `common`
+  // so the notification toast and this one can never drift apart.
+  const tc = useTranslations('common');
   const { isAdmin } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -94,7 +97,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
       await postSuggestionsApi.setVisibility(hidden);
       if (hidden) {
         toast.success(t('hiddenUntilTomorrow'), {
-          action: { label: t('undo'), onClick: () => void setHidden(false) },
+          action: { label: tc('undo'), onClick: () => void setHidden(false) },
         });
       }
     } catch (err) {
@@ -102,7 +105,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
       toast.error(t('hideFailed'));
       captureError(err, 'Post suggestion card visibility failed', { extra: { hidden } });
     }
-  }, [pageId, queryClient, t]);
+  }, [pageId, queryClient, t, tc]);
 
   if (!pageId || isError) return null;
 
