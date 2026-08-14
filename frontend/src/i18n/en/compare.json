@@ -36,14 +36,15 @@
   "val": {
     "priceStarter": "$15/mo",
     "manychatPrice": "$14/mo · AI from $29",
-    "chatfuelPrice": "$23.99/mo",
+    "chatfuelPrice": "One plan, unlimited contacts",
     "tidioPrice": "$29/mo",
-    "botpressPrice": "$89/mo",
+    "botpressPrice": "$150/mo",
     "speedlyPrice": "Subscription + AI credits",
     "meteredByContacts": "Metered by contacts",
     "businessContextNoCatalog": "Business context, no catalog sync",
     "trial30": "30 days",
-    "trial14": "14 days"
+    "trial14": "14 days",
+    "keywordUnlimitedAiFairUse": "Unlimited keyword; AI fair-use capped"
   },
   "manychat": {
     "seoTitle": "Jawab24 vs ManyChat: Best Auto-Reply for Arabic Businesses (2026)",
@@ -69,7 +70,7 @@
     "advantage3": "2-tier price verification: Jawab24 checks every AI-generated price against your catalog. Chatfuel has no price hallucination detection.",
     "advantage4": "Business Info with RAG: Jawab24 uses retrieval-augmented generation to answer from your verified business data. Chatfuel uses simpler FAQ matching.",
     "faqQ1": "Is Jawab24 better than Chatfuel for Arabic businesses?",
-    "faqA1": "Yes. Jawab24 understands Arabic dialects, integrates with Salla, and has price verification — features Chatfuel does not provide.",
+    "faqA1": "Yes, for Arabic businesses. Jawab24 understands Arabic dialects, integrates with Salla, and verifies prices against your catalog — none of which Chatfuel offers. Chatfuel's own strength is unlimited contacts on a single plan.",
     "faqQ2": "Does Chatfuel work with Salla stores?",
     "faqA2": "No. Chatfuel supports Shopify but not Salla. Jawab24 natively integrates with both Shopify and Salla.",
     "faqQ3": "Which has better AI quality, Jawab24 or Chatfuel?",
@@ -93,15 +94,15 @@
   "botpress": {
     "seoTitle": "Jawab24 vs Botpress: Best Facebook & Instagram Auto-Reply for Arabic Businesses (2026)",
     "seoDescription": "Compare Jawab24 and Botpress for Facebook and Instagram auto-replies. See why Jawab24 is 90% cheaper, requires no coding, and is purpose-built for Arabic e-commerce with Salla and Shopify integration.",
-    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your Business Info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $15/month vs $89/month, Jawab24 is built for business owners, not developers.",
-    "advantage1": "83% cheaper: Jawab24 starts at $15/month all-inclusive. Botpress Plus costs $89/month plus separate AI usage fees that can grow unpredictably. Their Team plan is $495/month.",
+    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your Business Info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $15/month vs $150/month, Jawab24 is built for business owners, not developers.",
+    "advantage1": "90% cheaper: Jawab24 starts at $15/month all-inclusive. Botpress Plus is $150/month for 250 conversations, with extra conversations sold in packs of 100 for $65. Their Team plan is $750/month.",
     "advantage2": "Zero coding required: Jawab24 works out of the box — connect your page and Smart Replies start in minutes. Botpress requires building conversation flows, writing code, and developer involvement.",
     "advantage3": "Arabic-first: Jawab24 understands 6 Arabic dialect families and Franco-Arabic. Botpress has no Arabic dialect detection — it treats all Arabic the same.",
     "advantage4": "E-commerce ready: Jawab24 natively integrates with Shopify and Salla, syncing your product catalog for accurate Smart Replies. Botpress has no built-in e-commerce integration — you need Zapier or custom code.",
     "faqQ1": "Is Jawab24 better than Botpress for Facebook and Instagram auto-replies?",
     "faqA1": "For Arabic businesses, yes. Jawab24 is purpose-built for Facebook and Instagram with Arabic dialect support, e-commerce integration, and price verification. Botpress is a general-purpose chatbot platform that requires developer skills to set up and has no Arabic-specific features.",
     "faqQ2": "Why is Botpress so much more expensive than Jawab24?",
-    "faqA2": "Botpress is a developer platform for building custom chatbots across many channels. Its Plus plan costs $89/month plus AI usage fees on top. Jawab24 costs $15/month with Smart Replies included — no surprise bills. Jawab24 is focused on one thing: intelligent auto-replies for social media.",
+    "faqA2": "Botpress is a developer platform for building custom chatbots across many channels. Its Plus plan costs $150/month and covers 250 conversations — beyond that you buy conversation packs, so a busy month costs more. Jawab24 costs $15/month with Smart Replies included. Jawab24 is focused on one thing: intelligent auto-replies for social media.",
     "faqQ3": "Can I use Botpress without coding?",
     "faqA3": "Botpress has a visual flow builder, but users consistently report a steep learning curve, and advanced features require JavaScript coding. Jawab24 requires zero technical knowledge — connect your Facebook page, write your Business Info, and you are live."
   },

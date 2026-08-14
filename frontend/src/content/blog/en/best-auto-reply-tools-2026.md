@@ -48,7 +48,7 @@ Simple, template-based chatbot builder. Chatfuel is the "easy entry point" — g
 
 However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla or Zid integration.
 
-Free tier available, paid starts at $14.99/month. [See our full Jawab24 vs Chatfuel comparison →](/en/compare/chatfuel)
+Free tier available (Chatfuel Light); the paid offering is now a single plan with unlimited active contacts and a fair-use cap on AI processing. [See our full Jawab24 vs Chatfuel comparison →](/en/compare/chatfuel)
 
 ### Tidio
 
@@ -106,7 +106,7 @@ Here's how the tools stack up across the features that matter most:
 | Angry customer alerts | No | No | No | No | Push notification |
 | Confidence scoring | No | No | No | No | Yes |
 | Auto-pause on manual reply | No | No | No | No | Yes |
-| Starting price | $14/mo (AI from $29) | $14.99/mo | $29/mo | Free* | $15/mo |
+| Starting price | $14/mo (AI from $29) | One plan, unlimited contacts | $29/mo | Free* (Plus $150/mo) | $15/mo |
 
 *Botpress free tier has usage limits.
 

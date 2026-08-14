@@ -28,9 +28,31 @@ export interface Competitor {
  *
  * 'postReplies' = unlimited keyword comment auto-replies included in the base
  * subscription at no extra cost. Tidio & Botpress have no native comment
- * automation; Speedly includes comment replies in its subscription. Chatfuel
- * meters automations by contacts/usage (verified 2026-07-11, not re-checked
- * since).
+ * automation; Speedly includes comment replies in its subscription.
+ *
+ * Chatfuel re-verified 2026-08-14 against limits.chatfuel.com: it has moved to a
+ * SINGLE plan with **unlimited active contacts**, where "keyword replies, button
+ * flows, broadcasts, and any non-AI automation are unlimited regardless of
+ * volume" and only AI processing carries a fair-use allowance. The old red X on
+ * postReplies (and the "meters automations by contacts" note that used to live
+ * here) is contradicted by their own docs. Its price cell is deliberately NOT a
+ * number: the $23.99 we published is from a tier structure that no longer
+ * exists, and chatfuel.com/pricing renders its prices in shadow DOM that the
+ * fetch path cannot read — third-party sources say $69/mo, which is not good
+ * enough to publish. Re-check in a browser and put the real figure back.
+ *
+ * Botpress re-verified 2026-08-14 against botpress.com/pricing: Plus is now
+ * $150/mo for 250 conversations (extra in packs of 100 for $65) and Team is
+ * $750/mo for 1,500. We had been publishing $89 and $495 — stale, and stale in
+ * the direction that UNDERSTATED our own price advantage.
+ *
+ * Tidio re-verified 2026-08-14: Starter $24.17/mo billed annually = $29/mo
+ * monthly, and Lyro (now its own product at getlyro.ai) starts at $39/mo. Both
+ * numbers on that page still hold.
+ *
+ * Speedly re-verified 2026-08-14 against speedly.ly: "يتم تشغيلها من خلال إضافة
+ * رصيد الذكاء الاصطناعي إلى حسابك" — AI is still activated by adding credits on
+ * top of the subscription, exactly as that page claims.
  *
  * ManyChat cells re-verified 2026-08-14 against manychat.com/pricing and
  * /product/ai, after its 2026-03-02 pricing restructure. What changed, and what
@@ -94,7 +116,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: false },
       aiSmartReplies: { jawab24: true, competitor: true },
-      postReplies: { jawab24: true, competitor: false },
+      postReplies: { jawab24: true, competitor: 'keywordUnlimitedAiFairUse' },
       shopifyIntegration: { jawab24: true, competitor: true },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },
