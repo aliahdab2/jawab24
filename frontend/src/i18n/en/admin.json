@@ -269,6 +269,7 @@
     "flag_no_offering_chunks": "No products or prices in Business Info — the AI can't answer pricing questions.",
     "flag_trial_expired": "Trial has expired.",
     "flag_subscription_inactive": "Auto-replies are blocked by the subscription gate. DB status: {status, select, past_due {past due} canceled {canceled} active {active — a manual plan that has passed its coverage end} other {inactive}}.",
+    "flag_subscription_past_due_grace": "Payment is past due — replies are still sending during the {daysLeft, plural, one {# day} other {# days}} left of the retry window, then they stop.",
     "flag_usage_over_cap": "Monthly reply limit reached ({used}/{limit}).",
     "flag_usage_near_cap": "Usage at {percent}% of the monthly limit ({used}/{limit}).",
     "flag_usage_on_topup": "Monthly plan limit reached ({used}/{limit}) — replies keep sending from the top-up balance ({balance} left).",

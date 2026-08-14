@@ -269,6 +269,7 @@
     "flag_no_offering_chunks": "لا توجد منتجات أو أسعار في معلومات النشاط — لا يستطيع الذكاء الاصطناعي الرد على أسئلة الأسعار.",
     "flag_trial_expired": "انتهت الفترة التجريبية.",
     "flag_subscription_inactive": "بوابة الاشتراك تمنع الردود التلقائية. الحالة في قاعدة البيانات: {status, select, past_due {متأخر السداد} canceled {مُلغى} active {نشط — باقة يدوية تجاوزت نهاية تغطيتها} other {غير نشِط}}.",
+    "flag_subscription_past_due_grace": "السداد متأخر — لا تزال الردود تُرسل خلال ما تبقى من مهلة إعادة المحاولة ({daysLeft, plural, zero {لا أيام} one {يوم واحد} two {يومان} few {# أيام} many {# يوماً} other {# يوم}})، ثم تتوقف.",
     "flag_usage_over_cap": "بلغ الحد الشهري للردود ({used}/{limit}).",
     "flag_usage_near_cap": "بلغ الاستهلاك {percent}٪ من الحد الشهري ({used}/{limit}).",
     "flag_usage_on_topup": "بلغ الحد الشهري للردود ({used}/{limit}) — والإرسال مستمر من الردود الإضافية المتاحة ({balance}).",

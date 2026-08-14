@@ -80,6 +80,19 @@ export const MAX_BRAND_VOICE_LENGTH = 800;
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
 
 /**
+ * Days a `past_due` subscription keeps replying while an external processor
+ * retries the payment (declined card, bank flag). Covers Stripe's first retry
+ * window without granting a week of free service every month; matches Shopify.
+ *
+ * Lives here rather than in the subscriptions service because the support console
+ * must date the same fuse the reply gate burns, and `admin/health.ts` is
+ * deliberately DB-free — importing the service would drag `db`/`redis` into a
+ * module whose whole value is being unit-testable with plain fixtures. A second
+ * literal `3` in the console would drift the day the grace changes.
+ */
+export const PAST_DUE_GRACE_DAYS = 3;
+
+/**
  * Placeholder timezone a settings row carries until the merchant sets a real one.
  *
  * NOT a sensible guess — no global default can be — which is why the business-hours

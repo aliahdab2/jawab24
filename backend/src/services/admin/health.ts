@@ -1,4 +1,4 @@
-import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, PAST_DUE_GRACE_DAYS, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
 import { coerceMultiLang } from '../multiLangTranslation';
 import { overlayWorkspaceFields } from '../pipelineFields';
 
@@ -94,6 +94,8 @@ export interface HealthInput {
          * The tool support diagnoses with must not be the tool that reassures them.
          */
         autoReplyAllowed: boolean;
+        /** Dates the `past_due` grace fuse so support sees how long is left. */
+        currentPeriodEnd: Date | null;
     } | null;
     pages: HealthInputPage[];
     /**
@@ -161,7 +163,8 @@ const NO_OFFERING_FAQ_DOWNGRADE = 3;
  */
 export const HEALTH_FLAG_KEYS = [
     'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
-    'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
+    'trial_expired', 'subscription_inactive', 'subscription_past_due_grace',
+    'usage_over_cap', 'usage_near_cap',
     'usage_on_topup', 'usage_near_cap_on_topup', 'usage_topup_nearly_drained',
     'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
@@ -374,8 +377,23 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
             // Driven by the gate, NOT by `status in (past_due, canceled)`. That old
             // pair silently excluded the manual-plan expiry, which keeps `status`
             // at 'active' forever — the exact case that stayed green while replies
-            // were blocked. `status` rides along as meta so support still sees it.
+            // were blocked. It also missed 'paused', which does block.
+            // `status` rides along as meta so support still sees it.
             add('red', 'subscription_inactive', { meta: { status: status ?? 'unknown' } });
+        } else if (status === 'past_due') {
+            // Gate ALLOWS — the 3-day grace is still running, so replies really are
+            // flowing and red would be a lie. But the fuse must stay visible: the
+            // old status-only rule flagged this red, and moving to the gate would
+            // otherwise have DELETED support's only warning that a card failed.
+            // Yellow with the deadline is the honest version of that signal.
+            const graceEnd = subscription.currentPeriodEnd
+                ? new Date(subscription.currentPeriodEnd.getTime() + PAST_DUE_GRACE_DAYS * DAY_MS)
+                : null;
+            add('yellow', 'subscription_past_due_grace', {
+                meta: graceEnd
+                    ? { daysLeft: Math.max(0, Math.ceil((graceEnd.getTime() - now.getTime()) / DAY_MS)) }
+                    : { daysLeft: PAST_DUE_GRACE_DAYS },
+            });
         }
     }
 

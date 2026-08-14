@@ -11,6 +11,7 @@ import { resolveMarketplaceBilling } from './marketplaceBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
+    PAST_DUE_GRACE_DAYS,
     type AiQuotaStatus,
     type Subscription, type Plan, type Usage, type UsageSummary,
     type SubscriptionStatus, type LimitCheckResult,
@@ -1258,14 +1259,11 @@ export const subscriptionsService = {
         }
 
         if (subscription.status === 'past_due') {
-            // 3 days covers Stripe's first payment-retry window (declined card, bank flag)
-            // without giving abusers a week of free service every month. Matches Shopify.
-            const GRACE_PERIOD_DAYS = 3;
             const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
 
             if (periodEnd) {
                 const gracePeriodEnd = new Date(periodEnd);
-                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + PAST_DUE_GRACE_DAYS);
 
                 if (new Date() > gracePeriodEnd) {
                     return {

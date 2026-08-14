@@ -96,6 +96,28 @@ A top-up does **not** lift this gate: `enforceAutoReplyGate` → `canAutoReply` 
 status only and never reaches the top-up fallback in `canUseAiReplies`. The paused
 banner therefore suppresses its top-up CTA and offers renewal instead.
 
+**These surfaces are rail-agnostic, and deliberately so.** The trigger is the gate
+refusing, not `payment_method = 'manual'` — so a Stripe subscription that is `canceled`,
+`paused`, or `past_due` beyond grace raises the same banner and the same red badge. That
+is the point: the manual case is simply the one that had *no* signal at all, while the
+auto-renew cases had a partial one. What each rail/state shows:
+
+| Rail · state | Gate | Merchant banner | Console flag |
+|---|---|---|---|
+| any · active / in-window | allows | — | — |
+| stripe · `past_due` **in** 3-day grace | **allows** | — (replies flowing) | 🟡 `subscription_past_due_grace` (days left) |
+| stripe · `past_due` beyond grace | refuses | 🔴 paused | 🔴 `subscription_inactive` |
+| stripe · `canceled` / `paused` | refuses | 🔴 paused | 🔴 `subscription_inactive` |
+| manual · past snapped end | refuses | 🔴 paused | 🔴 `subscription_inactive` |
+| trial · expired | refuses | 🔴 paused | 🔴 `trial_expired` (earlier branch wins) |
+
+⚠️ `subscription_past_due_grace` exists because moving this flag onto the gate would
+otherwise have **deleted** a signal on the auto-renew path: the old rule flagged every
+`past_due` red, including inside the grace where replies genuinely still send. Red there
+was wrong, but silence was worse — that is the shape of the fleet-wide silent suspension
+(2026-08-09). Yellow-with-a-deadline is the honest form. `PAST_DUE_GRACE_DAYS` lives in
+`@jawab24/shared` so the console dates the same fuse the gate burns.
+
 ### Gate 5 is TWO states in one boolean — never conflate them
 
 `isAutoReplyEnabledFromSettings(settings, 'messages')` returns false for **either**:
