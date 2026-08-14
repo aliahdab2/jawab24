@@ -29,8 +29,108 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, buildNotificationTag, resolveUrgentChannelId } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, buildNotificationTag, resolveUrgentChannelId, type NotificationType } from '../../src/services/notifications';
 import { db } from '../../src/db';
+
+/**
+ * What each notification type actually sends, copied from its production call
+ * site — NOT synthesised. `buildFcmMessage` is shared infrastructure that every
+ * push in the system passes through, so its guard has to assert against the
+ * real payload shapes; a hand-made `data: {}` asserts nothing.
+ *
+ * `source` is the call site, so a reader can re-verify a row without grepping.
+ * `tag` is what buildNotificationTag must therefore emit — `undefined` means the
+ * push still STACKS, which is the correct answer for anything that does not name
+ * a single row.
+ *
+ * Typed Record<NotificationType, …> on purpose: adding a notification type
+ * surfaces here immediately in the editor. It does NOT fail `npm run type-check`
+ * — backend/tsconfig.json includes the src tree only, so no tsc run ever sees
+ * this file — which is why the `covers every notification type in the registry`
+ * case below repeats the check at RUNTIME. That one is the real gate.
+ */
+interface ProductionPayloadSpec {
+    source: string;
+    data?: Record<string, unknown>;
+    tag?: string;
+}
+
+const PRODUCTION_PAYLOADS: Record<NotificationType, ProductionPayloadSpec> = {
+    // ---- Row-targeted: these collapse, and that is the point of the change ----
+    flagged_reply: {
+        source: 'services/reply/messageProcessor.ts:1005',
+        data: { messageId: 'm1', type: 'message', deepLink: '/messages?filter=flagged' },
+        tag: 'flagged_reply:m1',
+    },
+    skipped_reply: {
+        source: 'services/reply/commentProcessor.ts:698',
+        data: { commentId: 'c1', type: 'comment', deepLink: '/comments?filter=flagged', urgent: true },
+        tag: 'skipped_reply:c1',
+    },
+    new_comment: {
+        source: 'services/reply/commentProcessor.ts:775',
+        data: { commentId: 'c1', type: 'comment', deepLink: '/comments?filter=flagged' },
+        tag: 'new_comment:c1',
+    },
+    stale_comment: {
+        source: 'services/escalation.ts:279',
+        data: { commentId: 'c1' },
+        tag: 'stale_comment:c1',
+    },
+    stale_message: {
+        source: 'services/escalation.ts:361',
+        data: { type: 'message', messageId: 'm1', senderId: 's1', pageId: 'p1' },
+        tag: 'stale_message:m1',
+    },
+    new_lead: {
+        source: 'services/leadExtractor.ts:625',
+        data: { leadId: 'l1', pageId: 'p1', deepLink: '/leads?leadId=l1' },
+        tag: 'new_lead:l1',
+    },
+    lead_reengaged: {
+        source: 'services/leadExtractor.ts:683',
+        data: { leadId: 'l1', pageId: 'p1', deepLink: '/leads?leadId=l1', urgent: true },
+        tag: 'lead_reengaged:l1',
+    },
+
+    // ---- Page-scoped: a page emits MANY distinct events, so these must stack ----
+    kb_gap: {
+        source: 'services/kb/gap-detector.ts:196 — one per missing topic',
+        data: { pageId: 'p1', intent: 'price', occurrenceCount: 3, sampleQuery: 'كم السعر؟', deepLink: '/pages#page-p1' },
+    },
+    auto_reply_paused: {
+        source: 'services/pageAutoPause.ts:203',
+        data: { pageId: 'p1', action: 'reconnect_page', urgent: true },
+    },
+    post_reply_orphaned: {
+        source: 'services/posts.ts:734 — one per detection, different post ids',
+        data: { pageId: 'p1', orphanedPostIds: ['post-1'] },
+    },
+
+    // ---- Id-less: nothing to collapse on ----
+    payment_failed: { source: 'controllers/paymentWebhookHandlers.ts:502', data: { deepLink: '/settings' } },
+    refund_processed: { source: 'controllers/paymentWebhookHandlers.ts:656', data: { deepLink: '/settings' } },
+    topup_credited: { source: 'controllers/paymentWebhookHandlers.ts:504', data: { deepLink: '/dashboard' } },
+    page_disconnected: { source: 'services/tokenRefresh.ts:275', data: { action: 'reconnect_page' } },
+    whatsapp_reconnect_needed: { source: 'services/whatsappTokenHealth.ts:311', data: { action: 'reconnect_whatsapp' } },
+    whatsapp_token_expiring: { source: 'services/whatsappTokenHealth.ts:340', data: { action: 'reconnect_whatsapp' } },
+    provider_failover: { source: 'services/ai.ts:947', data: { urgent: true } },
+    page_trial_used: { source: 'controllers/pages.ts:541 — no data argument' },
+    trial_ending: { source: 'services/trialReminders.ts:267 — no data argument' },
+    trial_ended: { source: 'services/trialReminders.ts:318 — no data argument' },
+    image_limit_reached: { source: 'services/imageUnderstanding.ts:524 — no data argument' },
+    auto_reply_paused_billing: { source: 'services/subscriptions.ts:1127 — no data argument' },
+    ai_usage_warning_80: { source: 'services/subscriptions.ts:774 — no data argument' },
+    ai_usage_limit_reached: { source: 'services/subscriptions.ts:774 — no data argument' },
+    ai_usage_on_topup: { source: 'services/subscriptions.ts:774 — no data argument' },
+    ai_usage_topup_low: { source: 'services/subscriptions.ts:774 — no data argument' },
+    // Templates with no production sender today (demo seeder only). Recorded so
+    // the exhaustiveness check stays honest rather than being weakened for them.
+    subscription_expiring: { source: 'no live sender — plugins/demo/seedData.ts:1897 only' },
+    subscription_renewed: { source: 'no live sender — plugins/demo/seedData.ts:1913 only' },
+};
+
+const PRODUCTION_PAYLOAD_ENTRIES = Object.entries(PRODUCTION_PAYLOADS) as Array<[NotificationType, ProductionPayloadSpec]>;
 
 describe('NotificationService', () => {
     beforeEach(() => {
@@ -1054,21 +1154,55 @@ describe('NotificationService', () => {
             expect(msg.android.notification.tag).toBe('flagged_reply:m1');
         });
 
-        it('omits the tag for every id-less template, leaving their stacking unchanged', () => {
-            // Shared-infrastructure guard: buildFcmMessage serves EVERY type, so
-            // assert across the whole template registry rather than one sample.
-            // An id-less type (payment_failed, topup_credited, refund_processed…)
-            // must NOT get a per-type tag — a second distinct event would
-            // silently overwrite the first.
-            const idLess = Object.keys(NOTIFICATION_TEMPLATES).filter(
-                type => !['flagged_reply', 'skipped_reply', 'new_comment', 'stale_comment', 'stale_message', 'new_lead', 'lead_reengaged', 'kb_gap'].includes(type),
-            );
-            expect(idLess.length).toBeGreaterThan(0);
-            for (const type of idLess) {
-                const msg = buildFcmMessage({ ...base, type: type as any, data: {} }, 'en', ['t']) as any;
-                expect(msg.android.notification.tag, `${type} must not carry a tag`).toBeUndefined();
-                expect(msg.android.notification.channelId).toBe('jawab24_default');
+        it('emits exactly the tag each type\'s REAL payload earns', () => {
+            // Shared-infrastructure guard: buildFcmMessage serves every type in
+            // the system, so this asserts over the real `data` each one sends —
+            // copied from its call site, not synthesised. An earlier version of
+            // this test passed `data: {}` to every type; that made it a
+            // tautology, and it was blind to the three page-scoped types whose
+            // production payloads DO carry an id.
+            for (const [type, spec] of PRODUCTION_PAYLOAD_ENTRIES) {
+                const msg = buildFcmMessage({ ...base, type, data: spec.data }, 'en', ['t']) as any;
+                expect(msg.android.notification.tag, `${type} — ${spec.source}`).toBe(spec.tag);
             }
+        });
+
+        it('covers every notification type in the registry', () => {
+            // The real gate. PRODUCTION_PAYLOADS' Record<NotificationType, …>
+            // type only helps in the editor — backend/tsconfig.json includes the
+            // src tree only, so no tsc run ever sees this file. Comparing the two
+            // key sets at runtime is what actually stops a new notification type
+            // from shipping without a recorded collapse decision, and it catches
+            // drift in both directions.
+            expect(Object.keys(PRODUCTION_PAYLOADS).sort())
+                .toEqual(Object.keys(NOTIFICATION_TEMPLATES).sort());
+        });
+
+        it('routes each real payload to the channel its own urgency demands', () => {
+            // The old guard asserted 'jawab24_default' for every "id-less" type
+            // while feeding them `data: {}`. auto_reply_paused really sends
+            // `urgent: true`, so that assertion was wrong about production too.
+            for (const [type, spec] of PRODUCTION_PAYLOAD_ENTRIES) {
+                const msg = buildFcmMessage({ ...base, type, data: spec.data }, 'en', ['t']) as any;
+                const expected = spec.data?.urgent === true ? 'jawab24_urgent' : 'jawab24_default';
+                expect(msg.android.notification.channelId, `${type} — ${spec.source}`).toBe(expected);
+            }
+        });
+
+        it('never collapses a page-scoped alert (regression: kb_gap lost distinct topics)', () => {
+            // A page is a container, not a target. Two different missing-info
+            // topics on ONE page are distinct events; tagging by pageId made the
+            // second silently replace the first in the tray.
+            const first = buildFcmMessage(
+                { ...base, type: 'kb_gap', data: { pageId: 'p1', intent: 'delivery', sampleQuery: 'هل توصلون لحلب؟' } },
+                'ar', ['t'],
+            ) as any;
+            const second = buildFcmMessage(
+                { ...base, type: 'kb_gap', data: { pageId: 'p1', intent: 'price', sampleQuery: 'كم السعر؟' } },
+                'ar', ['t'],
+            ) as any;
+            expect(first.android.notification.tag).toBeUndefined();
+            expect(second.android.notification.tag).toBeUndefined();
         });
     });
 
@@ -1084,10 +1218,10 @@ describe('NotificationService', () => {
             expect(buildNotificationTag({ ...base, type: 'payment_failed', data: { urgent: true } })).toBeUndefined();
         });
 
-        it('prefers the row id over the page id', () => {
-            // Forward-compat with the deep-link fix, which adds pageId to these
-            // payloads: the ROW is the target, so two flagged rows on one page
-            // must not collapse into a single tray entry.
+        it('tags on the row id, ignoring any pageId alongside it', () => {
+            // The deep-link fix will add pageId to these payloads. The ROW stays
+            // the target: two flagged rows on one page must not collapse into a
+            // single tray entry.
             expect(buildNotificationTag({
                 ...base, type: 'flagged_reply', data: { pageId: 'p1', messageId: 'm1' },
             })).toBe('flagged_reply:m1');
@@ -1096,8 +1230,13 @@ describe('NotificationService', () => {
             })).toBe('flagged_reply:c1');
         });
 
-        it('falls back to pageId for page-scoped alerts', () => {
-            expect(buildNotificationTag({ ...base, type: 'kb_gap', data: { pageId: 'p1' } })).toBe('kb_gap:p1');
+        it('never tags on pageId alone — a page is a container, not a target', () => {
+            // Regression: pageId used to be the last resort in the key list, so
+            // every kb_gap on a page shared one tag and each new missing-info
+            // topic silently replaced the previous one in the tray.
+            expect(buildNotificationTag({ ...base, type: 'kb_gap', data: { pageId: 'p1' } })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'auto_reply_paused', data: { pageId: 'p1', urgent: true } })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'post_reply_orphaned', data: { pageId: 'p1', orphanedPostIds: ['x'] } })).toBeUndefined();
         });
 
         it('ignores non-string and empty ids', () => {

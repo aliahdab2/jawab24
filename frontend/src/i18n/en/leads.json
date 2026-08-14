@@ -68,7 +68,7 @@
   "exportCsv": "Export CSV",
   "exportFailed": "Failed to export. Please try again.",
   "loadFailed": "Failed to load leads",
-  "deepLinkNotFound": "Couldn't open this lead — it may have been removed, or it's on a page your current filter hides.",
+  "deepLinkNotFound": "Couldn't open this lead. Try refreshing, or find it in the list below.",
   "deleteLead": "Delete",
   "deleteConfirm": "Are you sure you want to delete this lead?",
   "deleteSuccess": "Lead deleted",

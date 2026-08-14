@@ -454,12 +454,22 @@ function replaceVariables(
 }
 
 /**
- * Keys naming the notification's TARGET, most-specific first.
+ * Keys naming the notification's TARGET — the single row the push is about.
  *
- * Order matters: a flagged/skipped reply carries a messageId or commentId AND
- * (once the deep-link fix lands) a pageId — the row is the target, not the page.
+ * ROW ids only. `pageId` is deliberately ABSENT: a page is a CONTAINER that
+ * emits many distinct events, so tagging by it would let a second, genuinely
+ * different event silently overwrite the first — the exact harm the id-less
+ * exclusion below exists to prevent. Three types carry a pageId and would have
+ * been swept in: `kb_gap` (one per missing topic — services/kb/gap-detector.ts),
+ * `post_reply_orphaned` (one per detection — services/posts.ts) and
+ * `auto_reply_paused` (services/pageAutoPause.ts).
+ *
+ * Nothing loses a tag by the omission: every row-targeted payload already
+ * carries one of these — flagged/skipped/new_comment/stale_comment → commentId,
+ * stale_message → messageId, new_lead/lead_reengaged → leadId. Order is
+ * therefore only a tie-break; no payload carries two today.
  */
-const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId', 'pageId'] as const;
+const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId'] as const;
 
 /**
  * Android notification tag for a payload — `undefined` when it names no target.
@@ -470,10 +480,15 @@ const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId', 'pageId'] 
  * shared tag makes the second delivery REPLACE the first in the tray instead of
  * stacking. Pushes about different targets get different tags and still stack.
  *
- * Deliberately NOT applied to id-less types (payment_failed, topup_credited,
- * refund_processed, ai_usage_*): there a per-type tag would let a second,
- * genuinely distinct event silently overwrite the first. Those keep today's
- * stacking behaviour untouched.
+ * Deliberately NOT applied to payloads that name no ROW — both the id-less
+ * types (payment_failed, topup_credited, refund_processed, ai_usage_*) and the
+ * page-scoped ones (kb_gap, auto_reply_paused, post_reply_orphaned): for those a
+ * per-type or per-page tag would let a second, genuinely distinct event silently
+ * overwrite the first. They keep today's stacking behaviour untouched.
+ *
+ * What each type actually sends is pinned by PRODUCTION_PAYLOADS in
+ * test/services/notifications.test.ts, checked against NOTIFICATION_TEMPLATES at
+ * runtime — a new type cannot land without recording whether it collapses.
  */
 export function buildNotificationTag(payload: NotificationPayload): string | undefined {
     const data = payload.data;
@@ -496,6 +511,18 @@ export function buildNotificationTag(payload: NotificationPayload): string | und
  * the duplicate was reported on Android, and the apns block is currently built
  * only for urgent pushes. Tracked as a follow-up rather than restructuring the
  * urgent-sound path in the same change.
+ *
+ * Two constraints for whoever picks that up:
+ * - `apns-collapse-id` is capped at 64 BYTES; APNs rejects the request above it,
+ *   and the failure surfaces as an error row in notification_send_log, not as a
+ *   compile error. The tag is `${type}:${uuid}` and the longest NotificationType
+ *   is 25 chars (`auto_reply_paused_billing`, `whatsapp_reconnect_needed`), so
+ *   the worst case today is 25+1+36 = 62 bytes — two bytes of headroom. Assert
+ *   it when the header is added.
+ * - Web push (`webpush.notification.tag`) is NOT a missing leg: both push
+ *   registration entry points are gated on Capacitor.isNativePlatform()
+ *   (frontend/src/lib/notifications.ts), so platform='web' tokens are never
+ *   created. The 'web' value in the device_tokens schema comment is aspirational.
  */
 export function buildFcmMessage(
     payload: NotificationPayload,
