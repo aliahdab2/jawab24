@@ -14,14 +14,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const {
-    mockRedisSet, mockRedisDel, mockSelect, mockUpdate,
+    mockRedisSet, mockRedisDel, mockRedisEval, mockSelect, mockUpdate, mockUpdateSet,
     mockGetUserPages, mockDecrypt, mockEncrypt,
     mockNotifyWorkspace, mockNotifyUser, mockEmailSend, mockTemplate, mockCaptureError,
 } = vi.hoisted(() => ({
     mockRedisSet: vi.fn(),
     mockRedisDel: vi.fn().mockResolvedValue(1),
+    mockRedisEval: vi.fn().mockResolvedValue(1),
     mockSelect: vi.fn(),
     mockUpdate: vi.fn(),
+    /** The `.set({...})` payload of each UPDATE, so tests can assert WHAT was
+     *  written and not merely that something was. */
+    mockUpdateSet: vi.fn(),
     mockGetUserPages: vi.fn(),
     mockDecrypt: vi.fn((t: string) => `decrypted:${t}`),
     mockEncrypt: vi.fn((t: string) => `encrypted:${t}`),
@@ -32,20 +36,32 @@ const {
     mockCaptureError: vi.fn(),
 }));
 
-vi.mock('../lib/redis', () => ({ redis: { set: mockRedisSet, del: mockRedisDel } }));
+vi.mock('../lib/redis', () => ({ redis: { set: mockRedisSet, del: mockRedisDel, eval: mockRedisEval } }));
 vi.mock('../db', () => ({ db: { select: mockSelect, update: mockUpdate } }));
 vi.mock('../services/facebook', () => ({ facebookService: { getUserPages: mockGetUserPages } }));
 vi.mock('../services/facebookCrypto', () => ({ maybeDecryptToken: mockDecrypt, maybeEncryptToken: mockEncrypt }));
 vi.mock('../services/notifications', () => ({
     notificationService: { sendNotificationToWorkspace: mockNotifyWorkspace, sendNotification: mockNotifyUser },
 }));
-vi.mock('../services/email', () => ({ emailService: { send: mockEmailSend } }));
+vi.mock('../services/email', async () => {
+    // The REAL `EmailService`, with only the transport stubbed. `trySend` is the
+    // thing under test on this path (a delivered email is what spends the dedup
+    // claim), so re-implementing it in the mock would pin my copy instead of the
+    // production contract — the drift AI_INSTRUCTIONS §19.3 forbids. Stubbing
+    // `send` keeps BOTH of its failure shapes — resolve-false and THROW —
+    // flowing through the real `trySend`.
+    const actual = await vi.importActual<typeof import('../services/email')>('../services/email');
+    const service = new actual.EmailService();
+    service.send = mockEmailSend;
+    return { ...actual, emailService: service };
+});
 vi.mock('../utils/emailTemplates', () => ({ pageReconnectEmailTemplate: mockTemplate }));
 vi.mock('../utils/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('../config', () => ({ config: { frontendUrl: 'https://jawab24.com' } }));
 
-import { classifyTokenFailure, handlePageTokenFailure, markPageNeedsReconnect, withPageTokenRetry } from '../services/pageTokenRecovery';
-import { FacebookApiError, DmSendError } from '../utils/fbGraphErrors';
+import { AxiosError, AxiosHeaders } from 'axios';
+import { classifyTokenFailure, handlePageTokenFailure, markPageNeedsReconnect, withPageTokenRetry, withPageTokenRetryResult } from '../services/pageTokenRecovery';
+import { FacebookApiError, DmSendError, classifyDmError } from '../utils/fbGraphErrors';
 
 const PAGE_ID = 'page-uuid-1';
 const FB_PAGE_ID = '102140258463931';
@@ -91,16 +107,28 @@ beforeEach(() => {
     // A REAL `SET NX` fake, keyed like Redis. Returning a blanket 'OK' would make
     // both the cooldown and the alert-dedup assertions vacuous — the two guards
     // that exist precisely because one dead token produced 36 failing calls.
-    const claimedKeys = new Set<string>();
-    mockRedisSet.mockImplementation(async (key: string) => {
+    //
+    // The VALUE is stored, not just the key, because the claims are now tokened
+    // (`lib/redisMutex`) and released by compare-and-delete. A fake that ignored
+    // the token would let a broken CAS pass.
+    const claimedKeys = new Map<string, string>();
+    mockRedisSet.mockImplementation(async (key: string, value: string) => {
         if (claimedKeys.has(key)) return null;
-        claimedKeys.add(key);
+        claimedKeys.set(key, value);
         return 'OK';
     });
-    mockRedisDel.mockImplementation(async (key: string) => { claimedKeys.delete(key); return 1; });
+    mockRedisDel.mockImplementation(async (key: string) => (claimedKeys.delete(key) ? 1 : 0));
+    // `releaseMutex`'s Lua, faithfully: delete ONLY if we still hold the key. A
+    // holder whose claim lapsed and was re-taken by someone else deletes nothing.
+    mockRedisEval.mockImplementation(async (_script: string, _keyCount: number, key: string, token: string) => {
+        if (claimedKeys.get(key) !== token) return 0;
+        claimedKeys.delete(key);
+        return 1;
+    });
     mockDecrypt.mockImplementation((t: string) => `decrypted:${t}`);
     mockEncrypt.mockImplementation((t: string) => `encrypted:${t}`);
-    mockUpdate.mockReturnValue({ set: () => ({ where: async () => undefined }) });
+    mockUpdateSet.mockReturnValue({ where: async () => undefined });
+    mockUpdate.mockReturnValue({ set: mockUpdateSet });
     mockEmailSend.mockResolvedValue({ success: true, id: 'email-1' });
     mockTemplate.mockReturnValue({ subject: 'subj', html: '<html/>' });
 });
@@ -148,6 +176,47 @@ describe('classifyTokenFailure', () => {
         expect(classifyTokenFailure(new FacebookApiError('x', { code: 190, subcode: 460, isTransport: true }))).toBeNull();
     });
 
+    // ⛔⛔ The same negative case in the shape the COMMENT pipeline actually
+    // hands in. The `FacebookApiError` case above cannot cover it: commentProcessor
+    // holds a plain `DmFailure`, and until it carried `isTransport` there was no
+    // way to say "5xx that happens to quote code 190" in that shape at all — so
+    // `toFacebookApiError` rebuilt it as `isTransport: false` and a Facebook
+    // OUTAGE classified as every page's credential being revoked at once.
+    //
+    // Built by running the real `classifyDmError` over a real AxiosError rather
+    // than hand-writing the DmFailure: a literal would pin my assumption about
+    // that function's output instead of its behaviour (AI_INSTRUCTIONS §19.3).
+    it('returns null for a Graph 5xx whose BODY carries code 190 (the DmFailure shape)', () => {
+        const outage = new AxiosError('Request failed with status code 500', '500');
+        outage.response = {
+            status: 500, statusText: 'Internal Server Error', headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: { error: { message: 'Error validating access token', code: 190, error_subcode: 460, type: 'OAuthException' } },
+        };
+
+        const failure = classifyDmError(outage, 'facebook');
+
+        expect(failure.isTransport).toBe(true);
+        expect(failure.code).toBe(190);
+        expect(classifyTokenFailure(failure)).toBeNull();
+    });
+
+    it('still classifies a 4xx 190 from the DmFailure shape as revoked', () => {
+        // The counterweight: the guard above must not turn every coded failure
+        // into "not a token problem", which would restore the original silence.
+        const revoked = new AxiosError('Request failed with status code 400', '400');
+        revoked.response = {
+            status: 400, statusText: 'Bad Request', headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: { error: { message: 'Session invalidated', code: 190, error_subcode: 460, type: 'OAuthException' } },
+        };
+
+        const failure = classifyDmError(revoked, 'facebook');
+
+        expect(failure.isTransport).toBe(false);
+        expect(classifyTokenFailure(failure)).toBe('password_changed');
+    });
+
     it('returns null for a Node system error whose code is a STRING', () => {
         // Pins the OUTCOME, not the mechanism: two independent guards reject this
         // (the numeric-code narrowing, and `isTokenRevoked`'s strict lookup), so
@@ -176,8 +245,16 @@ describe('recovery', () => {
         // Nothing to tell the merchant: it healed.
         expect(mockNotifyWorkspace).not.toHaveBeenCalled();
         expect(mockEmailSend).not.toHaveBeenCalled();
-        // Cooldown released on success so a later genuine failure heals at once.
-        expect(mockRedisDel).toHaveBeenCalledWith(`fb:token:recovery:cooldown:${PAGE_ID}`);
+        // Cooldown released on success so a later genuine failure heals at once —
+        // by COMPARE-AND-DELETE, not a bare DEL. A blind delete would also remove
+        // a claim taken by another process after ours lapsed on a slow
+        // /me/accounts, stripping the damper from the one caller still using it.
+        expect(mockRedisEval).toHaveBeenCalledWith(
+            expect.stringContaining('redis.call("del"'),
+            1,
+            `fb:token:recovery:cooldown:${PAGE_ID}`,
+            expect.any(String),
+        );
     });
 
     it('does nothing at all for a non-token error', async () => {
@@ -296,6 +373,11 @@ describe('merchant alert when recovery is impossible', () => {
         await handlePageTokenFailure(PAGE_ID, passwordChangedError());
 
         expect(mockUpdate).toHaveBeenCalled();
+        // WHAT was written, not merely that something was: `isConnected` is
+        // derived from an empty token, and the reason is what support reads.
+        expect(mockUpdateSet).toHaveBeenCalledWith(
+            expect.objectContaining({ accessToken: '', disconnectReason: 'token_revoked' }),
+        );
     });
 
     it('alerts once per page per day, however many calls fail', async () => {
@@ -320,6 +402,110 @@ describe('merchant alert when recovery is impossible', () => {
 
         expect(mockEmailSend).toHaveBeenCalled();
         expect(mockCaptureError).toHaveBeenCalled();
+    });
+
+    // ── The dedup key must gate the NOTIFICATION and nothing else ──────────
+    //
+    // This is the defect the module exists to remove, re-entering through its
+    // own fix. The alert claim used to be taken BEFORE the row was written, so a
+    // page whose token died a second time inside 24h returned at the claim and
+    // kept a POPULATED access_token with a NULL disconnect_reason: a
+    // healthy-looking row with a dead token, no reconnect UI, no email — exactly
+    // the 2026-08-10 / 2026-08-14 signature.
+    //
+    // Mutation-checked: moving the `db.update` back below the claim fails the
+    // first test; making the write conditional on the claim fails both.
+    it('writes the dead-token state on EVERY confirmation, even when the alert is deduped', async () => {
+        selectCycle([ownerRow]);
+
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+
+        // The row is the system's answer to "is this credential dead?" and must
+        // be re-stated every time Facebook confirms it — the merchant may have
+        // reconnected in between (controllers/pages.ts restores the token and
+        // nulls the reason, and deletes no Redis key).
+        expect(mockUpdate).toHaveBeenCalledTimes(3);
+        // The mailbox is a different question, and stays deduped.
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('records the disconnect even when the alert claim was burned by an earlier incident', async () => {
+        selectCycle([ownerRow]);
+
+        // Incident 1 — alerted, claim taken for 24h.
+        await markPageNeedsReconnect(pageRow() as never, 'permissions_revoked');
+        mockUpdate.mockClear();
+        mockUpdateSet.mockClear();
+
+        // Merchant reconnects (not modelled — nothing deletes the Redis key), then
+        // changes their Facebook password hours later, still inside the 24h window.
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+
+        expect(mockUpdate).toHaveBeenCalledTimes(1);
+        // Whatever else is suppressed, `isConnected` must go false.
+        expect(mockUpdateSet).toHaveBeenCalledWith(
+            expect.objectContaining({ accessToken: '', disconnectReason: 'token_revoked' }),
+        );
+    });
+});
+
+// ── The email claim must be GIVEN BACK when no email went out ─────────────
+//
+// Holding a 24h per-owner claim for a send that failed costs the merchant the
+// one channel that reaches them when they are not in the app — over a failure
+// that was ours. `pageAutoPause.notifyMerchantAutoPaused` already learned this
+// (its `finally` release); the clone here did not inherit it.
+//
+// Mutation-checked: deleting either `releaseClaim()` call fails the matching
+// test, and deleting both fails all three.
+describe('reconnect email — a claim that did not send is released', () => {
+    beforeEach(() => {
+        selectCycle([ownerRow]);
+    });
+
+    it('lets a sibling page retry after the provider rejects the send', async () => {
+        mockEmailSend.mockResolvedValueOnce({ success: false, error: 'Resend 422' });
+
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-uuid-2' }) as never, 'password_changed');
+
+        // Two attempts: the first burned nothing, because it delivered nothing.
+        expect(mockEmailSend).toHaveBeenCalledTimes(2);
+        expect(mockCaptureError).toHaveBeenCalled();
+    });
+
+    it('lets a sibling page retry after the send THROWS (network, not a rejection)', async () => {
+        mockEmailSend.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-uuid-2' }) as never, 'password_changed');
+
+        expect(mockEmailSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the claim when the owner has no email on file', async () => {
+        // No address → nothing sent → nothing to dedup. Burning the day here
+        // would silence the owner over a row they can fix in the app.
+        selectCycle([]);
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(mockEmailSend).not.toHaveBeenCalled();
+
+        selectCycle([ownerRow]);
+        await markPageNeedsReconnect(pageRow({ id: 'page-uuid-2' }) as never, 'password_changed');
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('still collapses the fan-out when the send SUCCEEDS', async () => {
+        // The release must not become "no dedup at all" — the guard that stops
+        // nine identical emails to one agency owner still has to hold.
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-uuid-2' }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-uuid-3' }) as never, 'password_changed');
+
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -363,6 +549,81 @@ describe('withPageTokenRetry', () => {
  * per page — the exact fan-out this module's own docblock argues against for
  * `tokenRefresh.notifyReconnectNeeded`.
  */
+// ── The result-shaped retry the COMMENT path needs ────────────────────────
+//
+// The comment adapters return `{ success: false, dmFailure }` instead of
+// throwing, so `withPageTokenRetry` never fires there. Without this, the comment
+// that EXPOSED the dead token is flagged `dm_failed` and never answered while
+// the background re-mint helps only the NEXT customer — on the very surface the
+// 2026-08-14 report came from (an empty Post Reply picker).
+describe('withPageTokenRetryResult', () => {
+    /** The comment adapters' result shape, narrowed to what this reads. */
+    type SendResult = { success: boolean; dmFailure?: { bucket: string; code: number; subcode?: number; rawMessage: string } };
+    const sendOf = () => vi.fn<(accessToken: string) => Promise<SendResult>>();
+    const failureOf = (r: SendResult) => (r.success ? undefined : r.dmFailure);
+
+    const ok: SendResult = { success: true, dmFailure: undefined };
+    const dead: SendResult = { success: false, dmFailure: { bucket: 'our_fault', code: 190, subcode: 460, rawMessage: 'gone' } };
+
+    beforeEach(() => {
+        selectCycle([pageRow()], [userRow()]);
+        mockGetUserPages.mockResolvedValue({ data: [{ id: FB_PAGE_ID, access_token: 'fresh-page-token' }] });
+    });
+
+    it('re-mints and retries once, and REPORTS the fresh token for adoption', async () => {
+        const call = sendOf()
+            .mockResolvedValueOnce(dead)
+            .mockResolvedValueOnce(ok);
+
+        const { result, accessToken } = await withPageTokenRetryResult(PAGE_ID, 'stale-token', call, failureOf);
+
+        expect(call).toHaveBeenCalledTimes(2);
+        expect(call).toHaveBeenNthCalledWith(1, 'stale-token');
+        expect(call).toHaveBeenNthCalledWith(2, 'fresh-page-token');
+        expect(result).toBe(ok);
+        // Returned, not just used: the caller's `likeComment` runs on this same
+        // credential afterwards and would otherwise re-use the dead one.
+        expect(accessToken).toBe('fresh-page-token');
+    });
+
+    it('does not call again on success — one send stays one send', async () => {
+        const call = sendOf().mockResolvedValue(ok);
+
+        const { accessToken } = await withPageTokenRetryResult(PAGE_ID, 'good-token', call, failureOf);
+
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(accessToken).toBe('good-token');
+        expect(mockGetUserPages).not.toHaveBeenCalled();
+    });
+
+    it('does not retry a failure that is not a dead credential', async () => {
+        // A blocked customer is not a token problem; retrying it would send the
+        // same doomed request twice and double the Graph cost of every refusal.
+        const refused: SendResult = { success: false, dmFailure: { bucket: 'customer_refused', code: 551, rawMessage: 'unavailable' } };
+        const call = sendOf().mockResolvedValue(refused);
+
+        const { result, accessToken } = await withPageTokenRetryResult(PAGE_ID, 'good-token', call, failureOf);
+
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(result).toBe(refused);
+        expect(accessToken).toBe('good-token');
+    });
+
+    it('returns the ORIGINAL failure when recovery is impossible — never a fake success', async () => {
+        selectCycle([pageRow()], [userRow()], [ownerRow]);
+        mockGetUserPages.mockRejectedValue(new FacebookApiError('gone', { code: 190, subcode: 460 }));
+        const call = sendOf().mockResolvedValue(dead);
+
+        const { result, accessToken } = await withPageTokenRetryResult(PAGE_ID, 'stale-token', call, failureOf);
+
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(result).toBe(dead);
+        expect(accessToken).toBe('stale-token');
+        // …and the merchant was told, since nothing else can fix it.
+        expect(mockNotifyWorkspace).toHaveBeenCalled();
+    });
+});
+
 describe('alert fan-out across an owner\'s pages', () => {
     beforeEach(() => {
         selectCycle([ownerRow]);

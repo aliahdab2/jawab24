@@ -153,6 +153,37 @@ export class EmailService {
         return { success: true, id: data.id, emailSendId };
     }
 
+    /**
+     * `send` as a total function: one answer to "did this actually go out?".
+     *
+     * ⚠️ `send` fails in TWO shapes, and they mean the same thing:
+     *   - it RESOLVES `{ success: false }` for a provider-level failure (Resend
+     *     4xx/5xx, unconfigured API key), and
+     *   - it THROWS for a network-level one — there is no try/catch around its
+     *     `fetch` above, so DNS failure, socket reset, TLS error and timeout all
+     *     propagate as a raw TypeError.
+     *
+     * Only the first shape looks like failure, so a caller that checks
+     * `result.success` alone silently treats the MORE likely outage as a
+     * success. Any caller whose next step depends on delivery — releasing a
+     * dedup claim, marking a row notified, counting a send — must ask this
+     * instead of re-deriving the pair.
+     *
+     * That re-derivation is not hypothetical: both merchant-alert paths owned it
+     * separately, `pageAutoPause` was corrected for it (2026-08) and the newer
+     * `pageTokenRecovery` copy inherited the original bug — a 24h dedup key held
+     * open by a send that never happened, i.e. the alert silenced by its own
+     * failure. The knowledge lives here now, next to the function it describes.
+     */
+    async trySend(payload: EmailPayload): Promise<{ delivered: boolean; error?: string }> {
+        try {
+            const result = await this.send(payload);
+            return { delivered: result.success, error: result.error };
+        } catch (err) {
+            return { delivered: false, error: err instanceof Error ? err.message : String(err) };
+        }
+    }
+
     // Audit-log failure must never block the actual send flow.
     private async recordAttempt(
         payload: EmailPayload,

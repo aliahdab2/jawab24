@@ -31,6 +31,21 @@ export interface DmFailure {
     subcode?: number;
     fbMessage?: string;
     rawMessage: string;
+    /**
+     * True when the failure came from the TRANSPORT (network error, or a 5xx from
+     * Graph) rather than from Facebook rejecting the request on its merits.
+     *
+     * Load-bearing beyond the bucket: Graph answers some 5xx responses with a
+     * populated `error.code` — including 190 — and a consumer that reads the code
+     * alone cannot tell "your token is revoked" from "Facebook was briefly
+     * broken". `pageTokenRecovery` clears the stored token and emails the merchant
+     * on that distinction, so a `DmFailure` that cannot carry the flag lets a
+     * Graph outage present as every page in the fleet being revoked at once.
+     *
+     * `bucket` does not cover it: a payload-bearing 5xx is bucketed by its code
+     * (`our_fault`, `customer_refused`, …), never `transient`.
+     */
+    isTransport?: boolean;
 }
 
 /**
@@ -297,6 +312,7 @@ export function classifyDmError(err: unknown, platform: FbPlatform): DmFailure {
             subcode: err.subcode,
             fbMessage: err.message,
             rawMessage: err.message,
+            isTransport: false,
         };
     }
 
@@ -313,6 +329,12 @@ export function classifyDmError(err: unknown, platform: FbPlatform): DmFailure {
                 subcode,
                 fbMessage: typeof fbError.message === 'string' ? fbError.message : undefined,
                 rawMessage: err.message,
+                // A 5xx can arrive WITH a Graph payload, code and all. The bucket
+                // is chosen from that code, so it cannot carry this: a 500 whose
+                // body says 190 buckets as `our_fault`, not `transient`. Consumers
+                // that act on the code — pageTokenRecovery clears the token and
+                // mails the merchant — need the transport fact separately.
+                isTransport: !err.response || isTransientAxiosStatus(err.response.status),
             };
         }
         // No Graph payload: network/timeout/5xx

@@ -37,7 +37,18 @@ vi.mock('../services/notifications', () => ({
         sendTemplateNotification: mockNotifyUser,
     },
 }));
-vi.mock('../services/email', () => ({ emailService: { send: mockEmailSend } }));
+vi.mock('../services/email', async () => {
+    // The REAL `EmailService`, with only the transport stubbed. `trySend` is the
+    // thing under test on this path (a delivered email is what spends the dedup
+    // claim), so re-implementing it in the mock would pin my copy instead of the
+    // production contract — the drift AI_INSTRUCTIONS §19.3 forbids. Stubbing
+    // `send` keeps BOTH of its failure shapes — resolve-false and THROW —
+    // flowing through the real `trySend`.
+    const actual = await vi.importActual<typeof import('../services/email')>('../services/email');
+    const service = new actual.EmailService();
+    service.send = mockEmailSend;
+    return { ...actual, emailService: service };
+});
 vi.mock('../utils/emailTemplates', () => ({ autoPausedEmailTemplate: mockTemplate }));
 vi.mock('../config', () => ({ config: { frontendUrl: 'https://jawab24.com' } }));
 // Collaborator, not a dependency of the pause logic: recordSendFailure hands it

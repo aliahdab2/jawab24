@@ -27,6 +27,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from '../db';
 import { pages, settings, users } from '../db/schema';
 import { redis } from '../lib/redis';
+import { acquireMutex, releaseMutex } from '../lib/redisMutex';
 import { config } from '../config';
 import { facebookService } from './facebook';
 import { maybeDecryptToken, maybeEncryptToken } from './facebookCrypto';
@@ -119,6 +120,21 @@ function releaseLocally(key: string): void {
 }
 
 /**
+ * Give a claim back, whichever ledger holds it.
+ *
+ * Compare-and-delete on the Redis side (`token` is what `acquireMutex` returned,
+ * or `null` when the claim only ever landed in the per-process fallback): a blind
+ * `DEL` would also remove a claim someone else took after ours lapsed, which on
+ * the cooldown means stripping the damper from the caller still relying on it.
+ * Never throws — releasing is always best-effort, and a failure to release costs
+ * at most one extra attempt after the TTL.
+ */
+async function releaseClaim(key: string, token: string | null): Promise<void> {
+    if (token) await releaseMutex(key, token).catch(() => {});
+    releaseLocally(key);
+}
+
+/**
  * Why Facebook rejected the token. Mapped from the Graph code/subcode pairs in
  * `fbGraphErrors.TOKEN_REVOKED_CODES` — the merchant-facing half of the same
  * table, so a new code cannot be handled in one place and forgotten in the other.
@@ -177,12 +193,23 @@ function toFacebookApiError(error: unknown): FacebookApiError | DmSendError | nu
     // string-coded object from being wrapped as a Graph error at all, which is
     // cheaper to reason about than relying on a downstream guard.
     if (isCodedFailure(error)) {
-        return new FacebookApiError(error.fbMessage ?? 'Graph API error', { code: error.code, subcode: error.subcode });
+        // `isTransport` must be carried, not defaulted. Graph answers some 5xx
+        // responses with a populated `error.code` — 190 among them — and
+        // `classifyDmError` buckets those by the code, so the resulting
+        // `DmFailure` looks exactly like a revoked token. Reconstructing it here
+        // without the flag made `isTokenRevoked` say yes to a Facebook outage,
+        // which on this path means clearing the stored token of every page whose
+        // send failed during it and mailing each owner a reconnect notice.
+        return new FacebookApiError(error.fbMessage ?? 'Graph API error', {
+            code: error.code,
+            subcode: error.subcode,
+            isTransport: error.isTransport === true,
+        });
     }
     return null;
 }
 
-function isCodedFailure(error: unknown): error is { code: number; subcode?: number; fbMessage?: string } {
+function isCodedFailure(error: unknown): error is { code: number; subcode?: number; fbMessage?: string; isTransport?: boolean } {
     return typeof error === 'object'
         && error !== null
         && typeof (error as { code?: unknown }).code === 'number';
@@ -223,9 +250,16 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
     // leaves the damper in place. Redis down → fall back to the per-process
     // ledger rather than to no damper at all: `inFlight` only bounds CONCURRENT
     // callers, and the failures this damps arrive sequentially over minutes.
+    //
+    // Tokened, because this claim is RELEASED on success below. A bare `DEL`
+    // there would delete whatever is at the key — including a claim a second
+    // process took after ours lapsed on a slow `/me/accounts`, which removes the
+    // damper for the one caller still relying on it. `releaseMutex` compares
+    // before deleting, so a lapsed holder releases nothing.
+    let cooldownToken: string | null = null;
     try {
-        const claimed = await redis.set(cooldownKey(pageId), '1', 'EX', RECOVERY_COOLDOWN_SECONDS, 'NX');
-        if (claimed !== 'OK') return null;
+        cooldownToken = await acquireMutex(cooldownKey(pageId), RECOVERY_COOLDOWN_SECONDS);
+        if (!cooldownToken) return null;
     } catch {
         if (!claimLocally(cooldownKey(pageId), RECOVERY_COOLDOWN_SECONDS)) return null;
     }
@@ -311,8 +345,7 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
 
     // Recovery worked, so release the damper: a genuinely new failure minutes
     // from now deserves its own immediate attempt rather than a 5-minute wait.
-    await redis.del(cooldownKey(pageId)).catch(() => {});
-    releaseLocally(cooldownKey(pageId));
+    await releaseClaim(cooldownKey(pageId), cooldownToken);
 
     logger.info('[PageTokenRecovery] Page token re-minted from /me/accounts', { pageId, cause });
     return freshToken;
@@ -361,6 +394,48 @@ export async function withPageTokenRetry<T>(
 }
 
 /**
+ * The same contract as {@link withPageTokenRetry}, for call sites that report
+ * failure by RETURNING it instead of throwing.
+ *
+ * The comment adapters are the reason: `sendReply` resolves
+ * `{ success: false, dmFailure }` rather than rejecting, so the throw-based
+ * wrapper above never fires there — and the comment surface is precisely where
+ * the 2026-08-14 symptom was reported (an empty Post Reply picker on a page
+ * whose token had died). Without this the comment that EXPOSED the dead token is
+ * flagged `dm_failed` and never answered, while the fire-and-forget
+ * `recordSendFailure` re-mints in the background for the benefit of the NEXT
+ * customer. That is the defect this module was written to end, one surface over.
+ *
+ * Returns the token that produced the final result so the caller can ADOPT it.
+ * Borrowing it for the retry alone is not enough: a comment reply is followed by
+ * `likeComment` on the same credential, which would otherwise be issued with the
+ * token we just proved dead (the identical trap `sendProductCards` set on the DM
+ * path).
+ *
+ * `failureOf` returns the thing to classify — `undefined` for success. It is the
+ * caller's, not this function's, because only the caller knows which field of its
+ * result shape carries the Graph error.
+ */
+export async function withPageTokenRetryResult<T>(
+    pageId: string,
+    accessToken: string,
+    call: (accessToken: string) => Promise<T>,
+    failureOf: (result: T) => unknown,
+): Promise<{ result: T; accessToken: string }> {
+    const result = await call(accessToken);
+
+    const failure = failureOf(result);
+    if (failure === undefined || failure === null) return { result, accessToken };
+
+    // Returns null for anything that is not a revoked credential, so a rate
+    // limit, a blocked customer, or a 5xx costs one classification and no retry.
+    const freshToken = await handlePageTokenFailure(pageId, failure);
+    if (!freshToken) return { result, accessToken };
+
+    return { result: await call(freshToken), accessToken: freshToken };
+}
+
+/**
  * Mark the page as needing a merchant reconnect, and say WHY.
  *
  * Clears the stored token so `isConnected` turns false and the reconnect UI
@@ -387,21 +462,46 @@ export async function withPageTokenRetry<T>(
  */
 export async function markPageNeedsReconnect(page: RecoverablePage, cause: TokenFailureCause): Promise<void> {
     try {
-        // Deduped per page per day. Redis down degrades to the per-process
-        // ledger rather than to no dedup: a duplicate alert is a nuisance, a
-        // missed one costs the merchant every customer who writes while the page
-        // is dead, and 36 of them is its own outage.
+        // ⚠️ THE STATE WRITE COMES FIRST, AND IS NOT GATED BY THE ALERT DEDUP.
+        //
+        // These are two different questions and only one of them is about the
+        // merchant's attention:
+        //   "is this page's stored credential dead?" — a fact about the ROW. We
+        //      must record it every single time Facebook tells us, because every
+        //      reader of that row (isConnected, the reconnect UI, the Post Reply
+        //      picker, support triage) is answering from it.
+        //   "have we already told them today?" — a fact about the MAILBOX.
+        //
+        // Gating the first on the second re-creates the exact defect this module
+        // exists to remove. A page that dies, is reconnected, and dies again
+        // inside 24h (nothing deletes the Redis key on reconnect — see
+        // controllers/pages.ts, which restores accessToken and nulls
+        // disconnectReason) would find the claim already taken, return here, and
+        // keep a POPULATED access_token with a NULL disconnect_reason: a
+        // healthy-looking row with a dead token, no card and no email. That is
+        // 2026-08-10 and 2026-08-14 verbatim, produced by the fix for them.
+        //
+        // The same ordering also survives a failed write: the UPDATE below can
+        // throw (it is inside the outer catch), and with the claim taken first
+        // that failure would have silenced the next 24 hours of attempts.
+        //
+        // Idempotent, so repeating it costs one UPDATE — and it is reached at
+        // most once per RECOVERY_COOLDOWN_SECONDS per page anyway.
+        await db
+            .update(pages)
+            .set({ accessToken: '', disconnectReason: 'token_revoked', updatedAt: new Date() })
+            .where(eq(pages.id, page.id));
+
+        // Only the NOTIFICATION is deduped — per page per day. Redis down
+        // degrades to the per-process ledger rather than to no dedup: a duplicate
+        // alert is a nuisance, a missed one costs the merchant every customer who
+        // writes while the page is dead, and 36 of them is its own outage.
         try {
             const claimed = await redis.set(alertDedupKey(page.id), '1', 'EX', RECONNECT_ALERT_DEDUP_SECONDS, 'NX');
             if (claimed !== 'OK') return;
         } catch {
             if (!claimLocally(alertDedupKey(page.id), RECONNECT_ALERT_DEDUP_SECONDS)) return;
         }
-
-        await db
-            .update(pages)
-            .set({ accessToken: '', disconnectReason: 'token_revoked', updatedAt: new Date() })
-            .where(eq(pages.id, page.id));
 
         const pageName = page.name || 'Facebook Page';
         const data = { pageId: page.id, action: 'reconnect_page', cause, urgent: true };
@@ -438,34 +538,57 @@ export async function markPageNeedsReconnect(page: RecoverablePage, cause: Token
 
 async function emailPageOwner(page: RecoverablePage, pageName: string, cause: TokenFailureCause): Promise<void> {
     if (!page.userId) return;
+    const userId = page.userId;
+    const dedupKey = emailDedupKey(userId);
 
     // Collapse the fan-out to ONE email per owner per day. The page-scoped claim
     // in the caller cannot: the cause is per USER, so N dead pages clear N page
     // keys and produce N identical emails to the same address. Claimed before the
     // lookup so the DB read is skipped too.
+    //
+    // Tokened (`acquireMutex`) rather than a bare `SET NX`, because it now has a
+    // release path: a CAS release can only ever delete OUR claim, never one a
+    // later attempt took after this one lapsed.
+    let claimToken: string | null = null;
     try {
-        const claimed = await redis.set(emailDedupKey(page.userId), '1', 'EX', RECONNECT_EMAIL_DEDUP_SECONDS, 'NX');
-        if (claimed !== 'OK') {
+        claimToken = await acquireMutex(dedupKey, RECONNECT_EMAIL_DEDUP_SECONDS);
+        if (!claimToken) {
             logger.info('[PageTokenRecovery] Reconnect email suppressed — owner already notified today', {
-                pageId: page.id, userId: page.userId,
+                pageId: page.id, userId,
             });
             return;
         }
     } catch {
-        if (!claimLocally(emailDedupKey(page.userId), RECONNECT_EMAIL_DEDUP_SECONDS)) return;
+        if (!claimLocally(dedupKey, RECONNECT_EMAIL_DEDUP_SECONDS)) return;
     }
 
+    // A claim that did not result in a DELIVERED email must be given back (see
+    // `releaseClaim`). Holding it costs the merchant the one channel that reaches
+    // them when they are not in the app — for a full day, over a failure that was
+    // ours: the 37-hour-dark scenario with the notification switched off.
+    // `pageAutoPause.notifyMerchantAutoPaused` learned this first, and this copy
+    // did not inherit the fix — which is why the "did it deliver?" question now
+    // lives in one place, `emailService.trySend`.
     const [info] = await db
         .select({ ownerEmail: users.email, dashboardLanguage: settings.dashboardLanguage })
         .from(users)
         .leftJoin(settings, eq(settings.userId, users.id))
-        .where(and(eq(users.id, page.userId), isNotNull(users.email)))
+        .where(and(eq(users.id, userId), isNotNull(users.email)))
         .limit(1);
 
-    if (!info?.ownerEmail) return;
+    // No address on file: nothing was sent, so nothing is deduped. Releasing lets
+    // a sibling page — or the same page once the owner adds an email — try again
+    // rather than inheriting a day of silence bought by a send that never happened.
+    if (!info?.ownerEmail) {
+        await releaseClaim(dedupKey, claimToken);
+        return;
+    }
 
-    // emailService.send fails in two shapes — resolves `{success:false}` for a
-    // provider error and THROWS for a network one. Both are the same event here.
+    // `trySend`, not `send`: delivery is what the claim above is spending, and
+    // only `trySend` answers that in one value (see its docblock — `send` fails
+    // in two shapes and one of them does not look like failure).
+    let delivered = false;
+    let failureReason: string | undefined;
     try {
         const { subject, html } = pageReconnectEmailTemplate({
             lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
@@ -473,15 +596,21 @@ async function emailPageOwner(page: RecoverablePage, pageName: string, cause: To
             cause,
             dashboardUrl: `${config.frontendUrl}/pages`,
         });
-        const result = await emailService.send({
-            to: info.ownerEmail, subject, html, type: 'page_reconnect', userId: page.userId,
-        });
-        if (!result.success) throw new Error(result.error ?? 'unknown error');
+        ({ delivered, error: failureReason } = await emailService.trySend({
+            to: info.ownerEmail, subject, html, type: 'page_reconnect', userId,
+        }));
     } catch (err) {
-        captureError(err, 'pageTokenRecovery.reconnectEmailFailed', {
-            tags: { component: 'page-token-recovery' },
-            extra: { pageId: page.id, userId: page.userId },
-        });
+        // Template rendering, not the send — `trySend` never throws.
+        failureReason = err instanceof Error ? err.message : String(err);
+    }
+
+    if (!delivered) {
+        await releaseClaim(dedupKey, claimToken);
+        captureError(
+            new Error(`Reconnect email failed for page ${page.id}: ${failureReason ?? 'unknown error'}`),
+            'pageTokenRecovery.reconnectEmailFailed',
+            { tags: { component: 'page-token-recovery' }, extra: { pageId: page.id, userId } },
+        );
     }
 }
 

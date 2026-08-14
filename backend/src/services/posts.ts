@@ -809,7 +809,7 @@ export class PostsService {
                 facebookService.getPagePosts(facebookPageId, accessToken, { limit, after: opts.after }),
                 wantScheduled
                     ? facebookService.getScheduledPosts(facebookPageId, accessToken)
-                    : Promise.resolve({ posts: [], failed: false, truncated: false, error: undefined as unknown }),
+                    : Promise.resolve({ posts: [], failed: false, truncated: false, error: undefined }),
             ]);
 
             let [published, scheduled] = await readSlice(page.accessToken);

@@ -29,6 +29,50 @@ interface GraphAttachment {
     subattachments?: { data?: GraphAttachment[] };
 }
 
+/**
+ * Turn a failed fail-soft Graph READ into the error shape a caller may safely
+ * hold, log and forward, and report it to Sentry with groupable numeric tags.
+ *
+ * ⚠️ NEVER return the AxiosError itself. The reads below fail soft, so the error
+ * is RETURNED rather than thrown — and a returned object travels much further
+ * than a caught one (`controllers/posts.ts` does `request.log.error(error)`).
+ * `AxiosError.toJSON` — what `JSON.stringify`, pino and Sentry all reach for —
+ * serialises `config`, and `config.params.access_token` on these calls is the
+ * page's LIVE credential. `FacebookApiError` carries exactly what the one
+ * consumer (`pageTokenRecovery`) reads — code, subcode, isTransport, message —
+ * and nothing that is a secret.
+ *
+ * ⚠️ The Graph code/subcode go in TAGS, never only inside the free-text detail.
+ * Sentry's server-side scrubbing replaced `extra.error` with "[Filtered]" on
+ * JAWAB24-BACKEND-1Z (the message contains "access token"), so the alert that
+ * exists to explain this failure could not explain it — the cause had to be read
+ * off the server by SSH. Numbers in tags survive scrubbing and are groupable.
+ *
+ * Shared by both post-list edges on purpose: the 2026-08-14 incident was
+ * diagnosed off `/posts`, and instrumenting only `scheduled_posts` would leave
+ * the edge that actually failed as invisible as it was that day.
+ */
+function reportGraphReadFailure(
+    error: unknown,
+    opts: { pageId: string; message: string; fingerprint: string; detail: string },
+): FacebookApiError | undefined {
+    const fbError = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: { code?: unknown; error_subcode?: unknown } } | undefined)?.error
+        : undefined;
+    Sentry.captureMessage(opts.message, {
+        level: 'warning',
+        fingerprint: [opts.fingerprint, opts.pageId],
+        tags: {
+            fb_code: typeof fbError?.code === 'number' ? String(fbError.code) : 'none',
+            fb_subcode: typeof fbError?.error_subcode === 'number' ? String(fbError.error_subcode) : 'none',
+        },
+        extra: { pageId: opts.pageId, error: opts.detail },
+    });
+    return axios.isAxiosError(error)
+        ? FacebookApiError.fromAxios(error, opts.message)
+        : undefined;
+}
+
 /** Flatten a post's attachment tree into unique full-res photo URLs. An album's
  *  parent node repeats the first child image — the Set dedupes it. Videos and
  *  links carry preview images too; only media_type "photo"/"album" count. */
@@ -602,7 +646,7 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number; after?: string; fullImages?: boolean },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null; failed: boolean; error?: unknown }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null; failed: boolean; error?: FacebookApiError }> {
         try {
             const attachmentFields = opts?.fullImages
                 ? ',attachments{media_type,media{image{src}},subattachments.limit(20){media_type,media{image{src}}}}'
@@ -629,18 +673,27 @@ export class FacebookService {
             const nextCursor = (response.data?.paging?.cursors?.after as string) || null;
             return { posts, nextCursor, failed: false };
         } catch (error) {
-            if (axios.isAxiosError(error)) {
-                this.logger.error('[Facebook] Error listing page posts', {
-                    pageId,
-                    error: error.response?.data?.error?.message || error.message,
-                });
-            }
+            const detail = axios.isAxiosError(error)
+                ? error.response?.data?.error?.message || error.message
+                : String(error);
+            this.logger.error('[Facebook] Error listing page posts', { pageId, error: detail });
             // The error rides along with `failed` rather than being swallowed:
             // a caller that owns the page row can tell a dead CREDENTIAL from a
             // Graph blip and start recovery (services/pageTokenRecovery.ts).
             // Degrading to an empty list while discarding the one fact that
             // explains it is what made the 2026-08-14 outage invisible.
-            return { posts: [], nextCursor: null, failed: true, error };
+            //
+            // Normalised, never the raw axios error — see `reportGraphReadFailure`
+            // for why returning that object would publish the page token.
+            return {
+                posts: [], nextCursor: null, failed: true,
+                error: reportGraphReadFailure(error, {
+                    pageId,
+                    message: 'Failed to list page posts',
+                    fingerprint: 'fb-page-posts-read-failed',
+                    detail,
+                }),
+            };
         }
     }
 
@@ -664,7 +717,7 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean; truncated: boolean; error?: unknown }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean; truncated: boolean; error?: FacebookApiError }> {
         const limit = opts?.limit ?? SCHEDULED_POSTS_MAX;
         try {
             const response = await traced('getScheduledPosts', () =>
@@ -692,26 +745,15 @@ export class FacebookService {
             // Sentry too: the caller degrades to "no scheduled posts", so without this a
             // broken permission on this edge is invisible on BOTH sides — the merchant
             // sees an empty list and we see nothing at all.
-            //
-            // ⚠️ The Graph code/subcode go in TAGS, never only inside the free-text
-            // detail. Sentry's server-side scrubbing replaced `extra.error` with
-            // "[Filtered]" on JAWAB24-BACKEND-1Z (the message contains "access
-            // token"), so the alert that exists to explain this failure could not
-            // explain it — the cause had to be read off the server by SSH. Numbers
-            // in tags survive scrubbing and are groupable/searchable.
-            const fbError = axios.isAxiosError(error)
-                ? (error.response?.data as { error?: { code?: unknown; error_subcode?: unknown } } | undefined)?.error
-                : undefined;
-            Sentry.captureMessage('Failed to list scheduled posts', {
-                level: 'warning',
-                fingerprint: ['fb-scheduled-posts-read-failed', pageId],
-                tags: {
-                    fb_code: typeof fbError?.code === 'number' ? String(fbError.code) : 'none',
-                    fb_subcode: typeof fbError?.error_subcode === 'number' ? String(fbError.error_subcode) : 'none',
-                },
-                extra: { pageId, error: detail },
-            });
-            return { posts: [], failed: true, truncated: false, error };
+            return {
+                posts: [], failed: true, truncated: false,
+                error: reportGraphReadFailure(error, {
+                    pageId,
+                    message: 'Failed to list scheduled posts',
+                    fingerprint: 'fb-scheduled-posts-read-failed',
+                    detail,
+                }),
+            };
         }
     }
 

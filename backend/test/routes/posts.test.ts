@@ -549,6 +549,34 @@ describe('Posts Routes', () => {
             expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null, partial: false });
             expect(postsService.listPublishedPosts).not.toHaveBeenCalled();
         });
+
+        it('reports the list as PARTIAL when the page has no usable token', async () => {
+            // `partial: false` is an assertion that the merchant has no posts, and
+            // it is the wrong one when the CREDENTIAL is what is missing.
+            // `pageTokenRecovery.markPageNeedsReconnect` blanks `access_token` the
+            // moment Facebook confirms it is revoked, so without this the first
+            // failure moves the page from "read failed → partial: true" to a
+            // confidently COMPLETE empty list — the 2026-08-14 screen («لا توجد
+            // منشورات حديثة على هذه الصفحة») with its last remaining clue removed.
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: '' } as any);
+
+            const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts' });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null, partial: true });
+            // Still no Graph call — there is nothing to call with.
+            expect(postsService.listPublishedPosts).not.toHaveBeenCalled();
+        });
+
+        it('keeps "source not connected" COMPLETE even when the token is also blank', async () => {
+            // The counterweight: an unconnected source has no list to be missing
+            // anything from, so it must not start claiming to be partial.
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: '' } as any);
+
+            const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts?source=instagram' });
+
+            expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null, partial: false });
+        });
     });
 
     describe('POST /posts/ensure', () => {

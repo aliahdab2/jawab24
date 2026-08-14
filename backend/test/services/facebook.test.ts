@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
+import * as Sentry from '@sentry/node';
 import { fbAxios } from '../../src/lib/fbAxios';
 import { FacebookService } from '../../src/services/facebook';
 
@@ -959,6 +960,88 @@ describe('Facebook Service', () => {
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getLongLivedToken('invalid_token')).rejects.toThrow('Facebook API error');
+        });
+    });
+
+    // ⛔ Both post-list edges FAIL SOFT: the error is RETURNED, not thrown. A
+    // returned object travels much further than a caught one — `controllers/posts.ts`
+    // does `request.log.error(error)` — so what rides on it is a publishing
+    // decision, not an implementation detail.
+    describe('post-list reads — the returned error is safe to hold and log', () => {
+        /** An AxiosError shaped like a real Graph rejection: the page token is in
+         *  `config.params`, exactly where `AxiosError.toJSON` would serialise it. */
+        function graphRejection(status: number, code: number, subcode?: number) {
+            return {
+                isAxiosError: true,
+                message: `Request failed with status code ${status}`,
+                config: {
+                    url: 'https://graph.facebook.com/v18.0/page_123/posts',
+                    params: { fields: 'id,message', access_token: 'EAAG-SUPER-SECRET-PAGE-TOKEN' },
+                },
+                response: {
+                    status,
+                    data: { error: { message: 'Error validating access token', code, error_subcode: subcode, type: 'OAuthException' } },
+                },
+                toJSON() { return { message: this.message, config: this.config }; },
+            };
+        }
+
+        beforeEach(() => {
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+        });
+
+        it.each([
+            ['getPagePosts', (s: FacebookService) => s.getPagePosts('page_123', 'EAAG-SUPER-SECRET-PAGE-TOKEN')],
+            ['getScheduledPosts', (s: FacebookService) => s.getScheduledPosts('page_123', 'EAAG-SUPER-SECRET-PAGE-TOKEN')],
+        ])('%s never returns the raw AxiosError — that would publish the page token', async (_name, read) => {
+            vi.mocked(fbAxios.get).mockRejectedValue(graphRejection(400, 190, 460));
+
+            const result = await read(service);
+
+            expect(result.failed).toBe(true);
+            // The property that matters, stated the way a leak actually happens:
+            // something downstream serialises it.
+            expect(JSON.stringify(result.error)).not.toContain('EAAG-SUPER-SECRET-PAGE-TOKEN');
+            expect(JSON.stringify(result.error ?? {})).not.toContain('access_token');
+            // …and there is no axios `config` hanging off it at all.
+            expect((result.error as unknown as { config?: unknown })?.config).toBeUndefined();
+        });
+
+        it('still carries the code/subcode recovery classifies on', async () => {
+            // The leak fix must not cost the diagnosis: pageTokenRecovery reads
+            // exactly these fields to tell a dead credential from a Graph blip.
+            vi.mocked(fbAxios.get).mockRejectedValue(graphRejection(400, 190, 460));
+
+            const result = await service.getPagePosts('page_123', 'tok');
+
+            expect(result.error).toMatchObject({ code: 190, subcode: 460, isTransport: false });
+        });
+
+        it('flags a 5xx as transport, so an outage is not read as a revoked token', async () => {
+            vi.mocked(fbAxios.get).mockRejectedValue(graphRejection(500, 190, 460));
+
+            const result = await service.getPagePosts('page_123', 'tok');
+
+            expect(result.error?.isTransport).toBe(true);
+        });
+
+        it('reports the /posts edge to Sentry with groupable numeric tags', async () => {
+            // The incident was diagnosed off `/posts`; instrumenting only
+            // `scheduled_posts` would leave the failing edge as invisible as it
+            // was on 2026-08-14. Tags, not free text: Sentry's server-side
+            // scrubbing replaced `extra.error` with "[Filtered]" on
+            // JAWAB24-BACKEND-1Z because the message contains "access token".
+            vi.mocked(fbAxios.get).mockRejectedValue(graphRejection(400, 190, 460));
+
+            await service.getPagePosts('page_123', 'tok');
+
+            expect(Sentry.captureMessage).toHaveBeenCalledWith(
+                'Failed to list page posts',
+                expect.objectContaining({
+                    fingerprint: ['fb-page-posts-read-failed', 'page_123'],
+                    tags: { fb_code: '190', fb_subcode: '460' },
+                }),
+            );
         });
     });
 

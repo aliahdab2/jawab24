@@ -246,19 +246,11 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
             // Redis unreachable — send anyway (see above).
         }
 
-        // The dedup key is released on ANY outcome that isn't a delivered email —
-        // hence the `finally`, not a check on `result.success` alone.
-        //
-        // emailService.send fails in TWO shapes and they need identical handling:
-        //   - it RESOLVES with { success: false } for a provider-level failure
-        //     (Resend 4xx/5xx, unconfigured API key), and
-        //   - it THROWS for a network-level one — there is no try/catch around its
-        //     `fetch`, so DNS failure, socket reset, TLS error and timeout all
-        //     propagate as a raw TypeError.
-        // Only the first shape was released before, which left the far more likely
-        // outage shape holding the key for the full 24h. The crossing guard
-        // guarantees no retry inside that window, so the merchant simply never
-        // heard about a page that had stopped answering.
+        // The dedup key is released on ANY outcome that isn't a DELIVERED email —
+        // never on `result.success` alone. `emailService.trySend` owns that
+        // distinction (its docblock explains why `send` cannot be asked
+        // directly); this used to re-derive it here, and the copy of this code in
+        // `pageTokenRecovery` inherited the pre-correction version. One home now.
         let emailed = false;
         let failureReason: string | undefined;
         try {
@@ -267,10 +259,11 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
                 pageName,
                 dashboardUrl: `${config.frontendUrl}/dashboard`,
             });
-            const result = await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
-            emailed = result.success;
-            failureReason = result.error;
+            ({ delivered: emailed, error: failureReason } = await emailService.trySend({
+                to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId,
+            }));
         } catch (err) {
+            // Template rendering, not the send — `trySend` never throws.
             failureReason = err instanceof Error ? err.message : String(err);
         } finally {
             if (!emailed && dedupKeyClaimed) {
@@ -333,13 +326,36 @@ export async function recordSendFailure(
     // every send path flows through; a new caller cannot forget it. `undefined`
     // is the comment pipelines, which are Facebook/Instagram-only by construction
     // (there is no WhatsApp comment adapter).
+    //
+    // ⚠️ Its OWN error boundary, for two independent reasons.
+    //
+    // 1. Both production callers dispatch `recordSendFailure` with `void`
+    //    (messageProcessor, commentProcessor), so anything escaping this function
+    //    is an unhandled promise rejection rather than a Sentry event.
+    //    `handlePageTokenFailure` promises never to throw — but "the callee
+    //    promises" is not an error boundary, and this one is reached on the
+    //    failure path of every send.
+    // 2. Recovery and the pause counter are separate concerns and must not be
+    //    able to take each other down. Sharing the counter's `try` looks safe and
+    //    is not: a recovery that blew up would skip the UPDATE below, and that
+    //    counter is the entire basis of the ten-failure pause threshold. Same
+    //    reasoning as the notification's own `try` in
+    //    `pageTokenRecovery.markPageNeedsReconnect`.
     if (failure !== undefined && ownsFacebookCredential(platform)) {
-        await handlePageTokenFailure(pageId, failure);
+        try {
+            await handlePageTokenFailure(pageId, failure);
+        } catch (err) {
+            captureError(err, 'pageAutoPause.tokenRecoveryFailed', {
+                tags: { component: 'pageAutoPause' },
+                extra: { pageId, bucket, platform },
+            });
+        }
     }
 
     if (!isPageLevelFailure(bucket)) return;
 
     try {
+
         // Single UPDATE: bump counter, and if it would cross threshold, pause atomically.
         // The CASE WHEN means we don't need a SELECT-then-UPDATE round trip.
         const [row] = await db
