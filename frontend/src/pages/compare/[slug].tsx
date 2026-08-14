@@ -23,8 +23,11 @@ interface ComparePageProps {
 }
 
 function FeatureValue({ value }: { value: boolean | string }) {
+  const t = useTranslations('compare');
+  // A string value is an i18n key under `compare.val.*`, never display text —
+  // see the CompetitorFeature doc comment in data/competitors.ts.
   if (typeof value === 'string') {
-    return <span className="text-foreground font-medium">{value}</span>;
+    return <span className="text-foreground font-medium">{t(k(`val.${value}`))}</span>;
   }
   if (value) {
     return <Check className="w-5 h-5 text-green-600 dark:text-green-400 mx-auto" aria-hidden="true" />;

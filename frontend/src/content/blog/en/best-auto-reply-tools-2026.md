@@ -40,7 +40,7 @@ The downside? You need to build those flows. Setting up ManyChat properly takes 
 
 Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla and Zid integration doesn't exist. Comment replies are basic compared to DM flows.
 
-Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/en/compare/manychat)
+Starts at $14/month (Essential), but that tier has no AI at all — AI replies to DMs and comments begin on the $29/month Pro tier. Pricing is per active contact, not per reply. [See our full Jawab24 vs ManyChat comparison →](/en/compare/manychat)
 
 ### Chatfuel
 
@@ -106,7 +106,7 @@ Here's how the tools stack up across the features that matter most:
 | Angry customer alerts | No | No | No | No | Push notification |
 | Confidence scoring | No | No | No | No | Yes |
 | Auto-pause on manual reply | No | No | No | No | Yes |
-| Starting price | $15/mo | $14.99/mo | $29/mo | Free* | $15/mo |
+| Starting price | $14/mo (AI from $29) | $14.99/mo | $29/mo | Free* | $15/mo |
 
 *Botpress free tier has usage limits.
 
