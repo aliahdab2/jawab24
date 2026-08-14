@@ -103,7 +103,12 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
     <>
       {/* Owns its own bottom margin: the dashboard renders this unwrapped, so a
           null return (every non-pilot workspace) must leave NO stray gap. */}
-      <div className="mb-8 p-4 sm:p-5 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800">
+      {/* A quieter ground. The card used to shout with a brand-tinted fill and
+          a brand-coloured border, competing with the inbox below it on COLOUR
+          rather than on content — while the one genuinely eye-catching thing
+          it owns, the generated image, sat inside that noise. Plain card
+          surface, hairline border, and the picture does the attracting. */}
+      <div className="mb-8 p-4 sm:p-5 rounded-2xl border border-theme-border bg-card">
         {/* Wraps on narrow screens: the action drops to its own full-width row
             instead of squeezing the preview. One DOM, responsive — never a
             duplicated mobile/desktop copy. */}
@@ -139,11 +144,12 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
               <h2 className="text-sm sm:text-base font-semibold text-brand-900 dark:text-brand-200">
                 {t('cardTitle')}
               </h2>
-              {hasPost && suggestion && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-500/10 dark:bg-brand-400/15 text-brand-800 dark:text-brand-300">
-                  {t(`type_${suggestion.postType}`)}
-                </span>
-              )}
+              {/* The angle chip («تفاعل» / «عرض ساري») is gone. It named an
+                  INTERNAL taxonomy — the variety picker's post_type — which
+                  tells the merchant nothing they can act on, while sitting in
+                  the highest-contrast spot on the card and competing with the
+                  post's own opening line for the glance. The value is still
+                  stored and still steers generation; it just is not chrome. */}
             </div>
             <p
               dir="auto"
@@ -175,8 +181,23 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           </Button>
         </div>
 
+        {/* ONE scrolling row, never a wrapping block.
+            Measured on the running app with 6 connected pages: `flex-wrap` put
+            the switcher on TWO rows occupying as much vertical space as the
+            post itself, which made the card the busiest thing on the dashboard
+            for a merchant who has not asked to switch anything. A horizontal
+            strip keeps the card a fixed height no matter how many pages a
+            workspace connects — and page count only grows.
+
+            `overflow-x-auto` + `shrink-0` on the pills is the standard chip-row
+            pattern; the row scrolls, the page body never does (Rule: wide
+            content scrolls inside its own container). */}
         {eligiblePages.length > 1 && (
-          <div role="tablist" aria-label={t('pageSwitcher')} className="flex flex-wrap gap-1.5 mt-3">
+          <div
+            role="tablist"
+            aria-label={t('pageSwitcher')}
+            className="flex gap-1.5 mt-3 overflow-x-auto pb-1 -mb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {eligiblePages.map((p) => {
               const active = p.id === pageId;
               return (
@@ -187,7 +208,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                   aria-selected={active}
                   onClick={() => setSelectedId(p.id)}
                   className={clsx(
-                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors max-w-[12rem] truncate',
+                    'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors max-w-[12rem] truncate',
                     active
                       ? 'bg-brand-500 text-white border-brand-500'
                       : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',

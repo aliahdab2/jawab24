@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Page } from '@jawab24/shared';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
-import arPostSuggestions from '@/i18n/ar/postSuggestions.json';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
 const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
@@ -114,14 +113,23 @@ describe('PostSuggestionCard — the card previews the REAL post', () => {
     createdAt: '2026-08-10T05:00:00Z',
   };
 
-  it('shows the thumbnail, the angle badge, and the post text — not a generic banner', async () => {
+  it('shows the thumbnail and the post text — not a generic banner', async () => {
     mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
     renderCard();
 
     const thumb = await screen.findByAltText(enPostSuggestions.postImageAlt);
     expect(thumb).toHaveAttribute('src', WITH_IMAGE.imageUrl);
     expect(screen.getByText(WITH_IMAGE.text)).toBeInTheDocument();
-    expect(screen.getByText(enPostSuggestions.type_promo)).toBeInTheDocument();
+  });
+
+  it('does NOT show the angle badge — it named an internal taxonomy, not anything the merchant can act on', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
+    renderCard();
+
+    await screen.findByText(WITH_IMAGE.text);
+    // `postType` is still stored and still steers generation; it is just no
+    // longer chrome competing with the post's opening line for the glance.
+    expect(screen.queryByText(enPostSuggestions.type_promo)).not.toBeInTheDocument();
   });
 
   it('a TEXT-ONLY post (image degraded) renders the brand tile, never a broken frame', async () => {
@@ -176,24 +184,17 @@ describe('PostSuggestionCard — the card previews the REAL post', () => {
   });
 });
 
-describe('postSuggestions Arabic plural — all six CLDR forms compile and the dual renders', () => {
-  // The suite-wide next-intl mock resolves EN messages with English plural
-  // rules, so the Arabic `remaining` message — the one string in this feature
-  // carrying all six CLDR forms — would otherwise never execute: a malformed
-  // two{}/few{} branch would throw at render, in production, in Arabic only.
-  // Format it through the REAL next-intl translator (vi.importActual bypasses
-  // the mock) with the REAL ar JSON, which parses the full ICU message.
-  it('count: 2 produces the dual form', async () => {
-    const { createTranslator } = await vi.importActual<typeof import('next-intl')>('next-intl');
-    const t = createTranslator({
-      locale: 'ar',
-      messages: { postSuggestions: arPostSuggestions },
-      namespace: 'postSuggestions',
-    });
-    render(<p>{t('remaining', { count: 2 })}</p>);
-    expect(screen.getByText('محاولتان متبقيتان اليوم')).toBeInTheDocument();
-  });
-});
+/**
+ * The Arabic six-form plural guard that used to live here has MOVED to
+ * test/i18n/arabicPlurals.test.ts.
+ *
+ * It aimed at one string, `postSuggestions.remaining`, which no longer exists —
+ * the attempt count moved onto the create button as a bare parenthesised number
+ * and needs no plural. Rather than delete the coverage, it was generalised: the
+ * new file discovers EVERY six-form Arabic plural across every namespace (97
+ * messages in 20 files, where this guarded 1) and formats each through the real
+ * translator at all six CLDR boundaries.
+ */
 
 /**
  * A generation the merchant started can still be running when the dashboard

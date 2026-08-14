@@ -254,9 +254,16 @@ its own decision.
   production on 11 Aug a page's three attempts produced its best post FIRST and the third
   erased it — and it was backwards economically, an image costing ~$0.0064 to generate
   and a fraction of a cent a year to store. So **a `superseded` row is a LIVE, REFERENCED
-  row**: it keeps `image_url` / `image_key` and every `variants[].imageKey`, and the
-  merchant's history strip renders those objects. Supersede is now a status relabel and
-  touches storage not at all.
+  row**: it keeps `image_url` / `image_key` and every `variants[].imageKey`. Supersede is
+  now a status relabel and touches storage not at all.
+  ⚠️ **The earlier-posts strip that used to render these objects was removed from the
+  sheet on 2026-08-14** (owner: «I do not see any benefit for it»). That does NOT relax
+  anything here. The rows are still written, still `superseded` rather than deleted, and
+  the read route still serves them — only the UI stopped drawing them. Read "REFERENCED"
+  as **retained by policy**, not as "some screen currently paints it": the whole point of
+  the 11 Aug fix was that the merchant's earlier work survives, and a sweep justified by
+  "nothing renders it any more" would re-create exactly the loss D-077 repaired, silently
+  and for every page at once.
   Consequences to respect:
   - **Nothing but page delete removes a `generated-posts/` object.** There is no other
     sweep, and there must not be an age-based one — every row that names a key is live.

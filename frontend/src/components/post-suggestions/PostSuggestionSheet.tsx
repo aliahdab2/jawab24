@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useTranslations, useLocale } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto, type PostSuggestionHistoryItem, type PostSuggestionInFlight } from '@jawab24/shared';
+import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto, type PostSuggestionInFlight } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -72,10 +72,6 @@ export function PostSuggestionSheet({
 }) {
   const t = useTranslations('postSuggestions');
   const tc = useTranslations('common');
-  // Dates in the history strip are formatted in the merchant's own locale —
-  // never a hardcoded 'ar'/'en' ternary, and never the browser default, which
-  // ignores the language they chose in the app.
-  const locale = useLocale();
   const { copied, copy } = useCopyToClipboard();
 
   const [suggestion, setSuggestion] = useState<PostSuggestionDto | null>(initial?.suggestion ?? null);
@@ -109,15 +105,12 @@ export function PostSuggestionSheet({
   // the sheet. Forced open when either box has content so a request can never
   // be sent from a panel the merchant cannot see.
   const [requestOpen, setRequestOpen] = useState(false);
-  // The posts this page made before the current one. Creating another used to
-  // DELETE the one it replaced (text and image); they are kept now, so the
-  // merchant can go back to one they preferred. `[]` = none yet; an absent
-  // field on the response leaves whatever we already had rather than blanking
-  // the strip on a payload that simply didn't carry it.
-  const [history, setHistory] = useState<PostSuggestionHistoryItem[]>(initial?.history ?? []);
-  // Earlier posts whose thumbnail failed to load (a missing object) — they fall
-  // back to the brand tile instead of a broken frame, same as the card.
-  const [failedThumbs, setFailedThumbs] = useState<string[]>([]);
+  // ⚠️ NO `history` state. The earlier-posts strip was removed on 2026-08-14
+  // (owner: «I do not see any benefit for it»). The ROWS are untouched — they
+  // are still written, still `superseded` rather than deleted, and the read
+  // route still serves them — so restoring the strip is a UI change alone.
+  // See backend/docs/OBJECT_STORAGE.md §9: those rows keep their images, and
+  // that exemption now rests on retention, not on this UI referencing them.
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
@@ -193,7 +186,6 @@ export function PostSuggestionSheet({
             setSuggestion(recovered);
             setInFlight(running);
             setRemaining(latest.data.remainingToday);
-            if (latest.data.history) setHistory(latest.data.history);
             // A row that already ENDED in failure is a real failure to report —
             // but as the generation error, not the "we have no idea" one.
             if (running?.status === 'failed') setError(t('errorGeneration'));
@@ -241,6 +233,39 @@ export function PostSuggestionSheet({
   // typed work is the exact failure this whole feature exists to end. A
   // REGENERATE mints a new id, which is the case that genuinely must reset.
   const suggestionId = suggestion?.id ?? null;
+  /**
+   * The auto-generate that runs when a sheet opens on nothing.
+   *
+   * Opened WITHOUT a seed (`initial` null — the card's own read had not landed
+   * when the merchant pressed), the cap is UNKNOWN, and firing blind is the
+   * remaining way a merchant at a spent cap meets `errorDailyCap` without
+   * having pressed anything here. So resolve the state first, then decide: one
+   * extra GET, paid only on that rare unseeded path and never on the CTA path,
+   * which always arrives with `initial`.
+   *
+   * A GET that itself fails falls THROUGH to generate rather than blocking —
+   * the route fails closed server-side, so the worst case is the old behaviour
+   * rather than a merchant denied attempts they actually hold.
+   */
+  const autoGenerate = useCallback(async () => {
+    if (remaining === null) {
+      try {
+        const latest = await postSuggestionsApi.getCurrent(pageId);
+        setSuggestion(latest.data.suggestion);
+        setInFlight(latest.data.inFlight ?? null);
+        setRemaining(latest.data.remainingToday);
+        onChanged(latest.data);
+        // Anything the read turns up — a finished post, an attempt already
+        // running, or a spent cap — is a reason NOT to claim a paid slot.
+        if (latest.data.suggestion || latest.data.inFlight || latest.data.remainingToday === 0) return;
+      } catch {
+        // Deliberately swallowed: the fall-through to generate() is the
+        // recovery, and the route decides. Nothing here is user-visible.
+      }
+    }
+    await generate();
+  }, [remaining, pageId, generate, onChanged]);
+
   useEffect(() => {
     setEditsByVariant({});
     setVariantIndex(suggestion?.selectedVariant ?? 0);
@@ -251,12 +276,19 @@ export function PostSuggestionSheet({
     if (suggestion && !stampedOpen.current) {
       stampedOpen.current = true;
       stamp(suggestion.id, 'opened');
-    } else if (!suggestion && !inFlight && !loading && !error && canGenerate && !autoGenerated.current) {
+    } else if (!suggestion && !inFlight && !loading && !error && canGenerate && remaining !== 0 && !autoGenerated.current) {
       // Nothing to show AND nothing already running. The `!inFlight` guard is
       // what stops a sheet opened over a generation someone else started (or
       // one the merchant left running) from spending a second capped slot.
+      //
+      // `remaining !== 0` is what stops the sheet from firing a request the
+      // server will refuse: at a spent cap this effect used to auto-generate on
+      // OPEN and surface `errorDailyCap` — an error the merchant never asked
+      // for, since no button of theirs was pressed. A confirmed 0 is the only
+      // value that blocks; `null` (cap store unreachable) still generates, and
+      // the route fails closed behind it.
       autoGenerated.current = true;
-      void generate();
+      void autoGenerate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + new-suggestion only
   }, [suggestionId]);
@@ -304,7 +336,6 @@ export function PostSuggestionSheet({
           setSuggestion(res.data.suggestion);
           setInFlight(next);
           setRemaining(res.data.remainingToday);
-          if (res.data.history) setHistory(res.data.history);
           setError(next?.status === 'failed' ? t('errorGeneration') : null);
           onChanged(res.data);
         })
@@ -433,7 +464,10 @@ export function PostSuggestionSheet({
             auto-generates in an effect, i.e. one frame later — an ungated CTA
             would flash there, and a click landing in that frame would spend a
             second capped slot on top of the one the effect is about to. */}
-        {!working && !suggestion && (inFlight || error || !canGenerate) && (
+        {/* `remaining === 0` earns its place in this list now that a spent cap
+            no longer auto-generates: without it the sheet would open on a
+            blank body — no post, no attempt, no error to explain the void. */}
+        {!working && !suggestion && (inFlight || error || !canGenerate || remaining === 0) && (
           <div className="py-8 text-center space-y-3">
             <Sparkles className="w-6 h-6 mx-auto text-brand-500" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">{t('cardDesc')}</p>
@@ -461,8 +495,7 @@ export function PostSuggestionSheet({
               // control: `surface-100` is synced to `--card` in dark mode, so a
               // track drawn with it disappears and takes the active pill's
               // contrast with it. Brand fill reads in both themes.
-              <div>
-                <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
+              <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
                   {variants.map((variant, index) => (
                     <button
                       key={index}
@@ -485,15 +518,6 @@ export function PostSuggestionSheet({
                       {variantLens(index, t)}
                     </button>
                   ))}
-                </div>
-                {/* The takes really do differ — take 1 leads on the offer, 2 on
-                    the customer's question, 3 on the outcome — but numbered
-                    tabs hid that behind three taps of reading. The opening line
-                    of the SELECTED take is the honest one-glance answer: it is
-                    the content itself, not a claim about it. */}
-                <p dir="auto" className="mt-1.5 text-[11px] text-subtle line-clamp-1">
-                  {firstLine(activeText)}
-                </p>
               </div>
             )}
 
@@ -553,25 +577,32 @@ export function PostSuggestionSheet({
               </div>
             )}
 
-            {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version.
-                The label is not decoration: an outside reviewer read this sheet
-                and reported editing as MISSING, because a bordered grey block of
-                text reads as output, not as an input. Saying so costs one line. */}
-            <label className="block">
-              <span className="flex items-center gap-1.5 mb-1.5 text-xs font-medium text-muted-foreground">
-                <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                {t('editTextLabel')}
-              </span>
+            {/* THE POST. It is the product, so it is read as a post — not as a
+                form field wearing a label.
+
+                An outside reviewer once read this sheet and reported editing as
+                MISSING, and the fix then was a «عدّل نص المنشور» caption above
+                it. That treated a VISUAL problem with a sentence: the field
+                looked like output, so we wrote a line explaining it was not.
+                The caption is gone and the affordance is now visual and
+                permanent — a pencil sitting in the corner of the field, and a
+                hover/focus border. The accessible name carries what the caption
+                said, so a screen-reader user is told it is editable exactly as
+                before. */}
+            <div className="relative">
+              <Pencil
+                className="pointer-events-none absolute top-2.5 end-2.5 w-3.5 h-3.5 text-icon-muted"
+                aria-hidden="true"
+              />
               <textarea
                 dir="auto"
+                aria-label={t('editTextLabel')}
                 value={activeText}
                 onChange={(e) => setEditsByVariant((prev) => ({ ...prev, [activeIndex]: e.target.value }))}
                 rows={Math.min(10, Math.max(4, activeText.split('\n').length + 1))}
-                className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-brand-300"
+                className="w-full rounded-xl border border-transparent bg-transparent p-3 pe-8 text-sm text-foreground text-start leading-relaxed resize-y transition-colors hover:border-theme-border focus:border-theme-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-brand-300"
               />
-            </label>
-
-            <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
+            </div>
 
             {canRegenerate && (
               /* ASK — post-first (owner ruling 2026-08-13). The post is already
@@ -586,9 +617,15 @@ export function PostSuggestionSheet({
                  gets keyboard, screen-reader and open-state behaviour right for
                  free. `open` is CONTROLLED so a box with content can never be
                  collapsed out of sight while it is still what would be sent. */
+              /* A HAIRLINE, not a card. This panel used to be a bordered,
+                 filled box sitting inside the sheet's own box, with the
+                 history disclosure making a third — box inside box inside
+                 box was half of what made this sheet feel crowded. A single
+                 top rule separates "the post" from "ask for another" just as
+                 well and adds no enclosure. */
               <details
                 open={requestOpen || Boolean(brief || imageRequest)}
-                className="rounded-xl border border-theme-border bg-card"
+                className="border-t border-theme-border pt-1"
               >
                 {/* The native toggle is SUPPRESSED and the state owned here.
                     A <details> whose `open` is a prop is only half-controlled:
@@ -605,13 +642,13 @@ export function PostSuggestionSheet({
                     if (brief || imageRequest) { setRequestOpen(true); return; }
                     setRequestOpen((open) => !open);
                   }}
-                  className="flex items-center gap-2 min-h-[44px] px-3 text-xs font-medium text-muted-foreground cursor-pointer select-none"
+                  className="flex items-center gap-2 min-h-[44px] text-xs font-medium text-muted-foreground cursor-pointer select-none"
                 >
-                  <Pencil className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                   {t('askLabel')}
                 </summary>
 
-                <div className="px-3 pb-3 space-y-3">
+                <div className="pb-1 space-y-3">
                   {/* What the post should SAY. */}
                   <label className="block">
                     <span className="block mb-1.5 text-xs font-medium text-muted-foreground">{t('briefLabel')}</span>
@@ -643,8 +680,10 @@ export function PostSuggestionSheet({
                     />
                   </label>
 
-                  <p className="text-[11px] text-subtle">{t('askHint')}</p>
-
+                  {/* «اترك الحقلين فارغين ونختار…» removed: it explained the
+                      default behaviour of two fields already marked
+                      «(اختياري)», to a merchant who has just chosen to open a
+                      panel they did not have to open. */}
                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -658,74 +697,23 @@ export function PostSuggestionSheet({
               </details>
             )}
 
-            {/* null = unknown — assert neither a count nor "exhausted". */}
-            {remaining !== null && (
-              <p className="text-xs text-subtle">
-                {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}
-              </p>
+            {/* The remaining-attempts COUNT moved onto the create button (see
+                the footer): it is a property of that action, and as a free
+                sentence in the body it read as a standing warning about a
+                limit rather than a label on a control.
+
+                Only the EXHAUSTED state stays here, and only because at zero
+                there is no button left to carry it — the footer hides the
+                control entirely, so without this line the sheet would simply
+                lose the ability to create with no explanation.
+                null = unknown: assert neither a count nor "exhausted". */}
+            {remaining === 0 && (
+              <p className="text-xs text-subtle">{t('noRemaining')}</p>
             )}
 
           </>
         )}
 
-        {/* The posts this page made before the current one.
-            Creating another used to DESTROY the one it replaced — text and
-            image both — with no way back (production, 11 Aug: three
-            attempts, the first was the best one, the third erased it).
-            They are kept now, so this is simply a list of them.
-
-            A SIBLING of the post block, not a child: a strip the merchant can
-            still copy from must not disappear because the newest attempt left
-            nothing to show above it.
-
-            <details> rather than a click-to-swap viewer on purpose: the
-            merchant's job here is "copy the one I preferred", and native
-            disclosure gets keyboard, screen-reader and open-state
-            behaviour right without a second view mode to keep in sync. */}
-        {!working && history.length > 0 && (
-          <section className="border-t border-theme-border pt-3">
-            <h3 className="text-xs font-medium text-muted-foreground">{t('historyTitle')}</h3>
-            <p className="text-[11px] text-subtle mt-0.5">{t('historyHint')}</p>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {history.map((item) => (
-                <li key={item.id}>
-                  <details className="rounded-xl border border-theme-border bg-card">
-                    <summary className="flex items-center gap-2.5 p-2 cursor-pointer list-none min-h-[44px] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
-                      {item.imageUrl && !failedThumbs.includes(item.id) ? (
-                        // Plain <img>: these are small, below the fold and
-                        // behind a disclosure, and next/image would demand
-                        // a remote-pattern entry per storage host.
-                        <img
-                          src={item.imageUrl}
-                          alt={t('historyImageAlt')}
-                          loading="lazy"
-                          // Same fallback the dashboard card uses: an object
-                          // that has gone missing shows the brand tile rather
-                          // than a broken frame.
-                          onError={() => setFailedThumbs((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))}
-                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <span className="w-10 h-10 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center flex-shrink-0">
-                          <Sparkles className="w-4 h-4 text-icon-muted" aria-hidden="true" />
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span dir="auto" className="block text-xs text-foreground truncate">{firstLine(item.text)}</span>
-                        <span className="block text-[11px] text-subtle">
-                          {t('historyItemLabel', { date: new Date(item.createdAt).toLocaleDateString(locale) })}
-                        </span>
-                      </span>
-                    </summary>
-                    <p dir="auto" className="whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground leading-relaxed">
-                      {item.text}
-                    </p>
-                  </details>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
 
       {/* Fixed footer (Rule 3: scrollable body, fixed header/footer). Copy is
@@ -736,7 +724,10 @@ export function PostSuggestionSheet({
           the keyboard is open, so the bar rides above it while editing. */}
       {!working && suggestion && (
         <div className="flex-shrink-0 border-t border-theme-border bg-card px-4 py-3 sm:px-5 pb-safe-modal flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => void handleCopy()}>
+          {/* PRIMARY. Three equal-weight grey buttons said all three actions
+              matter the same; they do not. Copying is why the merchant opened
+              the sheet, and it is the metric the pilot exists to move. */}
+          <Button size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => void handleCopy()}>
             {copied ? <Check className="w-4 h-4 me-1.5" aria-hidden="true" /> : <Copy className="w-4 h-4 me-1.5" aria-hidden="true" />}
             {copied ? t('copied') : t('copyText')}
           </Button>
@@ -747,9 +738,26 @@ export function PostSuggestionSheet({
             </Button>
           )}
           {canRegenerate && (
+            /* The remaining count rides ON the control it governs. As its own
+               sentence in the body it read as a warning about a limit; here it
+               is a label on the button that spends it. `null` = unknown, so the
+               button simply carries no count rather than inventing one.
+
+               The count is PARENTHESISED, never separated by «·»: in an RTL run
+               at button size, «… · 3» scans as a single number — ٣٠ — and I
+               misread it that way myself while auditing. The label is also kept
+               short because this footer holds three controls at 390px.
+
+               ⚠️ Do NOT "fix" this button by measuring `scrollWidth`. Every
+               Button of this variant carries a shine overlay child that sits
+               outside the box and is clipped by `overflow-hidden`, so
+               `scrollWidth ≈ 2 × clientWidth` on ALL of them («عرض المنشور»
+               326/653, «إدارة الاشتراك» 310/621) and says nothing about the
+               text. Measure the label's own text node against the content box
+               instead — here 62px in 62px, i.e. exact. */
             <Button variant="ghost" size="sm" className="min-h-[44px]" onClick={() => void generate()}>
               <RefreshCw className="w-4 h-4 me-1.5" aria-hidden="true" />
-              {t('regenerate')}
+              {remaining !== null ? t('regenerateWithCount', { count: remaining }) : t('regenerate')}
             </Button>
           )}
         </div>
