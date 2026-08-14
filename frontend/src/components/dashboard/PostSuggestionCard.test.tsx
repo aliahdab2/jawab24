@@ -32,11 +32,12 @@ vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
  * it passes, and what it does when a dismiss actually happens.
  */
 vi.mock('@/components/ui/SwipeDismissWrapper', () => ({
-  SwipeDismissWrapper: ({ children, onDismiss, enabled }: {
-    children: React.ReactNode; onDismiss: () => void; enabled?: boolean;
+  SwipeDismissWrapper: ({ children, onDismiss, enabled, foregroundClassName }: {
+    children: React.ReactNode; onDismiss: () => void; enabled?: boolean; foregroundClassName?: string;
   }) => (
     <div>
       <button type="button" data-testid="swipe" disabled={enabled === false} onClick={onDismiss}>swipe</button>
+      <span data-testid="fg-class">{foregroundClassName ?? ''}</span>
       {children}
     </div>
   ),
@@ -119,6 +120,27 @@ describe('PostSuggestionCard — swipe hides it until tomorrow', () => {
     await screen.findByText(enPostSuggestions.cardTitle);
 
     expect(await screen.findByTestId('swipe')).toBeDisabled();
+  });
+
+  /**
+   * ⭐ Regression: "View your post is above Hide for Today" (reported on the
+   * running build, 2026-08-14).
+   *
+   * The wrapper stacks the swipe background and the card as two layers. This
+   * card's own fill is `bg-brand-50/60` — 60% ALPHA — so with a transparent
+   * foreground the teal «إخفاء لليوم» band was legible straight through the
+   * post. Every other consumer (SwipeableMessageCard, SwipeableNotificationItem)
+   * passes an opaque `bg-card` foreground; this one did not.
+   *
+   * Asserted on the PROP rather than on pixels because jsdom computes no
+   * stacking — but the prop is exactly what was missing.
+   */
+  it('gives the swipe wrapper an OPAQUE foreground, or the background bleeds through the card', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+
+    const fg = await screen.findByTestId('fg-class');
+    expect(fg).toHaveTextContent('bg-card');
   });
 
   it('a non-admin member cannot hide the card for the whole workspace', async () => {

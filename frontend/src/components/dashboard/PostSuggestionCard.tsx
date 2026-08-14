@@ -154,6 +154,18 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
         onDismiss={() => void setHidden(true)}
         enabled={canHide}
         className="mb-8 rounded-2xl"
+        // ⭐ The foreground layer must be OPAQUE and carry the same radius —
+        // copied from SwipeableMessageCard, which had this right.
+        //
+        // Without it the swipe background bleeds through the card: this card's
+        // own fill is `bg-brand-50/60`, i.e. 60% alpha, so the teal «إخفاء
+        // لليوم» band was legible straight through the post — reported on the
+        // running build as "View your post is above Hide for Today". The
+        // wrapper draws background and foreground as stacked layers, so a
+        // translucent foreground is not a style choice here, it is a bug.
+        // `z-10` keeps the stacking explicit rather than relying on source
+        // order, again matching the message card.
+        foregroundClassName="z-10 rounded-2xl bg-card"
         peekStorageKey="postSuggestionCardPeekSeen"
         background={
           <SwipeBothSidesLabel
