@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useTranslations, useLocale } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { X, Copy, Check, Download, RefreshCw, Sparkles, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto, type PostSuggestionHistoryItem, type PostSuggestionInFlight } from '@jawab24/shared';
+import { POST_SUGGESTION_BRIEF_MAX, type PostSuggestionDto, type PostSuggestionInFlight } from '@jawab24/shared';
 import { DetailSheet, Button } from '@/components/ui';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { useCopyToClipboard } from '@/hooks';
@@ -72,10 +72,6 @@ export function PostSuggestionSheet({
 }) {
   const t = useTranslations('postSuggestions');
   const tc = useTranslations('common');
-  // Dates in the history strip are formatted in the merchant's own locale —
-  // never a hardcoded 'ar'/'en' ternary, and never the browser default, which
-  // ignores the language they chose in the app.
-  const locale = useLocale();
   const { copied, copy } = useCopyToClipboard();
 
   const [suggestion, setSuggestion] = useState<PostSuggestionDto | null>(initial?.suggestion ?? null);
@@ -109,15 +105,12 @@ export function PostSuggestionSheet({
   // the sheet. Forced open when either box has content so a request can never
   // be sent from a panel the merchant cannot see.
   const [requestOpen, setRequestOpen] = useState(false);
-  // The posts this page made before the current one. Creating another used to
-  // DELETE the one it replaced (text and image); they are kept now, so the
-  // merchant can go back to one they preferred. `[]` = none yet; an absent
-  // field on the response leaves whatever we already had rather than blanking
-  // the strip on a payload that simply didn't carry it.
-  const [history, setHistory] = useState<PostSuggestionHistoryItem[]>(initial?.history ?? []);
-  // Earlier posts whose thumbnail failed to load (a missing object) — they fall
-  // back to the brand tile instead of a broken frame, same as the card.
-  const [failedThumbs, setFailedThumbs] = useState<string[]>([]);
+  // ⚠️ NO `history` state. The earlier-posts strip was removed on 2026-08-14
+  // (owner: «I do not see any benefit for it»). The ROWS are untouched — they
+  // are still written, still `superseded` rather than deleted, and the read
+  // route still serves them — so restoring the strip is a UI change alone.
+  // See backend/docs/OBJECT_STORAGE.md §9: those rows keep their images, and
+  // that exemption now rests on retention, not on this UI referencing them.
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Merchant choice: append the verified contact footer (address/phone/WhatsApp)?
@@ -193,7 +186,6 @@ export function PostSuggestionSheet({
             setSuggestion(recovered);
             setInFlight(running);
             setRemaining(latest.data.remainingToday);
-            if (latest.data.history) setHistory(latest.data.history);
             // A row that already ENDED in failure is a real failure to report —
             // but as the generation error, not the "we have no idea" one.
             if (running?.status === 'failed') setError(t('errorGeneration'));
@@ -304,7 +296,6 @@ export function PostSuggestionSheet({
           setSuggestion(res.data.suggestion);
           setInFlight(next);
           setRemaining(res.data.remainingToday);
-          if (res.data.history) setHistory(res.data.history);
           setError(next?.status === 'failed' ? t('errorGeneration') : null);
           onChanged(res.data);
         })
@@ -680,66 +671,6 @@ export function PostSuggestionSheet({
           </>
         )}
 
-        {/* The posts this page made before the current one.
-            Creating another used to DESTROY the one it replaced — text and
-            image both — with no way back (production, 11 Aug: three
-            attempts, the first was the best one, the third erased it).
-            They are kept now, so this is simply a list of them.
-
-            A SIBLING of the post block, not a child: a strip the merchant can
-            still copy from must not disappear because the newest attempt left
-            nothing to show above it.
-
-            <details> rather than a click-to-swap viewer on purpose: the
-            merchant's job here is "copy the one I preferred", and native
-            disclosure gets keyboard, screen-reader and open-state
-            behaviour right without a second view mode to keep in sync. */}
-        {!working && history.length > 0 && (
-          <section className="border-t border-theme-border pt-3">
-            {/* The title stays — it names the list. The hint under it («محفوظة
-                هنا بنصوصها وصورها. افتح أيّ منشور لنسخه») explained a
-                disclosure that explains itself the moment it is opened. */}
-            <h3 className="text-xs font-medium text-muted-foreground">{t('historyTitle')}</h3>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {history.map((item) => (
-                <li key={item.id}>
-                  <details className="rounded-xl border border-theme-border bg-card">
-                    <summary className="flex items-center gap-2.5 p-2 cursor-pointer list-none min-h-[44px] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
-                      {item.imageUrl && !failedThumbs.includes(item.id) ? (
-                        // Plain <img>: these are small, below the fold and
-                        // behind a disclosure, and next/image would demand
-                        // a remote-pattern entry per storage host.
-                        <img
-                          src={item.imageUrl}
-                          alt={t('historyImageAlt')}
-                          loading="lazy"
-                          // Same fallback the dashboard card uses: an object
-                          // that has gone missing shows the brand tile rather
-                          // than a broken frame.
-                          onError={() => setFailedThumbs((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))}
-                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <span className="w-10 h-10 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center flex-shrink-0">
-                          <Sparkles className="w-4 h-4 text-icon-muted" aria-hidden="true" />
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span dir="auto" className="block text-xs text-foreground truncate">{firstLine(item.text)}</span>
-                        <span className="block text-[11px] text-subtle">
-                          {t('historyItemLabel', { date: new Date(item.createdAt).toLocaleDateString(locale) })}
-                        </span>
-                      </span>
-                    </summary>
-                    <p dir="auto" className="whitespace-pre-wrap px-3 pb-3 text-xs text-muted-foreground leading-relaxed">
-                      {item.text}
-                    </p>
-                  </details>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
 
       {/* Fixed footer (Rule 3: scrollable body, fixed header/footer). Copy is

@@ -632,53 +632,30 @@ describe('PostSuggestionSheet — downloading the card', () => {
  * the first was the best one, the third erased it). They are kept since
  * 2026-08-13, and this strip is where the merchant reaches them.
  */
-describe('PostSuggestionSheet — earlier posts', () => {
+describe('PostSuggestionSheet — the earlier-posts strip is gone', () => {
   const HISTORY = [
     { id: 'old2', text: 'العنوان الأول\nبقية المنشور الأحدث', imageUrl: 'https://media/o2.jpg', postType: 'promo' as const, createdAt: '2026-08-11T10:00:00Z' },
     { id: 'old1', text: 'أقدم منشور', imageUrl: null, postType: 'general' as const, createdAt: '2026-08-10T10:00:00Z' },
   ];
 
-  it('lists them under the post, each openable to its full text', async () => {
+  /**
+   * Removed 2026-08-14 (owner: «I do not see any benefit for it»).
+   *
+   * The point of this test is the SECOND assertion, not the first: the response
+   * still CARRIES the history, and the sheet simply does not draw it. The rows
+   * are still written, still `superseded` rather than deleted, and their images
+   * are still retained — so restoring the strip stays a UI change alone, and
+   * nothing here licenses a sweep of `generated-posts/` objects
+   * (backend/docs/OBJECT_STORAGE.md §9).
+   */
+  it('draws nothing for earlier posts, even when the response carries them', async () => {
     renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
 
-    expect(await screen.findByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
-
-    // The SUMMARY carries just the opening line — the strip has to stay
-    // scannable when a post runs long.
-    expect(screen.getByText('العنوان الأول')).toBeInTheDocument();
-    // …and the full text sits inside the disclosure, so a merchant can read and
-    // copy the one they preferred.
-    expect(screen.getByText(/بقية المنشور الأحدث/)).toBeInTheDocument();
-    expect(screen.getAllByText('أقدم منشور').length).toBeGreaterThan(0);
-  });
-
-  it('shows the KEPT image of an earlier post — that it survived is the whole point', async () => {
-    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
-
-    const thumbs = await screen.findAllByAltText(enPostSuggestions.historyImageAlt);
-    expect(thumbs[0]).toHaveAttribute('src', 'https://media/o2.jpg');
-    // Exactly one: the text-only earlier post must NOT invent a thumbnail.
-    expect(thumbs).toHaveLength(1);
-  });
-
-  it('renders no section at all when the page has no earlier posts', () => {
-    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: [] });
-    expect(screen.queryByText(enPostSuggestions.historyTitle)).not.toBeInTheDocument();
-  });
-
-  it('keeps the strip when a response carries NO history field', async () => {
-    // `undefined` means "this response does not carry history" — the generate
-    // route never does — NOT "there are none". Conflating the two would wipe
-    // the strip the moment the merchant creates another post.
-    renderSheet({ suggestion: SUGGESTION, remainingToday: 2, availableTypes: ['general'], history: HISTORY });
-    expect(await screen.findByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
-
-    mockGenerate.mockResolvedValue({
-      data: { suggestion: { ...SUGGESTION, id: 's2' }, remainingToday: 1, availableTypes: ['general'] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(enPostSuggestions.regenerate) }));
-
-    await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
-    expect(screen.getByText(enPostSuggestions.historyTitle)).toBeInTheDocument();
+    await screen.findByRole('button', { name: new RegExp(enPostSuggestions.copyText) });
+    // Neither an earlier post's opening line nor its full text is rendered.
+    expect(screen.queryByText(/العنوان الأول/)).not.toBeInTheDocument();
+    expect(screen.queryByText('أقدم منشور')).not.toBeInTheDocument();
+    // …and no thumbnail of one either.
+    expect(screen.queryByAltText(/منشور سابق|Earlier post/)).not.toBeInTheDocument();
   });
 });
