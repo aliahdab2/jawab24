@@ -461,8 +461,7 @@ export function PostSuggestionSheet({
               // control: `surface-100` is synced to `--card` in dark mode, so a
               // track drawn with it disappears and takes the active pill's
               // contrast with it. Brand fill reads in both themes.
-              <div>
-                <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
+              <div role="tablist" aria-label={t('variantsLabel')} className="flex gap-1.5">
                   {variants.map((variant, index) => (
                     <button
                       key={index}
@@ -485,15 +484,6 @@ export function PostSuggestionSheet({
                       {variantLens(index, t)}
                     </button>
                   ))}
-                </div>
-                {/* The takes really do differ — take 1 leads on the offer, 2 on
-                    the customer's question, 3 on the outcome — but numbered
-                    tabs hid that behind three taps of reading. The opening line
-                    of the SELECTED take is the honest one-glance answer: it is
-                    the content itself, not a claim about it. */}
-                <p dir="auto" className="mt-1.5 text-[11px] text-subtle line-clamp-1">
-                  {firstLine(activeText)}
-                </p>
               </div>
             )}
 
@@ -553,25 +543,32 @@ export function PostSuggestionSheet({
               </div>
             )}
 
-            {/* Editable copy — the merchant tweaks freely; Copy copies THEIR version.
-                The label is not decoration: an outside reviewer read this sheet
-                and reported editing as MISSING, because a bordered grey block of
-                text reads as output, not as an input. Saying so costs one line. */}
-            <label className="block">
-              <span className="flex items-center gap-1.5 mb-1.5 text-xs font-medium text-muted-foreground">
-                <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                {t('editTextLabel')}
-              </span>
+            {/* THE POST. It is the product, so it is read as a post — not as a
+                form field wearing a label.
+
+                An outside reviewer once read this sheet and reported editing as
+                MISSING, and the fix then was a «عدّل نص المنشور» caption above
+                it. That treated a VISUAL problem with a sentence: the field
+                looked like output, so we wrote a line explaining it was not.
+                The caption is gone and the affordance is now visual and
+                permanent — a pencil sitting in the corner of the field, and a
+                hover/focus border. The accessible name carries what the caption
+                said, so a screen-reader user is told it is editable exactly as
+                before. */}
+            <div className="relative">
+              <Pencil
+                className="pointer-events-none absolute top-2.5 end-2.5 w-3.5 h-3.5 text-icon-muted"
+                aria-hidden="true"
+              />
               <textarea
                 dir="auto"
+                aria-label={t('editTextLabel')}
                 value={activeText}
                 onChange={(e) => setEditsByVariant((prev) => ({ ...prev, [activeIndex]: e.target.value }))}
                 rows={Math.min(10, Math.max(4, activeText.split('\n').length + 1))}
-                className="w-full rounded-xl border border-theme-border bg-background p-3 text-sm text-foreground text-start leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-brand-300"
+                className="w-full rounded-xl border border-transparent bg-transparent p-3 pe-8 text-sm text-foreground text-start leading-relaxed resize-y transition-colors hover:border-theme-border focus:border-theme-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-brand-300"
               />
-            </label>
-
-            <p className="text-xs text-muted-foreground">{t('reviewBeforePosting')}</p>
+            </div>
 
             {canRegenerate && (
               /* ASK — post-first (owner ruling 2026-08-13). The post is already
@@ -586,9 +583,15 @@ export function PostSuggestionSheet({
                  gets keyboard, screen-reader and open-state behaviour right for
                  free. `open` is CONTROLLED so a box with content can never be
                  collapsed out of sight while it is still what would be sent. */
+              /* A HAIRLINE, not a card. This panel used to be a bordered,
+                 filled box sitting inside the sheet's own box, with the
+                 history disclosure making a third — box inside box inside
+                 box was half of what made this sheet feel crowded. A single
+                 top rule separates "the post" from "ask for another" just as
+                 well and adds no enclosure. */
               <details
                 open={requestOpen || Boolean(brief || imageRequest)}
-                className="rounded-xl border border-theme-border bg-card"
+                className="border-t border-theme-border pt-1"
               >
                 {/* The native toggle is SUPPRESSED and the state owned here.
                     A <details> whose `open` is a prop is only half-controlled:
@@ -605,13 +608,13 @@ export function PostSuggestionSheet({
                     if (brief || imageRequest) { setRequestOpen(true); return; }
                     setRequestOpen((open) => !open);
                   }}
-                  className="flex items-center gap-2 min-h-[44px] px-3 text-xs font-medium text-muted-foreground cursor-pointer select-none"
+                  className="flex items-center gap-2 min-h-[44px] text-xs font-medium text-muted-foreground cursor-pointer select-none"
                 >
-                  <Pencil className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                   {t('askLabel')}
                 </summary>
 
-                <div className="px-3 pb-3 space-y-3">
+                <div className="pb-1 space-y-3">
                   {/* What the post should SAY. */}
                   <label className="block">
                     <span className="block mb-1.5 text-xs font-medium text-muted-foreground">{t('briefLabel')}</span>
@@ -643,8 +646,10 @@ export function PostSuggestionSheet({
                     />
                   </label>
 
-                  <p className="text-[11px] text-subtle">{t('askHint')}</p>
-
+                  {/* «اترك الحقلين فارغين ونختار…» removed: it explained the
+                      default behaviour of two fields already marked
+                      «(اختياري)», to a merchant who has just chosen to open a
+                      panel they did not have to open. */}
                   <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -658,11 +663,18 @@ export function PostSuggestionSheet({
               </details>
             )}
 
-            {/* null = unknown — assert neither a count nor "exhausted". */}
-            {remaining !== null && (
-              <p className="text-xs text-subtle">
-                {remaining > 0 ? t('remaining', { count: remaining }) : t('noRemaining')}
-              </p>
+            {/* The remaining-attempts COUNT moved onto the create button (see
+                the footer): it is a property of that action, and as a free
+                sentence in the body it read as a standing warning about a
+                limit rather than a label on a control.
+
+                Only the EXHAUSTED state stays here, and only because at zero
+                there is no button left to carry it — the footer hides the
+                control entirely, so without this line the sheet would simply
+                lose the ability to create with no explanation.
+                null = unknown: assert neither a count nor "exhausted". */}
+            {remaining === 0 && (
+              <p className="text-xs text-subtle">{t('noRemaining')}</p>
             )}
 
           </>
@@ -684,8 +696,10 @@ export function PostSuggestionSheet({
             behaviour right without a second view mode to keep in sync. */}
         {!working && history.length > 0 && (
           <section className="border-t border-theme-border pt-3">
+            {/* The title stays — it names the list. The hint under it («محفوظة
+                هنا بنصوصها وصورها. افتح أيّ منشور لنسخه») explained a
+                disclosure that explains itself the moment it is opened. */}
             <h3 className="text-xs font-medium text-muted-foreground">{t('historyTitle')}</h3>
-            <p className="text-[11px] text-subtle mt-0.5">{t('historyHint')}</p>
             <ul className="mt-2 flex flex-col gap-1.5">
               {history.map((item) => (
                 <li key={item.id}>
@@ -736,7 +750,10 @@ export function PostSuggestionSheet({
           the keyboard is open, so the bar rides above it while editing. */}
       {!working && suggestion && (
         <div className="flex-shrink-0 border-t border-theme-border bg-card px-4 py-3 sm:px-5 pb-safe-modal flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => void handleCopy()}>
+          {/* PRIMARY. Three equal-weight grey buttons said all three actions
+              matter the same; they do not. Copying is why the merchant opened
+              the sheet, and it is the metric the pilot exists to move. */}
+          <Button size="sm" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => void handleCopy()}>
             {copied ? <Check className="w-4 h-4 me-1.5" aria-hidden="true" /> : <Copy className="w-4 h-4 me-1.5" aria-hidden="true" />}
             {copied ? t('copied') : t('copyText')}
           </Button>
@@ -747,9 +764,13 @@ export function PostSuggestionSheet({
             </Button>
           )}
           {canRegenerate && (
+            /* The remaining count rides ON the control it governs. As its own
+               sentence in the body it read as a warning about a limit; here it
+               is a label on the button that spends it. `null` = unknown, so the
+               button simply carries no count rather than inventing one. */
             <Button variant="ghost" size="sm" className="min-h-[44px]" onClick={() => void generate()}>
               <RefreshCw className="w-4 h-4 me-1.5" aria-hidden="true" />
-              {t('regenerate')}
+              {remaining !== null ? t('regenerateWithCount', { count: remaining }) : t('regenerate')}
             </Button>
           )}
         </div>

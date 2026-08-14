@@ -114,14 +114,23 @@ describe('PostSuggestionCard — the card previews the REAL post', () => {
     createdAt: '2026-08-10T05:00:00Z',
   };
 
-  it('shows the thumbnail, the angle badge, and the post text — not a generic banner', async () => {
+  it('shows the thumbnail and the post text — not a generic banner', async () => {
     mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
     renderCard();
 
     const thumb = await screen.findByAltText(enPostSuggestions.postImageAlt);
     expect(thumb).toHaveAttribute('src', WITH_IMAGE.imageUrl);
     expect(screen.getByText(WITH_IMAGE.text)).toBeInTheDocument();
-    expect(screen.getByText(enPostSuggestions.type_promo)).toBeInTheDocument();
+  });
+
+  it('does NOT show the angle badge — it named an internal taxonomy, not anything the merchant can act on', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: WITH_IMAGE, remainingToday: 2 } });
+    renderCard();
+
+    await screen.findByText(WITH_IMAGE.text);
+    // `postType` is still stored and still steers generation; it is just no
+    // longer chrome competing with the post's opening line for the glance.
+    expect(screen.queryByText(enPostSuggestions.type_promo)).not.toBeInTheDocument();
   });
 
   it('a TEXT-ONLY post (image degraded) renders the brand tile, never a broken frame', async () => {
@@ -190,8 +199,10 @@ describe('postSuggestions Arabic plural — all six CLDR forms compile and the d
       messages: { postSuggestions: arPostSuggestions },
       namespace: 'postSuggestions',
     });
-    render(<p>{t('remaining', { count: 2 })}</p>);
-    expect(screen.getByText('محاولتان متبقيتان اليوم')).toBeInTheDocument();
+    // The count moved onto the create button, so `regenerateWithCount` is now
+    // the string carrying all six CLDR forms — the risk moved with it.
+    render(<p>{t('regenerateWithCount', { count: 2 })}</p>);
+    expect(screen.getByText('أنشئ منشوراً آخر · محاولتان')).toBeInTheDocument();
   });
 });
 
