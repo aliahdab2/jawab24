@@ -45,7 +45,8 @@ import {
     type PostSuggestionStatus,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { pages, catalogItems, factCollections, factRows, postSuggestions, type PostSuggestionVariantRow } from '../db/schema';
+import { pages, catalogItems, factCollections, factRows, postSuggestions, workspaces, type PostSuggestionVariantRow } from '../db/schema';
+import { subscriptionsService } from './subscriptions';
 import { config } from '../config';
 import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -102,14 +103,98 @@ export function setPostSuggestionsLogger(l: Logger): void { logger = l; }
  * Whether the feature is live for this WORKSPACE (owner ruling 2026-08-09:
  * the pilot belongs to the founder's workspace, not to page lists). Pure and
  * exported so the gate is unit-testable on its own (shouldVerifyGrounding
- * posture). Empty allowlist = fleet-wide once enabled (the GA path);
- * non-empty = only those workspaces.
+ * posture).
+ *
+ * ⭐ FAILS CLOSED. An EMPTY allowlist means OFF, not "everyone".
+ *
+ * It used to mean fleet-wide, and was documented as "the GA path" — so the
+ * intuitive way to disable the pilot (clear `POST_SUGGESTIONS_WORKSPACE_IDS`)
+ * was in fact the way to hand a feature that spends a PAID text call and a PAID
+ * image call per generation to every workspace on every tier, including free
+ * and trial. One env var, no second confirmation, no plan check behind it.
+ *
+ * A gate whose most dangerous state is also its emptiest is not a gate. Opening
+ * this feature to more merchants is now something you do by SAYING SO — either
+ * by listing workspaces, or by turning on the plan gate below, which is the
+ * real GA path (owner ruling 2026-08-09: Business and above).
  */
 export function isPostSuggestionsEnabledForWorkspace(workspaceId: string): boolean {
     if (!config.postSuggestions?.enabled) return false;
-    const allowed = config.postSuggestions.workspaceIds;
-    if (allowed && allowed.length > 0 && !allowed.includes(workspaceId)) return false;
-    return true;
+    if (config.postSuggestions.workspaceIds?.includes(workspaceId)) return true;
+    // Not named explicitly ⇒ only the plan gate can admit this workspace, and
+    // it is off until GA. Never "true because the list was empty".
+    return config.postSuggestions.planGateEnabled === true;
+}
+
+/**
+ * Plans that may use the feature at GA — "Business and above" (owner ruling
+ * 2026-08-09, recorded in SYSTEM_ANALYSIS as «الأعمال + الاحترافي»).
+ *
+ * ⛔ Deliberately an ORDER, not the literal `['business','pro']` the ruling was
+ * phrased with. The catalogue also sells `scale-20k` and `scale-30k`, which are
+ * LARGER than Pro — a two-slug list would have silently excluded the biggest
+ * paying customers while admitting nobody by accident, i.e. failed quietly in
+ * the direction nobody checks. Rank comparison keeps new tiers correct by
+ * default: anything at or above Business is in.
+ */
+export const PLAN_RANK: Readonly<Record<string, number>> = {
+    starter: 1,
+    business: 2,
+    pro: 3,
+    'scale-20k': 4,
+    'scale-30k': 5,
+};
+const MIN_PLAN_RANK = PLAN_RANK.business;
+
+/**
+ * Does this plan slug clear the GA bar?
+ *
+ * An UNKNOWN slug is refused. A plan we cannot rank is a plan we cannot say is
+ * entitled, and the failure we can afford is "a paying merchant asks why the
+ * card is missing" — not "every trial account generates paid images".
+ */
+export function planAllowsPostSuggestions(slug: string | null | undefined): boolean {
+    if (!slug) return false;
+    const rank = PLAN_RANK[slug];
+    return rank !== undefined && rank >= MIN_PLAN_RANK;
+}
+
+/**
+ * The REAL gate: config, then — once GA is on — the workspace's plan.
+ *
+ * Async because entitlement is a fact about the merchant's subscription, not
+ * about the process's env. The sync
+ * `isPostSuggestionsEnabledForWorkspace` above stays as the cheap
+ * config-only half, so the dark-feature 404s cost no query while the pilot is
+ * allowlist-only; this adds a lookup ONLY on the GA path.
+ *
+ * Fails CLOSED on every uncertainty — no subscription, unknown plan, a DB error
+ * mid-lookup. An entitlement check that admits people when it cannot answer is
+ * not a check, and the thing behind this one costs real money per press.
+ */
+export async function isPostSuggestionsEntitled(workspaceId: string): Promise<boolean> {
+    if (!config.postSuggestions?.enabled) return false;
+    // Named workspaces (the pilot) skip the plan entirely — the owner invited
+    // them by hand, and a tester must not lose the feature the day GA lands.
+    if (config.postSuggestions.workspaceIds?.includes(workspaceId)) return true;
+    if (config.postSuggestions.planGateEnabled !== true) return false;
+
+    try {
+        const [ws] = await db.select({ ownerId: workspaces.ownerId })
+            .from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+        if (!ws?.ownerId) return false;
+        const sub = await subscriptionsService.getUserSubscription(ws.ownerId);
+        // Only a LIVE subscription entitles. `past_due` is the state that
+        // already silently starved 8 pages of replies on 2026-08-09; it must
+        // not quietly keep buying images here.
+        if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) return false;
+        return planAllowsPostSuggestions(sub.plan?.slug);
+    } catch (err) {
+        logger.warn('[PostSuggestions] Entitlement lookup failed; refusing', {
+            workspaceId, error: err instanceof Error ? err.message : String(err),
+        });
+        return false;
+    }
 }
 
 /**

@@ -38,7 +38,10 @@ const {
     mockFetchRoundedLogo: vi.fn(),
     mockConfig: {
         openai: { apiKey: 'test-key' },
-        postSuggestions: { enabled: true, workspaceIds: [] as string[], dailyCapPerPage: 3 },
+        // Present only so importing the subscriptions service (pulled in by the
+        // entitlement check) can construct its Redis client at module load.
+        redis: { host: '127.0.0.1', port: 6379, password: undefined },
+        postSuggestions: { enabled: true, workspaceIds: [] as string[], dailyCapPerPage: 3, planGateEnabled: false },
     },
 }));
 
@@ -103,6 +106,7 @@ import { captureError } from '../utils/sentryHelpers';
 import {
     postSuggestionsService,
     isPostSuggestionsEnabledForWorkspace,
+    planAllowsPostSuggestions,
     setPostSuggestionsLogger,
     pickPostType,
     buildContactSuffix,
@@ -302,7 +306,11 @@ beforeEach(() => {
     router = makeDbRouter();
     setPostSuggestionsLogger(log);
     mockConfig.postSuggestions.enabled = true;
-    mockConfig.postSuggestions.workspaceIds = [];
+    // The test workspace is ALLOWLISTED explicitly. It used to be `[]`, which
+    // relied on empty meaning fleet-wide — the very fail-open behaviour this
+    // branch removes. Naming it is also how production works now.
+    mockConfig.postSuggestions.workspaceIds = [WS];
+    mockConfig.postSuggestions.planGateEnabled = false;
     mockConfig.postSuggestions.dailyCapPerPage = 3;
     mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
     mockClaimDailyCapSlot.mockResolvedValue(true);
@@ -320,18 +328,89 @@ beforeEach(() => {
 });
 
 describe('gate functions', () => {
-    it('workspace gate: disabled kills everything; empty allowlist = fleet-wide; non-empty = only listed', () => {
+    it('workspace gate: disabled kills everything; non-empty = only listed', () => {
         mockConfig.postSuggestions.enabled = false;
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
 
         mockConfig.postSuggestions.enabled = true;
-        mockConfig.postSuggestions.workspaceIds = [];
-        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
-
         mockConfig.postSuggestions.workspaceIds = ['other-workspace'];
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
         mockConfig.postSuggestions.workspaceIds = [WS];
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+
+    /**
+     * ⭐ THE test this file exists for.
+     *
+     * An empty allowlist used to mean FLEET-WIDE, and was documented as "the GA
+     * path". So the intuitive way to switch the pilot off — clear
+     * `POST_SUGGESTIONS_WORKSPACE_IDS` — handed a feature that spends a PAID
+     * text call and a PAID image call per generation to every workspace on
+     * every tier, free and trial included, with no plan check behind it.
+     *
+     * If this test ever goes green after being inverted, the gate has gone back
+     * to failing open and the blast radius is the entire customer base.
+     */
+    it('⭐ an EMPTY allowlist admits NOBODY — the gate fails closed', () => {
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [];
+        mockConfig.postSuggestions.planGateEnabled = false;
+
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
+        expect(isPostSuggestionsEnabledForWorkspace('any-other-workspace')).toBe(false);
+    });
+
+    it('the GA plan gate is the explicit way to widen — and it is OFF by default', () => {
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [];
+
+        mockConfig.postSuggestions.planGateEnabled = false;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
+
+        mockConfig.postSuggestions.planGateEnabled = true;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+
+    it('an allowlisted workspace stays in even before the plan gate opens', () => {
+        // The pilot testers must not lose the feature the day GA wiring lands.
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [WS];
+        mockConfig.postSuggestions.planGateEnabled = false;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+});
+
+describe('plan entitlement — "Business and above" (owner ruling 2026-08-09)', () => {
+    it('admits Business and every larger tier', () => {
+        expect(planAllowsPostSuggestions('business')).toBe(true);
+        expect(planAllowsPostSuggestions('pro')).toBe(true);
+    });
+
+    /**
+     * ⭐ The reason this is a RANK and not the literal ['business','pro'] the
+     * ruling was phrased with: the catalogue also sells scale-20k / scale-30k,
+     * which are LARGER than Pro. A two-slug list would have excluded the
+     * biggest paying customers — failing quietly, in the direction nobody
+     * checks, while admitting nobody by accident.
+     */
+    it('⭐ admits tiers ABOVE Pro that the ruling never named', () => {
+        expect(planAllowsPostSuggestions('scale-20k')).toBe(true);
+        expect(planAllowsPostSuggestions('scale-30k')).toBe(true);
+    });
+
+    it('refuses Starter, and refuses absence', () => {
+        expect(planAllowsPostSuggestions('starter')).toBe(false);
+        expect(planAllowsPostSuggestions(null)).toBe(false);
+        expect(planAllowsPostSuggestions(undefined)).toBe(false);
+        expect(planAllowsPostSuggestions('')).toBe(false);
+    });
+
+    it('refuses an UNKNOWN slug rather than guessing', () => {
+        // A plan we cannot rank is a plan we cannot call entitled. The
+        // affordable failure is "a paying merchant asks where the card went",
+        // never "every trial account generates paid images".
+        expect(planAllowsPostSuggestions('enterprise-2027')).toBe(false);
+        expect(planAllowsPostSuggestions('BUSINESS')).toBe(false); // case is not a guess either
     });
 
     it('generateSuggestion refuses a workspace outside the allowlist', async () => {

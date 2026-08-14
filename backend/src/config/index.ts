@@ -154,12 +154,21 @@ export const config = {
     // doubles as the instant rollback.
     postSuggestions: {
         enabled: process.env.POST_SUGGESTIONS_ENABLED === 'true',
+        // ⭐ GA gate. OFF by default: until this is true, ONLY the workspaces
+        // listed below can see the feature, whatever the list contains.
+        //
+        // This is the switch that opens «إنشاء منشور» to paying merchants
+        // (Business and above — owner ruling 2026-08-09). It exists as its own
+        // flag because the previous way to widen the pilot was to EMPTY the
+        // allowlist, which read as "turn it off" and meant "give it to
+        // everyone, on every tier". Widening is now an explicit yes.
+        planGateEnabled: process.env.POST_SUGGESTIONS_PLAN_GATE === 'true',
         // WORKSPACE allowlist (owner ruling 2026-08-09: «just for
         // aliahdab@gmail.com workspace»). The default IS the founder's prod
         // workspace, so enabling the pilot needs only POST_SUGGESTIONS_ENABLED
-        // — override the list for local dev or a wider rollout. EMPTY = every
-        // workspace (the eventual GA path); the seed sweep never runs
-        // fleet-wide regardless (see seedFirstPostSuggestions).
+        // — override the list for local dev or a wider rollout.
+        // ⚠️ EMPTY now means NOBODY (fail closed), not everybody. The seed
+        // sweep never runs fleet-wide regardless (see seedFirstPostSuggestions).
         workspaceIds: (process.env.POST_SUGGESTIONS_WORKSPACE_IDS
             || [
                 'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)
