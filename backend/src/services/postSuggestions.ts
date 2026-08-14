@@ -337,6 +337,45 @@ async function fetchOwnedPage(workspaceId: string, pageId: string) {
  * and re-checking would mean a second pages read on the highest-frequency fetch
  * in the feature.
  */
+/**
+ * Today's cap for one page — the SINGLE arithmetic both the read and the write
+ * path use.
+ *
+ * ⛔ It exists because they used to compute it differently, and the drift was
+ * user-visible. `readRemainingToday` reported `limit - redisUsed` while
+ * `requestSuggestion` refused on `dbUsed >= limit`, so a page whose Redis key
+ * was gone but whose rows were not read as «3 attempts left» and answered every
+ * one of them with «بلغت الحد اليومي». Measured on تقنيات الشام, 2026-08-14:
+ * three durable rows for the day, no counter key, GET reporting 3 remaining and
+ * POST returning 429 in the same second. No amount of UI gating can fix that —
+ * the client was being handed a number the server would not honour.
+ *
+ * Redis bounds ATTEMPTS (a failed generation burns its slot by design); the
+ * durable row count is the FLOOR that survives a lost key (eviction/failover,
+ * observed in the 08-09 dogfood). The truth is whichever is higher.
+ *
+ * Throws when either source is unreachable — both callers fail closed on that,
+ * which is the dailyCap contract: the cap is the only bound on real spend.
+ */
+async function readCapStatus(pageId: string, today: string, limit: number): Promise<{ used: number; limit: number; allowed: boolean }> {
+    const [cap, countRows] = await Promise.all([
+        checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), limit),
+        // Served by idx_post_suggestions_page_date — (page_id, suggested_for) is
+        // exactly this predicate, so the count the read path now pays for is an
+        // index scan running INSIDE an existing parallel batch, not a new
+        // sequential hop (Rule 17.3).
+        db.select({ value: sql<number>`count(*)::int` }).from(postSuggestions)
+            .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today))),
+    ]);
+    const dbUsed = Number(countRows[0]?.value ?? 0);
+    if (dbUsed > cap.used) {
+        // Durable rows exceed the counter, i.e. the counter was lost or reset.
+        // The DB floor below keeps the cap honest regardless.
+        logger.warn('[PostSuggestions] Daily-cap counter behind DB rows', { pageId, dbUsed, redisUsed: cap.used });
+    }
+    return { used: Math.max(cap.used, dbUsed), limit, allowed: cap.allowed && dbUsed < limit };
+}
+
 async function readCurrentPost(pageId: string) {
     const [row] = await db.select().from(postSuggestions)
         .where(and(
@@ -1171,7 +1210,10 @@ class PostSuggestionsService {
      */
     private async readRemainingToday(pageId: string, today: string): Promise<number | null> {
         try {
-            const cap = await checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), config.postSuggestions.dailyCapPerPage);
+            // Same arithmetic the WRITE path enforces — see readCapStatus. A
+            // number this method reports is a promise the card makes on the
+            // server's behalf, so it must be the server's own number.
+            const cap = await readCapStatus(pageId, today, config.postSuggestions.dailyCapPerPage);
             return Math.max(0, cap.limit - cap.used);
         } catch (err) {
             captureError(err, 'Post suggestion: getCurrent cap read failed', {
@@ -1215,33 +1257,18 @@ class PostSuggestionsService {
 
         const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId, today);
         const limit = config.postSuggestions.dailyCapPerPage;
-        let cap: DailyCapStatus;
-        let dbUsed: number;
+        let cap: { used: number; limit: number; allowed: boolean };
         try {
-            // The Redis counter bounds ATTEMPTS (a failed generation burns its
-            // slot by design); the DB row count grounds the cap in durable
-            // truth, so a lost Redis key (eviction/failover — observed in the
-            // 08-09 dogfood) can never silently re-open spend. Either read
-            // failing → fail closed (dailyCap contract).
-            const [capStatus, countRows] = await Promise.all([
-                checkDailyCap(capKey, limit),
-                db.select({ value: sql<number>`count(*)::int` }).from(postSuggestions)
-                    .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today))),
-            ]);
-            cap = capStatus;
-            dbUsed = Number(countRows[0]?.value ?? 0);
+            // Shared with the read path so the card can never advertise an
+            // attempt this block will refuse. Either source failing → fail
+            // closed (dailyCap contract).
+            cap = await readCapStatus(pageId, today, limit);
         } catch (err) {
             captureError(err, 'Post suggestion: cap check unavailable', { tags: { service: 'post-suggestions' }, extra: { pageId } });
             return { ok: false, reason: 'cap_check_unavailable' };
         }
-        if (dbUsed > cap.used) {
-            // The dogfood 08-09 counter-loss signal: durable rows exceed the
-            // Redis counter, i.e. the counter was lost/reset. The DB floor
-            // below keeps the cap honest regardless.
-            logger.warn('[PostSuggestions] Daily-cap counter behind DB rows', { pageId, dbUsed, redisUsed: cap.used });
-        }
-        if (!cap.allowed || dbUsed >= limit) {
-            return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: Math.max(cap.used, dbUsed), limit } };
+        if (!cap.allowed) {
+            return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: cap.used, limit } };
         }
         // Atomic claim BEFORE the paid calls: the INCR itself is the arbiter,
         // so two requests racing the last slot can never both pass (the
@@ -1350,9 +1377,10 @@ class PostSuggestionsService {
             computeAvailableTypes(page, today),
         ]);
 
-        // Remaining slots from the stricter of the two views, counting the slot
-        // this request just consumed.
-        const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
+        // Counting the slot this request just consumed. `cap.used` is already
+        // the stricter of the counter and the durable row count (readCapStatus),
+        // so there is no second view left to take a max against.
+        const remaining = Math.max(0, limit - (cap.used + 1));
         return {
             ok: true,
             suggestion: settledIsPost ? toDto(settled) : (previous ? toDto(previous) : null),

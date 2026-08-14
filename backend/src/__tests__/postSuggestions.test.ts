@@ -290,12 +290,16 @@ function queueFullRun(
  */
 function queueGetCurrent(
     currentRows: unknown[],
-    opts: { latest?: unknown[]; history?: unknown[] } = {},
+    opts: { latest?: unknown[]; history?: unknown[]; dbUsed?: number } = {},
 ) {
     queueOwnedPage([PAGE_ROW]);
     router.queue({ op: 'select', table: postSuggestions, rows: currentRows });     // readCurrentPost (full row)
     queueInFlight(opts.latest ?? currentRows.map(r => ({ id: (r as { id: string }).id, status: 'ready' })));
     queueHistory(opts.history ?? []);                                             // the earlier posts
+    // The READ path counts durable rows too now — same arithmetic the write
+    // path enforces, so the card can never advertise an attempt the POST will
+    // refuse. Defaults to 0 so the Redis mock alone decides, as before.
+    queueCapCount(opts.dbUsed ?? 0);
     router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] }); // availability probe
     queueDatedCatalog([]);
     queueCollections([]);
@@ -1117,6 +1121,38 @@ describe('getCurrent', () => {
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r).toBeNull();
         expect(mockCheckDailyCap).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⭐ The defect the UI could not fix: the READ reported the cap from Redis
+     * alone while the WRITE refused on the durable row count, so a page whose
+     * counter key was gone but whose rows were not advertised «3 attempts left»
+     * and answered every one with «بلغت الحد اليومي».
+     *
+     * Measured on تقنيات الشام, 2026-08-14: three rows for the day, no counter
+     * key, GET reporting remainingToday 3 and POST returning 429 in the same
+     * second. Both paths now share readCapStatus.
+     */
+    it('⭐ reports 0 when the COUNTER was lost but the durable rows say the cap is spent', async () => {
+        // Redis has no memory of today (key evicted / flushed / never claimed).
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueGetCurrent([INSERTED], { dbUsed: 3 });
+
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+
+        // The number the card is handed must be the number the POST will honour.
+        expect(r?.remainingToday).toBe(0);
+    });
+
+    it('takes the STRICTER of the two views, not whichever was read first', async () => {
+        // Counter ahead of the rows — a failed attempt burned a slot before any
+        // row landed. The counter wins here; the row count wins above.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 2, limit: 3 });
+        queueGetCurrent([INSERTED], { dbUsed: 1 });
+
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+
+        expect(r?.remainingToday).toBe(1);
     });
 
     it('returns the ready suggestion, remaining, and availableTypes from ONE page read', async () => {
