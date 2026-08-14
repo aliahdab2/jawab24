@@ -76,6 +76,25 @@ export function isChannelLevelFailure(bucket: DmFailureBucket | undefined): bool
 }
 
 /**
+ * Does this platform's send use the FACEBOOK page token (`pages.access_token`)?
+ *
+ * Instagram does — it is columns on the page row, not a separate credential, so
+ * one revoked Facebook session kills both. WhatsApp does NOT: it carries
+ * `pages.whatsapp_access_token`, a separate credential on Meta's forced 60-day
+ * clock with its own health cron and its own reconnect path.
+ *
+ * The distinction matters because Meta answers an expired WABA token with the
+ * same code 190 as a revoked page token, so anything that reads a Graph code to
+ * decide "this page's credential is dead" must ask which credential first.
+ *
+ * `undefined` = the comment pipelines, which are Facebook/Instagram-only by
+ * construction (there is no WhatsApp comment adapter).
+ */
+export function ownsFacebookCredential(platform: string | undefined): boolean {
+    return platform === undefined || platform === 'facebook' || platform === 'instagram';
+}
+
+/**
  * Per-(page, platform) consecutive send-failure streak, in Redis.
  *
  * Why this exists when `consecutive_send_failures` already does: that counter
@@ -299,7 +318,22 @@ export async function recordSendFailure(
     // merchant is the only one who can fix it and must be told which of Meta's
     // five causes it was. Never throws, and leaves the counter logic below
     // untouched — a page whose token recovers still owes its failure count.
-    if (failure !== undefined) {
+    //
+    // ⛔ Facebook-credential platforms ONLY. WhatsApp lives on the same page row
+    // but holds a SEPARATE credential (`pages.whatsapp_access_token`) on its own
+    // 60-day clock, with its own health cron and its own reconnect notice
+    // (whatsappAdapter → markWhatsAppNeedsReconnect). Meta answers an expired WABA
+    // token with code 190 too, so without this gate a WhatsApp expiry would run
+    // Facebook page-token recovery: re-minting `pages.access_token` the WhatsApp
+    // failure says nothing about, and — when the user session is also gone —
+    // CLEARING the Facebook token and mailing the merchant "reconnect your
+    // Facebook page" to explain a WhatsApp outage.
+    //
+    // The gate is here rather than at the caller because this is the choke point
+    // every send path flows through; a new caller cannot forget it. `undefined`
+    // is the comment pipelines, which are Facebook/Instagram-only by construction
+    // (there is no WhatsApp comment adapter).
+    if (failure !== undefined && ownsFacebookCredential(platform)) {
         await handlePageTokenFailure(pageId, failure);
     }
 

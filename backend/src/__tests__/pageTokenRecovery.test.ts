@@ -355,3 +355,105 @@ describe('withPageTokenRetry', () => {
         expect(call).toHaveBeenCalledTimes(1);
     });
 });
+
+/**
+ * The unit of the CAUSE is the user, not the page: one revoked Facebook session
+ * kills every page token minted from it in the same instant. A page-scoped dedup
+ * therefore reads as "deduped" while mailing an agency owner one identical notice
+ * per page — the exact fan-out this module's own docblock argues against for
+ * `tokenRefresh.notifyReconnectNeeded`.
+ */
+describe('alert fan-out across an owner\'s pages', () => {
+    beforeEach(() => {
+        selectCycle([ownerRow]);
+    });
+
+    it('mails the owner ONCE when several of their pages die together', async () => {
+        await markPageNeedsReconnect(pageRow({ id: 'page-a' }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-b' }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-c' }) as never, 'password_changed');
+
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+        // The in-app card stays PER PAGE on purpose: each carries its own pageId
+        // and its own reconnect action, so three cards are three things to fix
+        // rather than three copies of one thing. Only the mailbox collapses.
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(3);
+        // Every page is still marked disconnected — suppressing the email must
+        // never suppress the state the reconnect UI reads.
+        expect(mockUpdate).toHaveBeenCalledTimes(3);
+    });
+
+    it('still mails each owner when the dead pages belong to DIFFERENT users', async () => {
+        // The negative control: collapsing on the wrong key would silence a second
+        // merchant entirely, which is worse than the fan-out it fixes.
+        await markPageNeedsReconnect(pageRow({ id: 'page-a', userId: 'user-1' }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'page-b', userId: 'user-2' }) as never, 'password_changed');
+
+        expect(mockEmailSend).toHaveBeenCalledTimes(2);
+    });
+});
+
+/**
+ * Both Redis guards fail OPEN, and each is right to on its own. Failing open on
+ * BOTH at once restores the storm they exist to stop: the 2026-08-14 window was
+ * 36 failing Graph calls in 11 minutes, arriving SEQUENTIALLY — so the in-process
+ * single-flight, which only collapses concurrent callers, damps none of them.
+ */
+describe('Redis outage', () => {
+    // Ids used nowhere else in this file. The fallback ledger is module state that
+    // outlives a test and holds its claims for the real TTL, so a shared id would
+    // make whichever of these ran second assert against the first one's claims.
+    // Only these cases ever reach it — every other test has a working Redis fake.
+    const DOWN_PAGE = 'page-redis-down';
+
+    beforeEach(() => {
+        selectCycle([pageRow({ id: DOWN_PAGE, userId: 'user-redis-down' })], [userRow()], [ownerRow]);
+        mockRedisSet.mockRejectedValue(new Error('redis unreachable'));
+        mockGetUserPages.mockRejectedValue(new FacebookApiError('gone', { code: 190, subcode: 460 }));
+    });
+
+    it('caps a burst at one /me/accounts and one alert, without going silent', async () => {
+        for (let i = 0; i < 6; i += 1) {
+            await handlePageTokenFailure(DOWN_PAGE, passwordChangedError());
+        }
+
+        // Exactly 1 is the whole assertion: 6 would be the storm the guards exist
+        // to stop, and 0 would be the silence they must never cause — fail-open is
+        // deliberate, because a suppressed reconnect notice costs the merchant
+        // every customer who writes while the page is dead.
+        expect(mockGetUserPages).toHaveBeenCalledTimes(1);
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+
+    // The two cases below drive `markPageNeedsReconnect` DIRECTLY, because the
+    // cooldown fallback stops calls 2..n of the burst above long before they reach
+    // either alert guard — so the burst test passes with EITHER of them deleted and
+    // proves nothing about them. One case per guard, each failing on its own.
+    it('holds the per-page alert dedup with Redis down (same page, repeatedly)', async () => {
+        selectCycle([ownerRow]);
+        const page = pageRow({ id: 'rd-page-repeat', userId: 'user-rd-repeat' });
+
+        await markPageNeedsReconnect(page as never, 'password_changed');
+        await markPageNeedsReconnect(page as never, 'password_changed');
+        await markPageNeedsReconnect(page as never, 'password_changed');
+
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds the per-OWNER email dedup with Redis down (distinct pages, one owner)', async () => {
+        selectCycle([ownerRow]);
+        const userId = 'user-rd-fanout';
+
+        await markPageNeedsReconnect(pageRow({ id: 'rd-page-a', userId }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'rd-page-b', userId }) as never, 'password_changed');
+        await markPageNeedsReconnect(pageRow({ id: 'rd-page-c', userId }) as never, 'password_changed');
+
+        // Three distinct pages → three distinct alert keys → three cards, by design.
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(3);
+        // …and still ONE email. The owner-scoped claim is the only thing standing
+        // between an agency owner and one notice per dead page; it has to survive
+        // the outage too, not just the happy path.
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+});

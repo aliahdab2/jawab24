@@ -57,8 +57,24 @@ const RECOVERY_COOLDOWN_SECONDS = 5 * 60;
 /** One reconnect alert per page per day, however many calls fail meanwhile. */
 const RECONNECT_ALERT_DEDUP_SECONDS = 24 * 60 * 60;
 
+/**
+ * One reconnect EMAIL per page OWNER per day, however many of their pages died.
+ *
+ * The page-scoped key cannot do this job, because the page is the wrong unit for
+ * this cause: a revoked user session kills EVERY page token minted from it in the
+ * same instant, so an agency with nine pages clears nine page-scoped keys and
+ * mails the owner nine identical notices about one Facebook password change.
+ *
+ * Only the mailbox needs the collapse. The in-app notification stays per page —
+ * each carries its own `pageId` and its own reconnect action, and account health
+ * pins them individually, so nine cards are nine things to fix rather than nine
+ * copies of one thing.
+ */
+const RECONNECT_EMAIL_DEDUP_SECONDS = 24 * 60 * 60;
+
 const cooldownKey = (pageId: string) => `fb:token:recovery:cooldown:${pageId}`;
 const alertDedupKey = (pageId: string) => `fb:token:reconnect:alerted:${pageId}`;
+const emailDedupKey = (userId: string) => `fb:token:reconnect:emailed:${userId}`;
 
 /**
  * In-process single-flight. Complements the Redis cooldown rather than
@@ -67,6 +83,40 @@ const alertDedupKey = (pageId: string) => `fb:token:reconnect:alerted:${pageId}`
  * would each pass the `SET NX` before any of them finished.
  */
 const inFlight = new Map<string, Promise<string | null>>();
+
+/**
+ * Per-process fallback for the two Redis claims below, used ONLY when Redis
+ * itself failed.
+ *
+ * Both guards fail OPEN on a Redis error, and each is right to on its own — a
+ * suppressed reconnect alert costs the merchant every customer who writes while
+ * the page is dead. But failing open on BOTH at once restores the exact storm
+ * they exist to stop: the 2026-08-14 window produced 36 failing Graph calls in 11
+ * minutes, and `inFlight` cannot damp those because they arrived SEQUENTIALLY,
+ * not concurrently. Redis down would therefore have meant 36 `/me/accounts` calls
+ * and 36 emails.
+ *
+ * This is deliberately NOT a Redis substitute: it is per-process and lost on
+ * restart, which is the correct trade for "cap the storm, still alert".
+ */
+const localClaims = new Map<string, number>();
+
+/** `SET NX`-equivalent against the in-process ledger. True = the caller owns it. */
+function claimLocally(key: string, ttlSeconds: number): boolean {
+    const now = Date.now();
+    // Drop lapsed entries first, so the map holds live claims rather than every
+    // key this process has ever seen.
+    for (const [k, expiry] of localClaims) {
+        if (expiry <= now) localClaims.delete(k);
+    }
+    if (localClaims.has(key)) return false;
+    localClaims.set(key, now + ttlSeconds * 1000);
+    return true;
+}
+
+function releaseLocally(key: string): void {
+    localClaims.delete(key);
+}
 
 /**
  * Why Facebook rejected the token. Mapped from the Graph code/subcode pairs in
@@ -170,14 +220,14 @@ export async function recoverPageToken(pageId: string, cause: TokenFailureCause)
 
 async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<string | null> {
     // Claim the cooldown BEFORE the Graph call, so a failure that throws still
-    // leaves the damper in place. Redis down → proceed (fail open): the
-    // single-flight map still bounds this to one call at a time, and a page that
-    // cannot recover is worse than an extra /me/accounts.
+    // leaves the damper in place. Redis down → fall back to the per-process
+    // ledger rather than to no damper at all: `inFlight` only bounds CONCURRENT
+    // callers, and the failures this damps arrive sequentially over minutes.
     try {
         const claimed = await redis.set(cooldownKey(pageId), '1', 'EX', RECOVERY_COOLDOWN_SECONDS, 'NX');
         if (claimed !== 'OK') return null;
     } catch {
-        // Redis unreachable — proceed.
+        if (!claimLocally(cooldownKey(pageId), RECOVERY_COOLDOWN_SECONDS)) return null;
     }
 
     const [page] = await db
@@ -262,6 +312,7 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
     // Recovery worked, so release the damper: a genuinely new failure minutes
     // from now deserves its own immediate attempt rather than a 5-minute wait.
     await redis.del(cooldownKey(pageId)).catch(() => {});
+    releaseLocally(cooldownKey(pageId));
 
     logger.info('[PageTokenRecovery] Page token re-minted from /me/accounts', { pageId, cause });
     return freshToken;
@@ -318,28 +369,33 @@ export async function withPageTokenRetry<T>(
  * never on a transient error.
  *
  * Three channels, because the failure mode being fixed is silence:
- *   - in-app, to the whole WORKSPACE (agencies manage merchant pages)
+ *   - in-app, to the whole WORKSPACE (agencies manage merchant pages), per page
  *   - push, via the same notification
- *   - email to the page OWNER only — the original connector is the one person
- *     whose re-auth can re-mint the token (pages.ts, isOriginalConnector)
+ *   - email to the page OWNER, at most ONE per owner per day however many of
+ *     their pages died — the original connector is the one person whose re-auth
+ *     can re-mint the token (pages.ts, isOriginalConnector), and one revoked
+ *     session kills all their pages at once. See `RECONNECT_EMAIL_DEDUP_SECONDS`
+ *     for why the page-scoped claim below cannot cover that.
  *
  * ⚠️ `tokenRefresh.notifyReconnectNeeded` is NOT dead code and must not be merged
  * into this: it alerts per USER for a whole batch of pages the 6h sweep found
- * dead at once, in ONE notification. Folding it into this per-page function
- * would turn one message into nine for an agency workspace. The overlap is the
- * DB write and the `page_disconnected` type — both deliberately identical, so a
- * page marked by either route looks the same to the UI and to support.
+ * dead at once, in ONE in-app notification naming every page (and no email at
+ * all). Folding it into this per-page function would turn one message into nine
+ * for an agency workspace. The overlap is the DB write and the
+ * `page_disconnected` type — both deliberately identical, so a page marked by
+ * either route looks the same to the UI and to support.
  */
 export async function markPageNeedsReconnect(page: RecoverablePage, cause: TokenFailureCause): Promise<void> {
     try {
-        // Deduped per page per day. Fails OPEN (Redis down → alert anyway): a
-        // duplicate email is a nuisance, a missed one costs the merchant every
-        // customer who writes while the page is dead.
+        // Deduped per page per day. Redis down degrades to the per-process
+        // ledger rather than to no dedup: a duplicate alert is a nuisance, a
+        // missed one costs the merchant every customer who writes while the page
+        // is dead, and 36 of them is its own outage.
         try {
             const claimed = await redis.set(alertDedupKey(page.id), '1', 'EX', RECONNECT_ALERT_DEDUP_SECONDS, 'NX');
             if (claimed !== 'OK') return;
         } catch {
-            // Redis unreachable — alert anyway.
+            if (!claimLocally(alertDedupKey(page.id), RECONNECT_ALERT_DEDUP_SECONDS)) return;
         }
 
         await db
@@ -382,6 +438,22 @@ export async function markPageNeedsReconnect(page: RecoverablePage, cause: Token
 
 async function emailPageOwner(page: RecoverablePage, pageName: string, cause: TokenFailureCause): Promise<void> {
     if (!page.userId) return;
+
+    // Collapse the fan-out to ONE email per owner per day. The page-scoped claim
+    // in the caller cannot: the cause is per USER, so N dead pages clear N page
+    // keys and produce N identical emails to the same address. Claimed before the
+    // lookup so the DB read is skipped too.
+    try {
+        const claimed = await redis.set(emailDedupKey(page.userId), '1', 'EX', RECONNECT_EMAIL_DEDUP_SECONDS, 'NX');
+        if (claimed !== 'OK') {
+            logger.info('[PageTokenRecovery] Reconnect email suppressed — owner already notified today', {
+                pageId: page.id, userId: page.userId,
+            });
+            return;
+        }
+    } catch {
+        if (!claimLocally(emailDedupKey(page.userId), RECONNECT_EMAIL_DEDUP_SECONDS)) return;
+    }
 
     const [info] = await db
         .select({ ownerEmail: users.email, dashboardLanguage: settings.dashboardLanguage })
