@@ -27,7 +27,9 @@ import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
     whatsappNumbers,
-    businessPhoneList,
+    businessPhoneEntries,
+    phoneEntryNumber,
+    phoneEntryDescription,
     isRowLive,
     normalizeArabicIndic,
     DEFAULT_AI_MODEL,
@@ -121,10 +123,38 @@ export function buildContactSuffix(merchant: BusinessProfile | null | undefined)
     const lines: string[] = [];
     const address = [merchant.address, merchant.city].filter(Boolean).join('، ');
     if (address) lines.push(`📍 ${address}`);
-    // businessPhoneList is THE reader of the phones[]/phone legacy dual shape.
-    const phone = businessPhoneList(merchant)[0];
-    if (phone) lines.push(`📞 ${phone}`);
+
+    // ⭐ A post is PUBLIC and UNCONDITIONAL, so it must not publish a number
+    // whose purpose restricts it. Once a contact point can say what it is for,
+    // «الإدارة — عند الطلب فقط» is a real stored value (it is this PR's own
+    // worked example and its demo fixture), and taking `[0]` bare published that
+    // number to everyone with the condition silently stripped — honoured by the
+    // reply prompt, ignored here.
+    //
+    // So: prefer the first UNCONDITIONAL line. By the canonical-form invariant
+    // (businessPhone.ts) "no description" is exactly "stored as a bare string",
+    // so this reads the merchant's own signal rather than guessing at wording —
+    // no keyword list of restriction phrases, which would be a hand-maintained
+    // linguistic list and would miss every phrasing it did not anticipate.
+    //
+    // If EVERY line carries a purpose, fall back to the first but render the
+    // purpose with it, so the condition travels instead of being dropped.
+    const entries = businessPhoneEntries(merchant);
+    const unconditional = entries.find((e) => !e.description);
+    const chosen = unconditional ?? entries[0];
+    // Trim for OUTPUT only. businessPhoneEntries deliberately publishes a bare
+    // stored string verbatim to keep BUSINESS_INFO byte-identical; a post suffix
+    // is not that block, and « 0911 » with padding in a public post is a defect.
+    const phone = chosen ? phoneEntryNumber(chosen).trim() : undefined;
+    if (phone) {
+        const purpose = chosen && !unconditional ? phoneEntryDescription(chosen) : '';
+        lines.push(purpose ? `📞 ${phone} (${purpose})` : `📞 ${phone}`);
+    }
+
     // whatsappNumbers is THE reader of the field's legacy string|array dual shape.
+    // Compare on the TRIMMED number: whatsappNumbers trims and the phone list
+    // does not, so an untrimmed stored number used to fail this equality and
+    // publish the same line twice — once as 📞 and once as واتساب.
     const whatsapp = whatsappNumbers(merchant)[0];
     if (whatsapp && whatsapp !== phone) {
         lines.push(`💬 واتساب: ${whatsapp}`);

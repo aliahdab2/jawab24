@@ -54,7 +54,7 @@ export type MerchantProvenanceMap = Partial<Record<keyof BusinessProfile, FieldP
  * without redefining the constant (avoids drift if a new field is added).
  */
 export const TRACKED_FIELDS: ReadonlyArray<keyof BusinessProfile> = [
-    'name', 'category', 'about', 'phones', 'website',
+    'name', 'category', 'about', 'phones', 'email', 'website',
     'address', 'city', 'country', 'hours', 'channels',
     'language_hint', 'policies',
 ];

@@ -252,6 +252,11 @@ export const DEMO_PAGES = [
             merchant: {
                 hours: { fri: ['10:00-18:00'] },
                 phones: ['0500000000'],
+                // CONFIRMED, unlike the two fb_sync values above: Cat 75 uses
+                // this to prove the structured field is served, and it matches
+                // the address in the KB prose so the two sources agree rather
+                // than compete (the KB-prose case must keep passing too).
+                email: 'reservations@shifa-dental.com',
             },
             suggestions: {
                 hours: { fri: ['10:00-18:00'] },
@@ -260,6 +265,7 @@ export const DEMO_PAGES = [
             merchantProvenance: {
                 hours: { source: 'fb_sync', confirmedAt: null },
                 phones: { source: 'fb_sync', confirmedAt: null },
+                email: { source: 'editor', confirmedAt: '2026-08-13T00:00:00.000Z' },
             },
         },
     },
@@ -587,6 +593,22 @@ VC2280SA	مكنسة لاسلكية شاحن - بطارية حتى 60 دقيقة 
 الجمعة: مغلق`,
         autoReplyEnabled: true,
         instagramUsername: null,
+        // Contact standard (Cat 76): two lines whose PURPOSE lives in the
+        // structured field, not in a persona and not glued into the number.
+        // The real page expressed the same routing as prose instructions in
+        // its brand voice at 800/800 chars; the eval cases prove the
+        // description alone does that work with no persona at all.
+        businessProfile: {
+            merchant: {
+                phones: [
+                    { number: '0911000202', description: 'خدمة ما بعد البيع' },
+                    { number: '0911000299', description: 'الإدارة — عند الطلب فقط' },
+                ],
+            },
+            merchantProvenance: {
+                phones: { source: 'editor', confirmedAt: '2026-08-13T00:00:00.000Z' },
+            },
+        },
     },
 ];
 

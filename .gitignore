@@ -60,3 +60,13 @@ seo-indexing-report-*.md
 
 # GSD local planning/workflow state (per-developer, not shared)
 /.planning/
+
+# Transient baseline copies staged by A/B probes, e.g.
+#   git show origin/main:packages/shared/src/businessInfoPrompt.ts \
+#     > packages/shared/src/__mainBusinessInfoPrompt.ts
+# (scripts/contact-standard-probe.ts). They are verbatim copies of the OTHER
+# version, imported so one process can byte-diff both formatters. They must
+# never be committed, and never de-duplicated against the file they mirror —
+# being a frozen copy IS the point, so `check:duplication` would otherwise
+# fail every time someone follows the probe's own instructions.
+packages/shared/src/__main*.ts

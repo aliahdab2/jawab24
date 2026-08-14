@@ -7,10 +7,12 @@ import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
+import { normalizePhoneEntries, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from '@jawab24/shared';
+import type { BusinessPhone, BusinessPhoneEntry } from '@jawab24/shared';
 
 /** Facts editable through the single-field sheet. `hours` is NOT here — it is a
  *  structured Record<day, ranges[]> and needs the Phase-D day/range editor. */
-export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment';
+export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment' | 'email';
 
 /** Multi-line facts get a textarea; the rest a single-line input. `address`
  *  is here because a real one runs long — «دمشق، البرامكة، فوق مكتبة الحافظ،
@@ -57,9 +59,10 @@ const PRESETS: Partial<Record<EditableFactKey, readonly string[]>> = {
 /** Facts that hold MULTIPLE values — rendered as one input per value. */
 const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
 
-const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'text'>> = {
+const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'email' | 'text'>> = {
   phone: 'tel',
   website: 'url',
+  email: 'email',
 };
 
 /** `type="tel"` (not just `inputMode`) so mobile keyboards, autofill and
@@ -83,11 +86,54 @@ const INPUT_TYPE: Partial<Record<EditableFactKey, 'tel'>> = { phone: 'tel' };
 const PAYMENT_METHODS = ['cash', 'transfer', 'card', 'cod'] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+
+/*
+ * ⛔ No suggestion chips for the phone purpose — removed 2026-08-13, measured.
+ *
+ * A curated list of six («الإدارة، المبيعات، خدمة العملاء، الشكاوى، الحجوزات،
+ * مبيعات الجملة») shipped here first. Across the 16 labelled contact lines in
+ * the whole fleet, THREE of the six matched nothing at all, and the three
+ * commonest things merchants actually write — «للتواصل» (5), «واتساب» (4),
+ * «للاستفسار» (4) — were none of them.
+ *
+ * The industry split decides it. A fixed taxonomy is right when the vocabulary
+ * is UNIVERSAL — iOS/Google Contacts ship Home/Work/Mobile because every human
+ * has those. It is wrong when the vocabulary is per-business, and ours is:
+ * «صالة الأعراس», «قسم المشاريع», «العيادات الخارجية», «خدمة ما بعد البيع».
+ * There the standard is Notion's Select — free text whose options accumulate
+ * from what THIS workspace has used, with no vendor-supplied list. schema.org
+ * agrees: `contactType` is free text whose suggested values illustrate the
+ * concept rather than enumerate it.
+ *
+ * And the costs are asymmetric. A missing chip costs a merchant a few seconds
+ * of typing. A wrong-but-offered chip invites «المبيعات» where they meant
+ * «قسم المشاريع» — a mislabelled number, which is the exact defect this whole
+ * contact standard exists to repair.
+ *
+ * If suggestions return, source them from the merchant's OWN data (their KB
+ * already contains their labels), never from a list maintained here.
+ */
+
+/**
+ * What Save hands back. `phone` is its own variant because a number carries a
+ * description and a WhatsApp mark — squeezing that through the single text
+ * field the other facts use would mean inventing a separator that a merchant's
+ * own description could contain.
+ */
+export type FactSavePayload =
+  | { kind: 'text'; value: string }
+  /** Already canonical (see `normalizePhoneEntries`) — bare strings for lines
+   *  with no description, objects for the rest. */
+  | { kind: 'phones'; entries: BusinessPhone[]; whatsapp: string[] };
+
 interface BusinessFactSheetProps {
   factKey: EditableFactKey;
   /** Localized field label — the sheet title. */
   label: string;
+  /** Every fact except `phone`, which uses `initialEntries`. */
   initialValue: string;
+  /** `phone` only: the stored contact lines, each with its description. */
+  initialEntries?: BusinessPhoneEntry[];
   /** `phone` only: which listed numbers are on WhatsApp. Legacy data may hold
    *  a single string — any subset of the numbers is valid. */
   initialWhatsapp?: string | string[];
@@ -103,8 +149,7 @@ interface BusinessFactSheetProps {
    *  modal tier (z-45 < z-50) so they can never block a footer again — which
    *  also means a toast can no longer carry this message. */
   saveError?: string | null;
-  /** `whatsapp` is passed for `phone` only — the numbers flagged in the sheet. */
-  onSave: (value: string, whatsapp?: string[]) => void;
+  onSave: (payload: FactSavePayload) => void;
   onClose: () => void;
 }
 
@@ -126,6 +171,7 @@ export function BusinessFactSheet({
   factKey,
   label,
   initialValue,
+  initialEntries,
   initialWhatsapp,
   storeAnswered = false,
   fbSuggested = false,
@@ -146,13 +192,17 @@ export function BusinessFactSheet({
   // independently of the others — the old single-mark model made tapping the
   // badge on one number silently clear it from another (radio semantics the
   // merchant never asked for).
-  const [entries, setEntries] = useState<{ value: string; wa: boolean }[]>(() => {
+  const [entries, setEntries] = useState<{ value: string; description: string; wa: boolean }[]>(() => {
     const wa = (Array.isArray(initialWhatsapp) ? initialWhatsapp : initialWhatsapp ? [initialWhatsapp] : [])
       .map((n) => n.trim())
       .filter(Boolean);
-    const parts = initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean);
-    const rows = parts.map((p) => ({ value: p, wa: wa.includes(p) }));
-    return rows.length ? rows : [{ value: '', wa: false }];
+    const rows = (initialEntries ?? []).map((e) => ({
+      value: e.number,
+      description: e.description ?? '',
+      // The mark belongs to the NUMBER, never to the entry object.
+      wa: wa.includes(e.number),
+    }));
+    return rows.length ? rows : [{ value: '', description: '', wa: false }];
   });
 
   /** Two-tap delete: first tap arms this row, second executes. A number is one
@@ -185,12 +235,15 @@ export function BusinessFactSheet({
     if (isMultiline && !isMulti && !intake) autoResize();
   }, [value, isMultiline, isMulti, intake, autoResize]);
 
-  const joined = entries.map((e) => e.value.trim()).filter(Boolean).join(', ');
-  // Through the SAME split/trim/join as `entries`, so legacy spacing or a
-  // stored duplicate can't make the sheet open already-dirty.
-  const initialJoined = useMemo(
-    () => initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean).join(', '),
-    [initialValue],
+  /** What Save would store — canonicalized here so "did anything change?" is
+   *  asked against the exact value the server will hold, not the raw rows. */
+  const phoneEntries = useMemo(
+    () => normalizePhoneEntries(entries.map((e) => ({ number: e.value, description: e.description }))),
+    [entries],
+  );
+  const initialPhoneEntries = useMemo(
+    () => normalizePhoneEntries(initialEntries ?? []),
+    [initialEntries],
   );
   const waList = entries.filter((e) => e.wa && e.value.trim()).map((e) => e.value.trim());
   const initialWaList = useMemo(() => {
@@ -200,9 +253,64 @@ export function BusinessFactSheet({
     // Only marks on numbers the sheet can show count as the baseline — a
     // legacy mark on an unlisted number is not representable here and would
     // otherwise hold the sheet permanently dirty.
-    const listed = initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean);
+    const listed = (initialEntries ?? []).map((e) => e.number);
     return wa.filter((n) => listed.includes(n));
-  }, [initialWhatsapp, initialValue]);
+  }, [initialWhatsapp, initialEntries]);
+
+  /**
+   * Numbers ALREADY STORED when this sheet opened — grandfathered, exactly as
+   * the server grandfathers them (`merchantBusinessProfileSchema`).
+   *
+   * Without this the two sides disagree in the worst direction: the server would
+   * accept the save and the UI would still refuse to send it, so a merchant with
+   * one bad legacy row — which Facebook sync or the KB extractor can write, both
+   * bypassing the merchant rule by design — could never edit their address again.
+   * They can delete such a row or leave it; it must not disable Save.
+   */
+  const grandfatheredNumbers = useMemo(
+    () => new Set((initialEntries ?? []).map((e) => e.number.trim()).filter(Boolean)),
+    [initialEntries],
+  );
+
+  /**
+   * A row whose number slot holds something that is not a number — the class
+   * that let «رقم الجملة فقط يطلب مبيعات جملة» be stored AS a phone and
+   * published in every prompt. `isUsablePhoneEntry` is the only judge (NOT
+   * `extractPhones`, whose 9-digit prose floor rejected a real landline).
+   *
+   * ⭐⭐ MARKING and BLOCKING are two different questions, and collapsing them is
+   * how the first cut of the grandfathering fix traded a loud bug for a silent
+   * one. Grandfathering the row out of THIS set unblocked Save and also removed
+   * its red border, its `aria-invalid` and its inline message — so the merchant
+   * had no indication that a line of prose was still being published to their
+   * customers as a phone number. The lockout was gone and so was the warning.
+   *
+   * ⇒ `invalidIndexes` answers "is this row wrong?" and includes grandfathered
+   * rows, so they stay VISIBLE. `blockingIndexes` answers "may Save proceed?" and
+   * excludes them. Marked but not blocked is strictly better than either of the
+   * two states this code has been in, and it is where PR B's «انقله إلى الوصف»
+   * hint lands.
+   */
+  const invalidIndexes = useMemo(() => {
+    const bad = new Set<number>();
+    if (!isMulti) return bad;
+    entries.forEach((e, i) => {
+      const v = e.value.trim();
+      if (v && !isUsablePhoneEntry(v)) bad.add(i);
+    });
+    return bad;
+  }, [entries, isMulti]);
+
+  /** Of those, the ones the merchant is ADDING or CHANGING — the only rows that
+   *  may hold Save back. Mirrors the server's grandfathering exactly. */
+  const blockingIndexes = useMemo(() => {
+    const blocking = new Set<number>();
+    invalidIndexes.forEach((i) => {
+      if (!grandfatheredNumbers.has(entries[i].value.trim())) blocking.add(i);
+    });
+    return blocking;
+  }, [invalidIndexes, entries, grandfatheredNumbers]);
+  const hasInvalid = blockingIndexes.size > 0;
 
   /** Same SIM typed twice — blocks Save and marks the later row. Without this
    *  a duplicate also renders the WhatsApp mark on both copies in the row list. */
@@ -242,7 +350,7 @@ export function BusinessFactSheet({
   };
 
   const dirty = isMulti
-    ? joined !== initialJoined
+    ? JSON.stringify(phoneEntries) !== JSON.stringify(initialPhoneEntries)
       || JSON.stringify([...waList].sort()) !== JSON.stringify([...initialWaList].sort())
     : intake
       ? composed().trim() !== ''
@@ -272,7 +380,7 @@ export function BusinessFactSheet({
 
   const addEntry = () => {
     setConfirmingDelete(null);
-    setEntries((prev) => [...prev, { value: '', wa: false }]);
+    setEntries((prev) => [...prev, { value: '', description: '', wa: false }]);
   };
 
   const removeEntry = (i: number) => {
@@ -284,11 +392,57 @@ export function BusinessFactSheet({
     setConfirmingDelete(null);
     // Clearing a number clears its mark too — a checked-but-disabled box on
     // an empty row claimed a WhatsApp number that no longer exists.
-    setEntries((prev) => prev.map((e, j) => (j === i ? { value: v, wa: v.trim() ? e.wa : false } : e)));
+    setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, value: v, wa: v.trim() ? e.wa : false } : e)));
   };
 
   const toggleWa = (i: number) =>
     setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, wa: !e.wa } : e)));
+
+  /**
+   * Contacts grouped by PURPOSE for display only — storage stays the flat
+   * `entries` array, so two numbers sharing a purpose are simply two entries
+   * with the same description and the canonical form is untouched.
+   *
+   * A purpose genuinely owns several numbers in real data: 2 of MES's 3
+   * departments carry a «هاتف بديل», and Shahin's KB gives two lines for
+   * booking confirmation («عبر 0189955 أو 0982414141»). Without grouping the
+   * merchant has to type the same purpose twice and then reads two rows
+   * carrying the same label.
+   *
+   * ⚠️ Only ADJACENT entries group, and an empty purpose never groups: two
+   * blank rows are two contacts not yet labelled, not one contact with two
+   * numbers. Grouping them would silently merge unrelated lines the moment a
+   * merchant added a row.
+   */
+  const groups = useMemo(() => {
+    const out: { description: string; idxs: number[] }[] = [];
+    entries.forEach((e, i) => {
+      const d = e.description.trim();
+      const last = out[out.length - 1];
+      if (last && d !== '' && last.description === d) last.idxs.push(i);
+      else out.push({ description: d, idxs: [i] });
+    });
+    return out;
+  }, [entries]);
+
+  /** Editing a shared purpose rewrites it on every number that carries it. */
+  const setGroupDescription = (idxs: readonly number[], v: string) => {
+    setConfirmingDelete(null);
+    const target = new Set(idxs);
+    setEntries((prev) => prev.map((e, j) => (target.has(j) ? { ...e, description: v } : e)));
+  };
+
+  /** Another number under the SAME purpose — inserted directly after the
+   *  group's last row so the grouping (which is adjacency-based) holds. */
+  const addToGroup = (idxs: readonly number[], description: string) => {
+    setConfirmingDelete(null);
+    const at = idxs[idxs.length - 1] + 1;
+    setEntries((prev) => [
+      ...prev.slice(0, at),
+      { value: '', description, wa: false },
+      ...prev.slice(at),
+    ]);
+  };
 
   /** Leave the intake for the plain textarea, carrying anything already typed. */
   const switchToFreeText = () => {
@@ -298,10 +452,10 @@ export function BusinessFactSheet({
   };
 
   const submit = () => {
-    if (saving || !dirty || hasDuplicates) return;
-    if (isMulti) onSave(joined, waList);
-    else if (intake) onSave(composed().trim());
-    else onSave(value.trim());
+    if (saving || !dirty || hasDuplicates || hasInvalid) return;
+    if (isMulti) onSave({ kind: 'phones', entries: phoneEntries, whatsapp: waList });
+    else if (intake) onSave({ kind: 'text', value: composed().trim() });
+    else onSave({ kind: 'text', value: value.trim() });
   };
 
   const intakeFieldClass =
@@ -375,92 +529,214 @@ export function BusinessFactSheet({
              never have to remember a separator. Joined with ", " on save; the
              page splits it back into the `phones` array. */
           <div className="space-y-3">
-            {entries.map((e, i) => (
-              <div key={i} className="space-y-1.5">
-                <div className="flex items-center gap-2">
+            {/* Labelled ONCE for the whole list. The purpose field's only label
+                used to be its placeholder, which disappears the moment a value
+                is typed — so a filled sheet showed unlabelled text. A column
+                header costs one line instead of one per row. Hidden below `sm`,
+                where the fields stack and the header would sit over the wrong
+                one; the placeholder carries an empty field there. */}
+            <div className="hidden sm:flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              <span className="flex-1 min-w-[8rem]">{t('facts.phoneDescription')}</span>
+              <span className="w-[9.5rem]">{label}</span>
+              <span className="w-[44px]" aria-hidden="true" />
+            </div>
+            {groups.map((g) => {
+              const first = g.idxs[0];
+              return (
+              /* One CARD per PURPOSE, its numbers stacked inside. The old flat
+                 stack separated fields within a contact by 6px and contacts
+                 from each other by 12px, so nothing but proximity said which
+                 purpose belonged to which number — five numbers read as
+                 fifteen unrelated boxes. Grouping also gives a main line and
+                 its fallback one label instead of two identical ones. */
+              <div key={first} className="rounded-xl border border-theme-border bg-card p-2 space-y-1.5">
+                {/* PURPOSE FIRST, then the number(s). Every labelled contact
+                    line in the fleet is written that way — «للشكاوي :
+                    0931671111», «📞 الإدارة: 0126543210» — 16 of 16, and the
+                    only number-first string anywhere is the one a merchant was
+                    forced to cram into a number field.
+                    Wraps to stacked below `sm`: at 390px two inputs plus the
+                    delete button leave ~148px for the purpose, which truncates
+                    «خدمات المسبح والجاكوزي» before it can be read. */}
+                <div className="flex flex-wrap items-start gap-2">
                   <input
-                    type={INPUT_TYPE[factKey] ?? 'text'}
-                    inputMode={INPUT_MODE[factKey] ?? 'text'}
-                    value={e.value}
-                    onChange={(ev) => setEntryValue(i, ev.target.value)}
-                    onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addEntry(); } }}
-                    dir={e.value ? 'auto' : undefined}
-                    autoFocus={i === 0}
-                    placeholder={t(`facts.placeholder_${factKey}`)}
-                    aria-label={`${label} ${i + 1}`}
-                    aria-invalid={duplicateIndexes.has(i) || undefined}
-                    aria-describedby={duplicateIndexes.has(i) ? `${inputId}-dup-${i}` : undefined}
-                    className={clsx(
-                      'flex-1 min-w-0 min-h-[44px] rounded-xl border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500',
-                      duplicateIndexes.has(i) ? 'border-red-400 dark:border-red-700' : 'border-theme-border',
-                    )}
+                    type="text"
+                    value={entries[first].description}
+                    onChange={(ev) => setGroupDescription(g.idxs, ev.target.value)}
+                    onKeyDown={submitOnEnter}
+                    /* Conditional, like every other field in this sheet — and
+                       the reason that pattern exists. Per the HTML spec, `auto`
+                       resolves by the first STRONG character of the value, and
+                       when there is none "the directionality of the element is
+                       ltr". So an unconditional `auto` on an EMPTY input renders
+                       its Arabic placeholder «ما الغرض من هذا الرقم؟»
+                       left-aligned inside an RTL sheet. Inheriting while empty
+                       keeps the placeholder in the page's direction; `auto`
+                       once there is content lets Arabic and Latin each sit
+                       correctly. */
+                    dir={entries[first].description ? 'auto' : undefined}
+                    maxLength={MAX_PHONE_DESCRIPTION_LENGTH}
+                    placeholder={t('facts.phoneDescriptionPlaceholder')}
+                    aria-label={`${t('facts.phoneDescription')} — ${label} ${first + 1}`}
+                    /* Secondary by design: lighter border, smaller type, no
+                       fill, so the number stays the primary value. Previously
+                       both carried identical 44px/rounded-xl/bordered styling
+                       and the annotation read as a second number field. */
+                    className="w-full sm:w-auto sm:flex-1 sm:min-w-[8rem] min-h-[44px] rounded-xl border border-theme-border/60 bg-transparent px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
-                  {entries.length > 1 && (
-                    confirmingDelete === i ? (
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => removeEntry(i)}
-                        className="flex-shrink-0 min-h-[44px]"
-                      >
-                        {t('facts.deleteNumberConfirm')}
-                      </Button>
-                    ) : (
+
+                  <div className="w-full sm:w-auto sm:flex-none space-y-1.5">
+                    {g.idxs.map((i) => {
+                      const e = entries[i];
+                      return (
+                        <div key={i} className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type={INPUT_TYPE[factKey] ?? 'text'}
+                              inputMode={INPUT_MODE[factKey] ?? 'text'}
+                              value={e.value}
+                              onChange={(ev) => setEntryValue(i, ev.target.value)}
+                              onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addEntry(); } }}
+                              /* ⭐ The app's existing phone convention, copied
+                                 from `auth/PhoneInput.tsx` rather than invented
+                                 here: the control is `dir="ltr"` AND its
+                                 placeholder is a digit MASK («09XX XXX XXX»,
+                                 mirroring PhoneInput's «5XX XXX XXXX»).
+                                 Why `ltr` is required: digits are directionally
+                                 NEUTRAL, so `auto` finds no strong character in
+                                 «0982414141», falls back to the surrounding RTL,
+                                 and bidi lays each digit GROUP out
+                                 right-to-left — «963 472 924» paints as
+                                 «924 472 963». Same class `renderMessageText`
+                                 fixes with `<span dir="ltr">` (PR #658).
+                                 Why the mask matters: it is direction-neutral,
+                                 so an LTR field no longer drags an Arabic word
+                                 to the wrong edge — which is what made a
+                                 conditional `dir` (and a `::placeholder`
+                                 override) look necessary. Neither is.
+                                 ⚠️ jsdom does no bidi layout — a test can assert
+                                 this attribute, never the painted order. That
+                                 needs real Chrome. */
+                              dir="ltr"
+                              autoFocus={i === 0}
+                              placeholder={t(`facts.placeholder_${factKey}`)}
+                              aria-label={`${label} ${i + 1}`}
+                              aria-invalid={duplicateIndexes.has(i) || invalidIndexes.has(i) || undefined}
+                              aria-describedby={clsx(
+                                duplicateIndexes.has(i) && `${inputId}-dup-${i}`,
+                                invalidIndexes.has(i) && `${inputId}-invalid-${i}`,
+                              ) || undefined}
+                              className={clsx(
+                                // Fixed basis, not flex-1: a phone number has a
+                                // known length, and letting it eat the row is
+                                // what pushed the delete button a screen-width
+                                // away from its own field.
+                                'w-full sm:w-[9.5rem] min-w-0 min-h-[44px] rounded-xl border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500',
+                                duplicateIndexes.has(i) || invalidIndexes.has(i)
+                                  ? 'border-red-400 dark:border-red-700'
+                                  : 'border-theme-border',
+                              )}
+                            />
+                            {entries.length > 1 && (
+                              confirmingDelete === i ? (
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => removeEntry(i)}
+                                  className="flex-shrink-0 min-h-[44px]"
+                                >
+                                  {t('facts.deleteNumberConfirm')}
+                                </Button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  // An empty row holds nothing to lose; a filled
+                                  // one arms first (two-tap) so a number is never
+                                  // one mistap from gone — nothing here is
+                                  // undoable before Save.
+                                  onClick={() => (e.value.trim() ? setConfirmingDelete(i) : removeEntry(i))}
+                                  aria-label={`${tc('delete')} ${label} ${i + 1}`}
+                                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                                </button>
+                              )
+                            )}
+                          </div>
+                          {duplicateIndexes.has(i) && (
+                            <p id={`${inputId}-dup-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
+                              {t('facts.duplicateNumber')}
+                            </p>
+                          )}
+                          {invalidIndexes.has(i) && (
+                            <p id={`${inputId}-invalid-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
+                              {t('facts.phoneInvalid')}
+                            </p>
+                          )}
+                          {/* Keeps its words — an unlabelled icon reads as
+                              "call", not "WhatsApp" (owner call). What it loses
+                              is the CHROME: as a bordered pill it outweighed the
+                              number it describes, and because its row was
+                              `justify-between` it landed under the DELETE button
+                              in RTL instead of under its own field. */}
+                          <label
+                            className={clsx(
+                              'min-h-[36px] max-sm:min-h-[44px] inline-flex items-center gap-1.5 rounded-lg px-1 text-xs transition select-none focus-within:ring-2 focus-within:ring-brand-500',
+                              !e.value.trim() ? 'opacity-40' : 'cursor-pointer',
+                              e.wa ? 'text-brand-700 dark:text-brand-300 font-medium' : 'text-muted-foreground',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={e.wa}
+                              disabled={!e.value.trim()}
+                              onChange={() => toggleWa(i)}
+                              aria-label={`${t('facts.phoneIsWhatsapp')} — ${label} ${i + 1}`}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className={clsx(
+                                'flex h-4 w-4 items-center justify-center rounded border',
+                                e.wa ? 'bg-brand-600 border-brand-600 text-white' : 'border-theme-border bg-card',
+                              )}
+                            >
+                              {e.wa && <Check className="w-3 h-3" />}
+                            </span>
+                            {t('facts.phoneIsWhatsapp')}
+                            {/* AFTER the label text, not between the box and it.
+                                Flex follows the page direction, so in Arabic
+                                the mark lands at the end of the phrase and the
+                                row reads ☐ «هذا الرقم على واتساب» ⟨mark⟩ instead
+                                of clustering two glyphs before the words. The
+                                same DOM order gives LTR «Also on WhatsApp» ⟨mark⟩.
+                                aria-hidden, so this is purely visual — the
+                                checkbox's own aria-label carries the meaning. */}
+                            <WhatsAppIcon size={14} aria-hidden="true" />
+                          </label>
+                        </div>
+                      );
+                    })}
+
+                    {/* Another line for the SAME purpose. Only offered once the
+                        purpose is named — under a blank label it would produce
+                        two unlabelled rows that then cannot be told apart. */}
+                    {g.description !== '' && (
                       <button
                         type="button"
-                        // An empty row holds nothing to lose; a filled one arms
-                        // first (two-tap) so a number is never one mistap from
-                        // gone — nothing here is undoable before Save.
-                        onClick={() => (e.value.trim() ? setConfirmingDelete(i) : removeEntry(i))}
-                        aria-label={`${tc('delete')} ${label} ${i + 1}`}
-                        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                        onClick={() => addToGroup(g.idxs, entries[first].description)}
+                        className="min-h-[44px] inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
                       >
-                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                        {t('facts.addNumberSamePurpose')}
                       </button>
-                    )
-                  )}
-                </div>
-                {duplicateIndexes.has(i) && (
-                  <p id={`${inputId}-dup-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
-                    {t('facts.duplicateNumber')}
-                  </p>
-                )}
-                {/* A real checkbox, not a status pill: each number carries its
-                    own independent flag, and the box makes "this is tappable"
-                    visible — the old badge read as a label. */}
-                <label
-                  className={clsx(
-                    'min-h-[36px] max-sm:min-h-[44px] inline-flex items-center gap-1.5 rounded-full ps-2.5 pe-3 text-xs font-medium border transition select-none focus-within:ring-2 focus-within:ring-brand-500',
-                    !e.value.trim()
-                      ? 'opacity-40'
-                      : 'cursor-pointer',
-                    e.wa
-                      ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500'
-                      : 'bg-card text-muted-foreground border-theme-border hover:bg-surface-100',
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={e.wa}
-                    disabled={!e.value.trim()}
-                    onChange={() => toggleWa(i)}
-                    aria-label={`${t('facts.phoneIsWhatsapp')} — ${label} ${i + 1}`}
-                  />
-                  <span
-                    aria-hidden="true"
-                    className={clsx(
-                      'flex h-4 w-4 items-center justify-center rounded border',
-                      e.wa ? 'bg-brand-600 border-brand-600 text-white' : 'border-theme-border bg-card',
                     )}
-                  >
-                    {e.wa && <Check className="w-3 h-3" />}
-                  </span>
-                  <WhatsAppIcon size={14} aria-hidden="true" />
-                  {t('facts.phoneIsWhatsapp')}
-                </label>
+                  </div>
+                </div>
+
               </div>
-            ))}
+              );
+            })}
             <button
               type="button"
               onClick={addEntry}
@@ -690,7 +966,7 @@ export function BusinessFactSheet({
           loading={saving}
           // An fb-suggested prefill may be saved UNCHANGED — that save is the
           // merchant's explicit confirmation, which is the whole point.
-          disabled={(!dirty && !fbSuggested) || hasDuplicates}
+          disabled={(!dirty && !fbSuggested) || hasDuplicates || hasInvalid}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >

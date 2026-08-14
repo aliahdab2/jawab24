@@ -11,7 +11,7 @@ import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
-import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
+import { BusinessFactSheet, type EditableFactKey, type FactSavePayload } from '@/components/business/BusinessFactSheet';
 import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, factCollectionsApi, type CatalogVerticalInfo, type FactCollectionWithRows } from '@/lib/api';
@@ -19,7 +19,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import { todayISODate } from '@/utils/dateUtils';
 import { KbCleanupSheet } from '@/components/catalog/KbCleanupSheet';
 import {
-  unwrapBusinessProfile, whatsappNumbers, hasFieldLinesToClean, isRowLive,
+  unwrapBusinessProfile, whatsappNumbers, businessPhoneEntries, businessPhoneList,
+  normalizePhoneEntries, hasFieldLinesToClean, isRowLive,
   type BusinessProfile, type StoredBusinessProfile,
 } from '@jawab24/shared';
 import { toast } from 'sonner';
@@ -53,6 +54,7 @@ const CONFIRM_FIELDS: Record<EditableFactKey, ReadonlyArray<keyof BusinessProfil
   address: ['address'],
   phone: ['phones', 'channels'],
   website: ['website'],
+  email: ['email'],
   delivery: ['policies'],
   payment: ['policies'],
 };
@@ -229,8 +231,12 @@ function BusinessPageInner() {
     const { merchant = {} } = unwrapBusinessProfile(selectedPage?.businessProfile);
     switch (key) {
       case 'address': return merchant.address ?? '';
-      case 'phone': return (merchant.phones ?? []).filter((p) => p?.trim()).join(', ');
+      // `phone` edits through `initialEntries` — a joined string cannot carry
+      // per-number descriptions without inventing a separator a description
+      // could itself contain.
+      case 'phone': return '';
       case 'website': return merchant.website ?? '';
+      case 'email': return merchant.email ?? '';
       case 'delivery': return merchant.policies?.shipping ?? '';
       case 'payment': return merchant.policies?.payment ?? '';
     }
@@ -314,30 +320,39 @@ function BusinessPageInner() {
     }
   };
 
-  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string[]) => {
-    const value = raw.trim();
+  const saveFact = (key: EditableFactKey, payload: FactSavePayload) => {
     return saveProfile((patch) => {
+      if (payload.kind === 'phones') {
+        // A stored WhatsApp mark on a number NOT among the listed phones
+        // (legacy/imported data) is invisible to the sheet — carry it
+        // through the save instead of silently dropping it. Compare against
+        // the NUMBERS: an entry object would never match a stored mark.
+        const prevPhones = businessPhoneList(patch);
+        const orphans = whatsappNumbers(patch).filter((n) => !prevPhones.includes(n));
+        // Canonicalized here as well as server-side: the patch is compared
+        // against the stored value to decide whether `phones` changed, and a
+        // non-canonical echo would stamp merchant provenance on a field the
+        // merchant never touched (see businessPhone.ts).
+        const entries = normalizePhoneEntries(payload.entries);
+        patch.phones = entries.length ? entries : undefined;
+        // The WhatsApp marks ride with the numbers they belong to — any
+        // subset of the listed numbers (stored as an array; legacy rows may
+        // still hold a single string, normalized on read by
+        // `whatsappNumbers`). Spread the existing container: `channels`
+        // also holds `preferred`.
+        const marked = [...orphans, ...payload.whatsapp];
+        patch.channels = { ...patch.channels, whatsapp: marked.length ? marked : undefined };
+        return patch;
+      }
+
+      const value = payload.value.trim();
       switch (key) {
         case 'address': patch.address = value || undefined; break;
-        case 'phone': {
-          // A stored WhatsApp mark on a number NOT among the listed phones
-          // (legacy/imported data) is invisible to the sheet — carry it
-          // through the save instead of silently dropping it.
-          const prevPhones = (patch.phones ?? []).filter((p): p is string => !!p?.trim()).map((p) => p.trim());
-          const orphans = whatsappNumbers(patch).filter((n) => !prevPhones.includes(n));
-          patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined;
-          // The WhatsApp marks ride with the numbers they belong to — any
-          // subset of the listed numbers (stored as an array; legacy rows may
-          // still hold a single string, normalized on read by
-          // `whatsappNumbers`). Spread the existing container: `channels`
-          // also holds `preferred`.
-          const marked = [...orphans, ...(whatsapp ?? [])];
-          patch.channels = { ...patch.channels, whatsapp: marked.length ? marked : undefined };
-          break;
-        }
         case 'website': patch.website = value || undefined; break;
+        case 'email': patch.email = value || undefined; break;
         case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
         case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
+        case 'phone': break; // handled above
       }
       return patch;
     }, () => setEditingFact(null), CONFIRM_FIELDS[key]);
@@ -566,6 +581,7 @@ function BusinessPageInner() {
           factKey={editingFact}
           label={t(`facts.${editingFact}`)}
           initialValue={factValue(editingFact)}
+          initialEntries={businessPhoneEntries(unwrapBusinessProfile(selectedPage?.businessProfile).merchant ?? {})}
           initialWhatsapp={unwrapBusinessProfile(selectedPage?.businessProfile).merchant?.channels?.whatsapp}
           // Not `hasStore`: the sheet's hint tells the merchant they need not answer,
           // so it may only appear when the store REALLY answers (active + synced
@@ -576,7 +592,7 @@ function BusinessPageInner() {
           fbSuggested={hasFbSuggestion(editingFact)}
           saving={savingFact}
           saveError={saveError}
-          onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
+          onSave={(payload) => saveFact(editingFact, payload)}
           onClose={() => setEditingFact(null)}
         />
       )}

@@ -140,6 +140,7 @@ matched cross-format (E.164 + last-9-digit tail). The exclusion set:
 | Source | Catches | Incident |
 |---|---|---|
 | Business phones (`getBusinessPhones`, Redis 1 h under a **`kbVersion`-scoped key**) — the UNION of the KB free text, the structured Business Info fields (`phones` + WhatsApp) and the fact-collection rows (names + attribute values) | customer pastes/types the merchant's published line, wherever the merchant happens to keep it | June 2026 — 8 bogus leads dialing the merchant · Aug 2026 — MES fact-row migration |
+| ⚠️ **NOT yet a source: the persona** (`brandVoiceNotesMulti`) | a merchant who wrote their routing table into «الشخصية ونبرة العلامة» publishes those numbers in every reply, and none of them are excluded | open — see the note below |
 | **Prior** merchant turns of this conversation (`priorBusinessTurns`) | customer pastes our earlier reply back (e.g. to translate it) | June 2026 — ICDL paste-back |
 | Forwarded `[Shared post: "…"]` blocks — stripped from gate text AND fed to the exclusion | customer forwards the merchant's own ad whose body ends with the merchant's number | June 2026 — Nourva ad forwards |
 | Image-message turns (`imageTurnTexts`) — the whole body is dropped from gate text AND every image turn in the history joins the exclusion | numbers OCR'd from a photo the customer shared (a doctor's prescription stamp, another clinic's flyer footer) — third-party contact lines, never the customer's | July 2026 — Port Said hospital, 3/3 leads |
@@ -161,12 +162,30 @@ customer's phone. Any NEW surface that publishes a merchant number must be added
 to that union in the same PR. Expired/unavailable fact rows are included on
 purpose — a business's old number is still not a customer's.
 
+🔴 **The persona is such a surface, and it is NOT in the union yet.** A number in
+`settings.brandVoiceNotesMulti` reaches customers on every reply, so a customer
+echoing it back becomes a lead whose call button dials the merchant — the same
+defect the fact-row gap produced, on a surface two of our most engaged merchants
+actually use (one at the 800-char cap with 18 phone tokens in it). Adding it has
+one trap worth writing down: the persona is **settings**-scoped, while this cache
+key is `kbVersion`-scoped, and a settings save moves nothing on `pages`. Joining
+the union without adding a persona dimension to the key would serve stale numbers
+for up to an hour — re-creating exactly the staleness the 2026-08-12 fix removed.
+
 **The `phones[]` / legacy `phone` dual shape has ONE reader**, `businessPhoneList`
 (`packages/shared/src/businessInfoPrompt.ts`), shared with the prompt formatter.
 The set the prompt PUBLISHES and the set capture EXCLUDES must be identical; an
 inline `phones ?? [phone]` reads an empty array as "no phones" while the prompt
 still publishes the legacy value, which puts the merchant's own line back on a
 lead's call button. Same rule for `whatsappNumbers`.
+
+Since 2026-08-13 an entry may also be a `{number, description}` object (the
+contact standard — a line can say what it is for). `businessPhoneList` still
+returns bare NUMBERS, so this file's contract is unchanged by construction;
+`businessPhoneEntries` is the reader for anything that wants the description
+too. Never iterate `merchant.phones` directly — an object reaching
+`texts.join('\n')` renders `[object Object]` and every one of the merchant's
+numbers silently leaves the exclusion set.
 
 **Two bounds on the URL strip, both measured over 90 days of prod inbound (128,187
 messages), not guessed:**

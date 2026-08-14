@@ -1,12 +1,17 @@
 import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Clock, MapPin, Truck, CreditCard, Phone, Globe } from 'lucide-react';
+import { Clock, MapPin, Truck, CreditCard, Phone, Globe, Mail } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui';
-import type { Page } from '@jawab24/shared';
+import type { Page, BusinessPhoneEntry } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
 import type { EditableFactKey } from './BusinessFactSheet';
 import { computeFactCoverage, isScoredFactKey, isStorePolicyKey, type BusinessFactKey } from '@/utils/businessCoverage';
 import { parseWeek, summarizeWeek, type DayKey } from '@/utils/businessHours';
+
+/** Plain-text form of one contact line, for the row's `value` (used by the
+ *  collapsed summary and by anything reading the row as a string). */
+const describePhone = (p: BusinessPhoneEntry) =>
+  p.description ? `${p.number} (${p.description})` : p.number;
 
 interface BusinessFactRowsProps {
   page: Page;
@@ -100,15 +105,21 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
       // the same digits typed twice and two copies to keep in sync.
       row('phone', {
         icon: Phone,
-        value: phones.length ? phones.join(' · ') : null,
-        suggestedValue: suggested.phones?.length ? suggested.phones.join(' · ') : null,
+        value: phones.length ? phones.map(describePhone).join(' · ') : null,
+        suggestedValue: suggested.phones?.length ? suggested.phones.map(describePhone).join(' · ') : null,
         valueNode: phones.length ? (
           <span className="inline-flex items-center gap-1 min-w-0">
             {phones.map((p, i) => (
               <span key={i} className="inline-flex items-center gap-1">
                 {i > 0 && <span aria-hidden="true" className="text-subtle">·</span>}
-                <span>{p}</span>
-                {whatsapp.includes(p) && (
+                <span>{p.number}</span>
+                {/* The purpose the merchant gave this line, muted so the number
+                    stays the thing the eye lands on. */}
+                {p.description && (
+                  <span className="text-muted-foreground text-xs">{p.description}</span>
+                )}
+                {/* The mark belongs to the NUMBER — never compare an entry. */}
+                {whatsapp.includes(p.number) && (
                   <WhatsAppIcon size={12} className="text-brand-600 flex-shrink-0" aria-label={t('facts.whatsapp')} />
                 )}
               </span>
@@ -125,6 +136,9 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
       row('delivery', { icon: Truck, value: values.delivery, suggestedValue: suggested.delivery ?? null }),
       row('payment', { icon: CreditCard, value: values.payment, suggestedValue: suggested.payment ?? null }),
       row('website', { icon: Globe, value: values.website, suggestedValue: suggested.website ?? null }),
+      // Last, by the same question-volume rule: customers ask for an email far
+      // less often than for hours, an address or a number.
+      row('email', { icon: Mail, value: values.email, suggestedValue: suggested.email ?? null }),
     ];
   }, [page, t]);
 
@@ -245,27 +259,21 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
         })}
       </ul>
 
-      {/* What makes the badge colours legible rather than decorative.
-          The swatches are literal emerald/amber because `status-success` and
-          `status-warning` are 50/700 background+text pairs with no solid-fill
-          token to borrow — these two values must be kept in step with those
-          classes by hand. */}
-      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-muted-foreground">
-        <li className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-500" />
-          {t('state.legendCovered')}
-        </li>
-        <li className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-amber-500" />
-          {t('state.legendMissing')}
-        </li>
-        <li className="inline-flex items-center gap-1.5">
-          {/* bg-current inherits the list's muted-foreground — theme-correct in
-              dark mode where a literal gray would wash out. */}
-          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-current" />
-          {t('state.legendOptional')}
-        </li>
-      </ul>
+      {/* ⛔ No colour legend here — removed 2026-08-13 (owner: «the explaining
+          text is useless»), and the code agreed.
+          Every row already renders its state as a WORD next to the colour
+          («مكتمل» / «ناقص» / «اختياري» / «بحاجة إلى مراجعة», see the badge above),
+          so a legend explaining the colour restated a meaning the badge was
+          never carrying alone. Two of its three lines — «ناقص — يحتاج إدخالك»,
+          «مكتمل — يستخدمه جواب» — were pure restatement, permanently on screen
+          for something a merchant needs at most once.
+          It also carried a maintenance trap worth losing: its swatches were
+          literal emerald/amber that had to be kept in step BY HAND with the
+          `status-success` / `status-warning` classes, which are 50/700
+          background+text pairs with no solid-fill token to borrow.
+          The words stay on the badges, so nothing is lost for colour-blind
+          readers either — the swatches were `aria-hidden` and the label was
+          always doing the accessible work. */}
     </section>
   );
 }

@@ -59,7 +59,8 @@ describe('computeFactCoverage — unconfirmed fb_sync values (the MES «+9715560
     const { suggested } = computeFactCoverage(
       businessPageFbSynced({ phones: ['+971556087128'], hours: FILLED_HOURS, address: 'Damascus Mazzah', website: 'mes-me.com' }),
     );
-    expect(suggested.phones).toEqual(['+971556087128']);
+    // Entries, not bare numbers — the row prints each with its purpose.
+    expect(suggested.phones).toEqual([{ number: '+971556087128' }]);
     expect(suggested.hours).toEqual(FILLED_HOURS);
     expect(suggested.address).toBe('Damascus Mazzah');
     expect(suggested.website).toBe('mes-me.com');
@@ -78,7 +79,7 @@ describe('computeFactCoverage — unconfirmed fb_sync values (the MES «+9715560
       },
     } as unknown as Page;
     const { values, suggested, covered } = computeFactCoverage(page);
-    expect(values.phones).toEqual(['0955545600']);
+    expect(values.phones).toEqual([{ number: '0955545600' }]);
     expect(covered.phone).toBe(true);
     expect(suggested.phones).toBeUndefined();
     expect(suggested.hours).toEqual(FILLED_HOURS);

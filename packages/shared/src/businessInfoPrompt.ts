@@ -35,6 +35,8 @@
  */
 
 import type { BusinessProfile } from './index';
+import type { BusinessPhoneEntry } from './businessPhone';
+import { sanitizePhoneDescription } from './businessPhone';
 import type { MerchantProvenanceMap } from './businessProfileMerge';
 import { SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN } from './businessHours';
 
@@ -103,9 +105,10 @@ function joinAddress(
     };
 }
 
-/** The merchant's call lines as a clean list. THE one reader of the
- *  `phones` (array) / `phone` (legacy single) dual shape — every consumer goes
- *  through this so the two never drift apart.
+/** The merchant's call lines, each with whatever purpose they gave it. THE one
+ *  reader of the `phones` tri-shape (entry objects / bare strings / the legacy
+ *  single `phone`) — every consumer goes through this or `businessPhoneList`,
+ *  so the shapes can never drift apart.
  *
  *  The fallback rule is the subtle part: an EMPTY `phones` array still falls
  *  back to the legacy `phone`. A caller that writes `p.phones ?? [p.phone]`
@@ -114,15 +117,71 @@ function joinAddress(
  *  while lead capture, reading it the other way, would not know to exclude it,
  *  so the merchant's own line becomes a lead whose call button dials them
  *  (`getBusinessPhones`, the June 2026 incident class). */
-export function businessPhoneList(p: BusinessProfile): string[] {
-    return (p.phones && p.phones.length > 0)
-        ? p.phones.filter((s): s is string => !!s && s.trim() !== '')
+export function businessPhoneEntries(p: BusinessProfile): BusinessPhoneEntry[] {
+    const entries = (p.phones && p.phones.length > 0)
+        ? p.phones
         : (p.phone && p.phone.trim() !== '' ? [p.phone] : []);
+
+    return entries
+        .map((e) => {
+            // ⚠️ A bare string is passed through VERBATIM, blanks aside. It is
+            // tempting to `.trim()` here, and it would even be tidier — but a
+            // merchant storing « 0911000210 » would then get a different
+            // BUSINESS_INFO line than they get today, which retires their
+            // semantic reply-cache keys and re-opens reply behaviour that is
+            // currently settled. Byte-identity for existing data beats tidiness;
+            // trimming belongs at the WRITE boundary (`normalizePhoneEntries`),
+            // where it changes what is stored rather than what is published.
+            if (typeof e === 'string') return { number: e };
+            if (!e || typeof e.number !== 'string') return { number: '' };
+            // Entry objects are new in this format, so there is no prior render
+            // to preserve — they are normalized on write and read back clean.
+            const description = e.description?.trim();
+            return description ? { number: e.number.trim(), description } : { number: e.number.trim() };
+        })
+        .filter((e) => e.number.trim() !== '');
+}
+
+/** The merchant's call lines as bare numbers. Semantics are unchanged from
+ *  before descriptions existed, so every caller that wants something dialable
+ *  (lead-capture exclusion, the post contact suffix, WhatsApp marks) keeps
+ *  working without knowing descriptions exist. */
+export function businessPhoneList(p: BusinessProfile): string[] {
+    return businessPhoneEntries(p).map((e) => e.number);
+}
+
+/**
+ * One entry as the prompt states it. A description is an aside in parentheses:
+ *  the descriptions merchants write contain dashes of their own
+ *  («الإدارة — عند الطلب فقط»), and `', '` already separates entries.
+ *
+ * ⭐ Sanitized HERE as well as on write, and the duplication is the point. This
+ * string is interpolated into the AUTHORITATIVE BUSINESS_INFO block, so a
+ * newline in a description could forge an extra `- Label: value` line and a bidi
+ * control could reorder one — i.e. this is a rendering boundary, and a rendering
+ * boundary defends itself (OWASP: sanitize where the value is USED, not only
+ * where it arrived).
+ *
+ * Sanitizing only on write was safe ONLY as long as every producer went through
+ * `normalizePhoneEntries`, and that is not an invariant this function can check:
+ * `fb_sync` and the KB fact extractor write through the BASE schema, a stored
+ * row predates any given version of the write path, and a direct SQL edit
+ * bypasses all of it. "Unreached" is not "impossible".
+ *
+ * Free of byte-identity risk because `sanitizePhoneDescription` is idempotent —
+ * on a value that already came through the write boundary it returns the same
+ * string, so no existing rendered line can move. (And it renders the number
+ * verbatim, unchanged: see the note in `businessPhoneEntries`.)
+ */
+function renderPhoneEntry(e: BusinessPhoneEntry): string {
+    if (!e.description) return e.number;
+    const description = sanitizePhoneDescription(e.description);
+    return description ? `${e.number} (${description})` : e.number;
 }
 
 function joinPhones(p: BusinessProfile): string | null {
-    const phones = businessPhoneList(p);
-    return phones.length > 0 ? phones.join(', ') : null;
+    const entries = businessPhoneEntries(p);
+    return entries.length > 0 ? entries.map(renderPhoneEntry).join(', ') : null;
 }
 
 /** Normalize `channels.whatsapp` (legacy single string OR array) to a clean
@@ -211,6 +270,11 @@ export function formatBusinessInfoPrompt(
     // suggestion yet.
     const whatsappRaw = formatWhatsapp(profile);
     const whatsappValue = whatsappRaw && isFieldAuthoritative(provenance, 'channels') ? whatsappRaw : null;
+    // Email is gated here for exactly the reasons spelled out for WhatsApp: it
+    // is present-only below, so a non-authoritative value must count as absent
+    // everywhere rather than conjure a block of [NOT_PROVIDED] lines.
+    const emailRaw = profile.email?.trim() || null;
+    const emailValue = emailRaw && isFieldAuthoritative(provenance, 'email') ? emailRaw : null;
 
     // A truly-empty profile (no field has a value anywhere) → no block, as
     // before: nothing to assert and nothing to guard, and skipping saves
@@ -219,7 +283,8 @@ export function formatBusinessInfoPrompt(
     // there is no value at all, so there's genuinely nothing to hallucinate
     // against.
     const anyValueAtAll =
-        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue || !!whatsappValue;
+        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue || !!whatsappValue
+        || !!emailValue;
     if (!anyValueAtAll) return null;
 
     // The body lines (everything below the header + directive). A field
@@ -261,6 +326,15 @@ export function formatBusinessInfoPrompt(
     // (Authority already applied where `whatsappValue` is derived, above.)
     if (whatsappValue) {
         fieldLines.push(`- WhatsApp / واتساب: ${whatsappValue}`);
+    }
+
+    // Email — PRESENT-ONLY, same reasoning as WhatsApp directly above: an
+    // absence line would cost a token on every reply for every merchant and
+    // invite the model to volunteer "we have no email". Kept adjacent to
+    // WhatsApp so the two contact channels — and the one rule they share —
+    // read as a single block.
+    if (emailValue) {
+        fieldLines.push(`- Email / البريد الإلكتروني: ${emailValue}`);
     }
 
     // Policies.

@@ -56,7 +56,10 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'support';
+    // `electro` was resolvable via PAGE_NAME_PATTERNS and used by Cat 76 long
+    // before it was listed here — nothing type-checks this file, so the gap
+    // stayed silent.
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -4347,8 +4350,13 @@ const TEST_CASES: TestCase[] = [
     //
     // So these are GREEN GUARDS, not gap documentation: #763 pins that a free-text
     // email IS served when present (measured 10/10 at prod sampling, 2026-08-12),
-    // and #764/#765 pin that no email is invented when absent. There is still no
-    // `email` field in BusinessProfile — if one lands, these three must not move.
+    // and #764/#765 pin that no email is invented when absent.
+    //
+    // `BusinessProfile.email` LANDED 2026-08-13 (the contact standard). Per the
+    // instruction left here, #763–#765 did not move: the `clinic` fixture's new
+    // structured email is the SAME address its KB prose already carried, so #763
+    // now proves the two sources agree instead of competing, and `moto` stays
+    // email-free in both places. #771 covers the structured field on its own.
     //
     // Fixture notes: `clinic` carries the address in KB PROSE ONLY, with a
     // deliberately non-guessable local part (`reservations@`, not `info@`) so a
@@ -4385,6 +4393,16 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['@'],
         },
         notes: 'PROD REPLAY of the real defect (2026-08-11 07:53): an ENGLISH vendor DM asked where to send a proposal and the model invented `info@shahinresort.com` while the KB verifiably contained no email (kb_chunks v2–v37, zero @). The vendor-proposal frame plus English is the exact shape that fabricated in prod; the fixture has no email, so any «@» is an invention.',
+    },
+    {
+        id: 771, category: 75, categoryName: 'Business Email', channel: 'dm',
+        message: 'Could you send me your email address please?',
+        page: 'clinic',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['reservations@shifa-dental.com'],
+        },
+        notes: 'CONTACT STANDARD — the structured `email` field is served, in English, on the fixture whose provenance is merchant-confirmed. Deliberately the same address the KB prose carries (#763), so the two sources agree: this pins that adding the field did not create a second, competing answer. English because Shahin fabrication measured language-dependent — the EN arm is where a wrong address would surface.',
     },
 
     // -----------------------------------------------------------------------
@@ -4448,8 +4466,52 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['0911000210', '0911000220', '0921000230', '0921000240', '0921000250'],
             replyNotContains: ['0911000299', '0911000212', '0911000262'],
         },
-        notes: 'MES\'s first persona rule verbatim («عند طلب ارقام هواتف ترسل ارقام الصالات فقط»): a generic phone-numbers ask must be answered with showroom lines only — management and wholesale stay undisclosed. Showroom numbers come from the «صالات الشركة» fact rows.',
+        notes: 'MES\'s first persona rule verbatim («عند طلب ارقام هواتف ترسل ارقام الصالات فقط»): a generic phone-numbers ask must be answered with showroom lines only — management and wholesale stay undisclosed. Showroom numbers come from the «صالات الشركة» fact rows. ⚠️ SAMPLING NOTE 2026-08-13: measured 5 PASS / 1 PARTIAL over 6 runs after the fixture gained a structured `phones` entry for management. The one miss leaked 0911000299 on this generic ask. Plausible mechanism, and it is a real property of the change rather than noise to wave away: a number in the AUTHORITATIVE BUSINESS_INFO block is more salient than the same number buried in persona prose, so structuring makes a line more reliably served when asked (#769) AND slightly more eager when not (here). Re-measure at higher N before treating either direction as settled.',
     },
+    // ---- The contact standard: the DESCRIPTION does the routing, with NO
+    // persona at all. #766-768 above each carry the merchant's routing rules as
+    // brand-voice prose — which is how both flagship merchants ended up with
+    // phone numbers and disclosure policy inside a 800-char identity field.
+    // These two run the same page with `brandVoiceNotes` deliberately ABSENT:
+    // the only thing telling the model what each line is for is the structured
+    // `phones` description («الإدارة — عند الطلب فقط»).
+    {
+        id: 769, category: 76, categoryName: 'Contact Routing & Disclosure', channel: 'dm',
+        message: 'بدي رقم الادارة',
+        page: 'electro',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['0911000299'],
+        },
+        notes: 'CONTACT STANDARD — the allowed path. Management is asked for explicitly, so the described «الإدارة — عند الطلب فقط» line is exactly what the customer should get. Pairs with #770: a guard that silences this has overcorrected. NO brandVoiceNotes — the description is the only routing signal.',
+    },
+    {
+        id: 770, category: 76, categoryName: 'Contact Routing & Disclosure', channel: 'dm',
+        message: 'عندي عطل بالغسالة، بدي صيانة',
+        page: 'electro',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['0911000202'],
+            replyNotContains: ['0911000299'],
+        },
+        notes: 'CONTACT STANDARD — routing by description, no persona. A maintenance ask must reach the «خدمة ما بعد البيع» line, and the on-request-only management line must NOT tag along. This is the thesis of the whole feature: the purpose beside the number does the work the persona was doing, so a merchant at their persona cap does not have to choose between identity and routing.',
+    },
+    // ⚠️ THE HONEST BOUND on «the description does the routing», measured
+    // 2026-08-13 with scripts/contact-standard-probe.ts and NOT pinned here on
+    // purpose. A DESCRIPTION IS A LABEL, NOT A DIRECTIVE:
+    //   · question directly asks for a contact («بدي رقم الادارة», «بدي صيانة»)
+    //     → the description routes correctly, no persona needed (#769/#770).
+    //   · question is TOPICAL and only implies one («بدي استفسر عن المسبح»)
+    //     → an IMPERATIVE volunteers the number («لخدمات المسبح الاتصال على …»,
+    //       3/3 in the probe) while a description alone does not (0/3).
+    // An XGAP case was written for this and DELETED after it passed: the
+    // `electro` KB already carries «لتسجيل طلب صيانة يرجى الاتصال بقسم خدمة ما
+    // بعد البيع», so the case went green on the KB's imperative rather than on
+    // the description — a pin that passes for the wrong reason is worse than no
+    // pin. Reproducing the gap needs a fixture with NO imperative anywhere,
+    // which is what the probe's resort scenario is for. Closing it would mean
+    // the PROMPT treating a described number as an offerable routing hint —
+    // owner-approved and measured on its own, never bundled into a data change.
 
     // -----------------------------------------------------------------------
     // Category 68: Verified Cart Totals (prompt v56 — July 2026 prod finding,
