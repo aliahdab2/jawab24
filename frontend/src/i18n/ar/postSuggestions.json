@@ -35,7 +35,7 @@
   "type_faq_tip": "سؤال شائع",
   "type_hours_reminder": "الدوام والتواصل",
   "type_general": "تفاعل",
-  "regenerateWithCount": "أنشئ منشوراً آخر · {count, plural, zero {لا محاولات} one {محاولة واحدة} two {محاولتان} few {# محاولات} many {# محاولة} other {# محاولة}}",
+  "regenerateWithCount": "أنشئ آخر ({count})",
   "noRemaining": "استنفدت محاولات اليوم. يمكنك إنشاء منشور جديد غداً.",
   "textOnlyNotice": "تعذّر توليد الصورة هذه المرة — النص جاهز للاستخدام.",
   "textOnlyStorageOff": "الصور غير متاحة حالياً — النص جاهز للاستخدام.",

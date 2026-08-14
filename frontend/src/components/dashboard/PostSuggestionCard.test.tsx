@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Page } from '@jawab24/shared';
 import enPostSuggestions from '@/i18n/en/postSuggestions.json';
-import arPostSuggestions from '@/i18n/ar/postSuggestions.json';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
 const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
@@ -185,26 +184,17 @@ describe('PostSuggestionCard — the card previews the REAL post', () => {
   });
 });
 
-describe('postSuggestions Arabic plural — all six CLDR forms compile and the dual renders', () => {
-  // The suite-wide next-intl mock resolves EN messages with English plural
-  // rules, so the Arabic `remaining` message — the one string in this feature
-  // carrying all six CLDR forms — would otherwise never execute: a malformed
-  // two{}/few{} branch would throw at render, in production, in Arabic only.
-  // Format it through the REAL next-intl translator (vi.importActual bypasses
-  // the mock) with the REAL ar JSON, which parses the full ICU message.
-  it('count: 2 produces the dual form', async () => {
-    const { createTranslator } = await vi.importActual<typeof import('next-intl')>('next-intl');
-    const t = createTranslator({
-      locale: 'ar',
-      messages: { postSuggestions: arPostSuggestions },
-      namespace: 'postSuggestions',
-    });
-    // The count moved onto the create button, so `regenerateWithCount` is now
-    // the string carrying all six CLDR forms — the risk moved with it.
-    render(<p>{t('regenerateWithCount', { count: 2 })}</p>);
-    expect(screen.getByText('أنشئ منشوراً آخر · محاولتان')).toBeInTheDocument();
-  });
-});
+/**
+ * The Arabic six-form plural guard that used to live here has MOVED to
+ * test/i18n/arabicPlurals.test.ts.
+ *
+ * It aimed at one string, `postSuggestions.remaining`, which no longer exists —
+ * the attempt count moved onto the create button as a bare parenthesised number
+ * and needs no plural. Rather than delete the coverage, it was generalised: the
+ * new file discovers EVERY six-form Arabic plural across every namespace (97
+ * messages in 20 files, where this guarded 1) and formats each through the real
+ * translator at all six CLDR boundaries.
+ */
 
 /**
  * A generation the merchant started can still be running when the dashboard

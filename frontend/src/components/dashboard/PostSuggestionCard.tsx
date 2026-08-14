@@ -181,8 +181,23 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           </Button>
         </div>
 
+        {/* ONE scrolling row, never a wrapping block.
+            Measured on the running app with 6 connected pages: `flex-wrap` put
+            the switcher on TWO rows occupying as much vertical space as the
+            post itself, which made the card the busiest thing on the dashboard
+            for a merchant who has not asked to switch anything. A horizontal
+            strip keeps the card a fixed height no matter how many pages a
+            workspace connects — and page count only grows.
+
+            `overflow-x-auto` + `shrink-0` on the pills is the standard chip-row
+            pattern; the row scrolls, the page body never does (Rule: wide
+            content scrolls inside its own container). */}
         {eligiblePages.length > 1 && (
-          <div role="tablist" aria-label={t('pageSwitcher')} className="flex flex-wrap gap-1.5 mt-3">
+          <div
+            role="tablist"
+            aria-label={t('pageSwitcher')}
+            className="flex gap-1.5 mt-3 overflow-x-auto pb-1 -mb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {eligiblePages.map((p) => {
               const active = p.id === pageId;
               return (
@@ -193,7 +208,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                   aria-selected={active}
                   onClick={() => setSelectedId(p.id)}
                   className={clsx(
-                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors max-w-[12rem] truncate',
+                    'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors max-w-[12rem] truncate',
                     active
                       ? 'bg-brand-500 text-white border-brand-500'
                       : 'bg-card text-muted-foreground border-theme-border hover:border-brand-300',

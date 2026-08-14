@@ -698,9 +698,15 @@ export function PostSuggestionSheet({
             /* The remaining count rides ON the control it governs. As its own
                sentence in the body it read as a warning about a limit; here it
                is a label on the button that spends it. `null` = unknown, so the
-               button simply carries no count rather than inventing one. */
-            <Button variant="ghost" size="sm" className="min-h-[44px]" onClick={() => void generate()}>
-              <RefreshCw className="w-4 h-4 me-1.5" aria-hidden="true" />
+               button simply carries no count rather than inventing one.
+               ⚠️ `whitespace-nowrap` + a SHORT label are load-bearing: measured
+               in a real browser at 390px, the first wording («أنشئ منشوراً آخر ·
+               3 محاولات») needed 360px inside a 180px button and was clipped in
+               half by `overflow-x: hidden`. The count is parenthesised rather
+               than separated by «·», which at button size read as part of the
+               number — «… · 3» scans as ٣٠. */
+            <Button variant="ghost" size="sm" className="min-h-[44px] whitespace-nowrap" onClick={() => void generate()}>
+              <RefreshCw className="w-4 h-4 me-1.5 shrink-0" aria-hidden="true" />
               {remaining !== null ? t('regenerateWithCount', { count: remaining }) : t('regenerate')}
             </Button>
           )}

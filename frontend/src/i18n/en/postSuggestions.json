@@ -35,7 +35,7 @@
   "type_faq_tip": "Common question",
   "type_hours_reminder": "Hours & contact",
   "type_general": "Engagement",
-  "regenerateWithCount": "Create another · {count, plural, one {# left} other {# left}}",
+  "regenerateWithCount": "Create another ({count})",
   "noRemaining": "You've used today's attempts. You can create a new post tomorrow.",
   "textOnlyNotice": "The image couldn't be generated this time — the text is ready to use.",
   "textOnlyStorageOff": "Images are temporarily unavailable — the text is ready to use.",
