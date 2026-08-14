@@ -153,6 +153,17 @@ export interface HealthInput {
     subscription: {
         status: string | null;
         trialEndsAt: Date | null;
+        /**
+         * Verdict of THE reply gate (`subscriptionsService.checkSubscriptionStatus`).
+         *
+         * REQUIRED, and deliberately not derivable here: `status` alone cannot say
+         * whether replies are flowing. A manual (cash/transfer) subscription never
+         * leaves 'active' — it expires by a snapped UTC-midnight boundary — so a
+         * console reading `status` showed a green "active" badge and no red flag
+         * while every reply was being refused (owner's own account, 2026-08-14).
+         * The tool support diagnoses with must not be the tool that reassures them.
+         */
+        autoReplyAllowed: boolean;
     } | null;
     pages: HealthInputPage[];
     /**
@@ -441,8 +452,12 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
                     add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
                 }
             }
-        } else if (status === 'past_due' || status === 'canceled') {
-            add('red', 'subscription_inactive', { meta: { status } });
+        } else if (!subscription.autoReplyAllowed) {
+            // Driven by the gate, NOT by `status in (past_due, canceled)`. That old
+            // pair silently excluded the manual-plan expiry, which keeps `status`
+            // at 'active' forever — the exact case that stayed green while replies
+            // were blocked. `status` rides along as meta so support still sees it.
+            add('red', 'subscription_inactive', { meta: { status: status ?? 'unknown' } });
         }
     }
 

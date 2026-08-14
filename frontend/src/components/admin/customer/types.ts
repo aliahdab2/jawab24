@@ -118,6 +118,16 @@ export interface CustomerDetail {
         trialEndsAt: string | null;
         maxAiRepliesPerMonth: number | null;
         maxPages: number | null;
+        /**
+         * Verdict of the reply gate. Support must read THIS, never `status`: a
+         * manual (cash/transfer) plan stays 'active' forever and lapses only at a
+         * snapped UTC-midnight boundary, so `status` rendered a green "active"
+         * badge over an account whose every reply was refused.
+         */
+        autoReply?: { allowed: boolean; code?: string };
+        /** The instant coverage actually ends — snapped, so up to ~24h before
+         *  `currentPeriodEnd`. The honest number to show a support agent. */
+        entitlementEndsAt?: string | null;
     } | null;
     pages: Array<{
         id: string;

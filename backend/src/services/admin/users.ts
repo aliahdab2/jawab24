@@ -9,6 +9,8 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
+import type { SubscriptionStatus } from '@jawab24/shared';
+import { subscriptionsService, resolveEntitlementEnd } from '../subscriptions';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
@@ -805,12 +807,30 @@ class AdminUsersService {
             replyModeEffective: resolveEffectiveReplyMode(p.replyMode, workspaceReplyMode),
         }));
 
+        // THE gate verdict, from the same predicate enforceAutoReplyGate blocks on.
+        // The console must never form its own opinion of "is this account replying?"
+        // — that is how it showed 🟢 active through a manual expiry that had frozen
+        // every reply, and why the fleet-wide past_due suspension survived a month.
+        const entitlement = subscription
+            ? subscriptionsService.checkSubscriptionStatus({
+                status: (subscription.status ?? 'active') as SubscriptionStatus,
+                paymentMethod: subscription.paymentMethod,
+                currentPeriodEnd: subscription.currentPeriodEnd,
+                trialEndsAt: subscription.trialEndsAt,
+            })
+            : null;
+        const entitlementEndsAt = subscription ? resolveEntitlementEnd(subscription) : null;
+
         const health = computeHealthFlags({
             now,
             lastSeenAt: user.lastSeenAt,
             settings: effectiveSettings,
             subscription: subscription
-                ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt }
+                ? {
+                    status: subscription.status,
+                    trialEndsAt: subscription.trialEndsAt,
+                    autoReplyAllowed: entitlement?.allowed ?? true,
+                }
                 : null,
             pages: pagesWithReplyMode.map(p => ({
                 id: p.id,
@@ -848,7 +868,17 @@ class AdminUsersService {
                     source: settingsSource,
                 }
                 : null,
-            subscription: subscription || null,
+            subscription: subscription
+                ? {
+                    ...subscription,
+                    // Support reads THIS, not `status`. `entitlementEndsAt` is the
+                    // snapped boundary the gate enforces — for a manual plan it is up
+                    // to ~24h before `currentPeriodEnd`, which is the raw instant the
+                    // console used to print as the coverage end.
+                    autoReply: { allowed: entitlement?.allowed ?? true, code: entitlement?.code },
+                    entitlementEndsAt,
+                }
+                : null,
             pages: pagesWithReplyMode,
             usage: currentUsage ? {
                 aiRepliesCount: currentUsage.aiRepliesCount || 0,

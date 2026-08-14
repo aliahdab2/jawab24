@@ -117,7 +117,12 @@ export function CommandCenter({
   // we fall back to last-30-days activity since there's no quota to show.
   const hasQuota = quota?.limit != null && quota.limit > 0;
   const quotaUsed = quota?.used ?? 0;
-  const resetDate = formatQuotaResetDate(quotaResetsAt, locale);
+  // withTime, always. The period boundary is an exact instant — for manual plans
+  // it is UTC midnight — and a bare calendar date reads as "all of that day",
+  // putting the merchant's understanding of their cut-off a full day late. Adding
+  // the time is also timezone-honest: rendered in the viewer's own zone, a
+  // 00:00 UTC boundary correctly shows as 03:00 for a merchant in UTC+3.
+  const resetDate = formatQuotaResetDate(quotaResetsAt, locale, { withTime: true });
 
   // Top-up is a separate, non-expiring bucket consumed only after the monthly
   // plan quota runs out. It was previously invisible until the merchant blew

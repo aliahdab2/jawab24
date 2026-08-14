@@ -21,6 +21,10 @@
   "limitBanner": {
     "warningTitle": "You're approaching your monthly reply limit",
     "reachedTitle": "You've used all Smart Replies for this period — Post Replies and greeting messages still work",
+    "billingPausedTitle": "Auto-replies are paused — your subscription has ended",
+    "billingPausedBody": "Every auto-reply is stopped: Smart Replies, Post Replies, away and greeting messages. New comments and DMs are going unanswered until you renew.",
+    "coverageEndedOn": "Coverage ended {date}",
+    "renewNow": "Renew subscription",
     "onTopupTitle": "You're now using your top-up balance",
     "onTopupUsage": "Smart Replies keep sending — {balance} top-up left",
     "topupLowTitle": "Your top-up balance is almost gone — Smart Replies stop when it runs out",

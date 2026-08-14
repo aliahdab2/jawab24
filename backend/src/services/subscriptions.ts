@@ -155,8 +155,6 @@ const LAZY_EXPIRY_CANARIES: Record<string, {
     },
 };
 
-/** Statuses that allow AI reply generation. */
-const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
 const STATUS_CACHE_TTL = 60;
 /**
@@ -180,6 +178,42 @@ export function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
     return d;
+}
+
+/**
+ * Exactly the fields `checkSubscriptionStatus` reads. Narrower than
+ * `Subscription & { plan: Plan }` on purpose: entitlement never depends on the
+ * plan, and demanding one forced every caller that only has a subscription row
+ * — the admin console among them — to either fabricate a plan or re-implement
+ * the predicate. A second implementation is precisely how the console came to
+ * disagree with the gate.
+ */
+export type SubscriptionStatusInput = Pick<
+    Subscription,
+    'status' | 'paymentMethod' | 'currentPeriodEnd' | 'trialEndsAt'
+>;
+
+/**
+ * The instant a subscription's entitlement ACTUALLY ends — the same boundary
+ * `checkSubscriptionStatus` enforces, exported so every display surface reads
+ * it from one place instead of re-deriving it from `currentPeriodEnd`.
+ *
+ * For a MANUAL (cash/transfer) subscription that boundary is snapped back to
+ * UTC midnight of the period-end day, because `initializeUsagePeriod` snaps the
+ * usage window the same way — see the long comment in `checkSubscriptionStatus`.
+ * That snap is deliberate and load-bearing (it closes the free-refill hole), but
+ * it means entitlement ends up to ~24h BEFORE the raw `currentPeriodEnd` instant
+ * every UI used to print. Printing the raw instant is what let a merchant read
+ * "14 August" while replies had already stopped at 14 August 00:00 UTC.
+ *
+ * Returns null when nothing bounds the subscription in time (no period end).
+ */
+export function resolveEntitlementEnd(
+    subscription: Pick<Subscription, 'paymentMethod' | 'currentPeriodEnd'>,
+): Date | null {
+    if (!subscription.currentPeriodEnd) return null;
+    const periodEnd = new Date(subscription.currentPeriodEnd);
+    return subscription.paymentMethod === 'manual' ? startOfUtcDay(periodEnd) : periodEnd;
 }
 
 /**
@@ -295,8 +329,16 @@ export const subscriptionsService = {
 
     /**
      * Fast subscription status check for the reply pipeline.
-     * Returns true if the user has an active/trialing subscription.
+     * Returns true if the user is entitled to auto-replies.
      * Cached in Redis for 60s to keep the hot path fast.
+     *
+     * Delegates to `checkSubscriptionStatus` — THE entitlement predicate — rather
+     * than testing `status in (active, trialing)` itself. It used to do the latter,
+     * which made it a second, disagreeing answer to "is this account replying?":
+     * a manual (cash/transfer) plan holds `status = 'active'` for good and lapses
+     * only at a snapped UTC-midnight boundary, so this would have called a frozen
+     * account active. It has no production caller today, and its docstring invites
+     * one onto the hot path — so it must not be able to disagree with the gate.
      */
     async isSubscriptionActive(userId: string): Promise<boolean> {
         const cacheKey = `sub:active:${userId}`;
@@ -309,9 +351,9 @@ export const subscriptionsService = {
         }
 
         const sub = await this.getUserSubscription(userId);
-        // No subscription row = free/trial user → allow replies
-        // Only block when an explicit subscription exists with inactive status
-        const active = sub === null || ACTIVE_STATUSES.has(sub.status);
+        // No subscription row = free/trial user → allow replies, matching
+        // canAutoReply. Only an explicit, unentitled subscription blocks.
+        const active = sub === null || this.checkSubscriptionStatus(sub).allowed;
 
         try {
             await redis.set(cacheKey, active ? '1' : '0', 'EX', STATUS_CACHE_TTL);
@@ -593,6 +635,20 @@ export const subscriptionsService = {
         // payment controller's guard uses, so the UI and the API cannot disagree.
         const marketplaceVerdict = await resolveMarketplaceBilling(subscriptionOwnerId, subscription);
 
+        // THE gate verdict — the very predicate enforceAutoReplyGate blocks on,
+        // not a second opinion assembled from `status` or percent-of-quota.
+        //
+        // Without this the dashboard had no way to know replies were frozen: a
+        // manual subscription past its snapped boundary closes the usage window,
+        // getCurrentUsage then matches no row, `used` reads 0 — and the warning
+        // banner, seeing 0 of 4,500, concluded everything was healthy and hid
+        // itself. The merchant saw a green dashboard while every reply was
+        // refused (owner's own account, 2026-08-14). `reason` is deliberately NOT
+        // forwarded: it is an internal English string, and the client renders a
+        // translated message keyed off `code`.
+        const entitlement = this.checkSubscriptionStatus(subscription);
+        const entitlementEnd = resolveEntitlementEnd(subscription);
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -615,6 +671,11 @@ export const subscriptionsService = {
                 status: subscription.status,
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
+                // When entitlement actually lapses — snapped for manual plans, so
+                // this can be ~24h earlier than `renewsAt`. Surfaces that tell a
+                // merchant "until when am I covered?" must read THIS, not renewsAt.
+                entitlementEndsAt: entitlementEnd?.toISOString(),
+                autoReply: { allowed: entitlement.allowed, code: entitlement.code },
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
                 // A CANCELED shopify mirror must NOT read as shopify-billed
                 // (isShopifyBilled carries the exemption): the merchant
@@ -1192,7 +1253,7 @@ export const subscriptionsService = {
      * Check subscription status (canceled/paused/expired trial/past_due beyond grace)
      * Reusable across all limit-check methods.
      */
-    checkSubscriptionStatus(subscription: Subscription & { plan: Plan }): LimitCheckResult {
+    checkSubscriptionStatus(subscription: SubscriptionStatusInput): LimitCheckResult {
         if (subscription.status === 'canceled' || subscription.status === 'paused') {
             return { allowed: false, reason: `Subscription is ${subscription.status}`, code: 'subscription_inactive' };
         }
@@ -1216,7 +1277,10 @@ export const subscriptionsService = {
         // Admin reopens the window (and the quota) via manualUpgrade once the
         // cash/transfer lands.
         if (subscription.paymentMethod === 'manual' && subscription.currentPeriodEnd) {
-            if (startOfUtcDay(new Date(subscription.currentPeriodEnd)) < new Date()) {
+            // resolveEntitlementEnd applies the snap; display surfaces call the
+            // same helper so the date a merchant reads is the date enforced here.
+            const entitlementEnd = resolveEntitlementEnd(subscription);
+            if (entitlementEnd && entitlementEnd < new Date()) {
                 return {
                     allowed: false,
                     reason: 'Subscription expired. Please renew to continue.',

@@ -1173,9 +1173,37 @@ describe('isSubscriptionActive', () => {
         spy.mockRestore();
     });
 
-    it('should return false for past_due subscription', async () => {
+    // past_due carries a 3-day grace in checkSubscriptionStatus (Stripe's first
+    // payment-retry window). This used to answer a flat `false` for past_due
+    // because it tested `status in (active, trialing)` itself — a SECOND opinion
+    // that contradicted the gate actually deciding replies. It now delegates, so
+    // these two pin the real boundary rather than the old disagreement.
+    it('should return true for past_due still inside the 3-day grace window', async () => {
         const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
             id: 'sub_1', userId: 'user_1', status: 'past_due',
+            currentPeriodEnd: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(true);
+        spy.mockRestore();
+    });
+
+    it('should return false for past_due beyond the grace window', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'past_due',
+            currentPeriodEnd: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(false);
+        spy.mockRestore();
+    });
+
+    it('should return false for a manual plan past its snapped coverage end', async () => {
+        // The regression, at this layer: `status` stays 'active' forever on a
+        // manual plan, so a status-only check called this account healthy.
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'active', paymentMethod: 'manual',
+            currentPeriodEnd: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
         } as any);
         const result = await subscriptionsService.isSubscriptionActive('user_1');
         expect(result).toBe(false);

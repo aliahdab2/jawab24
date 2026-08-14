@@ -118,7 +118,7 @@ function healthyInput(overrides: Partial<HealthInput> = {}): HealthInput {
         now: NOW,
         lastSeenAt: new Date('2026-07-23T00:00:00Z'),
         settings: healthySettings(),
-        subscription: { status: 'active', trialEndsAt: null },
+        subscription: { status: 'active', trialEndsAt: null, autoReplyAllowed: true },
         pages: [healthyPage()],
         usage: { aiRepliesCount: 100, limit: 1000, topupBalance: 0 },
         isTeamMemberOnly: false,
@@ -329,7 +329,7 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
 
     it('trial_expired when a trialing sub is past its end date', () => {
         const flags = computeHealthFlags(healthyInput({
-            subscription: { status: 'trialing', trialEndsAt: new Date('2026-07-20T00:00:00Z') },
+            subscription: { status: 'trialing', trialEndsAt: new Date('2026-07-20T00:00:00Z'), autoReplyAllowed: false },
         }));
         expect(keys(flags)).toContain('trial_expired');
     });
@@ -337,11 +337,31 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
     it('subscription_inactive for past_due / canceled', () => {
         for (const status of ['past_due', 'canceled']) {
             const flags = computeHealthFlags(healthyInput({
-                subscription: { status, trialEndsAt: null },
+                subscription: { status, trialEndsAt: null, autoReplyAllowed: false },
             }));
             const f = flags.find(x => x.key === 'subscription_inactive');
             expect(f?.meta?.status).toBe(status);
         }
+    });
+
+    it('subscription_inactive when the gate refuses a status-active manual plan', () => {
+        // The regression. A manual (cash/transfer) plan never leaves 'active' — it
+        // lapses at a snapped UTC-midnight boundary — so the old
+        // `status in (past_due, canceled)` test could not see it, and the console
+        // showed support a green "active" account whose every reply was refused.
+        const flags = computeHealthFlags(healthyInput({
+            subscription: { status: 'active', trialEndsAt: null, autoReplyAllowed: false },
+        }));
+        const f = flags.find(x => x.key === 'subscription_inactive');
+        expect(f?.severity).toBe('red');
+        expect(f?.meta?.status).toBe('active');
+    });
+
+    it('stays quiet when the gate allows, whatever the status reads', () => {
+        const flags = computeHealthFlags(healthyInput({
+            subscription: { status: 'active', trialEndsAt: null, autoReplyAllowed: true },
+        }));
+        expect(keys(flags)).not.toContain('subscription_inactive');
     });
 });
 
@@ -468,7 +488,7 @@ describe('computeHealthFlags — usage with a top-up balance', () => {
 describe('computeHealthFlags — trial ending window', () => {
     const trialEndingIn = (days: number) =>
         keys(computeHealthFlags(healthyInput({
-            subscription: { status: 'trialing', trialEndsAt: new Date(NOW.getTime() + days * 24 * 60 * 60 * 1000) },
+            subscription: { status: 'trialing', trialEndsAt: new Date(NOW.getTime() + days * 24 * 60 * 60 * 1000), autoReplyAllowed: true },
         })));
 
     it('3 days left → trial_ending_soon', () => {

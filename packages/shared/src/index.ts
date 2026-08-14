@@ -950,6 +950,31 @@ export interface UsageSummary {
     status: SubscriptionStatus;
     trialDaysRemaining?: number;
     renewsAt?: string;
+    /**
+     * When entitlement actually lapses. For a MANUAL (cash/transfer) plan this
+     * is snapped back to UTC midnight of the period-end day — up to ~24h before
+     * `renewsAt` — because the reply gate enforces that snapped boundary. Any
+     * surface answering "how long am I covered?" must read this, never
+     * `renewsAt`, which reads a full calendar day later than the truth.
+     */
+    entitlementEndsAt?: string;
+    /**
+     * Verdict of THE reply gate (`checkSubscriptionStatus`) — the same predicate
+     * `enforceAutoReplyGate` blocks on, not a second opinion derived from
+     * `status` or from percent-of-quota.
+     *
+     * `status` alone cannot answer "are replies flowing?": a manual subscription
+     * sits at 'active' forever, and expires only by the snapped boundary above.
+     * Reading `status` is what let the dashboard and the admin console both show
+     * a healthy account while every reply was refused.
+     *
+     * No human-readable reason is carried: the backend's is internal English, so
+     * clients render a translated message keyed off `code`.
+     */
+    autoReply?: {
+      allowed: boolean;
+      code?: LimitCheckResult['code'];
+    };
     hasStripeCustomer?: boolean;
     /** 'shopify' = billing lives in Shopify admin: the frontend must route
      * plan changes there and never into Stripe checkout/top-ups (D-G). */
