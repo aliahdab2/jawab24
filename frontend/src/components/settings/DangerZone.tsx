@@ -7,7 +7,8 @@ import {
 import { useTranslations } from 'next-intl';
 
 interface DangerZoneProps {
-  onDeleteAccount: () => Promise<void>;
+  /** Resolves true only when the account was actually deleted. */
+  onDeleteAccount: () => Promise<boolean>;
   saving: boolean;
 }
 
@@ -19,8 +20,15 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
   const [isDeleted, setIsDeleted] = useState(false);
 
   const handleDelete = async () => {
-    await onDeleteAccount();
-    setIsDeleted(true);
+    // Only claim success when the delete actually succeeded — a refused or failed
+    // request used to land on the "Account Deleted Successfully" screen anyway.
+    const deleted = await onDeleteAccount();
+    if (deleted) {
+      setIsDeleted(true);
+      return;
+    }
+    setShowDeleteModal(false);
+    setDeleteConfirmation('');
   };
 
   return (

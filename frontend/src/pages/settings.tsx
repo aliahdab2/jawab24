@@ -21,6 +21,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
+import { useIsDemoUser } from '@/features/demo';
 import type { NextPageWithLayout } from './_app';
 import {
   LanguageSelector,
@@ -138,6 +139,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const { language, setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
   const { canEdit } = useWorkspaceRole();
+  const isDemoUser = useIsDemoUser();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const router = useRouter();
 
@@ -382,7 +384,17 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  // Returns true only when the account is actually gone, so DangerZone does not
+  // show its "deleted successfully" state over a failed delete.
+  const handleDeleteAccount = async (): Promise<boolean> => {
+    // The demo workspace is one row shared by every visitor; the backend refuses
+    // to delete it (DEMO_DELETE_FORBIDDEN). Say so without a pointless round trip,
+    // mirroring the connect-Facebook pre-empt on /pages.
+    if (isDemoUser) {
+      toast.info(t('deleteDemoForbidden'));
+      return false;
+    }
+
     setSaving(true);
     try {
       await api.delete('/auth/me');
@@ -392,19 +404,28 @@ const SettingsPage: NextPageWithLayout = () => {
         await useAuthStore.getState().logout();
         router.replace('/');
       }, 2500);
+      return true;
     } catch (error: unknown) {
       const axiosErr = error as { response?: { data?: { error?: string; code?: string }; status?: number } };
       const status = axiosErr.response?.status;
-      captureError(error, 'Failed to delete account', { tags: { page: 'settings', action: 'delete-account' } });
+      const code = axiosErr.response?.data?.code;
       setSaving(false);
+      // An expected guard response, not a fault — keep it out of Sentry.
+      if (code === 'DEMO_DELETE_FORBIDDEN') {
+        toast.info(t('deleteDemoForbidden'));
+        return false;
+      }
+      captureError(error, 'Failed to delete account', { tags: { page: 'settings', action: 'delete-account' } });
       if (status === 404) {
+        // Already gone server-side — treat as success so the UI settles.
         setTimeout(async () => {
           await useAuthStore.getState().logout();
           router.replace('/');
         }, 2500);
-        return;
+        return true;
       }
       toast.error(tc('error'));
+      return false;
     }
   };
 

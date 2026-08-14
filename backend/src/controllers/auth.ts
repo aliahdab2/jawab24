@@ -616,6 +616,21 @@ export class AuthController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
+        // The demo workspace is ONE row shared by every visitor, so a delete from a
+        // demo session is not "my account" — it destroys the shared fixture and
+        // cascades the demo_page_* pages, breaking demo login for everyone. Same
+        // class as the linkFacebook/linkPhone guards above (prod incident
+        // 2026-07-18), which only stopped the flows that OVERWROTE the row.
+        // A real account is one phone registration away, and deletable.
+        if (await isDemoSession(userId)) {
+            request.log.warn('Demo session attempted account deletion — refused');
+            return reply.status(403).send({
+                error: true,
+                message: 'The shared demo account cannot be deleted. Sign in from the login page to create your own account.',
+                code: 'DEMO_DELETE_FORBIDDEN',
+            });
+        }
+
         try {
             // Audit BEFORE deletion (user row will be gone after)
             await auditLog({ userId, action: 'account.deleted', entityType: 'user' });

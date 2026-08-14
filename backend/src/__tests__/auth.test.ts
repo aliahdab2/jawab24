@@ -4,6 +4,7 @@ import { facebookService } from '../services/facebook';
 import { authService } from '../services/auth';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
+import { auditLog } from '../services/auditLog';
 
 // Mock dependencies
 vi.mock('../services/facebook', () => ({
@@ -21,7 +22,12 @@ vi.mock('../services/auth', () => ({
         generateToken: vi.fn(),
         createAuthResponse: vi.fn(),
         getUserById: vi.fn(),
+        deleteUser: vi.fn(),
     }
+}));
+
+vi.mock('../services/auditLog', () => ({
+    auditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock db for refreshPicture (update chain)
@@ -334,5 +340,67 @@ describe('AuthController - linkFacebook demo guard', () => {
         expect(facebookService.getAccessToken).toHaveBeenCalledWith('fb-oauth-code', 'https://jawab24.com/ar/auth/callback');
         expect(mockReply.status).toHaveBeenCalledWith(400);
         expect(mockReply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_LINK_FORBIDDEN' }));
+    });
+});
+
+describe('AuthController - deleteAccount demo guard', () => {
+    // The 2026-07-18 hijack fix guarded the two LINK paths and stopped there, so a
+    // demo session could still DELETE the shared demo user outright — cascading the
+    // demo_page_* fixtures and breaking demo login for everyone. Found 2026-08-14
+    // while answering Apple's Guideline 2.1 request, which asks us to demonstrate
+    // the account-deletion flow and so puts a reviewer on exactly that screen.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockRequest: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockReply: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockRequest = {
+            user: { userId: 'user-1' },
+            log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        };
+        mockReply = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn().mockReturnThis(),
+        };
+    });
+
+    it('refuses to delete the shared demo account, before any destructive call', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-1', facebookId: 'demo_user_jawab24', name: 'Demo',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        await authController.deleteAccount(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(403);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_DELETE_FORBIDDEN' }));
+        expect(authService.deleteUser).not.toHaveBeenCalled();
+        expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('deletes a real (non-demo) account', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-1', facebookId: '1234567890', name: 'Real User',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        vi.mocked(authService.deleteUser).mockResolvedValue(undefined);
+
+        await authController.deleteAccount(mockRequest, mockReply);
+
+        expect(authService.deleteUser).toHaveBeenCalledWith('user-1');
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+        expect(mockReply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_DELETE_FORBIDDEN' }));
+    });
+
+    it('rejects an unauthenticated caller without looking the user up', async () => {
+        mockRequest.user = undefined;
+
+        await authController.deleteAccount(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(401);
+        expect(authService.getUserById).not.toHaveBeenCalled();
+        expect(authService.deleteUser).not.toHaveBeenCalled();
     });
 });
