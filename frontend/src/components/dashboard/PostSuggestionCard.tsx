@@ -123,6 +123,22 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const suggestion = current?.suggestion ?? null;
   const pending = current?.inFlight?.status === 'pending';
   const hasPost = Boolean(suggestion);
+  // Today's attempts, straight from the read this card already performs. It was
+  // fetched here from the day the card shipped and never consulted, so a
+  // merchant whose attempts had all FAILED (a burned slot is never refunded —
+  // `requestSuggestion` bounds spend rather than refunding on every error path)
+  // saw a full-strength «أنشئ منشوراً الآن» that the server was guaranteed to
+  // refuse with a 429. Offering an action the system will decline is the defect;
+  // the count that prevents it was already on the wire.
+  const remaining = current?.remainingToday ?? null;
+  // Only a CONFIRMED 0 withholds the action. `null` means the cap store was
+  // unreachable, and blocking a merchant who may well have attempts left is the
+  // worse failure — the route fails closed behind us either way.
+  const exhausted = !hasPost && !pending && remaining === 0;
+  // Warn on the LAST attempt rather than counting down from the first: a quota
+  // printed on a fresh CTA makes the feature read as a limit, while silence
+  // until 0 makes the last attempt a cliff. Surface scarcity only once scarce.
+  const lastAttempt = !hasPost && !pending && remaining === 1;
   // Nothing to show and nothing this member may do about it → no card.
   if (!hasPost && !pending && !isAdmin) return null;
   // Swiped away earlier today. The server decides this against the feature's
@@ -228,23 +244,36 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                   : 'text-brand-800/80 dark:text-brand-300/80',
               )}
             >
-              {pending ? t('generating') : hasPost && suggestion ? suggestion.text : t('cardDesc')}
+              {/* At a spent cap the description carries the REASON, replacing
+                  the generic pitch — which would otherwise sell a feature the
+                  merchant cannot use for the rest of the day. One message, in
+                  the spot the eye already reads. */}
+              {pending ? t('generating') : hasPost && suggestion ? suggestion.text : exhausted ? t('noRemaining') : t('cardDesc')}
             </p>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => setOpen(true)}
-            className="w-full sm:w-auto flex-shrink-0"
-            // Opening a pending row shows the same "writing…" state the card
-            // already shows, so the action waits until there is a post to open.
-            disabled={pending}
-          >
-            {/* "View" while pending, not "Suggest a post": a post IS coming,
-                and a disabled CTA to start one reads as "you may not do this"
-                rather than "this is nearly ready". */}
-            {hasPost || pending ? t('cardOpen') : t('cardCta')}
-          </Button>
+          {/* No control at all once the cap is spent, rather than a disabled
+              one. The same reasoning the `pending` label below already applies:
+              a greyed-out CTA reads as «you may not do this» — a permission
+              problem the merchant might try to solve — when the truth is «come
+              back tomorrow», which the description now states outright. There
+              is no live action left here to keep a button for: the sheet would
+              open on the same sentence. */}
+          {!exhausted && (
+            <Button
+              size="sm"
+              onClick={() => setOpen(true)}
+              className="w-full sm:w-auto flex-shrink-0"
+              // Opening a pending row shows the same "writing…" state the card
+              // already shows, so the action waits until there is a post to open.
+              disabled={pending}
+            >
+              {/* "View" while pending, not "Suggest a post": a post IS coming,
+                  and a disabled CTA to start one reads as "you may not do this"
+                  rather than "this is nearly ready". */}
+              {hasPost || pending ? t('cardOpen') : lastAttempt ? t('cardCtaLast') : t('cardCta')}
+            </Button>
+          )}
         </div>
 
         {eligiblePages.length > 1 && (

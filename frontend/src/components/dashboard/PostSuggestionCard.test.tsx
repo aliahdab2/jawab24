@@ -389,3 +389,74 @@ describe('PostSuggestionCard — a generation still in flight', () => {
     expect(screen.getByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
   });
 });
+
+/**
+ * The card is the feature's ENTRY POINT, and the entry point is where an
+ * unusable action does its damage. `remainingToday` has ridden on this card's
+ * response since the feature shipped and was spent on nothing: a merchant whose
+ * three attempts had all FAILED — a burned slot is never refunded, see the
+ * comment in `requestSuggestion` — was shown a full-strength «أنشئ منشوراً
+ * الآن» that the server was guaranteed to refuse with a 429 («بلغت الحد
+ * اليومي»). Reported on the running build, 2026-08-14.
+ *
+ * One rule pinned here: the card never offers an action the server will decline.
+ */
+describe('PostSuggestionCard — never offers what the server will refuse', () => {
+  const POST = {
+    id: 's-cap', status: 'ready', text: 'منشور جاهز', imageUrl: null,
+    variants: [{ text: 'منشور جاهز', headline: 'ه', imageUrl: null }],
+    selectedVariant: 0, postType: 'general', source: 'manual',
+    suggestedFor: '2026-08-14', createdAt: '2026-08-14T08:00:00Z',
+  };
+
+  it('⭐ withholds the create CTA at a spent cap, and states the reason instead', async () => {
+    // Three attempts, all failed: nothing to show AND nothing left to spend.
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: null, inFlight: { id: 'f3', status: 'failed' as const }, remainingToday: 0 },
+    });
+    renderCard();
+
+    expect(await screen.findByText(enPostSuggestions.noRemaining)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+    // Not a DISABLED button either: greyed-out reads as «you may not do this»,
+    // a permission problem, when the truth is «come back tomorrow».
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCtaLast })).not.toBeInTheDocument();
+    // And the generic pitch must not sit above the refusal, still selling it.
+    expect(screen.queryByText(enPostSuggestions.cardDesc)).not.toBeInTheDocument();
+  });
+
+  it('still offers the post when one exists at a spent cap — the cap governs creating, not reading', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: POST, remainingToday: 0 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
+    expect(screen.queryByText(enPostSuggestions.noRemaining)).not.toBeInTheDocument();
+  });
+
+  it('warns on the LAST attempt, so 0 is never a cliff', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 1 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCtaLast })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+  });
+
+  it('says nothing about the budget while attempts are plentiful', async () => {
+    // A quota printed on a fresh CTA makes the feature read as a limit.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCta })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCtaLast })).not.toBeInTheDocument();
+  });
+
+  it('an UNKNOWN remaining keeps the CTA — a cap store that is down must not deny a merchant', async () => {
+    // `null` ≠ 0. Withholding on "we could not check" would block attempts the
+    // merchant actually holds; the route fails closed behind it either way.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: null } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCta })).toBeEnabled();
+    expect(screen.queryByText(enPostSuggestions.noRemaining)).not.toBeInTheDocument();
+  });
+});
