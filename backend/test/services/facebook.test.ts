@@ -999,7 +999,11 @@ describe('Facebook Service', () => {
 
             const result = await service.getScheduledPosts('page_123', 'page_token');
 
-            expect(result).toEqual({ posts: [], failed: true, truncated: false });
+            expect(result).toMatchObject({ posts: [], failed: true, truncated: false });
+            // The error rides along so a caller that owns the page row can tell a dead
+            // CREDENTIAL from a Graph blip and start recovery. Discarding it is what
+            // made the 2026-08-14 outage look like "this page has no posts".
+            expect(result.error).toBeDefined();
         });
 
         it('reports truncated when the edge fills the limit, rather than capping silently', async () => {

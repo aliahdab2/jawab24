@@ -10,7 +10,9 @@ const {
     mockIncr, mockExpire, mockDel, mockSet, mockCaptureError,
     mockUpdate, mockSelect, mockLogToggle,
     mockNotifyWorkspace, mockNotifyUser, mockEmailSend, mockTemplate,
+    mockHandleTokenFailure,
 } = vi.hoisted(() => ({
+    mockHandleTokenFailure: vi.fn().mockResolvedValue(null),
     mockIncr: vi.fn(),
     mockExpire: vi.fn().mockResolvedValue(1),
     mockDel: vi.fn().mockResolvedValue(1),
@@ -38,6 +40,10 @@ vi.mock('../services/notifications', () => ({
 vi.mock('../services/email', () => ({ emailService: { send: mockEmailSend } }));
 vi.mock('../utils/emailTemplates', () => ({ autoPausedEmailTemplate: mockTemplate }));
 vi.mock('../config', () => ({ config: { frontendUrl: 'https://jawab24.com' } }));
+// Collaborator, not a dependency of the pause logic: recordSendFailure hands it
+// the raw failure so a revoked credential is re-minted on the FIRST rejection
+// instead of the tenth. Mocked here so this file keeps testing the counter.
+vi.mock('../services/pageTokenRecovery', () => ({ handlePageTokenFailure: mockHandleTokenFailure }));
 
 import { recordSendFailure, PAUSE_THRESHOLD, isNotifiableAutoPausePlatform } from '../services/pageAutoPause';
 
@@ -106,6 +112,25 @@ describe('auto-pause merchant notification', () => {
             type: 'auto_pause',
             userId: 'user-1',
         }));
+    });
+
+    it('forwards the raw failure to token recovery on the FIRST rejection, long before the threshold', async () => {
+        mockPauseRow({ consecutiveSendFailures: 1, autoReplyDisabledReason: null });
+        const failure = { bucket: 'our_fault', code: 190, subcode: 460 };
+        await recordSendFailure(PAGE, 'our_fault', 'facebook', failure);
+        await flush();
+
+        expect(mockHandleTokenFailure).toHaveBeenCalledWith(PAGE, failure);
+        // …and the counter still ran: recovery does not excuse the failure.
+        expect(mockUpdate).toHaveBeenCalled();
+    });
+
+    it('does not call token recovery when the caller passes no failure (old 3-arg callers)', async () => {
+        mockPauseRow({ consecutiveSendFailures: 1, autoReplyDisabledReason: null });
+        await recordSendFailure(PAGE, 'our_fault', 'facebook');
+        await flush();
+
+        expect(mockHandleTokenFailure).not.toHaveBeenCalled();
     });
 
     it('below the threshold sends nothing', async () => {

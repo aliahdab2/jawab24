@@ -910,7 +910,9 @@ export class MessageProcessor {
                 const dmFailure = (platform === 'facebook' || platform === 'instagram')
                     ? classifyDmError(error, platform)
                     : undefined;
-                void recordSendFailure(page.id, dmFailure?.bucket, platform);
+                // `error` (not just the bucket) so a revoked credential can be
+                // re-minted on the spot instead of waiting for ten more losses.
+                void recordSendFailure(page.id, dmFailure?.bucket, platform, error);
                 // SSE: notify merchant of failed reply
                 publishSSEEvent(userId, 'message:reply_failed', {
                     messageId: platformMessageId,

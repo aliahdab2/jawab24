@@ -9,6 +9,7 @@ import { notificationService } from './notifications';
 import { emailService } from './email';
 import { autoPausedEmailTemplate } from '../utils/emailTemplates';
 import { config } from '../config';
+import { handlePageTokenFailure } from './pageTokenRecovery';
 
 /**
  * Auto-pause defense for "dead pages" — pages where Facebook persistently
@@ -282,12 +283,24 @@ export async function recordSendFailure(
     pageId: string,
     bucket: DmFailureBucket | undefined,
     platform?: string,
+    failure?: unknown,
 ): Promise<void> {
     // Per-platform streak first: it covers channel-level buckets the page-level
     // counter deliberately ignores (thread_owned_elsewhere), and fire-and-forget
     // so it can never block or fail the caller.
     if (platform && isChannelLevelFailure(bucket)) {
         trackPlatformFailure(pageId, platform, bucket);
+    }
+
+    // A revoked page credential is a DIFFERENT event from a page that keeps
+    // getting rejected, even though both arrive here as `our_fault`. Counting to
+    // ten before acting is right for the second and indefensible for the first:
+    // the credential is re-mintable in one Graph call, and when it isn't, the
+    // merchant is the only one who can fix it and must be told which of Meta's
+    // five causes it was. Never throws, and leaves the counter logic below
+    // untouched — a page whose token recovers still owes its failure count.
+    if (failure !== undefined) {
+        await handlePageTokenFailure(pageId, failure);
     }
 
     if (!isPageLevelFailure(bucket)) return;

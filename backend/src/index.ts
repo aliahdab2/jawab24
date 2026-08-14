@@ -60,6 +60,7 @@ import { startPostSuggestionWorker, stopPostSuggestionWorker, setPostSuggestionW
 import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
+import { setPageTokenRecoveryLogger } from "./services/pageTokenRecovery";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
@@ -372,6 +373,12 @@ const start = async () => {
     // Start Facebook token refresh cron (refreshes tokens expiring within 7 days, every 6h)
     setTokenRefreshLogger(workerLogger);
     startTokenRefreshCron();
+
+    // Live token recovery has no cron — it fires from whichever Graph call hits a
+    // revoked credential first. It still needs the logger: without this it runs
+    // against noopLogger, and the one path that explains a silent page would be
+    // silent itself.
+    setPageTokenRecoveryLogger(workerLogger);
 
     // WhatsApp token health cron — separate from the Facebook one because WhatsApp
     // business tokens expire on a CLOCK (Meta forces 60 days on the Embedded Signup

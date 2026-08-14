@@ -602,7 +602,7 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number; after?: string; fullImages?: boolean },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null; failed: boolean }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null; failed: boolean; error?: unknown }> {
         try {
             const attachmentFields = opts?.fullImages
                 ? ',attachments{media_type,media{image{src}},subattachments.limit(20){media_type,media{image{src}}}}'
@@ -634,9 +634,13 @@ export class FacebookService {
                     pageId,
                     error: error.response?.data?.error?.message || error.message,
                 });
-                return { posts: [], nextCursor: null, failed: true };
             }
-            return { posts: [], nextCursor: null, failed: true };
+            // The error rides along with `failed` rather than being swallowed:
+            // a caller that owns the page row can tell a dead CREDENTIAL from a
+            // Graph blip and start recovery (services/pageTokenRecovery.ts).
+            // Degrading to an empty list while discarding the one fact that
+            // explains it is what made the 2026-08-14 outage invisible.
+            return { posts: [], nextCursor: null, failed: true, error };
         }
     }
 
@@ -660,7 +664,7 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean; truncated: boolean }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean; truncated: boolean; error?: unknown }> {
         const limit = opts?.limit ?? SCHEDULED_POSTS_MAX;
         try {
             const response = await traced('getScheduledPosts', () =>
@@ -688,12 +692,26 @@ export class FacebookService {
             // Sentry too: the caller degrades to "no scheduled posts", so without this a
             // broken permission on this edge is invisible on BOTH sides — the merchant
             // sees an empty list and we see nothing at all.
+            //
+            // ⚠️ The Graph code/subcode go in TAGS, never only inside the free-text
+            // detail. Sentry's server-side scrubbing replaced `extra.error` with
+            // "[Filtered]" on JAWAB24-BACKEND-1Z (the message contains "access
+            // token"), so the alert that exists to explain this failure could not
+            // explain it — the cause had to be read off the server by SSH. Numbers
+            // in tags survive scrubbing and are groupable/searchable.
+            const fbError = axios.isAxiosError(error)
+                ? (error.response?.data as { error?: { code?: unknown; error_subcode?: unknown } } | undefined)?.error
+                : undefined;
             Sentry.captureMessage('Failed to list scheduled posts', {
                 level: 'warning',
                 fingerprint: ['fb-scheduled-posts-read-failed', pageId],
+                tags: {
+                    fb_code: typeof fbError?.code === 'number' ? String(fbError.code) : 'none',
+                    fb_subcode: typeof fbError?.error_subcode === 'number' ? String(fbError.error_subcode) : 'none',
+                },
                 extra: { pageId, error: detail },
             });
-            return { posts: [], failed: true, truncated: false };
+            return { posts: [], failed: true, truncated: false, error };
         }
     }
 

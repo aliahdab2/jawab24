@@ -1048,7 +1048,10 @@ export class CommentProcessor {
             // Defensive auto-pause: bump page-level failure counter (fire-and-forget).
             // Only `our_fault` / `unknown` / no-bucket count — `customer_refused` and
             // `window_expired` are per-customer issues, not page-wide. See pageAutoPause.ts.
-            void recordSendFailure(pageId, sendResult.dmFailure?.bucket);
+            // The whole dmFailure (not just its bucket): it carries the Graph
+            // code/subcode, which is what tells a revoked credential — re-mintable
+            // in one call — apart from a page Facebook simply keeps rejecting.
+            void recordSendFailure(pageId, sendResult.dmFailure?.bucket, undefined, sendResult.dmFailure);
             // Flag the comment so it surfaces in "Needs Attention" — previously it stayed
             // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
             // Swallow a secondary DB error here: we already failed to send, the SSE event

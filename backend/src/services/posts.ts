@@ -11,6 +11,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { isUniqueViolation } from '../utils/dbErrors';
 import { PostNotOwnedError } from './postErrors';
+import { handlePageTokenFailure, withPageTokenRetry } from './pageTokenRecovery';
 import { POST_REPLY_BUTTON_TEXT_MAX, type PublishedPost } from '@jawab24/shared';
 
 /** How the caller wants the Post Reply image handled on this save. */
@@ -803,12 +804,29 @@ export class PostsService {
             // "load more" would need a second cursor to page independently. Fetched in
             // parallel with the published page — two independent Graph reads.
             const wantScheduled = !!opts.includeScheduled && !opts.after;
-            const [published, scheduled] = await Promise.all([
-                facebookService.getPagePosts(page.facebookPageId, page.accessToken, { limit, after: opts.after }),
+            const facebookPageId = page.facebookPageId;
+            const readSlice = (accessToken: string) => Promise.all([
+                facebookService.getPagePosts(facebookPageId, accessToken, { limit, after: opts.after }),
                 wantScheduled
-                    ? facebookService.getScheduledPosts(page.facebookPageId, page.accessToken)
-                    : Promise.resolve({ posts: [], failed: false, truncated: false }),
+                    ? facebookService.getScheduledPosts(facebookPageId, accessToken)
+                    : Promise.resolve({ posts: [], failed: false, truncated: false, error: undefined as unknown }),
             ]);
+
+            let [published, scheduled] = await readSlice(page.accessToken);
+
+            // Both reads fail SOFT, so a dead page credential arrives here as an
+            // empty list rather than an exception — which is exactly how it reached
+            // a merchant as "لا توجد منشورات حديثة" while the real answer was "your
+            // Facebook connection ended" (2026-08-14). Recover the token in-request
+            // and read once more; `handlePageTokenFailure` alerts the merchant when
+            // it cannot, and returns null for every non-token error.
+            const readError = published.error ?? scheduled.error;
+            if (readError) {
+                const freshToken = await handlePageTokenFailure(page.id, readError);
+                if (freshToken) {
+                    [published, scheduled] = await readSlice(freshToken);
+                }
+            }
             // At the publish boundary Graph can briefly return the same post on BOTH edges.
             // The published copy is the truthful one (it's live), so drop the scheduled
             // twin — otherwise the picker renders one post twice under one React key.
@@ -861,8 +879,14 @@ export class PostsService {
         }
 
         if (!page.instagramAccountId) return { posts: [], nextCursor: null, partial: false };
-        const { media, nextCursor } = await instagramService.getMedia(
-            page.instagramAccountId, page.accessToken, { limit, after: opts.after },
+        const instagramAccountId = page.instagramAccountId;
+        // Instagram rides the SAME page token as Facebook (IG is columns on the page
+        // row, not a separate credential), so one revoked session kills both. Unlike
+        // the Facebook reads above this one THROWS — the controller turns it into a
+        // 500 and the app shows «حدث خطأ ما» — so it gets the wrapper rather than the
+        // fail-soft treatment: re-mint once, retry once, otherwise rethrow untouched.
+        const { media, nextCursor } = await withPageTokenRetry(page, accessToken =>
+            instagramService.getMedia(instagramAccountId, accessToken, { limit, after: opts.after }),
         );
         const triggers = await this.instagramTriggerMap(media.map(m => m.id));
         return {

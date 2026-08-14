@@ -51,12 +51,20 @@ vi.mock('../../src/services/notifications', () => ({
     notificationService: { sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined) },
 }));
 
+vi.mock('../../src/services/pageTokenRecovery', () => ({
+    handlePageTokenFailure: vi.fn().mockResolvedValue(null),
+    // Pass-through by default so the Instagram tests exercise the real call; the
+    // recovery behaviour itself is covered in pageTokenRecovery.test.ts.
+    withPageTokenRetry: vi.fn(async (page: { accessToken: string }, call: (t: string) => Promise<unknown>) => call(page.accessToken)),
+}));
+
 // Import after mocking
 const { facebookService } = await import('../../src/services/facebook');
 const { instagramService } = await import('../../src/services/instagram');
 const { imageStorage } = await import('../../src/services/imageStorage');
 const { captureError } = await import('../../src/utils/sentryHelpers');
 const { notificationService } = await import('../../src/services/notifications');
+const { handlePageTokenFailure, withPageTokenRetry } = await import('../../src/services/pageTokenRecovery');
 
 /** Column names referenced anywhere in a drizzle WHERE clause. Walks `queryChunks`
  *  rather than serializing (drizzle's column objects point back at their table, so
@@ -559,6 +567,42 @@ describe('PostsService', () => {
             ]);
         });
 
+        it('recovers a dead page token and re-reads, instead of showing an empty picker', async () => {
+            // 2026-08-14: this exact path answered «لا توجد منشورات حديثة» while the
+            // real cause was a revoked credential (190/460). Both Graph reads fail
+            // SOFT, so the recovery hangs off the returned `error`, not a throw.
+            const tokenError = { isAxiosError: true, response: { status: 400, data: { error: { code: 190, error_subcode: 460 } } } };
+            vi.mocked(facebookService.getPagePosts)
+                .mockResolvedValueOnce({ posts: [], nextCursor: null, failed: true, error: tokenError } as any)
+                .mockResolvedValueOnce({ posts: [{ id: 'fb_A', message: 'back', imageUrl: null, createdTime: '2026-08-14', commentsCount: 0 }], nextCursor: null, failed: false } as any);
+            vi.mocked(handlePageTokenFailure).mockResolvedValue('fresh-token');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook' });
+
+            expect(handlePageTokenFailure).toHaveBeenCalledWith('page-1', tokenError);
+            // Re-read used the FRESH token, not the dead one.
+            expect(vi.mocked(facebookService.getPagePosts).mock.calls[1][1]).toBe('fresh-token');
+            expect(result.posts).toHaveLength(1);
+            expect(result.partial).toBe(false);
+        });
+
+        it('does not re-read when recovery is impossible — one attempt, still `partial`', async () => {
+            const tokenError = { isAxiosError: true, response: { status: 400, data: { error: { code: 190, error_subcode: 460 } } } };
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({ posts: [], nextCursor: null, failed: true, error: tokenError } as any);
+            vi.mocked(handlePageTokenFailure).mockResolvedValue(null);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook' });
+
+            expect(facebookService.getPagePosts).toHaveBeenCalledTimes(1);
+            expect(result.partial).toBe(true);
+        });
+
         it('does NOT read the scheduled edge unless the client opts in', async () => {
             // A shipped mobile bundle that predates scheduled posts must keep getting the
             // list it knows how to render — it would show one as published with no date.
@@ -636,6 +680,20 @@ describe('PostsService', () => {
             await postsService.listPublishedPosts(page, { source: 'facebook', after: 'CURSOR', includeScheduled: true });
 
             expect(facebookService.getScheduledPosts).not.toHaveBeenCalled();
+        });
+
+        it('runs the Instagram read through token recovery — same credential, and this path THROWS', async () => {
+            // IG is columns on the page row, not a separate credential: one revoked
+            // session kills both sources. This read throws (the controller 500s and
+            // the app shows «حدث خطأ ما»), so it must go through the retry wrapper.
+            vi.mocked(instagramService.getMedia).mockResolvedValue({ media: [], nextCursor: null } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            await postsService.listPublishedPosts(page, { source: 'instagram' });
+
+            expect(withPageTokenRetry).toHaveBeenCalledWith(page, expect.any(Function));
         });
 
         it('maps instagram media (thumbnail preferred) and merges trigger state', async () => {
