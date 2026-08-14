@@ -245,6 +245,49 @@ describe('PostSuggestionSheet — auto-generate fires ONCE (StrictMode regressio
     expect(mockGenerate).toHaveBeenCalledTimes(1);
   });
 
+  it('does NOT auto-generate at a spent cap — and says why instead of erroring', async () => {
+    // The shipped defect: opening the sheet with no attempts left fired a POST
+    // the server was certain to refuse, so the merchant met `errorDailyCap`
+    // without having pressed anything. A confirmed 0 must never spend a request.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 0, availableTypes: ['general'] } });
+    render(<PostSuggestionSheet pageId="p1" initial={null} canGenerate onClose={vi.fn()} onChanged={vi.fn()} />);
+
+    // The reason is present…
+    await waitFor(() => expect(screen.getByText(enPostSuggestions.noRemaining)).toBeInTheDocument());
+    // …the doomed request was never issued…
+    expect(mockGenerate).not.toHaveBeenCalled();
+    // …and the error the merchant used to see is nowhere.
+    expect(screen.queryByText(enPostSuggestions.errorDailyCap)).not.toBeInTheDocument();
+    // No dead control to press either.
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+  });
+
+  it('does NOT auto-generate at a spent cap it was SEEDED with — no read needed to know better', async () => {
+    // The production shape: the card hands the sheet its own loaded response,
+    // so the cap is known at mount and not one request should leave the client.
+    render(
+      <PostSuggestionSheet
+        pageId="p1"
+        initial={{ suggestion: null, remainingToday: 0, availableTypes: ['general'] }}
+        canGenerate
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText(enPostSuggestions.noRemaining)).toBeInTheDocument());
+    expect(mockGenerate).not.toHaveBeenCalled();
+    // Seeded means seeded — no confirming round trip either.
+    expect(mockGetToday).not.toHaveBeenCalled();
+  });
+
+  it('an UNKNOWN remaining still generates — the cap store being down must not block a merchant', async () => {
+    // `null` ≠ 0. Blocking on "we could not check" would deny attempts the
+    // merchant may well have; the route fails closed behind this either way.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: null, availableTypes: ['general'] } });
+    render(<PostSuggestionSheet pageId="p1" initial={null} canGenerate onClose={vi.fn()} onChanged={vi.fn()} />);
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalledTimes(1));
+  });
+
   it('shows NO create button on the way in — the auto-generate owns that click', async () => {
     // The empty state added for a failed seed must not appear on the CTA path.
     // Auto-generate fires in an effect, i.e. one frame after the first paint,
