@@ -147,8 +147,22 @@ interface Scenario {
      * replace the very thing under test. Set it only to model a KB edit.
      */
     pageKey: string;
-    /** What the merchant has TODAY, verbatim in shape. */
+    /**
+     * The BASELINE arm — what the merchant had when the scenario was written,
+     * verbatim in shape.
+     *
+     * ⚠️ "today" is the role, not a guarantee of currency. A merchant (or we, on
+     * their behalf) can change production afterwards, and then this arm becomes a
+     * historical before-state. When that happens, set `todayLabel` so the printed
+     * column says so — MES is the worked example (his typo was fixed in
+     * production on 2026-08-14, so his baseline prints as PRE-FIX).
+     */
     today: Arm;
+    /**
+     * Overrides the printed label for the `today` arm. Default `'TODAY    '`.
+     * Pad to 9 characters so the per-question verdict columns stay aligned.
+     */
+    todayLabel?: string;
     /** The same business expressed through the contact standard. */
     standard: Arm;
     /**
@@ -243,10 +257,22 @@ const CONFIRMED: MerchantProvenanceMap = {
  * في حالة طلب» is «إلا» (except) mistyped as «إلى» (to). He meant "the
  * management number is sent ONLY when management or complaints is asked for";
  * as written it reads as a flat refusal. The English translation then baked the
- * broken reading in («is not sent if … is requested»). Kept verbatim — the
- * point of a TODAY arm is what the merchant actually has, typo included.
+ * broken reading in («is not sent if … is requested»).
+ *
+ * 🔴⭐⭐ **THIS IS NO LONGER WHAT PRODUCTION HAS — it is the PRE-FIX baseline.**
+ * The typo was corrected in production on **2026-08-14**, in every place it
+ * lived: both settings stores (legacy `settings` AND the governing
+ * `workspaces.settings` JSONB, `ar`/`en`/flat in each), `pages.knowledge_base`,
+ * and the re-ingested `kb_chunks` at `kb_version` 97. So the arm built from this
+ * constant measures MES as he WAS, and `MES_PERSONA_TYPO_FIXED` below is what he
+ * now IS. Renamed from `MES_PERSONA_TODAY` for exactly that reason: a constant
+ * called TODAY that describes the past is how a measurement gets misread.
+ *
+ * ⛔ Do NOT "refresh" this to current production. Its whole job is to be the
+ * before-state that the TYPO-ONLY arm is compared against; overwriting it makes
+ * both arms identical and would silently "prove" the typo cost nothing.
  */
-const MES_PERSONA_TODAY = `الاسم: معك رنيم من شركة ام اي اس
+const MES_PERSONA_PRE_FIX = `الاسم: معك رنيم من شركة ام اي اس
 النبرة واللهجة:  ودود، لهجة سورية
 عبارات مميّزة: بعض العبارات مع إيموجي
 أسلوب الرد: قصير، إيموجي خفيف، يبدو بشري — بدون ردود جافة
@@ -273,18 +299,24 @@ const MES_TYPO_FIX = {
 };
 
 /**
- * TODAY's persona with ONLY the typo corrected — everything else byte-identical,
- * including the fourth redundant rule and the double space HYBRID tidies up.
+ * The pre-fix persona with ONLY the typo corrected — everything else
+ * byte-identical, including the fourth redundant rule and the double space
+ * HYBRID tidies up.
+ *
+ * ⭐ **As of 2026-08-14 this arm IS production** (the typo was corrected in the
+ * persona and the KB together, which is what this arm models — see
+ * `MES_TYPO_FIX`). It measured **8.0/8 with the total silence on «ممكن رقم
+ * الادارة» gone**, over 5 runs, MES measured twice.
  *
  * Derived rather than copied: a second 405-char literal would drift silently
- * from the TODAY arm it is supposed to differ from in exactly one character
+ * from the pre-fix arm it is supposed to differ from in exactly one character
  * (Rule 10.8). The assertion below is what makes the derivation trustworthy —
- * a rewrite that matched nothing would make this arm a duplicate of TODAY and
- * "prove" the typo costs nothing.
+ * a rewrite that matched nothing would make this arm a duplicate of the baseline
+ * and "prove" the typo costs nothing.
  */
-const MES_PERSONA_TYPO_FIXED = MES_PERSONA_TODAY.replace(MES_TYPO_FIX.from, MES_TYPO_FIX.to);
-if (MES_PERSONA_TYPO_FIXED === MES_PERSONA_TODAY) {
-    throw new Error('TYPO-ONLY arm is inert: the typo anchor no longer matches MES_PERSONA_TODAY.');
+const MES_PERSONA_TYPO_FIXED = MES_PERSONA_PRE_FIX.replace(MES_TYPO_FIX.from, MES_TYPO_FIX.to);
+if (MES_PERSONA_TYPO_FIXED === MES_PERSONA_PRE_FIX) {
+    throw new Error('TYPO-ONLY arm is inert: the typo anchor no longer matches MES_PERSONA_PRE_FIX.');
 }
 
 /** The same persona with the four routing lines DELETED — identity, tone and
@@ -398,6 +430,12 @@ const SCENARIOS: Scenario[] = [
         key: 'mes-contaminated-phones-and-routing-persona',
         merchant: 'MES — instructions inside `phones`, routing rules inside the persona',
         pageKey: 'mes-eval-probe',
+        // His baseline is a BEFORE-state, not current production: the «إلى»→«إلا»
+        // typo was fixed in production on 2026-08-14 (persona in both settings
+        // stores, the KB, and the re-ingested chunks). The TYPO-ONLY arm below is
+        // what he actually runs now. Labelled so nobody reads the first column as
+        // "what MES has today".
+        todayLabel: 'PRE-FIX  ',
         today: {
             // Verbatim from production (page c75b6f33; `phones` editor-confirmed
             // 2026-08-10T10:58Z): two of the three "numbers" are instruction
@@ -411,7 +449,7 @@ const SCENARIOS: Scenario[] = [
                 ],
             },
             provenance: CONFIRMED,
-            persona: MES_PERSONA_TODAY,
+            persona: MES_PERSONA_PRE_FIX,
             keepCollections: ['أرقام الأقسام', 'صالات الشركة'],
         },
         standard: {
@@ -1068,7 +1106,7 @@ async function measuredHalf(sql: postgres.Sql): Promise<void> {
             console.log(`▸ ${s.merchant}`);
             console.log(`  page: ${s.pageKey}  ·  persona: ${s.today.persona.length} → ${s.standard.persona.length} chars\n`);
             const arms = [
-                { name: 'TODAY    ', cfg: s.today },
+                { name: s.todayLabel ?? 'TODAY    ', cfg: s.today },
                 { name: 'STANDARD ', cfg: s.standard },
                 ...(s.variants ?? []),
             ];
