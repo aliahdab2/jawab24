@@ -11,6 +11,7 @@ import { resolveMarketplaceBilling } from './marketplaceBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
+    PAST_DUE_GRACE_DAYS,
     type AiQuotaStatus,
     type Subscription, type Plan, type Usage, type UsageSummary,
     type SubscriptionStatus, type LimitCheckResult,
@@ -1312,7 +1313,7 @@ export const subscriptionsService = {
 
             if (periodEnd) {
                 const gracePeriodEnd = new Date(periodEnd);
-                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + PAST_DUE_GRACE_DAYS);
 
                 if (new Date() > gracePeriodEnd) {
                     return {

@@ -830,6 +830,7 @@ class AdminUsersService {
                     status: subscription.status,
                     trialEndsAt: subscription.trialEndsAt,
                     autoReplyAllowed: entitlement?.allowed ?? true,
+                    currentPeriodEnd: subscription.currentPeriodEnd,
                 }
                 : null,
             pages: pagesWithReplyMode.map(p => ({
