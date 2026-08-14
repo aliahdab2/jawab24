@@ -40,7 +40,7 @@ The downside? You need to build those flows. Setting up ManyChat properly takes 
 
 Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla and Zid integration doesn't exist. Comment replies are basic compared to DM flows.
 
-Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/en/compare/manychat)
+Starts at $14/month (Essential), but that tier has no AI at all — AI replies to DMs and comments begin on the $29/month Pro tier. Pricing is per active contact, not per reply. [See our full Jawab24 vs ManyChat comparison →](/en/compare/manychat)
 
 ### Chatfuel
 
@@ -48,7 +48,7 @@ Simple, template-based chatbot builder. Chatfuel is the "easy entry point" — g
 
 However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla or Zid integration.
 
-Free tier available, paid starts at $14.99/month. [See our full Jawab24 vs Chatfuel comparison →](/en/compare/chatfuel)
+Free tier available (Chatfuel Light); the paid offering is now a single plan with unlimited active contacts and a fair-use cap on AI processing. [See our full Jawab24 vs Chatfuel comparison →](/en/compare/chatfuel)
 
 ### Tidio
 
@@ -106,7 +106,7 @@ Here's how the tools stack up across the features that matter most:
 | Angry customer alerts | No | No | No | No | Push notification |
 | Confidence scoring | No | No | No | No | Yes |
 | Auto-pause on manual reply | No | No | No | No | Yes |
-| Starting price | $15/mo | $14.99/mo | $29/mo | Free* | $15/mo |
+| Starting price | $14/mo (AI from $29) | One plan, unlimited contacts | $29/mo | Free* (Plus $150/mo) | $15/mo |
 
 *Botpress free tier has usage limits.
 
