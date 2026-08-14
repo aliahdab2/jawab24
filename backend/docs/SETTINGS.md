@@ -37,6 +37,42 @@
     not merchant action.
 - **`pages.auto_reply_enabled` — the page master switch** lives on the page row, not in
   settings. `pages.auto_reply_disabled_reason` records who/what turned it off (`user`, …).
+- **`workspaces.settings.postSuggestionHiddenOn` — JSONB ONLY, deliberately no legacy
+  column and no UI settings row.** The UTC day (`YYYY-MM-DD`) on which a merchant swiped
+  the «إنشاء منشور» dashboard card away; absent/null = showing. Written by
+  `PUT /post-suggestions/visibility` (workspace admin) via
+  `postSuggestionsService.setHiddenToday`, read by `isHiddenToday` and served to the
+  client as `hiddenToday` on the post-suggestions read route.
+  - **A date, not a boolean or a timer.** The card returns the moment this stops
+    equalling today, so nothing has to expire it — no sweep, no TTL, and no state that
+    can get stuck hiding a feature whose ONLY entry point is that card (there is no nav
+    item and no `/posts` page). Undo writes `null`, never a back-dated value, so the
+    stored string is never a sentinel to interpret.
+  - **Compared against the feature's own UTC day** (the same one `post_suggestions.
+    suggested_for` uses), never the viewer's clock — a phone in Damascus and a browser in
+    Berlin must agree on when the card comes back.
+    ⚠️ **Known wrinkle:** near the UTC boundary "hidden until tomorrow" can be minutes.
+    A Damascus merchant (UTC+3) who swipes at 02:50 local is swiping at 23:50 UTC, and
+    the card returns 10 minutes later. Accepted rather than fixed: the daily CAP and
+    `suggested_for` already turn over on the same boundary, so a per-workspace-timezone
+    day here would make the card and the merchant's remaining attempts disagree — a worse
+    inconsistency than a rare short hide, which one more swipe resolves.
+  - **Written surgically via `workspaceSettingsService.setKey`, NEVER `updateSettings`.**
+    `updateSettings` is a read-modify-write over `getSettings`, which returns
+    `{ ...DEFAULTS, ...stored }` — so it writes every read-time default back as an
+    explicit key, after which `detectLegacyDrift` finds nothing missing and the
+    legacy-row heal stops for that workspace, for every field, permanently. Acceptable
+    when a merchant saves the settings form; not as the side effect of a swipe. Pinned by
+    `test/integration/workspaceSettingsSetKey.test.ts`, which runs the real `jsonb_set`
+    against Postgres and asserts the sibling keys are untouched.
+  - **`isHiddenToday` fails OPEN.** A settings read that throws SHOWS the card; hiding a
+    feature whose only entry point is that card is the worse failure, and the merchant
+    can always swipe again.
+  - It is NOT in `WORKSPACE_OVERLAY_FIELDS` and has no legacy counterpart, so it is
+    exempt from the two-store drift described above — there is only one store for it.
+  - The seed sweep also reads it: a page whose workspace hid the card is **deferred**,
+    not skipped forever (the "has any row" predicate is untouched, so tomorrow's sweep
+    still finds it unseeded). Counter: `skippedHidden`.
 - **Multilingual fields** (`*_multi` JSONB) hold `{ ar, en, sourceLang }`. `sourceLang`
   (`'ar' | 'en' | 'manual' | 'default'`) is **bookkeeping for the auto-translate flow, not
   copy**. Anything reading these records must go through

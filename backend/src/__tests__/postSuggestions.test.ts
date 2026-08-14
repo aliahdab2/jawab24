@@ -22,10 +22,14 @@ import { POST_SUGGESTION_VARIANT_COUNT, type PostSuggestionDto } from '@jawab24/
 const {
     mockChatCreate, mockImagesGenerate, mockCheckDailyCap, mockClaimDailyCapSlot,
     mockIsConfigured, mockPut, mockRemove, mockGetObject, mockComposePostCard, mockFetchRoundedLogo,
-    mockRenderPosterBase, mockConfig, mockEnqueue,
+    mockRenderPosterBase, mockConfig, mockEnqueue, mockGetWorkspaceSettings, mockUpdateWorkspaceSettings,
+    mockSetWorkspaceKey,
 } = vi.hoisted(() => ({
     mockRenderPosterBase: vi.fn(),
     mockEnqueue: vi.fn(),
+    mockGetWorkspaceSettings: vi.fn(),
+    mockUpdateWorkspaceSettings: vi.fn(),
+    mockSetWorkspaceKey: vi.fn(),
     mockChatCreate: vi.fn(),
     mockImagesGenerate: vi.fn(),
     mockCheckDailyCap: vi.fn(),
@@ -76,6 +80,13 @@ vi.mock('../services/imageCompose', () => ({
 }));
 vi.mock('../services/settings', () => ({
     settingsService: { getSettings: vi.fn().mockResolvedValue({ brandVoiceNotes: 'ودّي وقريب' }) },
+}));
+vi.mock('../services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getSettings: mockGetWorkspaceSettings,
+        updateSettings: mockUpdateWorkspaceSettings,
+        setKey: mockSetWorkspaceKey,
+    },
 }));
 vi.mock('../services/ecommerce', () => ({ getStoreContextForAI: vi.fn() }));
 vi.mock('../services/catalog', () => ({
@@ -313,6 +324,10 @@ beforeEach(() => {
     mockComposePostCard.mockImplementation(async (base: Buffer) => base);
     mockFetchRoundedLogo.mockResolvedValue(null);
     mockRenderPosterBase.mockResolvedValue(Buffer.from('poster-base'));
+    // Card SHOWING is the default state — every pre-existing test predates the
+    // swipe and must keep behaving as if nothing was ever hidden.
+    mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: null });
+    mockUpdateWorkspaceSettings.mockResolvedValue({});
     // Seeded like every other mock above: clearAllMocks resets CALLS, not
     // implementations, so the queue-down test's rejection would otherwise leak
     // into every test that runs after it.
@@ -915,7 +930,7 @@ describe('generateSuggestion — server-side availability enforcement (one deriv
 });
 
 describe('seedFirstPostSuggestions — one post per page, ever', () => {
-    const emptyResult = { eligible: 0, seeded: 0, skippedExisting: 0, failed: 0 };
+    const emptyResult = { eligible: 0, seeded: 0, skippedExisting: 0, skippedHidden: 0, failed: 0 };
 
     it('EMPTY workspace allowlist seeds nobody (stricter than the endpoint) and says so in the log', async () => {
         mockConfig.postSuggestions.workspaceIds = [];
@@ -1606,5 +1621,104 @@ describe('getVariantImage — the download path', () => {
         const out = await postSuggestionsService.getVariantImage(WS, PAGE, 's1');
         expect(mockGetObject).toHaveBeenCalledWith('generated-posts/ws/x.png');
         expect(out).not.toBeNull();
+    });
+});
+
+describe('the card can be swiped away for the rest of the day', () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    it('hidden is a DATE match against the feature own UTC day, not a boolean', async () => {
+        mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: today });
+        expect(await postSuggestionsService.isHiddenToday(WS)).toBe(true);
+    });
+
+    it('yesterday stops hiding it WITHOUT anything having to expire the flag', async () => {
+        // The whole point of storing a date: no sweep, no TTL, and no state that
+        // can get stuck hiding a feature whose only entry point is this card.
+        mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: '2020-01-01' });
+        expect(await postSuggestionsService.isHiddenToday(WS)).toBe(false);
+    });
+
+    it('never hidden reads as showing', async () => {
+        mockGetWorkspaceSettings.mockResolvedValue({});
+        expect(await postSuggestionsService.isHiddenToday(WS)).toBe(false);
+    });
+
+    it('⭐ a settings read that THROWS shows the card — failing closed would strip the only entry point', async () => {
+        mockGetWorkspaceSettings.mockRejectedValue(new Error('redis down'));
+        expect(await postSuggestionsService.isHiddenToday(WS)).toBe(false);
+    });
+
+    it('undo writes NULL rather than an old date, so the stored value is never a sentinel', async () => {
+        await postSuggestionsService.setHiddenToday(WS, false);
+        expect(mockSetWorkspaceKey).toHaveBeenCalledWith(WS, 'postSuggestionHiddenOn', null);
+    });
+
+    it('hiding stamps today', async () => {
+        await postSuggestionsService.setHiddenToday(WS, true);
+        expect(mockSetWorkspaceKey).toHaveBeenCalledWith(WS, 'postSuggestionHiddenOn', today);
+    });
+
+    /**
+     * ⭐ The review finding this test exists for.
+     *
+     * `updateSettings` is a read-modify-write over `getSettings`, which returns
+     * `{ ...DEFAULTS, ...stored }` — so it writes every read-time default back
+     * as an EXPLICIT key, and `detectLegacyDrift` then finds nothing missing and
+     * stops healing that workspace from the legacy row, for every field,
+     * permanently. Tolerable when a merchant saves the settings form; NOT as the
+     * side effect of swiping a card away.
+     */
+    it('⭐ a swipe NEVER goes through updateSettings — it must not materialise the defaults', async () => {
+        await postSuggestionsService.setHiddenToday(WS, true);
+        expect(mockUpdateWorkspaceSettings).not.toHaveBeenCalled();
+    });
+
+    it('the swipe is logged, because swipe FREQUENCY is what decides whether a permanent opt-out is owed', async () => {
+        await postSuggestionsService.setHiddenToday(WS, true);
+        expect(log.info).toHaveBeenCalledWith(
+            '[PostSuggestions] Card visibility changed',
+            expect.objectContaining({ workspaceId: WS, hidden: true }),
+        );
+    });
+
+    it('the read route carries the answer, so the client never computes the day itself', async () => {
+        queueGetCurrent([INSERTED]);
+        mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: today });
+
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+        expect(r?.hiddenToday).toBe(true);
+    });
+
+    it('⭐ the SEED is deferred while hidden — a paid post nobody will see today is pure waste', async () => {
+        mockConfig.postSuggestions.workspaceIds = [WS];
+        mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: today });
+        router.queue({ op: 'select', table: pages, fields: ['workspaceId'], rows: [{ id: PAGE, workspaceId: WS }] });
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
+
+        const out = await postSuggestionsService.seedFirstPostSuggestions();
+
+        expect(out.skippedHidden).toBe(1);
+        expect(out.seeded).toBe(0);
+        // Deferred, NOT skipped forever: the "has any row" predicate above is
+        // untouched, so tomorrow's sweep still finds this page unseeded.
+        expect(mockChatCreate).not.toHaveBeenCalled();
+    });
+
+    it('asks ONCE per workspace, not once per page — at GA that is a read per page per day', async () => {
+        mockConfig.postSuggestions.workspaceIds = [WS];
+        mockGetWorkspaceSettings.mockResolvedValue({ postSuggestionHiddenOn: today });
+        router.queue({
+            op: 'select', table: pages, fields: ['workspaceId'],
+            rows: [{ id: 'pg1', workspaceId: WS }, { id: 'pg2', workspaceId: WS }, { id: 'pg3', workspaceId: WS }],
+        });
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
+        router.queue({ op: 'select', table: postSuggestions, fields: ['id'], rows: [] });
+
+        const out = await postSuggestionsService.seedFirstPostSuggestions();
+
+        expect(out.skippedHidden).toBe(3);
+        expect(mockGetWorkspaceSettings).toHaveBeenCalledTimes(1);
     });
 });

@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, Clock } from 'lucide-react';
 import clsx from 'clsx';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui';
+import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
+import { SwipeBothSidesLabel } from '@/components/ui/SwipeBothSidesLabel';
+import { captureError } from '@/lib/sentryHelpers';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { isPostSuggestionsVisible } from '@/lib/featureFlags';
 import { useAuthStore } from '@/lib/store';
@@ -74,6 +78,32 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
       (!open && query.state.data?.inFlight?.status === 'pending' ? POST_SUGGESTION_POLL_MS : false),
   });
 
+  /**
+   * Swipe the card away for the rest of today, or bring it back.
+   *
+   * Optimistic: the cache flips first so the space is reclaimed on the frame
+   * the gesture ends — a card that lingers for a round trip reads as a swipe
+   * that did not take. A failed write rolls the flag back and says so, because
+   * silently leaving it hidden would promise a persistence we did not get.
+   */
+  const setHidden = useCallback(async (hidden: boolean) => {
+    const key = ['post-suggestion-current', pageId] as const;
+    const previous = queryClient.getQueryData<PostSuggestionResponse>(key);
+    queryClient.setQueryData<PostSuggestionResponse>(key, (prev) => prev && { ...prev, hiddenToday: hidden });
+    try {
+      await postSuggestionsApi.setVisibility(hidden);
+      if (hidden) {
+        toast.success(t('hiddenUntilTomorrow'), {
+          action: { label: t('undo'), onClick: () => void setHidden(false) },
+        });
+      }
+    } catch (err) {
+      queryClient.setQueryData<PostSuggestionResponse>(key, previous);
+      toast.error(t('hideFailed'));
+      captureError(err, 'Post suggestion card visibility failed', { extra: { hidden } });
+    }
+  }, [pageId, queryClient, t]);
+
   if (!pageId || isError) return null;
 
   // React-query cache is the SINGLE source of truth: generation results are
@@ -92,6 +122,14 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const hasPost = Boolean(suggestion);
   // Nothing to show and nothing this member may do about it → no card.
   if (!hasPost && !pending && !isAdmin) return null;
+  // Swiped away earlier today. The server decides this against the feature's
+  // own UTC day, so the card returns tomorrow with nothing to expire it — and
+  // a phone and a desktop browser agree on when that is.
+  if (current?.hiddenToday) return null;
+  // A generation the merchant started is still theirs to watch land: swiping
+  // mid-flight would hide paid work in progress and read as having cancelled
+  // it. The gesture comes back the moment the post is ready.
+  const canHide = isAdmin && !pending;
 
   // A text-only post (image degraded / cleaned up) keeps the brand tile rather
   // than a broken frame — same for a thumbnail whose URL fails to load. Any
@@ -101,9 +139,28 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
 
   return (
     <>
-      {/* Owns its own bottom margin: the dashboard renders this unwrapped, so a
-          null return (every non-pilot workspace) must leave NO stray gap. */}
-      <div className="mb-8 p-4 sm:p-5 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800">
+      {/* Swipe to hide for the day — the SAME two components the notifications
+          list uses, so the gesture a merchant learned in the inbox means the
+          same thing here. Brand-tinted, not red: this is not a delete, and the
+          card is back tomorrow. Icon + label on BOTH sides because the gesture
+          works in either direction, which also keeps it correct under RTL.
+
+          The wrapper owns the bottom margin now: it is the outermost node, and
+          a null return (every non-pilot workspace) must leave NO stray gap. */}
+      <SwipeDismissWrapper
+        onDismiss={() => void setHidden(true)}
+        enabled={canHide}
+        className="mb-8 rounded-2xl"
+        peekStorageKey="postSuggestionCardPeekSeen"
+        background={
+          <SwipeBothSidesLabel
+            icon={<Clock className="w-4 h-4 text-brand-600" aria-hidden="true" />}
+            label={t('hideForToday')}
+            className="bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300"
+          />
+        }
+      >
+      <div className="p-4 sm:p-5 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800">
         {/* Wraps on narrow screens: the action drops to its own full-width row
             instead of squeezing the preview. One DOM, responsive — never a
             duplicated mobile/desktop copy. */}
@@ -200,6 +257,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           </div>
         )}
       </div>
+      </SwipeDismissWrapper>
 
       {open && (
         <PostSuggestionSheet

@@ -7,14 +7,39 @@ import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import arPostSuggestions from '@/i18n/ar/postSuggestions.json';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
-const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
+const { mockGetToday, mockIsVisible, mockRole, mockSetVisibility, mockToastSuccess, mockToastError } = vi.hoisted(() => ({
   mockGetToday: vi.fn(),
   mockIsVisible: vi.fn(),
   mockRole: { isAdmin: true },
+  mockSetVisibility: vi.fn(),
+  mockToastSuccess: vi.fn(),
+  mockToastError: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
+  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn(), setVisibility: mockSetVisibility },
+}));
+vi.mock('sonner', () => ({ toast: { success: mockToastSuccess, error: mockToastError } }));
+vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
+
+/**
+ * The gesture itself belongs to `useSwipeToDismiss`, which has its own suite
+ * (test/hooks/useSwipeToDismiss.test.tsx) covering direction lock, threshold,
+ * pointer capture and the slide-out. Re-driving pointer events here would test
+ * that hook a second time — brittle, and it would hide what this file is for.
+ *
+ * So the wrapper is stubbed down to what the CARD is responsible for: the props
+ * it passes, and what it does when a dismiss actually happens.
+ */
+vi.mock('@/components/ui/SwipeDismissWrapper', () => ({
+  SwipeDismissWrapper: ({ children, onDismiss, enabled }: {
+    children: React.ReactNode; onDismiss: () => void; enabled?: boolean;
+  }) => (
+    <div>
+      <button type="button" data-testid="swipe" disabled={enabled === false} onClick={onDismiss}>swipe</button>
+      {children}
+    </div>
+  ),
 }));
 vi.mock('@/lib/featureFlags', () => ({ isPostSuggestionsVisible: mockIsVisible }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));
@@ -38,7 +63,72 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRole.isAdmin = true;
   mockIsVisible.mockReturnValue(true);
+  mockSetVisibility.mockResolvedValue({ data: { hiddenToday: true } });
   mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
+});
+
+describe('PostSuggestionCard — swipe hides it until tomorrow', () => {
+  const SUGGESTION = {
+    id: 's1', status: 'ready', text: 'منشور تجريبي', imageUrl: null,
+    variants: [{ text: 'منشور تجريبي', headline: 'ه', imageUrl: null }],
+    selectedVariant: 0, postType: 'general', source: 'manual',
+    suggestedFor: '2026-08-14', createdAt: '2026-08-14T08:00:00Z',
+  };
+
+  const swipe = async () => fireEvent.click(await screen.findByTestId('swipe'));
+
+  it('renders NOTHING when the server says it was hidden earlier today', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3, hiddenToday: true } });
+    const { container } = renderCard();
+    // The read still happens — the SERVER owns the day boundary, not the client.
+    // A phone in Damascus and a browser in Berlin must agree on when it returns.
+    await waitFor(() => expect(mockGetToday).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('swiping persists the choice SERVER-side, so the phone and the desktop agree', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    await swipe();
+
+    await waitFor(() => expect(mockSetVisibility).toHaveBeenCalledWith(true));
+    // …and the space is reclaimed optimistically, without waiting for the trip.
+    await waitFor(() => expect(screen.queryByText(enPostSuggestions.cardTitle)).not.toBeInTheDocument());
+    expect(mockToastSuccess).toHaveBeenCalled();
+  });
+
+  it('a FAILED write puts the card back rather than promising a persistence we did not get', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    mockSetVisibility.mockRejectedValue(new Error('offline'));
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    await swipe();
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith(enPostSuggestions.hideFailed));
+    expect(await screen.findByText(enPostSuggestions.cardTitle)).toBeInTheDocument();
+  });
+
+  it('a generation IN FLIGHT cannot be swiped away — that is paid work the merchant is watching', async () => {
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: null, inFlight: { id: 'x', status: 'pending', brief: null }, remainingToday: 2 },
+    });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    expect(await screen.findByTestId('swipe')).toBeDisabled();
+  });
+
+  it('a non-admin member cannot hide the card for the whole workspace', async () => {
+    mockRole.isAdmin = false;
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    expect(await screen.findByTestId('swipe')).toBeDisabled();
+  });
 });
 
 describe('PostSuggestionCard — pilot self-gating', () => {

@@ -1733,6 +1733,17 @@ export interface PostSuggestionResponse {
    * they last held when the field is absent.
    */
   history?: PostSuggestionHistoryItem[];
+  /**
+   * The merchant swiped the card away earlier TODAY, so the dashboard should
+   * not render it. Resolved server-side against the UTC day, never by the
+   * client comparing dates — a phone in Damascus and a browser in Berlin must
+   * agree on when "tomorrow" starts.
+   *
+   * Absent = showing. Sent by the READ route only: the generate route is
+   * reached from inside the opened sheet, where the card's visibility is not
+   * in question and a stale value could only mislead.
+   */
+  hiddenToday?: boolean;
 }
 
 // --- Leads Types ---
@@ -1921,6 +1932,24 @@ export interface WorkspaceSettings {
   leadStages?: LeadStagesConfig;
   /** Merchant-defined per-lead data fields (see LeadCustomFieldDef). */
   leadFields?: LeadCustomFieldDef[];
+  /**
+   * The UTC day on which the merchant swiped the «إنشاء منشور» card away, as
+   * `YYYY-MM-DD`. Absent/null = showing.
+   *
+   * A DATE, not a boolean or a timer. The card returns on its own the moment
+   * this stops equalling today, so nothing has to expire it — no scheduled
+   * sweep, no TTL to tune, and no state that can get stuck hiding a feature
+   * whose only entry point is this card.
+   *
+   * Compared against the SAME UTC day the feature already uses for
+   * `post_suggestions.suggested_for`, so "tomorrow" means one thing across the
+   * whole feature rather than drifting with the viewer's timezone.
+   *
+   * Workspace-scoped on purpose: a merchant who does not want the card today
+   * does not want it on any of their pages, and the card carries a page
+   * switcher above this, not below it.
+   */
+  postSuggestionHiddenOn?: string | null;
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
