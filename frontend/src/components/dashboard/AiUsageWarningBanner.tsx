@@ -6,6 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA, InfoPopover } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { isIOSNative } from '@/lib/capacitor';
 import { formatQuotaResetDate } from '@/lib/formatDate';
 import { resolveAiQuotaStatus, type UsageSummary } from '@jawab24/shared';
 
@@ -262,9 +263,15 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                                         ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
                                         : isTopupLow
                                             ? tSub('limitBanner.topupLowUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                            // `limit` is non-null here: the early
+                                            // return above only lets a null limit
+                                            // through in the billing-paused state,
+                                            // which renders the other branch. No
+                                            // `?? 0` — a silent "of 0" would hide a
+                                            // broken narrowing instead of failing.
                                             : tSub('limitBanner.usage', {
                                                 used: used.toLocaleString(locale),
-                                                limit: (limit ?? 0).toLocaleString(locale),
+                                                limit: Number(limit).toLocaleString(locale),
                                             })}
                                 </span>
                                 <InfoPopover
@@ -286,6 +293,17 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* iOS renders NO billing control: UpgradeCTA returns null under
+                        App Store Guideline 3.1.1, and the top-up CTA is suppressed in
+                        this state — which left a pinned, undismissable "your replies
+                        are frozen" alert with nothing to press and nowhere named.
+                        Plain text, no link and no price, keeps the reader-app model
+                        while telling the merchant where renewal actually happens. */}
+                    {isBillingPaused && isIOSNative() && (
+                        <p className="text-xs sm:text-sm font-semibold opacity-90 max-w-[16rem]">
+                            {tSub('limitBanner.renewOnWebHint')}
+                        </p>
+                    )}
                     {/* Customize-fallback shortcut surfaces only when Smart Replies are
                         genuinely paused (no top-up). On top-up the fallback never fires,
                         so prompting the merchant to configure it would mislead. Visible on

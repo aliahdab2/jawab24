@@ -153,6 +153,14 @@ vi.mock('../../src/services/subscriptions', () => ({
         // own semantics are covered in subscriptionExpiry / adminHealth tests; here
         // it only has to exist so the route can render.
         checkSubscriptionStatus: vi.fn(() => ({ allowed: true })),
+        // getUserDetail resolves the entitlement through the SAME accessor the reply
+        // path uses (lazy expiry flip + active-first row ordering), not the raw row it
+        // selected — evaluating the raw row reported a healthy account for an expired
+        // Stripe subscription whose status had not been flipped yet.
+        getUserSubscription: vi.fn().mockResolvedValue({
+            id: 'sub-1', userId: 'user-1', status: 'active',
+            paymentMethod: null, currentPeriodEnd: null, trialEndsAt: null,
+        }),
     },
     resolveEntitlementEnd: vi.fn(() => null),
 }));

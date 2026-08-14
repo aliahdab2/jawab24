@@ -302,6 +302,17 @@ describe('AiUsageWarningBanner — billing paused (gate refuses)', () => {
         expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'billing-paused');
     });
 
+    it('never leaves an iOS merchant with a pinned alert and nowhere to go', () => {
+        // UpgradeCTA returns null on iOS (Guideline 3.1.1) and the top-up CTA is
+        // suppressed in this state, so the banner had NO action at all — pinned,
+        // undismissable, and silent about where renewal happens.
+        mockIsIOSNative.mockReturnValue(true);
+        render(<AiUsageWarningBanner planSlug="starter" aiReplies={lapsed()} autoReply={blocked} />);
+
+        expect(screen.queryByRole('link', { name: /renew subscription/i })).not.toBeInTheDocument();
+        expect(screen.getByText(/renew from the jawab24 website/i)).toBeInTheDocument();
+    });
+
     it('leaves quota behaviour untouched when the gate allows', () => {
         const { container } = render(
             <AiUsageWarningBanner aiReplies={lapsed()} autoReply={{ allowed: true }} />,

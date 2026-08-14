@@ -220,15 +220,29 @@ describe('canUseAiReplies — manual sliver does not hand out a free refill', ()
         expect(result.usingTopup).toBe(true);
     });
 
-    it('blocks the AUTO-REPLY path regardless of top-up balance', () => {
-        // canAutoReply (what enforceAutoReplyGate calls) consults status only —
-        // it never reaches the top-up fallback above. Pinned because the dashboard
-        // banner suppresses its top-up CTA on the strength of this: offering credits
-        // that cannot unblock a reply would be taking money for nothing.
-        const result = subscriptionsService.checkSubscriptionStatus(
+    it('blocks the AUTO-REPLY path regardless of top-up balance', async () => {
+        // canAutoReply — what enforceAutoReplyGate actually calls — consults status
+        // only and never reaches the top-up fallback that canUseAiReplies applies
+        // directly above. Pinned because the dashboard banner suppresses its top-up
+        // CTA on the strength of it: offering credits that cannot unblock a reply
+        // would be taking money for nothing.
+        //
+        // Must exercise canAutoReply with a REAL balance present — an earlier version
+        // of this test called checkSubscriptionStatus, which cannot see a balance at
+        // all, so it would have stayed green through exactly the change it names.
+        vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(
             sub({ paymentMethod: 'manual', currentPeriodEnd: new Date('2026-07-17T18:52:00.000Z') }),
         );
-        expect(result.allowed).toBe(false);
+        vi.spyOn(subscriptionsService, 'getTopupBalance').mockResolvedValue(500);
+
+        const gate = await subscriptionsService.canAutoReply('user-1');
+        expect(gate.allowed).toBe(false);
+
+        // ...while the billing-level check DOES honour the balance. The two answering
+        // differently is the point: one asks "may automation run", the other "may this
+        // call be billed". If they ever converge, the banner's CTA logic is wrong.
+        const billing = await subscriptionsService.canUseAiReplies('user-1');
+        expect(billing.allowed).toBe(true);
     });
 });
 
@@ -242,45 +256,104 @@ describe('canUseAiReplies — manual sliver does not hand out a free refill', ()
  * `resolveEntitlementEnd` is the one boundary both sides now read.
  */
 describe('resolveEntitlementEnd — one boundary for enforcement and display', () => {
+    const PERIOD_END = new Date('2026-08-14T16:26:00.000Z');
+
     it('snaps a manual plan back to UTC midnight of the period-end day', () => {
         expect(
             resolveEntitlementEnd({
-                paymentMethod: 'manual',
-                currentPeriodEnd: new Date('2026-08-14T16:26:00.000Z'),
+                status: 'active', paymentMethod: 'manual', currentPeriodEnd: PERIOD_END, trialEndsAt: null,
             })?.toISOString(),
         ).toBe('2026-08-14T00:00:00.000Z');
     });
 
-    it('leaves every other rail on its exact instant', () => {
-        for (const paymentMethod of ['stripe', 'shopify', null]) {
+    it('uses trialEndsAt for a trial-origin row, NOT the far-future period end', () => {
+        // The defect this replaced: modelling only the manual rail returned
+        // currentPeriodEnd here — roughly three weeks AFTER the gate cuts the trial
+        // off — and the dashboard printed it as "Coverage ended <future date>".
+        for (const status of ['trialing', 'past_due'] as const) {
             expect(
                 resolveEntitlementEnd({
-                    paymentMethod,
-                    currentPeriodEnd: new Date('2026-08-14T16:26:00.000Z'),
+                    status, paymentMethod: null,
+                    currentPeriodEnd: PERIOD_END,
+                    trialEndsAt: new Date('2026-07-22T09:00:00.000Z'),
                 })?.toISOString(),
-            ).toBe('2026-08-14T16:26:00.000Z');
+            ).toBe('2026-07-22T09:00:00.000Z');
         }
     });
 
-    it('returns null when nothing bounds the subscription in time', () => {
-        expect(resolveEntitlementEnd({ paymentMethod: 'manual', currentPeriodEnd: null })).toBeNull();
+    it('adds the retry grace for past_due, which ends AFTER the period end', () => {
+        expect(
+            resolveEntitlementEnd({
+                status: 'past_due', paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END, trialEndsAt: null,
+            })?.toISOString(),
+        ).toBe('2026-08-17T16:26:00.000Z');
     });
 
-    it('agrees with the gate at every hour around the boundary', () => {
-        // The invariant that makes the bug unrepeatable: whatever the gate decides,
-        // the date shown to the merchant must be able to explain it. Walking the
-        // whole sliver catches a one-sided change to either function.
-        const currentPeriodEnd = new Date('2026-08-14T16:26:00.000Z');
-        const entitlementEnd = resolveEntitlementEnd({ paymentMethod: 'manual', currentPeriodEnd });
-        if (!entitlementEnd) throw new Error('expected a bounded entitlement end');
-
-        for (let hour = 0; hour < 48; hour++) {
-            const now = new Date(Date.UTC(2026, 7, 13, hour));
-            vi.setSystemTime(now);
-            const allowed = subscriptionsService.checkSubscriptionStatus(
-                sub({ paymentMethod: 'manual', currentPeriodEnd }),
-            ).allowed;
-            expect(allowed).toBe(entitlementEnd >= now);
+    it('leaves a healthy external rail on its exact instant', () => {
+        for (const paymentMethod of ['stripe', 'shopify', 'zid']) {
+            expect(
+                resolveEntitlementEnd({
+                    status: 'active', paymentMethod, currentPeriodEnd: PERIOD_END, trialEndsAt: null,
+                })?.toISOString(),
+            ).toBe(PERIOD_END.toISOString());
         }
+    });
+
+    it('returns null when no CLOCK bounds the row (never "it has ended")', () => {
+        // canceled/paused are refused by STATUS, and a past_due row with no period
+        // end is never refused at all. Neither has a date to show a merchant.
+        for (const s of [
+            { status: 'canceled' as const, paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END, trialEndsAt: null },
+            { status: 'paused' as const, paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END, trialEndsAt: null },
+            { status: 'past_due' as const, paymentMethod: 'stripe', currentPeriodEnd: null, trialEndsAt: null },
+            { status: 'active' as const, paymentMethod: 'manual', currentPeriodEnd: null, trialEndsAt: null },
+        ]) {
+            expect(resolveEntitlementEnd(s)).toBeNull();
+        }
+    });
+
+    it('agrees with the gate at every hour, on every rail', () => {
+        // THE invariant, and the reason the boundary is not a second implementation:
+        // whenever a date is shown, the gate's verdict must be exactly "that date is
+        // still ahead of us". Walking every rail hour by hour catches a change made
+        // to one function and not the other — which is how the trial rail broke.
+        // Only the rails checkSubscriptionStatus can bound BY ITSELF. An `active`
+        // external row is deliberately absent — see the test below.
+        const RAILS = [
+            { label: 'manual', status: 'active' as const, paymentMethod: 'manual', currentPeriodEnd: PERIOD_END, trialEndsAt: null },
+            { label: 'stripe past_due', status: 'past_due' as const, paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END, trialEndsAt: null },
+            { label: 'trial-origin trialing', status: 'trialing' as const, paymentMethod: null, currentPeriodEnd: PERIOD_END, trialEndsAt: new Date('2026-08-12T09:00:00.000Z') },
+            { label: 'trial-origin past_due', status: 'past_due' as const, paymentMethod: null, currentPeriodEnd: PERIOD_END, trialEndsAt: new Date('2026-08-12T09:00:00.000Z') },
+        ];
+
+        for (const rail of RAILS) {
+            const endsAt = resolveEntitlementEnd(rail);
+            if (!endsAt) throw new Error(`${rail.label}: expected a bounded entitlement end`);
+
+            for (let hour = 0; hour < 24 * 8; hour++) {
+                const now = new Date(Date.UTC(2026, 7, 11, hour));
+                vi.setSystemTime(now);
+                expect(
+                    { rail: rail.label, hour, allowed: subscriptionsService.checkSubscriptionStatus(sub(rail)).allowed },
+                ).toEqual({ rail: rail.label, hour, allowed: endsAt >= now });
+            }
+        }
+    });
+
+    it('an expired ACTIVE external row is not blocked by the predicate alone — the flip does it', () => {
+        // Why the admin console must resolve through getUserSubscription rather than
+        // evaluating the row it selected itself. checkSubscriptionStatus has no period
+        // check for Stripe/Shopify/Zid: those rails are expired by getUserSubscription
+        // LAZILY FLIPPING status to past_due (and persisting it), after which the
+        // grace arm above applies. Evaluate the un-flipped row and you get
+        // `allowed: true` for an account whose replies are about to stop — a green
+        // console over the silent auto-renew suspension.
+        vi.setSystemTime(new Date('2026-08-24T00:00:00.000Z')); // 10 days past period end
+        const raw = sub({ status: 'active', paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END });
+        expect(subscriptionsService.checkSubscriptionStatus(raw).allowed).toBe(true);
+
+        // Post-flip, the same row is correctly refused.
+        const flipped = sub({ status: 'past_due', paymentMethod: 'stripe', currentPeriodEnd: PERIOD_END });
+        expect(subscriptionsService.checkSubscriptionStatus(flipped).allowed).toBe(false);
     });
 });
