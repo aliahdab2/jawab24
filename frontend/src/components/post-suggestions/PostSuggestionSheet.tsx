@@ -699,14 +699,21 @@ export function PostSuggestionSheet({
                sentence in the body it read as a warning about a limit; here it
                is a label on the button that spends it. `null` = unknown, so the
                button simply carries no count rather than inventing one.
-               ⚠️ `whitespace-nowrap` + a SHORT label are load-bearing: measured
-               in a real browser at 390px, the first wording («أنشئ منشوراً آخر ·
-               3 محاولات») needed 360px inside a 180px button and was clipped in
-               half by `overflow-x: hidden`. The count is parenthesised rather
-               than separated by «·», which at button size read as part of the
-               number — «… · 3» scans as ٣٠. */
-            <Button variant="ghost" size="sm" className="min-h-[44px] whitespace-nowrap" onClick={() => void generate()}>
-              <RefreshCw className="w-4 h-4 me-1.5 shrink-0" aria-hidden="true" />
+
+               The count is PARENTHESISED, never separated by «·»: in an RTL run
+               at button size, «… · 3» scans as a single number — ٣٠ — and I
+               misread it that way myself while auditing. The label is also kept
+               short because this footer holds three controls at 390px.
+
+               ⚠️ Do NOT "fix" this button by measuring `scrollWidth`. Every
+               Button of this variant carries a shine overlay child that sits
+               outside the box and is clipped by `overflow-hidden`, so
+               `scrollWidth ≈ 2 × clientWidth` on ALL of them («عرض المنشور»
+               326/653, «إدارة الاشتراك» 310/621) and says nothing about the
+               text. Measure the label's own text node against the content box
+               instead — here 62px in 62px, i.e. exact. */
+            <Button variant="ghost" size="sm" className="min-h-[44px]" onClick={() => void generate()}>
+              <RefreshCw className="w-4 h-4 me-1.5" aria-hidden="true" />
               {remaining !== null ? t('regenerateWithCount', { count: remaining }) : t('regenerate')}
             </Button>
           )}
