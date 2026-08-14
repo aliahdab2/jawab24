@@ -76,6 +76,7 @@
     "hint": "Please select an end time that comes after the start time"
   },
   "deleteSuccess": "Account Deleted Successfully",
+  "deleteDemoForbidden": "The demo account is shared by everyone trying Jawab24, so it cannot be deleted. Sign in from the login page to create your own account.",
   "autoReplySettings": "Auto Reply",
   "autoReplyDescription": "Turn automatic replies on or off",
   "webhookRetries": "Webhook Retries",
