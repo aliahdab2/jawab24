@@ -198,12 +198,46 @@ export type SubscriptionStatusInput = Pick<
  *
  * Returns null when nothing bounds the subscription in time (no period end).
  */
-export function resolveEntitlementEnd(
-    subscription: Pick<Subscription, 'paymentMethod' | 'currentPeriodEnd'>,
-): Date | null {
-    if (!subscription.currentPeriodEnd) return null;
-    const periodEnd = new Date(subscription.currentPeriodEnd);
-    return subscription.paymentMethod === 'manual' ? startOfUtcDay(periodEnd) : periodEnd;
+export function resolveEntitlementEnd(subscription: SubscriptionStatusInput): Date | null {
+    const { status, paymentMethod, currentPeriodEnd, trialEndsAt } = subscription;
+
+    // Order mirrors checkSubscriptionStatus branch for branch. Each arm answers
+    // "which clock cuts this subscription off?", and it is NOT currentPeriodEnd
+    // on three of the four rails:
+    //
+    //   manual        → currentPeriodEnd SNAPPED to UTC midnight (up to 24h early)
+    //   trial-origin  → trialEndsAt, which can be WEEKS before currentPeriodEnd
+    //   past_due      → currentPeriodEnd + the retry grace (3 days LATE)
+    //   trialing      → trialEndsAt
+    //
+    // The first cut of this function modelled only the manual rail and returned
+    // the raw currentPeriodEnd for everything else. On a trial that is a date
+    // ~23 days in the FUTURE, which the dashboard then printed as "Coverage
+    // ended <future date>" — reproducing, larger, the very defect this PR was
+    // written to remove. Keep the arms in lockstep with the gate.
+    // null means "no CLOCK bounds this row", never "it has ended". canceled/paused
+    // are refused by status, and a past_due row with no currentPeriodEnd is never
+    // refused at all — both are unbounded in time, so no date may be shown for them.
+    if (status === 'canceled' || status === 'paused') return null;
+
+    if (paymentMethod === 'manual' && currentPeriodEnd) {
+        return startOfUtcDay(new Date(currentPeriodEnd));
+    }
+
+    if (!paymentMethod && trialEndsAt && (status === 'trialing' || status === 'past_due')) {
+        return new Date(trialEndsAt);
+    }
+
+    if (status === 'past_due') {
+        if (!currentPeriodEnd) return null; // gate never blocks this row — see below
+        const graceEnd = new Date(currentPeriodEnd);
+        graceEnd.setDate(graceEnd.getDate() + PAST_DUE_GRACE_DAYS);
+        return graceEnd;
+    }
+
+    if (status === 'trialing' && trialEndsAt) return new Date(trialEndsAt);
+
+    return currentPeriodEnd ? new Date(currentPeriodEnd) : null;
 }
 
 /**

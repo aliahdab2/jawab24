@@ -416,7 +416,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
   // Use slug for plan matching — slugs are stable ('starter', 'business', 'pro'),
   // whereas plan.id is a UUID that differs between environments and after re-seeding.
-  const currentPlanSlug = usage?.subscription?.plan?.slug;
+  // A plan whose entitlement has lapsed is NOT this merchant's "current plan":
+  // marking it so disables its card and stamps a green ✅ "Current Plan" badge on
+  // it. That dead-ends the one journey that matters here — the dashboard's
+  // "Renew subscription" CTA lands on this page, and the only plan that would
+  // restore replies was greyed out, with a third green surface telling a frozen
+  // merchant they were fine. Read from the gate, the same field the banner uses.
+  const currentPlanSlug = usage?.subscription?.autoReply?.allowed === false
+    ? undefined
+    : usage?.subscription?.plan?.slug;
   // Which marketplace — if any — owns this account's paid plans (D-073). Read
   // from the one field the backend's guard computes, so this banner and the
   // useSelectPlan refusal can never disagree about who is billed where.

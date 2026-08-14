@@ -94,8 +94,18 @@ export interface HealthInput {
          * The tool support diagnoses with must not be the tool that reassures them.
          */
         autoReplyAllowed: boolean;
-        /** Dates the `past_due` grace fuse so support sees how long is left. */
-        currentPeriodEnd: Date | null;
+        /**
+         * `resolveEntitlementEnd`'s answer — the instant the CLOCK cuts this
+         * subscription off, already rail-correct (snapped for manual, trialEndsAt
+         * for a trial, +grace for past_due). null = no clock bounds this row.
+         *
+         * Taken from the resolver rather than recomputed here so the console cannot
+         * date a different fuse than the gate burns: an earlier cut added
+         * `currentPeriodEnd + N * DAY_MS` locally, while the gate walks calendar days
+         * via `setDate(+N)` — the same number, two different instants across a DST
+         * boundary.
+         */
+        entitlementEndsAt: Date | null;
     } | null;
     pages: HealthInputPage[];
     /**
@@ -363,37 +373,41 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
     if (subscription) {
         const status = subscription.status;
         const trialEndsAt = subscription.trialEndsAt;
-        if (status === 'trialing' && trialEndsAt) {
-            const msLeft = trialEndsAt.getTime() - now.getTime();
-            if (msLeft < 0) {
+        // THE REFUSAL IS CHECKED FIRST, unconditionally. It used to sit in an
+        // `else if` behind `status === 'trialing'`, which recreated the very bypass
+        // this console was fixed to remove: a trialing row with a FUTURE trialEndsAt
+        // whose gate refuses for some other reason (a manual grant past its snapped
+        // end) matched the trial arm, fell through `daysLeft > TRIAL_ENDING_SOON`,
+        // and emitted nothing at all — a healthy chip over a frozen account.
+        if (!subscription.autoReplyAllowed) {
+            // `trial_expired` stays the more specific label when that is genuinely
+            // the cause; otherwise the generic refusal carries the raw status as meta.
+            const trialIsTheCause = status === 'trialing' && trialEndsAt && trialEndsAt.getTime() < now.getTime();
+            if (trialIsTheCause) {
                 add('red', 'trial_expired');
             } else {
-                const daysLeft = Math.ceil(msLeft / DAY_MS);
-                if (daysLeft <= TRIAL_ENDING_SOON_DAYS) {
-                    add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
-                }
+                add('red', 'subscription_inactive', { meta: { status: status ?? 'unknown' } });
             }
-        } else if (!subscription.autoReplyAllowed) {
-            // Driven by the gate, NOT by `status in (past_due, canceled)`. That old
-            // pair silently excluded the manual-plan expiry, which keeps `status`
-            // at 'active' forever — the exact case that stayed green while replies
-            // were blocked. It also missed 'paused', which does block.
-            // `status` rides along as meta so support still sees it.
-            add('red', 'subscription_inactive', { meta: { status: status ?? 'unknown' } });
-        } else if (status === 'past_due') {
-            // Gate ALLOWS — the 3-day grace is still running, so replies really are
+        } else if (status === 'trialing' && trialEndsAt) {
+            const daysLeft = Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS);
+            if (daysLeft <= TRIAL_ENDING_SOON_DAYS) {
+                add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
+            }
+        } else if (status === 'past_due' && subscription.entitlementEndsAt) {
+            // Gate ALLOWS — the retry grace is still running, so replies really are
             // flowing and red would be a lie. But the fuse must stay visible: the
             // old status-only rule flagged this red, and moving to the gate would
             // otherwise have DELETED support's only warning that a card failed.
-            // Yellow with the deadline is the honest version of that signal.
-            const graceEnd = subscription.currentPeriodEnd
-                ? new Date(subscription.currentPeriodEnd.getTime() + PAST_DUE_GRACE_DAYS * DAY_MS)
-                : null;
-            add('yellow', 'subscription_past_due_grace', {
-                meta: graceEnd
-                    ? { daysLeft: Math.max(0, Math.ceil((graceEnd.getTime() - now.getTime()) / DAY_MS)) }
-                    : { daysLeft: PAST_DUE_GRACE_DAYS },
-            });
+            //
+            // Requires entitlementEndsAt. A past_due row with no currentPeriodEnd is
+            // never refused by the gate at all (the grace check is guarded on it), so
+            // announcing "3 days left, then they stop" would hand support a deadline
+            // that never arrives — the resolver returns null for exactly that row.
+            const daysLeft = Math.max(
+                0,
+                Math.ceil((subscription.entitlementEndsAt.getTime() - now.getTime()) / DAY_MS),
+            );
+            add('yellow', 'subscription_past_due_grace', { meta: { daysLeft } });
         }
     }
 

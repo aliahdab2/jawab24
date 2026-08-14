@@ -105,11 +105,28 @@ auto-renew cases had a partial one. What each rail/state shows:
 | Rail · state | Gate | Merchant banner | Console flag |
 |---|---|---|---|
 | any · active / in-window | allows | — | — |
+| external · `active` but period passed | **allows** until the flip | — | — |
 | stripe · `past_due` **in** 3-day grace | **allows** | — (replies flowing) | 🟡 `subscription_past_due_grace` (days left) |
 | stripe · `past_due` beyond grace | refuses | 🔴 paused | 🔴 `subscription_inactive` |
 | stripe · `canceled` / `paused` | refuses | 🔴 paused | 🔴 `subscription_inactive` |
-| manual · past snapped end | refuses | 🔴 paused | 🔴 `subscription_inactive` |
-| trial · expired | refuses | 🔴 paused | 🔴 `trial_expired` (earlier branch wins) |
+| `payment_method = 'manual'` · past snapped end | refuses | 🔴 paused | 🔴 `subscription_inactive` |
+| trial · expired | refuses | 🔴 paused | 🔴 `trial_expired` |
+
+⚠️ **`checkSubscriptionStatus` has NO period check for the external rails.** An expired
+Stripe/Shopify/Zid row still reads `status = 'active'` until `getUserSubscription` LAZILY
+FLIPS it to `past_due` and persists that; only then does the grace arm apply. Anything
+asking "is this account replying?" must therefore go through `getUserSubscription`, never
+evaluate a row it selected itself — the support console did the latter and reported a
+healthy account for a silently-suspended auto-renew merchant.
+
+⛔ **`'manual'` is NOT every cash rail.** `manualUpgrade` also writes `'bank_transfer'`
+and `'syrian_bank'` (see `backend/src/types/admin.ts`), and the snapped-expiry branch
+matches `'manual'` only. Those two are still expired — by the lazy flip plus the 3-day
+grace — so they do **not** run free forever, but they lose the midnight snap and so keep
+the free-refill sliver it exists to close: the usage window shuts at snapped midnight
+while entitlement runs to `currentPeriodEnd + 3d`, and `getCurrentUsage` reports `used =
+0` for that gap. Pre-dates this work. Closing it changes WHO gets cut off on the Syrian
+cash rail, so it is an owner decision, not a refactor.
 
 ⚠️ `subscription_past_due_grace` exists because moving this flag onto the gate would
 otherwise have **deleted** a signal on the auto-renew path: the old rule flagged every

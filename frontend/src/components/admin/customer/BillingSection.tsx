@@ -131,7 +131,19 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
                                 the row above overstates coverage by up to a day. */}
                             {coverageEndsEarlier && (
                                 <div className="text-xs status-error mt-1">
-                                    {t('customer.coverageEndsAt', { date: formatDate(entitlementEndsAt ?? null) })}
+                                    {/* WITH a time. `formatDate` is date-only, and for a
+                                        manual plan both instants fall on the same calendar
+                                        day in every MENA timezone — so this line rendered
+                                        the identical string as the row above and conveyed
+                                        nothing, on the one surface support diagnoses from.
+                                        It also broke this PR's own rule: a 00:00 boundary
+                                        printed bare reads as the whole of that day. */}
+                                    {t('customer.coverageEndsAt', {
+                                        date: new Date(entitlementEndsAt as string).toLocaleString(intlLocale, {
+                                            year: 'numeric', month: 'long', day: 'numeric',
+                                            hour: '2-digit', minute: '2-digit',
+                                        }),
+                                    })}
                                 </div>
                             )}
                         </div>
