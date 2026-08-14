@@ -34,7 +34,7 @@
   "unresolveSuccess": "Marked as unhandled",
   "noCommentsDesc": "Comments from your Facebook and Instagram pages will appear here.",
   "noCommentsForFilter": "No comments match this filter. Try another filter or wait for new comments.",
-  "deepLinkNotFound": "This comment may have already been handled or removed.",
+  "deepLinkNotFound": "Couldn't open this comment — it may have been removed, or it's on a page your current filter hides.",
   "needsAttention": "Needs attention",
   "needsAttentionDesc": "Comments that require action.",
   "openComment": "Open comment from {name}",

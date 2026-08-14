@@ -454,11 +454,48 @@ function replaceVariables(
 }
 
 /**
+ * Keys naming the notification's TARGET, most-specific first.
+ *
+ * Order matters: a flagged/skipped reply carries a messageId or commentId AND
+ * (once the deep-link fix lands) a pageId — the row is the target, not the page.
+ */
+const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId', 'pageId'] as const;
+
+/**
+ * Android notification tag for a payload — `undefined` when it names no target.
+ *
+ * Why: one FCM multicast reaches EVERY registered token, so a device holding two
+ * live tokens (reinstall / rotation — see the prune in registerDeviceToken, which
+ * only catches tokens idle for STALE_TOKEN_DAYS) renders the same push twice. A
+ * shared tag makes the second delivery REPLACE the first in the tray instead of
+ * stacking. Pushes about different targets get different tags and still stack.
+ *
+ * Deliberately NOT applied to id-less types (payment_failed, topup_credited,
+ * refund_processed, ai_usage_*): there a per-type tag would let a second,
+ * genuinely distinct event silently overwrite the first. Those keep today's
+ * stacking behaviour untouched.
+ */
+export function buildNotificationTag(payload: NotificationPayload): string | undefined {
+    const data = payload.data;
+    if (!data) return undefined;
+    for (const key of NOTIFICATION_TAG_ID_KEYS) {
+        const value = data[key];
+        if (typeof value === 'string' && value.length > 0) return `${payload.type}:${value}`;
+    }
+    return undefined;
+}
+
+/**
  * Build the FCM multicast message for a notification. Pure (no I/O) so the
  * payload shape — urgent channel routing + iOS custom sound — is unit-testable
  * without firebase-admin. Urgent pushes route to the urgent channel (high
  * priority + heads-up) and carry the distinct iOS sound; routine pushes use the
  * quiet default channel and the system default sound.
+ *
+ * NOTE: iOS de-duplication (`apns-collapse-id`) is deliberately NOT set here —
+ * the duplicate was reported on Android, and the apns block is currently built
+ * only for urgent pushes. Tracked as a follow-up rather than restructuring the
+ * urgent-sound path in the same change.
  */
 export function buildFcmMessage(
     payload: NotificationPayload,
@@ -468,6 +505,7 @@ export function buildFcmMessage(
     const title = payload.titles[userLanguage] || payload.titles[FALLBACK_LANG] || '';
     const body = payload.bodies[userLanguage] || payload.bodies[FALLBACK_LANG] || '';
     const isUrgent = payload.data?.urgent === true;
+    const tag = buildNotificationTag(payload);
 
     return {
         notification: { title, body },
@@ -481,7 +519,10 @@ export function buildFcmMessage(
         tokens: tokenStrings,
         android: {
             priority: (isUrgent ? 'high' : 'normal') as 'high' | 'normal',
-            notification: { channelId: isUrgent ? ANDROID_URGENT_CHANNEL_ID : ANDROID_CHANNEL_ID },
+            notification: {
+                channelId: isUrgent ? ANDROID_URGENT_CHANNEL_ID : ANDROID_CHANNEL_ID,
+                ...(tag ? { tag } : {}),
+            },
         },
         ...(isUrgent ? {
             apns: {

@@ -19,7 +19,7 @@
   "emptyAutoRepliedSub": "Conversations handled by Smart Reply will appear here once auto-reply is active.",
   "emptyHandled": "No handled conversations",
   "emptyHandledSub": "Conversations you mark as handled will appear here.",
-  "deepLinkNotFound": "This conversation may have already been handled or removed.",
+  "deepLinkNotFound": "Couldn't open this conversation — it may have been removed, or it's on a page your current filter hides.",
   "typeReply": "Type your reply...",
   "replySent": "Reply sent successfully",
   "replyFailed": "Failed to send reply",

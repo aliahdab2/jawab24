@@ -13,7 +13,7 @@ describe('translateFlagReason', () => {
         'offensive_or_abusive': 'محتوى مسيء',
         'angry_customer': 'عميل غاضب',
         'low_confidence': 'يحتاج مراجعتك',
-        'price_not_in_kb': 'ارجو إضافة السعر',
+        'price_not_in_kb': 'أرجو إضافة السعر',
     };
 
     const tEn = (key: string) => mockTranslations[key] ?? key;

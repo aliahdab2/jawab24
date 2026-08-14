@@ -29,7 +29,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, resolveUrgentChannelId } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, buildNotificationTag, resolveUrgentChannelId } from '../../src/services/notifications';
 import { db } from '../../src/db';
 
 describe('NotificationService', () => {
@@ -1003,6 +1003,107 @@ describe('NotificationService', () => {
 
             const fr = buildFcmMessage({ ...base, data: { urgent: true } }, 'fr', ['t']) as any;
             expect(fr.notification.title).toBe('Title EN'); // no fr → English fallback
+        });
+
+        it('stamps the android tag so a duplicate delivery replaces rather than stacks', () => {
+            // The reported bug: one multicast, two live tokens on ONE device → the
+            // same push rendered twice. Identical payload ⇒ identical tag ⇒ Android
+            // replaces the first tray entry instead of adding a second.
+            const first = buildFcmMessage(
+                { ...base, type: 'flagged_reply', data: { messageId: 'm1', type: 'message' } },
+                'ar', ['tok-a'],
+            ) as any;
+            const second = buildFcmMessage(
+                { ...base, type: 'flagged_reply', data: { messageId: 'm1', type: 'message' } },
+                'ar', ['tok-b'],
+            ) as any;
+
+            expect(first.android.notification.tag).toBe('flagged_reply:m1');
+            expect(second.android.notification.tag).toBe(first.android.notification.tag);
+        });
+
+        it('keeps distinct targets on distinct tags so they still stack', () => {
+            const m1 = buildFcmMessage({ ...base, type: 'flagged_reply', data: { messageId: 'm1' } }, 'en', ['t']) as any;
+            const m2 = buildFcmMessage({ ...base, type: 'flagged_reply', data: { messageId: 'm2' } }, 'en', ['t']) as any;
+            expect(m1.android.notification.tag).not.toBe(m2.android.notification.tag);
+        });
+
+        it('separates the same row across notification types', () => {
+            const flagged = buildFcmMessage({ ...base, type: 'flagged_reply', data: { commentId: 'c1' } }, 'en', ['t']) as any;
+            const skipped = buildFcmMessage({ ...base, type: 'skipped_reply', data: { commentId: 'c1' } }, 'en', ['t']) as any;
+            expect(flagged.android.notification.tag).toBe('flagged_reply:c1');
+            expect(skipped.android.notification.tag).toBe('skipped_reply:c1');
+        });
+
+        it('gives every lead its own tag (new_lead must never collapse)', () => {
+            // NON_GROUPABLE_TYPES: the per-lead body carries name + phone, so two
+            // leads collapsing into one tray entry would hide a real lead.
+            const a = buildFcmMessage({ ...base, type: 'new_lead', data: { leadId: 'l1' } }, 'en', ['t']) as any;
+            const b = buildFcmMessage({ ...base, type: 'new_lead', data: { leadId: 'l2' } }, 'en', ['t']) as any;
+            expect(a.android.notification.tag).toBe('new_lead:l1');
+            expect(b.android.notification.tag).toBe('new_lead:l2');
+        });
+
+        it('leaves channelId and priority untouched when a tag is added', () => {
+            const msg = buildFcmMessage(
+                { ...base, type: 'flagged_reply', data: { messageId: 'm1', urgent: true } },
+                'en', ['t'],
+            ) as any;
+            expect(msg.android.priority).toBe('high');
+            expect(msg.android.notification.channelId).toBe('jawab24_urgent');
+            expect(msg.android.notification.tag).toBe('flagged_reply:m1');
+        });
+
+        it('omits the tag for every id-less template, leaving their stacking unchanged', () => {
+            // Shared-infrastructure guard: buildFcmMessage serves EVERY type, so
+            // assert across the whole template registry rather than one sample.
+            // An id-less type (payment_failed, topup_credited, refund_processed…)
+            // must NOT get a per-type tag — a second distinct event would
+            // silently overwrite the first.
+            const idLess = Object.keys(NOTIFICATION_TEMPLATES).filter(
+                type => !['flagged_reply', 'skipped_reply', 'new_comment', 'stale_comment', 'stale_message', 'new_lead', 'lead_reengaged', 'kb_gap'].includes(type),
+            );
+            expect(idLess.length).toBeGreaterThan(0);
+            for (const type of idLess) {
+                const msg = buildFcmMessage({ ...base, type: type as any, data: {} }, 'en', ['t']) as any;
+                expect(msg.android.notification.tag, `${type} must not carry a tag`).toBeUndefined();
+                expect(msg.android.notification.channelId).toBe('jawab24_default');
+            }
+        });
+    });
+
+    describe('buildNotificationTag', () => {
+        const base = {
+            titles: { en: 'T' },
+            bodies: { en: 'B' },
+        };
+
+        it('returns undefined when the payload names no target', () => {
+            expect(buildNotificationTag({ ...base, type: 'payment_failed' })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'payment_failed', data: {} })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'payment_failed', data: { urgent: true } })).toBeUndefined();
+        });
+
+        it('prefers the row id over the page id', () => {
+            // Forward-compat with the deep-link fix, which adds pageId to these
+            // payloads: the ROW is the target, so two flagged rows on one page
+            // must not collapse into a single tray entry.
+            expect(buildNotificationTag({
+                ...base, type: 'flagged_reply', data: { pageId: 'p1', messageId: 'm1' },
+            })).toBe('flagged_reply:m1');
+            expect(buildNotificationTag({
+                ...base, type: 'flagged_reply', data: { pageId: 'p1', commentId: 'c1' },
+            })).toBe('flagged_reply:c1');
+        });
+
+        it('falls back to pageId for page-scoped alerts', () => {
+            expect(buildNotificationTag({ ...base, type: 'kb_gap', data: { pageId: 'p1' } })).toBe('kb_gap:p1');
+        });
+
+        it('ignores non-string and empty ids', () => {
+            expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: '' } })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: 42 } })).toBeUndefined();
+            expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: null } })).toBeUndefined();
         });
     });
 
