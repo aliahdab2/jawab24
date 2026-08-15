@@ -49,6 +49,16 @@ export function isWhatsAppRedirectConnect(): boolean {
 }
 
 /**
+ * Instagram-DIRECT connect (Instagram Login, no Facebook Page). Dark by
+ * default: the option appears only once the flag is on AND the backend's
+ * INSTAGRAM_APP_* credentials are configured (the /start endpoint 404s
+ * otherwise — defence in depth, same layering as the WhatsApp flags).
+ */
+export function isInstagramDirectEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED === 'true';
+}
+
+/**
  * Canary window: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is 'true', the
  * WhatsApp surface is shown ONLY to platform admins (the founder), even though
  * the config is live. This lets us set the config in prod (so connect actually

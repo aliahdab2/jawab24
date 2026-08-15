@@ -37,7 +37,7 @@ import dynamic from 'next/dynamic';
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
-import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -193,6 +193,30 @@ const PagesPage: NextPageWithLayout = () => {
 
   // Create a stable reference to handleSync
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
+
+  /*
+   * Instagram-DIRECT connect (Instagram Login, no Facebook Page). Rule 17b:
+   * the backend mints single-use state and hands back the instagram.com
+   * authorize URL; the tab's FIRST document must be instagram.com, so this
+   * navigates to it directly — natively via the external browser (the App-Link
+   * return leg reopens the app), on web as a full-page navigation.
+   */
+  const startInstagramConnect = useCallback(async () => {
+    try {
+      const { data } = await api.post<{ url: string }>('/auth/instagram/start', { locale });
+      if (Capacitor.isNativePlatform()) {
+        // A Custom Tab is fine here (unlike WhatsApp's popup-based signup):
+        // the tab starts at instagram.com and returns via the App Link page.
+        const { openExternalUrl } = await import('@/lib/openExternalUrl');
+        await openExternalUrl(data.url);
+      } else {
+        window.location.assign(data.url);
+      }
+    } catch (error) {
+      const code = (error as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      toast.error(t(code === 'PAGE_LIMIT_REACHED' ? 'pageLimitReached' : 'instagramConnectFailed'));
+    }
+  }, [locale, t]);
 
   const handleSync = useCallback(async () => {
     if (!fbToken) {
@@ -459,6 +483,32 @@ const PagesPage: NextPageWithLayout = () => {
     delete remaining.whatsappConnected;
     delete remaining.waPageId;
     delete remaining.whatsappError;
+    void router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
+  }, [router, t, fetchPages]);
+
+  /*
+   * ?instagramConnected=1 / ?igError=<code> → the RETURN leg of the
+   * Instagram-direct connect (the backend callback serves the app-sync page;
+   * a navigation cannot carry a JSON body). Same once-then-strip contract as
+   * the WhatsApp block above.
+   */
+  const igReturnHandledRef = useRef(false);
+  useEffect(() => {
+    if (igReturnHandledRef.current || !router.isReady) return;
+    const connected = router.query.instagramConnected === '1';
+    const errorCode = typeof router.query.igError === 'string' ? router.query.igError : null;
+    if (!connected && !errorCode) return;
+    igReturnHandledRef.current = true;
+    if (connected) {
+      toast.success(t('instagramConnectSuccess'));
+      void fetchPages();
+    } else if (errorCode && errorCode !== 'cancelled') {
+      // A deliberate dialog cancel is not an error — no toast for it.
+      toast.error(t(errorCode === 'taken' ? 'instagramAccountTaken' : 'instagramConnectFailed'));
+    }
+    const remaining = { ...router.query };
+    delete remaining.instagramConnected;
+    delete remaining.igError;
     void router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
   }, [router, t, fetchPages]);
 
@@ -1472,8 +1522,13 @@ const PagesPage: NextPageWithLayout = () => {
           setShowChannelPicker(false);
           void requestConnectWhatsApp(null);
         }}
+        onPickInstagram={() => {
+          setShowChannelPicker(false);
+          void startInstagramConnect();
+        }}
         whatsappAvailable={whatsappVisible && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
+        instagramAvailable={isInstagramDirectEnabled()}
       />
 
       {/* Desktop guidance before a phone attempts Embedded Signup. Meta's wizard

@@ -10,18 +10,20 @@ import { ChevronRight } from 'lucide-react';
  * already inverts on its own and a manual dark: variant would double-flip it.
  * The blue/emerald scales are raw Tailwind palettes and do need theirs.
  */
-export type ChoiceRowAccent = 'blue' | 'emerald' | 'brand';
+export type ChoiceRowAccent = 'blue' | 'emerald' | 'brand' | 'violet';
 
 const ACCENT_HOVER: Record<ChoiceRowAccent, string> = {
   blue: 'hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/40 dark:hover:bg-blue-950/20',
   emerald: 'hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20',
   brand: 'hover:border-brand-300 hover:bg-brand-50/40',
+  violet: 'hover:border-violet-300 dark:hover:border-violet-700 hover:bg-violet-50/40 dark:hover:bg-violet-950/20',
 };
 
 const ACCENT_ICON: Record<ChoiceRowAccent, string> = {
   blue: 'icon-bg-blue',
   emerald: 'icon-bg-emerald',
   brand: 'icon-bg-brand',
+  violet: 'icon-bg-violet',
 };
 
 interface ChoiceRowProps {
