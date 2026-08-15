@@ -1135,9 +1135,16 @@ export const subscriptionsService = {
             const TTL_SECONDS = 24 * 60 * 60;
             const set = await redis.set(dedupKey, '1', 'EX', TTL_SECONDS, 'NX');
             if (set === 'OK') {
-                await notificationService.sendTemplateNotification(userId, 'auto_reply_paused_billing', {
-                    reason: check.reason ?? 'inactive',
-                });
+                // No variables: the template deliberately has no {reason}
+                // placeholder (check.reason is an internal English string that
+                // used to leak into the Arabic body). deepLink makes the card
+                // actionable — without it the frontend renders a dead end.
+                await notificationService.sendTemplateNotification(
+                    userId,
+                    'auto_reply_paused_billing',
+                    {},
+                    { deepLink: '/settings' },
+                );
             }
         } catch (err) {
             captureError(err, 'Failed to dispatch auto-reply paused notification', {

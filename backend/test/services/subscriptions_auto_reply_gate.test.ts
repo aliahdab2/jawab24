@@ -179,11 +179,28 @@ describe('enforceAutoReplyGate', () => {
             24 * 60 * 60,
             'NX',
         );
+        // Contract (2026-08-15): NO variables — the template has no {reason}
+        // placeholder (the gate's internal English reason used to leak into the
+        // Arabic body) — and a deepLink so the card is actionable.
         expect(mockSendTemplateNotification).toHaveBeenCalledWith(
             'user_1',
             'auto_reply_paused_billing',
-            expect.objectContaining({ reason: expect.stringMatching(/canceled/i) }),
+            {},
+            { deepLink: '/settings' },
         );
+    });
+
+    it('ships billing-pause copy with no placeholder and no English inside the Arabic body', async () => {
+        const { NOTIFICATION_TEMPLATES } = await vi.importActual<typeof import('../../src/services/notifications')>(
+            '../../src/services/notifications',
+        );
+        const tpl = NOTIFICATION_TEMPLATES.auto_reply_paused_billing;
+
+        expect(tpl.bodies.ar).not.toContain('{reason}');
+        expect(tpl.bodies.en).not.toContain('{reason}');
+        // Latin words in the Arabic body = the leak this guards against
+        // (brand names like Jawab24 would be fine, but this copy has none).
+        expect(tpl.bodies.ar).not.toMatch(/[A-Za-z]{3,}/);
     });
 
     it('suppresses the notification when the 24h dedup lock is held (Redis SET NX returns null)', async () => {
