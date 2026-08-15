@@ -35,6 +35,13 @@ interface CacheContext {
     postMessage?: string;
     storePolicies?: string;
     replyStyle?: string;
+    /**
+     * Effective reply mode ('sales' | 'info'). 'info' renders the INFO-DESK
+     * prompt block, so it must scope both caches — settings/pages saves don't
+     * bump kbActiveVersion (same read-side scoping rationale as brandVoiceHash).
+     * Conditional key append: sales traffic keeps byte-identical keys.
+     */
+    replyMode?: string;
     customerContext?: string;
     /**
      * Model resolved for the request. Included in the cache key so workspaces
@@ -226,6 +233,12 @@ export class AiService {
         // storePolicies). Conditional append: workspaces without brand voice keep
         // byte-identical keys, so only voice-having entries re-warm on rollout.
         if (ctx.brandVoiceHash) key.push(`bv:${ctx.brandVoiceHash}`);
+
+        // Reply mode renders a different prompt shape (INFO-DESK block), so info
+        // pages get their own bucket. Conditional append like sg:/bv: — the sales
+        // fleet (everyone today) keeps byte-identical keys, and a page toggled
+        // back to sales immediately re-uses its still-valid sales entries.
+        if (ctx.replyMode === 'info') key.push('rm:i');
 
         // DM only: bucket by gender when the sender's first name is confidently known
         // (v53 fleet-learned map — resolved once per request into ctx.genderBucket),
@@ -427,6 +440,7 @@ export class AiService {
             postMessage,
             storePolicies: request.context?.storePolicies,
             replyStyle: request.context?.replyStyle,
+            replyMode: request.context?.replyMode,
             customerContext: request.context?.customerContext,
             model: resolvedModel,
             suppressGreeting: request.context?.suppressGreeting,
@@ -599,6 +613,7 @@ export class AiService {
                             {
                                 channel: request.context?.channel,
                                 replyStyle: request.context?.replyStyle,
+                                replyMode: request.context?.replyMode,
                                 model: modelCacheScope,
                                 brandVoiceHash,
                             },
@@ -875,6 +890,7 @@ export class AiService {
                     kbActiveVersion,
                     channel: request.context?.channel,
                     replyStyle: request.context?.replyStyle,
+                    replyMode: request.context?.replyMode,
                     model: modelCacheScope,
                     brandVoiceHash,
                     metadata: { confidence: response.data.confidence, flags: response.data.flags, intent: response.data.intent },
