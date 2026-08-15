@@ -15,7 +15,6 @@ vi.mock('../../src/services/plans', () => ({
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
-            showBranding: false,
             prioritySupport: false,
         }),
         getDefaultPlan: vi.fn().mockResolvedValue({
@@ -29,7 +28,6 @@ vi.mock('../../src/services/plans', () => ({
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
-            showBranding: true,
             prioritySupport: false,
         }),
         mapToPlan: vi.fn((row) => row),
@@ -377,7 +375,6 @@ describe('Subscriptions Service', () => {
                 facebookEnabled: true,
                 instagramEnabled: true,
                 whatsappEnabled: false,
-                showBranding: true,
                 prioritySupport: false,
             };
 
@@ -431,7 +428,6 @@ describe('Subscriptions Service', () => {
                 facebookEnabled: true,
                 instagramEnabled: true,
                 whatsappEnabled: false,
-                showBranding: false,
                 prioritySupport: false,
             };
 
@@ -476,7 +472,7 @@ describe('Subscriptions Service', () => {
                 id: 'plan_123', name: 'Business', slug: 'business', price: 2500,
                 maxPages: 3, maxAiRepliesPerMonth: 1500, trialDays: 0,
                 facebookEnabled: true, instagramEnabled: true, whatsappEnabled: false,
-                showBranding: false, prioritySupport: false,
+                prioritySupport: false,
             };
 
             vi.mocked(db.select).mockReturnValue({
@@ -527,7 +523,6 @@ describe('Subscriptions Service', () => {
                 facebookEnabled: true,
                 instagramEnabled: true,
                 whatsappEnabled: false,
-                showBranding: false,
                 prioritySupport: false,
             };
 
@@ -608,7 +603,7 @@ describe('Subscriptions Service', () => {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                         maxPages: 1, maxAiRepliesPerMonth: 60,
                         trialDays: 30, facebookEnabled: true, instagramEnabled: true,
-                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                        whatsappEnabled: false, prioritySupport: false,
                     },
                 }]),
             });
@@ -654,7 +649,7 @@ describe('Subscriptions Service', () => {
                                                 id: 'plan_1', name: 'Business', slug: 'business', price: 2500,
                                                 maxPages: 3, maxAiRepliesPerMonth: 1500, trialDays: 0, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: false, prioritySupport: false,
+                                                prioritySupport: false,
                                             },
                                         }]),
                                     }),
@@ -701,7 +696,7 @@ describe('Subscriptions Service', () => {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                                                 maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: true, prioritySupport: false,
+                                                prioritySupport: false,
                                             },
                                         }]),
                                     }),
@@ -762,7 +757,7 @@ describe('Subscriptions Service', () => {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                         maxPages: 1, maxAiRepliesPerMonth: 60,
                         trialDays: 30, facebookEnabled: true, instagramEnabled: true,
-                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                        whatsappEnabled: false, prioritySupport: false,
                     },
                 }]),
             });
@@ -798,7 +793,7 @@ describe('Subscriptions Service', () => {
                         id: 'plan_1', name: 'Enterprise', slug: 'enterprise', price: 10000,
                         maxPages: null, maxAiRepliesPerMonth: null, trialDays: 0, facebookEnabled: true,
                         instagramEnabled: true, whatsappEnabled: true,
-                        showBranding: false, prioritySupport: true,
+                        prioritySupport: true,
                     },
                 }]),
             });
@@ -842,7 +837,7 @@ describe('Subscriptions Service', () => {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                                                 maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: true, prioritySupport: false,
+                                                prioritySupport: false,
                                             },
                                         }]),
                                     }),
@@ -909,7 +904,7 @@ describe('Subscriptions Service', () => {
                                                 id: 'plan_1', name: 'Pro', slug: 'pro', price: 1000,
                                                 maxPages: 5, maxAiRepliesPerMonth: 10000, trialDays: 0, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: false, prioritySupport: true,
+                                                prioritySupport: true,
                                             },
                                         }]),
                                     }),
@@ -971,7 +966,7 @@ describe('Subscriptions Service', () => {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                                                 maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: true, prioritySupport: false,
+                                                prioritySupport: false,
                                             },
                                         }]),
                                     }),
@@ -1052,7 +1047,6 @@ describe('checkSubscriptionStatus', () => {
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
-            showBranding: true,
             prioritySupport: false,
         },
         ...overrides,
@@ -1209,7 +1203,6 @@ describe('isSubscriptionActive', () => {
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
-            showBranding: false,
             prioritySupport: false,
         };
 

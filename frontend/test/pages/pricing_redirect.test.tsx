@@ -38,7 +38,6 @@ const TEST_PLANS = [
         maxPages: 1,
         maxTemplates: 5,
         maxRules: 5,
-        showBranding: true,
         facebookEnabled: true,
         instagramEnabled: true,
         whatsappEnabled: false,

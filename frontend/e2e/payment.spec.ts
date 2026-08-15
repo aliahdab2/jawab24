@@ -20,7 +20,6 @@ const MOCK_PLANS = [
     facebookEnabled: true,
     instagramEnabled: true,
     whatsappEnabled: false,
-    showBranding: true,
     prioritySupport: false,
     regionalPricing: {},
     sortOrder: 0
@@ -43,7 +42,6 @@ const MOCK_PLANS = [
     facebookEnabled: true,
     instagramEnabled: true,
     whatsappEnabled: false,
-    showBranding: false,
     prioritySupport: true,
     regionalPricing: {},
     sortOrder: 1

@@ -53,7 +53,6 @@ function makeDbRow(overrides: Record<string, unknown> = {}) {
         instagramEnabled: true,
         whatsappEnabled: false,
         ecommerceEnabled: true,
-        showBranding: false,
         prioritySupport: true,
         trialDays: 14,
         regionalPricing: {},
@@ -107,7 +106,6 @@ describe('Plans Service', () => {
                 price: 2500,
                 maxPages: 3,
                 maxAiRepliesPerMonth: 1500,
-                showBranding: false,
                 regionalPricing: { SY: 350000 },
                 sortOrder: 2,
             });
@@ -120,7 +118,6 @@ describe('Plans Service', () => {
             expect(plan.price).toBe(2500);
             expect(plan.maxPages).toBe(3);
             expect(plan.facebookEnabled).toBe(true);
-            expect(plan.showBranding).toBe(false);
             expect(plan.regionalPricing).toEqual({ SY: 350000 });
         });
 
@@ -141,7 +138,6 @@ describe('Plans Service', () => {
                 instagramEnabled: null,
                 whatsappEnabled: null,
                 ecommerceEnabled: null,
-                showBranding: null,
                 prioritySupport: null,
                 trialDays: null,
                 regionalPricing: null,
@@ -160,7 +156,6 @@ describe('Plans Service', () => {
             expect(plan.facebookEnabled).toBe(true);
             expect(plan.instagramEnabled).toBe(true);
             expect(plan.whatsappEnabled).toBe(false);
-            expect(plan.showBranding).toBe(true);
             expect(plan.prioritySupport).toBe(false);
             expect(plan.trialDays).toBe(0);
             expect(plan.regionalPricing).toEqual({});
@@ -189,7 +184,6 @@ describe('Plans Service', () => {
             instagramEnabled: true,
             whatsappEnabled: false,
             ecommerceEnabled: true,
-            showBranding: false,
             prioritySupport: false,
             trialDays: 0,
             isActive: true,

@@ -23,7 +23,6 @@ export interface PlanSeed {
     instagramEnabled: boolean;
     whatsappEnabled: boolean;
     ecommerceEnabled: boolean;
-    showBranding: boolean;
     prioritySupport: boolean;
     trialDays: number;
     isActive: boolean;
@@ -47,7 +46,6 @@ export const PLANS: PlanSeed[] = [
         instagramEnabled: true,
         whatsappEnabled: false,
         ecommerceEnabled: false,
-        showBranding: true,
         prioritySupport: false,
         trialDays: 30,
         isActive: true,
@@ -69,7 +67,6 @@ export const PLANS: PlanSeed[] = [
         instagramEnabled: true,
         whatsappEnabled: true,
         ecommerceEnabled: true,
-        showBranding: false,
         prioritySupport: false,
         trialDays: 0,
         isActive: true,
@@ -91,7 +88,6 @@ export const PLANS: PlanSeed[] = [
         instagramEnabled: true,
         whatsappEnabled: true,
         ecommerceEnabled: true,
-        showBranding: false,
         prioritySupport: true,
         trialDays: 0,
         isActive: true,
@@ -116,7 +112,6 @@ export const PLANS: PlanSeed[] = [
         instagramEnabled: true,
         whatsappEnabled: true,
         ecommerceEnabled: true,
-        showBranding: false,
         prioritySupport: true,
         trialDays: 0,
         isActive: true,
@@ -139,7 +134,6 @@ export const PLANS: PlanSeed[] = [
         instagramEnabled: true,
         whatsappEnabled: true,
         ecommerceEnabled: true,
-        showBranding: false,
         prioritySupport: true,
         trialDays: 0,
         isActive: true,
