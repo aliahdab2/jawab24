@@ -15,6 +15,7 @@ import type { PlaygroundSource } from '../../types/aiPipeline';
 import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
+    resolveEffectiveReplyMode,
     type StoredBusinessProfile,
 } from '@jawab24/shared';
 
@@ -38,6 +39,7 @@ export const PLAYGROUND_PAGE_COLUMNS = {
     ecommerceStoreId: pages.ecommerceStoreId,
     businessProfile: pages.businessProfile,
     brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
+    replyMode: pages.replyMode,
 } as const;
 
 export interface PlaygroundPageData {
@@ -52,6 +54,10 @@ export interface PlaygroundPageData {
     businessProfile?: unknown;
     /** Per-page persona override (D-084) — resolved exactly like production. */
     brandVoiceNotesMulti?: Record<string, string> | null;
+    /** Per-page reply-mode override; null/absent = inherit the workspace default.
+     *  ⚠️ Callers must SELECT this column — a page object without it silently
+     *  resolves to the workspace default while production honors the override. */
+    replyMode?: string | null;
 }
 
 interface PlaygroundContextOptions {
@@ -79,6 +85,9 @@ interface PlaygroundContextOptions {
      * admin playground can still try a persona the merchant has not saved.
      */
     replyStyle?: string;
+    /** Reply mode override ('sales' | 'info') — same caller-wins semantics as replyStyle;
+     *  omitted → resolved from page.replyMode ?? workspace.replyMode, as production does. */
+    replyMode?: string;
     brandVoiceNotes?: string;
     /** Admin-only experiment input: a synthetic returning-customer summary. The production
      *  DM pipeline derives its own from conversation history inside the generator, so there
@@ -105,7 +114,7 @@ export interface PlaygroundContext {
  * Shared between the admin playground route and the customer-facing test-reply endpoint.
  */
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
-    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source } = opts;
+    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source } = opts;
 
     // 1. Fetch owner settings for comment reply mode + workspace settings for the
     //    language fallback and the merchant's stored persona.
@@ -148,6 +157,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     // paths cannot drift — the same single-choke-point rule the language work follows.
     let storedBrandVoiceNotes: string | undefined;
     let storedReplyStyle: string | undefined;
+    let storedWorkspaceReplyMode: string | undefined;
     if (page.workspaceId) {
         try {
             const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
@@ -158,6 +168,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             // previews resolve the persona exactly like the reply pipeline.
             storedBrandVoiceNotes = resolveBrandVoiceNotes(wsSettings, question, page.brandVoiceNotesMulti);
             storedReplyStyle = wsSettings.replyStyle || undefined;
+            storedWorkspaceReplyMode = wsSettings.replyMode || undefined;
         } catch {
             // Non-critical — fall back to default
         }
@@ -166,6 +177,8 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     // persona per request to try one the merchant has not saved.
     const effectiveBrandVoiceNotes = brandVoiceNotes ?? storedBrandVoiceNotes;
     const effectiveReplyStyle = replyStyle ?? storedReplyStyle;
+    // Same production resolution as the processors: page override ?? workspace default.
+    const effectiveReplyMode = replyMode ?? resolveEffectiveReplyMode(page.replyMode, storedWorkspaceReplyMode);
 
     // 2. Enrich KB with e-commerce product/policy data
     let pageKB = page.knowledgeBase || undefined;
@@ -253,6 +266,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         senderName: channel === 'dm' ? senderName : undefined,
         minutesSinceLastMessage: channel === 'dm' ? minutesSinceLastMessage : undefined,
         replyStyle: effectiveReplyStyle,
+        replyMode: effectiveReplyMode,
         brandVoiceNotes: effectiveBrandVoiceNotes,
         businessInfoBlock,
         customerContext,

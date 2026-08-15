@@ -44,6 +44,8 @@ export interface PlatformPage {
      * production (the Rule 19.2 drift, inverted).
      */
     brandVoiceNotesMulti?: Record<string, string> | null;
+    /** Per-page reply-mode override ('sales' | 'info'); null = inherit workspace default */
+    replyMode?: string | null;
 }
 
 /** Stored message returned by the adapter's storeIncomingMessage */

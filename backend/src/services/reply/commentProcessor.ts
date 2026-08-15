@@ -10,6 +10,7 @@ import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
+import { resolveEffectiveReplyMode } from '@jawab24/shared';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { isDemoPlatformId } from '../../utils/demo';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -495,6 +496,7 @@ export class CommentProcessor {
                             accessToken: page.accessToken, fromId, fromName,
                             instagramCredential: page.instagramCredential,
                             userSettings: userSettings as unknown as Record<string, unknown>,
+                            replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                             postMessage: content.message || undefined,
                             contentId: content.id,
                             triggerKeyword: match.keyword ?? undefined,
@@ -633,6 +635,7 @@ export class CommentProcessor {
             generatorContext.factCollectionsBlock = enriched.factCollectionsBlock;
             generatorContext.factCollectionsGated = enriched.factCollectionsGated;
             generatorContext.replyStyle = userSettings.replyStyle;
+            generatorContext.replyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             generatorContext.timezone = userSettings.timezone;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
@@ -736,6 +739,7 @@ export class CommentProcessor {
                     sourceType: 'comment',
                     senderId: fromId ?? '',
                     senderName: fromName,
+                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
@@ -845,6 +849,7 @@ export class CommentProcessor {
                 instagramCredential: page.instagramCredential,
                 likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
+                replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                 postMessage: content.message || undefined,
                 contentId: content.id,
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
@@ -992,6 +997,9 @@ export class CommentProcessor {
         fromId?: string;
         fromName?: string;
         userSettings: Record<string, unknown>;
+        /** Effective reply mode of the page — forwarded to lead capture so info
+         *  pages store leads silently (push suppressed). */
+        replyMode?: string;
         postMessage?: string;
         /** Business Info exactly as the generator saw it, for the post-send
          *  grounding audit. Absent on the post_reply path (merchant-authored
@@ -1238,6 +1246,7 @@ export class CommentProcessor {
             sourceType: 'comment',
             senderId: fromId ?? '',
             senderName: fromName,
+            replyMode: opts.replyMode,
             messageText: commentMessage,
             postMessage: opts.postMessage,
             replyText,

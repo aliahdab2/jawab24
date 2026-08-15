@@ -6,7 +6,7 @@ import { mapToPlatformPage } from '../../../src/services/reply/adapters/shared';
  * passes through before enrichPageContext. A prompt-relevant column that the
  * mapper drops produces a feature that works in the playground (full row) and
  * is silently dark in production — the Rule 19.2 drift, inverted. This suite
- * fails if brandVoiceNotesMulti ever falls out of the mapping.
+ * fails if brandVoiceNotesMulti or replyMode ever falls out of the mapping.
  */
 describe('mapToPlatformPage — per-page persona carried into the reply pipeline', () => {
     const row = {
@@ -32,5 +32,18 @@ describe('mapToPlatformPage — per-page persona carried into the reply pipeline
     it('normalizes an absent override to null (inherit)', () => {
         const mapped = mapToPlatformPage(row, { autoReplyEnabled: true });
         expect(mapped.brandVoiceNotesMulti).toBeNull();
+    });
+
+    it('forwards a page reply-mode override', () => {
+        const mapped = mapToPlatformPage(
+            { ...row, replyMode: 'info' },
+            { autoReplyEnabled: true },
+        );
+        expect(mapped.replyMode).toBe('info');
+    });
+
+    it('normalizes an absent reply mode to null (inherit)', () => {
+        const mapped = mapToPlatformPage(row, { autoReplyEnabled: true });
+        expect(mapped.replyMode).toBeNull();
     });
 });

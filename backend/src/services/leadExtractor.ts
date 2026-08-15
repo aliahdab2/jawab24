@@ -136,6 +136,12 @@ export interface MaybeCaptureLeadParams {
     postMessage?: string;
     /** Comment-only: the reply we just sent, so the AI sees a 2-turn exchange. */
     replyText?: string;
+    /**
+     * Effective reply mode of the page ('sales' | 'info') — 'info' keeps the
+     * capture (row, bell, SSE) but mutes the push: the merchant chose an
+     * "information source" and doesn't work leads. Absent = 'sales'.
+     */
+    replyMode?: string;
 }
 
 export interface LeadsPage {

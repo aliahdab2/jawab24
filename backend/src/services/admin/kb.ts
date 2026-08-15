@@ -233,7 +233,7 @@ class AdminKbService {
     async runPlayground(body: PlaygroundRequestBody, log: FastifyBaseLogger): Promise<PlaygroundResult> {
         const {
             pageId, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         } = body;
         const startTime = Date.now();
 
@@ -242,10 +242,11 @@ class AdminKbService {
         }
 
         const [page] = await db
-            // The shared prompt-column subset (incl. the D-084 page persona) —
-            // hand-listing columns here is how a preview drifts from production
-            // (wrong reply AND wrong `bv:` cache key), so the list lives in ONE
-            // place both this select and warm-reply-cache spread.
+            // The shared prompt-column subset (incl. the D-084 page persona and
+            // the reply mode) — hand-listing columns here is how a preview
+            // drifts from production (wrong reply AND wrong cache key), so the
+            // list lives in ONE place both this select and warm-reply-cache
+            // spread.
             .select({ ...PLAYGROUND_PAGE_COLUMNS })
             .from(pages)
             .where(eq(pages.id, pageId))
@@ -257,7 +258,7 @@ class AdminKbService {
 
         const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
             page, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         });
 
         replyGenerator.setLogger(log);
