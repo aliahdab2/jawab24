@@ -109,6 +109,43 @@ describe('buildSystemPrompt — structure (prompt-cache contract)', () => {
     });
 });
 
+describe('buildSystemPrompt — INFO-DESK MODE block (replyMode, D-083)', () => {
+    it('sales / absent replyMode renders a prompt byte-identical to one built with no mode at all', () => {
+        // Blast radius: the entire sales fleet must be untouched by the feature —
+        // same guarantee the gender block pins for comments (:295 below). 'sales'
+        // and absent must also be the same bytes (explicit ≡ omitted).
+        const none = buildSystemPrompt(req('hi', { knowledgeBase: 'We sell flowers.' }));
+        const sales = buildSystemPrompt(req('hi', { knowledgeBase: 'We sell flowers.', replyMode: 'sales' }));
+        expect(sales).toBe(none);
+        expect(none).not.toContain('INFO-DESK MODE');
+    });
+
+    it('info renders the block exactly once, after brand voice, before the FINAL line', () => {
+        const s = suffix(req('hi', {
+            replyMode: 'info',
+            brandVoiceNotes: 'You are Sara. Always collect name and phone.',
+        }));
+        // Exactly once
+        expect(s.split('INFO-DESK MODE').length).toBe(2);
+        // Downstream of the persona it overrides, upstream of the FINAL recency line
+        expect(s.indexOf('BRAND VOICE NOTES')).toBeLessThan(s.indexOf('INFO-DESK MODE'));
+        expect(s.indexOf('INFO-DESK MODE')).toBeLessThan(s.indexOf('FINAL: end on the answer'));
+        // The counter-demonstrations are the mechanism (D-019) — both must be present
+        expect(s).toContain('NEVER ask the customer for their name, phone number');
+        expect(s).toContain('NEVER promise that you or the team will follow up');
+        expect(s).toContain('"intent":"PURCHASE_INTENT"');
+        expect(s).toContain('"flags":["cancellation_request"]');
+    });
+
+    it('the static prefix itself never contains the block (prompt-cache contract)', () => {
+        expect(STATIC_SYSTEM_PREFIX).not.toContain('INFO-DESK MODE');
+    });
+
+    it('an unknown replyMode value degrades to sales (no block)', () => {
+        expect(suffix(req('hi', { replyMode: 'garbage' }))).not.toContain('INFO-DESK MODE');
+    });
+});
+
 describe('buildSystemPrompt — page name', () => {
     it('includes the provided page name in quotes', () => {
         expect(suffix(req('hi', { pageName: 'Acme Store' }))).toContain('- Business name: "Acme Store"');
