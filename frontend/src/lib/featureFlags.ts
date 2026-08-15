@@ -108,3 +108,25 @@ const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
 export function isPostSuggestionsVisible(workspaceId: string | null | undefined): boolean {
   return Boolean(workspaceId && POST_SUGGESTIONS_WORKSPACE_IDS.has(workspaceId));
 }
+
+/**
+ * Reply-mode pilot (2026-08-15): the «وضع الرد» card in settings — sales rep
+ * vs information desk, per page. WORKSPACE-gated with the requesting merchant
+ * (InMedia agency) as the built-in default — the POST_SUGGESTIONS pattern.
+ * This only hides the card; the backend write-gate (REPLY_MODE_WORKSPACE_IDS
+ * in backend config) is the enforcement and must stay in step with this list.
+ * An EMPTY override (`NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS=""`) is treated as
+ * "no override" (falls back to the default list); GA = delete both gates.
+ */
+const REPLY_MODE_WORKSPACE_IDS: ReadonlySet<string> = new Set(
+  (process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS
+    || [
+      'd06ed500-74ea-42ee-bff6-37bee2cf412a', // InMedia agency (inmedia.sy@gmail.com) — requesting merchant
+    ].join(','))
+    .split(',').map((id) => id.trim()).filter(Boolean),
+);
+
+/** Whether the reply-mode card may render for this workspace. */
+export function isReplyModeVisible(workspaceId: string | null | undefined): boolean {
+  return Boolean(workspaceId && REPLY_MODE_WORKSPACE_IDS.has(workspaceId));
+}

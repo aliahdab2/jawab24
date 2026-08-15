@@ -53,6 +53,11 @@ describe('settings.tsx pre-submit validation contract', () => {
         expect(errors).toHaveProperty('replyStyle');
     });
 
+    it('flags invalid enum (replyMode) by field name', () => {
+        const errors = fieldErrorsFromSchema({ replyMode: 'support' });
+        expect(errors).toHaveProperty('replyMode');
+    });
+
     it('flags bad businessHoursStart format', () => {
         const errors = fieldErrorsFromSchema({ businessHoursStart: '25:00' });
         expect(errors).toHaveProperty('businessHoursStart');

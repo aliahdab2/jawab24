@@ -305,6 +305,7 @@
     "setting_commentsAutoReply": "Comment auto-reply",
     "setting_messagesAutoReply": "Message auto-reply",
     "setting_commentReplyMode": "Comment reply mode",
+    "setting_replyMode": "Reply mode",
     "setting_holdLowConfidence": "Hold low-confidence replies",
     "setting_replyDelay": "Reply delay (sec)",
     "setting_defaultReplyLanguage": "Default reply language",

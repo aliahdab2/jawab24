@@ -32,6 +32,8 @@ export interface SettingsState {
   messageEscalationMinutes: number;
   handoffPauseDurationMinutes: number;
   replyStyle: string;
+  /** Workspace default reply mode ('sales' | 'info'); pages may override per-page. */
+  replyMode: string;
   brandVoiceNotes: string;
   holdLowConfidence: boolean;
 }

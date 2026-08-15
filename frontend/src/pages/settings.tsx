@@ -21,6 +21,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
+import { isReplyModeVisible } from '@/lib/featureFlags';
 import { useIsDemoUser } from '@/features/demo';
 import type { NextPageWithLayout } from './_app';
 import {
@@ -35,6 +36,7 @@ import {
   GreetingMessageCard,
   LimitFallbackMessageCard,
   ReplyStyleCard,
+  ReplyModeCard,
   LowConfidenceHoldCard,
   DangerZone,
   CollapsibleSectionHeader,
@@ -73,6 +75,7 @@ const INITIAL_SETTINGS: SettingsState = {
   messageEscalationMinutes: 30,
   handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
   replyStyle: 'professional',
+  replyMode: 'sales',
   brandVoiceNotes: '',
   holdLowConfidence: false,
   likeComments: false,
@@ -87,7 +90,7 @@ const INITIAL_SETTINGS: SettingsState = {
 const SECTION_FIELD_KEYS: Record<'general' | 'autoReply' | 'aiPersonality', (keyof SettingsState)[]> = {
   general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage', 'timezone'],
   autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'dualReplyNudgeMulti', 'likeComments'],
-  aiPersonality: ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
+  aiPersonality: ['replyStyle', 'replyMode', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
 };
 
 /** Which sections changed between two settings snapshots (for the Saved ✓ flash). */
@@ -138,6 +141,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const { language, setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const { canEdit } = useWorkspaceRole();
   const isDemoUser = useIsDemoUser();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
@@ -211,6 +215,7 @@ const SettingsPage: NextPageWithLayout = () => {
         newLeadAlertsEnabled: data.newLeadAlertsEnabled ?? true,
         pushNotifications: data.pushNotifications ?? true,
         replyStyle: data.replyStyle || 'professional',
+        replyMode: data.replyMode === 'info' ? 'info' : 'sales',
         brandVoiceNotes: data.brandVoiceNotes || '',
         holdLowConfidence: data.holdLowConfidence ?? false,
         likeComments: data.likeComments ?? false,
@@ -496,7 +501,12 @@ const SettingsPage: NextPageWithLayout = () => {
         {/* Gate on the channels (not the derived aiEnabled): personality matters
             exactly when Smart Replies can fire somewhere (D-029). */}
         {(settings.commentsAutoReply || settings.messagesAutoReply) ? (
-          <ReplyStyleCard
+          <>
+            {/* Reply mode pilot — allowlisted workspaces only (backend enforces the write). */}
+            {isReplyModeVisible(activeWorkspaceId) && (
+              <ReplyModeCard settings={settings} setSettings={setSettings} />
+            )}
+            <ReplyStyleCard
             settings={settings}
             setSettings={setSettings}
             hasChanges={hasChanges}
@@ -507,6 +517,7 @@ const SettingsPage: NextPageWithLayout = () => {
               });
             }}
           />
+          </>
         ) : (
           <div className="flex items-center gap-3 rounded-2xl border border-dashed border-theme-border bg-muted/40 p-4 text-sm text-muted-foreground">
             <Sparkles className="w-5 h-5 shrink-0 text-icon-muted" aria-hidden="true" />

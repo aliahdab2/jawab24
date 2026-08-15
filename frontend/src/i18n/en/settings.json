@@ -38,6 +38,19 @@
   "duration2hr": "2 hours",
   "duration24hr": "24 hours",
   "duration4hr": "4 hours",
+  "replyMode": {
+    "title": "Reply Mode",
+    "info": "Choose the job Smart Replies do for you. Sales assistant guides interested customers to complete an order and collects their contact details. Information desk answers questions from your Business Info and directs customers to your own contact channels — it never asks for their details and never promises follow-up calls.",
+    "desc": "What should Smart Replies do with interested customers?",
+    "sales": "Sales assistant",
+    "infoDesk": "Information desk",
+    "salesDesc": "Guides customers to order: asks for their name and number when they want to buy, and saves them as potential customers.",
+    "infoDeskDesc": "Answers questions only and directs customers to your contact channels. Never asks for their details and never promises follow-up. Numbers customers share on their own are still saved quietly.",
+    "perPageTitle": "Per-page override",
+    "inherit": "Default ({mode})",
+    "pageRowLabel": "Reply mode for {page}",
+    "pageUpdateError": "Saving the page's reply mode failed — try again."
+  },
   "replyStyle": {
     "title": "Brand Voice",
     "desc": "Tell Jawab24 about your business — what to always say, never say, special offers.",

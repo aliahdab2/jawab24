@@ -37,6 +37,7 @@ function healthySettings(overrides: Partial<SupportSettings> = {}): SupportSetti
         businessHoursEnd: '18:00',
         timezone: PLACEHOLDER_TIMEZONE,
         replyStyle: 'professional',
+        replyMode: 'sales',
         brandVoiceNotes: 'نتحدث بلطف ونساعد العميل بسرعة',
         brandVoiceNotesMulti: {},
         greetingMessageEnabled: false,

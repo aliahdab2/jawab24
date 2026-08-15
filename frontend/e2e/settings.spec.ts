@@ -32,6 +32,7 @@ const MOCK_SETTINGS = {
   commentEscalationMinutes: 60,
   messageEscalationMinutes: 30,
   handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
+  replyMode: 'sales',
 };
 
 test.describe('Settings Page', () => {

@@ -188,6 +188,9 @@ export const pagesApi = {
   // default; an omitted key leaves it unchanged; a value is a full override.
   updateLeadConfig: (id: string, data: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null }) =>
     api.patch(`/pages/${id}/lead-config`, data),
+  // Per-page reply-mode override: null reverts the page to the workspace default.
+  updateReplyMode: (id: string, replyMode: 'sales' | 'info' | null) =>
+    api.patch(`/pages/${id}/reply-mode`, { replyMode }),
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };

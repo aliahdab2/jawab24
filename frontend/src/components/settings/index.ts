@@ -15,6 +15,7 @@ export { HandoffPauseCard } from './HandoffPauseCard';
 export { GreetingMessageCard } from './GreetingMessageCard';
 export { LimitFallbackMessageCard } from './LimitFallbackMessageCard';
 export { ReplyStyleCard } from './ReplyStyleCard';
+export { ReplyModeCard } from './ReplyModeCard';
 export { LowConfidenceHoldCard } from './LowConfidenceHoldCard';
 export { DangerZone } from './DangerZone';
 export type { SettingsState, SettingsCardProps } from './types';

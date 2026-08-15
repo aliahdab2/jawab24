@@ -49,6 +49,7 @@ export interface CustomerSettings {
         businessHoursEnd: string | null;
         timezone: string | null;
         replyStyle: string | null;
+        replyMode: string | null;
         brandVoiceNotes: string | null;
         brandVoiceNotesMulti: Record<string, string> | null;
         greetingMessageEnabled: boolean | null;

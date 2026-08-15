@@ -34,6 +34,7 @@ export function makeSettings(overrides: Partial<SettingsState> = {}): SettingsSt
     dualReplyNudge: '',
     brandVoiceNotesMulti: {},
     replyStyle: 'professional',
+    replyMode: 'sales',
     brandVoiceNotes: '',
     holdLowConfidence: false,
     likeComments: false,

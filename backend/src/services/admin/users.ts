@@ -239,6 +239,7 @@ class AdminUsersService {
                 businessHoursEnd: settings.businessHoursEnd,
                 timezone: settings.timezone,
                 replyStyle: settings.replyStyle,
+                replyMode: settings.replyMode,
                 brandVoiceNotes: settings.brandVoiceNotes,
                 brandVoiceNotesMulti: settings.brandVoiceNotesMulti,
                 greetingMessageEnabled: settings.greetingMessageEnabled,
