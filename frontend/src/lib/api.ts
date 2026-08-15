@@ -1011,11 +1011,108 @@ export interface PartnerOverview {
   merchants: PartnerMerchant[];
 }
 
+export interface PartnerMerchantPage {
+  id: string;
+  name: string | null;
+  facebookPageId: string | null;
+  instagramUsername: string | null;
+  whatsappDisplayPhoneNumber: string | null;
+  autoReplyEnabled: boolean | null;
+  autoReplyDisabledReason: string | null;
+  whatsappAutoReplyEnabled: boolean | null;
+  disconnected: boolean;
+  disconnectReason: string | null;
+  archivedAt: string | null;
+  kb: {
+    kbLength: number;
+    kbActiveVersion: number | null;
+    kbUpdatedAt: string | null;
+    chunksTotal: number;
+    chunksByType: Record<string, number>;
+    unresolvedGaps: number;
+  };
+}
+
+export interface PartnerMerchantDetail {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  topupBalance: number;
+  adminNote: string | null;
+  subscription: {
+    status: string | null;
+    planName: string | null;
+    planSlug: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    trialEndsAt: string | null;
+    paymentMethod: string | null;
+    maxAiRepliesPerMonth: number | null;
+    maxPages: number | null;
+  } | null;
+  status: PartnerMerchantStatus;
+  // Configured-or-not only: the free-text fields (brand voice, greeting, away
+  // message) are collapsed to booleans server-side and never reach the client.
+  settings: {
+    aiEnabled: boolean | null;
+    commentsAutoReply: boolean | null;
+    messagesAutoReply: boolean | null;
+    commentReplyMode: string | null;
+    holdLowConfidence: boolean | null;
+    businessHoursOnly: boolean | null;
+    businessHoursStart: string | null;
+    businessHoursEnd: string | null;
+    timezone: string | null;
+    replyStyle: string | null;
+    replyDelay: number | null;
+    defaultReplyLanguage: string | null;
+    autoDetectLanguage: boolean | null;
+    greetingMessageEnabled: boolean | null;
+    limitFallbackEnabled: boolean | null;
+    onboardingCompletedAt: string | null;
+    hasBrandVoice: boolean;
+    hasGreetingMessage: boolean;
+    hasAwayMessage: boolean;
+    source: 'effective' | 'legacy-fallback';
+  } | null;
+  usage: {
+    aiRepliesCount: number;
+    postRepliesCount: number;
+    periodStart: string | null;
+    periodEnd: string | null;
+    limit: number | null;
+  };
+  leads: {
+    total: number;
+    today: number;
+    last7d: number;
+    last30d: number;
+    byStatus: { new: number; contacted: number; converted: number };
+  };
+  pages: PartnerMerchantPage[];
+  workspaces: Array<{
+    id: string;
+    name: string | null;
+    role: 'owner' | 'admin' | 'member';
+    isOwner: boolean;
+    ownerName: string | null;
+    memberCount: number;
+  }>;
+}
+
 // Partner Portal API — read-only surface for resellers. Any authenticated user
 // may call; non-partners get 403 (NOT_A_PARTNER) and the page redirects them.
 export const partnerApi = {
   getOverview: async () => {
     const response = await api.get<{ success: boolean; data: PartnerOverview }>('/partner/overview');
+    return response.data;
+  },
+
+  // 404 when the merchant is not attributed to the calling partner.
+  getMerchant: async (userId: string) => {
+    const response = await api.get<{ success: boolean; data: PartnerMerchantDetail }>(`/partner/merchants/${userId}`);
     return response.data;
   },
 };

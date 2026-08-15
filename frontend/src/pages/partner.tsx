@@ -11,6 +11,8 @@ import { useLanguage } from '@/i18n/hooks';
 import { partnerApi, type PartnerMerchant, type PartnerMerchantStatus } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { Card } from '@/components/ui';
+import { PartnerStatusPill } from '@/components/partner/PartnerStatusPill';
+import { formatTimestampDate, formatDaysAgo } from '@/utils/dateUtils';
 
 /**
  * Partner Portal — the read-only page a reseller / country rep sees.
@@ -24,17 +26,6 @@ import { Card } from '@/components/ui';
 type StatusFilter = 'all' | 'trialing' | 'trial_expired' | 'active' | 'at_risk';
 
 const AT_RISK: PartnerMerchantStatus[] = ['past_due', 'expired', 'canceled', 'paused'];
-
-const STATUS_PILL: Record<PartnerMerchantStatus, { className: string; key: string }> = {
-    trialing: { className: 'status-info', key: 'statusTrialing' },
-    trial_expired: { className: 'status-warning', key: 'statusTrialExpired' },
-    active: { className: 'status-success', key: 'statusActive' },
-    expired: { className: 'bg-muted text-muted-foreground', key: 'statusExpired' },
-    past_due: { className: 'status-error', key: 'statusPastDue' },
-    canceled: { className: 'status-error', key: 'statusCanceled' },
-    paused: { className: 'bg-muted text-muted-foreground', key: 'statusPaused' },
-    none: { className: 'bg-muted text-muted-foreground', key: 'statusNone' },
-};
 
 export default function PartnerPortalPage() {
     const router = useRouter();
@@ -92,27 +83,6 @@ export default function PartnerPortalPage() {
         if (filter === 'at_risk') return merchants.filter(m => AT_RISK.includes(m.status));
         return merchants.filter(m => m.status === filter);
     }, [merchants, filter]);
-
-    const formatDate = (dateStr: string | null) => {
-        if (!dateStr) return '—';
-        return new Date(dateStr).toLocaleDateString(intlLocale, {
-            year: 'numeric', month: 'short', day: 'numeric',
-        });
-    };
-
-    // "Last active" reads better relative (today / 3 days ago); falls back to a
-    // plain date beyond a month.
-    const relativeFormatter = useMemo(
-        () => new Intl.RelativeTimeFormat(intlLocale, { numeric: 'auto' }),
-        [intlLocale],
-    );
-    const formatLastSeen = (dateStr: string | null) => {
-        if (!dateStr) return '—';
-        const days = Math.round((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
-        if (days < 0) return formatDate(dateStr);
-        if (days <= 30) return relativeFormatter.format(-days, 'day');
-        return formatDate(dateStr);
-    };
 
     const endDate = (m: PartnerMerchant) =>
         m.status === 'trialing' || m.status === 'trial_expired' ? m.trialEndsAt : m.currentPeriodEnd;
@@ -239,9 +209,12 @@ export default function PartnerPortalPage() {
                                             </thead>
                                             <tbody className="divide-y divide-theme-border">
                                                 {visible.map((m) => {
-                                                    const pill = STATUS_PILL[m.status] ?? STATUS_PILL.none;
                                                     return (
-                                                        <tr key={m.id}>
+                                                        <tr
+                                                            key={m.id}
+                                                            onClick={() => router.push({ pathname: '/partner/merchant', query: { merchantId: m.id } })}
+                                                            className="hover:bg-background cursor-pointer transition-colors"
+                                                        >
                                                             <td className="px-4 py-4">
                                                                 <div className="font-medium text-foreground">
                                                                     {m.name || t('noName')}
@@ -271,21 +244,16 @@ export default function PartnerPortalPage() {
                                                                 {m.planName || '—'}
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                                <span className={clsx(
-                                                                    'inline-flex px-2 py-1 text-xs font-medium rounded-full',
-                                                                    pill.className,
-                                                                )}>
-                                                                    {t(pill.key as Parameters<typeof t>[0])}
-                                                                </span>
+                                                                <PartnerStatusPill status={m.status} />
                                                             </td>
                                                             <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap tabular-nums">
-                                                                {formatDate(endDate(m))}
+                                                                {formatTimestampDate(endDate(m), intlLocale)}
                                                             </td>
                                                             <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap tabular-nums">
-                                                                {formatDate(m.createdAt)}
+                                                                {formatTimestampDate(m.createdAt, intlLocale)}
                                                             </td>
                                                             <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                                                                {formatLastSeen(m.lastSeenAt)}
+                                                                {formatDaysAgo(m.lastSeenAt, intlLocale)}
                                                             </td>
                                                         </tr>
                                                     );

@@ -45,6 +45,7 @@ vi.mock('../../src/services/partnerPortal', () => ({
     partnerPortalService: {
         resolvePartnerForUser: vi.fn(),
         getOverview: vi.fn(),
+        getMerchantDetail: vi.fn(),
     },
 }));
 
@@ -110,5 +111,77 @@ describe('Partner Routes', () => {
         // and the partner block must not expose the commission %.
         expect(body.data.merchants[0]).not.toHaveProperty('email');
         expect(body.data.partner).not.toHaveProperty('commissionPct');
+    });
+
+    // ---------------------------------------------------------------
+    // GET /partner/merchants/:userId — the ownership boundary
+    // ---------------------------------------------------------------
+    describe('GET /partner/merchants/:userId', () => {
+        const MERCHANT_ID = '33333333-3333-3333-3333-333333333333';
+
+        it('returns 401 without authorization header', async () => {
+            const response = await app.inject({ method: 'GET', url: `/partner/merchants/${MERCHANT_ID}` });
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('returns 403 for an authenticated non-partner', async () => {
+            vi.mocked(partnerPortalService.resolvePartnerForUser).mockResolvedValue(null);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: `/partner/merchants/${MERCHANT_ID}`,
+                headers: { authorization: 'Bearer valid-token' },
+            });
+
+            expect(response.statusCode).toBe(403);
+            expect(partnerPortalService.getMerchantDetail).not.toHaveBeenCalled();
+        });
+
+        it('answers 404 — not 403 — for a merchant attributed to another partner', async () => {
+            vi.mocked(partnerPortalService.resolvePartnerForUser).mockResolvedValue({ id: 'p-1', name: 'Ahmad' } as any);
+            // The service applies the ownership gate and returns null.
+            vi.mocked(partnerPortalService.getMerchantDetail).mockResolvedValue(null);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: `/partner/merchants/${MERCHANT_ID}`,
+                headers: { authorization: 'Bearer valid-token' },
+            });
+
+            // 404 on purpose: a 403 would confirm the id exists, letting a
+            // partner enumerate other partners' merchants by status code.
+            expect(response.statusCode).toBe(404);
+            expect(partnerPortalService.getMerchantDetail).toHaveBeenCalledWith('p-1', MERCHANT_ID);
+        });
+
+        it('scopes the lookup to the CALLING partner, never a client-supplied partner id', async () => {
+            vi.mocked(partnerPortalService.resolvePartnerForUser).mockResolvedValue({ id: 'p-real', name: 'Ahmad' } as any);
+            vi.mocked(partnerPortalService.getMerchantDetail).mockResolvedValue({ id: MERCHANT_ID } as any);
+
+            await app.inject({
+                method: 'GET',
+                // A caller trying to pass someone else's partner id along.
+                url: `/partner/merchants/${MERCHANT_ID}?partnerId=p-attacker`,
+                headers: { authorization: 'Bearer valid-token' },
+            });
+
+            expect(partnerPortalService.getMerchantDetail).toHaveBeenCalledWith('p-real', MERCHANT_ID);
+        });
+
+        it('returns the merchant detail for an attributed merchant', async () => {
+            vi.mocked(partnerPortalService.resolvePartnerForUser).mockResolvedValue({ id: 'p-1', name: 'Ahmad' } as any);
+            vi.mocked(partnerPortalService.getMerchantDetail).mockResolvedValue({
+                id: MERCHANT_ID, name: 'Merchant', phone: '+963944000000', status: 'trialing',
+            } as any);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: `/partner/merchants/${MERCHANT_ID}`,
+                headers: { authorization: 'Bearer valid-token' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload).data.id).toBe(MERCHANT_ID);
+        });
     });
 });

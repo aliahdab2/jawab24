@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { partners, users, subscriptions, plans, pages } from '../db/schema';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { adminUsersService } from './admin/users';
 
 /**
  * Partner Portal service — the read-only surface a reseller / country rep sees.
@@ -69,6 +70,126 @@ export function deriveStatus(
     if (status === 'past_due' || status === 'canceled' || status === 'paused') return status;
     return 'none';
 }
+
+/**
+ * A partner sees WHETHER something is configured, never WHAT it says.
+ *
+ * The toggles are what makes a trial fail ("Smart Replies off" is the single
+ * most common cause), so the rep needs them to do their job. The free-text
+ * fields — brand voice, greeting, away message — are merchant-authored content
+ * with no diagnostic value to a reseller, so they collapse to a boolean here.
+ * Stripped server-side on purpose: hiding them in the UI would still ship the
+ * text to the reseller's browser.
+ */
+function toPartnerSettings(settings: NonNullable<
+    NonNullable<Awaited<ReturnType<typeof adminUsersService.getUserDetail>>>['settings']
+>) {
+    const v = settings.values;
+    const filled = (text: unknown, multi: unknown) =>
+        Boolean(
+            (typeof text === 'string' && text.trim().length > 0) ||
+            (multi && typeof multi === 'object' && Object.values(multi as Record<string, string>).some(s => s?.trim())),
+        );
+
+    return {
+        aiEnabled: v.aiEnabled,
+        commentsAutoReply: v.commentsAutoReply,
+        messagesAutoReply: v.messagesAutoReply,
+        commentReplyMode: v.commentReplyMode,
+        holdLowConfidence: v.holdLowConfidence,
+        businessHoursOnly: v.businessHoursOnly,
+        businessHoursStart: v.businessHoursStart,
+        businessHoursEnd: v.businessHoursEnd,
+        timezone: v.timezone,
+        replyStyle: v.replyStyle,
+        replyDelay: v.replyDelay,
+        defaultReplyLanguage: v.defaultReplyLanguage,
+        autoDetectLanguage: v.autoDetectLanguage,
+        greetingMessageEnabled: v.greetingMessageEnabled,
+        limitFallbackEnabled: v.limitFallbackEnabled,
+        onboardingCompletedAt: v.onboardingCompletedAt,
+        // Configured-or-not, never the text itself.
+        hasBrandVoice: filled(v.brandVoiceNotes, v.brandVoiceNotesMulti),
+        hasGreetingMessage: filled(null, v.greetingMessageMulti),
+        hasAwayMessage: filled(null, v.awayMessageMulti),
+        // 'legacy-fallback' means the workspace overlay didn't run, so these
+        // values may not match what the pipeline actually obeys — carried
+        // through so the UI can say so instead of showing them as truth.
+        source: settings.source,
+    };
+}
+
+/**
+ * Least-privilege projection of the admin merchant detail for a partner.
+ *
+ * ALLOWLIST, never a denylist: `getUserDetail` is the support console's
+ * payload and will keep growing. Spreading it and deleting known-bad keys
+ * would silently hand a reseller every field added later. Everything the
+ * partner sees is therefore named explicitly below.
+ *
+ * Deliberately absent: `email` (merchant + workspace owner), `facebookId`,
+ * `aiModel`. Costs never appear here at all — AI spend lives behind the
+ * separate admin /ai-cost endpoints, which the partner routes do not expose.
+ * KB is summary-only by construction upstream (length + counts, never text).
+ */
+function toPartnerMerchantDetail(
+    detail: NonNullable<Awaited<ReturnType<typeof adminUsersService.getUserDetail>>>,
+    adminNote: string | null,
+    now: Date,
+) {
+    return {
+        id: detail.id,
+        name: detail.name,
+        phone: detail.phone,
+        createdAt: detail.createdAt,
+        lastSeenAt: detail.lastSeenAt,
+        topupBalance: detail.topupBalance,
+        adminNote,
+        // Same derivation as the list, from the same function — otherwise a
+        // merchant whose trial lapsed reads "trial ended" in the list and
+        // "trialing" here, and the partner cannot tell which is true.
+        status: deriveStatus(
+            detail.subscription?.status ?? null,
+            detail.subscription?.trialEndsAt ?? null,
+            detail.subscription?.currentPeriodEnd ?? null,
+            now,
+        ),
+        subscription: detail.subscription,
+        settings: detail.settings ? toPartnerSettings(detail.settings) : null,
+        usage: detail.usage,
+        leads: detail.leads,
+        // `health` is intentionally omitted: its flag catalog is authored in the
+        // admin i18n namespace, and rendering it here would mean shipping the
+        // whole admin string set to a reseller's browser or duplicating the
+        // catalog. Every signal it carries is already visible in the sections
+        // below — a disconnected page, a past-due subscription, an empty
+        // Business Info — so nothing is lost.
+        pages: detail.pages.map(p => ({
+            id: p.id,
+            name: p.name,
+            facebookPageId: p.facebookPageId,
+            instagramUsername: p.instagramUsername,
+            whatsappDisplayPhoneNumber: p.whatsappDisplayPhoneNumber,
+            autoReplyEnabled: p.autoReplyEnabled,
+            autoReplyDisabledReason: p.autoReplyDisabledReason,
+            whatsappAutoReplyEnabled: p.whatsappAutoReplyEnabled,
+            disconnected: p.disconnected,
+            disconnectReason: p.disconnectReason,
+            archivedAt: p.archivedAt,
+            kb: p.kb,
+        })),
+        workspaces: detail.workspaces.map(w => ({
+            id: w.id,
+            name: w.name,
+            role: w.role,
+            isOwner: w.isOwner,
+            ownerName: w.ownerName,
+            memberCount: w.memberCount,
+        })),
+    };
+}
+
+export type PartnerMerchantDetail = ReturnType<typeof toPartnerMerchantDetail>;
 
 class PartnerPortalService {
     /**
@@ -171,6 +292,29 @@ class PartnerPortalService {
                 adminNote: r.partnerNote,
             })),
         };
+    }
+
+    /**
+     * One attributed merchant's detail, for the partner's drill-down view.
+     *
+     * The ownership gate is the whole security boundary of this endpoint: the
+     * merchant must carry THIS partner's `partner_id`. A merchant belonging to
+     * another partner — or to nobody — returns null, which the controller
+     * answers as 404, not 403: a partner must not be able to probe whether a
+     * given user id exists by reading the status code.
+     */
+    async getMerchantDetail(partnerId: string, userId: string): Promise<PartnerMerchantDetail | null> {
+        const [owned] = await db
+            .select({ id: users.id, partnerNote: users.partnerNote })
+            .from(users)
+            .where(and(eq(users.id, userId), eq(users.partnerId, partnerId)))
+            .limit(1);
+        if (!owned) return null;
+
+        const detail = await adminUsersService.getUserDetail(userId);
+        if (!detail) return null;
+
+        return toPartnerMerchantDetail(detail, owned.partnerNote, new Date());
     }
 }
 

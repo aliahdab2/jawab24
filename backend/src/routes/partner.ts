@@ -20,5 +20,18 @@ export default async function partnerRoutes(fastify: FastifyInstance) {
             { schema: { tags: ['Partner'], summary: 'Partner profile + attributed merchants (read-only)', security: auth } },
             partnerController.getOverview,
         );
+
+        protectedRoutes.get(
+            '/merchants/:userId',
+            {
+                schema: {
+                    tags: ['Partner'],
+                    summary: 'One attributed merchant\'s detail (read-only; 404 if not attributed to the caller)',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                },
+            },
+            partnerController.getMerchant,
+        );
     });
 }

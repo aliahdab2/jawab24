@@ -4,6 +4,7 @@
  * - formatFullTime / formatMessageTime — use date-fns with a Locale (bubble timestamps)
  * - formatRelativeTime — uses 'time' i18n namespace (relative labels with ICU plurals)
  * - formatConnectedDate — uses 'pages' i18n namespace (connected X days ago)
+ * - formatTimestampDate / formatDaysAgo — Intl-only, no translator needed
  */
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
@@ -114,6 +115,45 @@ export function formatConnectedDate(
     const days = Math.floor(diffMs / 86_400_000);
     if (days < 1) return tPages('connectedToday');
     return tPages('connectedAgo', { count: days });
+}
+
+/**
+ * A full ISO TIMESTAMP as a short calendar date ("20 أغسطس 2026").
+ *
+ * Distinct from formatPlainDate below, which takes a bare YYYY-MM-DD and must
+ * hand-parse it to dodge the UTC-midnight trap. A timestamp carries its own
+ * instant, so Date can parse it directly. Returns `fallback` for null/invalid
+ * input rather than "Invalid Date".
+ */
+export function formatTimestampDate(
+    iso: string | null | undefined,
+    intlLocale: string,
+    fallback = '—',
+): string {
+    if (!iso) return fallback;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return fallback;
+    return d.toLocaleDateString(intlLocale, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/**
+ * "today" / "3 days ago" for a past timestamp, via Intl.RelativeTimeFormat —
+ * no i18n namespace needed, unlike formatRelativeTime above. Beyond `maxDays`
+ * (default 30) a relative label stops being useful, so it falls back to the
+ * absolute date. Future timestamps also render absolute: "in 3 days" reads as
+ * wrong for a last-activity column.
+ */
+export function formatDaysAgo(
+    iso: string | null | undefined,
+    intlLocale: string,
+    { maxDays = 30, fallback = '—' }: { maxDays?: number; fallback?: string } = {},
+): string {
+    if (!iso) return fallback;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return fallback;
+    const days = Math.round((Date.now() - d.getTime()) / 86_400_000);
+    if (days < 0 || days > maxDays) return formatTimestampDate(iso, intlLocale, fallback);
+    return new Intl.RelativeTimeFormat(intlLocale, { numeric: 'auto' }).format(-days, 'day');
 }
 
 /**
