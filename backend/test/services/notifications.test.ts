@@ -29,7 +29,8 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, buildNotificationTag, resolveUrgentChannelId, type NotificationType } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, buildNotificationTag, buildTemplatePayload, resolveUrgentChannelId, type NotificationType } from '../../src/services/notifications';
+import { flagReasonAr, flagReasonEn } from '@jawab24/shared';
 import { db } from '../../src/db';
 
 /**
@@ -1243,6 +1244,69 @@ describe('NotificationService', () => {
             expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: '' } })).toBeUndefined();
             expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: 42 } })).toBeUndefined();
             expect(buildNotificationTag({ ...base, type: 'flagged_reply', data: { messageId: null } })).toBeUndefined();
+        });
+    });
+
+    describe('flag reasons in the push body', () => {
+        // packages/shared/src/i18n/*/flagReason.json feeds TWO surfaces: the inbox
+        // chip (FlagTag) and the flagged_reply push body (translateFlagReason).
+        // Only the chip was ever asserted, which is how `ارجو` shipped for three
+        // keys. The VALUES are pinned in packages/shared (flagReasonArabic.test.ts);
+        // what these cases pin is the plumbing — that the shared map reaches the
+        // body at all, and that a raw flag code never reaches a merchant's phone.
+        const KB_GAP_REASONS = ['price_not_in_kb', 'info_not_in_kb', 'phone_not_in_kb'] as const;
+
+        it('renders the shared Arabic label into the Arabic push body', () => {
+            for (const reason of KB_GAP_REASONS) {
+                const payload = buildTemplatePayload(
+                    'flagged_reply',
+                    { senderName: 'Ali', reason },
+                    { messageId: 'm1', type: 'message' },
+                );
+                expect(payload.bodies.ar, `${reason} not translated into the AR body`)
+                    .toContain((flagReasonAr as Record<string, string>)[reason]);
+                expect(payload.bodies.ar, `raw flag code leaked into the AR body`).not.toContain(reason);
+            }
+        });
+
+        it('renders the shared English label into the English push body', () => {
+            for (const reason of KB_GAP_REASONS) {
+                const payload = buildTemplatePayload(
+                    'flagged_reply',
+                    { senderName: 'Ali', reason },
+                    { commentId: 'c1', type: 'comment' },
+                );
+                expect(payload.bodies.en).toContain((flagReasonEn as Record<string, string>)[reason]);
+                expect(payload.bodies.en).not.toContain(reason);
+            }
+        });
+
+        it('carries the label all the way into the FCM message the device receives', () => {
+            // buildTemplatePayload → buildFcmMessage is the whole push path; assert
+            // its END, not just the middle.
+            const msg = buildFcmMessage(
+                buildTemplatePayload('flagged_reply', { senderName: 'Ali', reason: 'price_not_in_kb' }, { messageId: 'm1' }),
+                'ar',
+                ['tok'],
+            ) as any;
+            expect(msg.notification.body).toContain((flagReasonAr as Record<string, string>).price_not_in_kb);
+            expect(msg.android.notification.tag).toBe('flagged_reply:m1');
+        });
+    });
+
+    describe('apns-collapse-id budget (iOS follow-up)', () => {
+        it('every possible tag fits in the 64-byte APNs cap', () => {
+            // The follow-up will set apns-collapse-id to this same tag. APNs rejects
+            // above 64 bytes and the failure shows up as an error row in
+            // notification_send_log, never as a compile error — so pin it now, while
+            // the headroom is only two bytes. A longer type name fails HERE instead.
+            const APNS_COLLAPSE_ID_MAX_BYTES = 64;
+            const UUID_LENGTH = 36;
+            const longest = Object.keys(NOTIFICATION_TEMPLATES)
+                .reduce((a, b) => (b.length > a.length ? b : a));
+            const worstCase = Buffer.byteLength(`${longest}:${'x'.repeat(UUID_LENGTH)}`, 'utf8');
+            expect(worstCase, `type "${longest}" would overrun the APNs collapse-id cap`)
+                .toBeLessThanOrEqual(APNS_COLLAPSE_ID_MAX_BYTES);
         });
     });
 
