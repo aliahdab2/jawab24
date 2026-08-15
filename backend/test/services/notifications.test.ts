@@ -218,72 +218,79 @@ describe('NotificationService', () => {
     });
 
     describe('registerDeviceToken', () => {
-        it('should insert a new token if it does not exist', async () => {
-            (db.select as any).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-
-            (db.insert as any).mockReturnValue({
-                values: vi.fn().mockResolvedValue(undefined),
-            });
-
+        /** Wire db.insert(...).values(...).onConflictDoUpdate(...) and the prune. */
+        function mockUpsert(onConflictResult: Promise<unknown> = Promise.resolve(undefined)) {
+            const onConflictDoUpdate = vi.fn().mockReturnValue(onConflictResult);
+            const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+            (db.insert as any).mockReturnValue({ values });
             const deleteWhere = vi.fn().mockResolvedValue(undefined);
             (db.delete as any).mockReturnValue({ where: deleteWhere });
+            return { values, onConflictDoUpdate, deleteWhere };
+        }
+
+        it('registers in ONE statement — no read-then-write left to race', async () => {
+            // The defect this replaced: SELECT → branch → INSERT, no transaction,
+            // no unique constraint. Two concurrent registrations of the same token
+            // both read zero rows and both inserted, so the device received every
+            // push twice. Asserting the SELECT is GONE is the point here — a
+            // re-introduced read restores the race without failing anything else.
+            const { values, onConflictDoUpdate } = mockUpsert();
 
             await notificationService.registerDeviceToken('user-123', 'fcm-token-abc', 'android');
 
-            expect(db.insert).toHaveBeenCalled();
-            expect(db.delete).toHaveBeenCalled();
-            expect(deleteWhere).toHaveBeenCalled();
+            expect(db.select).not.toHaveBeenCalled();
+            expect(db.update).not.toHaveBeenCalled();
+            expect(values).toHaveBeenCalledWith({
+                userId: 'user-123', token: 'fcm-token-abc', platform: 'android',
+            });
+            expect(onConflictDoUpdate).toHaveBeenCalledTimes(1);
         });
 
-        it('should update lastUsedAt if token already exists', async () => {
-            (db.select as any).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([{ id: 'token-1', token: 'fcm-token-abc' }]),
-                    }),
-                }),
-            });
-
-            (db.update as any).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            });
-
-            const deleteWhere = vi.fn().mockResolvedValue(undefined);
-            (db.delete as any).mockReturnValue({ where: deleteWhere });
+        it('conflicts on (user_id, token) and bumps only lastUsedAt', async () => {
+            // The conflict target must match the unique index from migration 0165.
+            // Naming the wrong columns throws at runtime ("no unique or exclusion
+            // constraint matching the ON CONFLICT specification") — a failure no
+            // call-happened assertion can see, because the mock resolves anyway.
+            const { onConflictDoUpdate } = mockUpsert();
 
             await notificationService.registerDeviceToken('user-123', 'fcm-token-abc', 'android');
 
-            expect(db.update).toHaveBeenCalled();
-            // Stale-sibling cleanup runs on every register, even for re-registrations.
-            expect(db.delete).toHaveBeenCalled();
+            const arg = onConflictDoUpdate.mock.calls[0][0];
+            expect(arg.target.map((col: { name: string }) => col.name)).toEqual(['user_id', 'token']);
+            // platform is deliberately NOT refreshed: the token belongs to the
+            // install that minted it, and the old read-then-write left it alone.
+            expect(Object.keys(arg.set)).toEqual(['lastUsedAt']);
+            expect(arg.set.lastUsedAt).toBeInstanceOf(Date);
         });
 
         it('prunes stale sibling tokens for the same user+platform on register', async () => {
-            (db.select as any).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-            (db.insert as any).mockReturnValue({
-                values: vi.fn().mockResolvedValue(undefined),
-            });
-            const deleteWhere = vi.fn().mockResolvedValue(undefined);
-            (db.delete as any).mockReturnValue({ where: deleteWhere });
+            const { deleteWhere } = mockUpsert();
 
             await notificationService.registerDeviceToken('user-123', 'fcm-new', 'android');
 
             expect(db.delete).toHaveBeenCalled();
             expect(deleteWhere).toHaveBeenCalledTimes(1);
+        });
+
+        it('swallows the FK violation when the user row is gone but the JWT is not', async () => {
+            const { deleteWhere } = mockUpsert(
+                Promise.reject(Object.assign(new Error('violates foreign key constraint'), { code: '23503' })),
+            );
+
+            await expect(
+                notificationService.registerDeviceToken('deleted-user', 'fcm-token-abc', 'android'),
+            ).resolves.toBeUndefined();
+
+            // Returns before the prune — there is no user left to prune for.
+            expect(deleteWhere).not.toHaveBeenCalled();
+        });
+
+        it('rethrows any other database error rather than losing the token silently', async () => {
+            mockUpsert(Promise.reject(Object.assign(new Error('deadlock detected'), { code: '40P01' })));
+
+            await expect(
+                notificationService.registerDeviceToken('user-123', 'fcm-token-abc', 'android'),
+            ).rejects.toThrow('deadlock detected');
         });
     });
 
