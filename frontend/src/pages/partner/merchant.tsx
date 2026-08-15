@@ -121,7 +121,10 @@ export default function PartnerMerchantDetailPage() {
     useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
-        if (_hasHydrated && !isAuthenticated) router.replace('/login');
+        // asPath keeps `?merchantId=`, so a shared deep link survives sign-in.
+        if (_hasHydrated && !isAuthenticated) {
+            router.replace(`/login?redirect=${encodeURIComponent(router.asPath)}`);
+        }
     }, [_hasHydrated, isAuthenticated, router]);
 
     const { data, isLoading, error } = useQuery<PartnerMerchantDetail>({

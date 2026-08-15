@@ -42,7 +42,11 @@ export default function PartnerPortalPage() {
 
     useEffect(() => {
         if (_hasHydrated && !isAuthenticated) {
-            router.replace('/login');
+            // Carry the destination through the sign-in, or the rollout link we
+            // hand a rep ("open jawab24.com/partner") drops them on the merchant
+            // dashboard after OTP and the portal never binds — which reads as
+            // "the portal won't open". Same trap the WhatsApp connect handoff hit.
+            router.replace(`/login?redirect=${encodeURIComponent(router.asPath)}`);
         }
     }, [_hasHydrated, isAuthenticated, router]);
 

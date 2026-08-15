@@ -72,6 +72,23 @@ export function deriveStatus(
 }
 
 /**
+ * Which of a merchant's subscription rows the portal should speak for, when
+ * there is more than one. A live row beats a canceled one — a merchant who
+ * uninstalled a Shopify store and resubscribed elsewhere is subscribed, not
+ * canceled — and among equals the newest wins. Exported for the test that
+ * pins the ordering.
+ */
+export function preferSubscription(
+    candidate: { status: string | null; createdAt: Date | null },
+    current: { status: string | null; createdAt: Date | null },
+): boolean {
+    const candidateLive = candidate.status !== 'canceled';
+    const currentLive = current.status !== 'canceled';
+    if (candidateLive !== currentLive) return candidateLive;
+    return (candidate.createdAt?.getTime() ?? 0) > (current.createdAt?.getTime() ?? 0);
+}
+
+/**
  * A partner sees WHETHER something is configured, never WHAT it says.
  *
  * The toggles are what makes a trial fail ("Smart Replies off" is the single
@@ -303,6 +320,15 @@ class PartnerPortalService {
      * a pageless account has nothing the rep can follow up on yet.
      */
     async getOverview(partner: { id: string; name: string }): Promise<PartnerOverview> {
+        // Subscriptions are fetched separately, NOT left-joined here.
+        // `subscriptions.user_id` carries only a plain index: the Shopify and
+        // Zid partial uniques deliberately keep a canceled row alongside a
+        // newer one (uninstall → resubscribe), so a merchant with 2+ rows is a
+        // supported state. Joining would emit that merchant once per row —
+        // duplicate list entries, duplicate React keys, doubled stat counts,
+        // a status picked by the planner, and duplicates eating the 500 cap.
+        // (Production has 0 such users today; the schema permits it by design,
+        // which is what makes it worth not relying on.)
         const rows = await db
             .select({
                 id: users.id,
@@ -311,20 +337,43 @@ class PartnerPortalService {
                 partnerNote: users.partnerNote,
                 createdAt: users.createdAt,
                 lastSeenAt: users.lastSeenAt,
-                status: subscriptions.status,
-                trialEndsAt: subscriptions.trialEndsAt,
-                currentPeriodEnd: subscriptions.currentPeriodEnd,
-                planName: plans.name,
             })
             .from(users)
-            .leftJoin(subscriptions, eq(subscriptions.userId, users.id))
-            .leftJoin(plans, eq(subscriptions.planId, plans.id))
             .where(and(
                 eq(users.partnerId, partner.id),
                 sql`EXISTS (SELECT 1 FROM ${pages} WHERE ${pages.userId} = ${users.id})`,
             ))
             .orderBy(desc(users.createdAt))
             .limit(500);
+
+        // One subscription per merchant, chosen deterministically: a live row
+        // beats a canceled one, then the newest wins.
+        const subByUser = new Map<string, {
+            status: string | null;
+            trialEndsAt: Date | null;
+            currentPeriodEnd: Date | null;
+            planName: string | null;
+            createdAt: Date | null;
+        }>();
+        if (rows.length > 0) {
+            const subRows = await db
+                .select({
+                    userId: subscriptions.userId,
+                    status: subscriptions.status,
+                    trialEndsAt: subscriptions.trialEndsAt,
+                    currentPeriodEnd: subscriptions.currentPeriodEnd,
+                    planName: plans.name,
+                    createdAt: subscriptions.createdAt,
+                })
+                .from(subscriptions)
+                .leftJoin(plans, eq(subscriptions.planId, plans.id))
+                .where(inArray(subscriptions.userId, rows.map(r => r.id)));
+
+            for (const s of subRows) {
+                const current = subByUser.get(s.userId);
+                if (!current || preferSubscription(s, current)) subByUser.set(s.userId, s);
+            }
+        }
 
         // Connected page names per merchant (the business names the partner
         // actually recognizes). One IN query, grouped in memory.
@@ -345,19 +394,27 @@ class PartnerPortalService {
         const now = new Date();
         return {
             partner: { name: partner.name },
-            merchants: rows.map(r => ({
-                id: r.id,
-                name: r.name,
-                phone: r.phone,
-                pageNames: pageNamesByUser.get(r.id) ?? [],
-                planName: r.planName,
-                status: deriveStatus(r.status, r.trialEndsAt, r.currentPeriodEnd, now),
-                trialEndsAt: r.trialEndsAt,
-                currentPeriodEnd: r.currentPeriodEnd,
-                createdAt: r.createdAt,
-                lastSeenAt: r.lastSeenAt,
-                adminNote: r.partnerNote,
-            })),
+            merchants: rows.map(r => {
+                const sub = subByUser.get(r.id);
+                return {
+                    id: r.id,
+                    name: r.name,
+                    phone: r.phone,
+                    pageNames: pageNamesByUser.get(r.id) ?? [],
+                    planName: sub?.planName ?? null,
+                    status: deriveStatus(
+                        sub?.status ?? null,
+                        sub?.trialEndsAt ?? null,
+                        sub?.currentPeriodEnd ?? null,
+                        now,
+                    ),
+                    trialEndsAt: sub?.trialEndsAt ?? null,
+                    currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+                    createdAt: r.createdAt,
+                    lastSeenAt: r.lastSeenAt,
+                    adminNote: r.partnerNote,
+                };
+            }),
         };
     }
 
