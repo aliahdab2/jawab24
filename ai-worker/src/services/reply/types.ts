@@ -46,6 +46,13 @@ export interface GenerateRequest {
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
+        /**
+         * Effective reply mode resolved by the backend ('sales' | 'info').
+         * 'info' appends the INFO-DESK MODE block (promptBuilder) that overrides
+         * the static prompt's contact-asking / follow-up-promise demonstrations.
+         * Absent = 'sales' (today's behavior, prompt byte-identical).
+         */
+        replyMode?: string;
         brandVoiceNotes?: string;
         /**
          * Stage 2.6 structured BUSINESS_INFO prompt block (pre-formatted by

@@ -1893,6 +1893,19 @@ export function resolveEffectiveReplyMode(
   return page ?? ws ?? 'sales';
 }
 
+/**
+ * The placeholder phone used inside the INFO-DESK prompt block's
+ * counter-demonstrations (ai-worker promptBuilder). Deliberately an
+ * all-zero-tail number no operator allocates: if the model ever echoes the
+ * EXAMPLE's number instead of the page's own BUSINESS_INFO phone, that leak
+ * must be (a) harmless to a real customer and (b) mechanically detectable.
+ * Eval guards assert replies never contain any of these tokens — a fixture
+ * page must therefore never use them as its own phone (finding E-1).
+ */
+export const INFO_DEMO_PHONE = '0900000000';
+
+export const INFO_DEMO_LEAK_TOKENS: readonly string[] = [INFO_DEMO_PHONE] as const;
+
 export interface LeadField {
   key: string;
   label_en: string;
