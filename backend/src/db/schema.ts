@@ -1146,6 +1146,16 @@ export const deviceTokens = pgTable('device_tokens', {
     return {
         userIdIdx: index('idx_device_tokens_user_id').on(table.userId),
         tokenIdx: index('idx_device_tokens_token').on(table.token),
+        // One row per (user, token) — enforced by the database, not by the
+        // application's read-then-write. registerDeviceToken used to SELECT,
+        // branch, then INSERT with no transaction, so two concurrent
+        // registrations of the SAME token both saw zero rows and both inserted.
+        // getUserDeviceTokens does not DISTINCT, so the duplicate rode into
+        // sendEachForMulticast as [T, T] and FCM delivered the identical push to
+        // the same device twice. The stale-token prune could never clear it
+        // either: both rows carry the same token, and the prune excludes
+        // `ne(token, token)`. Making it unrepresentable beats detecting it.
+        userTokenUnique: uniqueIndex('idx_device_tokens_user_token').on(table.userId, table.token),
     };
 });
 

@@ -494,42 +494,44 @@ export function buildFcmMessage(
 
 class NotificationService {
     /**
-     * Register a device token for push notifications
+     * Register a device token for push notifications.
+     *
+     * ONE statement, not a read-then-write. This was a SELECT, a branch, then an
+     * INSERT or UPDATE — with no transaction and no unique constraint behind it,
+     * so two concurrent registrations of the same token both saw zero rows and
+     * both inserted. `getUserDeviceTokens` does not DISTINCT, so the duplicate
+     * rode into `sendEachForMulticast` as [T, T] and FCM delivered the identical
+     * push to the same device twice, milliseconds apart. The stale-token prune
+     * below could never recover: both rows carry the same token, and the prune
+     * excludes `ne(token, token)`.
+     *
+     * The race is reachable on a normal install with no reinstall involved —
+     * `initPushNotifications` on mount and `refreshPushRegistration` on resume
+     * both call `PushNotifications.register()`, and each `registration` event
+     * POSTs here. The unique index added in migration 0165 makes the duplicate
+     * unrepresentable; this upsert is how the write cooperates with it.
+     *
+     * `platform` is intentionally NOT updated on conflict: a token belongs to the
+     * install that minted it, and the previous read-then-write left it alone too.
      */
     async registerDeviceToken(
         userId: string,
         token: string,
         platform: 'android' | 'ios' | 'web'
     ): Promise<void> {
-        // Check if token already exists for this user
-        const existing = await db
-            .select()
-            .from(deviceTokens)
-            .where(and(
-                eq(deviceTokens.userId, userId),
-                eq(deviceTokens.token, token)
-            ))
-            .limit(1);
-
-        if (existing.length > 0) {
-            // Update last used timestamp
+        try {
             await db
-                .update(deviceTokens)
-                .set({ lastUsedAt: new Date() })
-                .where(eq(deviceTokens.id, existing[0].id));
-        } else {
-            try {
-                await db.insert(deviceTokens).values({
-                    userId,
-                    token,
-                    platform,
+                .insert(deviceTokens)
+                .values({ userId, token, platform })
+                .onConflictDoUpdate({
+                    target: [deviceTokens.userId, deviceTokens.token],
+                    set: { lastUsedAt: new Date() },
                 });
-            } catch (err: unknown) {
-                // FK violation = user was deleted but JWT is still valid — ignore silently
-                const pgErr = err as { code?: string };
-                if (pgErr.code === '23503') return;
-                throw err;
-            }
+        } catch (err: unknown) {
+            // FK violation = user was deleted but JWT is still valid — ignore silently
+            const pgErr = err as { code?: string };
+            if (pgErr.code === '23503') return;
+            throw err;
         }
 
         // Opportunistic cleanup: prune sibling tokens for the same user+platform
