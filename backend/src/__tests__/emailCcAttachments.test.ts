@@ -216,6 +216,18 @@ describe('SendMerchantEmailSchema', () => {
         expect(parsed.success).toBe(false);
     });
 
+    it('accepts a MULTI-LINE body — newlines are the composer\'s only formatting mechanism (prod incident JAWAB24-FRONTEND-33, 2026-08-15)', () => {
+        // The template renders body newlines as <br>; the modal is a textarea.
+        // The control-char guard shipped rejecting \n, which 400'd every
+        // multi-paragraph email — including the first real invoice send.
+        const multiline = 'نودّ إفادتكم بأنه قد جرى استلام قيمة الاشتراك.\n\nأولاً: تفاصيل الاشتراك\n\n• الباقة: برو\n• المدة: سنة كاملة\n\nوتفضّلوا بقبول فائق الاحترام والتقدير،\n\nإدارة جواب24';
+        expect(SendMerchantEmailSchema.safeParse({ subject: 'تأكيد تفعيل الاشتراك', body: multiline }).success).toBe(true);
+    });
+
+    it('accepts Windows CRLF and tabs in the body (pasted content)', () => {
+        expect(SendMerchantEmailSchema.safeParse({ subject: 'ok', body: 'line one\r\nline\ttwo' }).success).toBe(true);
+    });
+
     it('rejects NUL bytes in subject and body (same audit-write poisoning class)', () => {
         expect(SendMerchantEmailSchema.safeParse({ subject: 'a\u0000b', body: 'ok' }).success).toBe(false);
         expect(SendMerchantEmailSchema.safeParse({ subject: 'ok', body: 'a\u0000b' }).success).toBe(false);
@@ -233,7 +245,8 @@ describe('SendMerchantEmailSchema', () => {
         });
         expect(parsed.success).toBe(true);
         if (parsed.success) {
-            expect(Object.keys(parsed.data.attachments![0]).sort()).toEqual(['content', 'filename']);
+            const first = (parsed.data.attachments ?? [])[0] ?? {};
+            expect(Object.keys(first).sort()).toEqual(['content', 'filename']);
         }
     });
 

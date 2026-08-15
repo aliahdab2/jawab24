@@ -86,7 +86,17 @@ export function base64ByteLength(b64: string): number {
 const CONTROL_OR_QUOTE_RE = /[\u0000-\u001f\u007f"]/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
+// C0 minus \t (09), \n (0a), \r (0d) — for MULTI-LINE text fields. The body
+// guard must allow those three: the compose textarea is multi-line and the
+// template renders body newlines as <br>. The first shipped version rejected
+// \n and 400'd EVERY multi-paragraph email (prod incident
+// JAWAB24-FRONTEND-33, caught on the first real invoice send). They are also
+// perfectly legal in Postgres jsonb — only \u0000 is not — so allowing them
+// does not reopen the audit-poisoning hole.
+// eslint-disable-next-line no-control-regex
+const CONTROL_EXCEPT_WHITESPACE_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const freeOfControlChars = (s: string): boolean => !CONTROL_RE.test(s);
+const freeOfNonWhitespaceControlChars = (s: string): boolean => !CONTROL_EXCEPT_WHITESPACE_RE.test(s);
 
 const EmailAttachmentSchema: z.ZodType<{ filename: string; content: string }> = z.object({
     // Basename only. A path separator here would let an admin-supplied name
@@ -117,7 +127,7 @@ export const SendMerchantEmailSchema = z.object({
     subject: z.string().trim().min(1, 'Subject is required').max(500)
         .refine(freeOfControlChars, 'Subject must not contain control characters'),
     body: z.string().trim().min(1, 'Body is required').max(20_000)
-        .refine(freeOfControlChars, 'Body must not contain control characters'),
+        .refine(freeOfNonWhitespaceControlChars, 'Body must not contain control characters'),
     cc: z.array(z.string().trim().email('Invalid CC address').max(255)).max(MAX_EMAIL_CC).optional(),
     bcc: z.array(z.string().trim().email('Invalid BCC address').max(255)).max(MAX_EMAIL_CC).optional(),
     attachments: z
