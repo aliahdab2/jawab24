@@ -33,6 +33,16 @@ export const config = {
         tokenEncryptionKey: process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY || '',
     },
 
+    // Instagram API with Instagram Login (Instagram-DIRECT connect, no FB Page).
+    // A SEPARATE Meta app product with its own app id/secret — not the Facebook
+    // app credentials above. All three unset ⇒ the feature is dark (connect
+    // endpoints 404 and the frontend option is hidden).
+    instagram: {
+        appId: process.env.INSTAGRAM_APP_ID || '',
+        appSecret: process.env.INSTAGRAM_APP_SECRET || '',
+        redirectUri: process.env.INSTAGRAM_REDIRECT_URI || '',
+    },
+
     // JWT (validated by validateEnv — no insecure fallbacks)
     jwt: {
         secret: process.env.JWT_SECRET || '',

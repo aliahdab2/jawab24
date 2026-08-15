@@ -225,6 +225,16 @@ export const pages = pgTable('pages', {
     instagramUsername: varchar('instagram_username', { length: 255 }),
     instagramProfilePicUrl: text('instagram_profile_pic_url'),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(false),
+    // Instagram-DIRECT connect (Instagram Login, no Facebook Page). When set, this
+    // row is an Instagram-only channel: the send path uses graph.instagram.com with
+    // THIS token instead of graph.facebook.com with access_token (which stays '' —
+    // there is no page). Presence of this token IS the discriminator; do not add a
+    // separate source column. AES-256-GCM encrypted (enc:v1: prefix), 60-day
+    // long-lived Instagram User token refreshed by the sweep like the WhatsApp one.
+    instagramAccessToken: text('instagram_access_token'),
+    // NULL means "unknown" — never compute days-until from it (same contract as
+    // whatsapp_token_expires_at below).
+    instagramTokenExpiresAt: timestamp('instagram_token_expires_at'),
     // WhatsApp Business Account linked to this page
     whatsappPhoneNumberId: varchar('whatsapp_phone_number_id', { length: 255 }),
     whatsappBusinessAccountId: varchar('whatsapp_business_account_id', { length: 255 }),
