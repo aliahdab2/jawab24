@@ -2,8 +2,9 @@ import { db } from '../../db';
 import {
     users, subscriptions, plans, pages, usage, posts, instagramMedia,
     leads, workspaces, workspaceMembers, settings, adminAuditLogs,
-    comments, instagramComments, messages, kbChunks, kbGaps,
+    comments, instagramComments, messages, kbChunks, kbGaps, partners,
 } from '../../db/schema';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
@@ -36,8 +37,14 @@ export interface AdminUserListRow {
     email: string | null;
     name: string | null;
     phone: string | null;
+    /** ISO-3166 alpha-2 derived from the E.164 phone prefix (e.g. SY, LY); null when no/unparseable phone. */
+    phoneCountry: string | null;
     facebookId: string | null;
     createdAt: Date | null;
+    /** Reseller / country-rep attribution (users.partner_id). */
+    partner: { id: string; name: string } | null;
+    /** Partner-visible follow-up note (users.partner_note). */
+    partnerNote: string | null;
     subscription: {
         id: string;
         status: string | null;
@@ -53,6 +60,20 @@ export interface AdminUserListRow {
 export interface ListAllUsersResult {
     data: AdminUserListRow[];
     total: number;
+}
+
+/**
+ * ISO country from the stored E.164 phone (+963… → SY). Backed by
+ * libphonenumber's metadata — no hand-maintained prefix list. Null for
+ * missing/unparseable phones (e.g. Facebook-only signups).
+ */
+function derivePhoneCountry(phone: string | null): string | null {
+    if (!phone) return null;
+    try {
+        return parsePhoneNumberFromString(phone)?.country ?? null;
+    } catch {
+        return null;
+    }
 }
 
 class AdminUsersService {
@@ -114,10 +135,14 @@ class AdminUsersService {
                     currentPeriodStart: subscriptions.currentPeriodStart,
                     currentPeriodEnd: subscriptions.currentPeriodEnd,
                     paymentMethod: subscriptions.paymentMethod,
+                    partnerId: users.partnerId,
+                    partnerName: partners.name,
+                    partnerNote: users.partnerNote,
                 })
                 .from(users)
                 .leftJoin(subscriptions, eq(users.id, subscriptions.userId))
                 .leftJoin(plans, eq(subscriptions.planId, plans.id))
+                .leftJoin(partners, eq(users.partnerId, partners.id))
                 .where(whereClause)
                 .orderBy(statusOrder, desc(users.createdAt))
                 .limit(limitNum)
@@ -137,8 +162,11 @@ class AdminUsersService {
             email: u.email,
             name: u.name,
             phone: u.phone,
+            phoneCountry: derivePhoneCountry(u.phone),
             facebookId: u.facebookId,
             createdAt: u.createdAt,
+            partner: u.partnerId && u.partnerName ? { id: u.partnerId, name: u.partnerName } : null,
+            partnerNote: u.partnerNote,
             subscription: u.subscriptionId ? {
                 id: u.subscriptionId,
                 status: u.subscriptionStatus,

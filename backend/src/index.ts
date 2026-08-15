@@ -31,6 +31,7 @@ import paymentRoutes from "./routes/payment";
 import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
+import partnerRoutes from "./routes/partner";
 import voiceRoutes from "./routes/voice";
 import kbUploadRoutes from "./routes/kb-upload";
 import analyticsRoutes from "./routes/analytics";
@@ -296,6 +297,7 @@ const start = async () => {
     await server.register(geoRoutes, { prefix: "/geo" });
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
+    await server.register(partnerRoutes, { prefix: "/partner" });
     await server.register(voiceRoutes, { prefix: "/voice" });
     await server.register(kbUploadRoutes, { prefix: "/kb" });
     await server.register(workspaceRoutes);

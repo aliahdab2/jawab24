@@ -12,3 +12,4 @@ export {
     UnknownTemplateError,
 } from './waitlist';
 export { adminMetricsService, AI_COST_PERIODS } from './metrics';
+export { adminPartnersService } from './partners';

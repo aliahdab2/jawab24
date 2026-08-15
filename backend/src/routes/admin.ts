@@ -260,6 +260,98 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         // ============================================
+        // Partners (resellers / country reps)
+        // ============================================
+
+        adminProtected.get(
+            '/partners',
+            { schema: { tags: ['Admin'], summary: 'List partners (resellers) with merchant counts', security: auth } },
+            adminController.listPartners,
+        );
+
+        adminProtected.post(
+            '/partners',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Create a partner (reseller / country rep)',
+                    security: auth,
+                    body: {
+                        type: 'object',
+                        // email/phone are both optional HERE but the service
+                        // requires at least one — they are the anchors the
+                        // portal binds a login to, and which one applies
+                        // depends on how the partner signs up (a phone-OTP
+                        // signup never has an email).
+                        required: ['name', 'commissionPct'],
+                        properties: {
+                            name: { type: 'string', minLength: 1, maxLength: 255 },
+                            email: { type: ['string', 'null'], format: 'email', maxLength: 255 },
+                            phone: { type: ['string', 'null'], pattern: '^\\+[1-9]\\d{6,18}$' },
+                            commissionPct: { type: 'integer', minimum: 0, maximum: 100 },
+                        },
+                    },
+                },
+            },
+            adminController.createPartner,
+        );
+
+        adminProtected.put(
+            '/partners/:partnerId',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Update a partner: contact, commission, active state, or portal binding',
+                    security: auth,
+                    params: {
+                        type: 'object',
+                        properties: { partnerId: { type: 'string', format: 'uuid' } },
+                        required: ['partnerId'],
+                    },
+                    body: {
+                        type: 'object',
+                        // Every field optional: omitted = unchanged.
+                        properties: {
+                            name: { type: 'string', minLength: 1, maxLength: 255 },
+                            email: { type: ['string', 'null'], format: 'email', maxLength: 255 },
+                            phone: { type: ['string', 'null'], pattern: '^\\+[1-9]\\d{6,18}$' },
+                            commissionPct: { type: 'integer', minimum: 0, maximum: 100 },
+                            // false = cut portal access on the next request.
+                            isActive: { type: 'boolean' },
+                            // null = unbind (recovery); a uuid = link an
+                            // email-only partner who cannot auto-bind.
+                            userId: { type: ['string', 'null'], format: 'uuid' },
+                        },
+                        additionalProperties: false,
+                    },
+                },
+            },
+            adminController.updatePartner,
+        );
+
+        adminProtected.put(
+            '/users/:userId/partner',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Assign or clear a merchant\'s partner (reseller) attribution',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        required: ['partnerId'],
+                        properties: {
+                            partnerId: { type: ['string', 'null'], format: 'uuid' },
+                            // Partner-visible follow-up note. Omit = unchanged; null/'' = clear.
+                            note: { type: ['string', 'null'], maxLength: 500 },
+                        },
+                    },
+                },
+            },
+            adminController.assignUserPartner,
+        );
+
+        // ============================================
         // Plans + audit logs
         // ============================================
 

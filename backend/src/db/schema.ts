@@ -32,6 +32,16 @@ export const users = pgTable('users', {
     // partially-consumed pack (gate `> 0` blocks usage until next purchase clears
     // the deficit) — intentional anti-abuse design, never clamp here.
     topupBalance: integer('topup_balance').notNull().default(0),
+    // Attribution: which partner (reseller / country rep) brought this merchant in.
+    // Written only by the admin console's manual assignment today; a future
+    // referral-link signup flow stamps the same column. ON DELETE SET NULL so
+    // removing a partner never breaks their merchants' accounts.
+    partnerId: uuid('partner_id').references((): AnyPgColumn => partners.id, { onDelete: 'set null' }),
+    // Admin-authored follow-up note about this merchant, shown to the assigned
+    // partner in the portal (e.g. "لم يفعّل الرد الآلي بعد — تواصل معه").
+    // Meaningful only while partner_id is set; kept on unassign so re-assigning
+    // doesn't lose context.
+    partnerNote: text('partner_note'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one identity anchor must be non-null —
@@ -53,6 +63,8 @@ export const users = pgTable('users', {
         // users where email is not null group by 1 having count(*) > 1` in
         // production, de-duplicate, then promote this to a partial unique index.
         emailLowerIdx: index('idx_users_email_lower').on(sql`lower(${table.email})`),
+        // Serves the partner portal's "my merchants" query.
+        partnerIdIdx: index('idx_users_partner_id').on(table.partnerId),
     };
 });
 
@@ -1782,6 +1794,40 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
         createdAtIdx: index('idx_admin_audit_created_at').on(table.createdAt),
     };
 });
+
+// 17. Partners — resellers / country representatives (e.g. the Syria rep at 20%,
+// the white-label reseller at 15%). Merchants are attributed to a partner via
+// `users.partner_id`. The commission percentage is per-partner and is
+// reporting-only: nothing auto-pays from it.
+export const partners = pgTable('partners', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    // Contact email, stored lowercase. Nullable because it is NOT a reliable
+    // login anchor on its own: Jawab24 has no email login, and a phone-OTP
+    // signup leaves users.email NULL (authService.findOrCreateUserByPhone).
+    email: varchar('email', { length: 255 }),
+    // E.164 phone — the product's PRIMARY identity, so this is what actually
+    // binds a phone-signup partner to their portal. At least one of email or
+    // phone must be present (enforced in the service + route schema).
+    phone: varchar('phone', { length: 20 }),
+    // The partner's own Jawab24 user account (portal login). Nullable until the
+    // partner first opens the portal.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Whole percent, e.g. 20 — display/reporting only.
+    commissionPct: integer('commission_pct').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    // Partial uniques: a NULL email/phone must not collide with another NULL.
+    emailLowerUnique: uniqueIndex('idx_partners_email_lower')
+        .on(sql`lower(${table.email})`)
+        .where(sql`${table.email} IS NOT NULL`),
+    phoneUnique: uniqueIndex('idx_partners_phone')
+        .on(table.phone)
+        .where(sql`${table.phone} IS NOT NULL`),
+    userIdIdx: index('idx_partners_user_id').on(table.userId),
+}));
 
 // Stripe Webhook Events - idempotency deduplication
 export const stripeWebhookEvents = pgTable('stripe_webhook_events', {

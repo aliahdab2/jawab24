@@ -59,6 +59,8 @@ const EXCLUDED_ROUTES = new Map([
   ['logout', 'utility page (not indexed)'],
   ['messages', 'app workspace (auth-gated)'],
   ['pages', 'app workspace (auth-gated)'],
+  ['partner', 'reseller portal (auth-gated — backend 403s non-partners)'],
+  ['partner/merchant', 'reseller portal merchant detail (auth-gated)'],
   ['payment/cancel', 'transactional (noindex)'],
   ['payment/return', 'transactional (noindex)'],
   ['payment/success', 'transactional (noindex)'],

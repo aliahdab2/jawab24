@@ -28,6 +28,36 @@ export interface ListAllUsersQuery {
     search?: string;
 }
 
+export interface CreatePartnerBody {
+    name: string;
+    /** At least one of email/phone is required — see adminPartnersService.create. */
+    email?: string | null;
+    phone?: string | null;
+    commissionPct: number;
+}
+
+export interface UpdatePartnerBody {
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    commissionPct?: number;
+    /** false cuts the partner's portal access on their next request. */
+    isActive?: boolean;
+    /**
+     * Portal login binding. `null` unbinds (the recovery path for a wrong
+     * link); a user id links an email-only partner, who has no auto-bind
+     * anchor. Omit to leave the binding untouched.
+     */
+    userId?: string | null;
+}
+
+export interface AssignPartnerBody {
+    /** Partner to attribute the merchant to; null clears the attribution. */
+    partnerId: string | null;
+    /** Partner-visible follow-up note. Omit = unchanged; null/'' = clear. */
+    note?: string | null;
+}
+
 export interface AiModelBody {
     model: string | null;
 }

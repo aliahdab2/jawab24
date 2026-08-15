@@ -969,6 +969,157 @@ export interface MessagesQueryParams {
   pageId?: string;           // Filter by specific page
 }
 
+// Partners (resellers / country reps) — admin registry + reseller-facing portal
+export interface AdminPartner {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  commissionPct: number;
+  isActive: boolean;
+  /** True once the partner has signed in and the portal bound their account. */
+  linked: boolean;
+  merchantCount: number;
+  createdAt: string | null;
+}
+
+export type PartnerMerchantStatus =
+  | 'trialing'
+  | 'trial_expired'
+  | 'active'
+  | 'expired'
+  | 'past_due'
+  | 'canceled'
+  | 'paused'
+  | 'none';
+
+export interface PartnerMerchant {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  pageNames: string[];
+  planName: string | null;
+  status: PartnerMerchantStatus;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  /** Admin-authored follow-up note for this merchant. */
+  adminNote: string | null;
+}
+
+export interface PartnerOverview {
+  // Commission % is deliberately absent — the portal never shows it.
+  partner: { name: string };
+  merchants: PartnerMerchant[];
+}
+
+export interface PartnerMerchantPage {
+  id: string;
+  name: string | null;
+  facebookPageId: string | null;
+  instagramUsername: string | null;
+  whatsappDisplayPhoneNumber: string | null;
+  autoReplyEnabled: boolean | null;
+  autoReplyDisabledReason: string | null;
+  whatsappAutoReplyEnabled: boolean | null;
+  disconnected: boolean;
+  disconnectReason: string | null;
+  archivedAt: string | null;
+  kb: {
+    kbLength: number;
+    kbActiveVersion: number | null;
+    kbUpdatedAt: string | null;
+    chunksTotal: number;
+    chunksByType: Record<string, number>;
+    unresolvedGaps: number;
+  };
+}
+
+export interface PartnerMerchantDetail {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  topupBalance: number;
+  adminNote: string | null;
+  subscription: {
+    status: string | null;
+    planName: string | null;
+    planSlug: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    trialEndsAt: string | null;
+    paymentMethod: string | null;
+    maxAiRepliesPerMonth: number | null;
+    maxPages: number | null;
+  } | null;
+  status: PartnerMerchantStatus;
+  // Configured-or-not only: the free-text fields (brand voice, greeting, away
+  // message) are collapsed to booleans server-side and never reach the client.
+  settings: {
+    aiEnabled: boolean | null;
+    commentsAutoReply: boolean | null;
+    messagesAutoReply: boolean | null;
+    commentReplyMode: string | null;
+    holdLowConfidence: boolean | null;
+    businessHoursOnly: boolean | null;
+    businessHoursStart: string | null;
+    businessHoursEnd: string | null;
+    timezone: string | null;
+    replyStyle: string | null;
+    replyDelay: number | null;
+    defaultReplyLanguage: string | null;
+    autoDetectLanguage: boolean | null;
+    greetingMessageEnabled: boolean | null;
+    limitFallbackEnabled: boolean | null;
+    onboardingCompletedAt: string | null;
+    hasBrandVoice: boolean;
+    hasGreetingMessage: boolean;
+    hasAwayMessage: boolean;
+    source: 'effective' | 'legacy-fallback';
+  } | null;
+  usage: {
+    aiRepliesCount: number;
+    postRepliesCount: number;
+    periodStart: string | null;
+    periodEnd: string | null;
+    limit: number | null;
+  };
+  leads: {
+    total: number;
+    today: number;
+    last7d: number;
+    last30d: number;
+    byStatus: { new: number; contacted: number; converted: number };
+  };
+  pages: PartnerMerchantPage[];
+  workspaces: Array<{
+    id: string;
+    name: string | null;
+    role: 'owner' | 'admin' | 'member';
+    isOwner: boolean;
+    ownerName: string | null;
+    memberCount: number;
+  }>;
+}
+
+// Partner Portal API — read-only surface for resellers. Any authenticated user
+// may call; non-partners get 403 (NOT_A_PARTNER) and the page redirects them.
+export const partnerApi = {
+  getOverview: async () => {
+    const response = await api.get<{ success: boolean; data: PartnerOverview }>('/partner/overview');
+    return response.data;
+  },
+
+  // 404 when the merchant is not attributed to the calling partner.
+  getMerchant: async (userId: string) => {
+    const response = await api.get<{ success: boolean; data: PartnerMerchantDetail }>(`/partner/merchants/${userId}`);
+    return response.data;
+  },
+};
+
 // Admin API - Protected routes for admin users only
 export const adminApi = {
   // List all users with pagination and filters
@@ -993,6 +1144,50 @@ export const adminApi = {
   // Get single user details
   getUser: async (userId: string) => {
     const response = await api.get(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  // Partners (resellers / country reps)
+  listPartners: async () => {
+    const response = await api.get<{ success: boolean; data: AdminPartner[] }>('/admin/partners');
+    return response.data;
+  },
+
+  // At least one of email/phone is required for contact. Only the PHONE
+  // auto-binds the portal login (unique + OTP-proven); an email-only reseller
+  // must be linked to their account by an admin via updatePartner({ userId }).
+  createPartner: async (input: { name: string; email?: string | null; phone?: string | null; commissionPct: number }) => {
+    const response = await api.post<{ success: boolean; data: AdminPartner }>('/admin/partners', input);
+    return response.data;
+  },
+
+  // Update a reseller. Omitted fields are unchanged. `userId: null` unbinds a
+  // wrong/stale portal link; `isActive: false` cuts their access outright.
+  updatePartner: async (
+    partnerId: string,
+    input: {
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      commissionPct?: number;
+      isActive?: boolean;
+      userId?: string | null;
+    },
+  ) => {
+    const response = await api.put<{ success: boolean; data: AdminPartner }>(
+      `/admin/partners/${partnerId}`,
+      input,
+    );
+    return response.data;
+  },
+
+  // Assign (or clear, with null) a merchant's reseller attribution.
+  // `note` (partner-visible follow-up note): omit = unchanged, null/'' = clear.
+  assignPartner: async (userId: string, partnerId: string | null, note?: string | null) => {
+    const response = await api.put<{ success: boolean; data: { partnerId: string | null; partnerNote: string | null } }>(
+      `/admin/users/${userId}/partner`,
+      note === undefined ? { partnerId } : { partnerId, note },
+    );
     return response.data;
   },
 

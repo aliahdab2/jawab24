@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 
-import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, User, Handshake, StickyNote } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
-import { Card } from '@/components/ui';
+import { Card, Button, Modal } from '@/components/ui';
+import { PartnerManagerModal } from '@/components/admin/PartnerManagerModal';
 import clsx from 'clsx';
-import { adminApi } from '@/lib/api';
+import { adminApi, type AdminPartner } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useDebounce } from '@/hooks';
 
@@ -18,8 +19,11 @@ interface Customer {
     email: string | null;
     name: string | null;
     phone: string | null;
+    phoneCountry: string | null;
     facebookId: string | null;
     createdAt: string | null;
+    partner: { id: string; name: string } | null;
+    partnerNote: string | null;
     subscription: {
         id: string;
         status: string;
@@ -118,6 +122,69 @@ export default function AdminCustomersPage() {
     const pagination: Pagination = customersPage?.pagination ?? { page, limit: 20, total: 0, totalPages: 0 };
     const error = isError ? 'Failed to load customers' : null;
 
+    const queryClient = useQueryClient();
+
+    // Partner (reseller) registry — small and near-static, cached for the session
+    const { data: partners = [] } = useQuery<AdminPartner[]>({
+        queryKey: ['admin', 'partners'],
+        queryFn: async () => {
+            try {
+                const response = await adminApi.listPartners();
+                return response.success ? response.data : [];
+            } catch (err) {
+                captureError(err, 'Failed to load partners', { tags: { page: 'admin-customers' } });
+                throw err;
+            }
+        },
+        staleTime: 10 * 60_000,
+    });
+
+    const assignPartner = useMutation({
+        mutationFn: ({ userId, partnerId, note }: { userId: string; partnerId: string | null; note?: string | null }) =>
+            adminApi.assignPartner(userId, partnerId, note),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'partners'] });
+        },
+        onError: (err) => {
+            captureError(err, 'Failed to assign partner', { tags: { page: 'admin-customers' } });
+        },
+    });
+
+    // Partner-note editor (per-merchant note the assigned reseller sees)
+    const [noteTarget, setNoteTarget] = useState<Customer | null>(null);
+    const [noteDraft, setNoteDraft] = useState('');
+    const openNoteEditor = (customer: Customer) => {
+        setNoteTarget(customer);
+        setNoteDraft(customer.partnerNote ?? '');
+    };
+    const saveNote = () => {
+        if (!noteTarget) return;
+        assignPartner.mutate(
+            { userId: noteTarget.id, partnerId: noteTarget.partner?.id ?? null, note: noteDraft },
+            { onSuccess: () => setNoteTarget(null) },
+        );
+    };
+
+    // Reseller registry (create / edit / unlink / deactivate) — its own
+    // component: this page owns the customer table, not the partner registry.
+    const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+
+    // Localized country name from the ISO code the backend derives off the
+    // phone prefix (+963 → SY → «سوريا»). Intl covers every region code.
+    const regionNames = useMemo(
+        () => new Intl.DisplayNames([intlLocale], { type: 'region' }),
+        [intlLocale],
+    );
+    const countryName = (code: string | null) => {
+        if (!code) return null;
+        try {
+            return regionNames.of(code) ?? code;
+        } catch {
+            return code;
+        }
+    };
+
     // Reset to page 1 when filters change
     useEffect(() => {
         setPage(1);
@@ -149,8 +216,18 @@ export default function AdminCustomersPage() {
                             {t('customers.subtitle')}
                         </p>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                        {pagination.total} {t('customers.totalCustomers')}
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setPartnerModalOpen(true)}
+                        >
+                            <Handshake className="w-4 h-4 me-2" aria-hidden="true" />
+                            {t('customers.resellersManage')}
+                        </Button>
+                        <div className="text-sm text-muted-foreground">
+                            {pagination.total} {t('customers.totalCustomers')}
+                        </div>
                     </div>
                 </div>
 
@@ -238,6 +315,9 @@ export default function AdminCustomersPage() {
                                         <th className="hidden md:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tableSignedUp')}
                                         </th>
+                                        <th className="hidden sm:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                            {t('customers.tableReseller')}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme-border">
@@ -264,9 +344,16 @@ export default function AdminCustomersPage() {
                                             </td>
                                             <td className="hidden lg:table-cell px-4 py-4">
                                                 {customer.phone ? (
-                                                    <span className="text-sm text-foreground font-mono" dir="ltr">
-                                                        {customer.phone}
-                                                    </span>
+                                                    <div>
+                                                        <span className="text-sm text-foreground font-mono" dir="ltr">
+                                                            {customer.phone}
+                                                        </span>
+                                                        {customer.phoneCountry && (
+                                                            <div className="text-xs text-muted-foreground">
+                                                                {countryName(customer.phoneCountry)}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <span className="text-sm text-muted-foreground">-</span>
                                                 )}
@@ -293,6 +380,45 @@ export default function AdminCustomersPage() {
                                             </td>
                                             <td className="hidden md:table-cell px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(customer.createdAt)}
+                                            </td>
+                                            {/* Reseller assignment — interactive cell, must not trigger row navigation */}
+                                            <td
+                                                className="hidden sm:table-cell px-4 py-4"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <select
+                                                        value={customer.partner?.id ?? ''}
+                                                        onChange={(e) => assignPartner.mutate({
+                                                            userId: customer.id,
+                                                            partnerId: e.target.value || null,
+                                                        })}
+                                                        disabled={assignPartner.isPending}
+                                                        aria-label={t('customers.tableReseller')}
+                                                        className="px-2 py-1.5 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card max-w-[10rem] disabled:opacity-50"
+                                                    >
+                                                        <option value="">{t('customers.noReseller')}</option>
+                                                        {partners.map((partner) => (
+                                                            <option key={partner.id} value={partner.id}>
+                                                                {partner.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    {customer.partner && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openNoteEditor(customer)}
+                                                            aria-label={t('customers.resellerNote')}
+                                                            title={customer.partnerNote || t('customers.resellerNote')}
+                                                            className={clsx(
+                                                                'p-1.5 rounded-lg border border-theme-border hover:bg-background',
+                                                                customer.partnerNote ? 'text-brand-600' : 'text-icon-muted',
+                                                            )}
+                                                        >
+                                                            <StickyNote className="w-4 h-4" aria-hidden="true" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -334,6 +460,40 @@ export default function AdminCustomersPage() {
                     )}
                 </Card>
             </div>
+
+            <PartnerManagerModal isOpen={partnerModalOpen} onClose={() => setPartnerModalOpen(false)} />
+
+            {/* Partner-note editor — the note the assigned reseller sees for this merchant */}
+            <Modal
+                isOpen={noteTarget !== null}
+                onClose={() => setNoteTarget(null)}
+                title={t('customers.resellerNote')}
+                size="sm"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                        {t('customers.resellerNoteHelper', { name: noteTarget?.name || noteTarget?.email || '' })}
+                    </p>
+                    <textarea
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraft(e.target.value)}
+                        dir="auto"
+                        rows={3}
+                        maxLength={500}
+                        aria-label={t('customers.resellerNote')}
+                        className="w-full px-3 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card placeholder:text-muted-foreground"
+                        placeholder={t('customers.resellerNotePlaceholder')}
+                    />
+                    <div className="flex justify-end gap-3">
+                        <Button variant="ghost" onClick={() => setNoteTarget(null)}>
+                            {tc('cancel')}
+                        </Button>
+                        <Button onClick={saveNote} disabled={assignPartner.isPending}>
+                            {assignPartner.isPending ? tc('loading') : tc('save')}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </AdminLayout>
     );
 }
