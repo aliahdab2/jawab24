@@ -368,6 +368,151 @@ export function trialEndedEmailTemplate(params: {
 }
 
 /**
+ * Renewal-payment-failed dunning notice — fired by the invoice.payment_failed
+ * webhook (and the daily dunning sweep as catch-up; see services/dunningNotices.ts)
+ * the first time a subscription renewal charge is declined.
+ *
+ * `payUrl` is Stripe's hosted invoice page when available (no login, accepts a
+ * different card) and falls back to the dashboard. `graceEndLabel` is null when
+ * the row has no period end — the copy then degrades to "the next few days"
+ * instead of printing a date we cannot stand behind (snapped-expiry lesson).
+ */
+export function paymentFailedEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    amountLabel: string | null;
+    graceEndLabel: string | null;
+    payUrl: string;
+}): { subject: string; html: string } {
+    const { lang, name, amountLabel, graceEndLabel, payUrl } = params;
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    // Same escaping contract as the trial lifecycle emails: translations are
+    // static, markup-free strings we control; caller-supplied values are escaped.
+    const escName = escapeHtml(name);
+
+    const subject = t('paymentFailedSubject', lang);
+    const heading = t('paymentFailedHeading', lang);
+    const intro = amountLabel
+        ? t('paymentFailedIntro', lang)
+            .replace(/\{name\}/g, escName)
+            .replace(/\{amount\}/g, escapeHtml(amountLabel))
+        : t('paymentFailedIntroNoAmount', lang).replace(/\{name\}/g, escName);
+    const grace = graceEndLabel
+        ? t('paymentFailedGrace', lang).replace(/\{graceEnd\}/g, escapeHtml(graceEndLabel))
+        : t('paymentFailedGraceUnknown', lang);
+    const updateCard = t('paymentFailedUpdateCard', lang);
+    const ctaLabel = t('paymentFailedCta', lang);
+    const signoff = t('paymentFailedSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              ${tealCallout(rtl, grace)}
+              ${ctaButton(payUrl, ctaLabel)}
+              <p style="margin:0 0 16px 0;color:#52525b;font-size:14px;">${updateCard}</p>
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
+ * Service-suspended dunning notice — the moment the merchant actually loses
+ * replies over an unpaid renewal: either Stripe gave up and canceled the
+ * subscription (webhook), or the past_due grace window expired with no webhook
+ * firing (daily sweep). See services/dunningNotices.ts for both triggers.
+ *
+ * `ctaVariant` picks the copy AND the destination: 'pay' when an open invoice
+ * is still payable (hosted invoice page), 'resubscribe' when the subscription
+ * is already canceled at Stripe and only a fresh checkout can revive it.
+ */
+export function serviceSuspendedEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    stoppedSinceLabel: string;
+    ctaUrl: string;
+    ctaVariant: 'pay' | 'resubscribe';
+}): { subject: string; html: string } {
+    const { lang, name, stoppedSinceLabel, ctaUrl, ctaVariant } = params;
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    const escName = escapeHtml(name);
+
+    const subject = t('serviceSuspendedSubject', lang);
+    const heading = t('serviceSuspendedHeading', lang);
+    const intro = t('serviceSuspendedIntro', lang)
+        .replace(/\{name\}/g, escName)
+        .replace(/\{stoppedSince\}/g, escapeHtml(stoppedSinceLabel));
+    const whatRemains = t('serviceSuspendedWhatRemains', lang);
+    const ctaLabel = t(ctaVariant === 'pay' ? 'serviceSuspendedCtaPay' : 'serviceSuspendedCtaResubscribe', lang);
+    const signoff = t('serviceSuspendedSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              ${tealCallout(rtl, whatRemains)}
+              ${ctaButton(ctaUrl, ctaLabel)}
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
+ * Payment-recovered confirmation — closes the dunning loop. Sent ONLY when a
+ * failure episode was open (the merchant received a payment-failed or
+ * suspension email); a normal renewal never triggers it. See
+ * services/dunningNotices.ts, handlePaymentRecovery.
+ */
+export function paymentRecoveredEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    periodEndLabel: string;
+    dashboardUrl: string;
+}): { subject: string; html: string } {
+    const { lang, name, periodEndLabel, dashboardUrl } = params;
+    const { dir, align, fontFamily } = langPresentation(lang);
+
+    const escName = escapeHtml(name);
+
+    const subject = t('paymentRecoveredSubject', lang);
+    const heading = t('paymentRecoveredHeading', lang);
+    const intro = t('paymentRecoveredIntro', lang)
+        .replace(/\{name\}/g, escName)
+        .replace(/\{periodEnd\}/g, escapeHtml(periodEndLabel));
+    const ctaLabel = t('paymentRecoveredCta', lang);
+    const signoff = t('paymentRecoveredSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              ${ctaButton(dashboardUrl, ctaLabel)}
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
  * Send-failure auto-pause notice — fired the moment services/pageAutoPause.ts
  * pauses a page after PAUSE_THRESHOLD consecutive rejected sends. The page has
  * gone silent and only a human re-enable brings it back, so this is the one

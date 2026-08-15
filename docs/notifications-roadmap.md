@@ -125,7 +125,9 @@ CREATE TABLE notification_preferences (
 
 | Notification Type | Trigger | Channels | Status |
 |-------------------|---------|----------|--------|
-| Payment Failed | Stripe webhook `invoice.payment_failed` | Push + In-App | ✅ live |
+| Payment Failed | Stripe webhook `invoice.payment_failed` | Push + In-App + **Email** (hosted-invoice pay link; once per failure episode) | ✅ live — email via `services/dunningNotices.ts` (webhook + daily catch-up sweep) |
+| Service Suspended (unpaid renewal) | `customer.subscription.deleted` (involuntary) OR past_due grace expiry (daily sweep) | **Email** | ✅ live — `services/dunningNotices.ts` |
+| Payment Recovered | `invoice.payment_succeeded` closing an open failure episode | **Email** | ✅ live — `services/dunningNotices.ts` |
 | Page Disconnected | Facebook API error (token expired) | Push + In-App | ✅ live — but **not** fired on the Facebook-revoked path (see below) |
 | New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App | ✅ live |
 | Subscription Expiring | 3 days before expiry (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |

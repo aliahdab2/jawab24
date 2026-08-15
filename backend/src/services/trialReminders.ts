@@ -27,22 +27,24 @@
  * `trial_ended_notified_at`) once the in-app notification has landed, and its
  * query skips stamped rows. The daily cadence would otherwise notify the same
  * merchant repeatedly.
+ *
+ * The delivery loop itself lives in lifecycleNoticeSweep.ts ('inapp-primary'
+ * mode — behavior identical to when it lived here), shared with the dunning
+ * sweeps (dunningNotices.ts).
  */
 import { and, eq, gt, inArray, isNull, lte } from 'drizzle-orm';
-import type { SQL } from 'drizzle-orm';
-import { db } from '../db';
-import { subscriptions, users, settings } from '../db/schema';
-import { emailService } from './email';
-import type { EmailType } from './email';
-import { notificationService, NOTIFICATION_TEMPLATES } from './notifications';
-import type { NotificationPayload } from './notifications';
+import { subscriptions } from '../db/schema';
+import { NOTIFICATION_TEMPLATES } from './notifications';
 import { trialEndingEmailTemplate, trialEndedEmailTemplate } from '../utils/emailTemplates';
-import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
-import { resolveLocale } from '../utils/i18n';
 import { formatDateLong } from '../utils/formatDate';
 import type { Logger } from '../types/logger';
-import { noopLogger } from '../types/logger';
+import {
+    runLifecycleNoticeSweep,
+    selectDueRows,
+    setLifecycleSweepLogger,
+} from './lifecycleNoticeSweep';
+import type { LifecycleNoticeResult } from './lifecycleNoticeSweep';
 
 /** How many days before `trial_ends_at` the single reminder goes out. */
 export const REMINDER_LEAD_DAYS = 3;
@@ -56,167 +58,12 @@ export const REMINDER_LEAD_DAYS = 3;
 export const ENDED_LOOKBACK_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-let logger: Logger = noopLogger;
-export function setTrialRemindersLogger(l: Logger): void { logger = l; }
+export function setTrialRemindersLogger(l: Logger): void { setLifecycleSweepLogger(l); }
 
-export interface TrialReminderResult {
-    /** Subscriptions inside the sweep's window that had not been notified yet. */
-    due: number;
-    /** In-app notifications successfully created. */
-    notified: number;
-    /** Emails successfully sent (≤ notified; email is best-effort). */
-    emailed: number;
-    /** Subscriptions left un-stamped because the in-app notification failed. */
-    errors: number;
-}
-
-/** The projection both sweeps select — one merchant-facing trial row. */
-interface LifecycleNoticeRow {
-    subscriptionId: string;
-    userId: string;
-    trialEndsAt: Date | null;
-    email: string | null;
-    name: string | null;
-    dashboardLanguage: string | null;
-}
-
-/**
- * Everything that differs between the two sweeps. Keeping the delivery loop in
- * ONE place (runLifecycleNoticeSweep) is deliberate: the retry semantics —
- * in-app failure leaves the row un-stamped for tomorrow, email is best-effort —
- * are the part that must never diverge between sweeps, the way a fix applied to
- * one hand-copied loop and not the other would. `subscription_expiring` (still
- * missing, see docs/notifications-roadmap.md) should become a third config.
- */
-interface LifecycleNoticeConfig {
-    /** Log-line prefix, e.g. '[TrialReminders]'. */
-    label: string;
-    /** Sentry `cron` tag. */
-    cronTag: string;
-    /** Human prefix for Sentry messages, e.g. 'Trial-ending'. */
-    noticeName: string;
-    emailType: EmailType;
-    /** Extra fields for the start-of-run log line. */
-    startMeta: Record<string, unknown>;
-    fetchDue(now: Date): Promise<LifecycleNoticeRow[]>;
-    /** Bell/push payload for a row, or null to skip the row entirely. */
-    composeNotification(row: LifecycleNoticeRow): NotificationPayload | null;
-    /** Email content; only called when the row has an email address. */
-    composeEmail(row: LifecycleNoticeRow, lang: 'ar' | 'en', name: string): { subject: string; html: string };
-    /** The sweep's own idempotency stamp — sweeps must never share one. */
-    stamp(): Partial<typeof subscriptions.$inferInsert>;
-}
-
-/** Shared SELECT for both sweeps — only the WHERE differs per config. */
-function selectDueRows(where: SQL | undefined): Promise<LifecycleNoticeRow[]> {
-    return db
-        .select({
-            subscriptionId: subscriptions.id,
-            userId: subscriptions.userId,
-            trialEndsAt: subscriptions.trialEndsAt,
-            email: users.email,
-            name: users.name,
-            dashboardLanguage: settings.dashboardLanguage,
-        })
-        .from(subscriptions)
-        .innerJoin(users, eq(users.id, subscriptions.userId))
-        .leftJoin(settings, eq(settings.userId, subscriptions.userId))
-        .where(where);
-}
+export type TrialReminderResult = LifecycleNoticeResult;
 
 function pricingUrl(lang: 'ar' | 'en'): string {
     return `${config.frontendUrl}/${lang}/pricing`;
-}
-
-/**
- * The delivery loop both sweeps share.
- *
- * Per row: in-app notification first — a failure is the only retryable case
- * (the row stays un-stamped, so tomorrow's run tries again). Email second and
- * best-effort by design: the merchant has already been told in-app, and
- * retrying the email tomorrow would re-send the bell row too, so a failed send
- * is captured, not retried. The stamp lands last.
- */
-async function runLifecycleNoticeSweep(cfg: LifecycleNoticeConfig): Promise<TrialReminderResult> {
-    const startedAt = Date.now();
-    const now = new Date();
-
-    logger.info(`${cfg.label} Starting run`, cfg.startMeta);
-
-    const rows = await cfg.fetchDue(now);
-    const result: TrialReminderResult = { due: rows.length, notified: 0, emailed: 0, errors: 0 };
-
-    for (const row of rows) {
-        const notification = cfg.composeNotification(row);
-        if (!notification) continue;
-
-        const lang = resolveLocale(row.dashboardLanguage);
-
-        try {
-            await notificationService.sendNotification(row.userId, notification);
-            result.notified++;
-        } catch (err) {
-            result.errors++;
-            logger.error(`${cfg.label} In-app notification failed`, {
-                subscriptionId: row.subscriptionId,
-                userId: row.userId,
-                error: String(err),
-            });
-            captureError(err, `${cfg.noticeName} notification failed`, {
-                tags: { cron: cfg.cronTag },
-                level: 'error',
-                extra: { subscriptionId: row.subscriptionId, userId: row.userId },
-            });
-            continue;
-        }
-
-        if (row.email) {
-            const { subject, html } = cfg.composeEmail(row, lang, row.name || row.email.split('@')[0]);
-
-            const send = await emailService.send({
-                to: row.email,
-                subject,
-                html,
-                type: cfg.emailType,
-                userId: row.userId,
-            });
-
-            if (send.success) {
-                result.emailed++;
-            } else {
-                logger.error(`${cfg.label} Email failed`, {
-                    subscriptionId: row.subscriptionId,
-                    userId: row.userId,
-                    error: send.error,
-                });
-                captureError(
-                    new Error(`${cfg.noticeName} email failed: ${send.error ?? 'unknown'}`),
-                    `${cfg.noticeName} email failed`,
-                    {
-                        tags: { cron: cfg.cronTag },
-                        level: 'warning',
-                        extra: { subscriptionId: row.subscriptionId, userId: row.userId, resendError: send.error },
-                    },
-                );
-            }
-        }
-
-        await db
-            .update(subscriptions)
-            .set(cfg.stamp())
-            .where(eq(subscriptions.id, row.subscriptionId));
-
-        logger.info(`${cfg.label} Notified merchant`, {
-            subscriptionId: row.subscriptionId,
-            userId: row.userId,
-            trialEndsAt: row.trialEndsAt?.toISOString(),
-            lang,
-            emailed: Boolean(row.email),
-        });
-    }
-
-    logger.info(`${cfg.label} Run complete`, { ...result, durationMs: Date.now() - startedAt });
-    return result;
 }
 
 /**
