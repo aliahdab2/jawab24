@@ -171,6 +171,12 @@ describe('notifyRenewalFailed', () => {
     });
 
     it('skips first-invoice failures (billing_reason=subscription_create)', async () => {
+        // Seed everything a send would need — the guard must be the ONLY
+        // reason nothing goes out (mutation-check found the vacuous version
+        // of this test passing with the guard deleted).
+        selectQueue.value = [[makeRow()]];
+        updateReturningQueue.value = [[{ id: 'db-sub-1' }]];
+
         await notifyRenewalFailed(makeInvoice({ billing_reason: 'subscription_create' }));
 
         expect(trySendMock).not.toHaveBeenCalled();
@@ -289,33 +295,42 @@ describe('subscription-deleted suspension notice', () => {
         expect(trySendMock).toHaveBeenCalledTimes(1);
     });
 
+    // The three silent cases seed a claimable stamp on purpose: the
+    // voluntary/involuntary guard must be the ONLY reason nothing goes out
+    // (a claim-denied path would make these pass vacuously — mutation-check).
     it('stays silent on a voluntary cancellation (cancel_at_period_end)', async () => {
         selectQueue.value = [[makeRow({ status: 'past_due' })]];
         const ctx = await prepareSubscriptionDeletedNotice('sub_stripe_1');
+        updateReturningQueue.value = [[{ id: 'db-sub-1' }]];
 
         await sendSubscriptionDeletedNotice(ctx, makeStripeSub({ cancel_at_period_end: true }));
 
         expect(trySendMock).not.toHaveBeenCalled();
+        expect(updateCalls.value).toHaveLength(0); // guard fires before any claim
     });
 
     it('stays silent when the merchant asked to cancel (cancellation_requested)', async () => {
         selectQueue.value = [[makeRow({ status: 'past_due' })]];
         const ctx = await prepareSubscriptionDeletedNotice('sub_stripe_1');
+        updateReturningQueue.value = [[{ id: 'db-sub-1' }]];
 
         await sendSubscriptionDeletedNotice(ctx, makeStripeSub({
             cancellation_details: { reason: 'cancellation_requested' },
         }));
 
         expect(trySendMock).not.toHaveBeenCalled();
+        expect(updateCalls.value).toHaveLength(0);
     });
 
     it('stays silent for an active row with no failure history', async () => {
         selectQueue.value = [[makeRow({ status: 'active' })]];
         const ctx = await prepareSubscriptionDeletedNotice('sub_stripe_1');
+        updateReturningQueue.value = [[{ id: 'db-sub-1' }]];
 
         await sendSubscriptionDeletedNotice(ctx, makeStripeSub());
 
         expect(trySendMock).not.toHaveBeenCalled();
+        expect(updateCalls.value).toHaveLength(0);
     });
 
     it('sends nothing twice — the suspension claim is the once-guard', async () => {
