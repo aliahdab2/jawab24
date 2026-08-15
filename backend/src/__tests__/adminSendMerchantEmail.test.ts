@@ -88,6 +88,62 @@ describe('adminUsersService.sendMerchantEmail', () => {
         expect(audit.newValue).toEqual({ subject: 'Reconnect', body: 'Your page dropped' });
     });
 
+    it('leaves cc/bcc/attachments undefined when the admin supplied none', async () => {
+        mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
+        await adminUsersService.sendMerchantEmail(USER_ID, { subject: 's', body: 'b' }, ADMIN_ID);
+
+        const sent = mockSend.mock.calls[0][0];
+        expect(sent.cc).toBeUndefined();
+        expect(sent.bcc).toBeUndefined();
+        expect(sent.attachments).toBeUndefined();
+    });
+
+    it('passes cc, bcc and attachments through to the email transport', async () => {
+        mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
+        await adminUsersService.sendMerchantEmail(
+            USER_ID,
+            {
+                subject: 'Invoice',
+                body: 'Attached',
+                cc: ['info@jawab24.com'],
+                bcc: ['rep@example.com'],
+                attachments: [{ filename: 'invoice.pdf', content: 'QUFB' }],
+            },
+            ADMIN_ID,
+        );
+
+        const sent = mockSend.mock.calls[0][0];
+        expect(sent.cc).toEqual(['info@jawab24.com']);
+        expect(sent.bcc).toEqual(['rep@example.com']);
+        expect(sent.attachments).toEqual([{ filename: 'invoice.pdf', content: 'QUFB' }]);
+    });
+
+    it('audits recipients and attachment NAMES, never the file bytes', async () => {
+        mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
+        await adminUsersService.sendMerchantEmail(
+            USER_ID,
+            {
+                subject: 'Invoice',
+                body: 'Attached',
+                cc: ['info@jawab24.com'],
+                bcc: ['rep@example.com'],
+                attachments: [{ filename: 'invoice.pdf', content: 'QUFBQUFB' }],
+            },
+            ADMIN_ID,
+        );
+
+        const audit = mockValues.mock.calls[0][0];
+        expect(audit.newValue).toEqual({
+            subject: 'Invoice',
+            body: 'Attached',
+            cc: ['info@jawab24.com'],
+            bcc: ['rep@example.com'],
+            attachments: ['invoice.pdf'],
+        });
+        // The base64 payload must not land in the audit table.
+        expect(JSON.stringify(audit.newValue)).not.toContain('QUFBQUFB');
+    });
+
     it('still resolves when the audit-log write fails (swallowed)', async () => {
         mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
         mockValues.mockRejectedValueOnce(new Error('audit db down'));

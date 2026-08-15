@@ -8,7 +8,7 @@ import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'driz
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
 import { workspaceSettingsService } from '../workspaceSettings';
-import { emailService } from '../email';
+import { emailService, type EmailAttachment } from '../email';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
 
@@ -702,7 +702,13 @@ class AdminUsersService {
      */
     async sendMerchantEmail(
         userId: string,
-        input: { subject: string; body: string },
+        input: {
+            subject: string;
+            body: string;
+            cc?: string[];
+            bcc?: string[];
+            attachments?: EmailAttachment[];
+        },
         adminUserId: string | undefined,
     ): Promise<{ emailSendId?: string }> {
         const [target] = await db
@@ -729,6 +735,9 @@ class AdminUsersService {
             html,
             type: 'account_notice',
             userId,
+            cc: input.cc,
+            bcc: input.bcc,
+            attachments: input.attachments,
         });
 
         if (!result.success) {
@@ -746,7 +755,21 @@ class AdminUsersService {
                 // Store subject AND body: email_sends.html_body is blanked after
                 // 30 days, so this is the durable record of "what did we tell them?"
                 // for any later support dispute (audit rows are exempt).
-                newValue: { subject: input.subject, body: input.body },
+                //
+                // Recipients and attachment NAMES are recorded here too — "who
+                // else saw this?" is exactly the question a dispute asks, and
+                // email_sends has no cc/bcc columns. File BYTES are deliberately
+                // not stored: they would bloat the audit table without answering
+                // a question the filename doesn't already answer.
+                newValue: {
+                    subject: input.subject,
+                    body: input.body,
+                    ...(input.cc?.length ? { cc: input.cc } : {}),
+                    ...(input.bcc?.length ? { bcc: input.bcc } : {}),
+                    ...(input.attachments?.length
+                        ? { attachments: input.attachments.map((a) => a.filename) }
+                        : {}),
+                },
             });
         } catch (err) {
             captureError(err, 'Failed to write admin audit log for merchant email', {

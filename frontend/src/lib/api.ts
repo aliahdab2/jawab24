@@ -1149,7 +1149,15 @@ export const adminApi = {
   },
 
   // Send an admin-composed account-notice email to one merchant (support console).
-  sendCustomerEmail: async (userId: string, data: { subject: string; body: string }) => {
+  // `attachments[].content` is raw base64 with no `data:` prefix — the backend
+  // rejects the prefixed form that FileReader produces.
+  sendCustomerEmail: async (userId: string, data: {
+    subject: string;
+    body: string;
+    cc?: string[];
+    bcc?: string[];
+    attachments?: { filename: string; content: string }[];
+  }) => {
     const response = await api.post(`/admin/users/${userId}/send-email`, data);
     return response.data as {
       success: boolean;

@@ -63,9 +63,68 @@ export const UpdatePlanSchema = CreatePlanSchema.partial();
  * Deliberately narrower than SendEmailSchema — no audience/template/broadcast
  * fields; just a subject + body sent to one user by id (path param).
  */
+/**
+ * Attachment limits.
+ *
+ * Sized to fit INSIDE the server's existing 10MB `bodyLimit` (index.ts) rather
+ * than raising it — that limit is global and guards every route, so widening it
+ * for one admin feature would relax a protection the whole API depends on.
+ * Base64 inflates bytes by 4/3, so 6MB of files ≈ 8MB on the wire, leaving
+ * headroom for the subject, body and recipient lists.
+ */
+export const MAX_EMAIL_ATTACHMENTS = 3;
+export const MAX_EMAIL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+export const MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES = 6 * 1024 * 1024;
+export const MAX_EMAIL_CC = 5;
+
+/** Extensions we are willing to put in front of a merchant. */
+const ALLOWED_ATTACHMENT_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg'] as const;
+
+const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** Decoded byte count of a base64 string, without allocating a Buffer. */
+export function base64ByteLength(b64: string): number {
+    const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+    return (b64.length / 4) * 3 - padding;
+}
+
+const EmailAttachmentSchema = z.object({
+    // Basename only. A path separator here would let an admin-supplied name
+    // reach a downstream consumer as a relative path; the filename is metadata,
+    // never a filesystem target for us, but we refuse to emit one either way.
+    filename: z
+        .string()
+        .trim()
+        .min(1, 'Attachment filename is required')
+        .max(200)
+        .refine((n) => !n.includes('/') && !n.includes('\\') && n !== '.' && n !== '..', 'Attachment filename must not contain a path')
+        .refine(
+            (n) => ALLOWED_ATTACHMENT_EXTENSIONS.includes(n.split('.').pop()?.toLowerCase() as typeof ALLOWED_ATTACHMENT_EXTENSIONS[number]),
+            `Attachment must be one of: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(', ')}`,
+        ),
+    content: z
+        .string()
+        .min(1, 'Attachment content is required')
+        // Reject a `data:` prefix explicitly — it is the single most likely
+        // caller mistake (FileReader hands you one) and Resend fails opaquely.
+        .refine((c) => !c.startsWith('data:'), 'Attachment content must be raw base64, without a data: prefix')
+        .refine((c) => c.length % 4 === 0 && BASE64_RE.test(c), 'Attachment content must be valid base64')
+        .refine((c) => base64ByteLength(c) <= MAX_EMAIL_ATTACHMENT_BYTES, `Each attachment must be ${MAX_EMAIL_ATTACHMENT_BYTES / 1024 / 1024}MB or smaller`),
+});
+
 export const SendMerchantEmailSchema = z.object({
     subject: z.string().trim().min(1, 'Subject is required').max(500),
     body: z.string().trim().min(1, 'Body is required').max(20_000),
+    cc: z.array(z.string().trim().email('Invalid CC address').max(255)).max(MAX_EMAIL_CC).optional(),
+    bcc: z.array(z.string().trim().email('Invalid BCC address').max(255)).max(MAX_EMAIL_CC).optional(),
+    attachments: z
+        .array(EmailAttachmentSchema)
+        .max(MAX_EMAIL_ATTACHMENTS, `At most ${MAX_EMAIL_ATTACHMENTS} attachments`)
+        .refine(
+            (list) => list.reduce((sum, a) => sum + base64ByteLength(a.content), 0) <= MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES,
+            `Attachments must total ${MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES / 1024 / 1024}MB or less`,
+        )
+        .optional(),
 });
 
 export const SendEmailSchema = z.object({

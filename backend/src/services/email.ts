@@ -9,6 +9,19 @@ import { noopLogger } from '../types/logger';
 // as new email kinds ship — keeps the union exhaustive at every call site.
 export type EmailType = 'lead_digest' | 'waitlist' | 'transactional' | 'subscription_welcome' | 'trial_ending' | 'trial_ended' | 'invite' | 'account_notice' | 'auto_pause' | 'page_reconnect';
 
+/**
+ * One file attached to an outgoing email.
+ *
+ * `content` is base64 WITHOUT a data: URI prefix — Resend rejects the prefixed
+ * form, and the caller that strips it is the one that knows where the bytes came
+ * from (a browser FileReader yields `data:application/pdf;base64,…`).
+ */
+export interface EmailAttachment {
+    filename: string;
+    /** Base64-encoded file bytes, no `data:` prefix. */
+    content: string;
+}
+
 interface EmailPayload {
     to: string;
     subject: string;
@@ -17,6 +30,19 @@ interface EmailPayload {
     // Optional owner of the email (recipient user). Stored on email_sends so
     // admins can filter "show me everything we sent to user X".
     userId?: string | null;
+    /**
+     * Carbon-copy recipients — visible to everyone on the message.
+     *
+     * Omitted from the Resend request entirely when absent or empty, so every
+     * pre-existing caller sends the exact same payload it did before these
+     * fields existed. Same for `bcc` and `attachments`: this is shared
+     * infrastructure behind every email we send (digests, reminders, invites),
+     * and the only safe extension is one that is provably inert when unused.
+     */
+    cc?: string[];
+    /** Blind-copy recipients — hidden from `to` and `cc`. */
+    bcc?: string[];
+    attachments?: EmailAttachment[];
 }
 
 interface ResendResponse {
@@ -129,6 +155,18 @@ export class EmailService {
                 to: [payload.to],
                 subject: payload.subject,
                 html: payload.html,
+                // Spread-if-present: an absent OR empty list contributes no key,
+                // so the serialized body is byte-identical to the pre-CC one for
+                // every existing caller.
+                //
+                // Do not "simplify" to `cc: payload.cc`. JSON.stringify drops a
+                // key whose value is undefined, so that shorthand looks correct
+                // for callers passing nothing — but it sends `"cc":[]` for a
+                // caller passing an empty array, which is a present-but-empty
+                // recipient list rather than no list at all.
+                ...(payload.cc?.length ? { cc: payload.cc } : {}),
+                ...(payload.bcc?.length ? { bcc: payload.bcc } : {}),
+                ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
             }),
         });
 

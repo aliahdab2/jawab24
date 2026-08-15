@@ -217,6 +217,23 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         properties: {
                             subject: { type: 'string', minLength: 1, maxLength: 500 },
                             body: { type: 'string', minLength: 1, maxLength: 20_000 },
+                            cc: { type: 'array', maxItems: 5, items: { type: 'string', format: 'email' } },
+                            bcc: { type: 'array', maxItems: 5, items: { type: 'string', format: 'email' } },
+                            // Sizes and file types are enforced by
+                            // SendMerchantEmailSchema (Zod) in the controller —
+                            // this schema only describes the shape for OpenAPI.
+                            attachments: {
+                                type: 'array',
+                                maxItems: 3,
+                                items: {
+                                    type: 'object',
+                                    required: ['filename', 'content'],
+                                    properties: {
+                                        filename: { type: 'string', minLength: 1, maxLength: 200 },
+                                        content: { type: 'string', minLength: 1, description: 'Base64 file bytes, no data: prefix' },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
