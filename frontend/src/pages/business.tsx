@@ -123,10 +123,19 @@ function BusinessPageInner() {
     router.replace(`/business?page=${targetPage}`, undefined, { shallow: true });
   }, [router, router.isReady, router.query.import, router.query.page, pagesData]);
 
-  // Default to the first page once loaded.
+  // Default to the first page once loaded — but never while a ?page= deep link
+  // names a valid page. On a warm-cache client-side nav (the /pages funnel)
+  // validPages are populated on the FIRST commit while `pageId` is still ''
+  // (syncFromUrl's setState hasn't landed), so an unguarded default here
+  // overwrote the deep-linked selection and rewrote the URL to the first page.
+  // An absent or invalid param still falls through, so a stale link degrades
+  // to the first page as before.
   useEffect(() => {
+    if (!router.isReady) return;
+    const urlPage = router.query.page as string | undefined;
+    if (urlPage && validPages.some((p) => p.id === urlPage)) return;
     if (!pageId && validPages.length > 0) updatePageId(validPages[0].id);
-  }, [validPages, pageId, updatePageId]);
+  }, [router.isReady, router.query.page, validPages, pageId, updatePageId]);
 
   const selectedPageId = pageId && validPages.some((p) => p.id === pageId) ? pageId : '';
   const selectedPage = validPages.find((p) => p.id === selectedPageId);
