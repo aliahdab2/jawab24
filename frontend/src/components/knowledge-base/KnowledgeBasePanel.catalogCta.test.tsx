@@ -1,12 +1,12 @@
 /**
  * The price-list notice and its "organize into catalog" CTA.
  *
- * Contract (owner ruling 2026-08-03):
- * - Merchants WITH a structured home for prices (catalog canary OR existing
- *   fact collections) get a LIVE notice while typing, before any save; the
- *   CTA only when the catalog import path is open.
- * - Everyone else keeps the pre-existing POST-SAVE "coming soon" banner,
- *   untouched, with no CTA.
+ * Contract (GA 2026-08-15 — previously an allowlist canary, owner ruling
+ * 2026-08-03):
+ * - EVERY merchant (no gate) gets a LIVE notice while typing, before any
+ *   save, with the import CTA — except store-linked pages, whose catalog is
+ *   store-owned.
+ * - Merchants with existing fact collections get the lists copy, no CTA.
  * - The CTA PERSISTS the editor text before handing off (review H1): it can
  *   fire mid-edit, the handoff closes the editor, and the cleanup sheet
  *   matches against the SAVED KB — an unsaved draft would be silently lost.
@@ -18,7 +18,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Page } from '@jawab24/shared';
-import { KnowledgeBaseModal } from './KnowledgeBaseModal';
+import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 
 const { push, authState, listCollections } = vi.hoisted(() => ({
   push: vi.fn(),
@@ -66,19 +66,19 @@ function page(overrides: Partial<Page> = {}): Page {
 const WARNINGS = { hasCatalog: true, reasons: ['price_list'], priceCount: 3 };
 const SAVE_OK = { ok: true, kbWarnings: WARNINGS };
 
-function renderModal(p: Page = page()) {
+function renderPanel(p: Page = page()) {
   const onSave = vi.fn().mockResolvedValue(SAVE_OK);
   const onClose = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { rerender } = render(
     <QueryClientProvider client={client}>
-      <KnowledgeBaseModal page={p} onClose={onClose} onSave={onSave} saving={false} saved={false} />
+      <KnowledgeBasePanel page={p} onClose={onClose} onSave={onSave} saving={false} saved={false} />
     </QueryClientProvider>,
   );
   const rerenderWithPage = (next: Page) =>
     rerender(
       <QueryClientProvider client={client}>
-        <KnowledgeBaseModal page={next} onClose={onClose} onSave={onSave} saving={false} saved={false} />
+        <KnowledgeBasePanel page={next} onClose={onClose} onSave={onSave} saving={false} saved={false} />
       </QueryClientProvider>,
     );
   return { onSave, onClose, rerenderWithPage };
@@ -96,32 +96,17 @@ beforeEach(() => {
   listCollections.mockResolvedValue({ data: { data: [] } });
 });
 
-describe('KnowledgeBaseModal — price notice gating', () => {
-  it('no alternative home: NO live notice; the post-save banner keeps the pre-existing copy, no CTA', async () => {
-    const { onSave } = renderModal();
-
-    // Live detection fires (debounce ~400ms) but the gate holds it back.
-    await new Promise((r) => setTimeout(r, 600));
-    expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
-
-    await save(onSave);
-    expect(await screen.findByText('This looks like a price list')).toBeInTheDocument();
-    expect(screen.getByText(/Soon you'll be able to store these/)).toBeInTheDocument();
-    expect(screen.queryByText('Organize into Products & Services')).not.toBeInTheDocument();
-  });
-
-  it('platform admin: the notice appears LIVE before any save, with the CTA', async () => {
-    authState.user = { isAdmin: true };
-    renderModal();
+describe('KnowledgeBasePanel — price notice gating', () => {
+  it('regular merchant (GA): the notice appears LIVE before any save, with the CTA', async () => {
+    renderPanel();
 
     expect(await screen.findByText('This looks like a price list', undefined, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByText(/Jawab can turn them into catalog items/)).toBeInTheDocument();
     expect(screen.getByText('Organize into Products & Services')).toBeInTheDocument();
   });
 
-  it('CTA persists the editor text, then hands off draft + navigation (admin, live notice)', async () => {
-    authState.user = { isAdmin: true };
-    const { onSave, onClose } = renderModal();
+  it('CTA persists the editor text, then hands off draft + navigation (live notice)', async () => {
+    const { onSave } = renderPanel();
 
     fireEvent.click(await screen.findByText('Organize into Products & Services', undefined, { timeout: 2000 }));
 
@@ -133,15 +118,15 @@ describe('KnowledgeBaseModal — price notice gating', () => {
 
     const draft = JSON.parse(sessionStorage.getItem('jawab24:catalog-import-draft') ?? '{}');
     expect(draft.pageId).toBe('page-1');
-    // The modal serializes its sections (headers included) — the price line
+    // The panel serializes its sections (headers included) — the price line
     // must survive verbatim; the extractor skips non-offering lines anyway.
+    // Closing on handoff is the MODAL wrapper's job (onImportNavigate), not
+    // the panel's — the panel only saves, writes the draft, and navigates.
     expect(draft.text).toContain('عطر العود الملكي ٣٥٠٠ ل.س');
-    expect(onClose).toHaveBeenCalled();
   });
 
   it('CTA save failure: stays in the editor — no draft, no navigation, no close', async () => {
-    authState.user = { isAdmin: true };
-    const { onSave, onClose } = renderModal();
+    const { onSave, onClose } = renderPanel();
     onSave.mockResolvedValue({ ok: false });
 
     fireEvent.click(await screen.findByText('Organize into Products & Services', undefined, { timeout: 2000 }));
@@ -154,18 +139,20 @@ describe('KnowledgeBaseModal — price notice gating', () => {
     expect(screen.getByText('This looks like a price list')).toBeInTheDocument();
   });
 
-  it('existing fact collections open the live notice WITHOUT the CTA (lists copy)', async () => {
+  it('store-linked page with fact collections: live notice WITHOUT the CTA (lists copy)', async () => {
+    // Post-GA the import path is open to every non-store page, so the
+    // lists-copy variant is only reachable where the import stays closed:
+    // a store-linked page whose workspace already authors lists.
     listCollections.mockResolvedValue({ data: { data: [{ id: 'col-1', label: 'أسعار', rows: [] }] } });
-    renderModal();
+    renderPanel(page({ ecommerceStoreId: 'store-1' }));
 
     expect(await screen.findByText('This looks like a price list', undefined, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByText(/Exact prices belong in your lists/)).toBeInTheDocument();
     expect(screen.queryByText('Organize into Products & Services')).not.toBeInTheDocument();
   });
 
-  it('store-linked pages get no live notice and no CTA even for a platform admin', async () => {
-    authState.user = { isAdmin: true };
-    const { onSave } = renderModal(page({ ecommerceStoreId: 'store-1' }));
+  it('store-linked pages get no live notice and no CTA — their catalog is store-owned', async () => {
+    const { onSave } = renderPanel(page({ ecommerceStoreId: 'store-1' }));
 
     await new Promise((r) => setTimeout(r, 600));
     expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
@@ -176,8 +163,7 @@ describe('KnowledgeBaseModal — price notice gating', () => {
   });
 
   it('dismissing the live notice hides it for the session', async () => {
-    authState.user = { isAdmin: true };
-    renderModal();
+    renderPanel();
 
     await screen.findByText('This looks like a price list', undefined, { timeout: 2000 });
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
@@ -185,8 +171,7 @@ describe('KnowledgeBaseModal — price notice gating', () => {
   });
 
   it('a dismissed notice survives a save — the pages refetch mints a new page object, same id (review M1)', async () => {
-    authState.user = { isAdmin: true };
-    const { onSave, rerenderWithPage } = renderModal();
+    const { onSave, rerenderWithPage } = renderPanel();
 
     await screen.findByText('This looks like a price list', undefined, { timeout: 2000 });
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
@@ -206,7 +191,9 @@ describe('KnowledgeBaseModal — price notice gating', () => {
     // before the fact-collections request returns.
     let resolveProbe: (v: { data: { data: Array<{ id: string; label: string; rows: never[] }> } }) => void;
     listCollections.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
-    const { onSave } = renderModal();
+    // Store-linked: the only page shape where the probe still gates the live
+    // notice post-GA (non-store pages have the import home unconditionally).
+    const { onSave } = renderPanel(page({ ecommerceStoreId: 'store-1' }));
 
     // Save while hasAlternativeHome is still (wrongly) false → post-save state.
     await save(onSave);

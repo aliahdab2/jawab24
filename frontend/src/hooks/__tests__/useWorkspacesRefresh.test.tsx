@@ -1,9 +1,8 @@
 /**
  * Regression tests for useWorkspacesRefresh (prod report 2026-08-03):
- * the /business surface was opened to founder-workspace members, but
- * teammates with standing sessions still couldn't see it — the workspace
- * list that isCatalogVisible reads was written only at login and persisted,
- * so gates widened AFTER a user's last login never reached them. This hook
+ * workspace-membership state read from the persisted store was written only
+ * at login, so anything granted AFTER a user's last login (new workspaces,
+ * membership-driven gates) never reached standing sessions. This hook
  * refreshes the snapshot from GET /workspaces once per app load.
  */
 import React from 'react';

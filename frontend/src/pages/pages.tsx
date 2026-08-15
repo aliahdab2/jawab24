@@ -34,18 +34,17 @@ import { iosOr } from '@/lib/iosCopy';
 import type { Page } from '@jawab24/shared';
 import dynamic from 'next/dynamic';
 
-const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
-import { isWhatsAppVisible, isWhatsAppRedirectConnect, isCatalogVisible } from '@/lib/featureFlags';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
 // an await between the gesture and location.assign is what mobile Chrome
 // silently ignored (2026-07-30).
 import { openWhatsAppSignupUrl } from '@/lib/whatsappRedirect';
-import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
+import { useWorkspaceRole, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
 import { getLocalePath } from '@/utils/locale';
@@ -63,7 +62,7 @@ const PagesPage: NextPageWithLayout = () => {
   const tTest = useTranslations('testSmartReply');
   const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
-  const { isAuthenticated, fbToken, user, workspaces } = useAuthStore();
+  const { isAuthenticated, fbToken, user } = useAuthStore();
   // Canary: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is on, the WhatsApp
   // surface shows only to platform admins (the founder). Otherwise governed by
   // the master switch. Actionable surfaces (picker, connect, add-card) gate on
@@ -74,10 +73,6 @@ const PagesPage: NextPageWithLayout = () => {
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
-  const [editingPage, setEditingPage] = useState<Page | null>(null);
-  const { saveKnowledgeBase, saving, saved, resetSaved } = useSaveKnowledgeBase(
-    (pageId, text) => setPages((prev) => prev.map(p => (p.id === pageId ? { ...p, knowledgeBase: text } : p))),
-  );
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
@@ -132,8 +127,6 @@ const PagesPage: NextPageWithLayout = () => {
   // Pre-fill the test-reply box with a sample question only when opened from the
   // onboarding checklist deep-link (not from the per-page "Test smart reply" button).
   const [testReplyPrefillSample, setTestReplyPrefillSample] = useState(false);
-
-  // ESC key handled inside KnowledgeBaseModal
 
   const { data: pagesRaw, isLoading: loading, isFetched: pagesFetched, isError: pagesError, refetch: refetchPages } = useQuery({
     queryKey: ['pages'],
@@ -354,20 +347,14 @@ const PagesPage: NextPageWithLayout = () => {
 
   const openKbEditorFor = useCallback((target: Page | undefined) => {
     if (!target) return;
-    // Business-Surface workspaces get the structured /business page as their
-    // canonical Business Info surface instead of the legacy free-text modal
-    // (owner ruling 2026-08-09: new merchants work directly on the new surface).
+    // The structured /business page is the canonical Business Info surface for
+    // ALL merchants (GA, owner ruling 2026-08-15 — previously an allowlist).
     // This callback is the single funnel for EVERY entry point — the page-card
     // button, the ?openKb / ?openKbActive deep links from emails, nudges and the
     // setup checklist, and the KB-nudge toast — so one branch here moves all of
-    // them at once and none can drift to the old editor.
-    if (isCatalogVisible(user, (workspaces ?? []).map((w) => w.id))) {
-      void router.push(`/business?page=${target.id}`);
-      return;
-    }
-    setEditingPage(target);
-    resetSaved();
-  }, [resetSaved, user, workspaces, router]);
+    // them at once and none can drift to a second editor.
+    void router.push(`/business?page=${target.id}`);
+  }, [router]);
 
   // ?openKb=true → the first page that NEEDS Business Info (same canonical
   // predicate as the dashboard nudge, checklist, and "Add info" chip — their
@@ -910,16 +897,6 @@ const PagesPage: NextPageWithLayout = () => {
 
   const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t, tc('noData'));
 
-  const openKnowledgeBase = (page: Page) => {
-    setEditingPage(page);
-    resetSaved();
-  };
-
-  const closeKnowledgeBase = () => {
-    setEditingPage(null);
-    resetSaved();
-  };
-
   if (loading && pages.length === 0) {
     return <PageSkeleton type="grid" />;
   }
@@ -1025,7 +1002,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {!page.knowledgeBase && !page.ecommerceStoreId && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); openKnowledgeBase(page); }}
+                      onClick={(e) => { e.stopPropagation(); openKbEditorFor(page); }}
                       className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" aria-hidden="true" />
@@ -1052,7 +1029,7 @@ const PagesPage: NextPageWithLayout = () => {
                   `strong` shows the honest "can only route to contact until you add info" copy —
                   rolled out to ALL merchants (2026-07-14, D-025), previously a founder-only canary. */}
               {needsBusinessInfo(page) && (
-                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} strong />
+                <BusinessInfoNudgeBanner onAdd={() => openKbEditorFor(page)} strong />
               )}
 
               {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
@@ -1356,7 +1333,7 @@ const PagesPage: NextPageWithLayout = () => {
 
                 {/* Knowledge Base CTA - More prominent */}
                 <button
-                  onClick={() => openKnowledgeBase(page)}
+                  onClick={() => openKbEditorFor(page)}
                   className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${page.knowledgeBase
                     ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
                     : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
@@ -1472,17 +1449,6 @@ const PagesPage: NextPageWithLayout = () => {
             }
           />
         </Card>
-      )}
-
-      {/* Knowledge Base Modal - Structured sections */}
-      {editingPage && (
-        <KnowledgeBaseModal
-          page={editingPage}
-          onClose={closeKnowledgeBase}
-          onSave={(text) => saveKnowledgeBase(editingPage.id, text)}
-          saving={saving}
-          saved={saved}
-        />
       )}
 
       {/* Test Smart Reply Modal */}
