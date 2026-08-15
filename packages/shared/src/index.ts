@@ -13,6 +13,13 @@ export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settin
 export { default as flagReasonEn } from './i18n/en/flagReason.json';
 export { default as flagReasonAr } from './i18n/ar/flagReason.json';
 
+// --- Notification payload contract (backend push tag + frontend deep-link route) ---
+export {
+    NOTIFICATION_TARGET_KEYS,
+    resolveNotificationTargetKey,
+    type NotificationTargetKey,
+} from './notifications';
+
 // --- Flag Reason Structured Metadata ---
 /**
  * Structured parameters/debug info attached to a flag_reason. Keyed by the

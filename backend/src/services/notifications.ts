@@ -2,7 +2,7 @@ import { db } from '../db';
 import { deviceTokens, notifications, notificationSendLog, settings, workspaceMembers } from '../db/schema';
 import { eq, and, desc, count, inArray, lt, ne } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
-import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
+import { flagReasonEn, flagReasonAr, resolveNotificationTargetKey } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { sha256Hex } from '../utils/hash';
 
@@ -417,7 +417,13 @@ function translateFlagReason(reason: string, lang: string): string {
  * Replace template placeholders in a localized string map.
  * Arabic gets special handling for `reason` (translated) and `senderName` ('Unknown' → مجهول).
  */
-function buildTemplatePayload(
+/**
+ * Exported for tests: pure (no I/O), and it is where the shared flagReason
+ * translations become the push BODY. That surface had no coverage — the same
+ * strings render as inbox chips too, and only the chip side was ever asserted,
+ * which is how three Arabic labels shipped misspelled.
+ */
+export function buildTemplatePayload(
     type: NotificationType,
     variables: Record<string, string>,
     data?: Record<string, unknown>,
@@ -454,24 +460,6 @@ function replaceVariables(
 }
 
 /**
- * Keys naming the notification's TARGET — the single row the push is about.
- *
- * ROW ids only. `pageId` is deliberately ABSENT: a page is a CONTAINER that
- * emits many distinct events, so tagging by it would let a second, genuinely
- * different event silently overwrite the first — the exact harm the id-less
- * exclusion below exists to prevent. Three types carry a pageId and would have
- * been swept in: `kb_gap` (one per missing topic — services/kb/gap-detector.ts),
- * `post_reply_orphaned` (one per detection — services/posts.ts) and
- * `auto_reply_paused` (services/pageAutoPause.ts).
- *
- * Nothing loses a tag by the omission: every row-targeted payload already
- * carries one of these — flagged/skipped/new_comment/stale_comment → commentId,
- * stale_message → messageId, new_lead/lead_reengaged → leadId. Order is
- * therefore only a tie-break; no payload carries two today.
- */
-const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId'] as const;
-
-/**
  * Android notification tag for a payload — `undefined` when it names no target.
  *
  * Why: one FCM multicast reaches EVERY registered token, so a device holding two
@@ -489,15 +477,18 @@ const NOTIFICATION_TAG_ID_KEYS = ['messageId', 'commentId', 'leadId'] as const;
  * What each type actually sends is pinned by PRODUCTION_PAYLOADS in
  * test/services/notifications.test.ts, checked against NOTIFICATION_TEMPLATES at
  * runtime — a new type cannot land without recording whether it collapses.
+ *
+ * The target-key list itself lives in @jawab24/shared rather than here, because
+ * the frontend's deep-link router answers the SAME question about the SAME
+ * payloads (which row is this notification about?) and the two encoded it
+ * separately — agreeing by coincidence, not by construction. That constant
+ * carries the full rationale for why `pageId` is excluded; the cross-boundary
+ * agreement is pinned by
+ * frontend/src/components/ui/__tests__/notificationTargetContract.test.ts.
  */
 export function buildNotificationTag(payload: NotificationPayload): string | undefined {
-    const data = payload.data;
-    if (!data) return undefined;
-    for (const key of NOTIFICATION_TAG_ID_KEYS) {
-        const value = data[key];
-        if (typeof value === 'string' && value.length > 0) return `${payload.type}:${value}`;
-    }
-    return undefined;
+    const target = resolveNotificationTargetKey(payload.data);
+    return target ? `${payload.type}:${target.id}` : undefined;
 }
 
 /**
@@ -780,6 +771,19 @@ class NotificationService {
             }
 
             const tokenStrings = tokens.map(t => t.token);
+
+            // Diagnostic: the SAME token twice in one multicast means device_tokens
+            // holds duplicate rows for this user. registerDeviceToken is a
+            // check-then-insert and there is no unique (user_id, token) constraint,
+            // so two concurrent registrations both insert — and FCM then delivers
+            // the identical push to one device twice. The android tag above HIDES
+            // that in the tray, so without this counter the fix would mask its own
+            // remaining root cause: non-zero means the duplicate-row race is real
+            // and the unique index is the actual repair; flat zero means the
+            // stale-token explanation holds. Fire-and-forget; never gates a send.
+            if (new Set(tokenStrings).size !== tokenStrings.length) {
+                redis.incr('metrics:notif:duplicate_token_in_multicast').catch(() => { /* diagnostic only */ });
+            }
             const message = buildFcmMessage(payload, userLanguage, tokenStrings);
 
             const response = await getMessaging().sendEachForMulticast(message);
