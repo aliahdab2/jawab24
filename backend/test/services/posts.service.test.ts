@@ -694,6 +694,40 @@ describe('PostsService', () => {
             await postsService.listPublishedPosts(page, { source: 'instagram' });
 
             expect(withPageTokenRetry).toHaveBeenCalledWith(page, expect.any(Function));
+
+            // The callback must USE the token the wrapper hands it — a callback
+            // that closes over `page.accessToken` passes the wiring assertion
+            // above while making the retry a no-op (mutation-checked: the
+            // `() => getMedia(id, page.accessToken)` variant fails only here).
+            const wrapped = vi.mocked(withPageTokenRetry).mock.calls[0][1];
+            vi.mocked(instagramService.getMedia).mockClear();
+            await wrapped('fresh-ig-token');
+            expect(instagramService.getMedia).toHaveBeenCalledWith('ig1', 'fresh-ig-token', expect.any(Object));
+        });
+
+        it('does NOT treat a scheduled-edge failure as a page-credential verdict', async () => {
+            // `/scheduled_posts` needs manage-level permission the published edge
+            // does not, so it can fail 200|10 while the same token serves replies
+            // fine. Feeding that to recovery could clear a WORKING page token
+            // (dead user token → markPageNeedsReconnect). Scheduled-only failure
+            // keeps its pre-existing answer: `partial: true`, no recovery.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [{ id: 'fb_ok', message: 'alive', imageUrl: null, createdTime: '2026-08-01', commentsCount: 0 }],
+                nextCursor: null, failed: false,
+            } as any);
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({
+                posts: [], failed: true, truncated: false,
+                error: { isAxiosError: true, response: { status: 400, data: { error: { code: 200, error_subcode: 10 } } } },
+            } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            expect(handlePageTokenFailure).not.toHaveBeenCalled();
+            expect(result.partial).toBe(true);
+            expect(result.posts).toHaveLength(1);
         });
 
         it('maps instagram media (thumbnail preferred) and merges trigger state', async () => {

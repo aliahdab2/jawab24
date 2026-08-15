@@ -7,6 +7,7 @@ import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { withRetry } from '../utils/retry';
 import { isTokenRevoked, FacebookApiError } from '../utils/fbGraphErrors';
+import { clearReconnectAlertClaims } from './pageTokenRecovery';
 import { isDemoPlatformId } from '../utils/demo';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
@@ -184,6 +185,9 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                             updatedAt: new Date(),
                         })
                         .where(eq(pages.id, page.id));
+                    // Restored token = incident over; the reconnect-alert dedup
+                    // claims must not suppress the NEXT incident's alerts.
+                    clearReconnectAlertClaims(page.id, userId);
                     refreshed++;
                 } else {
                     // Page exists in our DB but is not in the user's /me/accounts

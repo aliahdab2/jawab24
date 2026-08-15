@@ -820,7 +820,14 @@ export class PostsService {
             // Facebook connection ended" (2026-08-14). Recover the token in-request
             // and read once more; `handlePageTokenFailure` alerts the merchant when
             // it cannot, and returns null for every non-token error.
-            const readError = published.error ?? scheduled.error;
+            //
+            // ONLY the published edge is a credential verdict. `/scheduled_posts`
+            // needs manage-level permission the published edge does not, so it can
+            // fail 200|10 while the same token is serving replies fine — and if the
+            // owner's USER token is also long dead, recovery would then clear a
+            // WORKING page token over a permission gap on an optional edge. A
+            // scheduled-only failure keeps its pre-existing answer: `partial: true`.
+            const readError = published.error;
             if (readError) {
                 const freshToken = await handlePageTokenFailure(page.id, readError);
                 if (freshToken) {

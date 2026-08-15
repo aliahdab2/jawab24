@@ -65,10 +65,14 @@ vi.mock('../../src/services/auditLog', () => ({
 
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn().mockResolvedValue('OK');
+// `del`: the token-restore paths release the reconnect-alert dedup claims
+// (pageTokenRecovery.clearReconnectAlertClaims) fire-and-forget.
+const mockRedisDel = vi.fn().mockResolvedValue(1);
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: (...args: unknown[]) => mockRedisGet(...args),
         set: (...args: unknown[]) => mockRedisSet(...args),
+        del: (...args: unknown[]) => mockRedisDel(...args),
     },
 }));
 

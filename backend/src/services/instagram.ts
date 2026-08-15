@@ -90,7 +90,13 @@ export class InstagramService {
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Instagram] API Error fetching media', { error: error.response?.data?.error?.message || error.message });
-                throw new Error(`Instagram API error: ${error.response?.data?.error?.message || error.message}`);
+                // `DmSendError.fromAxios`, not `new Error(...)`: same contract and
+                // reasoning as `replyToComment` below — a plain Error destroys the
+                // Graph code/subcode, which made `withPageTokenRetry` around this
+                // read (posts.ts) permanently inert: `classifyTokenFailure` saw an
+                // unclassifiable error and never re-minted. Message text preserved
+                // by `fromAxios`, so `.message` consumers are unaffected.
+                throw DmSendError.fromAxios(error, 'Instagram API error');
             }
             throw error;
         }

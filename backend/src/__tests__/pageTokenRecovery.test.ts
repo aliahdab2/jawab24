@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const {
-    mockRedisSet, mockRedisDel, mockRedisEval, mockSelect, mockUpdate, mockUpdateSet,
+    mockRedisSet, mockRedisDel, mockRedisEval, mockSelect, mockUpdate, mockUpdateSet, mockUpdateWhere,
     mockGetUserPages, mockDecrypt, mockEncrypt,
     mockNotifyWorkspace, mockNotifyUser, mockEmailSend, mockTemplate, mockCaptureError,
 } = vi.hoisted(() => ({
@@ -26,6 +26,8 @@ const {
     /** The `.set({...})` payload of each UPDATE, so tests can assert WHAT was
      *  written and not merely that something was. */
     mockUpdateSet: vi.fn(),
+    /** The `.where(...)` condition of each UPDATE — the CAS guard lives there. */
+    mockUpdateWhere: vi.fn(),
     mockGetUserPages: vi.fn(),
     mockDecrypt: vi.fn((t: string) => `decrypted:${t}`),
     mockEncrypt: vi.fn((t: string) => `encrypted:${t}`),
@@ -60,7 +62,7 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('../config', () => ({ config: { frontendUrl: 'https://jawab24.com' } }));
 
 import { AxiosError, AxiosHeaders } from 'axios';
-import { classifyTokenFailure, handlePageTokenFailure, markPageNeedsReconnect, withPageTokenRetry, withPageTokenRetryResult } from '../services/pageTokenRecovery';
+import { classifyTokenFailure, clearReconnectAlertClaims, handlePageTokenFailure, markPageNeedsReconnect, withPageTokenRetry, withPageTokenRetryResult } from '../services/pageTokenRecovery';
 import { FacebookApiError, DmSendError, classifyDmError } from '../utils/fbGraphErrors';
 
 const PAGE_ID = 'page-uuid-1';
@@ -97,7 +99,9 @@ function selectCycle(...rowSets: unknown[][]) {
 }
 
 const pageRow = (over: Record<string, unknown> = {}) => ({
-    id: PAGE_ID, userId: 'user-1', workspaceId: 'ws-1', name: 'الفريق الدمشقي', facebookPageId: FB_PAGE_ID, ...over,
+    id: PAGE_ID, userId: 'user-1', workspaceId: 'ws-1', name: 'الفريق الدمشقي', facebookPageId: FB_PAGE_ID,
+    // The ciphertext "read at recovery entry" — both destructive writes CAS on it.
+    accessToken: 'enc:stale-page-token', ...over,
 });
 const userRow = (over: Record<string, unknown> = {}) => ({ facebookAccessToken: 'enc:user-token', ...over });
 const ownerRow = { ownerEmail: 'owner@example.com', dashboardLanguage: 'ar' };
@@ -117,7 +121,10 @@ beforeEach(() => {
         claimedKeys.set(key, value);
         return 'OK';
     });
-    mockRedisDel.mockImplementation(async (key: string) => (claimedKeys.delete(key) ? 1 : 0));
+    // Variadic like real Redis DEL — `clearReconnectAlertClaims` deletes both
+    // dedup keys in one call.
+    mockRedisDel.mockImplementation(async (...keys: string[]) =>
+        keys.reduce((n, k) => n + (claimedKeys.delete(k) ? 1 : 0), 0));
     // `releaseMutex`'s Lua, faithfully: delete ONLY if we still hold the key. A
     // holder whose claim lapsed and was re-taken by someone else deletes nothing.
     mockRedisEval.mockImplementation(async (_script: string, _keyCount: number, key: string, token: string) => {
@@ -127,7 +134,10 @@ beforeEach(() => {
     });
     mockDecrypt.mockImplementation((t: string) => `decrypted:${t}`);
     mockEncrypt.mockImplementation((t: string) => `encrypted:${t}`);
-    mockUpdateSet.mockReturnValue({ where: async () => undefined });
+    // `.where().returning()` resolving one row = the CAS matched (the common case).
+    // Race tests override `mockUpdateWhere` with an empty array.
+    mockUpdateWhere.mockReturnValue({ returning: async () => [{ id: PAGE_ID }] });
+    mockUpdateSet.mockReturnValue({ where: mockUpdateWhere });
     mockUpdate.mockReturnValue({ set: mockUpdateSet });
     mockEmailSend.mockResolvedValue({ success: true, id: 'email-1' });
     mockTemplate.mockReturnValue({ subject: 'subj', html: '<html/>' });
@@ -267,6 +277,24 @@ describe('recovery', () => {
         // cooldown is genuinely free for the next failure".
         const evalResults = await Promise.all(mockRedisEval.mock.results.map(r => r.value));
         expect(evalResults).toContain(1);
+
+        // WHAT the success write carries, not merely that it happened: dropping
+        // `disconnectReason: null` (what un-flags the page for support triage and
+        // the reconnect UI) or `tokenLastVerifiedAt` previously survived 47/47.
+        expect(mockUpdateSet).toHaveBeenCalledWith(expect.objectContaining({
+            accessToken: 'encrypted:fresh-page-token',
+            disconnectReason: null,
+            tokenLastVerifiedAt: expect.any(Date),
+        }));
+
+        // A restored token ends the incident: both alert dedup claims must be
+        // released so a LATER revocation alerts again (the 190/459 checkpoint
+        // resolves on facebook.com with no Jawab24 re-auth — this is the only
+        // place that learns the credential came back).
+        expect(mockRedisDel).toHaveBeenCalledWith(
+            `fb:token:reconnect:alerted:${PAGE_ID}`,
+            'fb:token:reconnect:emailed:user-1',
+        );
     });
 
     it('does nothing at all for a non-token error', async () => {
@@ -751,5 +779,116 @@ describe('Redis outage', () => {
         // between an agency owner and one notice per dead page; it has to survive
         // the outage too, not just the happy path.
         expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('clearReconnectAlertClaims — reconnect must re-arm every channel', () => {
+    // The 24h dedup collapses repeats of ONE incident. Without a release on
+    // reconnect, a page that dies again inside the window alerts on NO channel:
+    // the card/push return at the alert claim, the email at the owner claim, the
+    // auto-pause counter never advances (webhooks skip a cleared page), and the
+    // 6h sweep excludes `access_token = ''` rows. This is the exact silence the
+    // module exists to end, reproduced by its own dedup.
+    it('revoke → alert → reconnect → revoke again inside 24h → alerts again on BOTH channels', async () => {
+        selectCycle([ownerRow]);
+
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+
+        // Same incident, repeat failure: suppressed — that is what the claims are for.
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+
+        // The merchant reconnects (controllers/pages.ts calls this on the token write).
+        clearReconnectAlertClaims(PAGE_ID, 'user-1');
+
+        // NEW incident inside the original 24h window: every channel must fire.
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(2);
+        expect(mockEmailSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the per-process fallback ledger too (Redis down for the whole cycle)', async () => {
+        selectCycle([ownerRow]);
+        mockRedisSet.mockRejectedValue(new Error('redis down'));
+
+        const page = pageRow({ id: 'relcl-page', userId: 'relcl-user' });
+        await markPageNeedsReconnect(page as never, 'password_changed');
+        await markPageNeedsReconnect(page as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+
+        clearReconnectAlertClaims('relcl-page', 'relcl-user');
+
+        await markPageNeedsReconnect(page as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('the CAS guard on the two destructive writes', () => {
+    /** Column names referenced by a drizzle condition — walks the SQL chunk tree.
+     *  Pins that the WHERE actually carries the CAS (`access_token`), which the
+     *  0-row tests below cannot: the mock returns whatever it is told regardless
+     *  of the condition's content. */
+    const columnNames = (cond: unknown): string[] => {
+        const out: string[] = [];
+        const walk = (c: unknown): void => {
+            if (!c || typeof c !== 'object') return;
+            const chunks = (c as { queryChunks?: unknown[] }).queryChunks;
+            if (Array.isArray(chunks)) chunks.forEach(walk);
+            const maybe = c as { name?: unknown; columnType?: unknown };
+            if (typeof maybe.name === 'string' && maybe.columnType) out.push(maybe.name);
+        };
+        walk(cond);
+        return out;
+    };
+
+    it('both writes compare-and-set on the token read at entry, not just the page id', async () => {
+        selectCycle([ownerRow]);
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(columnNames(mockUpdateWhere.mock.calls[0][0])).toEqual(expect.arrayContaining(['id', 'access_token']));
+
+        vi.clearAllMocks();
+        mockUpdateWhere.mockReturnValue({ returning: async () => [{ id: PAGE_ID }] });
+        mockUpdateSet.mockReturnValue({ where: mockUpdateWhere });
+        mockUpdate.mockReturnValue({ set: mockUpdateSet });
+        selectCycle([pageRow()], [userRow()]);
+        mockGetUserPages.mockResolvedValue({ data: [{ id: FB_PAGE_ID, access_token: 'fresh-page-token' }] });
+        await handlePageTokenFailure(PAGE_ID, passwordChangedError());
+        expect(columnNames(mockUpdateWhere.mock.calls[0][0])).toEqual(expect.arrayContaining(['id', 'access_token']));
+    });
+
+    it('does not alert — and does not burn the 24h claim — when a reconnect won the race', async () => {
+        selectCycle([ownerRow]);
+        // Zero rows back = the row no longer holds the token this verdict was
+        // formed on (the merchant reconnected during /me/accounts).
+        mockUpdateWhere.mockReturnValue({ returning: async () => [] });
+
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+
+        expect(mockNotifyWorkspace).not.toHaveBeenCalled();
+        expect(mockEmailSend).not.toHaveBeenCalled();
+        // The claim was NOT consumed by the aborted attempt: a genuine disconnect
+        // right after must still alert.
+        mockUpdateWhere.mockReturnValue({ returning: async () => [{ id: PAGE_ID }] });
+        await markPageNeedsReconnect(pageRow() as never, 'password_changed');
+        expect(mockNotifyWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-mint that loses the race still hands the caller a working token, but leaves the row and the claims alone', async () => {
+        selectCycle([pageRow()], [userRow()]);
+        mockGetUserPages.mockResolvedValue({ data: [{ id: FB_PAGE_ID, access_token: 'fresh-page-token' }] });
+        mockUpdateWhere.mockReturnValue({ returning: async () => [] });
+
+        const token = await handlePageTokenFailure(PAGE_ID, passwordChangedError());
+
+        // Our minted token is valid — the caller's retry should still use it.
+        expect(token).toBe('fresh-page-token');
+        // But the row belongs to whoever won, and their write path owns the
+        // claim release: no DEL from this side.
+        expect(mockRedisDel).not.toHaveBeenCalled();
+        expect(mockNotifyWorkspace).not.toHaveBeenCalled();
     });
 });

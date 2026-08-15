@@ -225,6 +225,36 @@ interface RecoverablePage {
     workspaceId: string | null;
     name: string | null;
     facebookPageId: string | null;
+    /** The stored ciphertext as read at recovery entry — the CAS guard on both
+     *  writes below, so a reconnect that lands mid-recovery is never overwritten. */
+    accessToken: string;
+}
+
+/**
+ * Forget the 24h alert/email dedup claims for a page whose token was just
+ * restored. Every restore path must call this: the claims exist to collapse
+ * repeats of ONE incident, and a working token ends that incident — a page that
+ * dies again afterwards is a NEW incident that must alert on every channel.
+ * Without this release, a re-revocation inside the 24h window is completely
+ * silent (no card, no push, no email).
+ *
+ * Blind DEL on purpose, unlike `releaseClaim`: any claim at these keys —
+ * however recently taken, by whichever process — refers to the pre-restore
+ * incident, so deleting it is always correct here. Fire-and-forget; a restore
+ * must never fail on Redis.
+ */
+export function clearReconnectAlertClaims(pageId: string, userId: string | null): void {
+    const keys = [alertDedupKey(pageId)];
+    if (userId) keys.push(emailDedupKey(userId));
+    for (const key of keys) releaseLocally(key);
+    // try/catch AROUND the call, not just `.catch()` on the promise: a broken
+    // client can throw synchronously, and a token-restore path must never fail
+    // on this release — an unreleased claim merely expires by TTL.
+    try {
+        redis.del(...keys).catch(() => {});
+    } catch {
+        // Claims fall back to their 24h TTL.
+    }
 }
 
 /**
@@ -271,6 +301,7 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
             workspaceId: pages.workspaceId,
             name: pages.name,
             facebookPageId: pages.facebookPageId,
+            accessToken: pages.accessToken,
         })
         .from(pages)
         .where(eq(pages.id, pageId))
@@ -333,7 +364,11 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
         return null;
     }
 
-    await db
+    // Compare-and-set on the ciphertext read at entry: the decision to write was
+    // made BEFORE the `/me/accounts` round trip, and a merchant reconnect can
+    // land inside it. Zero rows = someone else already wrote a fresh token; ours
+    // is still valid for the caller's retry, but the ROW is theirs.
+    const reminted = await db
         .update(pages)
         .set({
             accessToken: maybeEncryptToken(freshToken),
@@ -341,11 +376,23 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
             disconnectReason: null,
             updatedAt: new Date(),
         })
-        .where(eq(pages.id, pageId));
+        .where(and(eq(pages.id, pageId), eq(pages.accessToken, page.accessToken)))
+        .returning({ id: pages.id });
 
     // Recovery worked, so release the damper: a genuinely new failure minutes
     // from now deserves its own immediate attempt rather than a 5-minute wait.
     await releaseClaim(cooldownKey(pageId), cooldownToken);
+
+    if (reminted.length === 0) {
+        logger.info('[PageTokenRecovery] Re-mint lost the race to a concurrent token write — row left as-is', { pageId, cause });
+        return freshToken;
+    }
+
+    // A working token ends the incident, so the merchant must be alertable again
+    // at once. This matters beyond the reconnect flow: a 190/459 security
+    // checkpoint is resolved on facebook.com with no Jawab24 re-auth, so THIS is
+    // the only place that learns the credential came back.
+    clearReconnectAlertClaims(pageId, page.userId);
 
     logger.info('[PageTokenRecovery] Page token re-minted from /me/accounts', { pageId, cause });
     return freshToken;
@@ -487,10 +534,24 @@ export async function markPageNeedsReconnect(page: RecoverablePage, cause: Token
         //
         // Idempotent, so repeating it costs one UPDATE — and it is reached at
         // most once per RECOVERY_COOLDOWN_SECONDS per page anyway.
-        await db
+        //
+        // Compare-and-set on the ciphertext read at recovery entry. The verdict
+        // "this credential is dead" was formed before a network round trip; if
+        // the merchant completed a reconnect inside it (the 2026-08-14 pattern —
+        // the owner was re-logging in DURING the failure storm), the row now
+        // holds a fresh token this verdict says nothing about. Zero rows = the
+        // race was lost: leave the row alone and say nothing to the merchant —
+        // their page works. Idempotency survives the guard: a repeat pass reads
+        // the already-cleared '' at entry and '' == '' still matches.
+        const cleared = await db
             .update(pages)
             .set({ accessToken: '', disconnectReason: 'token_revoked', updatedAt: new Date() })
-            .where(eq(pages.id, page.id));
+            .where(and(eq(pages.id, page.id), eq(pages.accessToken, page.accessToken)))
+            .returning({ id: pages.id });
+        if (cleared.length === 0) {
+            logger.info('[PageTokenRecovery] Disconnect skipped — a concurrent write restored the token first', { pageId: page.id, cause });
+            return;
+        }
 
         // Only the NOTIFICATION is deduped — per page per day. Redis down
         // degrades to the per-process ledger rather than to no dedup: a duplicate

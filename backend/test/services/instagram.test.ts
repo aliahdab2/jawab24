@@ -124,6 +124,25 @@ describe('InstagramService', () => {
             await expect(service.getMedia('ig-123', pageAccessToken))
                 .rejects.toThrow('Instagram API error: Rate limited');
         });
+
+        it('preserves the Graph code/subcode on failure — token recovery reads exactly these', async () => {
+            // A plain `new Error(...)` here made the posts.ts retry wrapper
+            // permanently inert: classifyTokenFailure saw an unclassifiable error
+            // and never re-minted, so the picker still 500'd on a revoked token.
+            const error = new Error('fail');
+            (error as any).response = { data: { error: {
+                message: 'Error validating access token', code: 190, error_subcode: 460, type: 'OAuthException',
+            } } };
+            mockedAxios.get.mockRejectedValue(error);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            let thrown: unknown;
+            try { await service.getMedia('ig-123', pageAccessToken); } catch (e) { thrown = e; }
+            expect(thrown).toBeInstanceOf(DmSendError);
+            expect((thrown as DmSendError).code).toBe(190);
+            expect((thrown as DmSendError).subcode).toBe(460);
+            expect(isTokenRevoked(thrown)).toBe(true);
+        });
     });
 
     describe('getComments', () => {

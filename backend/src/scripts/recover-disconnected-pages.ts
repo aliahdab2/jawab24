@@ -37,6 +37,7 @@ import { eq, sql } from 'drizzle-orm';
 import { facebookService } from '../services/facebook';
 import { maybeDecryptToken, maybeEncryptToken } from '../services/facebookCrypto';
 import { FacebookApiError, isTokenRevoked } from '../utils/fbGraphErrors';
+import { clearReconnectAlertClaims } from '../services/pageTokenRecovery';
 
 interface Args {
     apply: boolean;
@@ -187,6 +188,9 @@ async function recoverUser(user: AffectedUser, apply: boolean): Promise<Recovery
                     updatedAt: new Date(),
                 })
                 .where(eq(pages.id, dbPage.id));
+            // Same contract as every other token-restore site: release the
+            // reconnect-alert dedup claims so a later re-revocation alerts.
+            clearReconnectAlertClaims(dbPage.id, user.userId);
         }
         updated++;
     }
