@@ -1061,10 +1061,17 @@ export class CommentProcessor {
                 replyCta: opts.replyCta,
                 tagCommenter: opts.tagCommenter,
             }),
-            // The whole dmFailure, not its bucket: it carries the Graph
+            // The whole failure object, not its bucket: it carries the Graph
             // code/subcode that tells a dead credential from a page Facebook is
             // simply rejecting.
-            (r) => (r.success ? undefined : r.dmFailure),
+            //
+            // ⚠️ `publicFailure` is not optional garnish — it is the DEFAULT mode.
+            // `commentReplyMode` defaults to 'public' (schema.ts, workspaceSettings,
+            // and the adapter's own `|| 'public'`), and a public post produces no
+            // `dmFailure` because no DM is attempted. Reading `dmFailure` alone made
+            // this whole retry inert for every pre-existing workspace — the fix
+            // present, tested, and doing nothing on the path it was written for.
+            (r) => (r.success ? undefined : (r.dmFailure ?? r.publicFailure)),
         );
 
         if (!sendResult.success) {
@@ -1075,7 +1082,17 @@ export class CommentProcessor {
             // The whole dmFailure (not just its bucket): it carries the Graph
             // code/subcode, which is what tells a revoked credential — re-mintable
             // in one call — apart from a page Facebook simply keeps rejecting.
-            void recordSendFailure(pageId, sendResult.dmFailure?.bucket, undefined, sendResult.dmFailure);
+            // The BUCKET stays `dmFailure`-only on purpose: a public post has never
+            // carried one, so it counts as `no_bucket` (page-level) exactly as before.
+            // Widening it here would quietly change which failures reach the auto-pause
+            // threshold. Only the 4th argument — the recovery signal — gains the public
+            // failure, so a revoked credential is re-minted on the default path too.
+            void recordSendFailure(
+                pageId,
+                sendResult.dmFailure?.bucket,
+                undefined,
+                sendResult.dmFailure ?? sendResult.publicFailure,
+            );
             // Flag the comment so it surfaces in "Needs Attention" — previously it stayed
             // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
             // Swallow a secondary DB error here: we already failed to send, the SSE event

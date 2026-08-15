@@ -1087,6 +1087,15 @@ describe('Facebook Service', () => {
             // CREDENTIAL from a Graph blip and start recovery. Discarding it is what
             // made the 2026-08-14 outage look like "this page has no posts".
             expect(result.error).toBeDefined();
+            // …and it is REPORTED. The caller degrades to "no scheduled posts", so
+            // without this the failure is invisible on both sides. Pinned here
+            // because this edge's reporting moved into the shared
+            // `reportGraphReadFailure` helper — a refactor that silently dropped it
+            // would otherwise leave every test green.
+            expect(Sentry.captureMessage).toHaveBeenCalledWith(
+                'Failed to list scheduled posts',
+                expect.objectContaining({ fingerprint: ['fb-scheduled-posts-read-failed', 'page_123'] }),
+            );
         });
 
         it('reports truncated when the edge fills the limit, rather than capping silently', async () => {

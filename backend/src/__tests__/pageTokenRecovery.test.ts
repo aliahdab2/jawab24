@@ -253,8 +253,20 @@ describe('recovery', () => {
             expect.stringContaining('redis.call("del"'),
             1,
             `fb:token:recovery:cooldown:${PAGE_ID}`,
-            expect.any(String),
+            // The token we were GIVEN, not `expect.any(String)`. A CAS release with
+            // the wrong token deletes nothing and reports false — and because
+            // `releaseClaim` discards that boolean, an any-string assertion cannot
+            // tell a real release from a silent no-op. This is a new failure mode:
+            // the previous bare `redis.del` could not fail this way.
+            mockRedisSet.mock.calls.find(c => c[0] === `fb:token:recovery:cooldown:${PAGE_ID}`)?.[1],
         );
+        // …and the EFFECT. The fake implements the real Lua faithfully, so it
+        // answers 1 only when the token MATCHED and the key was actually deleted;
+        // a mismatched token answers 0 and deletes nothing. Comparing the resolved
+        // value is the difference between "a release was attempted" and "the
+        // cooldown is genuinely free for the next failure".
+        const evalResults = await Promise.all(mockRedisEval.mock.results.map(r => r.value));
+        expect(evalResults).toContain(1);
     });
 
     it('does nothing at all for a non-token error', async () => {
@@ -592,6 +604,29 @@ describe('withPageTokenRetryResult', () => {
         const { accessToken } = await withPageTokenRetryResult(PAGE_ID, 'good-token', call, failureOf);
 
         expect(call).toHaveBeenCalledTimes(1);
+        expect(accessToken).toBe('good-token');
+        expect(mockGetUserPages).not.toHaveBeenCalled();
+    });
+
+    it('treats a NULL failure as success — one call, original result, no re-mint', async () => {
+        // Pins the CONTRACT: `failureOf` may say "nothing wrong" with either
+        // `undefined` or `null`, and both mean the send stands as-is.
+        //
+        // ⚠️ It does NOT pin the `|| failure === null` half of the guard, and no
+        // test can: dropping it lets `null` reach `handlePageTokenFailure`, which
+        // classifies it to `null` and returns before touching Redis or Graph — so
+        // the result, the token, the call count and `getUserPages` are all
+        // identical either way. Verified by mutation: removing that half leaves
+        // the suite green. It is a true equivalent mutation, and the guard earns
+        // its place by making the contract legible, not by changing behaviour.
+        // Claiming otherwise here would be the vacuous-assertion trap this file
+        // exists to avoid.
+        const call = sendOf().mockResolvedValue(ok);
+
+        const { result, accessToken } = await withPageTokenRetryResult(PAGE_ID, 'good-token', call, () => null);
+
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(result).toBe(ok);
         expect(accessToken).toBe('good-token');
         expect(mockGetUserPages).not.toHaveBeenCalled();
     });
