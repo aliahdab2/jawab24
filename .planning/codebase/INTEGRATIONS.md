@@ -12,7 +12,7 @@
   - Access token stored encrypted (AES-256-GCM) in database
   - Token refresh: automatic background cron job every 6 hours (`/backend/src/services/tokenRefresh.ts`) — verifies tokens via Facebook debug_token API, re-fetches fresh page tokens if valid
   - **Live recovery (2026-08-14, `/backend/src/services/pageTokenRecovery.ts`)**: the cron alone left a window of up to 6h — a page token dies the moment the merchant changes their Facebook password (Graph `190/460`), and every call in between fails while the DB row still looks healthy. So the FIRST Graph call that hits a token-revoked code now re-mints that page's token from `/me/accounts` in-request and the caller retries once. When the user session is dead too (the password case, where re-minting cannot work), the page is marked disconnected and the merchant is told **which of the five causes** it was — in-app to the workspace and push **per page**, email to the page owner **at most once per owner per day**. The email is owner-scoped, not page-scoped, because the cause is: one revoked session kills every page token minted from it at the same instant, so a page-scoped dedup would mail an agency owner one identical notice per dead page. Guards: 5-min per-page Redis cooldown on FAILED attempts (released on success), in-process single-flight, a 24h per-page alert dedup, and a 24h per-owner email dedup — one dead token produced 36+ failing calls in 11 minutes in production. Both dedup claims are **released the moment a working token is written back** (`clearReconnectAlertClaims`, called from every restore path: page sync/reclaim, the 6h sweep's re-mint, recovery's own re-mint, and the ops recovery script), so a page that dies again after a reconnect alerts on every channel — the claims collapse repeats of ONE incident, never the next one. Both destructive writes (the clear and the re-mint) are compare-and-set on the ciphertext read at recovery entry, so a reconnect completing during the `/me/accounts` round trip can never be overwritten by the stale verdict. Every Redis claim falls back to a per-process ledger when Redis is unreachable, rather than failing fully open (both guards failing open at once is that same storm). Wired at the picker read path (`posts.listPublishedPosts` — both the fail-soft Facebook reads and the THROWING Instagram read, which shares the same page token) and the reply send path, where `messageProcessor` re-mints and **retries the send once** before booking a lost reply, with `pageAutoPause.recordSendFailure` as the fallback trigger. NOT covered: comment/message ingestion reads.
-    - ⛔ **WhatsApp is structurally excluded, not merely uncovered.** It sits on the same `pages` row but carries `whatsapp_access_token`, a separate credential on Meta's forced 60-day clock with its own health cron (`whatsappTokenHealth.ts`) and its own reconnect notice (`whatsappAdapter` → `markWhatsAppNeedsReconnect`). Meta answers an expired WABA token with code **190 too**, so the exclusion is enforced by `pageAutoPause.ownsFacebookCredential(platform)` at the choke point rather than left to callers: without it, a WhatsApp expiry would run Facebook page-token recovery, and — when the user session is also gone — clear `pages.access_token` and mail the merchant "reconnect your Facebook page" to explain a WhatsApp outage. Instagram is the opposite case and IS included: it is columns on the page row, not a separate credential, so one revoked session kills both.
+    - ⛔ **WhatsApp is structurally excluded, not merely uncovered.** It sits on the same `pages` row but carries `whatsapp_access_token`, a separate credential on Meta's forced 60-day clock with its own health cron (`whatsappTokenHealth.ts`) and its own reconnect notice (`whatsappAdapter` → `markWhatsAppNeedsReconnect`). Meta answers an expired WABA token with code **190 too**, so the exclusion is enforced by `pageAutoPause.ownsFacebookCredential(platform)` at the choke point rather than left to callers: without it, a WhatsApp expiry would run Facebook page-token recovery, and — when the user session is also gone — clear `pages.access_token` and mail the merchant "reconnect your Facebook page" to explain a WhatsApp outage. Page-linked Instagram is the opposite case and IS included: it is columns on the page row, not a separate credential, so one revoked session kills both. **Instagram-DIRECT (Instagram Login) is excluded for the same reason as WhatsApp** — see the section below.
 
 - **Meta App Review — Permission Status**:
   - ✅ `pages_messaging` — Approved (2026-03-21) — send/receive Messenger DMs
@@ -25,8 +25,55 @@
   - ✅ `instagram_basic` — Approved (2026-04-07) — Instagram account access
   - ✅ `instagram_manage_comments` — Approved (2026-04-07) — reply to Instagram comments
   - ✅ `instagram_manage_messages` — Approved (2026-04-07) — Instagram DMs
-  - ⏳ `instagram_business_basic` — Not yet submitted
-  - ⏳ `instagram_business_manage_messages` — Not yet submitted
+  - ⏳ `instagram_business_basic` — Not yet submitted (Instagram-direct; text ready at `.planning/IG_LOGIN_APP_REVIEW.md`)
+  - ⏳ `instagram_business_manage_messages` — Not yet submitted (Instagram-direct)
+  - ⏳ `instagram_business_manage_comments` — Not yet submitted (Instagram-direct)
+
+### Instagram-direct — "Instagram API with Instagram Login" (no Facebook Page)
+
+A professional (Business/Creator) Instagram account can connect with its OWN
+credentials, no Facebook Page involved. **Separate Meta app credentials**
+(`INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` / `INSTAGRAM_APP_REDIRECT_URI`,
+`config.instagram`) — never the Facebook app's. The whole feature is dark unless
+all three are set (`instagramLoginService.isConfigured`), and Standard Access
+covers our own test accounts, so App Review gates external merchants only.
+
+- **The row**: `facebook_page_id NULL`, `access_token ''`, and the credential in
+  the encrypted `instagram_access_token` (+ `instagram_token_expires_at`,
+  migration 0169). A row is Instagram-direct when it has that token AND no
+  Facebook Page — both halves, so an existing Page-linked page is never silently
+  moved onto the new host. Connect refuses to create the hybrid at all
+  (`connectInstagramDirect` → `alreadyLinked`).
+- **OAuth**: instagram.com dialog → code → short-lived (1h) → long-lived (60d) at
+  graph.instagram.com. Follows Rule 17b: the app opens the instagram.com URL as
+  the tab's FIRST document, the return leg SERVES A PAGE that navigates to the
+  `/auth/app-sync` App Link (never a 302), and replay defence is single-use state
+  in Redis (cookie jars don't cross app↔browser).
+- **Host and token travel together.** Every Instagram Graph call takes an
+  `InstagramCredential` (`services/instagramCredential.ts`) — `{accessToken,
+  baseUrl, direct}` — rather than a bare token string, so a call site cannot hand
+  an Instagram User token to graph.facebook.com. `resolveInstagramCredential` is
+  the single decision point (Rule 19: no forked reply logic; adapters only).
+  Endpoints are path-identical across the two hosts EXCEPT the messages edge:
+  Instagram Login uses `POST /{ig-id}/messages`, page-linked keeps `/me/messages`
+  (`instagramMessagesEndpoint`; verified against Meta's docs 2026-08-16).
+- **Webhooks need a PER-ACCOUNT subscription.** The app-level `instagram`
+  subscription only declares which fields the app may receive; each professional
+  account must additionally install the app on itself —
+  `POST graph.instagram.com/{ig-id}/subscribed_apps?subscribed_fields=messages,comments`,
+  called at connect (`instagramLoginService.subscribeToWebhooks`). Without it the
+  connect looks healthy and not one message arrives. A failed subscription is
+  REPORTED, not assumed: the return page carries `igWarn=webhooks` and the
+  merchant is told to reconnect.
+- **Token lifecycle**: 60-day clock like WhatsApp's, refreshed daily by
+  `startInstagramTokenRefreshCron` → `runRefreshSweep` (10-day window, per-row
+  failure isolation).
+- ⛔ **Excluded from Facebook page-token recovery**, for the same reason WhatsApp
+  is: there is no Facebook Page to re-mint from. Enforced at the choke point —
+  `recoverPageToken` requires a `facebook_page_id` — and at
+  `pageAutoPause.ownsFacebookCredential(platform, page)` on the DM send path.
+  Without it an Instagram-direct send failure would run `/me/accounts` and mail
+  the merchant "reconnect your Facebook page" to explain an Instagram outage.
 
 - **Webhook Setup** (for incoming messages/comments):
   - Endpoint: `/webhook` (POST)

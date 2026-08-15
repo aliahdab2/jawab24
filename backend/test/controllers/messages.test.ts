@@ -60,6 +60,7 @@ import { pagesService } from '../../src/services/pages';
 import { conversationsService } from '../../src/services/conversations';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
 import { whatsappService } from '../../src/services/whatsapp';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 
@@ -472,7 +473,7 @@ describe('MessagesController', () => {
 
             await messagesController.reply(mockRequest as any, mockReply as any);
 
-            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-123', 'sender-1', 'Thank you!', 'token-123');
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-123', 'sender-1', 'Thank you!', pageLinkedInstagramCredential('token-123'));
         });
 
         it('should send reply via WhatsApp with the WABA token (never the FB path)', async () => {
@@ -779,7 +780,7 @@ describe('MessagesController', () => {
 
             await messagesController.replyToConversation(mockRequest as any, mockReply as any);
 
-            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-acc-1', 'sender-1', 'Hello', 'token-123');
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-acc-1', 'sender-1', 'Hello', pageLinkedInstagramCredential('token-123'));
             expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
         });
 

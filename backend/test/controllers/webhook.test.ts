@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
 import crypto from 'crypto';
 import fastify, { type FastifyRequest } from 'fastify';
 import webhookRoutes from '../../src/routes/webhook';
@@ -1385,7 +1386,55 @@ describe('Webhook Controller', () => {
             expect(mockSendDirectMessage).toHaveBeenCalledWith(
                 'ig_account_123', 'ig_user_789',
                 expect.stringContaining('الرسائل النصية'),
-                mockPage.accessToken,
+                pageLinkedInstagramCredential(mockPage.accessToken),
+            );
+        });
+
+        // An Instagram LOGIN page keeps `access_token` at the '' sentinel and holds
+        // its real credential in `instagram_access_token`. The handler used to guard
+        // on `page.accessToken`, which silently dropped every voice note, image and
+        // sticker such a page received — the attachment never even reached the inbox.
+        // Mutation-checked: restoring `if (!page?.accessToken) return;` fails here.
+        it('handles Instagram non-text DMs on an Instagram-DIRECT page (empty page token)', async () => {
+            mockGetPageByInstagramId.mockResolvedValue({
+                ...mockPage,
+                accessToken: '',
+                facebookPageId: null,
+                instagramAccessToken: 'ig-direct-token',
+            });
+            mockRedisSet.mockResolvedValueOnce('OK');
+
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [{
+                    id: 'ig_account_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'ig_user_789' },
+                        message: { mid: 'msg_voice_2', attachments: [{ type: 'video' }] },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // The attachment reaches the merchant inbox…
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, mockPage.workspaceId, 'msg_voice_2', 'ig_user_789', '[فيديو]', undefined, 'video', undefined, undefined,
+            );
+            // …and the nudge goes out on the INSTAGRAM credential, not the empty one.
+            expect(mockSendDirectMessage).toHaveBeenCalledWith(
+                'ig_account_123', 'ig_user_789',
+                expect.stringContaining('الرسائل النصية'),
+                expect.objectContaining({ accessToken: 'ig-direct-token', direct: true }),
             );
         });
 

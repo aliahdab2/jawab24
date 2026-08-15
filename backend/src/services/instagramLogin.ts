@@ -34,10 +34,21 @@ export const INSTAGRAM_LOGIN_SCOPES = [
     'instagram_business_manage_comments',
 ] as const;
 
+/**
+ * Webhook fields this app wants on each connected Instagram Login account.
+ *
+ * Mirrors the app-level `instagram` subscription in `metaWebhooks.ts` — the two
+ * must stay in step, because the app-level subscription says WHICH events this
+ * app may receive and the per-account one below says FOR WHICH ACCOUNT.
+ */
+const WEBHOOK_FIELDS = 'messages,comments';
+
 /** Refresh tokens expiring within this window. Wide enough for several sweeps. */
 const REFRESH_BEFORE_EXPIRY_MS = 10 * 24 * 60 * 60 * 1000; // 10 days
 /** Delay between per-account Graph calls so the sweep can't hammer Meta. */
 const PER_ACCOUNT_DELAY_MS = 1000;
+/** How often the refresh sweep runs. Tokens live 60 days; daily is ample. */
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export class InstagramLoginError extends Error {
     constructor(message: string, public readonly code: string) {
@@ -173,6 +184,52 @@ export const instagramLoginService = {
     },
 
     /**
+     * Subscribe THIS Instagram account to our webhooks.
+     *
+     * Not optional and not a nicety: for Instagram Login, the app-level
+     * `instagram` subscription only declares which fields the app may receive —
+     * each professional account must additionally install the app on itself
+     * (`POST /{ig-id}/subscribed_apps`, verified against Meta's docs 2026-08-16).
+     * Without this call the connect succeeds, the page appears healthy, and not
+     * one message or comment ever arrives: the silent-channel failure mode this
+     * codebase has now paid for on Instagram twice.
+     *
+     * Returns whether the subscription is confirmed. Never throws — a merchant
+     * who reached this point has a valid credential, and losing that to a
+     * transient Graph error would be worse than a channel we can re-subscribe.
+     * The caller records the outcome so a false is visible rather than assumed.
+     */
+    async subscribeToWebhooks(instagramUserId: string, token: string, logger: Logger = noopLogger): Promise<boolean> {
+        try {
+            const { data } = await axios.post(
+                `${GRAPH_BASE}/${config.facebook.graphApiVersion}/${instagramUserId}/subscribed_apps`,
+                null,
+                {
+                    params: { subscribed_fields: WEBHOOK_FIELDS, access_token: token },
+                    timeout: 15_000,
+                },
+            );
+            const ok = data?.success === true;
+            if (!ok) {
+                captureError(
+                    new InstagramLoginError('subscribed_apps did not return success', 'SUBSCRIBE_NOT_CONFIRMED'),
+                    'Instagram-direct webhook subscription unconfirmed',
+                    { tags: { service: 'instagram-login' }, extra: { instagramUserId, response: data } },
+                );
+            } else {
+                logger.info(`[InstagramLogin] Webhooks subscribed for ${instagramUserId}`);
+            }
+            return ok;
+        } catch (error) {
+            captureError(error, 'Instagram-direct webhook subscription failed', {
+                tags: { service: 'instagram-login' },
+                extra: { instagramUserId },
+            });
+            return false;
+        }
+    },
+
+    /**
      * Refresh sweep for Instagram-direct tokens nearing expiry. Mirrors the
      * WhatsApp token-health discipline: failures are captured per-row and never
      * abort the sweep; a row whose refresh fails keeps its token so the next
@@ -217,6 +274,35 @@ export const instagramLoginService = {
         return { refreshed, failed };
     },
 };
+
+let sweepHandle: NodeJS.Timeout | null = null;
+
+/**
+ * Daily refresh sweep. Dark unless Instagram-direct is configured — a deployment
+ * without the Instagram app credentials has no such rows and no reason to wake.
+ *
+ * No sweep on boot: `runRefreshSweep` only touches rows inside a 10-day window of
+ * a 60-day token, so the first scheduled run is always early enough, and a restart
+ * loop must not turn into a burst of Graph calls.
+ */
+export function startInstagramTokenRefreshCron(logger: Logger = noopLogger): void {
+    if (sweepHandle || !instagramLoginService.isConfigured()) return;
+    logger.info(`[InstagramLogin] Refresh cron started — sweeps every ${SWEEP_INTERVAL_MS / 3600000}h`);
+    sweepHandle = setInterval(() => {
+        instagramLoginService.runRefreshSweep(logger).catch(err => {
+            captureError(err, 'Instagram-direct token refresh cron failed', {
+                tags: { service: 'instagram-login' },
+            });
+        });
+    }, SWEEP_INTERVAL_MS);
+}
+
+export function stopInstagramTokenRefreshCron(): void {
+    if (sweepHandle) {
+        clearInterval(sweepHandle);
+        sweepHandle = null;
+    }
+}
 
 function toLongLived(data: unknown): LongLivedToken {
     const d = data as { access_token?: string; expires_in?: number };

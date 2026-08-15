@@ -5,6 +5,7 @@ import { eq, desc, and, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
+import { resolveInstagramCredential, pageLinkedInstagramCredential } from './instagramCredential';
 import { notificationService } from './notifications';
 import { imageStorage } from './imageStorage';
 import { config } from '../config';
@@ -887,14 +888,27 @@ export class PostsService {
 
         if (!page.instagramAccountId) return { posts: [], nextCursor: null, partial: false };
         const instagramAccountId = page.instagramAccountId;
-        // Instagram rides the SAME page token as Facebook (IG is columns on the page
-        // row, not a separate credential), so one revoked session kills both. Unlike
-        // the Facebook reads above this one THROWS — the controller turns it into a
-        // 500 and the app shows «حدث خطأ ما» — so it gets the wrapper rather than the
-        // fail-soft treatment: re-mint once, retry once, otherwise rethrow untouched.
-        const { media, nextCursor } = await withPageTokenRetry(page, accessToken =>
-            instagramService.getMedia(instagramAccountId, accessToken, { limit, after: opts.after }),
-        );
+        // Page-linked Instagram rides the SAME page token as Facebook (IG is columns
+        // on the page row, not a separate credential), so one revoked session kills
+        // both. Unlike the Facebook reads above this one THROWS — the controller turns
+        // it into a 500 and the app shows «حدث خطأ ما» — so it gets the wrapper rather
+        // than the fail-soft treatment: re-mint once, retry once, otherwise rethrow
+        // untouched.
+        //
+        // An Instagram Login page has no Facebook Page to re-mint from, so the wrapper
+        // there would spend a Redis cooldown claim and a DB read on a recovery that
+        // always returns null. It runs the call directly on its own credential; the
+        // 60-day token is kept alive by `instagramLoginService.runRefreshSweep`.
+        const cred = resolveInstagramCredential(page);
+        const { media, nextCursor } = cred.direct
+            ? await instagramService.getMedia(instagramAccountId, cred, { limit, after: opts.after })
+            : await withPageTokenRetry(page, accessToken =>
+                instagramService.getMedia(
+                    instagramAccountId,
+                    pageLinkedInstagramCredential(accessToken),
+                    { limit, after: opts.after },
+                ),
+            );
         const triggers = await this.instagramTriggerMap(media.map(m => m.id));
         return {
             posts: media.map(m => ({

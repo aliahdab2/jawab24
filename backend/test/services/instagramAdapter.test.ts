@@ -35,6 +35,13 @@ vi.mock('../../src/services/messages', () => ({
     },
 }));
 
+// Mock the shared Meta send helpers — product cards must not reach real axios,
+// and the endpoint they receive is the assertion that matters for Instagram-direct.
+vi.mock('../../src/services/metaMessaging', () => ({
+    sendMetaProductCards: vi.fn().mockResolvedValue('card-msg-id'),
+    buildMessagePayload: vi.fn((recipientId: string, message: unknown) => ({ recipient: { id: recipientId }, message })),
+}));
+
 // Mock conversations service — canonical sender-name store.
 vi.mock('../../src/services/conversations', () => ({
     conversationsService: {
@@ -46,6 +53,10 @@ vi.mock('../../src/services/conversations', () => ({
 const mockedAxios = vi.mocked(axios, true);
 
 import { InstagramMessageAdapter } from '../../src/services/reply/adapters/instagramAdapter';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
+import { pagesService } from '../../src/services/pages';
+import { instagramService } from '../../src/services/instagram';
+import { sendMetaProductCards } from '../../src/services/metaMessaging';
 import { messagesService } from '../../src/services/messages';
 import { conversationsService } from '../../src/services/conversations';
 
@@ -194,13 +205,13 @@ describe('InstagramMessageAdapter', () => {
         it('sendTypingIndicator delegates to instagramService with account id + token', async () => {
             const { instagramService } = await import('../../src/services/instagram');
             await adapter.sendTypingIndicator(mockPage, 'recipient-1');
-            expect(instagramService.sendTypingIndicator).toHaveBeenCalledWith('ig-account-1', 'recipient-1', 'ig-token');
+            expect(instagramService.sendTypingIndicator).toHaveBeenCalledWith('ig-account-1', 'recipient-1', pageLinkedInstagramCredential('ig-token'));
         });
 
         it('sendTypingOff delegates to instagramService with account id + token', async () => {
             const { instagramService } = await import('../../src/services/instagram');
             await adapter.sendTypingOff(mockPage, 'recipient-1');
-            expect(instagramService.sendTypingOff).toHaveBeenCalledWith('ig-account-1', 'recipient-1', 'ig-token');
+            expect(instagramService.sendTypingOff).toHaveBeenCalledWith('ig-account-1', 'recipient-1', pageLinkedInstagramCredential('ig-token'));
         });
 
         it('sendTypingOff no-ops when platformAccountId is missing', async () => {
@@ -209,5 +220,73 @@ describe('InstagramMessageAdapter', () => {
             await adapter.sendTypingOff({ ...mockPage, platformAccountId: undefined }, 'recipient-1');
             expect(instagramService.sendTypingOff).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('InstagramMessageAdapter — Instagram-direct routing', () => {
+    const adapter = new InstagramMessageAdapter();
+
+    const directRow = {
+        id: 'page-uuid-direct',
+        userId: 'u1',
+        workspaceId: 'ws1',
+        name: '@shop',
+        // The '' sentinel: an Instagram Login row has no Facebook page token.
+        accessToken: '',
+        facebookPageId: null,
+        instagramAccessToken: 'ig-direct-token',
+        instagramAccountId: 'ig-acct-9',
+        instagramAutoReplyEnabled: true,
+        knowledgeBase: null,
+        kbActiveVersion: null,
+        ecommerceStoreId: null,
+        businessProfile: null,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(directRow as never);
+    });
+
+    // `accessToken` on a PlatformPage means "the credential THIS platform sends
+    // with" — the contract the WhatsApp adapter already follows. Without it every
+    // downstream reader (sender-name lookup, product cards, reply image) would be
+    // handed the '' sentinel.
+    it('getPage puts the Instagram User token on the page and marks the credential direct', async () => {
+        const page = await adapter.getPage('ig-acct-9');
+
+        expect(page?.accessToken).toBe('ig-direct-token');
+        expect(page?.instagramCredential).toEqual({
+            accessToken: 'ig-direct-token',
+            baseUrl: 'https://graph.instagram.com/v18.0',
+            direct: true,
+        });
+    });
+
+    // Mutation-checked: sending `page.accessToken` instead of the credential, or
+    // resolving the credential as page-linked, fails this.
+    it('sendReply issues the DM on the Instagram credential, not the Facebook one', async () => {
+        const page = await adapter.getPage('ig-acct-9');
+        await adapter.sendReply(page!, 'customer-1', 'أهلاً بك');
+
+        expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
+            'ig-acct-9', 'customer-1', 'أهلاً بك',
+            expect.objectContaining({ accessToken: 'ig-direct-token', direct: true }),
+        );
+    });
+
+    // Product cards ride the shared Meta helper, which defaults to
+    // graph.facebook.com/me/messages — the one place an Instagram-direct send could
+    // silently leak back onto the Facebook host.
+    it('sendProductCards targets /{ig-id}/messages on the Instagram host', async () => {
+        const page = await adapter.getPage('ig-acct-9');
+        await adapter.sendProductCards!(page!, 'customer-1', [
+            { title: 'حقيبة', imageUrl: 'https://cdn/x.jpg', price: '10' } as never,
+        ]);
+
+        expect(sendMetaProductCards).toHaveBeenCalledWith(
+            'ig-direct-token', 'customer-1', expect.any(Array), undefined,
+            'https://graph.instagram.com/v18.0/ig-acct-9/messages',
+        );
     });
 });

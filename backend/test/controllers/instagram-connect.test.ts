@@ -11,6 +11,7 @@ vi.mock('../../src/services/instagramLogin', () => ({
         isConfigured: vi.fn().mockReturnValue(true),
         buildAuthorizeUrl: vi.fn((state: string) => `https://www.instagram.com/oauth/authorize?state=${state}`),
         completeConnect: vi.fn(),
+        subscribeToWebhooks: vi.fn().mockResolvedValue(true),
     },
     InstagramLoginError: class InstagramLoginError extends Error {
         constructor(message: string, public readonly code: string) { super(message); }
@@ -54,6 +55,7 @@ describe('Instagram connect flow', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         vi.mocked(instagramLoginService.isConfigured).mockReturnValue(true);
+        vi.mocked(instagramLoginService.subscribeToWebhooks).mockResolvedValue(true);
         vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5 } as never);
         app = fastify();
         app.register(instagramConnectRoutes);
@@ -115,6 +117,49 @@ describe('Instagram connect flow', () => {
             expect(pagesService.connectInstagramDirect).toHaveBeenCalledWith('ws_1', 'owner_1', PROFILE, TOKEN);
             expect(response.payload).toContain('/auth/app-sync');
             expect(response.payload).toContain('instagramConnected%3D1');
+        });
+
+        // Instagram Login delivers nothing until the account installs the app on
+        // itself, so a connect that skipped this would look healthy and answer no
+        // one. Mutation-checked: removing the subscribeToWebhooks call fails here.
+        it('subscribes the new account to webhooks with its own Instagram token', async () => {
+            vi.mocked(consumeSingleUse).mockResolvedValue(VALID_STATE);
+            vi.mocked(instagramLoginService.completeConnect).mockResolvedValue({ token: TOKEN, profile: PROFILE } as never);
+            vi.mocked(pagesService.connectInstagramDirect).mockResolvedValue({ taken: false, page: { id: 'p1' } } as never);
+
+            await app.inject({ method: 'GET', url: '/auth/instagram/callback?code=c&state=abc' });
+
+            expect(instagramLoginService.subscribeToWebhooks).toHaveBeenCalledWith(
+                PROFILE.userId, TOKEN.accessToken, expect.anything(),
+            );
+        });
+
+        // The account IS connected, so a silent success would leave the merchant
+        // waiting on replies that can never arrive. The warning is the cue to retry.
+        it('flags igWarn=webhooks when the subscription did not take', async () => {
+            vi.mocked(consumeSingleUse).mockResolvedValue(VALID_STATE);
+            vi.mocked(instagramLoginService.completeConnect).mockResolvedValue({ token: TOKEN, profile: PROFILE } as never);
+            vi.mocked(pagesService.connectInstagramDirect).mockResolvedValue({ taken: false, page: { id: 'p1' } } as never);
+            vi.mocked(instagramLoginService.subscribeToWebhooks).mockResolvedValue(false);
+
+            const response = await app.inject({ method: 'GET', url: '/auth/instagram/callback?code=c&state=abc' });
+
+            expect(response.payload).toContain('instagramConnected%3D1');
+            expect(response.payload).toContain('igWarn%3Dwebhooks');
+        });
+
+        // An account already reachable through its Facebook Page must not be
+        // re-pointed at the new host: the Page token works, and the merchant's real
+        // answer is "already connected".
+        it('reports igError=linked when the account already arrives via its Facebook Page', async () => {
+            vi.mocked(consumeSingleUse).mockResolvedValue(VALID_STATE);
+            vi.mocked(instagramLoginService.completeConnect).mockResolvedValue({ token: TOKEN, profile: PROFILE } as never);
+            vi.mocked(pagesService.connectInstagramDirect).mockResolvedValue({ taken: false, alreadyLinked: true } as never);
+
+            const response = await app.inject({ method: 'GET', url: '/auth/instagram/callback?code=c&state=abc' });
+
+            expect(response.payload).toContain('igError%3Dlinked');
+            expect(instagramLoginService.subscribeToWebhooks).not.toHaveBeenCalled();
         });
 
         it('surfaces a cross-workspace claim as igError=taken, never a silent move', async () => {

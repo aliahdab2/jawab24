@@ -167,3 +167,39 @@ describe('instagramLoginService.runRefreshSweep', () => {
         expect(whereSpy).toHaveBeenCalledTimes(1); // only the healthy row was written
     }, 10_000);
 });
+
+describe('instagramLoginService.subscribeToWebhooks', () => {
+    // Instagram Login delivers NOTHING to an account that has not installed the app
+    // on itself (Meta docs, verified 2026-08-16). Without this call the connect looks
+    // healthy and answers no one — the silent-channel failure mode Instagram has
+    // already produced twice on this codebase.
+    it('POSTs subscribed_apps for THIS account on graph.instagram.com with messages+comments', async () => {
+        mockedAxios.post.mockResolvedValue({ data: { success: true } });
+
+        const ok = await instagramLoginService.subscribeToWebhooks('ig-user-1', 'ig-token');
+
+        expect(ok).toBe(true);
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+            'https://graph.instagram.com/v23.0/ig-user-1/subscribed_apps',
+            null,
+            expect.objectContaining({
+                params: { subscribed_fields: 'messages,comments', access_token: 'ig-token' },
+            }),
+        );
+    });
+
+    // Meta answers 200 with {"success": false} rather than an error status when it
+    // declines. Reading the BODY — not the status — is the difference between
+    // knowing the channel is live and assuming it.
+    it('reports FALSE when Meta answers 200 without success:true', async () => {
+        mockedAxios.post.mockResolvedValue({ data: { success: false } });
+        await expect(instagramLoginService.subscribeToWebhooks('ig-user-1', 'ig-token')).resolves.toBe(false);
+    });
+
+    // The merchant holds a valid credential by this point; losing the whole connect
+    // to a transient Graph error would be worse than a channel we can re-subscribe.
+    it('never throws on a Graph failure — reports false so the caller can warn', async () => {
+        mockedAxios.post.mockRejectedValue(Object.assign(new Error('boom'), { isAxiosError: true }));
+        await expect(instagramLoginService.subscribeToWebhooks('ig-user-1', 'ig-token')).resolves.toBe(false);
+    });
+});

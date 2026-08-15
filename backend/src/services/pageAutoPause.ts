@@ -78,19 +78,30 @@ export function isChannelLevelFailure(bucket: DmFailureBucket | undefined): bool
 /**
  * Does this platform's send use the FACEBOOK page token (`pages.access_token`)?
  *
- * Instagram does — it is columns on the page row, not a separate credential, so
- * one revoked Facebook session kills both. WhatsApp does NOT: it carries
- * `pages.whatsapp_access_token`, a separate credential on Meta's forced 60-day
- * clock with its own health cron and its own reconnect path.
+ * Page-linked Instagram does — it is columns on the page row, not a separate
+ * credential, so one revoked Facebook session kills both. Two cases do NOT:
  *
- * The distinction matters because Meta answers an expired WABA token with the
- * same code 190 as a revoked page token, so anything that reads a Graph code to
- * decide "this page's credential is dead" must ask which credential first.
+ *  - WhatsApp carries `pages.whatsapp_access_token`, a separate credential on
+ *    Meta's forced 60-day clock with its own health cron and reconnect path.
+ *  - An Instagram LOGIN page (Instagram-direct) carries
+ *    `pages.instagram_access_token` on the same kind of 60-day clock, and has no
+ *    Facebook Page to re-mint anything from. Pass `page` so this is decided here
+ *    rather than several layers down.
  *
- * `undefined` = the comment pipelines, which are Facebook/Instagram-only by
- * construction (there is no WhatsApp comment adapter).
+ * The distinction matters because Meta answers an expired WABA or Instagram User
+ * token with the same code 190 as a revoked page token, so anything that reads a
+ * Graph code to decide "this page's credential is dead" must ask which credential
+ * first — otherwise a channel-specific expiry runs Facebook page-token recovery
+ * and mails the merchant "reconnect your Facebook page" to explain it.
+ *
+ * `undefined` platform = the comment pipelines, which are Facebook/Instagram-only
+ * by construction (there is no WhatsApp comment adapter).
  */
-export function ownsFacebookCredential(platform: string | undefined): boolean {
+export function ownsFacebookCredential(
+    platform: string | undefined,
+    page?: { instagramCredential?: { direct: boolean } },
+): boolean {
+    if (page?.instagramCredential?.direct) return false;
     return platform === undefined || platform === 'facebook' || platform === 'instagram';
 }
 

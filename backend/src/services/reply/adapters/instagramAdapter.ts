@@ -2,6 +2,11 @@ import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { conversationsService } from '../../conversations';
 import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
+import {
+    resolveInstagramCredential,
+    instagramCredentialOf,
+    instagramMessagesEndpoint,
+} from '../../instagramCredential';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
 import { sendMetaProductCards } from '../../metaMessaging';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
@@ -19,13 +24,18 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
     async getPage(instagramAccountId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByInstagramId(instagramAccountId);
         if (!page) return null;
-        return mapToPlatformPage(page, {
+        const credential = resolveInstagramCredential(page);
+        // Same contract as the WhatsApp adapter: `accessToken` carries the
+        // credential THIS platform sends with, which for an Instagram Login page
+        // is the Instagram User token rather than the (empty) Facebook page token.
+        return mapToPlatformPage({ ...page, accessToken: credential.accessToken }, {
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             platformAccountId: page.instagramAccountId ?? undefined,
+            instagramCredential: credential,
         });
     }
 
-    async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
+    async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string, baseUrl: string = GRAPH_API_BASE): Promise<string | undefined> {
         // 1. Canonical source: conversations table
         if (pageId) {
             const canonical = await conversationsService.getSenderName(pageId, senderId);
@@ -34,7 +44,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
 
         // 2. Call Instagram Graph API to get sender profile
         try {
-            const res = await fbAxios.get(`${GRAPH_API_BASE}/${senderId}`, {
+            const res = await fbAxios.get(`${baseUrl}/${senderId}`, {
                 params: { fields: 'name,username', access_token: accessToken },
             });
             const name = res.data.username || res.data.name;
@@ -49,7 +59,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         // 3. Fallback: Graph Conversations API — returns participant names even when direct lookup is restricted
         if (platformPageId) {
             try {
-                const name = await fetchNameFromConversationsApi(platformPageId, senderId, accessToken, 'instagram');
+                const name = await fetchNameFromConversationsApi(platformPageId, senderId, accessToken, 'instagram', baseUrl);
                 if (name && pageId) conversationsService.setSenderName(pageId, senderId, name).catch(() => {});
                 return name;
             } catch {
@@ -77,12 +87,12 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
 
     async sendTypingIndicator(page: PlatformPage, senderId: string): Promise<void> {
         if (!page.platformAccountId) return;
-        await instagramService.sendTypingIndicator(page.platformAccountId, senderId, page.accessToken);
+        await instagramService.sendTypingIndicator(page.platformAccountId, senderId, instagramCredentialOf(page));
     }
 
     async sendTypingOff(page: PlatformPage, senderId: string): Promise<void> {
         if (!page.platformAccountId) return;
-        await instagramService.sendTypingOff(page.platformAccountId, senderId, page.accessToken);
+        await instagramService.sendTypingOff(page.platformAccountId, senderId, instagramCredentialOf(page));
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {
@@ -93,14 +103,18 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             page.platformAccountId,
             senderId,
             text,
-            page.accessToken,
+            instagramCredentialOf(page),
         );
         // See facebookAdapter.sendReply — no Coexistence equivalent on Instagram.
         return undefined;
     }
 
     async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {
-        await sendMetaProductCards(page.accessToken, senderId, cards);
+        const cred = instagramCredentialOf(page);
+        await sendMetaProductCards(
+            cred.accessToken, senderId, cards, undefined,
+            instagramMessagesEndpoint(cred, page.platformAccountId ?? ''),
+        );
     }
 
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {
@@ -110,7 +124,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
                 page.platformAccountId,
                 senderId,
                 text,
-                page.accessToken,
+                instagramCredentialOf(page),
             );
         } catch {
             // Instagram may not allow sending to this user

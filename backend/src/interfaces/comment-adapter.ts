@@ -146,6 +146,9 @@ export interface CommentPlatformAdapter {
          *  DM — a DM already goes to them). Only set on the post_reply path. Facebook resolves it
          *  against `fromId`; the Instagram adapter ignores it (IG mentions need `@username`). */
         tagCommenter?: boolean;
+        /** Which Graph host + credential this page's Instagram calls use. Set by the processor
+         *  from the PlatformPage; absent on Facebook. See `resolveInstagramCredential`. */
+        instagramCredential?: import('../services/instagramCredential').InstagramCredential;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

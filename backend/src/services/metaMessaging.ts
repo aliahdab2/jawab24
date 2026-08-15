@@ -22,6 +22,15 @@ import { POST_REPLY_BUTTON_TEXT_MAX, type ProductCard } from '@jawab24/shared';
  * - MESSAGE_TAG: proactive send; requires `tag` from Meta's approved list.
  * - UPDATE: reserved for policy-approved scenarios — avoid unless explicitly needed.
  */
+/**
+ * Where a Meta message send is POSTed when the caller does not say otherwise.
+ *
+ * Every Messenger and Page-linked Instagram send has always gone here, and still
+ * does. Instagram Login accounts are the exception — a different host AND a
+ * different path (`instagramMessagesEndpoint`) — so they pass their own.
+ */
+const DEFAULT_MESSAGES_ENDPOINT = `${GRAPH_API_BASE}/me/messages`;
+
 export type MessagingType = 'RESPONSE' | 'UPDATE' | 'MESSAGE_TAG';
 
 export interface SendMessageOptions {
@@ -217,12 +226,13 @@ export async function sendMetaProductCards(
     recipientId: string,
     cards: ProductCard[],
     opts?: SendMessageOptions,
+    endpoint: string = DEFAULT_MESSAGES_ENDPOINT,
 ): Promise<string | undefined> {
     if (!cards.length) return undefined;
     try {
         const response = await tracedExternalCall('meta', 'sendProductCards', () =>
             fbAxios.post<{ message_id?: string }>(
-                `${GRAPH_API_BASE}/me/messages`,
+                endpoint,
                 buildProductCardPayload(recipientId, cards, opts),
                 { params: { access_token: pageAccessToken } },
             ),
@@ -248,11 +258,12 @@ export async function sendMetaImageAttachment(
     recipientId: string,
     imageUrl: string,
     opts?: SendMessageOptions,
+    endpoint: string = DEFAULT_MESSAGES_ENDPOINT,
 ): Promise<string | undefined> {
     try {
         const response = await tracedExternalCall('meta', 'sendImageAttachment', () =>
             fbAxios.post<{ message_id?: string }>(
-                `${GRAPH_API_BASE}/me/messages`,
+                endpoint,
                 buildMessagePayload(recipientId, imageAttachmentMessage(imageUrl), opts),
                 { params: { access_token: pageAccessToken } },
             ),

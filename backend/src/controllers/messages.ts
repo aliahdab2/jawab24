@@ -5,6 +5,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { invalidateEndpointStatsCaches } from '../services/statsCache';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
+import { resolveInstagramCredential } from '../services/instagramCredential';
 import { whatsappService, META_TOKEN_EXPIRED } from '../services/whatsapp';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
@@ -147,7 +148,7 @@ async function sendAndStoreManualReply(opts: {
                 page.instagramAccountId,
                 recipientId,
                 replyText,
-                page.accessToken
+                resolveInstagramCredential(page)
             );
         } else {
             await facebookService.sendPrivateMessage(

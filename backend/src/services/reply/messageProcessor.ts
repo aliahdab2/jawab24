@@ -24,6 +24,7 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
+import { instagramCredentialOf } from '../instagramCredential';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
@@ -182,7 +183,7 @@ export class MessageProcessor {
             let senderName: string | undefined = webhookSenderName;
             if (!senderName) {
                 try {
-                    senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
+                    senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId, page.instagramCredential?.baseUrl);
                 } catch {
                     // Non-critical — continue without sender name
                 }
@@ -239,7 +240,7 @@ export class MessageProcessor {
                     const resolvedId = extractPostId(sharedPostUrl, sharedPostId);
                     if (resolvedId) {
                         const postContent = platform === 'instagram'
-                            ? await instagramService.getPostContent(resolvedId, page.accessToken)
+                            ? await instagramService.getPostContent(resolvedId, instagramCredentialOf(page))
                             : await facebookService.getPostContent(resolvedId, page.accessToken);
                         if (postContent) {
                             messageText = `[Shared post: "${postContent.slice(0, 200)}"] ${messageText}`;
@@ -898,7 +899,7 @@ export class MessageProcessor {
                 // token-revoked code (every other failure rethrows untouched).
                 //
                 // Facebook-credential platforms only — see `ownsFacebookCredential`.
-                sentPlatformMessageId = ownsFacebookCredential(platform)
+                sentPlatformMessageId = ownsFacebookCredential(platform, page)
                     ? await withPageTokenRetry(page, (accessToken) => {
                         // Adopt the token for the REST of the pipeline, not just this
                         // call. `sendProductCards` below reads `page.accessToken` and

@@ -204,6 +204,7 @@ import { replyGenerator, shouldSkipReply, shouldUseFallback } from '../../src/se
 import { rateLimiter } from '../../src/services/protection';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { instagramService } from '../../src/services/instagram';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
 import { messagesService } from '../../src/services/messages';
 import { notificationService } from '../../src/services/notifications';
 import { db } from '../../src/db';
@@ -464,7 +465,7 @@ describe('InstagramReplyService', () => {
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
             expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
-                'ig-1', 'sender-1', 'We are currently away', mockPage.accessToken,
+                'ig-1', 'sender-1', 'We are currently away', pageLinkedInstagramCredential(mockPage.accessToken),
             );
             expect(result.success).toBe(false);
             expect(result.error).toBe('Messages auto-reply disabled');
@@ -641,7 +642,7 @@ describe('InstagramReplyService', () => {
             expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
                 'ig-1', 'sender-1',
                 expect.stringContaining('Thank you for your interest'),
-                mockPage.accessToken,
+                pageLinkedInstagramCredential(mockPage.accessToken),
             );
             expect(messagesService.flagMessage).not.toHaveBeenCalled();
             expect(messagesService.markAsReplied).toHaveBeenCalled();

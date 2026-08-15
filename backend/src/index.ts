@@ -64,6 +64,7 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { setPageTokenRecoveryLogger } from "./services/pageTokenRecovery";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
+import { startInstagramTokenRefreshCron, stopInstagramTokenRefreshCron } from "./services/instagramLogin";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
 import { imageStorage } from "./services/imageStorage";
@@ -393,6 +394,11 @@ const start = async () => {
     setWhatsAppTokenHealthLogger(workerLogger);
     startWhatsAppTokenHealthCron();
 
+    // Instagram-direct (Instagram Login) token refresh — same reason as WhatsApp
+    // above: these tokens die on a 60-day CLOCK, not on revocation, and webhooks
+    // keep arriving after expiry. Dark unless the Instagram app is configured.
+    startInstagramTokenRefreshCron(workerLogger);
+
     const logJobError = (err: unknown, msg: string) => server.log.error(err, msg);
     const DAILY_MS = 24 * 60 * 60 * 1000;
 
@@ -713,6 +719,7 @@ const gracefulShutdown = async (signal: string) => {
     stopEscalationCron();
     stopTokenRefreshCron();
     stopWhatsAppTokenHealthCron();
+    stopInstagramTokenRefreshCron();
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");

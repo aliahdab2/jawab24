@@ -77,6 +77,8 @@
   "instagramConnectSuccess": "Instagram account connected",
   "instagramConnectFailed": "Could not connect the Instagram account. Please try again.",
   "instagramAccountTaken": "This Instagram account is already connected to another workspace.",
+  "instagramAlreadyLinked": "This Instagram account is already connected through its Facebook Page.",
+  "instagramWebhooksFailed": "Instagram is connected, but we could not turn on message delivery. Please reconnect the account.",
   "channelWhatsAppDesc": "No Facebook Page? Connect just your WhatsApp Business number — it gets its own card. Keep using it on your phone, or dedicate it to Jawab24; a quick Facebook sign-in verifies it.",
   "whatsappOnlyRemoveTitle": "Remove this number?",
   "whatsappOnlyRemoveMessage": "Jawab will stop replying on {number} and this card will be removed. Conversation history is kept, and you can connect the number again anytime.",

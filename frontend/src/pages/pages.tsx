@@ -500,8 +500,16 @@ const PagesPage: NextPageWithLayout = () => {
     if (!connected && !errorCode) return;
     igReturnHandledRef.current = true;
     if (connected) {
-      toast.success(t('instagramConnectSuccess'));
+      // The account is connected either way; the warning says replies won't
+      // arrive until the webhook subscription is retried, which is the merchant's
+      // cue to reconnect rather than to wait in silence.
+      if (router.query.igWarn === 'webhooks') toast.error(t('instagramWebhooksFailed'));
+      else toast.success(t('instagramConnectSuccess'));
       void fetchPages();
+    } else if (errorCode === 'linked') {
+      // Already reachable through its Facebook Page — nothing failed, and the
+      // merchant's page is right there in the list. Info, not an error.
+      toast.info(t('instagramAlreadyLinked'));
     } else if (errorCode && errorCode !== 'cancelled') {
       // A deliberate dialog cancel is not an error — no toast for it.
       toast.error(t(errorCode === 'taken' ? 'instagramAccountTaken' : 'instagramConnectFailed'));
@@ -509,6 +517,7 @@ const PagesPage: NextPageWithLayout = () => {
     const remaining = { ...router.query };
     delete remaining.instagramConnected;
     delete remaining.igError;
+    delete remaining.igWarn;
     void router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
   }, [router, t, fetchPages]);
 

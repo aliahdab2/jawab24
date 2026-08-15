@@ -7,6 +7,7 @@ import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
+import { pageLinkedInstagramCredential } from './instagramCredential';
 import { imageStorage } from './imageStorage';
 import { imageKeysOf } from '../lib/postSuggestionVariants';
 import { subscriptionsService } from './subscriptions';
@@ -290,7 +291,7 @@ export class PagesService {
         userId: string,
         profile: { userId: string; username: string; name: string | null; profilePictureUrl: string | null },
         token: { accessToken: string; expiresAt: Date },
-    ): Promise<{ taken: boolean; page?: typeof pages.$inferSelect }> {
+    ): Promise<{ taken: boolean; alreadyLinked?: boolean; page?: typeof pages.$inferSelect }> {
         const [existing] = await db
             .select()
             .from(pages)
@@ -299,6 +300,16 @@ export class PagesService {
 
         if (existing && existing.workspaceId !== workspaceId) {
             return { taken: true };
+        }
+
+        // This Instagram account already arrives through a connected Facebook
+        // Page. Writing the Instagram User token onto that row would produce a
+        // hybrid the send path deliberately refuses to use
+        // (`resolveInstagramCredential`) — a column written and never read — and
+        // the merchant's real answer is "it is already connected", not a second
+        // connection. Say so instead of mutating a working page.
+        if (existing?.facebookPageId) {
+            return { taken: false, alreadyLinked: true, page: existing };
         }
 
         if (existing) {
@@ -1143,7 +1154,7 @@ export class PagesService {
             try {
                 const igAccount = await instagramService.getLinkedInstagramAccount(
                     fbPage.id,
-                    fbPage.access_token
+                    pageLinkedInstagramCredential(fbPage.access_token)
                 );
                 if (igAccount) {
                     instagramAccountId = igAccount.id;

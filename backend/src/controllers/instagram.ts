@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
+import { resolveInstagramCredential } from '../services/instagramCredential';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
 import { recordAutoreplyEnabledIfEffective } from '../services/activation';
@@ -167,7 +168,7 @@ export class InstagramController {
             const replyId = await instagramService.replyToComment(
                 comment[0].instagramCommentId,
                 message,
-                page.accessToken
+                resolveInstagramCredential(page)
             );
 
             // Update comment in database
@@ -313,7 +314,7 @@ export class InstagramController {
             // Fetch media from Instagram API
             const { media: igMedia } = await instagramService.getMedia(
                 page.instagramAccountId,
-                page.accessToken
+                resolveInstagramCredential(page)
             );
 
             let syncedMedia = 0;
@@ -375,7 +376,7 @@ export class InstagramController {
                 try {
                     const igComments = await instagramService.getComments(
                         item.id,
-                        page.accessToken
+                        resolveInstagramCredential(page)
                     );
                     for (const comment of igComments) {
                         collectedComments.push({ mediaPk, comment });

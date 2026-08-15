@@ -77,6 +77,8 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 import { InstagramCommentAdapter } from '../../../src/services/reply/adapters/instagramCommentAdapter';
+import { pageLinkedInstagramCredential } from '../../../src/services/instagramCredential';
+import { GRAPH_API_BASE as BASE } from '../../../src/lib/fbAxios';
 
 describe('InstagramCommentAdapter', () => {
     let adapter: InstagramCommentAdapter;
@@ -257,7 +259,7 @@ describe('InstagramCommentAdapter', () => {
 
             expect(result.success).toBe(true);
             expect(mockReplyToComment).toHaveBeenCalledWith(
-                'ig_comment_123', 'Thank you!', 'ig_token_abc',
+                'ig_comment_123', 'Thank you!', pageLinkedInstagramCredential('ig_token_abc'),
             );
         });
 
@@ -279,7 +281,7 @@ describe('InstagramCommentAdapter', () => {
             });
 
             expect(mockReplyToComment).toHaveBeenCalledWith(
-                'ig_comment_123', 'Thank you!', 'ig_token_abc',
+                'ig_comment_123', 'Thank you!', pageLinkedInstagramCredential('ig_token_abc'),
             );
         });
 
@@ -445,12 +447,64 @@ describe('InstagramCommentAdapter', () => {
             mockSendMetaImageAttachment.mockResolvedValue('img-msg-id');
         });
 
+        // An Instagram LOGIN page reaches this adapter with its own credential on
+        // the opts. Every send here — public reply, DM, image — must follow it to
+        // graph.instagram.com; falling back to `opts.accessToken` alone would post
+        // an Instagram User token to the Facebook host.
+        describe('Instagram-direct (Instagram Login) page', () => {
+            const directCred = {
+                accessToken: 'ig-direct-token',
+                baseUrl: 'https://graph.instagram.com/v23.0',
+                direct: true,
+            };
+            const directOpts = { ...baseOpts, accessToken: 'ig-direct-token', instagramCredential: directCred };
+
+            it('posts the public comment reply on the Instagram credential', async () => {
+                await adapter.sendReply({ ...directOpts, userSettings: { commentReplyMode: 'public' } });
+
+                expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', directCred);
+            });
+
+            it('sends the private DM and its image on the Instagram host', async () => {
+                await adapter.sendReply({
+                    ...directOpts,
+                    replyImageUrl: 'https://cdn/x.jpg',
+                    userSettings: { commentReplyMode: 'private' },
+                });
+
+                expect(mockSendDirectMessage).toHaveBeenCalledWith(
+                    'ig-account-1', 'sender-1', 'Full AI reply text', directCred,
+                );
+                expect(mockSendMetaImageAttachment).toHaveBeenCalledWith(
+                    'ig-direct-token', 'sender-1', 'https://cdn/x.jpg', undefined,
+                    'https://graph.instagram.com/v23.0/ig-account-1/messages',
+                );
+            });
+
+            // The page-token retry wrapper hands this method a freshly re-minted
+            // FACEBOOK token when the stored one died, and the send must adopt it.
+            // The credential snapshot predates the re-mint, so the HOST comes from
+            // the credential and the TOKEN from opts — never the other way round.
+            it('adopts a re-minted token from opts while keeping the resolved host', async () => {
+                await adapter.sendReply({
+                    ...directOpts,
+                    accessToken: 'freshly-reminted',
+                    userSettings: { commentReplyMode: 'public' },
+                });
+
+                expect(mockReplyToComment).toHaveBeenCalledWith(
+                    'ig-comment-1', 'Full AI reply text',
+                    { ...directCred, accessToken: 'freshly-reminted' },
+                );
+            });
+        });
+
         it('public mode: replies on comment only', async () => {
             const opts = { ...baseOpts, userSettings: { commentReplyMode: 'public' } };
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
             expect(mockSendDirectMessage).not.toHaveBeenCalled();
         });
 
@@ -499,7 +553,7 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
             expect(mockSendMetaImageAttachment).not.toHaveBeenCalled();
             expect(mockSendDirectMessage).not.toHaveBeenCalled();
         });
@@ -509,8 +563,8 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result).toMatchObject({ success: true, imageDelivered: true });
-            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
-            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg');
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
+            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg', undefined, `${BASE}/me/messages`);
         });
 
         it('dual mode with an image: text DM + native image + public nudge (nudge carries NO image)', async () => {
@@ -518,10 +572,10 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result).toMatchObject({ success: true, imageDelivered: true });
-            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
-            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg');
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
+            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg', undefined, `${BASE}/me/messages`);
             // The public nudge is a plain text comment — never the image.
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), pageLinkedInstagramCredential('token-123'),);
         });
 
         it('image send failure: the text DM still delivers, imageDelivered=false, no throw', async () => {
@@ -538,7 +592,7 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
-            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
             expect(mockReplyToComment).not.toHaveBeenCalled();
         });
 
@@ -547,9 +601,9 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
-            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', pageLinkedInstagramCredential('token-123'),);
             // Public reply should be the nudge text, not the full reply
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), pageLinkedInstagramCredential('token-123'),);
         });
 
         it('dual mode: uses custom nudge variation', async () => {
@@ -563,7 +617,7 @@ describe('InstagramCommentAdapter', () => {
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل في رسالة خاصة', 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل في رسالة خاصة', pageLinkedInstagramCredential('token-123'),);
         });
 
         it('private mode: fails when fromId is missing', async () => {
@@ -606,7 +660,7 @@ describe('InstagramCommentAdapter', () => {
             expect(result.success).toBe(false);
             expect(result.dmFailure?.bucket).toBe('window_expired');
             // Nudge posted — full reply NOT posted
-            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل بالخاص', 'token-123');
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل بالخاص', pageLinkedInstagramCredential('token-123'),);
             expect(mockReplyToComment).not.toHaveBeenCalledWith('ig-comment-1', opts.replyText, 'token-123');
         });
 
@@ -699,7 +753,7 @@ describe('InstagramCommentAdapter', () => {
             expect(mockReplyToComment).toHaveBeenCalledWith(
                 'ig-comment-1',
                 'تم إرسال التفاصيل بالخاص',
-                'token-123',
+                pageLinkedInstagramCredential('token-123'),
             );
         });
 
@@ -722,7 +776,7 @@ describe('InstagramCommentAdapter', () => {
             expect(mockReplyToComment).toHaveBeenCalledWith(
                 'ig-comment-1',
                 'تم إرسال التفاصيل بالخاص',
-                'token-123',
+                pageLinkedInstagramCredential('token-123'),
             );
         });
 

@@ -157,8 +157,24 @@ export class InstagramConnectController {
                 request.log.warn('[InstagramConnect] account already connected to another workspace');
                 return sendPage({ igError: 'taken' }, state.locale);
             }
-            request.log.info(`[InstagramConnect] connected @${profile.username}`);
-            return sendPage({ instagramConnected: '1' }, state.locale);
+            if (result.alreadyLinked) {
+                request.log.info('[InstagramConnect] account already reachable via its Facebook Page');
+                return sendPage({ igError: 'linked' }, state.locale);
+            }
+
+            // Install the app on the account itself. Instagram Login delivers
+            // NOTHING without this (see subscribeToWebhooks) — a connect that
+            // skipped it would look healthy and answer no one. It runs after the
+            // row exists so a merchant whose subscription fails still has a page
+            // to retry from, and its outcome is reported rather than assumed.
+            const subscribed = await instagramLoginService.subscribeToWebhooks(
+                profile.userId, token.accessToken, request.log,
+            );
+            request.log.info(`[InstagramConnect] connected @${profile.username} (webhooks: ${subscribed ? 'ok' : 'FAILED'})`);
+            return sendPage(
+                subscribed ? { instagramConnected: '1' } : { instagramConnected: '1', igWarn: 'webhooks' },
+                state.locale,
+            );
         } catch (err) {
             const code2 = err instanceof InstagramLoginError ? err.code : 'UNEXPECTED';
             request.log.error({ err, code: code2 }, '[InstagramConnect] callback failed');

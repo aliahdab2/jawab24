@@ -493,6 +493,7 @@ export class CommentProcessor {
                             comment, replyText: rule.triggerReply, replyMethod: 'post_reply',
                             commentMessage, platformCommentId, platformPageId,
                             accessToken: page.accessToken, fromId, fromName,
+                            instagramCredential: page.instagramCredential,
                             userSettings: userSettings as unknown as Record<string, unknown>,
                             postMessage: content.message || undefined,
                             contentId: content.id,
@@ -841,6 +842,7 @@ export class CommentProcessor {
                 comment, replyText, replyMethod, commentMessage,
                 platformCommentId, platformPageId,
                 accessToken: page.accessToken, fromId, fromName,
+                instagramCredential: page.instagramCredential,
                 likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
@@ -985,6 +987,8 @@ export class CommentProcessor {
         platformCommentId: string;
         platformPageId: string;
         accessToken: string;
+        /** Instagram host + credential for this page — see `resolveInstagramCredential`. */
+        instagramCredential?: import('../instagramCredential').InstagramCredential;
         fromId?: string;
         fromName?: string;
         userSettings: Record<string, unknown>;
@@ -1043,7 +1047,12 @@ export class CommentProcessor {
         //
         // Comment pipelines are Facebook/Instagram-only by construction (there is
         // no WhatsApp comment adapter), so the `ownsFacebookCredential` gate the
-        // DM path needs has nothing to exclude here.
+        // DM path needs has nothing to exclude here. An Instagram LOGIN page does
+        // reach this line, and is handled one layer down: `recoverPageToken`
+        // requires a `facebook_page_id`, which such a row never has, so the
+        // wrapper resolves to "no fresh token" and the send result stands. The
+        // credential it holds is kept alive by `instagramLoginService`'s own
+        // refresh sweep instead.
         const { result: sendResult, accessToken } = await withPageTokenRetryResult(
             pageId,
             opts.accessToken,
@@ -1053,6 +1062,7 @@ export class CommentProcessor {
                 replyText,
                 commentMessage,
                 accessToken: token,
+                instagramCredential: opts.instagramCredential,
                 fromId,
                 userSettings,
                 postMessage: opts.postMessage,
