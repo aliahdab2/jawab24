@@ -28,21 +28,25 @@ import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 export function serializePage<T extends {
     accessToken?: string | null;
     whatsappAccessToken?: string | null;
+    instagramAccessToken?: string | null;
     facebookPageId?: string | null;
     whatsappDisconnectReason?: string | null;
 }>(page: T) {
-    const { accessToken, whatsappAccessToken, ...rest } = page;
+    const { accessToken, whatsappAccessToken, instagramAccessToken, ...rest } = page;
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
+    const instagramDirectConnected = !!instagramAccessToken && instagramAccessToken !== '';
     return {
         ...rest,
         // "Is the card's PRIMARY channel credential valid?" — Facebook token for a
-        // page-backed card, WABA token for a WhatsApp-only one.
+        // page-backed card; for a page-less card (facebookPageId null) whichever
+        // direct channel it carries: the WABA token or the Instagram-direct token.
         // ⚠️ The admin console asks the same question of the same rows, but in SQL
         // (`services/admin/users.ts`, the `disconnected` column) because it must not
         // pull token values into memory. Two expressions of ONE rule: change this and
         // change that, or the admin badge starts disagreeing with the merchant's own
         // page card. Both are pinned by tests.
-        isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
+        isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : (whatsappConnected || instagramDirectConnected),
+        instagramDirectConnected,
         whatsappConnected,
         // "The token needs attention" — driven by the REASON, not by the absence of a
         // token. The health sweep deliberately keeps the credential and only flags

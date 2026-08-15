@@ -274,6 +274,73 @@ export class PagesService {
     }
 
     /**
+     * Connect an Instagram professional account DIRECTLY (Instagram Login, no
+     * Facebook Page). The row is an Instagram-only channel: facebookPageId is
+     * null and accessToken is '' (there is no Facebook credential to hold);
+     * instagram_access_token — encrypted — is the working credential and the
+     * IG-direct discriminator for the send path.
+     *
+     * Cross-tenant claim is refused, mirroring the Facebook page-taken rule:
+     * whoever completes Instagram's OAuth *is* the account holder, but a
+     * workspace switch must be an explicit support action, never a silent
+     * side effect of reconnecting.
+     */
+    async connectInstagramDirect(
+        workspaceId: string,
+        userId: string,
+        profile: { userId: string; username: string; name: string | null; profilePictureUrl: string | null },
+        token: { accessToken: string; expiresAt: Date },
+    ): Promise<{ taken: boolean; page?: typeof pages.$inferSelect }> {
+        const [existing] = await db
+            .select()
+            .from(pages)
+            .where(eq(pages.instagramAccountId, profile.userId))
+            .limit(1);
+
+        if (existing && existing.workspaceId !== workspaceId) {
+            return { taken: true };
+        }
+
+        if (existing) {
+            // Reconnect: refresh credential + profile fields on the same row.
+            const [updated] = await db
+                .update(pages)
+                .set({
+                    instagramAccessToken: maybeEncryptToken(token.accessToken),
+                    instagramTokenExpiresAt: token.expiresAt,
+                    instagramUsername: profile.username,
+                    instagramProfilePicUrl: profile.profilePictureUrl,
+                    updatedAt: new Date(),
+                })
+                .where(eq(pages.id, existing.id))
+                .returning();
+            return { taken: false, page: updated };
+        }
+
+        const [created] = await db
+            .insert(pages)
+            .values({
+                workspaceId,
+                userId,
+                facebookPageId: null,
+                name: profile.name || `@${profile.username}`,
+                accessToken: '',
+                // The Facebook channel toggle is meaningless without a page; off
+                // keeps the card's state honest. Instagram replies stay opt-in
+                // like every linked-IG page (D-026 comments-opt-in-forever).
+                autoReplyEnabled: false,
+                instagramAccountId: profile.userId,
+                instagramUsername: profile.username,
+                instagramProfilePicUrl: profile.profilePictureUrl,
+                instagramAutoReplyEnabled: false,
+                instagramAccessToken: maybeEncryptToken(token.accessToken),
+                instagramTokenExpiresAt: token.expiresAt,
+            })
+            .returning();
+        return { taken: false, page: created };
+    }
+
+    /**
      * Get all pages for a user, with computed comment stats
      */
     async getPages(workspaceId: string) {

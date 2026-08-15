@@ -333,7 +333,8 @@ class AdminUsersService {
                 // support hunting a fault that was never there.
                 disconnected: sql<boolean>`CASE WHEN ${pages.facebookPageId} IS NOT NULL
                         THEN (${pages.accessToken} IS NULL OR ${pages.accessToken} = '')
-                        ELSE (${pages.whatsappAccessToken} IS NULL OR ${pages.whatsappAccessToken} = '')
+                        ELSE ((${pages.whatsappAccessToken} IS NULL OR ${pages.whatsappAccessToken} = '')
+                          AND (${pages.instagramAccessToken} IS NULL OR ${pages.instagramAccessToken} = ''))
                     END`,
                 disconnectReason: pages.disconnectReason,
                 // Merchant soft-hid this disconnected page: it is gone from THEIR
