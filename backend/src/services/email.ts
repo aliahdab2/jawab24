@@ -1,4 +1,5 @@
 import { config } from '../config';
+import type { EmailAttachment } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { db } from '../db';
 import { emailSends } from '../db/schema';
@@ -17,7 +18,44 @@ interface EmailPayload {
     // Optional owner of the email (recipient user). Stored on email_sends so
     // admins can filter "show me everything we sent to user X".
     userId?: string | null;
+    /**
+     * Carbon-copy recipients — visible to everyone on the message.
+     *
+     * Omitted from the Resend request entirely when absent or empty, so every
+     * pre-existing caller sends the exact same payload it did before these
+     * fields existed. Same for `bcc` and `attachments`: this is shared
+     * infrastructure behind every email we send (digests, reminders, invites),
+     * and the only safe extension is one that is provably inert when unused.
+     */
+    cc?: string[];
+    /** Blind-copy recipients — hidden from `to` and `cc`. */
+    bcc?: string[];
+    /**
+     * Size/count limits are the CALLER's responsibility — the composer's caps
+     * live in @jawab24/shared (MAX_EMAIL_ATTACHMENT*); the transport enforces
+     * only Resend's own ceiling (below). Two vendor facts every future caller
+     * must know (verified against Resend's docs, 2026-08-15): an email may be
+     * at most 40MB AFTER base64 encoding, and Resend's BATCH endpoint does not
+     * accept attachments at all — so a broadcast with attachments can never be
+     * batched and is forever a sequential per-recipient loop at the 4/sec
+     * pacing above (500 recipients × 8MB ≈ ≥125s and ~4GB egress). Design any
+     * broadcast-with-attachment feature with that constraint in front of you.
+     */
+    attachments?: EmailAttachment[];
+    /**
+     * Forwarded to Resend as an `Idempotency-Key` header (24h dedupe window,
+     * ≤256 chars) so a caller's retry after an ambiguous failure — timeout
+     * after the server received the body — cannot deliver the same email
+     * twice. Omitted from the request entirely when absent.
+     */
+    idempotencyKey?: string;
 }
+
+// Resend rejects emails over 40MB post-base64-encoding. Refusing here, before
+// the fetch, turns a guaranteed provider rejection into an immediate failed
+// attempt without uploading tens of MB first. Evaluated only when attachments
+// are present — provably a no-op for every attachment-less caller.
+const RESEND_ATTACHMENT_CEILING_BYTES = 30 * 1024 * 1024;
 
 interface ResendResponse {
     id: string;
@@ -116,6 +154,18 @@ export class EmailService {
             return { success: false, error: 'Email provider not configured', emailSendId };
         }
 
+        // Provider-ceiling guard: a payload Resend is guaranteed to reject is
+        // refused here, before uploading tens of MB. Only runs when attachments
+        // are present — a no-op for every attachment-less caller.
+        if (payload.attachments?.length) {
+            const totalBase64Chars = payload.attachments.reduce((sum, a) => sum + a.content.length, 0);
+            if (totalBase64Chars > RESEND_ATTACHMENT_CEILING_BYTES) {
+                const errorMessage = `Attachments exceed the provider ceiling (${Math.round(totalBase64Chars / 1024 / 1024)}MB encoded > ${RESEND_ATTACHMENT_CEILING_BYTES / 1024 / 1024}MB)`;
+                const emailSendId = await this.recordAttempt(payload, { status: 'failed', errorMessage });
+                return { success: false, error: errorMessage, emailSendId };
+            }
+        }
+
         await this.acquireSendSlot();
 
         const response = await fetch('https://api.resend.com/emails', {
@@ -123,12 +173,37 @@ export class EmailService {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${config.resend.apiKey}`,
+                // Resend dedupes on this for 24h — a caller's retry after an
+                // ambiguous failure cannot double-send. Absent → no header.
+                ...(payload.idempotencyKey ? { 'Idempotency-Key': payload.idempotencyKey } : {}),
             },
             body: JSON.stringify({
                 from: `${config.resend.fromName} <${config.resend.fromEmail}>`,
                 to: [payload.to],
                 subject: payload.subject,
                 html: payload.html,
+                // Spread-if-present: an absent OR empty list contributes no key,
+                // so the serialized body is byte-identical to the pre-CC one for
+                // every existing caller.
+                //
+                // Do not "simplify" to `cc: payload.cc`. JSON.stringify drops a
+                // key whose value is undefined, so that shorthand looks correct
+                // for callers passing nothing — but it sends `"cc":[]` for a
+                // caller passing an empty array, which is a present-but-empty
+                // recipient list rather than no list at all.
+                ...(payload.cc?.length ? { cc: payload.cc } : {}),
+                ...(payload.bcc?.length ? { bcc: payload.bcc } : {}),
+                // Resend's attachment fields are snake_case; our contract stays
+                // camelCase and translates only here, at the vendor boundary.
+                ...(payload.attachments?.length
+                    ? {
+                        attachments: payload.attachments.map((a) => ({
+                            filename: a.filename,
+                            content: a.content,
+                            ...(a.contentType ? { content_type: a.contentType } : {}),
+                        })),
+                    }
+                    : {}),
             }),
         });
 

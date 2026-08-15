@@ -3,6 +3,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { auth } from '../utils/swagger';
 import { adminController } from '../controllers/admin';
 import { AI_COST_PERIODS } from '../services/admin';
+import { sendMerchantEmailBodySchema } from './schemas/sendMerchantEmail';
 
 /**
  * Admin Routes — Protected endpoints for manual subscription management,
@@ -211,14 +212,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     summary: 'Send an admin-composed account-notice email to one merchant',
                     security: auth,
                     params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
-                    body: {
-                        type: 'object',
-                        required: ['subject', 'body'],
-                        properties: {
-                            subject: { type: 'string', minLength: 1, maxLength: 500 },
-                            body: { type: 'string', minLength: 1, maxLength: 20_000 },
-                        },
-                    },
+                    // Shape + count/format rejection at the route layer; sizes,
+                    // file types, magic bytes = Zod in the controller. The
+                    // object is exported so its test registers the real thing.
+                    body: sendMerchantEmailBodySchema,
                 },
             },
             adminController.sendUserEmail,

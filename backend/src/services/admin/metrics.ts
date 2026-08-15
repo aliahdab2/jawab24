@@ -82,7 +82,10 @@ class AdminMetricsService {
             })
             .from(adminAuditLogs)
             .leftJoin(users, eq(adminAuditLogs.adminUserId, users.id))
-            .orderBy(adminAuditLogs.createdAt)
+            // desc, or the endpoint serves the 100 OLDEST rows forever once the
+            // table passes 100 — which silently hides every recent action
+            // (merchant emails included) behind February's manual upgrades.
+            .orderBy(desc(adminAuditLogs.createdAt))
             .limit(100);
     }
 
