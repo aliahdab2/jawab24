@@ -158,7 +158,19 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 return { success: true };
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error);
-                return { success: false, error: `Failed to post reply to Instagram: ${detail}` };
+                // `publicFailure`, mirroring the Facebook sender. Instagram rides the
+                // SAME page token (it is columns on the page row, not a separate
+                // credential), so one revoked session kills both — but this branch used
+                // to return a bare string, so page-token recovery had nothing to
+                // classify and never fired on Instagram's DEFAULT comment mode.
+                //
+                // NOT `dmFailure`: no DM was attempted, and that field drives the inbox
+                // label and the auto-pause bucket. See sender.ts → SendReplyResult.
+                return {
+                    success: false,
+                    publicFailure: classifyDmError(error, 'instagram'),
+                    error: `Failed to post reply to Instagram: ${detail}`,
+                };
             }
         }
 
