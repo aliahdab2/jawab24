@@ -456,7 +456,10 @@ describe('Payment Controller', () => {
             );
         });
 
-        it('should fall back to monthly price when yearly is not configured', async () => {
+        // The fallback WAS the bug (fixed 2026-08-15): a yearly checkout
+        // silently subscribed the merchant to the MONTHLY price while the UI
+        // promised an annual total with ~17% off. The controller now refuses.
+        it('refuses yearly checkout with YEARLY_NOT_AVAILABLE when yearly is not configured', async () => {
             mockRequest.body = { planId: 'plan_123', billingInterval: 'year' };
 
             const mockUser = { id: 'user_123', email: 'test@example.com' };
@@ -467,22 +470,25 @@ describe('Payment Controller', () => {
                 stripeYearlyPriceId: null,
                 trialDays: 0,
             };
-            const mockSession = { id: 'cs_test', client_secret: 'cs_test_secret' };
 
             const mockDb = vi.mocked(db);
+            // Queue exactly the selects that run: user + plan. The refusal
+            // fires before the subscriptions lookup, and an unconsumed
+            // once-value would leak into the next test (clearAllMocks drains
+            // calls, not once-queues).
             mockDb.select
                 .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockUser]) }) } as any)
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any)
-                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) } as any);
-
-            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any);
 
             await paymentController.createCheckoutSession(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
-                'user_123', 'test@example.com', 'plan_123', 'price_monthly',
-                expect.any(String), 0
-            );
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith({
+                error: 'Yearly billing is not available for this plan',
+                code: 'YEARLY_NOT_AVAILABLE',
+            });
+            // Never silently bill the monthly price
+            expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
         });
 
         it('should default to monthly when billingInterval is invalid', async () => {
@@ -629,6 +635,7 @@ describe('Payment Controller', () => {
             expect(mockReply.status).toHaveBeenCalledWith(400);
             expect(mockReply.send).toHaveBeenCalledWith({
                 error: 'Plan does not have a Stripe Price ID configured',
+                code: 'PRICE_NOT_CONFIGURED',
             });
         });
 

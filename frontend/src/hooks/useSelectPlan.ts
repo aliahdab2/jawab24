@@ -35,6 +35,13 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
   const isBlockedForMember = useOwnerGate();
   const tPricing = useTranslations('pricing');
 
+  // A plan with no yearly Stripe price can only be billed monthly — the
+  // backend refuses yearly (400 YEARLY_NOT_AVAILABLE) instead of silently
+  // charging the monthly price. Coerce per plan so a "year" page toggle never
+  // sends a yearly request for a monthly-only plan (e.g. the scale tiers).
+  const intervalFor = (plan: Plan | undefined): 'month' | 'year' =>
+    billingInterval === 'year' && plan?.yearlyAvailable ? 'year' : 'month';
+
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
   const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
   const [downgradeLoading, setDowngradeLoading] = useState(false);
@@ -99,7 +106,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     if (isNativePlatform() && (nativeSelectedPlan?.price ?? 0) > 0) {
       if (!isAuthenticated) {
         // Can't create a session without auth — fall back to the old web flow.
-        const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}`;
+        const checkoutPath = `/checkout?planId=${planId}&interval=${intervalFor(nativeSelectedPlan)}`;
         await openExternalUrl(buildWebAuthedUrl(checkoutPath, router.locale));
         return;
       }
@@ -107,7 +114,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
       try {
         const response = await api.post('/payment/create-checkout-session', {
           planId,
-          billingInterval,
+          billingInterval: intervalFor(nativeSelectedPlan),
           uiMode: 'hosted',
         });
         await openExternalUrl(response.data.url);
@@ -159,7 +166,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
 
     // Paid plan, not authenticated → login then checkout.
     if (!isAuthenticated) {
-      router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}&interval=${billingInterval}`)}`);
+      router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}&interval=${intervalFor(selectedPlan)}`)}`);
       return;
     }
 
@@ -167,7 +174,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     // Trial/manual subscriptions (no Stripe customer) fall through to checkout.
     if (hasActiveSubscription && usage?.subscription?.hasStripeCustomer) {
       try {
-        await subscriptionApi.changePlan(planId, billingInterval);
+        await subscriptionApi.changePlan(planId, intervalFor(selectedPlan));
         toast.success(tPricing('planChangeSuccess'));
         router.replace(router.asPath); // refresh usage so the UI reflects the new plan
       } catch (err) {
@@ -180,7 +187,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     }
 
     // New subscription or trial-to-paid upgrade → checkout.
-    router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
+    router.push(`/checkout?planId=${planId}&interval=${intervalFor(selectedPlan)}`);
   };
 
   /** Open Stripe Billing Portal for downgrades / cancellation. */

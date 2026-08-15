@@ -67,6 +67,7 @@ function makeScalePlan(overrides: Partial<Plan> = {}): Plan {
         description: 'High volume',
         price: 19900,
         yearlyPrice: null,
+        yearlyAvailable: false,
         currency: 'USD',
         interval: 'month',
         maxPages: 5,

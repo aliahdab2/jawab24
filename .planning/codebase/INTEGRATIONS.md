@@ -513,7 +513,7 @@ Voice-to-text for KB content via microphone:
      - Backend creates checkout session via `POST /payment/create-checkout-session`
      - Returns `clientSecret` for Stripe Embedded Checkout component in frontend
      - Frontend renders inline Stripe Embedded Checkout (no redirect to Stripe-hosted page)
-     - Supports monthly + yearly billing intervals
+     - Supports monthly billing; yearly only per plan where `plans.stripe_yearly_price_id` is set — the resolver (`backend/src/utils/stripePrice.ts`) refuses `billingInterval=year` with 400 `YEARLY_NOT_AVAILABLE` instead of falling back to the monthly price, and the frontend offers the yearly toggle only when a plan reports `yearlyAvailable`. Yearly Stripe prices are created by `backend/src/scripts/create-yearly-prices.ts` (dry-run by default)
      - After completion, frontend polls `GET /payment/checkout-session/:sessionId` for status
   2. **PaymentElement** (subscription creation path):
      - `POST /payment/create-subscription` → returns `clientSecret` for PaymentElement

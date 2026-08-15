@@ -75,7 +75,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 - Salla API (products + policies)
 - Zid API (products + policies — Saudi Arabia)
 - OpenAI API (reply generation + embeddings + translation)
-- Stripe API (subscriptions + billing for direct jawab24.com customers; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes. **Not** the rail for Shopify App Store installs — those are Shopify-billed (D-054) and hard-blocked from every Stripe surface with 400 `SHOPIFY_BILLED`)
+- Stripe API (subscriptions + billing for direct jawab24.com customers; Embedded Checkout with PaymentElement, monthly billing — yearly is offered per plan only once `plans.stripe_yearly_price_id` is set (backend refuses with 400 `YEARLY_NOT_AVAILABLE` otherwise, and the UI hides the yearly toggle; create the prices with `backend/src/scripts/create-yearly-prices.ts`), Billing Portal for plan changes. **Not** the rail for Shopify App Store installs — those are Shopify-billed (D-054) and hard-blocked from every Stripe surface with 400 `SHOPIFY_BILLED`)
 - Vonage SMS API (e-commerce customer notifications only; phone-OTP auth + SMS team invites are retired/disabled — see Authentication Architecture)
 - Resend Email API (transactional emails — waitlist notifications, customer communications)
 

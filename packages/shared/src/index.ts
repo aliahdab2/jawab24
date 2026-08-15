@@ -768,6 +768,10 @@ export interface Plan {
   description?: string | null;
   price: number; // monthly price in cents
   yearlyPrice: number | null; // yearly price in cents; null = no yearly option
+  // True only when the plan has a yearly Stripe price configured. The UI must
+  // not offer yearly billing without it — the backend refuses (400
+  // YEARLY_NOT_AVAILABLE) instead of silently billing the monthly price.
+  yearlyAvailable: boolean;
   currency: string;
   interval: 'month' | 'year';
   // Limits

@@ -71,10 +71,15 @@ function PlanCard({
 
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
-  const isAnnual = billingInterval === 'year';
+  // A plan without a yearly Stripe price is always displayed (and billed) as
+  // monthly, even when the page toggle is on "year" — the backend refuses
+  // yearly checkout for it (YEARLY_NOT_AVAILABLE), so advertising an annual
+  // total here would promise a price that cannot be charged.
+  const cardInterval = plan.yearlyAvailable ? billingInterval : 'month';
+  const isAnnual = cardInterval === 'year';
 
-  const displayPrice = !isFree ? getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) : 0;
-  const monthlyEquivalent = !isFree ? getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) : 0;
+  const displayPrice = !isFree ? getDisplayPrice(plan.price, cardInterval, plan.yearlyPrice) : 0;
+  const monthlyEquivalent = !isFree ? getMonthlyEquivalent(plan.price, cardInterval, plan.yearlyPrice) : 0;
 
   const planName = tPricing(plan.slug);
   const planDescription = tPricing(`${plan.slug}Desc`);
@@ -82,7 +87,7 @@ function PlanCard({
   // Format price
   const formatPrice = (price: number) => formatUsd(price, locale);
 
-  const sarMonthly = !isFree ? getSarMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) : 0;
+  const sarMonthly = !isFree ? getSarMonthlyEquivalent(plan.price, cardInterval, plan.yearlyPrice) : 0;
 
   const isPro = plan.slug === 'pro';
 
@@ -358,6 +363,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  // Yearly billing is only offered when at least one paid plan actually has a
+  // yearly Stripe price. Without this gate the toggle promised "save ~17%"
+  // while the backend could only charge the monthly price.
+  const yearlyOffered = useMemo(
+    () => plans.some(p => p.isActive !== false && p.price > 0 && p.yearlyAvailable),
+    [plans]
+  );
+  const effectiveInterval = yearlyOffered ? billingInterval : 'month';
+
   // Plan-selection flow (native redirect, owner gate, sanctions, free-plan,
   // change-plan-vs-checkout) lives in the shared hook — same logic as /pricing/scale.
   const {
@@ -367,7 +381,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     closeDowngradeDialog,
     downgradeLoading,
     handleDowngradeConfirm,
-  } = useSelectPlan({ plans, usage, billingInterval });
+  } = useSelectPlan({ plans, usage, billingInterval: effectiveInterval });
 
   // Client-side: fetch real plans if ISR served fallback data
   useEffect(() => {
@@ -572,7 +586,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </div>
         </div>
 
-        {/* Billing interval toggle */}
+        {/* Billing interval toggle — hidden while no plan can actually be
+            billed yearly (no yearly Stripe price), so the "save ~17%" promise
+            is only shown when it can be honored. */}
+        {yearlyOffered && (
         <div className="flex justify-center mb-3 sm:mb-8 lg:mb-12">
           <div className="inline-flex items-center p-1 bg-muted rounded-xl border border-theme-border shadow-inner">
             <button
@@ -596,6 +613,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             </button>
           </div>
         </div>
+        )}
 
         {/* Plan tabs — mobile only (Shopify-style segmented control) */}
         <PlanTabSelector
@@ -643,7 +661,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 currentPlanPrice={currentPlanPrice}
                 subscriptionStatus={usage?.subscription?.status}
                 isSanctioned={isSanctioned === true}
-                billingInterval={billingInterval}
+                billingInterval={effectiveInterval}
                 locale={locale}
               />
             </div>

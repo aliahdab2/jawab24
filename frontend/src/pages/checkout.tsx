@@ -259,7 +259,7 @@ export function PaymentForm({
 function CheckoutPage() {
   const router = useRouter();
   const { planId, interval, theme: themeParam, topup } = router.query;
-  const billingInterval = interval === 'year' ? 'year' : 'month';
+  const requestedInterval = interval === 'year' ? 'year' : 'month';
   const topupPack: TopupPack | null = topup === '5k' || topup === '10k' ? topup : null;
   const isTopup = !!topupPack;
   const locale = useLocale();
@@ -303,6 +303,14 @@ function CheckoutPage() {
 
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
+  // ?interval=year is honored only when the loaded plan actually has a yearly
+  // Stripe price — the backend refuses yearly otherwise (YEARLY_NOT_AVAILABLE)
+  // instead of silently billing monthly. Coercing here keeps the summary, the
+  // submit button, and the created intent all describing the same real charge.
+  // Safe to derive before the plan loads: intent creation gates on the plan
+  // being present (purchaseReady), so no request fires with a stale value.
+  const billingInterval: 'month' | 'year' =
+    requestedInterval === 'year' && plan?.yearlyAvailable ? 'year' : 'month';
   const [topupInfo, setTopupInfo] = useState<TopupInfo | null>(null);
   const [fetchError, setFetchError] = useState(false);
   const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null);
