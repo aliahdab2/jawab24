@@ -12,6 +12,7 @@ import {
     adminKbService,
     adminWaitlistService,
     adminMetricsService,
+    adminPartnersService,
     AI_COST_PERIODS,
     TooManyRecipientsError,
     UnknownTemplateError,
@@ -39,6 +40,8 @@ import type {
     LeadDigestHistoryQuery,
     TopupBody,
     PlaygroundRequestBody,
+    CreatePartnerBody,
+    AssignPartnerBody,
 } from '../types/admin';
 
 /**
@@ -461,6 +464,59 @@ export class AdminController {
         } catch (error) {
             request.log.error(error, 'Admin get audit logs failed');
             return reply.status(500).send({ success: false, error: 'Failed to get audit logs' });
+        }
+    }
+
+    // ============================================
+    // Partners (resellers / country reps)
+    // ============================================
+
+    /** GET /admin/partners */
+    async listPartners(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const data = await adminPartnersService.list();
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin list partners failed');
+            return reply.status(500).send({ success: false, error: 'Failed to list partners' });
+        }
+    }
+
+    /** POST /admin/partners */
+    async createPartner(request: FastifyRequest<{ Body: CreatePartnerBody }>, reply: FastifyReply) {
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        try {
+            const data = await adminPartnersService.create(request.body, adminUserId);
+            return reply.status(201).send({ success: true, data });
+        } catch (error) {
+            if (error instanceof AppError) {
+                return reply.status(error.statusCode).send({ success: false, error: error.message });
+            }
+            request.log.error(error, 'Admin create partner failed');
+            return reply.status(500).send({ success: false, error: 'Failed to create partner' });
+        }
+    }
+
+    /** PUT /admin/users/:userId/partner — assign or clear (partnerId: null) attribution. */
+    async assignUserPartner(
+        request: FastifyRequest<{ Params: { userId: string }; Body: AssignPartnerBody }>,
+        reply: FastifyReply,
+    ) {
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        try {
+            const data = await adminPartnersService.assignToUser(
+                request.params.userId,
+                request.body.partnerId,
+                adminUserId,
+                request.body.note,
+            );
+            return reply.send({ success: true, data });
+        } catch (error) {
+            if (error instanceof AppError) {
+                return reply.status(error.statusCode).send({ success: false, error: error.message });
+            }
+            request.log.error(error, 'Admin assign partner failed');
+            return reply.status(500).send({ success: false, error: 'Failed to assign partner' });
         }
     }
 

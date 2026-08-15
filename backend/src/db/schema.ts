@@ -32,6 +32,16 @@ export const users = pgTable('users', {
     // partially-consumed pack (gate `> 0` blocks usage until next purchase clears
     // the deficit) — intentional anti-abuse design, never clamp here.
     topupBalance: integer('topup_balance').notNull().default(0),
+    // Attribution: which partner (reseller / country rep) brought this merchant in.
+    // Written only by the admin console's manual assignment today; a future
+    // referral-link signup flow stamps the same column. ON DELETE SET NULL so
+    // removing a partner never breaks their merchants' accounts.
+    partnerId: uuid('partner_id').references((): AnyPgColumn => partners.id, { onDelete: 'set null' }),
+    // Admin-authored follow-up note about this merchant, shown to the assigned
+    // partner in the portal (e.g. "لم يفعّل الرد الآلي بعد — تواصل معه").
+    // Meaningful only while partner_id is set; kept on unassign so re-assigning
+    // doesn't lose context.
+    partnerNote: text('partner_note'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one identity anchor must be non-null —
@@ -53,6 +63,8 @@ export const users = pgTable('users', {
         // users where email is not null group by 1 having count(*) > 1` in
         // production, de-duplicate, then promote this to a partial unique index.
         emailLowerIdx: index('idx_users_email_lower').on(sql`lower(${table.email})`),
+        // Serves the partner portal's "my merchants" query.
+        partnerIdIdx: index('idx_users_partner_id').on(table.partnerId),
     };
 });
 
@@ -1771,6 +1783,30 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
         createdAtIdx: index('idx_admin_audit_created_at').on(table.createdAt),
     };
 });
+
+// 17. Partners — resellers / country representatives (e.g. the Syria rep at 20%,
+// the white-label reseller at 15%). Merchants are attributed to a partner via
+// `users.partner_id`. The commission percentage is per-partner and is
+// reporting-only: nothing auto-pays from it.
+export const partners = pgTable('partners', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    // Contact email, stored lowercase. Doubles as the portal login binding: the
+    // /partner surface matches lower(users.email) on first visit and persists
+    // the link in user_id, so the admin only ever has to know the partner's email.
+    email: varchar('email', { length: 255 }).notNull(),
+    // The partner's own Jawab24 user account (portal login). Nullable until the
+    // partner first opens the portal.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Whole percent, e.g. 20 — display/reporting only.
+    commissionPct: integer('commission_pct').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    emailLowerUnique: uniqueIndex('idx_partners_email_lower').on(sql`lower(${table.email})`),
+    userIdIdx: index('idx_partners_user_id').on(table.userId),
+}));
 
 // Stripe Webhook Events - idempotency deduplication
 export const stripeWebhookEvents = pgTable('stripe_webhook_events', {

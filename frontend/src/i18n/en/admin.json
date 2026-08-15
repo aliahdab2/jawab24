@@ -94,6 +94,17 @@
     "tableStatus": "Status",
     "tablePeriodEnd": "Period End",
     "tableSignedUp": "Signed Up",
+    "tableReseller": "Reseller",
+    "noReseller": "None",
+    "addReseller": "Add reseller",
+    "resellerName": "Reseller name",
+    "resellerEmail": "Reseller email",
+    "resellerEmailHelper": "The reseller signs in with this email to open the partner portal",
+    "resellerCommission": "Commission %",
+    "resellerCreateFailed": "Could not create the reseller. Check that the email is not already in use.",
+    "resellerNote": "Reseller note",
+    "resellerNoteHelper": "This note is shown to the assigned reseller in the partner portal for {name}",
+    "resellerNotePlaceholder": "e.g. Trial ending soon — call to follow up",
     "paginationShowing": "Showing {from}-{to} of {total}"
   },
   "customer": {

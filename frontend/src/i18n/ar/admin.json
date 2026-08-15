@@ -94,6 +94,17 @@
     "tableStatus": "الحالة",
     "tablePeriodEnd": "نهاية الفترة",
     "tableSignedUp": "تاريخ التسجيل",
+    "tableReseller": "الموزّع",
+    "noReseller": "بدون",
+    "addReseller": "إضافة موزّع",
+    "resellerName": "اسم الموزّع",
+    "resellerEmail": "البريد الإلكتروني للموزّع",
+    "resellerEmailHelper": "يسجّل الموزّع دخوله بهذا البريد لفتح بوابة الموزّع",
+    "resellerCommission": "نسبة العمولة %",
+    "resellerCreateFailed": "تعذّر إنشاء الموزّع. تأكد من أن البريد الإلكتروني غير مستخدم مسبقاً.",
+    "resellerNote": "ملاحظة الموزّع",
+    "resellerNoteHelper": "تظهر هذه الملاحظة للموزّع المسند إليه في بوابة الموزّع للتاجر {name}",
+    "resellerNotePlaceholder": "مثال: تنتهي التجربة قريباً — تواصل معه للمتابعة",
     "paginationShowing": "عرض {from}-{to} من {total}"
   },
   "customer": {

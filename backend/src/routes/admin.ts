@@ -260,6 +260,59 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         // ============================================
+        // Partners (resellers / country reps)
+        // ============================================
+
+        adminProtected.get(
+            '/partners',
+            { schema: { tags: ['Admin'], summary: 'List partners (resellers) with merchant counts', security: auth } },
+            adminController.listPartners,
+        );
+
+        adminProtected.post(
+            '/partners',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Create a partner (reseller / country rep)',
+                    security: auth,
+                    body: {
+                        type: 'object',
+                        required: ['name', 'email', 'commissionPct'],
+                        properties: {
+                            name: { type: 'string', minLength: 1, maxLength: 255 },
+                            email: { type: 'string', format: 'email', maxLength: 255 },
+                            commissionPct: { type: 'integer', minimum: 0, maximum: 100 },
+                        },
+                    },
+                },
+            },
+            adminController.createPartner,
+        );
+
+        adminProtected.put(
+            '/users/:userId/partner',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Assign or clear a merchant\'s partner (reseller) attribution',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        required: ['partnerId'],
+                        properties: {
+                            partnerId: { type: ['string', 'null'], format: 'uuid' },
+                            // Partner-visible follow-up note. Omit = unchanged; null/'' = clear.
+                            note: { type: ['string', 'null'], maxLength: 500 },
+                        },
+                    },
+                },
+            },
+            adminController.assignUserPartner,
+        );
+
+        // ============================================
         // Plans + audit logs
         // ============================================
 

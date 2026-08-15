@@ -969,6 +969,57 @@ export interface MessagesQueryParams {
   pageId?: string;           // Filter by specific page
 }
 
+// Partners (resellers / country reps) — admin registry + reseller-facing portal
+export interface AdminPartner {
+  id: string;
+  name: string;
+  email: string;
+  commissionPct: number;
+  isActive: boolean;
+  merchantCount: number;
+  createdAt: string | null;
+}
+
+export type PartnerMerchantStatus =
+  | 'trialing'
+  | 'trial_expired'
+  | 'active'
+  | 'expired'
+  | 'past_due'
+  | 'canceled'
+  | 'paused'
+  | 'none';
+
+export interface PartnerMerchant {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  pageNames: string[];
+  planName: string | null;
+  status: PartnerMerchantStatus;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  /** Admin-authored follow-up note for this merchant. */
+  adminNote: string | null;
+}
+
+export interface PartnerOverview {
+  // Commission % is deliberately absent — the portal never shows it.
+  partner: { name: string };
+  merchants: PartnerMerchant[];
+}
+
+// Partner Portal API — read-only surface for resellers. Any authenticated user
+// may call; non-partners get 403 (NOT_A_PARTNER) and the page redirects them.
+export const partnerApi = {
+  getOverview: async () => {
+    const response = await api.get<{ success: boolean; data: PartnerOverview }>('/partner/overview');
+    return response.data;
+  },
+};
+
 // Admin API - Protected routes for admin users only
 export const adminApi = {
   // List all users with pagination and filters
@@ -993,6 +1044,27 @@ export const adminApi = {
   // Get single user details
   getUser: async (userId: string) => {
     const response = await api.get(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  // Partners (resellers / country reps)
+  listPartners: async () => {
+    const response = await api.get<{ success: boolean; data: AdminPartner[] }>('/admin/partners');
+    return response.data;
+  },
+
+  createPartner: async (input: { name: string; email: string; commissionPct: number }) => {
+    const response = await api.post<{ success: boolean; data: AdminPartner }>('/admin/partners', input);
+    return response.data;
+  },
+
+  // Assign (or clear, with null) a merchant's reseller attribution.
+  // `note` (partner-visible follow-up note): omit = unchanged, null/'' = clear.
+  assignPartner: async (userId: string, partnerId: string | null, note?: string | null) => {
+    const response = await api.put<{ success: boolean; data: { partnerId: string | null; partnerNote: string | null } }>(
+      `/admin/users/${userId}/partner`,
+      note === undefined ? { partnerId } : { partnerId, note },
+    );
     return response.data;
   },
 

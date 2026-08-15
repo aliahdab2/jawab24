@@ -2632,6 +2632,15 @@ The single home for AI cost visibility and quota-runway monitoring (built to pre
 - **Proactive alerts**: throttled admin email + Sentry on credit-low (`alert:openai_credit_low`) and spend-spike (`alert:openai_spend_spike`). OpenAI **auto-recharge** (enabled in the OpenAI dashboard) is the primary outage protection; these alerts are the backstop
 - **Endpoints**: `GET /admin/ai-cost/{consumption,billing,reconciliation,runway}`, `POST /admin/ai-cost/sync`, `PUT /admin/ai-cost/balance`
 
+### Partner (Reseller) Attribution & Portal (2026-08-15)
+
+Shared attribution primitive for every commission arrangement (country reps, white-label resellers):
+
+- **Schema**: `partners` table (name, email, per-partner `commission_pct`, `user_id` portal binding, `is_active`) + `users.partner_id` (attribution, ON DELETE SET NULL) + `users.partner_note` (admin-authored follow-up note the assigned partner sees). Migration 0167.
+- **Admin** (`/admin/customers`): per-merchant reseller assignment dropdown + note editor + "Add reseller" modal; the list also shows a country hint derived from the E.164 phone prefix (libphonenumber, e.g. +963 → Syria). Endpoints: `GET/POST /admin/partners`, `PUT /admin/users/:userId/partner` (all `requireAdmin`, audit-logged as `partner_created` / `partner_assigned`).
+- **Partner portal** (`/partner`, `GET /partner/overview`): read-only page for the partner's own login. Binding is lazy — admin records the partner's email; on first visit the portal matches `lower(users.email)` and persists `user_id`. Shows ONLY the partner's attributed merchants (accounts with ≥1 connected page, newest first, cap 500): name, phone, page names, plan, derived status (stale `trialing` rows past `trial_ends_at` render as trial-expired without mutating), trial/period end, signup, last activity, admin note. Never: email, costs, messages, KB, settings, other partners' merchants. Non-partners get 403 → redirected.
+- **Attribution is manual-only today** (admin dropdown). A future referral link (`?ref=<code>`) stamps the same `users.partner_id` at signup — planned, ❌ NOT IMPLEMENTED. Commission remains reporting-only: nothing auto-pays, and manual (cash/bank) payments still write no `payment_requests` row, so partner payouts are still computed outside the DB.
+
 ### SEO Infrastructure
 
 | Feature | Status |
@@ -2670,6 +2679,13 @@ The single home for AI cost visibility and quota-runway monitoring (built to pre
 - المسار: `/admin/observability` (محمي، مدير+ فقط)
 - تفصيل تكلفة AI حسب النموذج واليوم ومعدل إصابة الكاش
 - إحصائيات خط الإنتاج: معدل الرد، أوقات الاستجابة، العدد المُعلَّم
+
+### إسناد الموزّعين وبوابة الموزّع (2026-08-15)
+
+- **المخطط**: جدول `partners` (الاسم، البريد، نسبة عمولة لكل موزّع، ربط الحساب) + `users.partner_id` (الإسناد) + `users.partner_note` (ملاحظة متابعة يكتبها المدير ويراها الموزّع)
+- **الإدارة** (`/admin/customers`): إسناد الموزّع لكل تاجر + محرر الملاحظة + إضافة موزّع جديد، مع إظهار بلد التاجر المشتق من مفتاح الهاتف (+963 → سوريا)
+- **بوابة الموزّع** (`/partner`): صفحة قراءة فقط تعرض للموزّع تجّاره فقط (الحسابات التي لديها صفحة مرتبطة، الأحدث أولاً): الاسم، الهاتف، الصفحات، الخطة، الحالة، تواريخ التجربة والاشتراك، آخر نشاط، ملاحظة المدير — ولا تعرض أبداً: البريد، التكاليف، المحادثات، معلومات النشاط التجاري، الإعدادات
+- **الإسناد يدوي فقط حالياً**؛ رابط الإحالة (`?ref=`) مخطط له وغير منفّذ بعد ❌
 
 ### بنية SEO التحتية
 

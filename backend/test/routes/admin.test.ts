@@ -91,7 +91,8 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    users: { id: 'id', email: 'email', name: 'name', facebookId: 'facebookId', createdAt: 'createdAt' },
+    users: { id: 'id', email: 'email', name: 'name', phone: 'phone', facebookId: 'facebookId', createdAt: 'createdAt', partnerId: 'partnerId', partnerNote: 'partnerNote' },
+    partners: { id: 'id', name: 'name', email: 'email', userId: 'userId', commissionPct: 'commissionPct', isActive: 'isActive', createdAt: 'createdAt', updatedAt: 'updatedAt' },
     subscriptions: { id: 'id', userId: 'userId', status: 'status', planId: 'planId', currentPeriodStart: 'cps', currentPeriodEnd: 'cpe', paymentMethod: 'pm', trialEndsAt: 'te' },
     plans: { id: 'id', name: 'name', slug: 'slug', price: 'price', isActive: 'isActive', sortOrder: 'sortOrder', maxAiRepliesPerMonth: 'max_ai', maxPages: 'max_pages' },
     adminAuditLogs: { id: 'id', action: 'action', previousValue: 'pv', newValue: 'nv', paymentReference: 'pr', note: 'note', createdAt: 'createdAt', adminUserId: 'adminUserId', targetUserId: 'targetUserId' },

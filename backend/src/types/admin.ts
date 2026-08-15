@@ -28,6 +28,19 @@ export interface ListAllUsersQuery {
     search?: string;
 }
 
+export interface CreatePartnerBody {
+    name: string;
+    email: string;
+    commissionPct: number;
+}
+
+export interface AssignPartnerBody {
+    /** Partner to attribute the merchant to; null clears the attribution. */
+    partnerId: string | null;
+    /** Partner-visible follow-up note. Omit = unchanged; null/'' = clear. */
+    note?: string | null;
+}
+
 export interface AiModelBody {
     model: string | null;
 }

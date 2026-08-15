@@ -32,6 +32,7 @@ import enNav           from './en/nav.json';
 import enNotifications from './en/notifications.json';
 import enOnboarding    from './en/onboarding.json';
 import enPages         from './en/pages.json';
+import enPartner       from './en/partner.json';
 import enPayment       from './en/payment.json';
 import enPlans         from './en/plans.json';
 import enPricing       from './en/pricing.json';
@@ -87,6 +88,7 @@ import arNav           from './ar/nav.json';
 import arNotifications from './ar/notifications.json';
 import arOnboarding    from './ar/onboarding.json';
 import arPages         from './ar/pages.json';
+import arPartner       from './ar/partner.json';
 import arPayment       from './ar/payment.json';
 import arPlans         from './ar/plans.json';
 import arPricing       from './ar/pricing.json';
@@ -145,6 +147,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/notifications': enNotifications, 'ar/notifications': arNotifications,
   'en/onboarding': enOnboarding, 'ar/onboarding': arOnboarding,
   'en/pages': enPages,           'ar/pages': arPages,
+  'en/partner': enPartner,       'ar/partner': arPartner,
   'en/payment': enPayment,       'ar/payment': arPayment,
   'en/plans': enPlans,           'ar/plans': arPlans,
   'en/pricing': enPricing,       'ar/pricing': arPricing,

@@ -79,6 +79,9 @@ export const PAGE_NAMESPACES = {
   adminObservability: [...ADMIN_LAYOUT],
   adminAiCost:        [...ADMIN_LAYOUT],
 
+  // ── Partner portal (reseller-facing, standalone layout) ───────
+  partner:            ['partner'],
+
   // ── Integration onboarding ────────────────────────────────────
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],
   sallaOnboard:       ['salla', 'integrations', 'onboarding'],
