@@ -67,6 +67,7 @@ import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
 import { imageStorage } from "./services/imageStorage";
 import { setTrialRemindersLogger, runTrialEndingReminders, runTrialEndedNotices } from "./services/trialReminders";
+import { setDunningNoticesLogger, runDunningNotices } from "./services/dunningNotices";
 import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
@@ -431,6 +432,23 @@ const start = async () => {
       // Staggered 2 min behind the ending-reminder sweep, same reasoning
       initialDelayMs: 9 * 60 * 1000,
       run: runTrialEndedNotices,
+      logError: logJobError,
+    });
+
+    // Dunning catch-up cron — once per day, emails Stripe-rail merchants whose
+    // renewal failed (with the open invoice's hosted pay link) and those whose
+    // past_due grace has expired (replies stopped). The webhook paths are the
+    // primary trigger; this sweep is the retry channel AND the backfill for
+    // rows whose failure predates the feature. Stamp claims in the service
+    // guarantee one email per failure episode however often either fires.
+    setDunningNoticesLogger(workerLogger);
+    scheduleRecurringJob({
+      label: '[Dunning]',
+      tag: 'dunning_notices',
+      intervalMs: DAILY_MS,
+      // Staggered 2 min behind the trial-ended sweep, same reasoning
+      initialDelayMs: 11 * 60 * 1000,
+      run: runDunningNotices,
       logError: logJobError,
     });
 

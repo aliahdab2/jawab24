@@ -19,6 +19,9 @@ export const FALLBACK_PLANS: Plan[] = [
         description: 'For small projects',
         price: 1500,
         yearlyPrice: 15000,
+        // Display-only fallback: never claim yearly is purchasable when the API
+        // (the authority on Stripe price config) is unreachable.
+        yearlyAvailable: false,
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
@@ -43,6 +46,9 @@ export const FALLBACK_PLANS: Plan[] = [
         description: 'For active stores',
         price: 3900,
         yearlyPrice: 39000,
+        // Display-only fallback: never claim yearly is purchasable when the API
+        // (the authority on Stripe price config) is unreachable.
+        yearlyAvailable: false,
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
@@ -67,6 +73,9 @@ export const FALLBACK_PLANS: Plan[] = [
         description: 'For agencies',
         price: 7900,
         yearlyPrice: 79000,
+        // Display-only fallback: never claim yearly is purchasable when the API
+        // (the authority on Stripe price config) is unreachable.
+        yearlyAvailable: false,
         currency: 'USD',
         interval: 'month',
         maxPages: 5,

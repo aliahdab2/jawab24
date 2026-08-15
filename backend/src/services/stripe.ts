@@ -433,6 +433,18 @@ export class StripeService {
     }
 
     /**
+     * Get a subscription with its latest invoice expanded — the dunning sweep's
+     * catch-up path (services/dunningNotices.ts) needs the invoice's hosted
+     * payment URL and amount for rows whose original webhook payload is long
+     * gone. Expand precedent: createSubscriptionIntent's `latest_invoice.…`.
+     */
+    async getSubscriptionWithLatestInvoice(subscriptionId: string): Promise<Stripe.Subscription> {
+        return requireStripe().subscriptions.retrieve(subscriptionId, {
+            expand: ['latest_invoice'],
+        });
+    }
+
+    /**
      * List subscriptions in a given state, following pagination.
      *
      * Used by the reconciliation sweep, which treats Stripe as the authority on

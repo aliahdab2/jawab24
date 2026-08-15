@@ -11,7 +11,7 @@ import { t } from './i18n';
 const MOCK_PLANS = [
   {
     id: 'plan_free', slug: 'free', name: 'Free', description: 'Free plan',
-    price: 0, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 0, yearlyPrice: null, yearlyAvailable: false, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10, maxPages: 1,
     maxTemplates: 2, maxRules: 2, maxProducts: null, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, prioritySupport: false,
@@ -19,7 +19,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
-    price: 1500, currency: 'USD', interval: 'month', trialDays: 30,
+    price: 1500, yearlyPrice: 15000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 30,
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, prioritySupport: false,
@@ -27,7 +27,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_business', slug: 'business', name: 'Business', description: 'Business plan',
-    price: 2900, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 2900, yearlyPrice: 29000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 2500, maxPages: 2,
     maxTemplates: null, maxRules: null, maxProducts: 200, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, prioritySupport: true,
@@ -35,7 +35,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_pro', slug: 'pro', name: 'Pro', description: 'Pro plan',
-    price: 7900, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 7900, yearlyPrice: 79000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10000, maxPages: 5,
     maxTemplates: null, maxRules: null, maxProducts: null, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, prioritySupport: true,
@@ -124,6 +124,53 @@ test.describe('Pricing Page', () => {
 
     // Switch back to monthly
     await monthlyBtn.click();
+  });
+
+  test('a plan without a yearly price stays monthly while the toggle is on yearly', async ({ page }) => {
+    // Mixed grid: Business has no yearly Stripe price, Starter and Pro do.
+    // The toggle shows (someone offers yearly), but the Business card must
+    // keep advertising its MONTHLY price — an annual total there could not be
+    // charged (backend refuses with YEARLY_NOT_AVAILABLE).
+    await page.route('**/api/plans**', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          data: MOCK_PLANS.map(p => p.slug === 'business' ? { ...p, yearlyAvailable: false } : p),
+        }),
+      });
+    });
+
+    await page.goto('/en/pricing');
+    await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
+
+    await page.getByText(t('pricing.yearly')).first().click();
+
+    // Pro (yearly available) switches to its per-month-equivalent: $79 → $66
+    await expect(page.locator('#plan-panel-pro').getByText('$66', { exact: false })).toBeVisible();
+    // Business (no yearly price) keeps its monthly $29 — never the $24
+    // equivalent of an annual total that cannot be billed
+    await expect(page.locator('#plan-panel-business').getByText('$29', { exact: false })).toBeVisible();
+    await expect(page.locator('#plan-panel-business').getByText('$24', { exact: false })).toHaveCount(0);
+  });
+
+  test('hides the billing toggle when no plan has a yearly Stripe price', async ({ page }) => {
+    // The API says yearly is not purchasable for any plan (yearlyAvailable
+    // false — no stripe_yearly_price_id). The page must not promise the
+    // ~17% saving it cannot charge: no toggle, no save badge.
+    await page.route('**/api/plans**', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ data: MOCK_PLANS.map(p => ({ ...p, yearlyAvailable: false })) }),
+      });
+    });
+
+    await page.goto('/en/pricing');
+    await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
+    // Plan cards rendered (the page is not just empty)…
+    await expect(page.getByRole('heading', { name: 'Starter', exact: true })).toBeVisible();
+    // …but the yearly offer is gone.
+    await expect(page.getByText(t('pricing.yearly'))).toHaveCount(0);
+    await expect(page.getByText(t('pricing.savePercent'))).toHaveCount(0);
   });
 
   test('should render FAQ section with expandable questions', async ({ page }) => {

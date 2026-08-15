@@ -929,6 +929,17 @@ export const subscriptions = pgTable('subscriptions', {
     zidStoreId: varchar('zid_store_id', { length: 255 }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
 
+    // Dunning-email idempotency stamps (services/dunningNotices.ts). Each marks
+    // "the merchant has been emailed for the CURRENT failure episode" — an
+    // episode runs from the first failed renewal charge to the next successful
+    // payment, which resets both to NULL so a later failure notifies again.
+    // Claimed atomically (UPDATE … WHERE <col> IS NULL) before sending because
+    // two triggers race (webhook retries × the daily sweep), and released back
+    // to NULL when the send provably did not go out. NULL = no open notified
+    // episode. Same column-stamp pattern as trial_ending_notified_at above.
+    renewalFailureNotifiedAt: timestamp('renewal_failure_notified_at'),
+    suspensionNotifiedAt: timestamp('suspension_notified_at'),
+
     // Cancellation
     canceledAt: timestamp('canceled_at'),
     cancelReason: text('cancel_reason'),

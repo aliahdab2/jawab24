@@ -18,7 +18,7 @@ async function scrollIntoView(locator: Locator, timeout = 10000) {
 const MOCK_PLANS = [
   {
     id: 'plan_free', slug: 'free', name: 'Free', description: 'Free plan',
-    price: 0, yearlyPrice: null, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 0, yearlyPrice: null, yearlyAvailable: false, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10, maxPages: 1,
     maxTemplates: 2, maxRules: 2, maxProducts: null, facebookEnabled: true,
     instagramEnabled: true, whatsappEnabled: false,
@@ -26,7 +26,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
-    price: 1500, yearlyPrice: 15000, currency: 'USD', interval: 'month', trialDays: 30,
+    price: 1500, yearlyPrice: 15000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 30,
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true,
     instagramEnabled: true, whatsappEnabled: false,
@@ -35,7 +35,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_business', slug: 'business', name: 'Business', description: 'Business plan',
-    price: 2900, yearlyPrice: 29000, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 2900, yearlyPrice: 29000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 2500, maxPages: 2,
     maxTemplates: null, maxRules: null, maxProducts: 200, facebookEnabled: true,
     instagramEnabled: true, whatsappEnabled: false,
@@ -44,7 +44,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_pro', slug: 'pro', name: 'Pro', description: 'Pro plan',
-    price: 7900, yearlyPrice: 79000, currency: 'USD', interval: 'month', trialDays: 0,
+    price: 7900, yearlyPrice: 79000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10000, maxPages: 5,
     maxTemplates: null, maxRules: null, maxProducts: null, facebookEnabled: true,
     instagramEnabled: true, whatsappEnabled: false,
@@ -564,6 +564,42 @@ test.describe('Payment Flow — Checkout', () => {
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
     // Yearly price: $150 ($15000 cents / 100) — target desktop sidebar price
     await expect(page.locator('.font-display >> text=/\\$150/').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  // The yearly guard (2026-08-15): ?interval=year on a plan with NO yearly
+  // Stripe price must fall back to a plainly-monthly checkout — price, label
+  // AND the created intent. The backend refuses billingInterval=year for such
+  // a plan (400 YEARLY_NOT_AVAILABLE); before the guard this URL silently
+  // subscribed the merchant at the monthly price under a yearly promise.
+  test('yearly URL on a plan without a yearly price falls back to a monthly checkout', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.route('**/api/plans/plan_starter', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ data: { ...MOCK_PLANS[1], yearlyAvailable: false } }),
+      });
+    });
+    // No create-subscription-intent mock on purpose: the beforeEach catchall
+    // answers `{}` (no clientSecret), so Stripe Elements never initializes.
+    // Fulfilling with a fake secret crashes the page — Stripe.js validates the
+    // `${id}_secret_${secret}` shape synchronously and throws into the React
+    // error boundary. waitForRequest still observes the request and its body.
+
+    const intentRequest = page.waitForRequest(
+      (req) => req.url().includes('/create-subscription-intent'),
+      { timeout: 20000 },
+    );
+
+    await page.goto('/en/checkout?planId=plan_starter&interval=year');
+
+    // Monthly price shown — never the $150.00 yearly total
+    await expect(page.locator('.font-display >> text=/\\$15\\.00/').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.font-display >> text=/\\$150\\.00/')).toHaveCount(0);
+
+    // And the intent actually created bills MONTHLY
+    const body = JSON.parse((await intentRequest).postData() || '{}');
+    expect(body.planId).toBe('plan_starter');
+    expect(body.billingInterval).toBe('month');
   });
 
   test('embedded checkout session is created automatically', async ({ page }) => {

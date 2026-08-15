@@ -8,7 +8,7 @@ import { noopLogger } from '../types/logger';
 
 // Email type discriminator stored on `email_sends.type`. Add new values here
 // as new email kinds ship — keeps the union exhaustive at every call site.
-export type EmailType = 'lead_digest' | 'waitlist' | 'transactional' | 'subscription_welcome' | 'trial_ending' | 'trial_ended' | 'invite' | 'account_notice' | 'auto_pause' | 'page_reconnect';
+export type EmailType = 'lead_digest' | 'waitlist' | 'transactional' | 'subscription_welcome' | 'trial_ending' | 'trial_ended' | 'invite' | 'account_notice' | 'auto_pause' | 'page_reconnect' | 'payment_failed' | 'service_suspended' | 'payment_recovered';
 
 interface EmailPayload {
     to: string;

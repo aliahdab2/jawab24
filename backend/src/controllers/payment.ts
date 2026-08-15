@@ -12,6 +12,7 @@ import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import { stripeTsToDate } from '../utils/stripeTime';
+import { resolveStripePriceForInterval } from '../utils/stripePrice';
 import { getSubscriptionPeriod } from '../utils/stripeCompat';
 import { dispatchStripeEvent } from './paymentWebhookHandlers';
 
@@ -127,16 +128,17 @@ export class PaymentController {
                 return reply.status(404).send({ error: 'Plan not found' });
             }
 
-            // Pick monthly or yearly Stripe price (validate input)
-            const rawInterval = request.body.billingInterval;
-            const billingInterval = rawInterval === 'year' ? 'year' : 'month';
-            const stripePriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
-                ? plan.stripeYearlyPriceId
-                : plan.stripePriceId;
-
-            if (!stripePriceId) {
-                return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
+            // Pick monthly or yearly Stripe price. Refuses (never falls back
+            // to monthly) when yearly is requested but not configured.
+            const priceResolution = resolveStripePriceForInterval(plan, request.body.billingInterval);
+            if (!priceResolution.ok) {
+                request.log.warn(
+                    { userId, planId, code: priceResolution.code, requestedInterval: request.body.billingInterval },
+                    'Checkout refused: Stripe price not resolvable for requested interval'
+                );
+                return reply.status(400).send({ error: priceResolution.error, code: priceResolution.code });
             }
+            const { stripePriceId } = priceResolution;
 
             // Look at the user's full subscription history (any status).
             const existingSubscriptions = await db
@@ -262,15 +264,15 @@ export class PaymentController {
             const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
             if (!plan) return reply.status(404).send({ error: 'Plan not found' });
 
-            const rawInterval = request.body.billingInterval;
-            const billingInterval = rawInterval === 'year' ? 'year' : 'month';
-            const stripePriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
-                ? plan.stripeYearlyPriceId
-                : plan.stripePriceId;
-
-            if (!stripePriceId) {
-                return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
+            const priceResolution = resolveStripePriceForInterval(plan, request.body.billingInterval);
+            if (!priceResolution.ok) {
+                request.log.warn(
+                    { userId, planId, code: priceResolution.code, requestedInterval: request.body.billingInterval },
+                    'Subscription intent refused: Stripe price not resolvable for requested interval'
+                );
+                return reply.status(400).send({ error: priceResolution.error, code: priceResolution.code });
             }
+            const { stripePriceId } = priceResolution;
 
             // Check existing subscriptions for trial eligibility
             const existingSubscriptions = await db
@@ -580,7 +582,6 @@ export class PaymentController {
             }
 
             const { planId } = request.body;
-            const billingInterval = request.body.billingInterval === 'year' ? 'year' : 'month';
             if (!planId) {
                 return reply.status(400).send({ error: 'Plan ID is required' });
             }
@@ -590,12 +591,15 @@ export class PaymentController {
                 return reply.status(404).send({ error: 'Plan not found' });
             }
 
-            const newPriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
-                ? plan.stripeYearlyPriceId
-                : plan.stripePriceId;
-            if (!newPriceId) {
-                return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
+            const priceResolution = resolveStripePriceForInterval(plan, request.body.billingInterval);
+            if (!priceResolution.ok) {
+                request.log.warn(
+                    { userId, planId, code: priceResolution.code, requestedInterval: request.body.billingInterval },
+                    'Plan change refused: Stripe price not resolvable for requested interval'
+                );
+                return reply.status(400).send({ error: priceResolution.error, code: priceResolution.code });
             }
+            const newPriceId = priceResolution.stripePriceId;
 
             // Pick the user's active Stripe-backed subscription. The resolver
             // already prioritizes active/trialing rows, but we need the row

@@ -159,6 +159,17 @@ const LAZY_EXPIRY_CANARIES: Record<string, {
 const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
 const STATUS_CACHE_TTL = 60;
+/**
+ * How long a `past_due` subscription keeps its entitlement past
+ * `current_period_end` — covers Stripe's first payment-retry window (declined
+ * card, bank flag) without giving abusers a week of free service every month.
+ * Matches Shopify. Exported because the dunning emails print the same boundary
+ * (services/dunningNotices.ts) — display and enforcement must share one clock.
+ *
+ * NOTE: PR #749 extracts this to `PAST_DUE_GRACE_DAYS` in @jawab24/shared —
+ * whichever lands second folds the two into the shared constant.
+ */
+export const GRACE_PERIOD_DAYS = 3;
 
 /**
  * Snap a date to 00:00:00 UTC. Used to align usage rollover to a calendar boundary
@@ -1124,9 +1135,16 @@ export const subscriptionsService = {
             const TTL_SECONDS = 24 * 60 * 60;
             const set = await redis.set(dedupKey, '1', 'EX', TTL_SECONDS, 'NX');
             if (set === 'OK') {
-                await notificationService.sendTemplateNotification(userId, 'auto_reply_paused_billing', {
-                    reason: check.reason ?? 'inactive',
-                });
+                // No variables: the template deliberately has no {reason}
+                // placeholder (check.reason is an internal English string that
+                // used to leak into the Arabic body). deepLink makes the card
+                // actionable — without it the frontend renders a dead end.
+                await notificationService.sendTemplateNotification(
+                    userId,
+                    'auto_reply_paused_billing',
+                    {},
+                    { deepLink: '/settings' },
+                );
             }
         } catch (err) {
             captureError(err, 'Failed to dispatch auto-reply paused notification', {
@@ -1194,9 +1212,6 @@ export const subscriptionsService = {
         }
 
         if (subscription.status === 'past_due') {
-            // 3 days covers Stripe's first payment-retry window (declined card, bank flag)
-            // without giving abusers a week of free service every month. Matches Shopify.
-            const GRACE_PERIOD_DAYS = 3;
             const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
 
             if (periodEnd) {
