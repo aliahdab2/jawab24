@@ -48,6 +48,7 @@ export function mapToPlatformPage(
         kbActiveVersion: number | null;
         ecommerceStoreId: string | null;
         businessProfile: unknown;
+        replyMode?: string | null;
     },
     overrides: {
         autoReplyEnabled: boolean;
@@ -68,6 +69,7 @@ export function mapToPlatformPage(
         platformAccountId: overrides.platformAccountId,
         ecommerceStoreId: page.ecommerceStoreId,
         businessProfile: page.businessProfile as Record<string, unknown> | null,
+        replyMode: page.replyMode ?? null,
     };
 }
 

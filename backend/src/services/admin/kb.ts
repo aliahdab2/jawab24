@@ -233,7 +233,7 @@ class AdminKbService {
     async runPlayground(body: PlaygroundRequestBody, log: FastifyBaseLogger): Promise<PlaygroundResult> {
         const {
             pageId, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         } = body;
         const startTime = Date.now();
 
@@ -251,6 +251,7 @@ class AdminKbService {
                 kbActiveVersion: pages.kbActiveVersion,
                 ecommerceStoreId: pages.ecommerceStoreId,
                 businessProfile: pages.businessProfile,
+                replyMode: pages.replyMode,
             })
             .from(pages)
             .where(eq(pages.id, pageId))
@@ -262,7 +263,7 @@ class AdminKbService {
 
         const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
             page, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         });
 
         replyGenerator.setLogger(log);

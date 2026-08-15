@@ -56,6 +56,9 @@ export interface CommentReplyContext {
     storePolicies?: string;
     productCatalog?: string;
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    /** Effective reply mode ('sales' | 'info') — resolved by commentProcessor from
+     *  page.replyMode ?? workspace settings.replyMode. */
+    replyMode?: string;
     brandVoiceNotes?: string;
     /** Stage 2.6 structured BUSINESS_INFO block (merchant-confirmed only). */
     businessInfoBlock?: string | null;

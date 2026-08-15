@@ -117,6 +117,7 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
             kbActiveVersion: pages.kbActiveVersion,
             ecommerceStoreId: pages.ecommerceStoreId,
             businessProfile: pages.businessProfile,
+            replyMode: pages.replyMode,
             facebookPageId: pages.facebookPageId,
         })
         .from(pages)

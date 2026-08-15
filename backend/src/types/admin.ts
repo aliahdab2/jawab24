@@ -95,6 +95,9 @@ export interface PlaygroundRequestBody {
     ourFacebookPageId?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: string;
+    /** Reply-mode override ('sales' | 'info') for the eval/playground — same caller-wins
+     *  semantics as replyStyle; omitted → resolved from the page/workspace as production does. */
+    replyMode?: string;
     brandVoiceNotes?: string;
     customerContext?: string;
     /** Customer display name (DM only) — lets the eval/playground exercise gender-aware

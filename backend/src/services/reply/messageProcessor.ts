@@ -25,6 +25,7 @@ import { subscriptionsService } from '../subscriptions';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
+import { resolveEffectiveReplyMode } from '@jawab24/shared';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { isPunctuationOnly } from '../../utils/commentText';
@@ -726,6 +727,7 @@ export class MessageProcessor {
                         senderId,
                         senderName,
                         replyStyle: userSettings.replyStyle,
+                        replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                         brandVoiceNotes,
                         businessInfoBlock,
                         factCollectionsBlock,
@@ -821,6 +823,7 @@ export class MessageProcessor {
                     sourceType: 'message',
                     senderId,
                     senderName,
+                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                     messageText: consolidatedText,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_self_identification');
@@ -1066,6 +1069,7 @@ export class MessageProcessor {
                 sourceType: 'message',
                 senderId,
                 senderName,
+                replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
                 messageText: consolidatedText,
             }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 

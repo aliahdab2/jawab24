@@ -29,6 +29,8 @@ export interface PlatformPage {
     ecommerceStoreId?: string | null;
     /** Structured business profile from Facebook sync (hours, phone, address, etc.) */
     businessProfile?: Record<string, unknown> | null;
+    /** Per-page reply-mode override ('sales' | 'info'); null = inherit workspace default */
+    replyMode?: string | null;
 }
 
 /** Stored message returned by the adapter's storeIncomingMessage */
