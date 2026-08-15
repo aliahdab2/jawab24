@@ -1,20 +1,16 @@
 import { describe, it, expect } from 'vitest';
+import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
 import { translateFlagReason } from '@/utils/flagReason';
 
 describe('translateFlagReason', () => {
-    // Mock t() scoped to flagReason namespace (no prefix needed)
-    const mockTranslations: Record<string, string> = {
-        'offensive_or_abusive': 'Offensive or abusive',
-        'angry_customer': 'Angry customer',
-        'low_confidence': 'Needs your review',
-        'price_not_in_kb': 'Please add price',
-    };
-    const mockTranslationsAr: Record<string, string> = {
-        'offensive_or_abusive': 'محتوى مسيء',
-        'angry_customer': 'عميل غاضب',
-        'low_confidence': 'يحتاج مراجعتك',
-        'price_not_in_kb': 'ارجو إضافة السعر',
-    };
+    // t() is built from the SAME JSON production loads — i18n/getMessages.ts
+    // maps the `flagReason` namespace straight to these two exports.
+    //
+    // These used to be hand-copied literals. That made the test structurally
+    // incapable of catching a wrong label: correcting the data required editing
+    // the mock to match, so the two were always in agreement by construction.
+    const mockTranslations: Record<string, string> = flagReasonEn;
+    const mockTranslationsAr: Record<string, string> = flagReasonAr;
 
     const tEn = (key: string) => mockTranslations[key] ?? key;
     const tAr = (key: string) => mockTranslationsAr[key] ?? key;
@@ -54,5 +50,21 @@ describe('translateFlagReason', () => {
     it('should trim whitespace around flags', () => {
         const result = translateFlagReason(' angry_customer , low_confidence ', tEn, 'en');
         expect(result).toBe('Angry customer, Needs your review');
+    });
+
+    it('renders no Arabic label with the bare-alif «ارجو» (فصحى needs أرجو)', () => {
+        // Regression: price/info/phone_not_in_kb all shipped as «ارجو إضافة …».
+        // These strings are a single source of truth — they render as the inbox
+        // chip here AND inside the flagged_reply push body (translateFlagReason
+        // in backend/src/services/notifications.ts) — so one wrong character was
+        // wrong on two surfaces at once.
+        //
+        // Asserted as an absence over the whole map rather than as expected
+        // literals: a rewording of the label must not fail this test, but
+        // reintroducing the bare alif anywhere must.
+        const offenders = Object.entries(mockTranslationsAr)
+            .filter(([, label]) => /(^|\s)ارجو/.test(label))
+            .map(([key]) => key);
+        expect(offenders).toEqual([]);
     });
 });

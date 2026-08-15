@@ -2,7 +2,7 @@ import { db } from '../db';
 import { deviceTokens, notifications, notificationSendLog, settings, workspaceMembers } from '../db/schema';
 import { eq, and, desc, count, inArray, lt, ne } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
-import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
+import { flagReasonEn, flagReasonAr, resolveNotificationTargetKey } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { sha256Hex } from '../utils/hash';
 
@@ -417,7 +417,13 @@ function translateFlagReason(reason: string, lang: string): string {
  * Replace template placeholders in a localized string map.
  * Arabic gets special handling for `reason` (translated) and `senderName` ('Unknown' → مجهول).
  */
-function buildTemplatePayload(
+/**
+ * Exported for tests: pure (no I/O), and it is where the shared flagReason
+ * translations become the push BODY. That surface had no coverage — the same
+ * strings render as inbox chips too, and only the chip side was ever asserted,
+ * which is how three Arabic labels shipped misspelled.
+ */
+export function buildTemplatePayload(
     type: NotificationType,
     variables: Record<string, string>,
     data?: Record<string, unknown>,
@@ -454,11 +460,60 @@ function replaceVariables(
 }
 
 /**
+ * Android notification tag for a payload — `undefined` when it names no target.
+ *
+ * Why: one FCM multicast reaches EVERY registered token, so a device holding two
+ * live tokens (reinstall / rotation — see the prune in registerDeviceToken, which
+ * only catches tokens idle for STALE_TOKEN_DAYS) renders the same push twice. A
+ * shared tag makes the second delivery REPLACE the first in the tray instead of
+ * stacking. Pushes about different targets get different tags and still stack.
+ *
+ * Deliberately NOT applied to payloads that name no ROW — both the id-less
+ * types (payment_failed, topup_credited, refund_processed, ai_usage_*) and the
+ * page-scoped ones (kb_gap, auto_reply_paused, post_reply_orphaned): for those a
+ * per-type or per-page tag would let a second, genuinely distinct event silently
+ * overwrite the first. They keep today's stacking behaviour untouched.
+ *
+ * What each type actually sends is pinned by PRODUCTION_PAYLOADS in
+ * test/services/notifications.test.ts, checked against NOTIFICATION_TEMPLATES at
+ * runtime — a new type cannot land without recording whether it collapses.
+ *
+ * The target-key list itself lives in @jawab24/shared rather than here, because
+ * the frontend's deep-link router answers the SAME question about the SAME
+ * payloads (which row is this notification about?) and the two encoded it
+ * separately — agreeing by coincidence, not by construction. That constant
+ * carries the full rationale for why `pageId` is excluded; the cross-boundary
+ * agreement is pinned by
+ * frontend/src/components/ui/__tests__/notificationTargetContract.test.ts.
+ */
+export function buildNotificationTag(payload: NotificationPayload): string | undefined {
+    const target = resolveNotificationTargetKey(payload.data);
+    return target ? `${payload.type}:${target.id}` : undefined;
+}
+
+/**
  * Build the FCM multicast message for a notification. Pure (no I/O) so the
  * payload shape — urgent channel routing + iOS custom sound — is unit-testable
  * without firebase-admin. Urgent pushes route to the urgent channel (high
  * priority + heads-up) and carry the distinct iOS sound; routine pushes use the
  * quiet default channel and the system default sound.
+ *
+ * NOTE: iOS de-duplication (`apns-collapse-id`) is deliberately NOT set here —
+ * the duplicate was reported on Android, and the apns block is currently built
+ * only for urgent pushes. Tracked as a follow-up rather than restructuring the
+ * urgent-sound path in the same change.
+ *
+ * Two constraints for whoever picks that up:
+ * - `apns-collapse-id` is capped at 64 BYTES; APNs rejects the request above it,
+ *   and the failure surfaces as an error row in notification_send_log, not as a
+ *   compile error. The tag is `${type}:${uuid}` and the longest NotificationType
+ *   is 25 chars (`auto_reply_paused_billing`, `whatsapp_reconnect_needed`), so
+ *   the worst case today is 25+1+36 = 62 bytes — two bytes of headroom. Assert
+ *   it when the header is added.
+ * - Web push (`webpush.notification.tag`) is NOT a missing leg: both push
+ *   registration entry points are gated on Capacitor.isNativePlatform()
+ *   (frontend/src/lib/notifications.ts), so platform='web' tokens are never
+ *   created. The 'web' value in the device_tokens schema comment is aspirational.
  */
 export function buildFcmMessage(
     payload: NotificationPayload,
@@ -468,6 +523,7 @@ export function buildFcmMessage(
     const title = payload.titles[userLanguage] || payload.titles[FALLBACK_LANG] || '';
     const body = payload.bodies[userLanguage] || payload.bodies[FALLBACK_LANG] || '';
     const isUrgent = payload.data?.urgent === true;
+    const tag = buildNotificationTag(payload);
 
     return {
         notification: { title, body },
@@ -481,7 +537,10 @@ export function buildFcmMessage(
         tokens: tokenStrings,
         android: {
             priority: (isUrgent ? 'high' : 'normal') as 'high' | 'normal',
-            notification: { channelId: isUrgent ? ANDROID_URGENT_CHANNEL_ID : ANDROID_CHANNEL_ID },
+            notification: {
+                channelId: isUrgent ? ANDROID_URGENT_CHANNEL_ID : ANDROID_CHANNEL_ID,
+                ...(tag ? { tag } : {}),
+            },
         },
         ...(isUrgent ? {
             apns: {
@@ -712,6 +771,19 @@ class NotificationService {
             }
 
             const tokenStrings = tokens.map(t => t.token);
+
+            // Diagnostic: the SAME token twice in one multicast means device_tokens
+            // holds duplicate rows for this user. registerDeviceToken is a
+            // check-then-insert and there is no unique (user_id, token) constraint,
+            // so two concurrent registrations both insert — and FCM then delivers
+            // the identical push to one device twice. The android tag above HIDES
+            // that in the tray, so without this counter the fix would mask its own
+            // remaining root cause: non-zero means the duplicate-row race is real
+            // and the unique index is the actual repair; flat zero means the
+            // stale-token explanation holds. Fire-and-forget; never gates a send.
+            if (new Set(tokenStrings).size !== tokenStrings.length) {
+                redis.incr('metrics:notif:duplicate_token_in_multicast').catch(() => { /* diagnostic only */ });
+            }
             const message = buildFcmMessage(payload, userLanguage, tokenStrings);
 
             const response = await getMessaging().sendEachForMulticast(message);
