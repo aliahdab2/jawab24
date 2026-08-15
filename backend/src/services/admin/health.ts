@@ -1,4 +1,4 @@
-import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, PAST_DUE_GRACE_DAYS, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
 import { coerceMultiLang } from '../multiLangTranslation';
 import { overlayWorkspaceFields } from '../pipelineFields';
 
@@ -83,6 +83,29 @@ export interface HealthInput {
     subscription: {
         status: string | null;
         trialEndsAt: Date | null;
+        /**
+         * Verdict of THE reply gate (`subscriptionsService.checkSubscriptionStatus`).
+         *
+         * REQUIRED, and deliberately not derivable here: `status` alone cannot say
+         * whether replies are flowing. A manual (cash/transfer) subscription never
+         * leaves 'active' — it expires by a snapped UTC-midnight boundary — so a
+         * console reading `status` showed a green "active" badge and no red flag
+         * while every reply was being refused (owner's own account, 2026-08-14).
+         * The tool support diagnoses with must not be the tool that reassures them.
+         */
+        autoReplyAllowed: boolean;
+        /**
+         * `resolveEntitlementEnd`'s answer — the instant the CLOCK cuts this
+         * subscription off, already rail-correct (snapped for manual, trialEndsAt
+         * for a trial, +grace for past_due). null = no clock bounds this row.
+         *
+         * Taken from the resolver rather than recomputed here so the console cannot
+         * date a different fuse than the gate burns: an earlier cut added
+         * `currentPeriodEnd + N * DAY_MS` locally, while the gate walks calendar days
+         * via `setDate(+N)` — the same number, two different instants across a DST
+         * boundary.
+         */
+        entitlementEndsAt: Date | null;
     } | null;
     pages: HealthInputPage[];
     /**
@@ -150,7 +173,8 @@ const NO_OFFERING_FAQ_DOWNGRADE = 3;
  */
 export const HEALTH_FLAG_KEYS = [
     'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
-    'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
+    'trial_expired', 'subscription_inactive', 'subscription_past_due_grace',
+    'usage_over_cap', 'usage_near_cap',
     'usage_on_topup', 'usage_near_cap_on_topup', 'usage_topup_nearly_drained',
     'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
@@ -349,18 +373,41 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
     if (subscription) {
         const status = subscription.status;
         const trialEndsAt = subscription.trialEndsAt;
-        if (status === 'trialing' && trialEndsAt) {
-            const msLeft = trialEndsAt.getTime() - now.getTime();
-            if (msLeft < 0) {
+        // THE REFUSAL IS CHECKED FIRST, unconditionally. It used to sit in an
+        // `else if` behind `status === 'trialing'`, which recreated the very bypass
+        // this console was fixed to remove: a trialing row with a FUTURE trialEndsAt
+        // whose gate refuses for some other reason (a manual grant past its snapped
+        // end) matched the trial arm, fell through `daysLeft > TRIAL_ENDING_SOON`,
+        // and emitted nothing at all — a healthy chip over a frozen account.
+        if (!subscription.autoReplyAllowed) {
+            // `trial_expired` stays the more specific label when that is genuinely
+            // the cause; otherwise the generic refusal carries the raw status as meta.
+            const trialIsTheCause = status === 'trialing' && trialEndsAt && trialEndsAt.getTime() < now.getTime();
+            if (trialIsTheCause) {
                 add('red', 'trial_expired');
             } else {
-                const daysLeft = Math.ceil(msLeft / DAY_MS);
-                if (daysLeft <= TRIAL_ENDING_SOON_DAYS) {
-                    add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
-                }
+                add('red', 'subscription_inactive', { meta: { status: status ?? 'unknown' } });
             }
-        } else if (status === 'past_due' || status === 'canceled') {
-            add('red', 'subscription_inactive', { meta: { status } });
+        } else if (status === 'trialing' && trialEndsAt) {
+            const daysLeft = Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS);
+            if (daysLeft <= TRIAL_ENDING_SOON_DAYS) {
+                add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
+            }
+        } else if (status === 'past_due' && subscription.entitlementEndsAt) {
+            // Gate ALLOWS — the retry grace is still running, so replies really are
+            // flowing and red would be a lie. But the fuse must stay visible: the
+            // old status-only rule flagged this red, and moving to the gate would
+            // otherwise have DELETED support's only warning that a card failed.
+            //
+            // Requires entitlementEndsAt. A past_due row with no currentPeriodEnd is
+            // never refused by the gate at all (the grace check is guarded on it), so
+            // announcing "3 days left, then they stop" would hand support a deadline
+            // that never arrives — the resolver returns null for exactly that row.
+            const daysLeft = Math.max(
+                0,
+                Math.ceil((subscription.entitlementEndsAt.getTime() - now.getTime()) / DAY_MS),
+            );
+            add('yellow', 'subscription_past_due_grace', { meta: { daysLeft } });
         }
     }
 

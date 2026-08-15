@@ -42,6 +42,18 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
 
     const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
 
+    // Explicit `=== false`: an older API response without the field must fall back
+    // to the raw status badge rather than accuse a healthy account of being blocked.
+    const repliesBlocked = customer.subscription?.autoReply?.allowed === false;
+    // Manual plans snap entitlement back to UTC midnight, so coverage can end a
+    // full day before `currentPeriodEnd`. Compared, not assumed — for every other
+    // rail the two are the same instant and the extra line would be noise.
+    const entitlementEndsAt = customer.subscription?.entitlementEndsAt;
+    const periodEnd = customer.subscription?.currentPeriodEnd;
+    const coverageEndsEarlier = Boolean(
+        entitlementEndsAt && periodEnd && new Date(entitlementEndsAt) < new Date(periodEnd),
+    );
+
     const loadPaymentRequests = async () => {
         try {
             const res = await adminApi.listPaymentRequests(userId);
@@ -84,18 +96,56 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
                         </div>
                         <div>
                             <div className="text-xs text-muted-foreground mb-1">{t('customer.status')}</div>
-                            <span className={clsx(
-                                'inline-flex px-3 py-1 text-sm font-medium rounded-full border',
-                                STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800 border-gray-200'
-                            )}>
-                                {STATUS_KEYS[customer.subscription.status] ? t(STATUS_KEYS[customer.subscription.status] as Parameters<typeof t>[0]) : customer.subscription.status}
-                            </span>
+                            {/* The gate's verdict OUTRANKS the raw status, and is rendered
+                                first. A manual plan sits at 'active' for good and expires
+                                only at a snapped boundary, so a status-only badge told
+                                support the account was healthy while every reply was being
+                                refused — and that reassurance is why the same class of
+                                silent suspension went unnoticed for a month. The raw status
+                                stays visible beside it as context, never as the verdict. */}
+                            {repliesBlocked ? (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex px-3 py-1 text-sm font-medium rounded-full border status-error">
+                                        {t('customer.repliesBlocked')}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {t('customer.repliesBlockedRawStatus', { status: customer.subscription.status })}
+                                    </span>
+                                </div>
+                            ) : (
+                                <span className={clsx(
+                                    'inline-flex px-3 py-1 text-sm font-medium rounded-full border',
+                                    STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800 border-gray-200'
+                                )}>
+                                    {STATUS_KEYS[customer.subscription.status] ? t(STATUS_KEYS[customer.subscription.status] as Parameters<typeof t>[0]) : customer.subscription.status}
+                                </span>
+                            )}
                         </div>
                         <div>
                             <div className="text-xs text-muted-foreground mb-1">{t('customer.periodEnd')}</div>
                             <div className="font-medium">
                                 {formatDate(customer.subscription.currentPeriodEnd)}
                             </div>
+                            {/* Only when it differs from the raw period end — i.e. manual
+                                plans, where entitlement is snapped back to UTC midnight and
+                                the row above overstates coverage by up to a day. */}
+                            {coverageEndsEarlier && (
+                                <div className="text-xs status-error mt-1">
+                                    {/* WITH a time. `formatDate` is date-only, and for a
+                                        manual plan both instants fall on the same calendar
+                                        day in every MENA timezone — so this line rendered
+                                        the identical string as the row above and conveyed
+                                        nothing, on the one surface support diagnoses from.
+                                        It also broke this PR's own rule: a 00:00 boundary
+                                        printed bare reads as the whole of that day. */}
+                                    {t('customer.coverageEndsAt', {
+                                        date: new Date(entitlementEndsAt as string).toLocaleString(intlLocale, {
+                                            year: 'numeric', month: 'long', day: 'numeric',
+                                            hour: '2-digit', minute: '2-digit',
+                                        }),
+                                    })}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <div className="text-xs text-muted-foreground mb-1">{t('customer.paymentMethod')}</div>

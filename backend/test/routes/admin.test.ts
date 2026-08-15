@@ -141,7 +141,21 @@ vi.mock('../../src/services/kb/embedding', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+        // getUserDetail asks the gate whether replies are actually flowing, so the
+        // console can stop deriving that from `subscriptions.status`. The verdict's
+        // own semantics are covered in subscriptionExpiry / adminHealth tests; here
+        // it only has to exist so the route can render.
+        checkSubscriptionStatus: vi.fn(() => ({ allowed: true })),
+        // getUserDetail resolves the entitlement through the SAME accessor the reply
+        // path uses (lazy expiry flip + active-first row ordering), not the raw row it
+        // selected — evaluating the raw row reported a healthy account for an expired
+        // Stripe subscription whose status had not been flipped yet.
+        getUserSubscription: vi.fn().mockResolvedValue({
+            id: 'sub-1', userId: 'user-1', status: 'active',
+            paymentMethod: null, currentPeriodEnd: null, trialEndsAt: null,
+        }),
     },
+    resolveEntitlementEnd: vi.fn(() => null),
 }));
 
 vi.mock('../../src/services/kb/gap-detector', () => ({

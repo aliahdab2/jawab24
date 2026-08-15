@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
-import { AlertTriangle, Sparkles, MessageSquareOff } from 'lucide-react';
+import { AlertTriangle, Sparkles, MessageSquareOff, RefreshCw } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA, InfoPopover } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { isIOSNative } from '@/lib/capacitor';
 import { formatQuotaResetDate } from '@/lib/formatDate';
 import { resolveAiQuotaStatus, type UsageSummary } from '@jawab24/shared';
 
@@ -27,15 +28,34 @@ interface AiUsageWarningBannerProps {
      * so the banner shows a calm "on top-up" notice instead of the red wall.
      */
     topupBalance?: number;
+    /**
+     * The reply gate's verdict (`usage.subscription.autoReply`) — the SAME
+     * predicate the backend blocks on. When it refuses, no quota number can
+     * describe the account correctly and this banner must say so.
+     */
+    autoReply?: UsageSummary['subscription']['autoReply'];
+    /**
+     * ISO instant coverage actually ended (`usage.subscription.entitlementEndsAt`).
+     * Snapped for manual plans, so it can be ~24h earlier than `renewsAt` — which
+     * is the whole reason the merchant read the cut-off as a day later than it was.
+     */
+    entitlementEndsAt?: string;
 }
 
 /**
  * Proactive banner that warns users as they approach or hit their monthly
  * AI-reply limit. Shown on the dashboard above the plan card.
  *
- * States are derived from the shared plan+top-up runway policy
+ * Quota states are derived from the shared plan+top-up runway policy
  * (`resolveAiQuotaStatus`), never from percent-of-plan-cap — the cap is a billing
  * boundary, and top-up carries replies past it.
+ *
+ * BILLING-PAUSED outranks every quota state, because when the subscription gate
+ * refuses, the quota numbers stop describing reality: a lapsed manual plan closes
+ * its usage window, `used` falls back to 0, and a quota-only banner reads that as
+ * "healthy" and hides — which is exactly how a merchant sat on a green dashboard
+ * with every reply frozen (2026-08-14). It is therefore driven by the gate verdict
+ * the backend itself enforces, not by anything re-derived here.
  *
  * - Hidden for unlimited plans, below the near-wall threshold, AND for a near-cap
  *   merchant whose top-up balance comfortably absorbs the overflow (nothing stops).
@@ -50,9 +70,14 @@ interface AiUsageWarningBannerProps {
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
  * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance, autoReply, entitlementEndsAt }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
+
+    // The gate has refused: replies are frozen for a BILLING reason, whatever the
+    // quota says. Explicit `=== false` so an older API response (field absent)
+    // leaves the banner on its pre-existing quota behaviour rather than alarming.
+    const isBillingPaused = autoReply?.allowed === false;
 
     const { used, limit } = aiReplies;
     // The plan cap is a billing boundary, not the wall: canUseAiReplies falls
@@ -61,18 +86,24 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
     // this banner alarmed a merchant at 87% of a 10,000 plan who had 9,417 top-up
     // replies banked — nothing was going to stop.
     const quota = resolveAiQuotaStatus({ used, limit, topupBalance: topupBalance ?? 0 });
+    // Every quota state is suppressed while billing is paused. Not cosmetic: with
+    // the usage window closed `used` reads 0, so the quota policy would classify a
+    // frozen account as healthy and this banner would render nothing at all.
     // Plan quota AND balance both spent — Smart Replies really have paused.
-    const isCritical = quota.state === 'exhausted';
+    const isCritical = !isBillingPaused && quota.state === 'exhausted';
     // Past the cap with a real runway behind it: reassuring, not alarming.
-    const onTopup = quota.state === 'on_topup' && !quota.nearWall;
+    const onTopup = !isBillingPaused && quota.state === 'on_topup' && !quota.nearWall;
     // Past the cap but the balance is nearly gone. NOT the calm notice — promising
     // "no interruption" to a merchant with a handful of replies left is a lie.
-    const isTopupLow = quota.state === 'on_topup' && quota.nearWall;
+    const isTopupLow = !isBillingPaused && quota.state === 'on_topup' && quota.nearWall;
     // Approaching the wall. A near-cap merchant whose balance covers the overflow
     // is deliberately NOT warned; one whose balance is too thin to change the
     // outcome (`nearWall`) still is.
-    const isWarning = quota.state === 'near_cap'
-        || (quota.state === 'near_cap_on_topup' && quota.nearWall);
+    const isWarning = !isBillingPaused && (quota.state === 'near_cap'
+        || (quota.state === 'near_cap_on_topup' && quota.nearWall));
+    // Red styling covers both "replies have stopped" causes — quota spent, or
+    // billing lapsed. They differ in copy and CTA, never in urgency.
+    const isStopped = isBillingPaused || isCritical;
     // Pro is the top public tier, and Scale plans sit above it — both should be
     // pointed at the hidden high-volume plans rather than the public /pricing grid.
     const atTopPublicTier = planSlug === 'pro' || (planSlug?.startsWith('scale-') ?? false);
@@ -124,7 +155,10 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
         };
     }, [isDragging, dismiss]);
 
-    if (limit === null || (!isWarning && !isTopupLow && !onTopup && !isCritical)) return null;
+    // Billing-paused bypasses the unlimited-plan exemption: an unmetered plan
+    // still stops replying when the subscription lapses, and `limit === null`
+    // must not swallow that.
+    if (!isBillingPaused && (limit === null || (!isWarning && !isTopupLow && !onTopup && !isCritical))) return null;
     if (isWarning && warning.dismissed) return null;
     if (onTopup && topupNotice.dismissed) return null;
     if (isTopupLow && topupLowNotice.dismissed) return null;
@@ -132,6 +166,10 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
     // With time: a merchant staring at a paused-replies banner needs to know
     // WHEN today/tomorrow it un-pauses, not just the calendar date.
     const resetDate = formatQuotaResetDate(resetsAt, locale, { withTime: true });
+    // When billing lapsed, the honest date is when COVERAGE ended, not when the
+    // quota window rolls. They are the same instant for a manual plan, and
+    // printing it without a time is what let "14 August" read as all of the 14th.
+    const coverageEndedDate = formatQuotaResetDate(entitlementEndsAt, locale, { withTime: true });
 
     const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
         if (!swipeable) return;
@@ -161,13 +199,13 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
     // balance) fall through to amber in light / soft violet in dark — see the
     // `.alert-usage-warning` / `.icon-bg-usage-warning` classes in globals.css.
     // Only `onTopup` earns the calm sky palette.
-    const palette = isCritical
+    const palette = isStopped
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
         : onTopup
             ? 'bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60'
             : 'alert-usage-warning';
 
-    const iconBg = isCritical
+    const iconBg = isStopped
         ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
         : onTopup
             ? 'bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400'
@@ -184,7 +222,8 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
             style={cardStyle}
             padding="none"
             data-testid="ai-usage-warning-banner"
-            data-severity={isCritical ? 'critical' : onTopup ? 'topup' : isTopupLow ? 'topup-low' : 'warning'}
+            data-severity={isBillingPaused ? 'billing-paused' : isCritical ? 'critical' : onTopup ? 'topup' : isTopupLow ? 'topup-low' : 'warning'}
+            role={isStopped ? 'alert' : undefined}
             onPointerDown={swipeable ? handlePointerDown : undefined}
         >
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
@@ -194,44 +233,77 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
 
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm sm:text-base leading-tight">
-                        {onTopup
-                            ? tSub('limitBanner.onTopupTitle')
-                            : isTopupLow
-                                ? tSub('limitBanner.topupLowTitle')
-                                : isCritical
-                                    ? tSub('limitBanner.reachedTitle')
-                                    : tSub('limitBanner.warningTitle')}
+                        {isBillingPaused
+                            ? tSub('limitBanner.billingPausedTitle')
+                            : onTopup
+                                ? tSub('limitBanner.onTopupTitle')
+                                : isTopupLow
+                                    ? tSub('limitBanner.topupLowTitle')
+                                    : isCritical
+                                        ? tSub('limitBanner.reachedTitle')
+                                        : tSub('limitBanner.warningTitle')}
                     </p>
-                    <p className="text-xs sm:text-sm opacity-80 mt-1">
-                        <span className="inline-flex items-center gap-1 flex-wrap">
-                            <span>
-                                {onTopup
-                                    ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
-                                    : isTopupLow
-                                        ? tSub('limitBanner.topupLowUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
-                                        : tSub('limitBanner.usage', {
-                                            used: used.toLocaleString(locale),
-                                            limit: limit.toLocaleString(locale),
-                                        })}
+                    {/* Billing-paused gets its own body: the quota line would be a
+                        lie here (the closed window reports 0 used), and `limit` is
+                        null on unmetered plans, which this state no longer skips. */}
+                    {isBillingPaused ? (
+                        <p className="text-xs sm:text-sm opacity-80 mt-1">
+                            <span className="block">{tSub('limitBanner.billingPausedBody')}</span>
+                            {coverageEndedDate && (
+                                <span className="block">
+                                    {tSub('limitBanner.coverageEndedOn', { date: coverageEndedDate })}
+                                </span>
+                            )}
+                        </p>
+                    ) : (
+                        <p className="text-xs sm:text-sm opacity-80 mt-1">
+                            <span className="inline-flex items-center gap-1 flex-wrap">
+                                <span>
+                                    {onTopup
+                                        ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                        : isTopupLow
+                                            ? tSub('limitBanner.topupLowUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                            // `limit` is non-null here: the early
+                                            // return above only lets a null limit
+                                            // through in the billing-paused state,
+                                            // which renders the other branch. No
+                                            // `?? 0` — a silent "of 0" would hide a
+                                            // broken narrowing instead of failing.
+                                            : tSub('limitBanner.usage', {
+                                                used: used.toLocaleString(locale),
+                                                limit: Number(limit).toLocaleString(locale),
+                                            })}
+                                </span>
+                                <InfoPopover
+                                    label={tSub('limitBanner.scopeTooltip')}
+                                    panelWidth="md"
+                                    triggerClassName="opacity-70"
+                                >
+                                    {tSub('limitBanner.scopeTooltip')}
+                                </InfoPopover>
                             </span>
-                            <InfoPopover
-                                label={tSub('limitBanner.scopeTooltip')}
-                                panelWidth="md"
-                                triggerClassName="opacity-70"
-                            >
-                                {tSub('limitBanner.scopeTooltip')}
-                            </InfoPopover>
-                        </span>
-                        {/* Reset date on its own line — no separator dot (reads cleaner). */}
-                        {resetDate && (
-                            <span className="block">
-                                {tSub('limitBanner.resetsOn', { date: resetDate })}
-                            </span>
-                        )}
-                    </p>
+                            {/* Reset date on its own line — no separator dot (reads cleaner). */}
+                            {resetDate && (
+                                <span className="block">
+                                    {tSub('limitBanner.resetsOn', { date: resetDate })}
+                                </span>
+                            )}
+                        </p>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* iOS renders NO billing control: UpgradeCTA returns null under
+                        App Store Guideline 3.1.1, and the top-up CTA is suppressed in
+                        this state — which left a pinned, undismissable "your replies
+                        are frozen" alert with nothing to press and nowhere named.
+                        Plain text, no link and no price, keeps the reader-app model
+                        while telling the merchant where renewal actually happens. */}
+                    {isBillingPaused && isIOSNative() && (
+                        <p className="text-xs sm:text-sm font-semibold opacity-90 max-w-[16rem]">
+                            {tSub('limitBanner.renewOnWebHint')}
+                        </p>
+                    )}
                     {/* Customize-fallback shortcut surfaces only when Smart Replies are
                         genuinely paused (no top-up). On top-up the fallback never fires,
                         so prompting the merchant to configure it would mislead. Visible on
@@ -251,28 +323,45 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                         to "I hit my limit, how do I keep going?". Plan upgrade comes
                         second for users who need a structural change. Both CTAs
                         self-gate on iOS (App Store Guideline 3.1.1), so we don't
-                        wrap them in an outer isIOSNative() check here. */}
-                    <BuyTopUpCTA
-                        planSlug={planSlug}
-                        paymentMethod={paymentMethod}
-                        marketplaceBilled={marketplaceBilled}
-                        userEmail={userEmail}
-                        variant="primary"
-                        size="sm"
-                    />
+                        wrap them in an outer isIOSNative() check here.
+
+                        Suppressed while billing is paused: the subscription gate runs
+                        BEFORE any quota or balance is consulted, so a top-up buys a
+                        merchant nothing here — it would take their money and leave the
+                        replies just as frozen. Renewing is the only thing that lifts it. */}
+                    {!isBillingPaused && (
+                        <BuyTopUpCTA
+                            planSlug={planSlug}
+                            paymentMethod={paymentMethod}
+                            marketplaceBilled={marketplaceBilled}
+                            userEmail={userEmail}
+                            variant="primary"
+                            size="sm"
+                        />
+                    )}
                     {/* On top-up the merchant is covered — no upsell pressure; the plan
                         upgrade only shows when approaching or genuinely past the wall.
                         Pro (and Scale) customers are already at the top of the public
                         grid, so they're routed to the hidden high-volume plans instead
-                        of the regular /pricing page. */}
+                        of the regular /pricing page.
+
+                        When billing is paused this is the ONLY and PRIMARY action, and
+                        it says "renew" rather than "upgrade": the merchant does not need
+                        a bigger plan, they need the one they had back. */}
                     {!onTopup && (
                         <UpgradeCTA href={atTopPublicTier ? '/pricing/scale' : '/pricing'} className="block">
                             <Button
-                                variant="secondary"
+                                variant={isBillingPaused ? 'primary' : 'secondary'}
                                 size="sm"
-                                icon={<Sparkles className="w-4 h-4" />}
+                                // Sparkles reads as an upsell; renewing after a freeze
+                                // is a restore, not a celebration.
+                                icon={isBillingPaused
+                                    ? <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                                    : <Sparkles className="w-4 h-4" aria-hidden="true" />}
                             >
-                                {tSub(atTopPublicTier ? 'limitBanner.highVolumeLink' : 'upgradePlan')}
+                                {isBillingPaused
+                                    ? tSub('limitBanner.renewNow')
+                                    : tSub(atTopPublicTier ? 'limitBanner.highVolumeLink' : 'upgradePlan')}
                             </Button>
                         </UpgradeCTA>
                     )}
