@@ -1659,6 +1659,12 @@ export const leadDigestSends = pgTable('lead_digest_sends', {
 // audit lives in type-specific tables (lead_digest_sends, waitlist_email_sends);
 // the body + delivery status lives here. Bodies contain PII (lead names,
 // phones); cleanupEmailBodies (utils/cleanup.ts) blanks html_body after 30 days.
+//
+// ⚠️ Recipients: this table records the `to` address ONLY. For admin-composed
+// merchant emails, cc/bcc and per-attachment {filename, size, sha256} live in
+// admin_audit_logs (action 'merchant_email_sent'), whose newValue.emailSendId
+// joins back to this table's row — query BOTH before concluding "the rep was
+// never copied" or "no attachment was sent".
 export const emailSends = pgTable('email_sends', {
     id: uuid('id').defaultRandom().primaryKey(),
     type: varchar('type', { length: 50 }).notNull(), // 'lead_digest' | 'waitlist' | 'transactional' | …

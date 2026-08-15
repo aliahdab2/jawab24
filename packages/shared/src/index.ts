@@ -1993,3 +1993,18 @@ export type { FactRowSchedule } from './factSchedule';
 // means (it means "unreadable", and the merchant is told so). ---
 export { parseMerchantPrice } from './price';
 export type { ParsedPrice } from './price';
+
+// --- Admin merchant-email composer: limits, attachment wire shape, magic-byte
+// sniff, and rejection codes — one definition for the backend validator, the
+// route schema, and the frontend pre-submit checks, so they cannot drift. ---
+export {
+    MAX_EMAIL_ATTACHMENTS,
+    MAX_EMAIL_ATTACHMENT_BYTES,
+    MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES,
+    MAX_EMAIL_CC,
+    ALLOWED_ATTACHMENT_EXTENSIONS,
+    ATTACHMENT_ACCEPT,
+    sniffAttachmentMime,
+    EMAIL_COMPOSER_ERROR_CODES,
+} from './emailComposer';
+export type { EmailAttachment, AllowedAttachmentExtension, EmailComposerErrorCode } from './emailComposer';

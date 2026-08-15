@@ -4,7 +4,7 @@ import { clearAiModelCache } from '../services/aiModelResolver';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { AppError } from '../utils/errors';
 import { parsePaginationQuery } from '../utils/pagination';
-import { SendEmailSchema, SendMerchantEmailSchema } from '../utils/validation';
+import { SendEmailSchema, SendMerchantEmailSchema, sendMerchantEmailErrorCode } from '../utils/validation';
 import {
     adminUsersService,
     adminSubscriptionsService,
@@ -328,9 +328,14 @@ export class AdminController {
     ) {
         const parsed = SendMerchantEmailSchema.safeParse(request.body);
         if (!parsed.success) {
+            const issue = parsed.error.errors[0];
+            // `code` is the stable contract the modal maps to its translated
+            // messages; the English `error` string is diagnostic only. Additive
+            // and backwards-compatible.
             return reply.status(400).send({
                 success: false,
-                error: parsed.error.errors[0]?.message ?? 'Invalid request',
+                error: issue?.message ?? 'Invalid request',
+                code: issue ? sendMerchantEmailErrorCode(issue) : 'EMAIL_FIELDS_INVALID',
             });
         }
 

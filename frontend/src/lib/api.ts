@@ -16,7 +16,7 @@ import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import { getEmbeddedToken } from './embeddedSession';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, EmailAttachment, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -1150,19 +1150,26 @@ export const adminApi = {
 
   // Send an admin-composed account-notice email to one merchant (support console).
   // `attachments[].content` is raw base64 with no `data:` prefix — the backend
-  // rejects the prefixed form that FileReader produces.
+  // rejects the prefixed form that FileReader produces. `contentType` is
+  // server-derived; do not send it. LONG_RUNNING_TIMEOUT because 6MB of
+  // attachments → ~8.4MB wire body, which cannot upload inside the 15s default
+  // on ordinary uplinks (same reason as the waitlist send and KB extract).
+  // `idempotencyKey` rides to Resend as a dedupe header so a retry after an
+  // ambiguous failure cannot deliver the same email twice.
   sendCustomerEmail: async (userId: string, data: {
     subject: string;
     body: string;
     cc?: string[];
     bcc?: string[];
-    attachments?: { filename: string; content: string }[];
+    attachments?: Pick<EmailAttachment, 'filename' | 'content'>[];
+    idempotencyKey?: string;
   }) => {
-    const response = await api.post(`/admin/users/${userId}/send-email`, data);
+    const response = await api.post(`/admin/users/${userId}/send-email`, data, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data as {
       success: boolean;
       data?: { emailSendId?: string };
       error?: string;
+      code?: string;
     };
   },
 

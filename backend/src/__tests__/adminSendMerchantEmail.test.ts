@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHash } from 'crypto';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../utils/errors';
 
 // JWT_SECRET keys config, loaded transitively via emailTemplates → config.
@@ -85,7 +86,7 @@ describe('adminUsersService.sendMerchantEmail', () => {
         const audit = mockValues.mock.calls[0][0];
         expect(audit.action).toBe('merchant_email_sent');
         expect(audit.targetUserId).toBe(USER_ID);
-        expect(audit.newValue).toEqual({ subject: 'Reconnect', body: 'Your page dropped' });
+        expect(audit.newValue).toEqual({ subject: 'Reconnect', body: 'Your page dropped', emailSendId: 'es-1' });
     });
 
     it('leaves cc/bcc/attachments undefined when the admin supplied none', async () => {
@@ -98,8 +99,9 @@ describe('adminUsersService.sendMerchantEmail', () => {
         expect(sent.attachments).toBeUndefined();
     });
 
-    it('passes cc, bcc and attachments through to the email transport', async () => {
+    it('passes cc, bcc, idempotencyKey and magic-verified contentType through to the transport', async () => {
         mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
+        const pdfB64 = Buffer.from('%PDF-1.4 test').toString('base64');
         await adminUsersService.sendMerchantEmail(
             USER_ID,
             {
@@ -107,7 +109,8 @@ describe('adminUsersService.sendMerchantEmail', () => {
                 body: 'Attached',
                 cc: ['info@jawab24.com'],
                 bcc: ['rep@example.com'],
-                attachments: [{ filename: 'invoice.pdf', content: 'QUFB' }],
+                attachments: [{ filename: 'invoice.pdf', content: pdfB64 }],
+                idempotencyKey: 'compose-abc-123',
             },
             ADMIN_ID,
         );
@@ -115,11 +118,18 @@ describe('adminUsersService.sendMerchantEmail', () => {
         const sent = mockSend.mock.calls[0][0];
         expect(sent.cc).toEqual(['info@jawab24.com']);
         expect(sent.bcc).toEqual(['rep@example.com']);
-        expect(sent.attachments).toEqual([{ filename: 'invoice.pdf', content: 'QUFB' }]);
+        expect(sent.idempotencyKey).toBe('compose-abc-123');
+        // contentType is derived from the verified magic bytes — never from
+        // the (admin-chosen) filename alone, and never trusted from the client.
+        expect(sent.attachments).toEqual([
+            { filename: 'invoice.pdf', content: pdfB64, contentType: 'application/pdf' },
+        ]);
     });
 
-    it('audits recipients and attachment NAMES, never the file bytes', async () => {
+    it('audits recipients and per-attachment {filename, size, sha256} — never the file bytes', async () => {
         mockLimit.mockResolvedValueOnce([{ id: USER_ID, email: 'm@x.com', name: 'متجر' }]);
+        const raw = Buffer.from('%PDF-1.4 dispute-evidence');
+        const b64 = raw.toString('base64');
         await adminUsersService.sendMerchantEmail(
             USER_ID,
             {
@@ -127,7 +137,7 @@ describe('adminUsersService.sendMerchantEmail', () => {
                 body: 'Attached',
                 cc: ['info@jawab24.com'],
                 bcc: ['rep@example.com'],
-                attachments: [{ filename: 'invoice.pdf', content: 'QUFBQUFB' }],
+                attachments: [{ filename: 'invoice.pdf', content: b64 }],
             },
             ADMIN_ID,
         );
@@ -136,12 +146,17 @@ describe('adminUsersService.sendMerchantEmail', () => {
         expect(audit.newValue).toEqual({
             subject: 'Invoice',
             body: 'Attached',
+            emailSendId: 'es-1',
             cc: ['info@jawab24.com'],
             bcc: ['rep@example.com'],
-            attachments: ['invoice.pdf'],
+            attachments: [{
+                filename: 'invoice.pdf',
+                size: raw.length,
+                sha256: createHash('sha256').update(raw).digest('hex'),
+            }],
         });
         // The base64 payload must not land in the audit table.
-        expect(JSON.stringify(audit.newValue)).not.toContain('QUFBQUFB');
+        expect(JSON.stringify(audit.newValue)).not.toContain(b64);
     });
 
     it('still resolves when the audit-log write fails (swallowed)', async () => {

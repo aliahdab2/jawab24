@@ -8,7 +8,9 @@ import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'driz
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
 import { workspaceSettingsService } from '../workspaceSettings';
-import { emailService, type EmailAttachment } from '../email';
+import { createHash } from 'crypto';
+import { emailService } from '../email';
+import { sniffAttachmentMime, type EmailAttachment } from '@jawab24/shared';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
 
@@ -708,6 +710,7 @@ class AdminUsersService {
             cc?: string[];
             bcc?: string[];
             attachments?: EmailAttachment[];
+            idempotencyKey?: string;
         },
         adminUserId: string | undefined,
     ): Promise<{ emailSendId?: string }> {
@@ -729,6 +732,29 @@ class AdminUsersService {
             body: input.body,
         });
 
+        // One decode per attachment serves three needs: the sha256 + byte size
+        // for the audit row (so a later-presented copy — the merchant's or the
+        // CC'd rep's — is verifiable against our record), and the MIME type
+        // from the verified magic bytes (so Resend never infers a content type
+        // from an admin-chosen filename). Validation already pinned the magic
+        // bytes to the extension; a null sniff here is therefore impossible,
+        // but degrade to an omitted contentType rather than throw.
+        const attachmentRecords = (input.attachments ?? []).map((a) => {
+            const bytes = Buffer.from(a.content, 'base64');
+            const ext = a.filename.split('.').pop()?.toLowerCase() ?? '';
+            return {
+                attachment: {
+                    ...a,
+                    contentType: sniffAttachmentMime(ext, Uint8Array.from(bytes.subarray(0, 16))) ?? undefined,
+                },
+                audit: {
+                    filename: a.filename,
+                    size: bytes.length,
+                    sha256: createHash('sha256').update(bytes).digest('hex'),
+                },
+            };
+        });
+
         const result = await emailService.send({
             to: target.email,
             subject,
@@ -737,7 +763,8 @@ class AdminUsersService {
             userId,
             cc: input.cc,
             bcc: input.bcc,
-            attachments: input.attachments,
+            attachments: attachmentRecords.length ? attachmentRecords.map((r) => r.attachment) : undefined,
+            idempotencyKey: input.idempotencyKey,
         });
 
         if (!result.success) {
@@ -756,18 +783,20 @@ class AdminUsersService {
                 // 30 days, so this is the durable record of "what did we tell them?"
                 // for any later support dispute (audit rows are exempt).
                 //
-                // Recipients and attachment NAMES are recorded here too — "who
-                // else saw this?" is exactly the question a dispute asks, and
-                // email_sends has no cc/bcc columns. File BYTES are deliberately
-                // not stored: they would bloat the audit table without answering
-                // a question the filename doesn't already answer.
+                // Recipients and per-attachment {filename, size, sha256} are
+                // recorded too — "who else saw this?" and "are these the bytes
+                // we sent?" are exactly what a dispute asks, and email_sends
+                // has no cc/bcc columns. The hash makes any later-presented
+                // copy verifiable without storing the bytes themselves.
+                // emailSendId joins this row to its email_sends row.
                 newValue: {
                     subject: input.subject,
                     body: input.body,
+                    emailSendId: result.emailSendId,
                     ...(input.cc?.length ? { cc: input.cc } : {}),
                     ...(input.bcc?.length ? { bcc: input.bcc } : {}),
-                    ...(input.attachments?.length
-                        ? { attachments: input.attachments.map((a) => a.filename) }
+                    ...(attachmentRecords.length
+                        ? { attachments: attachmentRecords.map((r) => r.audit) }
                         : {}),
                 },
             });

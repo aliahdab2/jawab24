@@ -1,4 +1,5 @@
 import { config } from '../config';
+import type { EmailAttachment } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { db } from '../db';
 import { emailSends } from '../db/schema';
@@ -8,19 +9,6 @@ import { noopLogger } from '../types/logger';
 // Email type discriminator stored on `email_sends.type`. Add new values here
 // as new email kinds ship — keeps the union exhaustive at every call site.
 export type EmailType = 'lead_digest' | 'waitlist' | 'transactional' | 'subscription_welcome' | 'trial_ending' | 'trial_ended' | 'invite' | 'account_notice' | 'auto_pause' | 'page_reconnect';
-
-/**
- * One file attached to an outgoing email.
- *
- * `content` is base64 WITHOUT a data: URI prefix — Resend rejects the prefixed
- * form, and the caller that strips it is the one that knows where the bytes came
- * from (a browser FileReader yields `data:application/pdf;base64,…`).
- */
-export interface EmailAttachment {
-    filename: string;
-    /** Base64-encoded file bytes, no `data:` prefix. */
-    content: string;
-}
 
 interface EmailPayload {
     to: string;
@@ -42,8 +30,32 @@ interface EmailPayload {
     cc?: string[];
     /** Blind-copy recipients — hidden from `to` and `cc`. */
     bcc?: string[];
+    /**
+     * Size/count limits are the CALLER's responsibility — the composer's caps
+     * live in @jawab24/shared (MAX_EMAIL_ATTACHMENT*); the transport enforces
+     * only Resend's own ceiling (below). Two vendor facts every future caller
+     * must know (verified against Resend's docs, 2026-08-15): an email may be
+     * at most 40MB AFTER base64 encoding, and Resend's BATCH endpoint does not
+     * accept attachments at all — so a broadcast with attachments can never be
+     * batched and is forever a sequential per-recipient loop at the 4/sec
+     * pacing above (500 recipients × 8MB ≈ ≥125s and ~4GB egress). Design any
+     * broadcast-with-attachment feature with that constraint in front of you.
+     */
     attachments?: EmailAttachment[];
+    /**
+     * Forwarded to Resend as an `Idempotency-Key` header (24h dedupe window,
+     * ≤256 chars) so a caller's retry after an ambiguous failure — timeout
+     * after the server received the body — cannot deliver the same email
+     * twice. Omitted from the request entirely when absent.
+     */
+    idempotencyKey?: string;
 }
+
+// Resend rejects emails over 40MB post-base64-encoding. Refusing here, before
+// the fetch, turns a guaranteed provider rejection into an immediate failed
+// attempt without uploading tens of MB first. Evaluated only when attachments
+// are present — provably a no-op for every attachment-less caller.
+const RESEND_ATTACHMENT_CEILING_BYTES = 30 * 1024 * 1024;
 
 interface ResendResponse {
     id: string;
@@ -142,6 +154,18 @@ export class EmailService {
             return { success: false, error: 'Email provider not configured', emailSendId };
         }
 
+        // Provider-ceiling guard: a payload Resend is guaranteed to reject is
+        // refused here, before uploading tens of MB. Only runs when attachments
+        // are present — a no-op for every attachment-less caller.
+        if (payload.attachments?.length) {
+            const totalBase64Chars = payload.attachments.reduce((sum, a) => sum + a.content.length, 0);
+            if (totalBase64Chars > RESEND_ATTACHMENT_CEILING_BYTES) {
+                const errorMessage = `Attachments exceed the provider ceiling (${Math.round(totalBase64Chars / 1024 / 1024)}MB encoded > ${RESEND_ATTACHMENT_CEILING_BYTES / 1024 / 1024}MB)`;
+                const emailSendId = await this.recordAttempt(payload, { status: 'failed', errorMessage });
+                return { success: false, error: errorMessage, emailSendId };
+            }
+        }
+
         await this.acquireSendSlot();
 
         const response = await fetch('https://api.resend.com/emails', {
@@ -149,6 +173,9 @@ export class EmailService {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${config.resend.apiKey}`,
+                // Resend dedupes on this for 24h — a caller's retry after an
+                // ambiguous failure cannot double-send. Absent → no header.
+                ...(payload.idempotencyKey ? { 'Idempotency-Key': payload.idempotencyKey } : {}),
             },
             body: JSON.stringify({
                 from: `${config.resend.fromName} <${config.resend.fromEmail}>`,
@@ -166,7 +193,17 @@ export class EmailService {
                 // recipient list rather than no list at all.
                 ...(payload.cc?.length ? { cc: payload.cc } : {}),
                 ...(payload.bcc?.length ? { bcc: payload.bcc } : {}),
-                ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
+                // Resend's attachment fields are snake_case; our contract stays
+                // camelCase and translates only here, at the vendor boundary.
+                ...(payload.attachments?.length
+                    ? {
+                        attachments: payload.attachments.map((a) => ({
+                            filename: a.filename,
+                            content: a.content,
+                            ...(a.contentType ? { content_type: a.contentType } : {}),
+                        })),
+                    }
+                    : {}),
             }),
         });
 

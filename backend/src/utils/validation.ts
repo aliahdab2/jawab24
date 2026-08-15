@@ -7,8 +7,14 @@ import {
     normalizePhoneEntries,
     isUsablePhoneEntry,
     parseMerchantPrice,
+    MAX_EMAIL_ATTACHMENTS,
+    MAX_EMAIL_ATTACHMENT_BYTES,
+    MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES,
+    MAX_EMAIL_CC,
+    ALLOWED_ATTACHMENT_EXTENSIONS,
+    sniffAttachmentMime,
 } from '@jawab24/shared';
-import type { CatalogVertical } from '@jawab24/shared';
+import type { CatalogVertical, EmailComposerErrorCode } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -63,23 +69,6 @@ export const UpdatePlanSchema = CreatePlanSchema.partial();
  * Deliberately narrower than SendEmailSchema — no audience/template/broadcast
  * fields; just a subject + body sent to one user by id (path param).
  */
-/**
- * Attachment limits.
- *
- * Sized to fit INSIDE the server's existing 10MB `bodyLimit` (index.ts) rather
- * than raising it — that limit is global and guards every route, so widening it
- * for one admin feature would relax a protection the whole API depends on.
- * Base64 inflates bytes by 4/3, so 6MB of files ≈ 8MB on the wire, leaving
- * headroom for the subject, body and recipient lists.
- */
-export const MAX_EMAIL_ATTACHMENTS = 3;
-export const MAX_EMAIL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
-export const MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES = 6 * 1024 * 1024;
-export const MAX_EMAIL_CC = 5;
-
-/** Extensions we are willing to put in front of a merchant. */
-const ALLOWED_ATTACHMENT_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg'] as const;
-
 const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /** Decoded byte count of a base64 string, without allocating a Buffer. */
@@ -88,7 +77,18 @@ export function base64ByteLength(b64: string): number {
     return (b64.length / 4) * 3 - padding;
 }
 
-const EmailAttachmentSchema = z.object({
+// C0 controls + DEL (+ double quote for filenames). A NUL in any admin-typed
+// field would poison the jsonb audit write (Postgres jsonb rejects \\u0000
+// outright, and the audit insert's failure is swallowed by design), so the
+// email would send while its audit row silently never lands; a CRLF in a
+// filename reaches Resend's MIME part-header assembly verbatim.
+// eslint-disable-next-line no-control-regex
+const CONTROL_OR_QUOTE_RE = /[\u0000-\u001f\u007f"]/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001f\u007f]/;
+const freeOfControlChars = (s: string): boolean => !CONTROL_RE.test(s);
+
+const EmailAttachmentSchema: z.ZodType<{ filename: string; content: string }> = z.object({
     // Basename only. A path separator here would let an admin-supplied name
     // reach a downstream consumer as a relative path; the filename is metadata,
     // never a filesystem target for us, but we refuse to emit one either way.
@@ -97,9 +97,10 @@ const EmailAttachmentSchema = z.object({
         .trim()
         .min(1, 'Attachment filename is required')
         .max(200)
+        .refine((n) => !CONTROL_OR_QUOTE_RE.test(n), 'Attachment filename must not contain control characters or quotes')
         .refine((n) => !n.includes('/') && !n.includes('\\') && n !== '.' && n !== '..', 'Attachment filename must not contain a path')
         .refine(
-            (n) => ALLOWED_ATTACHMENT_EXTENSIONS.includes(n.split('.').pop()?.toLowerCase() as typeof ALLOWED_ATTACHMENT_EXTENSIONS[number]),
+            (n) => (ALLOWED_ATTACHMENT_EXTENSIONS as readonly string[]).includes(n.split('.').pop()?.toLowerCase() ?? ''),
             `Attachment must be one of: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(', ')}`,
         ),
     content: z
@@ -113,8 +114,10 @@ const EmailAttachmentSchema = z.object({
 });
 
 export const SendMerchantEmailSchema = z.object({
-    subject: z.string().trim().min(1, 'Subject is required').max(500),
-    body: z.string().trim().min(1, 'Body is required').max(20_000),
+    subject: z.string().trim().min(1, 'Subject is required').max(500)
+        .refine(freeOfControlChars, 'Subject must not contain control characters'),
+    body: z.string().trim().min(1, 'Body is required').max(20_000)
+        .refine(freeOfControlChars, 'Body must not contain control characters'),
     cc: z.array(z.string().trim().email('Invalid CC address').max(255)).max(MAX_EMAIL_CC).optional(),
     bcc: z.array(z.string().trim().email('Invalid BCC address').max(255)).max(MAX_EMAIL_CC).optional(),
     attachments: z
@@ -124,8 +127,46 @@ export const SendMerchantEmailSchema = z.object({
             (list) => list.reduce((sum, a) => sum + base64ByteLength(a.content), 0) <= MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES,
             `Attachments must total ${MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES / 1024 / 1024}MB or less`,
         )
+        // Magic-byte verification: the decoded bytes must BE what the filename
+        // claims. Runs on the array (not per-item) so it executes after the
+        // cheap shape/size refines; decodes only the signature bytes.
+        .refine(
+            (list) => list.every((a) => {
+                const ext = a.filename.split('.').pop()?.toLowerCase() ?? '';
+                const head = Uint8Array.from(Buffer.from(a.content.slice(0, 16), 'base64'));
+                return sniffAttachmentMime(ext, head) !== null;
+            }),
+            'Attachment content does not match its file type',
+        )
         .optional(),
+    // Client-minted, forwarded to Resend as an Idempotency-Key header so a
+    // retry after an ambiguous failure (timeout after server receipt) cannot
+    // deliver the same invoice twice. Optional: raw API callers may omit it.
+    idempotencyKey: z.string().trim().min(8).max(256).optional(),
 });
+
+/**
+ * Map the first Zod issue to a stable machine-readable code so the modal can
+ * select its already-translated message instead of showing a generic
+ * "try again" for a deterministic 400. Keyed on issue path + message content —
+ * the messages above are the single source of both the human string and the
+ * classification.
+ */
+export function sendMerchantEmailErrorCode(issue: z.ZodIssue): EmailComposerErrorCode {
+    const root = issue.path[0];
+    if (root === 'cc' || root === 'bcc') {
+        return issue.code === 'too_big' ? 'EMAIL_RECIPIENTS_TOO_MANY' : 'EMAIL_RECIPIENT_INVALID';
+    }
+    if (root === 'attachments') {
+        if (issue.code === 'too_big') return 'EMAIL_ATTACHMENTS_TOO_MANY';
+        const msg = issue.message;
+        if (msg.includes('or smaller')) return 'EMAIL_ATTACHMENT_TOO_LARGE';
+        if (msg.includes('total')) return 'EMAIL_ATTACHMENTS_TOTAL_TOO_LARGE';
+        if (msg.includes('must be one of')) return 'EMAIL_ATTACHMENT_BAD_TYPE';
+        return 'EMAIL_ATTACHMENT_BAD_CONTENT';
+    }
+    return 'EMAIL_FIELDS_INVALID';
+}
 
 export const SendEmailSchema = z.object({
     subject: z.string().trim().min(1, 'Subject is required').max(500),
