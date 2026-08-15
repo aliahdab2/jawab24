@@ -6,6 +6,12 @@ import { stripeService, stripeRefId } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
 import { adoptStripeSubscription } from '../services/subscriptionLinking';
+import {
+    notifyRenewalFailed,
+    prepareSubscriptionDeletedNotice,
+    sendSubscriptionDeletedNotice,
+    handlePaymentRecovery,
+} from '../services/dunningNotices';
 import { topupService } from '../services/topup';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
@@ -14,6 +20,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { stripeTsToDate } from '../utils/stripeTime';
 import { getInvoiceSubscriptionId, getSubscriptionPeriod } from '../utils/stripeCompat';
 import { resolveLocale } from '../utils/i18n';
+import { createRequestLogger } from '../types/logger';
 import type { FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -374,6 +381,11 @@ export async function handleSubscriptionDeleted(
     stripeSubscription: Stripe.Subscription,
     request: FastifyRequest
 ) {
+    // Snapshot BEFORE the flip: telling an involuntary cancellation (Stripe
+    // gave up collecting → suspension email) from a voluntary one (merchant
+    // asked to stop → no email) needs the row's prior status.
+    const noticeCtx = await prepareSubscriptionDeletedNotice(stripeSubscription.id);
+
     const result = await db
         .update(subscriptions)
         .set({
@@ -388,6 +400,10 @@ export async function handleSubscriptionDeleted(
         await subscriptionsService.invalidateStatusCache(result[0].userId);
     }
     request.log.info({ subscriptionId: stripeSubscription.id }, 'Subscription canceled');
+
+    // The merchant just lost replies — the one moment they must hear about
+    // over email, not only in-app. Never throws.
+    await sendSubscriptionDeletedNotice(noticeCtx, stripeSubscription, createRequestLogger(request.log));
 }
 
 /**
@@ -473,6 +489,16 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     // Drop the boolean status cache so a `past_due → active` recovery is
     // visible to the reply pipeline immediately, not after a 60s TTL.
     await subscriptionsService.invalidateStatusCache(updatedRow.userId);
+
+    // Close any open dunning episode: resets the notified stamps and — only
+    // when an episode WAS open — emails the payment-recovered confirmation.
+    // A normal renewal resets nothing and sends nothing. Never throws.
+    await handlePaymentRecovery(
+        stripeSubscriptionId,
+        typeof invoice.id === 'string' ? invoice.id : undefined,
+        periodEnd,
+        createRequestLogger(request.log),
+    );
 }
 
 /**
@@ -603,6 +629,12 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice, request: Fast
             {},
             { deepLink: '/settings' }
         ).catch(err => request.log.error({ err }, 'Failed to send payment_failed notification'));
+
+        // Dunning email with the invoice's hosted payment link — once per
+        // failure episode (Stripe re-fires this event on every Smart-Retry
+        // attempt; the stamp claim absorbs the repeats). Never throws; the
+        // daily sweep is the retry channel.
+        await notifyRenewalFailed(invoice, createRequestLogger(request.log));
     }
 }
 

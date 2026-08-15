@@ -70,3 +70,38 @@ export function getSubscriptionPeriod(subscription: Stripe.Subscription): {
         end: sub.current_period_end ?? item?.current_period_end ?? null,
     };
 }
+
+// ---------------------------------------------------------------------------
+// Invoice field accessors for the dunning emails (services/dunningNotices.ts).
+//
+// `hosted_invoice_url`, `amount_due` and `billing_reason` are top-level on the
+// invoice in BOTH the pinned SDK version and the endpoint's `2025-12-15.clover`
+// render — no relocation is known for them (unlike `invoice.subscription`
+// above). They still go through runtime type guards, per this file's contract:
+// a payload field we did not verify byte-for-byte is never trusted into an
+// email. On a guard miss the caller falls back (dashboard URL, no-amount copy)
+// instead of mailing `undefined`.
+// ---------------------------------------------------------------------------
+
+/** The Stripe-hosted payment page for an invoice — the dunning email's CTA. */
+export function getInvoiceHostedUrl(invoice: Stripe.Invoice): string | null {
+    const url = (invoice as unknown as { hosted_invoice_url?: unknown }).hosted_invoice_url;
+    return typeof url === 'string' && url.startsWith('https://') ? url : null;
+}
+
+/** The amount still owed on an invoice, in the currency's smallest unit. */
+export function getInvoiceAmountDue(invoice: Stripe.Invoice): { amountCents: number; currency: string } | null {
+    const inv = invoice as unknown as { amount_due?: unknown; currency?: unknown };
+    if (typeof inv.amount_due !== 'number' || typeof inv.currency !== 'string') return null;
+    return { amountCents: inv.amount_due, currency: inv.currency };
+}
+
+/**
+ * Why the invoice exists — 'subscription_cycle' for a renewal,
+ * 'subscription_create' for the first invoice at checkout (whose failure is
+ * in-checkout UX, not dunning material).
+ */
+export function getInvoiceBillingReason(invoice: Stripe.Invoice): string | null {
+    const reason = (invoice as unknown as { billing_reason?: unknown }).billing_reason;
+    return typeof reason === 'string' ? reason : null;
+}
