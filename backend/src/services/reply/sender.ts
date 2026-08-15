@@ -58,6 +58,23 @@ export interface SendReplyResult {
      */
     dmFailure?: DmFailure;
     /**
+     * The classified Graph failure of a PUBLIC comment post, when that is what failed.
+     *
+     * Deliberately NOT `dmFailure`, even though both carry a `DmFailure`: no DM was
+     * attempted here, and `dmFailure` is load-bearing for two decisions that must not
+     * change — commentProcessor labels the inbox row `dm_failed` vs `send_failed` from
+     * its presence, and `recordSendFailure` takes its auto-pause bucket from it (a
+     * public post has no bucket today, so it counts as `no_bucket`/page-level).
+     * Folding public failures into `dmFailure` would silently relabel every failed
+     * public reply as a DM failure and change which ones count toward auto-pause.
+     *
+     * It exists because `public` is the DEFAULT comment mode (schema.ts `comment_reply_mode`
+     * default, workspaceSettings fallback) and it was the one mode that discarded the
+     * Graph error entirely — so a revoked page token on the busiest comment path produced
+     * no signal at all, and page-token recovery could not fire. See pageTokenRecovery.ts.
+     */
+    publicFailure?: DmFailure;
+    /**
      * True when the public-comment fallback was intentionally suppressed because the
      * failure bucket forbids leaking DM content publicly (e.g. customer_refused, our_fault).
      * Callers use this to avoid logging "public post failed" when we never attempted one.
@@ -174,10 +191,14 @@ export class ReplySender {
 
         // Public send (public mode, or dual-mode nudge when DM succeeded/window_expired)
         if (replyMode === 'public') {
-            const ok = await this.postPublicReplyMaybeTagged(options, replyText);
+            const { ok, failure } = await this.postPublicReplyMaybeTagged(options, replyText);
+            // `publicFailure`, never `dmFailure` — no DM was attempted, and `dmFailure`
+            // drives the inbox label and the auto-pause bucket (see SendReplyResult).
+            // This is the DEFAULT mode, and it was the one path that dropped the Graph
+            // error on the floor, so a revoked page token produced no recoverable signal.
             return ok
                 ? { success: true }
-                : { success: false, error: 'Failed to post public reply to Facebook' };
+                : { success: false, publicFailure: failure, error: 'Failed to post public reply to Facebook' };
         }
 
         if (replyMode === 'private') {
@@ -193,7 +214,7 @@ export class ReplySender {
         if (!dmFailure) {
             // DM succeeded → post the nudge publicly
             const publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
-            const ok = await this.postPublicReplyMaybeTagged(options, publicText);
+            const { ok } = await this.postPublicReplyMaybeTagged(options, publicText);
             if (!ok) this.logger.warn('[Sender] Dual mode: nudge post failed', { facebookCommentId });
             return { success: true, dmRecipientId, imageDelivered };
         }
@@ -201,7 +222,7 @@ export class ReplySender {
         // DM failed in dual mode — only window_expired gets a short nudge.
         // All other buckets (customer_refused / our_fault / unknown): post nothing.
         if (dmFailure.bucket === 'window_expired' && dualReplyNudge) {
-            const ok = await this.postPublicReplyMaybeTagged(options, dualReplyNudge);
+            const { ok } = await this.postPublicReplyMaybeTagged(options, dualReplyNudge);
             if (!ok) this.logger.warn('[Sender] Dual mode: window_expired nudge post failed', { facebookCommentId });
             return { success: false, dmFailure, error: `DM failed: ${dmFailure.bucket}` };
         }
@@ -235,6 +256,22 @@ export class ReplySender {
         message: string,
         accessToken: string
     ): Promise<string | null> {
+        return (await this.postPublicReplyResult(commentId, message, accessToken)).id;
+    }
+
+    /**
+     * `postPublicReply` plus the reason it failed.
+     *
+     * The bare `string | null` above discarded the Graph error — which is why a revoked
+     * page token was invisible on the default (`public`) comment path: the token was dead,
+     * the post 400'd, and the only trace was one log line. Recovery reads the code/subcode,
+     * so it never fired. Callers that only need "did it post?" keep using `postPublicReply`.
+     */
+    private async postPublicReplyResult(
+        commentId: string,
+        message: string,
+        accessToken: string
+    ): Promise<{ id: string | null; failure?: DmFailure }> {
         try {
             const res = await fbAxios.post<{ id?: string }>(
                 `${FACEBOOK_GRAPH_API}/${commentId}/comments`,
@@ -243,13 +280,13 @@ export class ReplySender {
             );
             // Graph returns the new comment id; fall back to a sentinel so a successful post
             // with an unexpected body still reads as success (it just can't be verified).
-            return res.data?.id ?? '';
+            return { id: res.data?.id ?? '' };
         } catch (error) {
             this.logger.error('Failed to post reply to Facebook', {
                 commentId,
                 error: error instanceof Error ? error.message : String(error)
             });
-            return null;
+            return { id: null, failure: classifyDmError(error, 'facebook') };
         }
     }
 
@@ -265,17 +302,19 @@ export class ReplySender {
     private async postPublicReplyMaybeTagged(
         options: SendCommentReplyOptions,
         message: string,
-    ): Promise<boolean> {
+    ): Promise<{ ok: boolean; failure?: DmFailure }> {
         const { facebookCommentId, accessToken, fromId, platformPageId, tagCommenter } = options;
 
         const token = tagCommenter && platformPageId ? buildFacebookMentionToken(fromId) : null;
         const plan = token ? await commentMentionGuard.mentionPlan(platformPageId as string) : 'skip';
         if (!token || plan === 'skip') {
-            return (await this.postPublicReply(facebookCommentId, message, accessToken)) !== null;
+            const posted = await this.postPublicReplyResult(facebookCommentId, message, accessToken);
+            return { ok: posted.id !== null, failure: posted.failure };
         }
 
-        const postedId = await this.postPublicReply(facebookCommentId, prefixMention(token, message), accessToken);
-        if (postedId === null) return false;
+        const posted = await this.postPublicReplyResult(facebookCommentId, prefixMention(token, message), accessToken);
+        const postedId = posted.id;
+        if (postedId === null) return { ok: false, failure: posted.failure };
         // 'trust' = this page rendered a mention recently, so skip the read-back entirely.
         // Empty id = posted but unverifiable (no id in the response); nothing to read back.
         if (plan === 'verify' && postedId) {
@@ -287,7 +326,7 @@ export class ReplySender {
                 accessToken,
             });
         }
-        return true;
+        return { ok: true };
     }
 }
 

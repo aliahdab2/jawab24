@@ -9,6 +9,7 @@ import { notificationService } from './notifications';
 import { emailService } from './email';
 import { autoPausedEmailTemplate } from '../utils/emailTemplates';
 import { config } from '../config';
+import { handlePageTokenFailure } from './pageTokenRecovery';
 
 /**
  * Auto-pause defense for "dead pages" — pages where Facebook persistently
@@ -72,6 +73,25 @@ const CHANNEL_LEVEL_BUCKETS: ReadonlySet<DmFailureBucket | 'no_bucket'> = new Se
 
 export function isChannelLevelFailure(bucket: DmFailureBucket | undefined): boolean {
     return CHANNEL_LEVEL_BUCKETS.has(bucket ?? 'no_bucket');
+}
+
+/**
+ * Does this platform's send use the FACEBOOK page token (`pages.access_token`)?
+ *
+ * Instagram does — it is columns on the page row, not a separate credential, so
+ * one revoked Facebook session kills both. WhatsApp does NOT: it carries
+ * `pages.whatsapp_access_token`, a separate credential on Meta's forced 60-day
+ * clock with its own health cron and its own reconnect path.
+ *
+ * The distinction matters because Meta answers an expired WABA token with the
+ * same code 190 as a revoked page token, so anything that reads a Graph code to
+ * decide "this page's credential is dead" must ask which credential first.
+ *
+ * `undefined` = the comment pipelines, which are Facebook/Instagram-only by
+ * construction (there is no WhatsApp comment adapter).
+ */
+export function ownsFacebookCredential(platform: string | undefined): boolean {
+    return platform === undefined || platform === 'facebook' || platform === 'instagram';
 }
 
 /**
@@ -226,19 +246,11 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
             // Redis unreachable — send anyway (see above).
         }
 
-        // The dedup key is released on ANY outcome that isn't a delivered email —
-        // hence the `finally`, not a check on `result.success` alone.
-        //
-        // emailService.send fails in TWO shapes and they need identical handling:
-        //   - it RESOLVES with { success: false } for a provider-level failure
-        //     (Resend 4xx/5xx, unconfigured API key), and
-        //   - it THROWS for a network-level one — there is no try/catch around its
-        //     `fetch`, so DNS failure, socket reset, TLS error and timeout all
-        //     propagate as a raw TypeError.
-        // Only the first shape was released before, which left the far more likely
-        // outage shape holding the key for the full 24h. The crossing guard
-        // guarantees no retry inside that window, so the merchant simply never
-        // heard about a page that had stopped answering.
+        // The dedup key is released on ANY outcome that isn't a DELIVERED email —
+        // never on `result.success` alone. `emailService.trySend` owns that
+        // distinction (its docblock explains why `send` cannot be asked
+        // directly); this used to re-derive it here, and the copy of this code in
+        // `pageTokenRecovery` inherited the pre-correction version. One home now.
         let emailed = false;
         let failureReason: string | undefined;
         try {
@@ -247,10 +259,11 @@ async function notifyMerchantAutoPaused(row: { id: string; userId: string | null
                 pageName,
                 dashboardUrl: `${config.frontendUrl}/dashboard`,
             });
-            const result = await emailService.send({ to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId });
-            emailed = result.success;
-            failureReason = result.error;
+            ({ delivered: emailed, error: failureReason } = await emailService.trySend({
+                to: info.ownerEmail, subject, html, type: 'auto_pause', userId: row.userId,
+            }));
         } catch (err) {
+            // Template rendering, not the send — `trySend` never throws.
             failureReason = err instanceof Error ? err.message : String(err);
         } finally {
             if (!emailed && dedupKeyClaimed) {
@@ -282,6 +295,7 @@ export async function recordSendFailure(
     pageId: string,
     bucket: DmFailureBucket | undefined,
     platform?: string,
+    failure?: unknown,
 ): Promise<void> {
     // Per-platform streak first: it covers channel-level buckets the page-level
     // counter deliberately ignores (thread_owned_elsewhere), and fire-and-forget
@@ -290,9 +304,58 @@ export async function recordSendFailure(
         trackPlatformFailure(pageId, platform, bucket);
     }
 
+    // A revoked page credential is a DIFFERENT event from a page that keeps
+    // getting rejected, even though both arrive here as `our_fault`. Counting to
+    // ten before acting is right for the second and indefensible for the first:
+    // the credential is re-mintable in one Graph call, and when it isn't, the
+    // merchant is the only one who can fix it and must be told which of Meta's
+    // five causes it was. Never throws, and leaves the counter logic below
+    // untouched — a page whose token recovers still owes its failure count.
+    //
+    // ⛔ Facebook-credential platforms ONLY. WhatsApp lives on the same page row
+    // but holds a SEPARATE credential (`pages.whatsapp_access_token`) on its own
+    // 60-day clock, with its own health cron and its own reconnect notice
+    // (whatsappAdapter → markWhatsAppNeedsReconnect). Meta answers an expired WABA
+    // token with code 190 too, so without this gate a WhatsApp expiry would run
+    // Facebook page-token recovery: re-minting `pages.access_token` the WhatsApp
+    // failure says nothing about, and — when the user session is also gone —
+    // CLEARING the Facebook token and mailing the merchant "reconnect your
+    // Facebook page" to explain a WhatsApp outage.
+    //
+    // The gate is here rather than at the caller because this is the choke point
+    // every send path flows through; a new caller cannot forget it. `undefined`
+    // is the comment pipelines, which are Facebook/Instagram-only by construction
+    // (there is no WhatsApp comment adapter).
+    //
+    // ⚠️ Its OWN error boundary, for two independent reasons.
+    //
+    // 1. Both production callers dispatch `recordSendFailure` with `void`
+    //    (messageProcessor, commentProcessor), so anything escaping this function
+    //    is an unhandled promise rejection rather than a Sentry event.
+    //    `handlePageTokenFailure` promises never to throw — but "the callee
+    //    promises" is not an error boundary, and this one is reached on the
+    //    failure path of every send.
+    // 2. Recovery and the pause counter are separate concerns and must not be
+    //    able to take each other down. Sharing the counter's `try` looks safe and
+    //    is not: a recovery that blew up would skip the UPDATE below, and that
+    //    counter is the entire basis of the ten-failure pause threshold. Same
+    //    reasoning as the notification's own `try` in
+    //    `pageTokenRecovery.markPageNeedsReconnect`.
+    if (failure !== undefined && ownsFacebookCredential(platform)) {
+        try {
+            await handlePageTokenFailure(pageId, failure);
+        } catch (err) {
+            captureError(err, 'pageAutoPause.tokenRecoveryFailed', {
+                tags: { component: 'pageAutoPause' },
+                extra: { pageId, bucket, platform },
+            });
+        }
+    }
+
     if (!isPageLevelFailure(bucket)) return;
 
     try {
+
         // Single UPDATE: bump counter, and if it would cross threshold, pause atomically.
         // The CASE WHEN means we don't need a SELECT-then-UPDATE round trip.
         const [row] = await db

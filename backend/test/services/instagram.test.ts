@@ -11,6 +11,7 @@ vi.mock('../../src/config', () => ({
 const mockedAxios = vi.mocked(axios, true);
 
 import { InstagramService } from '../../src/services/instagram';
+import { DmSendError, isTokenRevoked } from '../../src/utils/fbGraphErrors';
 
 describe('InstagramService', () => {
     let service: InstagramService;
@@ -123,6 +124,25 @@ describe('InstagramService', () => {
             await expect(service.getMedia('ig-123', pageAccessToken))
                 .rejects.toThrow('Instagram API error: Rate limited');
         });
+
+        it('preserves the Graph code/subcode on failure — token recovery reads exactly these', async () => {
+            // A plain `new Error(...)` here made the posts.ts retry wrapper
+            // permanently inert: classifyTokenFailure saw an unclassifiable error
+            // and never re-minted, so the picker still 500'd on a revoked token.
+            const error = new Error('fail');
+            (error as any).response = { data: { error: {
+                message: 'Error validating access token', code: 190, error_subcode: 460, type: 'OAuthException',
+            } } };
+            mockedAxios.get.mockRejectedValue(error);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            let thrown: unknown;
+            try { await service.getMedia('ig-123', pageAccessToken); } catch (e) { thrown = e; }
+            expect(thrown).toBeInstanceOf(DmSendError);
+            expect((thrown as DmSendError).code).toBe(190);
+            expect((thrown as DmSendError).subcode).toBe(460);
+            expect(isTokenRevoked(thrown)).toBe(true);
+        });
     });
 
     describe('getComments', () => {
@@ -170,6 +190,49 @@ describe('InstagramService', () => {
 
             await expect(service.replyToComment('c1', 'text', pageAccessToken))
                 .rejects.toThrow('Instagram API error: Cannot reply');
+        });
+
+        // ⛔ The Graph code/subcode must SURVIVE the throw. While this flattened to a
+        // plain `Error`, the only thing downstream received was a message string, so
+        // `classifyDmError` could answer nothing better than `unknown` — and page-token
+        // recovery never fired on Instagram's default (public) comment path. Instagram
+        // rides the SAME page token as Facebook, so a revoked session kills both.
+        it('preserves the Graph code/subcode of a revoked token, not just the message', async () => {
+            const error = new Error('fail');
+            (error as any).response = {
+                status: 400,
+                data: { error: { message: 'Error validating access token', code: 190, error_subcode: 460, type: 'OAuthException' } },
+            };
+            mockedAxios.post.mockRejectedValue(error);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            const thrown = await service.replyToComment('c1', 'text', pageAccessToken).catch((e: unknown) => e);
+
+            expect(thrown).toBeInstanceOf(DmSendError);
+            expect(thrown).toMatchObject({ code: 190, subcode: 460, isTransport: false });
+            // Asserted through a production predicate, never a re-derived expectation.
+            // `isTokenRevoked` rather than `classifyTokenFailure` only because the
+            // latter lives in pageTokenRecovery, whose import chain instantiates a real
+            // Redis client. The cause-naming half is pinned where the mocks allow it:
+            // instagramCommentAdapter.test.ts.
+            expect(isTokenRevoked(thrown)).toBe(true);
+            // Message text unchanged, so callers reading `.message` are unaffected.
+            expect((thrown as Error).message).toBe('Instagram API error: Error validating access token');
+        });
+
+        it('flags a 5xx as transport, so an outage is not read as a revoked token', async () => {
+            const error = new Error('fail');
+            (error as any).response = {
+                status: 500,
+                data: { error: { message: 'Error validating access token', code: 190, error_subcode: 460 } },
+            };
+            mockedAxios.post.mockRejectedValue(error);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            const thrown = await service.replyToComment('c1', 'text', pageAccessToken).catch((e: unknown) => e);
+
+            expect(thrown).toMatchObject({ isTransport: true });
+            expect(isTokenRevoked(thrown)).toBe(false);
         });
     });
 

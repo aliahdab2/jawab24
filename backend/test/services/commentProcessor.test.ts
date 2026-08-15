@@ -13,6 +13,7 @@ import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment
 import { DmSendError } from '../../src/utils/fbGraphErrors';
 import { PostNotOwnedError } from '../../src/services/postErrors';
 import { captureError } from '../../src/utils/sentryHelpers';
+import { withPageTokenRetryResult, handlePageTokenFailure } from '../../src/services/pageTokenRecovery';
 
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../../src/services/workspaceSettings');
@@ -80,6 +81,36 @@ vi.mock('../../src/lib/replyLock', () => ({
 }));
 vi.mock('../../src/lib/eventBus', () => ({
     publishSSEEvent: vi.fn().mockResolvedValue(undefined),
+}));
+// Token recovery is a COLLABORATOR of the send path: a revoked page credential
+// is re-minted and the send retried IN-REQUEST, so the comment that exposed the
+// dead token is not the one we lose.
+//
+// The wrapper is mocked whole rather than partially. A partial mock does not
+// work here and would have been quietly useless: `withPageTokenRetryResult`
+// calls `handlePageTokenFailure` inside its own module, and an ESM module never
+// routes its internal calls through the mocked export — so the real recovery
+// would have run against a stubbed Redis and returned null, and the "it retries"
+// assertion would have been measuring nothing.
+//
+// So the split is by responsibility: THIS file owns the WIRING (does the
+// pipeline delegate its send, and does it adopt what comes back?), and
+// pageTokenRecovery.test.ts owns the retry/classification LOGIC against the real
+// implementation. The default below is a pass-through — one send, no recovery.
+vi.mock('../../src/services/pageTokenRecovery', () => ({
+    withPageTokenRetryResult: vi.fn(async (
+        _pageId: string,
+        accessToken: string,
+        call: (t: string) => Promise<unknown>,
+    ) => ({ result: await call(accessToken), accessToken })),
+    // ⚠️ REQUIRED even though commentProcessor never imports it. `pageAutoPause`
+    // does (`pageAutoPause.ts` → `handlePageTokenFailure`) and is NOT mocked in
+    // this suite, so omitting it from a whole-module factory made every call throw
+    // "No export named" — and the try/catch this branch gained swallows that into
+    // captureError. The suite stayed 164/164 green while the recovery hand-off was
+    // dead on every run, which is exactly the failure this file exists to catch.
+    handlePageTokenFailure: vi.fn().mockResolvedValue(null),
+    withPageTokenRetry: vi.fn(async (page: { accessToken: string }, call: (t: string) => Promise<unknown>) => call(page.accessToken)),
 }));
 // Only isWithinBusinessHours is replaced (default: within hours) — everything else
 // stays real. Lets the D-027 suite flip "outside business hours" deterministically.
@@ -3391,6 +3422,183 @@ describe('CommentProcessor — template reply mode behavior', () => {
 
             expect(adapter.sendReply).not.toHaveBeenCalled();
             expect(result).toMatchObject({ success: false, error: 'Subscription inactive' });
+        });
+    });
+    /**
+     * A revoked page credential must not cost the customer standing in front of
+     * us. The comment adapters report failure by RETURNING it, so the throw-based
+     * `withPageTokenRetry` the DM path uses never fires here — and until this was
+     * wired, the comment that EXPOSED the dead token was flagged `dm_failed` and
+     * never answered while the background re-mint helped only the NEXT customer.
+     * That is the 2026-08-14 outage in miniature, on the very surface it was
+     * reported (an empty Post Reply picker on a page whose token had died).
+     *
+     * These drive the real `processComment`, so they pin the WIRING. Without
+     * them a full revert of the call site compiles and passes every other suite
+     * in this repo — verified by mutation, which is how the gap was found.
+     */
+    describe('dead page credential — the comment that exposed it still gets answered', () => {
+        const revoked: SendCommentResult = {
+            success: false,
+            error: 'Facebook API error',
+            dmFailure: { bucket: 'our_fault', code: 190, subcode: 460, rawMessage: 'session invalidated' },
+        };
+
+        beforeEach(async () => {
+            // ⚠️ Re-arm the subscription gate explicitly. `vi.clearAllMocks()`
+            // clears CALLS but keeps implementations, and the
+            // "subscription inactive" describe above leaves
+            // `enforceAutoReplyGate` resolving `{ allowed: false }` — so without
+            // this every test here exits at step 2 and asserts against a pipeline
+            // that never ran. That failure looks identical to a broken fix.
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: true });
+
+            // This parent describe leaves getSettings to each test — set a mode
+            // here or processComment bails before the send path is reached.
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('public'));
+            // Re-arm the pass-through here, not only in the module factory: the
+            // parent `vi.clearAllMocks()` leaves this spy without a resolved
+            // value, so the awaited destructure would throw into processComment's
+            // outer catch — every test below would then "fail" for the wrong
+            // reason (no send at all) instead of testing the wiring.
+            vi.mocked(withPageTokenRetryResult).mockImplementation(async (
+                _pageId: string, accessToken: string, call: (t: string) => Promise<unknown>,
+            ) => ({ result: await call(accessToken), accessToken }));
+        });
+
+        it('routes the send through token recovery, with the failure it must classify', async () => {
+            const adapter = createMockAdapter();
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+
+            expect(withPageTokenRetryResult).toHaveBeenCalledWith(
+                'page-uuid',            // the internal page id recovery keys on
+                'token-123',            // the credential we currently believe in
+                expect.any(Function),
+                expect.any(Function),
+            );
+
+            // The `failureOf` argument decides whether recovery runs at all, so
+            // assert its BEHAVIOUR rather than its presence: a bucket-only or
+            // always-undefined predicate would pass an `expect.any(Function)`
+            // check and silently disable the whole mechanism.
+            const failureOf = vi.mocked(withPageTokenRetryResult).mock.calls[0][3] as (r: SendCommentResult) => unknown;
+            expect(failureOf(revoked)).toBe(revoked.dmFailure);
+            expect(failureOf({ success: true } as SendCommentResult)).toBeUndefined();
+        });
+
+        it('hands the wrapper a send that uses the token IT supplies, not the stale one', async () => {
+            // The retry is worthless if the callback ignores the fresh token and
+            // re-reads `opts.accessToken` — it would just re-issue the same
+            // doomed request.
+            const sendReply = vi.fn().mockResolvedValue({ success: true } as SendCommentResult);
+            const adapter = createMockAdapter({ sendReply });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+
+            const call = vi.mocked(withPageTokenRetryResult).mock.calls[0][2] as (t: string) => Promise<SendCommentResult>;
+            sendReply.mockClear();
+            await call('fresh-page-token');
+
+            expect(sendReply).toHaveBeenCalledWith(expect.objectContaining({ accessToken: 'fresh-page-token' }));
+        });
+
+        it('ADOPTS the recovered token for the follow-up likeComment', async () => {
+            // Borrowing it for the retry alone would issue the like with the
+            // credential we just proved dead — the same trap `sendProductCards`
+            // set on the DM path.
+            vi.mocked(withPageTokenRetryResult).mockImplementationOnce(async (
+                _pageId: string, _accessToken: string, call: (t: string) => Promise<unknown>,
+            ) => ({ result: await call('fresh-page-token'), accessToken: 'fresh-page-token' }));
+
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid', autoReplyEnabled: true, message: 'Post body',
+                    triggerKeyword: 'سجّل', triggerReply: 'مرحباً!', likeComment: true,
+                }),
+                likeComment,
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(likeComment).toHaveBeenCalledWith('comment-1', 'fresh-page-token');
+        });
+
+        // ⛔ THE DEFAULT MODE. `commentReplyMode` defaults to 'public' (schema
+        // default, workspaceSettings fallback, adapter `|| 'public'`), and a public
+        // comment post attempts no DM — so it carries `publicFailure`, never
+        // `dmFailure`. Reading only `dmFailure` made the entire in-request retry
+        // inert for every pre-existing workspace: shipped, tested, doing nothing.
+        it('recovers on a PUBLIC-mode failure, which carries publicFailure not dmFailure', async () => {
+            const publicRevoked: SendCommentResult = {
+                success: false,
+                error: 'Failed to post public reply to Facebook',
+                publicFailure: { bucket: 'our_fault', code: 190, subcode: 460, rawMessage: 'session invalidated' },
+            };
+            const adapter = createMockAdapter({ sendReply: vi.fn().mockResolvedValue(publicRevoked) });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+
+            const failureOf = vi.mocked(withPageTokenRetryResult).mock.calls[0][3] as (r: SendCommentResult) => unknown;
+            expect(failureOf(publicRevoked)).toBe(publicRevoked.publicFailure);
+        });
+
+        // The 4th argument of `recordSendFailure` is the ONLY channel by which a
+        // revoked credential reaches background recovery. Nothing else in the repo
+        // drives processComment → recordSendFailure, so without this, deleting that
+        // argument is invisible. Asserted through the real `pageAutoPause` (only
+        // `handlePageTokenFailure` is stubbed), so the whole hand-off is exercised.
+        it('hands the failure to background recovery via recordSendFailure', async () => {
+            const adapter = createMockAdapter({ sendReply: vi.fn().mockResolvedValue(revoked) });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(handlePageTokenFailure).toHaveBeenCalledWith('page-uuid', revoked.dmFailure);
+        });
+
+        it('hands a PUBLIC-mode failure to background recovery too', async () => {
+            const publicRevoked: SendCommentResult = {
+                success: false,
+                error: 'Failed to post public reply to Facebook',
+                publicFailure: { bucket: 'our_fault', code: 190, subcode: 460, rawMessage: 'session invalidated' },
+            };
+            const adapter = createMockAdapter({ sendReply: vi.fn().mockResolvedValue(publicRevoked) });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(handlePageTokenFailure).toHaveBeenCalledWith('page-uuid', publicRevoked.publicFailure);
+        });
+
+        it('still books the loss when recovery could not help', async () => {
+            // Recovery is a chance, not a guarantee: an unrecoverable failure must
+            // flag the comment exactly as before, never silently swallow it.
+            const adapter = createMockAdapter({ sendReply: vi.fn().mockResolvedValue(revoked) });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+            );
+
+            expect(result.success).toBe(false);
+            expect(adapter.flagComment).toHaveBeenCalledWith(
+                'comment-uuid', 'dm_failed', undefined, expect.anything(), false,
+            );
         });
     });
 });

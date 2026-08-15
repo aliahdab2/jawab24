@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DmSendError } from '../../../src/utils/fbGraphErrors';
+import { classifyTokenFailure } from '../../../src/services/pageTokenRecovery';
 
 // Mock dependencies
 const mockGetPageByInstagramId = vi.fn();
@@ -450,6 +452,44 @@ describe('InstagramCommentAdapter', () => {
             expect(result.success).toBe(true);
             expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', 'token-123');
             expect(mockSendDirectMessage).not.toHaveBeenCalled();
+        });
+
+        // ⛔ Instagram rides the SAME page token as Facebook (IG is columns on the
+        // page row, not a separate credential), so one revoked session kills both.
+        // But this branch used to return only a message string, so page-token
+        // recovery had nothing to classify and never fired on Instagram's DEFAULT
+        // comment mode — the identical defect the Facebook sender carried.
+        it('public mode: a REVOKED token comes back classified, so recovery can act', async () => {
+            mockReplyToComment.mockRejectedValue(
+                new DmSendError('Instagram API error: Error validating access token', { code: 190, subcode: 460 }),
+            );
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'public' } };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.publicFailure).toMatchObject({ code: 190, subcode: 460 });
+            // The property that matters, asserted through the production predicate
+            // rather than a re-derived expectation (AI_INSTRUCTIONS §19.3).
+            expect(classifyTokenFailure(result.publicFailure)).toBe('password_changed');
+            // Never `dmFailure`: no DM was attempted, and that field drives the inbox
+            // label and the auto-pause bucket.
+            expect(result.dmFailure).toBeUndefined();
+        });
+
+        it('public mode: a TRANSIENT failure is not mistaken for a dead credential', async () => {
+            // The counterweight. Classifying is only safe if it still says "no" to a
+            // blip — recovery CLEARS the stored token when it decides a credential is
+            // gone, so a false positive takes a healthy page dark.
+            mockReplyToComment.mockRejectedValue(
+                new DmSendError('Instagram API error: upstream', { code: 190, subcode: 460, isTransport: true }),
+            );
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'public' } };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(classifyTokenFailure(result.publicFailure)).toBeNull();
         });
 
         // Privacy invariant: an image must NEVER leave the DM channel. In public mode the

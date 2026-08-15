@@ -90,7 +90,13 @@ export class InstagramService {
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Instagram] API Error fetching media', { error: error.response?.data?.error?.message || error.message });
-                throw new Error(`Instagram API error: ${error.response?.data?.error?.message || error.message}`);
+                // `DmSendError.fromAxios`, not `new Error(...)`: same contract and
+                // reasoning as `replyToComment` below — a plain Error destroys the
+                // Graph code/subcode, which made `withPageTokenRetry` around this
+                // read (posts.ts) permanently inert: `classifyTokenFailure` saw an
+                // unclassifiable error and never re-minted. Message text preserved
+                // by `fromAxios`, so `.message` consumers are unaffected.
+                throw DmSendError.fromAxios(error, 'Instagram API error');
             }
             throw error;
         }
@@ -183,7 +189,16 @@ export class InstagramService {
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Instagram] API Error posting reply', { error: error.response?.data?.error?.message || error.message });
-                throw new Error(`Instagram API error: ${error.response?.data?.error?.message || error.message}`);
+                // `DmSendError.fromAxios`, not `new Error(...)`: flattening to a plain
+                // Error destroys the Graph code/subcode, and every consumer that has to
+                // tell a DEAD CREDENTIAL from a blip reads exactly those two fields.
+                // While this threw a bare Error, `classifyDmError` could only answer
+                // `unknown`, so page-token recovery never fired on Instagram's default
+                // comment path — the same defect the Facebook side carried until
+                // sender.ts started classifying. Same message text as before
+                // (`Instagram API error: <graph message>`), so callers reading
+                // `.message` are unaffected. Precedent: sendDirectMessage below.
+                throw DmSendError.fromAxios(error, 'Instagram API error');
             }
             throw error;
         }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { facebookService } from '../../src/services/facebook';
 import { fbAxios } from '../../src/lib/fbAxios';
+import { classifyTokenFailure } from '../../src/services/pageTokenRecovery';
 import { detectLanguageCode } from '../../src/utils/language';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
 import { sendMetaImageAttachment } from '../../src/services/metaMessaging';
@@ -180,10 +181,43 @@ describe('ReplySender', () => {
 
             const result = await sender.sendCommentReply(baseOptions);
 
-            expect(result).toEqual({
+            expect(result).toMatchObject({
                 success: false,
                 error: 'Failed to post public reply to Facebook',
             });
+            // A bare Error carries no Graph payload, so it classifies as `unknown`
+            // rather than a token problem — the conservative direction.
+            expect(result.publicFailure?.bucket).toBe('unknown');
+            // Never `dmFailure`: no DM was attempted, and that field decides both the
+            // inbox label and the auto-pause bucket.
+            expect(result.dmFailure).toBeUndefined();
+        });
+
+        // ⛔ The regression that made the whole comment-path recovery inert.
+        //
+        // `public` is the DEFAULT comment mode (schema default, workspaceSettings
+        // fallback, and the adapter's own `|| 'public'`). It was also the only mode
+        // that swallowed the Graph error — so when a page token was revoked, the post
+        // 400'd with code 190 and the result carried nothing recovery could classify.
+        // The in-request re-mint shipped, was tested, and did nothing here.
+        it('carries the Graph code/subcode of a REVOKED token, so recovery can classify it', async () => {
+            const revoked = Object.assign(new Error('Request failed with status code 400'), {
+                isAxiosError: true,
+                response: {
+                    status: 400,
+                    data: { error: { message: 'Error validating access token', code: 190, error_subcode: 460, type: 'OAuthException' } },
+                },
+            });
+            vi.mocked(fbAxios.post).mockRejectedValue(revoked);
+
+            const result = await sender.sendCommentReply(baseOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.publicFailure).toMatchObject({ code: 190, subcode: 460 });
+            // The property that actually matters: the production predicate must read
+            // this as the password-change case. Asserted through `classifyTokenFailure`
+            // itself rather than by re-deriving it here (AI_INSTRUCTIONS §19.3).
+            expect(classifyTokenFailure(result.publicFailure)).toBe('password_changed');
         });
 
         it('should not call sendPrivateMessage in public mode', async () => {

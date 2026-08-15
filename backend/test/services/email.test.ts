@@ -262,4 +262,47 @@ describe('EmailService', () => {
             config.resend.apiKey = originalKey;
         });
     });
+
+    /**
+     * `send` fails in TWO shapes — it RESOLVES `{ success: false }` for a
+     * provider error and THROWS for a network one (there is no try/catch around
+     * its `fetch`). Only the first LOOKS like failure, so every caller whose next
+     * step depends on delivery had to know both, and the merchant-alert paths
+     * each re-derived it — one correctly, its later copy not.
+     *
+     * `trySend` is that knowledge, held once. These are its tests; the callers
+     * assert what they do with the answer, not how it was reached.
+     */
+    describe('trySend — one answer to "did it actually go out?"', () => {
+        const payload = { to: 'user@example.com', subject: 'S', html: '<p/>', type: 'transactional' as const };
+
+        it('reports delivery when the provider accepts', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ id: 'resend-1' }));
+
+            await expect(emailService.trySend(payload)).resolves.toEqual({ delivered: true, error: undefined });
+        });
+
+        it('reports NOT delivered — with the reason — when the provider rejects', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue(errResponse(422, { message: 'Invalid recipient' }));
+
+            await expect(emailService.trySend(payload)).resolves.toEqual({ delivered: false, error: 'Invalid recipient' });
+        });
+
+        it('reports NOT delivered instead of THROWING when the network fails', async () => {
+            // The shape that got missed: a DNS/TLS/socket failure propagates as a
+            // raw error out of `send`'s bare fetch. A caller checking `success`
+            // alone never sees it, so it reads as "not a failure" — which is how a
+            // 24h dedup key stayed held through an outage.
+            vi.spyOn(global, 'fetch').mockRejectedValue(new TypeError('fetch failed'));
+
+            await expect(emailService.trySend(payload)).resolves.toEqual({ delivered: false, error: 'fetch failed' });
+        });
+
+        it('never throws, whatever the transport does', async () => {
+            // Belt: a non-Error rejection must not escape either.
+            vi.spyOn(global, 'fetch').mockRejectedValue('socket hang up');
+
+            await expect(emailService.trySend(payload)).resolves.toMatchObject({ delivered: false });
+        });
+    });
 });

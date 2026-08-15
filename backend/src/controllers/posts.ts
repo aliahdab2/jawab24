@@ -87,10 +87,25 @@ export class PostsController {
                 : requested === 'facebook' ? 'facebook'
                 : page.facebookPageId ? 'facebook' : 'instagram';
 
-            // Requested platform not connected, or no usable token → empty page, not an
-            // error (the picker simply shows nothing for that source).
+            // Requested platform not connected → empty page, not an error (the picker
+            // simply shows nothing for that source), and genuinely COMPLETE: there is
+            // no list to be missing anything from.
             const hasSource = source === 'facebook' ? !!page.facebookPageId : !!page.instagramAccountId;
-            if (!hasSource || !page.accessToken) return reply.send({ posts: [], nextCursor: null, partial: false });
+            if (!hasSource) return reply.send({ posts: [], nextCursor: null, partial: false });
+
+            // Source connected but no usable token → still an empty page, but the list
+            // is INCOMPLETE and must say so.
+            //
+            // `partial: false` here is an assertion that the merchant has no posts, and
+            // it is exactly the wrong one when the credential is the thing that is
+            // missing: `pageTokenRecovery.markPageNeedsReconnect` clears `access_token`
+            // the moment Facebook confirms it is revoked, so the FIRST failure moves
+            // this page from "read failed → partial: true" (which at least showed the
+            // "list may be incomplete" hint) to a confidently complete empty list. That
+            // is the 2026-08-14 screen — «لا توجد منشورات حديثة على هذه الصفحة» — with
+            // its one remaining clue removed. The reconnect card is raised separately;
+            // this keeps the picker itself from contradicting it.
+            if (!page.accessToken) return reply.send({ posts: [], nextCursor: null, partial: true });
 
             const includeScheduled = request.query.includeScheduled === '1' || request.query.includeScheduled === 'true';
             const result = await postsService.listPublishedPosts(

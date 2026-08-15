@@ -87,6 +87,14 @@ export interface SendCommentResult {
      * See docs/comment-and-message-handling.md → "DM-failure-aware fallback".
      */
     dmFailure?: import('../utils/fbGraphErrors').DmFailure;
+    /**
+     * Classified Graph failure of a PUBLIC comment post. Separate from `dmFailure` on
+     * purpose — no DM was attempted, and `dmFailure`'s presence drives both the inbox
+     * flag (`dm_failed` vs `send_failed`) and the auto-pause bucket. Consumed only by
+     * page-token recovery, which needs the code/subcode to tell a dead credential from
+     * a blip. See services/reply/sender.ts → SendReplyResult.publicFailure.
+     */
+    publicFailure?: import('../utils/fbGraphErrors').DmFailure;
     /** True when the public fallback was intentionally suppressed by the failure bucket. */
     suppressedPublic?: boolean;
     /** True when a Post Reply image was actually delivered (its own native-image message

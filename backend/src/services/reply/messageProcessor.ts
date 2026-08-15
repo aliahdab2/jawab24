@@ -39,7 +39,8 @@ import {
 import { leadExtractorService } from '../leadExtractor';
 import { groundingVerifierService, buildGroundingSource, shouldVerifyGrounding } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
-import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
+import { recordSendFailure, recordSendSuccess, ownsFacebookCredential } from '../pageAutoPause';
+import { withPageTokenRetry } from '../pageTokenRecovery';
 import { extractPostId } from '../../utils/instagram';
 
 /** Max age of the origin post to inherit into a follow-up DM's AI context.
@@ -887,7 +888,28 @@ export class MessageProcessor {
                 // The platform's own id for this send (WhatsApp wamid), when the channel
                 // returns one. Persisted on the outgoing row at step 15 so a Coexistence
                 // echo of this message is recognised as ours, not as a human reply.
-                sentPlatformMessageId = await adapter.sendReply(page, senderId, replyText);
+                //
+                // A revoked page credential is re-mintable in ONE Graph call, so the
+                // customer in front of us must not pay for it: re-mint and retry once
+                // before this counts as a lost reply. Recovering in `recordSendFailure`
+                // below only helps message N+1 — the message that EXPOSED the dead token
+                // still went unanswered, which is the 2026-08-14 outage in miniature.
+                // Bounded to one retry by `withPageTokenRetry`, and only entered on a
+                // token-revoked code (every other failure rethrows untouched).
+                //
+                // Facebook-credential platforms only — see `ownsFacebookCredential`.
+                sentPlatformMessageId = ownsFacebookCredential(platform)
+                    ? await withPageTokenRetry(page, (accessToken) => {
+                        // Adopt the token for the REST of the pipeline, not just this
+                        // call. `sendProductCards` below reads `page.accessToken` and
+                        // would otherwise issue the follow-up card send with the exact
+                        // credential we just proved dead — a silent card loss on the
+                        // one path that had already recovered. A no-op on the first
+                        // attempt, where this IS `page.accessToken`.
+                        page.accessToken = accessToken;
+                        return adapter.sendReply(page, senderId, replyText);
+                    })
+                    : await adapter.sendReply(page, senderId, replyText);
                 // Messenger/Instagram auto-clear the typing indicator when a message
                 // arrives, so no explicit typing_off needed on the happy path.
                 replySent = true;
@@ -910,7 +932,9 @@ export class MessageProcessor {
                 const dmFailure = (platform === 'facebook' || platform === 'instagram')
                     ? classifyDmError(error, platform)
                     : undefined;
-                void recordSendFailure(page.id, dmFailure?.bucket, platform);
+                // `error` (not just the bucket) so a revoked credential can be
+                // re-minted on the spot instead of waiting for ten more losses.
+                void recordSendFailure(page.id, dmFailure?.bucket, platform, error);
                 // SSE: notify merchant of failed reply
                 publishSSEEvent(userId, 'message:reply_failed', {
                     messageId: platformMessageId,

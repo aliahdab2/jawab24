@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockIncr, mockExpire, mockDel, mockCaptureError, mockUpdate } = vi.hoisted(() => ({
+const { mockIncr, mockExpire, mockDel, mockCaptureError, mockUpdate, mockRecoverToken } = vi.hoisted(() => ({
     mockIncr: vi.fn(),
     mockExpire: vi.fn().mockResolvedValue(1),
     mockDel: vi.fn().mockResolvedValue(1),
     mockCaptureError: vi.fn(),
     mockUpdate: vi.fn(),
+    mockRecoverToken: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../lib/redis', () => ({ redis: { incr: mockIncr, expire: mockExpire, del: mockDel } }));
+vi.mock('../services/pageTokenRecovery', () => ({ handlePageTokenFailure: mockRecoverToken }));
 vi.mock('../utils/sentryHelpers', () => ({ captureError: mockCaptureError }));
 vi.mock('../db', () => ({
     db: {
@@ -126,5 +128,56 @@ describe('per-platform consecutive send-failure streak', () => {
         expect(isChannelLevelFailure('customer_refused')).toBe(false);
         expect(isChannelLevelFailure('window_expired')).toBe(false);
         expect(isChannelLevelFailure('transient')).toBe(false);
+    });
+});
+
+/**
+ * `recordSendFailure` is dispatched with `void` by BOTH reply pipelines
+ * (messageProcessor, commentProcessor), so anything that escapes it is an
+ * unhandled promise rejection rather than a Sentry event — and the pause counter
+ * it exists to keep is silently skipped.
+ *
+ * Token recovery was bolted on ABOVE this function's own try, outside that
+ * boundary. `handlePageTokenFailure` promises never to throw, but "the callee
+ * promises" is not an error boundary.
+ */
+describe('recordSendFailure never escapes its own error boundary', () => {
+    beforeEach(() => {
+        mockIncr.mockReset().mockResolvedValue(1);
+        mockCaptureError.mockClear();
+        mockRecoverToken.mockReset().mockResolvedValue(null);
+        mockUpdate.mockReset().mockReturnValue({
+            set: () => ({ where: () => ({ returning: async () => [] }) }),
+        });
+    });
+
+    it('does not reject when token recovery throws — it reports and carries on', async () => {
+        mockRecoverToken.mockRejectedValue(new Error('/me/accounts exploded'));
+
+        // The assertion IS `.resolves`: a rejection here is the production defect.
+        await expect(
+            recordSendFailure(PAGE, 'our_fault', 'facebook', { bucket: 'our_fault', code: 190, subcode: 460, rawMessage: 'gone' }),
+        ).resolves.toBeUndefined();
+
+        await flush();
+        expect(mockCaptureError).toHaveBeenCalled();
+    });
+
+    it('still bumps the pause counter when recovery throws', async () => {
+        // The counter is what the ten-failure pause threshold is built on. A
+        // recovery that blows up must not cost the page its failure count.
+        mockRecoverToken.mockRejectedValue(new Error('/me/accounts exploded'));
+
+        await recordSendFailure(PAGE, 'our_fault', 'facebook', { bucket: 'our_fault', code: 190, rawMessage: 'gone' });
+        await flush();
+
+        expect(mockUpdate).toHaveBeenCalled();
+    });
+
+    it('leaves WhatsApp\'s separate credential alone — 190 there is a WABA expiry', async () => {
+        await recordSendFailure(PAGE, 'our_fault', 'whatsapp', { bucket: 'our_fault', code: 190, rawMessage: 'gone' });
+        await flush();
+
+        expect(mockRecoverToken).not.toHaveBeenCalled();
     });
 });

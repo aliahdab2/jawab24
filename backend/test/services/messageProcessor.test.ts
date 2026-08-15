@@ -15,6 +15,7 @@ import { db } from '../../src/db';
 import { posts, instagramMedia } from '../../src/db/schema';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
+import { withPageTokenRetry } from '../../src/services/pageTokenRecovery';
 import { WORST_CASE_ENRICHMENT_MS } from '../../src/services/imageUnderstanding';
 
 vi.mock('../../src/services/workspaceSettings');
@@ -109,6 +110,15 @@ vi.mock('../../src/lib/eventBus', () => ({
 
 vi.mock('../../src/services/leadExtractor', () => ({
     leadExtractorService: { maybeCaptureLead: vi.fn().mockResolvedValue(undefined) },
+}));
+
+// Pass-through by default, so every other test in this file keeps exercising the
+// real send exactly as before. The recovery behaviour itself is covered in
+// pageTokenRecovery.test.ts; what needs pinning HERE is the WIRING — which
+// platforms route their send through it and which must not.
+vi.mock('../../src/services/pageTokenRecovery', () => ({
+    withPageTokenRetry: vi.fn(async (page: { accessToken: string }, call: (token: string) => Promise<unknown>) => call(page.accessToken)),
+    handlePageTokenFailure: vi.fn().mockResolvedValue(null),
 }));
 
 // --- Mock adapter factory ---
@@ -2167,6 +2177,103 @@ describe('MessageProcessor — transient error retry behavior', () => {
         expect(adapter.sendReply).not.toHaveBeenCalled();
     });
 
+});
+
+// ─────────────────────────────────────────────────────────────
+// Page-token recovery wiring.
+//
+// A revoked page credential is re-mintable in one Graph call, so the customer in
+// front of us must not pay for it. Recovering only in `recordSendFailure` helps
+// message N+1 while the message that EXPOSED the dead token still goes
+// unanswered — which is the 2026-08-14 outage in miniature.
+//
+// The counterpart matters just as much: WhatsApp sits on the same page row but
+// carries `whatsapp_access_token`, a separate credential on Meta's forced 60-day
+// clock with its own health cron and its own reconnect notice. Meta answers an
+// expired WABA token with the same code 190, so routing WhatsApp through Facebook
+// page-token recovery would clear `pages.access_token` — and mail the merchant
+// "reconnect your Facebook page" to explain a WhatsApp outage.
+// ─────────────────────────────────────────────────────────────
+describe('MessageProcessor — page-token recovery wiring', () => {
+    beforeEach(() => {
+        // Required: this file has no global call-count reset, so `not.toHaveBeenCalled()`
+        // in the WhatsApp case below would otherwise be asserting against every
+        // Facebook send earlier in the file and fail for the wrong reason.
+        vi.clearAllMocks();
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Hi!',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+    });
+
+    it('routes a Facebook send through token recovery, with the page and its token', async () => {
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1');
+
+        expect(withPageTokenRetry).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'page-uuid', accessToken: 'token-123' }),
+            expect.any(Function),
+        );
+        // Still exactly one send on the happy path — the wrapper retries only on a
+        // token-revoked code, and the pass-through above proves the reply flows.
+        expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+    });
+
+    it('routes an Instagram send through it too — same credential as Facebook', async () => {
+        const adapter = createMockAdapter({ platform: 'instagram' });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1');
+
+        expect(withPageTokenRetry).toHaveBeenCalled();
+    });
+
+    it('routes a WhatsApp send AROUND it — separate credential, separate reconnect path', async () => {
+        const adapter = createMockAdapter({ platform: 'whatsapp' });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1');
+
+        expect(withPageTokenRetry).not.toHaveBeenCalled();
+        // …and the reply still went out. Skipping recovery must not skip the send.
+        expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+    });
+
+    it('hands the re-minted token to the follow-up card send, not the credential it replaced', async () => {
+        // The pipeline must ADOPT the fresh token, not borrow it for one call. Steps
+        // after the send read `page.accessToken` directly — `sendProductCards` is the
+        // one that would otherwise fire with the exact credential recovery just
+        // proved dead, losing the cards silently on the path that had already healed.
+        //
+        // The retry is simulated at the wrapper boundary on purpose; the wrapper's own
+        // re-mint/retry behaviour is pinned in pageTokenRecovery.test.ts.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Hi!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [{
+                title: 'Blue Cotton Shirt',
+                subtitle: '120 SAR · In stock',
+                imageUrl: 'https://cdn.test/shirt.jpg',
+                productUrl: 'https://shop.test/p/blue-shirt',
+            }],
+        });
+        vi.mocked(withPageTokenRetry).mockImplementationOnce(
+            async (_page, call) => call('re-minted-token') as never,
+        );
+        const sendProductCards = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendProductCards });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'show me', 'msg-1');
+        // Cards are fire-and-forget — let the rejection/resolution settle.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        expect(sendProductCards).toHaveBeenCalledWith(
+            expect.objectContaining({ accessToken: 're-minted-token' }),
+            'sender-1',
+            expect.anything(),
+        );
+    });
 });
 
 // ─────────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ import { leadExtractorService } from '../leadExtractor';
 import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
+import { withPageTokenRetryResult } from '../pageTokenRecovery';
 import {
     isTransientFbError,
     isTransientAiError,
@@ -1023,32 +1024,75 @@ export class CommentProcessor {
         const {
             adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
-            platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
+            platformCommentId, platformPageId, fromId, fromName, userSettings,
             contentId, needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
             confidence, triggerKeyword, triggerType,
         } = opts;
 
-        const sendResult = await adapter.sendReply({
-            platformCommentId,
-            platformPageId,
-            replyText,
-            commentMessage,
-            accessToken,
-            fromId,
-            userSettings,
-            postMessage: opts.postMessage,
-            replyImageUrl: opts.replyImageUrl,
-            postId: contentId,
-            replyCta: opts.replyCta,
-            tagCommenter: opts.tagCommenter,
-        });
+        // A revoked page credential is re-mintable in ONE Graph call, so the
+        // customer in front of us must not pay for it: re-mint and retry once
+        // before this counts as a lost reply. Recovering only in the
+        // fire-and-forget `recordSendFailure` below helps comment N+1 — the
+        // comment that EXPOSED the dead token still goes unanswered, which is the
+        // 2026-08-14 outage in miniature and on the very surface it was reported.
+        //
+        // `accessToken` is rebound from the result, not read from `opts`, because
+        // a fresh token has to be ADOPTED for the rest of this method: the
+        // `likeComment` call below runs on the same credential and would
+        // otherwise use the one we just proved dead.
+        //
+        // Comment pipelines are Facebook/Instagram-only by construction (there is
+        // no WhatsApp comment adapter), so the `ownsFacebookCredential` gate the
+        // DM path needs has nothing to exclude here.
+        const { result: sendResult, accessToken } = await withPageTokenRetryResult(
+            pageId,
+            opts.accessToken,
+            (token) => adapter.sendReply({
+                platformCommentId,
+                platformPageId,
+                replyText,
+                commentMessage,
+                accessToken: token,
+                fromId,
+                userSettings,
+                postMessage: opts.postMessage,
+                replyImageUrl: opts.replyImageUrl,
+                postId: contentId,
+                replyCta: opts.replyCta,
+                tagCommenter: opts.tagCommenter,
+            }),
+            // The whole failure object, not its bucket: it carries the Graph
+            // code/subcode that tells a dead credential from a page Facebook is
+            // simply rejecting.
+            //
+            // ⚠️ `publicFailure` is not optional garnish — it is the DEFAULT mode.
+            // `commentReplyMode` defaults to 'public' (schema.ts, workspaceSettings,
+            // and the adapter's own `|| 'public'`), and a public post produces no
+            // `dmFailure` because no DM is attempted. Reading `dmFailure` alone made
+            // this whole retry inert for every pre-existing workspace — the fix
+            // present, tested, and doing nothing on the path it was written for.
+            (r) => (r.success ? undefined : (r.dmFailure ?? r.publicFailure)),
+        );
 
         if (!sendResult.success) {
             pipelineMetrics.record(pipeline, 'send_failed');
             // Defensive auto-pause: bump page-level failure counter (fire-and-forget).
             // Only `our_fault` / `unknown` / no-bucket count — `customer_refused` and
             // `window_expired` are per-customer issues, not page-wide. See pageAutoPause.ts.
-            void recordSendFailure(pageId, sendResult.dmFailure?.bucket);
+            // The whole dmFailure (not just its bucket): it carries the Graph
+            // code/subcode, which is what tells a revoked credential — re-mintable
+            // in one call — apart from a page Facebook simply keeps rejecting.
+            // The BUCKET stays `dmFailure`-only on purpose: a public post has never
+            // carried one, so it counts as `no_bucket` (page-level) exactly as before.
+            // Widening it here would quietly change which failures reach the auto-pause
+            // threshold. Only the 4th argument — the recovery signal — gains the public
+            // failure, so a revoked credential is re-minted on the default path too.
+            void recordSendFailure(
+                pageId,
+                sendResult.dmFailure?.bucket,
+                undefined,
+                sendResult.dmFailure ?? sendResult.publicFailure,
+            );
             // Flag the comment so it surfaces in "Needs Attention" — previously it stayed
             // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
             // Swallow a secondary DB error here: we already failed to send, the SSE event

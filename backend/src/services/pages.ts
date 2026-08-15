@@ -22,6 +22,7 @@ import { STATS_CACHE_TTL, pagesStatsCacheKey } from './statsCache';
 // other stats-cache invalidation helpers.
 export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
+import { clearReconnectAlertClaims } from './pageTokenRecovery';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
@@ -1183,6 +1184,12 @@ export class PagesService {
                     .where(eq(pages.id, existingPage.id))
                     .returning();
                 syncedPages.push(updated);
+                // The token was just restored — the reconnect-alert dedup claims
+                // must not outlive the incident they collapsed, or a re-revocation
+                // inside 24h alerts on no channel at all.
+                if (isOriginalConnector) {
+                    clearReconnectAlertClaims(existingPage.id, updated?.userId ?? userId);
+                }
                 if (existingPage.archivedAt) {
                     void auditLog({
                         userId,
@@ -1291,6 +1298,9 @@ export class PagesService {
                         return row;
                     });
                     syncedPages.push(claimed);
+                    // Fresh token written in the transaction above — release the
+                    // reconnect-alert dedup claims (see the sync branch above).
+                    if (claimed) clearReconnectAlertClaims(claimed.id, userId);
                     if (globalExisting.archivedAt) {
                         void auditLog({
                             userId,

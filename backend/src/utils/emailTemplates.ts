@@ -416,6 +416,66 @@ export function autoPausedEmailTemplate(params: {
 }
 
 /**
+ * Page-reconnect notice — fired by services/pageTokenRecovery.ts the first time a
+ * live Graph call proves the page credential is gone AND re-minting it from
+ * /me/accounts failed (i.e. the merchant's own Facebook session ended).
+ *
+ * Distinct from `autoPausedEmailTemplate` on purpose, and both can be right:
+ * that one fires after ten rejected sends and asks for two steps (reconnect,
+ * then re-enable). This one fires on the FIRST rejection, before any customer
+ * has been lost, and names the actual cause — the sentence that turns "Jawab24
+ * is broken" into "I changed my password".
+ */
+export function pageReconnectEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    pageName: string;
+    cause: 'password_changed' | 'logged_out' | 'security_checkpoint' | 'token_expired' | 'permissions_revoked' | 'unknown';
+    dashboardUrl: string;
+}): { subject: string; html: string } {
+    const { lang, pageName, cause, dashboardUrl } = params;
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    // Same escaping contract as the other lifecycle emails: our translations are
+    // static markup-free strings; the page name is merchant data.
+    const escPageName = escapeHtml(pageName);
+
+    const causeKey = {
+        password_changed:    'pageReconnectCausePasswordChanged',
+        logged_out:          'pageReconnectCauseLoggedOut',
+        security_checkpoint: 'pageReconnectCauseSecurityCheckpoint',
+        token_expired:       'pageReconnectCauseTokenExpired',
+        permissions_revoked: 'pageReconnectCausePermissionsRevoked',
+        unknown:             'pageReconnectCauseUnknown',
+    } as const;
+
+    const subject = t('pageReconnectSubject', lang, { pageName });
+    const heading = t('pageReconnectHeading', lang);
+    const intro = t(causeKey[cause], lang).replace(/\{pageName\}/g, escPageName);
+    const impact = t('pageReconnectImpact', lang);
+    const fixSteps = t('pageReconnectFixSteps', lang);
+    const passwordNote = t('pageReconnectPasswordNote', lang);
+    const ctaLabel = t('pageReconnectCta', lang);
+    const signoff = t('pageReconnectSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro} ${impact}</p>
+              <p style="margin:0 0 16px 0;">${fixSteps}</p>
+              ${tealCallout(rtl, passwordNote)}
+              ${ctaButton(dashboardUrl, ctaLabel)}
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
  * Team invite email — sent when an owner/admin invites someone by email.
  *
  * Bilingual by design: the recipient may not have an account yet, so their
