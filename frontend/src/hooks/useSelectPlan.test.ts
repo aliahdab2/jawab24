@@ -164,6 +164,71 @@ describe('useSelectPlan — web unchanged', () => {
     });
 });
 
+/**
+ * The yearly guard (2026-08-15). A "year" page toggle must never produce a
+ * yearly billing request for a plan without a yearly Stripe price — the
+ * backend would 400 (YEARLY_NOT_AVAILABLE); before the guard it silently
+ * billed the MONTHLY price under the UI's "save ~17%" promise.
+ */
+describe('useSelectPlan — yearly interval coercion', () => {
+    const YEARLY_PLAN = { id: 'plan_biz', price: 3900, slug: 'business', yearlyAvailable: true } as unknown as Plan;
+    const MONTHLY_ONLY_PLAN = { id: 'plan_scale', price: 14900, slug: 'scale-20k', yearlyAvailable: false } as unknown as Plan;
+
+    const renderYear = (plans: Plan[]) =>
+        renderHook(() => useSelectPlan({ plans, usage: null, billingInterval: 'year' }));
+
+    it('web: passes interval=year to checkout for a plan WITH a yearly price', async () => {
+        nativeState.native = false;
+        const { result } = renderYear([YEARLY_PLAN]);
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=year');
+    });
+
+    it('web: coerces to interval=month for a plan WITHOUT a yearly price', async () => {
+        nativeState.native = false;
+        const { result } = renderYear([MONTHLY_ONLY_PLAN]);
+
+        await act(() => result.current.handleSelectPlan('plan_scale'));
+
+        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_scale&interval=month');
+    });
+
+    it('native hosted checkout: sends billingInterval year only when the plan has a yearly price', async () => {
+        nativeState.native = true;
+        mockApiPost.mockResolvedValue({ data: { sessionId: 'cs_y', url: 'https://checkout.stripe.com/c/pay/cs_y' } });
+        const { result } = renderYear([YEARLY_PLAN, MONTHLY_ONLY_PLAN]);
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+        expect(mockApiPost).toHaveBeenCalledWith('/payment/create-checkout-session',
+            expect.objectContaining({ billingInterval: 'year' }));
+
+        mockApiPost.mockClear();
+        await act(() => result.current.handleSelectPlan('plan_scale'));
+        expect(mockApiPost).toHaveBeenCalledWith('/payment/create-checkout-session',
+            expect.objectContaining({ billingInterval: 'month' }));
+    });
+
+    it('in-place plan change: coerces the interval per target plan', async () => {
+        nativeState.native = false;
+        const { subscriptionApi } = await import('@/lib/api');
+        vi.mocked(subscriptionApi.changePlan).mockResolvedValue({} as never);
+        const stripeUsage = {
+            subscription: { plan: { slug: 'starter' }, status: 'active', hasStripeCustomer: true },
+        } as unknown as UsageSummary;
+
+        const { result } = renderHook(() =>
+            useSelectPlan({ plans: [YEARLY_PLAN, MONTHLY_ONLY_PLAN], usage: stripeUsage, billingInterval: 'year' }));
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+        expect(subscriptionApi.changePlan).toHaveBeenCalledWith('plan_biz', 'year');
+
+        await act(() => result.current.handleSelectPlan('plan_scale'));
+        expect(subscriptionApi.changePlan).toHaveBeenCalledWith('plan_scale', 'month');
+    });
+});
+
 describe('useSelectPlan — Shopify-billed workspace (D-G)', () => {
     // Shopify forbids off-platform billing for App Store installs: every plan
     // click must route to the Shopify admin deep link, never into any Stripe

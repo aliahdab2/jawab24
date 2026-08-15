@@ -27,6 +27,12 @@ vi.mock('../../src/services/stripe', () => ({
             sessionId: 'cs_hosted_123',
             url: 'https://checkout.stripe.com/c/pay/cs_hosted_123',
         }),
+        findOrCreateCustomer: vi.fn().mockResolvedValue('cus_test_123'),
+        createSubscriptionIntent: vi.fn().mockResolvedValue({
+            clientSecret: 'seti_test_secret',
+            type: 'setup',
+            subscriptionId: 'sub_intent_123',
+        }),
         getSubscription: vi.fn().mockImplementation(async (id: string) => ({
             id,
             status: 'trialing',
@@ -184,6 +190,127 @@ describe('Payment — createCheckoutSession', () => {
         });
         expect(res.statusCode).toBe(400);
         expect(res.json().error).toMatch(/stripe price id/i);
+    });
+
+    // Yearly guard — a "year" checkout must never silently bill the monthly
+    // price. The pre-2026-08-15 bug: the UI promised an annual total with
+    // ~17% off while Stripe subscribed the merchant at the monthly price,
+    // because the controller fell back to stripePriceId when
+    // stripeYearlyPriceId was missing.
+    it('returns 400 YEARLY_NOT_AVAILABLE when yearly is requested but the plan has no yearly Stripe price', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+
+        const plan = await createTestPlan(); // stripeYearlyPriceId: null
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, billingInterval: 'year' },
+        });
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json().code).toBe('YEARLY_NOT_AVAILABLE');
+        // Refusal must happen before any billable Stripe call
+        expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('bills the YEARLY price id when yearly is requested and configured', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+
+        const plan = await createTestPlan({
+            stripePriceId: 'price_monthly_123',
+            stripeYearlyPriceId: 'price_yearly_456',
+        });
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, billingInterval: 'year' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'payer@test.com',
+            plan.id,
+            'price_yearly_456', // the yearly price — NOT price_monthly_123
+            expect.any(String),
+            expect.any(Number),
+        );
+    });
+
+    it('create-subscription-intent also refuses yearly without a yearly Stripe price', async () => {
+        const plan = await createTestPlan();
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-subscription-intent',
+            payload: { planId: plan.id, billingInterval: 'year' },
+        });
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json().code).toBe('YEARLY_NOT_AVAILABLE');
+    });
+
+    it('create-subscription-intent bills the YEARLY price id when configured (PaymentElement path)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createSubscriptionIntent).mockClear();
+
+        const plan = await createTestPlan({
+            stripePriceId: 'price_monthly_pe',
+            stripeYearlyPriceId: 'price_yearly_pe',
+        });
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-subscription-intent',
+            payload: { planId: plan.id, billingInterval: 'year' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+            expect.objectContaining({ priceId: 'price_yearly_pe' }),
+        );
+    });
+
+    it('uiMode: hosted refuses yearly without a yearly Stripe price (same guard, hosted surface)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createHostedCheckoutSession).mockClear();
+
+        const plan = await createTestPlan();
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, billingInterval: 'year', uiMode: 'hosted' },
+        });
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json().code).toBe('YEARLY_NOT_AVAILABLE');
+        expect(stripeService.createHostedCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('uiMode: hosted bills the YEARLY price id when configured (the native-app path)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createHostedCheckoutSession).mockClear();
+
+        const plan = await createTestPlan({
+            stripePriceId: 'price_monthly_h',
+            stripeYearlyPriceId: 'price_yearly_h',
+        });
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, billingInterval: 'year', uiMode: 'hosted' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createHostedCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'payer@test.com',
+            plan.id,
+            'price_yearly_h', // the yearly price — NOT price_monthly_h
+            expect.any(String),
+            expect.any(String),
+            expect.any(Number),
+        );
     });
 
     // Hosted mode (D-040): the native-app flow and the web fallback. Same
@@ -494,6 +621,58 @@ describe('Payment — changePlan sanctions guard', () => {
         // The billable Stripe operation runs for a legitimate request
         expect(stripeService.updateSubscriptionPrice).toHaveBeenCalledWith('sub_allow_me', 'price_target_999');
     });
+
+    it('moves the subscription onto the YEARLY price when the target plan has one', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.updateSubscriptionPrice).mockClear();
+
+        const app = await buildAppWithGeo({ country: 'US', region: null, source: 'geoip-lite' });
+        const currentPlan = await createTestPlan({ slug: `yr-ok-current-${Date.now()}` });
+        await createTestSubscription(userId, currentPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_go_yearly',
+        });
+        const targetPlan = await createTestPlan({
+            slug: `yr-ok-target-${Date.now()}`,
+            stripePriceId: 'price_target_monthly',
+            stripeYearlyPriceId: 'price_target_yearly',
+        });
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/change-plan',
+            payload: { planId: targetPlan.id, billingInterval: 'year' },
+        });
+
+        await app.close();
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.updateSubscriptionPrice).toHaveBeenCalledWith('sub_go_yearly', 'price_target_yearly');
+    });
+
+    it('returns 400 YEARLY_NOT_AVAILABLE for a yearly change to a plan with no yearly Stripe price', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.updateSubscriptionPrice).mockClear();
+
+        const app = await buildAppWithGeo({ country: 'US', region: null, source: 'geoip-lite' });
+        const currentPlan = await createTestPlan({ slug: `yr-current-${Date.now()}` });
+        await createTestSubscription(userId, currentPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_yearly_guard',
+        });
+        const targetPlan = await createTestPlan({ slug: `yr-target-${Date.now()}` }); // no yearly price id
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/change-plan',
+            payload: { planId: targetPlan.id, billingInterval: 'year' },
+        });
+
+        await app.close();
+        expect(res.statusCode).toBe(400);
+        expect(res.json().code).toBe('YEARLY_NOT_AVAILABLE');
+        // The subscription must NOT be moved onto the monthly price
+        expect(stripeService.updateSubscriptionPrice).not.toHaveBeenCalled();
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -541,6 +720,52 @@ describe('Payment — webhook DB mutations', () => {
         expect(updated.currentPeriodStart?.toISOString().slice(0, 10)).toBe('2026-03-01');
         expect(updated.currentPeriodEnd?.toISOString().slice(0, 10)).toBe('2026-04-01');
         expect(updated.cancelAtPeriodEnd).toBe(false);
+    });
+
+    // Once yearly Stripe prices exist, subscription.updated events carry the
+    // YEARLY price id. The plan lookup matches stripe_yearly_price_id too —
+    // without it, every yearly subscription would log "No matching plan for
+    // Stripe price" and the local planId would go stale on plan switches.
+    it('handleSubscriptionUpdated — resolves the plan from a YEARLY Stripe price id', async () => {
+        // Unique per run: `plans` rows persist across tests/runs (reference
+        // data, not truncated), and this test does a REVERSE lookup by price
+        // id — a fixed id would match a stale row from an earlier run.
+        const yearlyPriceId = `price_yy_${Date.now()}`;
+        const yearlyPlan = await createTestPlan({
+            slug: `yearly-target-${Date.now()}`,
+            stripePriceId: `price_ym_${Date.now()}`,
+            stripeYearlyPriceId: yearlyPriceId,
+        });
+        const sub = await createTestSubscription(userId, planId, {
+            status: 'active',
+            externalSubscriptionId: 'sub_yearly_switch',
+        });
+
+        const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
+
+        await handleSubscriptionUpdated(
+            {
+                id: 'sub_yearly_switch',
+                status: 'active',
+                items: { data: [{ price: { id: yearlyPriceId } }] },
+                current_period_start: Math.floor(Date.now() / 1000),
+                current_period_end: Math.floor(Date.now() / 1000) + 365 * 24 * 3600,
+                cancel_at_period_end: false,
+            },
+            mockRequest,
+        );
+
+        const [updated] = await testDb
+            .select({ planId: schema.subscriptions.planId })
+            .from(schema.subscriptions)
+            .where(eq(schema.subscriptions.id, sub.id));
+
+        // The subscription now mirrors the plan whose YEARLY price was billed
+        expect(updated.planId).toBe(yearlyPlan.id);
+        expect(mockRequest.log.warn).not.toHaveBeenCalledWith(
+            expect.anything(),
+            'No matching plan for Stripe price',
+        );
     });
 
     it('handleSubscriptionDeleted — marks subscription as canceled in DB', async () => {

@@ -206,6 +206,7 @@ export const plansService = {
             description: row.description,
             price: row.price,
             yearlyPrice: row.yearlyPrice ?? null,
+            yearlyAvailable: Boolean(row.stripeYearlyPriceId),
             currency: row.currency || 'USD',
             interval: (row.interval || 'month') as 'month' | 'year',
             maxPages: row.maxPages,
