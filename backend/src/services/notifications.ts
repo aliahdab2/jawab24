@@ -320,11 +320,15 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
             ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، ولم يتبقَّ من رصيدك الإضافي سوى {balance} رد. تتوقف الردود الذكية عند نفاد الرصيد — قم بالترقية أو أضف رصيداً إضافياً لتستمر.',
         },
     },
+    // No {reason} placeholder on purpose: the gate's LimitCheckResult.reason is
+    // an internal ENGLISH diagnostic string, and interpolating it produced
+    // «اشتراكك Subscription expired. Please renew to continue.» inside the
+    // Arabic body (fixed 2026-08-15). The copy stands on its own.
     auto_reply_paused_billing: {
         titles: { en: 'Auto-reply paused — subscription inactive', ar: 'تم إيقاف الرد التلقائي — الاشتراك غير نشط' },
         bodies: {
-            en: 'Your subscription is {reason}. All auto-replies (Smart Replies, Post Replies, away messages) are paused until you renew. New comments and DMs will go unanswered.',
-            ar: 'اشتراكك {reason}. تم إيقاف جميع الردود التلقائية (الردود الذكية وردود البوست ورسائل الغياب) حتى التجديد. لن يتم الرد على التعليقات والرسائل الجديدة.',
+            en: 'Your subscription is no longer active. All auto-replies (Smart Replies, Post Replies, away messages) are paused until you renew. New comments and DMs will go unanswered.',
+            ar: 'اشتراكك لم يعد نشطاً. تم إيقاف جميع الردود التلقائية (الردود الذكية وردود البوست ورسائل الغياب) حتى التجديد. لن يتم الرد على التعليقات والرسائل الجديدة.',
         },
     },
     auto_reply_paused: {

@@ -64,3 +64,19 @@ describe('auto_reply_paused presentation', () => {
         expect(ACCOUNT_HEALTH_TYPES.has('auto_reply_paused_billing')).toBe(true);
     });
 });
+
+describe('auto_reply_paused_billing presentation', () => {
+    it('has its own red billing style, not the generic bell fallback', () => {
+        const style = getNotificationStyle('auto_reply_paused_billing');
+        expect(style).not.toBe(DEFAULT_STYLE);
+        // Same family as payment_failed — the same incident one step later.
+        expect(style.icon).toBe(getNotificationStyle('payment_failed').icon);
+        expect(style.iconColor).toContain('red');
+        expect(style.ringColor).toBe('notif-ring-red');
+    });
+
+    it('routes via the backend-supplied deepLink', () => {
+        expect(resolveNotificationRoute('auto_reply_paused_billing', { deepLink: '/settings' }))
+            .toBe('/settings');
+    });
+});
