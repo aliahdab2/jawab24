@@ -37,12 +37,28 @@ Show the user before → after and confirm.
 
 ## Step 2: Run the release script
 
+**First**, if the delta touches `packages/shared/`, build it — the release script does **not**, and a
+stale `dist/` ships silently: `( cd packages/shared && npm run build )`.
+
 ```bash
-./scripts/release-android.sh <track> --version <X.Y.Z> [--dry-run] [--skip-tests]
+./scripts/release-android.sh <track> --version <X.Y.Z> -y [--dry-run] [--skip-tests]
 ```
+
+⛔ **`-y` is mandatory for any non-interactive/backgrounded run.** The script prompts `CONFIRM RELEASE`
+and reads stdin; with no tty it reads EOF and exits having uploaded nothing — after burning the full
+lint+test cycle. This trap has fired seven times.
+
+⛔ **Never pipe the run through `tee`, `tail -N`, or any other command.** A pipe reports the *last*
+command's exit status, so the script failing reads as `exit 0` (this masked a no-op upload on 2.0.39).
+`tail`/`tee` also buffer, making a stall indistinguishable from progress. Background it and read the
+task log directly.
 
 The script runs lint+tests (unless skipped), builds the web assets, `cap sync`s, builds the
 **signed AAB**, and uploads it to the chosen track. It prints a summary on success.
+
+⛔ **Never conclude the upload succeeded from an exit code.** Prove it from two independent signals:
+the Play tracks API reporting the new `versionCode`, and the AAB's **mtime** being from this run (a
+stale AAB from a previous build sits at the same path and looks identical otherwise).
 
 If `dry-run` was passed, stop here — report the AAB path (`frontend/android/app/build/outputs/bundle/release/app-release.aab`) and skip Steps 3–5.
 
@@ -56,15 +72,36 @@ Update the two fallback literals in [frontend/android/app/build.gradle](frontend
 - `def appVersionName = … ?: "X.Y.Z"`
 - `def appVersionCode = … ?: "<code>"`
 
-## Step 4: Commit & tag
+## Step 4: Land the record commit, THEN tag
+
+⛔ **`git push origin main` does not work here** — `.husky/pre-push` blocks direct pushes to `main`.
+Land the record commit via PR. The hook inspects only `refs/heads/main`, so a branch-ref push passes
+cleanly and needs **no** `--no-verify` bypass — and no branch switch, which Rule 18 forbids in the
+main checkout:
 
 ```bash
 git add frontend/android/app/build.gradle
 git commit -m "chore(android): release v<X.Y.Z> (code <code>)"
-git tag -a "android-v<X.Y.Z>" -m "Android release v<X.Y.Z> (versionCode <code>)"
-git push origin main
-git push origin "android-v<X.Y.Z>"
+git push origin HEAD:refs/heads/chore/android-v<X.Y.Z>
+gh pr create --base main --head chore/android-v<X.Y.Z> \
+  --title "chore(android): release v<X.Y.Z> (code <code>)"
+gh pr merge <n> --squash --admin --delete-branch
 ```
+
+⛔ **Create the tag only AFTER the merge — never before.** A squash merge gives the record commit a
+**new SHA**, so a tag made pre-merge points at an orphaned commit that is not on `origin/main`. This
+has stranded a published tag three times (2.0.27, 2.0.28, 2.0.39):
+
+```bash
+git fetch origin --tags
+git merge --ff-only origin/main                       # local main now has the squashed commit
+git tag -a "android-v<X.Y.Z>" -m "Android release v<X.Y.Z> (versionCode <code>)"
+git push origin "android-v<X.Y.Z>"
+git merge-base --is-ancestor "android-v<X.Y.Z>" origin/main && echo "tag OK"   # must print
+```
+
+> If a tag was already pushed at the wrong commit, repair it with
+> `git tag -f -a "android-v<X.Y.Z>" <mergeSha> -m …` then `git push origin "android-v<X.Y.Z>" --force`.
 
 > The `android-v*` tag is just a release marker — it does NOT trigger any upload. The optional CI
 > workflow (`.github/workflows/android-release.yml`) is manual-dispatch only, so there's no
