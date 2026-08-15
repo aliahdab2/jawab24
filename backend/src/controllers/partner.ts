@@ -22,7 +22,7 @@ export class PartnerController {
 
         try {
             const [user] = await db
-                .select({ id: users.id, email: users.email })
+                .select({ id: users.id, email: users.email, phone: users.phone })
                 .from(users)
                 .where(eq(users.id, auth.userId))
                 .limit(1);
@@ -54,7 +54,7 @@ export class PartnerController {
 
         try {
             const [user] = await db
-                .select({ id: users.id, email: users.email })
+                .select({ id: users.id, email: users.email, phone: users.phone })
                 .from(users)
                 .where(eq(users.id, auth.userId))
                 .limit(1);

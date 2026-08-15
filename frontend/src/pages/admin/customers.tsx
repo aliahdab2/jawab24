@@ -169,13 +169,15 @@ export default function AdminCustomersPage() {
     const [partnerModalOpen, setPartnerModalOpen] = useState(false);
     const [newPartnerName, setNewPartnerName] = useState('');
     const [newPartnerEmail, setNewPartnerEmail] = useState('');
+    const [newPartnerPhone, setNewPartnerPhone] = useState('');
     const [newPartnerCommission, setNewPartnerCommission] = useState('15');
     const [createPartnerError, setCreatePartnerError] = useState<string | null>(null);
 
     const createPartner = useMutation({
         mutationFn: () => adminApi.createPartner({
             name: newPartnerName.trim(),
-            email: newPartnerEmail.trim(),
+            email: newPartnerEmail.trim() || null,
+            phone: newPartnerPhone.trim() || null,
             commissionPct: Number(newPartnerCommission),
         }),
         onSuccess: () => {
@@ -183,6 +185,7 @@ export default function AdminCustomersPage() {
             setPartnerModalOpen(false);
             setNewPartnerName('');
             setNewPartnerEmail('');
+            setNewPartnerPhone('');
             setNewPartnerCommission('15');
             setCreatePartnerError(null);
         },
@@ -192,12 +195,20 @@ export default function AdminCustomersPage() {
         },
     });
 
+    // At least one sign-in anchor is required, and each supplied one must be
+    // well-formed. Phone is E.164 to match `users.phone`, which is what the
+    // portal compares against for a phone-OTP signup.
     const canCreatePartner = useMemo(() => {
         const pct = Number(newPartnerCommission);
+        const email = newPartnerEmail.trim();
+        const phone = newPartnerPhone.trim();
+        const emailOk = email.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        const phoneOk = phone.length === 0 || /^\+[1-9]\d{6,18}$/.test(phone);
         return newPartnerName.trim().length > 0
-            && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPartnerEmail.trim())
+            && (email.length > 0 || phone.length > 0)
+            && emailOk && phoneOk
             && Number.isInteger(pct) && pct >= 0 && pct <= 100;
-    }, [newPartnerName, newPartnerEmail, newPartnerCommission]);
+    }, [newPartnerName, newPartnerEmail, newPartnerPhone, newPartnerCommission]);
 
     // Localized country name from the ISO code the backend derives off the
     // phone prefix (+963 → SY → «سوريا»). Intl covers every region code.
@@ -510,7 +521,15 @@ export default function AdminCustomersPage() {
                         value={newPartnerEmail}
                         onChange={(e) => setNewPartnerEmail(e.target.value)}
                         dir="auto"
-                        helperText={t('customers.resellerEmailHelper')}
+                    />
+                    <Input
+                        label={t('customers.resellerPhone')}
+                        type="tel"
+                        value={newPartnerPhone}
+                        onChange={(e) => setNewPartnerPhone(e.target.value)}
+                        dir="ltr"
+                        placeholder="+963944123456"
+                        helperText={t('customers.resellerAnchorHelper')}
                     />
                     <Input
                         label={t('customers.resellerCommission')}

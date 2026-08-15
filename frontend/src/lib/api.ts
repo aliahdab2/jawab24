@@ -973,9 +973,12 @@ export interface MessagesQueryParams {
 export interface AdminPartner {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   commissionPct: number;
   isActive: boolean;
+  /** True once the partner has signed in and the portal bound their account. */
+  linked: boolean;
   merchantCount: number;
   createdAt: string | null;
 }
@@ -1150,7 +1153,9 @@ export const adminApi = {
     return response.data;
   },
 
-  createPartner: async (input: { name: string; email: string; commissionPct: number }) => {
+  // At least one of email/phone is required — they are how the portal binds
+  // the partner's login (a phone-OTP signup has no email at all).
+  createPartner: async (input: { name: string; email?: string | null; phone?: string | null; commissionPct: number }) => {
     const response = await api.post<{ success: boolean; data: AdminPartner }>('/admin/partners', input);
     return response.data;
   },

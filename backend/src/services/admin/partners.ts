@@ -1,7 +1,7 @@
 import { db } from '../../db';
 import { partners, users, adminAuditLogs } from '../../db/schema';
-import { eq, asc, sql } from 'drizzle-orm';
-import { ConflictError, NotFoundError } from '../../utils/errors';
+import { eq, asc, or, sql } from 'drizzle-orm';
+import { ConflictError, NotFoundError, ValidationError } from '../../utils/errors';
 
 /**
  * Admin Partners service — the reseller / country-representative registry and
@@ -17,9 +17,12 @@ import { ConflictError, NotFoundError } from '../../utils/errors';
 export interface AdminPartnerRow {
     id: string;
     name: string;
-    email: string;
+    email: string | null;
+    phone: string | null;
     commissionPct: number;
     isActive: boolean;
+    /** True once the partner has signed in and the portal bound their account. */
+    linked: boolean;
     merchantCount: number;
     createdAt: Date | null;
 }
@@ -32,8 +35,12 @@ class AdminPartnersService {
                 id: partners.id,
                 name: partners.name,
                 email: partners.email,
+                phone: partners.phone,
                 commissionPct: partners.commissionPct,
                 isActive: partners.isActive,
+                // Surfaces "has this partner actually got in yet?" — the
+                // question you ask when a rep says the portal won't open.
+                linked: sql<boolean>`${partners.userId} IS NOT NULL`,
                 createdAt: partners.createdAt,
                 merchantCount: sql<number>`count(${users.id})::int`,
             })
@@ -43,32 +50,49 @@ class AdminPartnersService {
             .orderBy(asc(partners.name));
     }
 
-    /** Create a partner. Email is stored lowercase (unique on lower(email)). */
+    /**
+     * Create a partner. Email is stored lowercase.
+     *
+     * At least one of email/phone is REQUIRED, because these are the anchors
+     * the portal binds a login to — a partner with neither could never open it.
+     * Record whichever the partner will actually sign in with: a phone-OTP
+     * signup has no email at all, so for a phone-first rep the phone is the
+     * only anchor that will ever match.
+     */
     async create(
-        input: { name: string; email: string; commissionPct: number },
+        input: { name: string; email?: string | null; phone?: string | null; commissionPct: number },
         adminUserId: string | undefined,
     ) {
         const name = input.name.trim();
-        const email = input.email.trim().toLowerCase();
+        const email = input.email?.trim().toLowerCase() || null;
+        const phone = input.phone?.trim() || null;
 
+        if (!email && !phone) {
+            throw new ValidationError('A reseller needs an email or a phone number to sign in with');
+        }
+
+        const anchors = [
+            ...(email ? [sql`lower(${partners.email}) = ${email}`] : []),
+            ...(phone ? [sql`${partners.phone} = ${phone}`] : []),
+        ];
         const [existing] = await db
             .select({ id: partners.id })
             .from(partners)
-            .where(sql`lower(${partners.email}) = ${email}`)
+            .where(or(...anchors))
             .limit(1);
         if (existing) {
-            throw new ConflictError('A reseller with this email already exists');
+            throw new ConflictError('A reseller with this email or phone already exists');
         }
 
         const [row] = await db
             .insert(partners)
-            .values({ name, email, commissionPct: input.commissionPct })
+            .values({ name, email, phone, commissionPct: input.commissionPct })
             .returning();
 
         await db.insert(adminAuditLogs).values({
             adminUserId,
             action: 'partner_created',
-            newValue: { partnerId: row.id, name, email, commissionPct: input.commissionPct },
+            newValue: { partnerId: row.id, name, email, phone, commissionPct: input.commissionPct },
         });
 
         return row;

@@ -30,7 +30,9 @@ export interface ListAllUsersQuery {
 
 export interface CreatePartnerBody {
     name: string;
-    email: string;
+    /** At least one of email/phone is required — see adminPartnersService.create. */
+    email?: string | null;
+    phone?: string | null;
     commissionPct: number;
 }
 

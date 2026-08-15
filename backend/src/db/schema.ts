@@ -1791,10 +1791,14 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
 export const partners = pgTable('partners', {
     id: uuid('id').defaultRandom().primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
-    // Contact email, stored lowercase. Doubles as the portal login binding: the
-    // /partner surface matches lower(users.email) on first visit and persists
-    // the link in user_id, so the admin only ever has to know the partner's email.
-    email: varchar('email', { length: 255 }).notNull(),
+    // Contact email, stored lowercase. Nullable because it is NOT a reliable
+    // login anchor on its own: Jawab24 has no email login, and a phone-OTP
+    // signup leaves users.email NULL (authService.findOrCreateUserByPhone).
+    email: varchar('email', { length: 255 }),
+    // E.164 phone — the product's PRIMARY identity, so this is what actually
+    // binds a phone-signup partner to their portal. At least one of email or
+    // phone must be present (enforced in the service + route schema).
+    phone: varchar('phone', { length: 20 }),
     // The partner's own Jawab24 user account (portal login). Nullable until the
     // partner first opens the portal.
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -1804,7 +1808,13 @@ export const partners = pgTable('partners', {
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-    emailLowerUnique: uniqueIndex('idx_partners_email_lower').on(sql`lower(${table.email})`),
+    // Partial uniques: a NULL email/phone must not collide with another NULL.
+    emailLowerUnique: uniqueIndex('idx_partners_email_lower')
+        .on(sql`lower(${table.email})`)
+        .where(sql`${table.email} IS NOT NULL`),
+    phoneUnique: uniqueIndex('idx_partners_phone')
+        .on(table.phone)
+        .where(sql`${table.phone} IS NOT NULL`),
     userIdIdx: index('idx_partners_user_id').on(table.userId),
 }));
 

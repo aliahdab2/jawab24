@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { partners, users, subscriptions, plans, pages } from '../db/schema';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { adminUsersService } from './admin/users';
 
 /**
@@ -195,10 +195,17 @@ class PartnerPortalService {
     /**
      * Resolve the partner row for a logged-in user, or null when the user is
      * not a partner. Binding is lazy: prefer the persisted user_id link, else
-     * match lower(email) and persist the link — so the admin only ever needs
-     * to know the partner's email, and the partner just signs in with it.
+     * match an identity anchor and persist the link, so the admin only has to
+     * know how to reach the partner and the partner just signs in normally.
+     *
+     * BOTH anchors are needed, and phone is the important one. Jawab24 has no
+     * email login: a Facebook signup carries whatever address is on the FB
+     * profile, and a phone-OTP signup — the product's primary identity — leaves
+     * `users.email` NULL entirely (authService.findOrCreateUserByPhone). An
+     * email-only match therefore locks a phone-signup partner out of the portal
+     * permanently, with no self-service fix.
      */
-    async resolvePartnerForUser(user: { id: string; email?: string | null }) {
+    async resolvePartnerForUser(user: { id: string; email?: string | null; phone?: string | null }) {
         const [byId] = await db
             .select()
             .from(partners)
@@ -206,25 +213,31 @@ class PartnerPortalService {
             .limit(1);
         if (byId) return byId;
 
-        if (!user.email) return null;
-        const email = user.email.trim().toLowerCase();
-        const [byEmail] = await db
+        const email = user.email?.trim().toLowerCase() || null;
+        const phone = user.phone?.trim() || null;
+        if (!email && !phone) return null;
+
+        const anchors = [
+            ...(email ? [sql`lower(${partners.email}) = ${email}`] : []),
+            ...(phone ? [sql`${partners.phone} = ${phone}`] : []),
+        ];
+        const [matched] = await db
             .select()
             .from(partners)
-            .where(and(sql`lower(${partners.email}) = ${email}`, eq(partners.isActive, true)))
+            .where(and(or(...anchors), eq(partners.isActive, true)))
             .limit(1);
-        if (!byEmail) return null;
+        if (!matched) return null;
 
         // Already bound to a different login — do not rebind silently.
-        if (byEmail.userId && byEmail.userId !== user.id) return null;
+        if (matched.userId && matched.userId !== user.id) return null;
 
-        if (!byEmail.userId) {
+        if (!matched.userId) {
             await db
                 .update(partners)
                 .set({ userId: user.id, updatedAt: new Date() })
-                .where(and(eq(partners.id, byEmail.id), sql`${partners.userId} IS NULL`));
+                .where(and(eq(partners.id, matched.id), sql`${partners.userId} IS NULL`));
         }
-        return byEmail;
+        return matched;
     }
 
     /**

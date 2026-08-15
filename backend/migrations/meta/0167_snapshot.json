@@ -1,5 +1,5 @@
 {
-  "id": "f083c8ad-cda5-4b22-a0c9-ddb73bdc8038",
+  "id": "3bf790da-2b45-483e-80ca-604a031d2b5a",
   "prevId": "9fc7b274-b153-4a64-849e-5d9106d373c0",
   "version": "7",
   "dialect": "postgresql",
@@ -5763,7 +5763,13 @@
           "name": "email",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
         },
         "user_id": {
           "name": "user_id",
@@ -5812,6 +5818,23 @@
             }
           ],
           "isUnique": true,
+          "where": "\"partners\".\"email\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_partners_phone": {
+          "name": "idx_partners_phone",
+          "columns": [
+            {
+              "expression": "phone",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"partners\".\"phone\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

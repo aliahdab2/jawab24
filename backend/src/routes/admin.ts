@@ -278,10 +278,16 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     security: auth,
                     body: {
                         type: 'object',
-                        required: ['name', 'email', 'commissionPct'],
+                        // email/phone are both optional HERE but the service
+                        // requires at least one — they are the anchors the
+                        // portal binds a login to, and which one applies
+                        // depends on how the partner signs up (a phone-OTP
+                        // signup never has an email).
+                        required: ['name', 'commissionPct'],
                         properties: {
                             name: { type: 'string', minLength: 1, maxLength: 255 },
-                            email: { type: 'string', format: 'email', maxLength: 255 },
+                            email: { type: ['string', 'null'], format: 'email', maxLength: 255 },
+                            phone: { type: ['string', 'null'], pattern: '^\\+[1-9]\\d{6,18}$' },
                             commissionPct: { type: 'integer', minimum: 0, maximum: 100 },
                         },
                     },
