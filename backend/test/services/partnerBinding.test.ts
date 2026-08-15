@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Portal login binding.
+ * Portal login binding — an access boundary, so these tests pin WHICH identity
+ * anchor is trusted, not merely that binding works.
  *
- * Regression guard for a defect caught before merge: binding matched only on
- * email, but Jawab24 has NO email login — a phone-OTP signup (the product's
- * primary identity) leaves `users.email` NULL, so a phone-first reseller was
- * locked out of the portal permanently with no self-service fix.
+ * The rule: the PHONE binds; the EMAIL never does. `users.phone` is unique and
+ * can only be set by proving possession via OTP. `users.email` is settable to
+ * any value by any authenticated user (PATCH /auth/profile, no verification)
+ * and is not unique — so auto-binding on it let any merchant who knew a rep's
+ * address take permanent possession of that rep's portal and read every
+ * attributed merchant's name, phone and note.
  */
 
 const selectChain = {
@@ -14,15 +17,25 @@ const selectChain = {
     where: vi.fn().mockReturnThis(),
     limit: vi.fn(),
 };
-const updateWhere = vi.fn().mockResolvedValue(undefined);
+// The claim UPDATE ends in .returning() — [] means the IS NULL guard matched
+// no row, i.e. a concurrent request claimed this partner first.
+const updateReturning = vi.fn().mockResolvedValue([{ id: 'p-1' }]);
+const updateWhere = vi.fn().mockReturnValue({ returning: updateReturning });
 const updateChain = { set: vi.fn().mockReturnValue({ where: updateWhere }) };
+const insertValues = vi.fn().mockResolvedValue(undefined);
+const insertChain = { values: insertValues };
 
 vi.mock('../../src/db', () => ({
-    db: { select: vi.fn(() => selectChain), update: vi.fn(() => updateChain) },
+    db: {
+        select: vi.fn(() => selectChain),
+        update: vi.fn(() => updateChain),
+        insert: vi.fn(() => insertChain),
+    },
 }));
 vi.mock('../../src/db/schema', () => ({
     partners: { id: 'id', email: 'email', phone: 'phone', userId: 'user_id', isActive: 'is_active' },
     users: { id: 'id', partnerId: 'partner_id', partnerNote: 'partner_note' },
+    adminAuditLogs: { id: 'id', action: 'action' },
     subscriptions: {}, plans: {}, pages: {},
 }));
 vi.mock('drizzle-orm', () => ({
@@ -43,6 +56,9 @@ describe('resolvePartnerForUser', () => {
         selectChain.from.mockReturnThis();
         selectChain.where.mockReturnThis();
         updateChain.set.mockReturnValue({ where: updateWhere });
+        updateWhere.mockReturnValue({ returning: updateReturning });
+        updateReturning.mockResolvedValue([{ id: 'p-1' }]);
+        insertChain.values = insertValues;
     });
 
     /**
@@ -62,7 +78,7 @@ describe('resolvePartnerForUser', () => {
             phone: '+963944123456',
         });
 
-        expect(result).toMatchObject({ id: 'p-1' });
+        expect(result).toMatchObject({ id: 'p-1', userId: 'u-1' });
         // The phone must be part of the anchor lookup (2nd select).
         const anchorWhere = JSON.stringify(selectChain.where.mock.calls[1]);
         expect(anchorWhere).toContain('+963944123456');
@@ -70,34 +86,61 @@ describe('resolvePartnerForUser', () => {
         expect(updateChain.set).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u-1' }));
     });
 
-    it('still binds an email-signup partner, matched case-insensitively', async () => {
-        const emailPartner = { ...PARTNER, email: 'ahmad.tabbaa@gmail.com', phone: null };
-        selectChain.limit
-            .mockResolvedValueOnce([])
-            .mockResolvedValueOnce([emailPartner]);
+    // ---------------------------------------------------------------
+    // The email anchor is GONE — this is the security regression guard
+    // ---------------------------------------------------------------
+    describe('email is not an identity anchor', () => {
+        it('does NOT bind a partner by a matching email when the user has no phone', async () => {
+            selectChain.limit.mockResolvedValueOnce([]);   // no user_id link
 
-        const result = await partnerPortalService.resolvePartnerForUser({
-            id: 'u-1', email: 'Ahmad.Tabbaa@Gmail.com', phone: null,
+            const result = await partnerPortalService.resolvePartnerForUser({
+                id: 'attacker-user',
+                // The rep's address, set on the attacker's own account via
+                // PATCH /auth/profile — which requires no verification at all.
+                email: 'ahmad.tabbaa@gmail.com',
+                phone: null,
+            });
+
+            expect(result).toBeNull();
+            // Must not even run an anchor lookup: with no phone there is no
+            // trustworthy anchor to look up.
+            expect(selectChain.limit).toHaveBeenCalledTimes(1);
+            expect(updateChain.set).not.toHaveBeenCalled();
         });
 
-        expect(result).toMatchObject({ id: 'p-1' });
-        const anchorWhere = JSON.stringify(selectChain.where.mock.calls[1]);
-        expect(anchorWhere).toContain('ahmad.tabbaa@gmail.com');   // lowercased
-        expect(anchorWhere).not.toContain('Ahmad.Tabbaa@Gmail.com');
-    });
+        it('never puts the email in the anchor query, even when the user has both', async () => {
+            selectChain.limit
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([PARTNER]);
 
-    it('queries BOTH anchors when the user carries email and phone', async () => {
-        selectChain.limit
-            .mockResolvedValueOnce([])
-            .mockResolvedValueOnce([PARTNER]);
+            await partnerPortalService.resolvePartnerForUser({
+                id: 'u-1',
+                email: 'ahmad.tabbaa@gmail.com',
+                phone: '+963944123456',
+            });
 
-        await partnerPortalService.resolvePartnerForUser({
-            id: 'u-1', email: 'a@b.com', phone: '+963944123456',
+            const anchorWhere = JSON.stringify(selectChain.where.mock.calls[1]);
+            expect(anchorWhere).toContain('+963944123456');
+            // An email-bearing anchor query would re-open the hijack.
+            expect(anchorWhere).not.toContain('ahmad.tabbaa@gmail.com');
         });
 
-        const anchorWhere = JSON.stringify(selectChain.where.mock.calls[1]);
-        expect(anchorWhere).toContain('a@b.com');
-        expect(anchorWhere).toContain('+963944123456');
+        it('does not bind an email-only partner row to a same-email login', async () => {
+            const emailOnlyPartner = { ...PARTNER, email: 'ahmad.tabbaa@gmail.com', phone: null };
+            selectChain.limit
+                .mockResolvedValueOnce([])
+                // Even if a row somehow comes back, the query was keyed on the
+                // caller's phone — an email-only partner cannot match it.
+                .mockResolvedValueOnce([emailOnlyPartner]);
+
+            await partnerPortalService.resolvePartnerForUser({
+                id: 'u-1', email: 'ahmad.tabbaa@gmail.com', phone: '+963900000000',
+            });
+
+            const anchorWhere = JSON.stringify(selectChain.where.mock.calls[1]);
+            expect(anchorWhere).not.toContain('ahmad.tabbaa@gmail.com');
+            expect(anchorWhere).toContain('+963900000000');
+        });
     });
 
     it('prefers the persisted user_id link without re-matching anchors', async () => {
@@ -112,7 +155,7 @@ describe('resolvePartnerForUser', () => {
         expect(updateChain.set).not.toHaveBeenCalled();
     });
 
-    it('returns null when the user carries neither anchor', async () => {
+    it('returns null when the user carries no phone at all', async () => {
         selectChain.limit.mockResolvedValueOnce([]);
 
         const result = await partnerPortalService.resolvePartnerForUser({
@@ -120,7 +163,6 @@ describe('resolvePartnerForUser', () => {
         });
 
         expect(result).toBeNull();
-        // No anchor to match on — must not run a second, unfiltered query.
         expect(selectChain.limit).toHaveBeenCalledTimes(1);
     });
 
@@ -135,5 +177,38 @@ describe('resolvePartnerForUser', () => {
 
         expect(result).toBeNull();
         expect(updateChain.set).not.toHaveBeenCalled();
+    });
+
+    it('loses gracefully when a concurrent request claims the partner first', async () => {
+        selectChain.limit
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([PARTNER]);
+        // The `WHERE user_id IS NULL` guard matched nothing — someone else won.
+        updateReturning.mockResolvedValueOnce([]);
+
+        const result = await partnerPortalService.resolvePartnerForUser({
+            id: 'u-1', email: null, phone: '+963944123456',
+        });
+
+        // Returning `matched` here would hand THIS request the merchant book
+        // even though the row now belongs to another login.
+        expect(result).toBeNull();
+        expect(insertValues).not.toHaveBeenCalled();
+    });
+
+    it('audits the bind so the claiming account is recoverable after the fact', async () => {
+        selectChain.limit
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([PARTNER]);
+
+        await partnerPortalService.resolvePartnerForUser({
+            id: 'u-1', email: null, phone: '+963944123456',
+        });
+
+        expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+            action: 'partner_portal_bound',
+            targetUserId: 'u-1',
+            newValue: expect.objectContaining({ partnerId: 'p-1', userId: 'u-1' }),
+        }));
     });
 });

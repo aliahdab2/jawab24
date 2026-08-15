@@ -1153,10 +1153,31 @@ export const adminApi = {
     return response.data;
   },
 
-  // At least one of email/phone is required — they are how the portal binds
-  // the partner's login (a phone-OTP signup has no email at all).
+  // At least one of email/phone is required for contact. Only the PHONE
+  // auto-binds the portal login (unique + OTP-proven); an email-only reseller
+  // must be linked to their account by an admin via updatePartner({ userId }).
   createPartner: async (input: { name: string; email?: string | null; phone?: string | null; commissionPct: number }) => {
     const response = await api.post<{ success: boolean; data: AdminPartner }>('/admin/partners', input);
+    return response.data;
+  },
+
+  // Update a reseller. Omitted fields are unchanged. `userId: null` unbinds a
+  // wrong/stale portal link; `isActive: false` cuts their access outright.
+  updatePartner: async (
+    partnerId: string,
+    input: {
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      commissionPct?: number;
+      isActive?: boolean;
+      userId?: string | null;
+    },
+  ) => {
+    const response = await api.put<{ success: boolean; data: AdminPartner }>(
+      `/admin/partners/${partnerId}`,
+      input,
+    );
     return response.data;
   },
 

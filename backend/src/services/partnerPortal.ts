@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { partners, users, subscriptions, plans, pages } from '../db/schema';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { partners, users, subscriptions, plans, pages, adminAuditLogs } from '../db/schema';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { adminUsersService } from './admin/users';
 
 /**
@@ -154,10 +154,42 @@ function toPartnerMerchantDetail(
             detail.subscription?.currentPeriodEnd ?? null,
             now,
         ),
-        subscription: detail.subscription,
+        // Named field-by-field for the same reason as the blocks below, NOT
+        // passed by reference: `getUserDetail`'s subscription select is the
+        // support console's and will grow. A `stripeCustomerId` added there for
+        // a billing investigation would reach every reseller with no diff in
+        // this file and no failing test — the leak tests scan a fixture, so
+        // they can only catch fields the fixture already carries.
+        subscription: detail.subscription ? {
+            status: detail.subscription.status,
+            planName: detail.subscription.planName,
+            planSlug: detail.subscription.planSlug,
+            currentPeriodStart: detail.subscription.currentPeriodStart,
+            currentPeriodEnd: detail.subscription.currentPeriodEnd,
+            trialEndsAt: detail.subscription.trialEndsAt,
+            paymentMethod: detail.subscription.paymentMethod,
+            maxAiRepliesPerMonth: detail.subscription.maxAiRepliesPerMonth,
+            maxPages: detail.subscription.maxPages,
+        } : null,
         settings: detail.settings ? toPartnerSettings(detail.settings) : null,
-        usage: detail.usage,
-        leads: detail.leads,
+        usage: {
+            aiRepliesCount: detail.usage.aiRepliesCount,
+            postRepliesCount: detail.usage.postRepliesCount,
+            periodStart: detail.usage.periodStart,
+            periodEnd: detail.usage.periodEnd,
+            limit: detail.usage.limit,
+        },
+        leads: {
+            total: detail.leads.total,
+            today: detail.leads.today,
+            last7d: detail.leads.last7d,
+            last30d: detail.leads.last30d,
+            byStatus: {
+                new: detail.leads.byStatus.new,
+                contacted: detail.leads.byStatus.contacted,
+                converted: detail.leads.byStatus.converted,
+            },
+        },
         // `health` is intentionally omitted: its flag catalog is authored in the
         // admin i18n namespace, and rendering it here would mean shipping the
         // whole admin string set to a reseller's browser or duplicating the
@@ -195,15 +227,26 @@ class PartnerPortalService {
     /**
      * Resolve the partner row for a logged-in user, or null when the user is
      * not a partner. Binding is lazy: prefer the persisted user_id link, else
-     * match an identity anchor and persist the link, so the admin only has to
-     * know how to reach the partner and the partner just signs in normally.
+     * match the PHONE anchor and persist the link, so a phone-first rep just
+     * signs in normally and the admin never has to know their user id.
      *
-     * BOTH anchors are needed, and phone is the important one. Jawab24 has no
-     * email login: a Facebook signup carries whatever address is on the FB
-     * profile, and a phone-OTP signup — the product's primary identity — leaves
-     * `users.email` NULL entirely (authService.findOrCreateUserByPhone). An
-     * email-only match therefore locks a phone-signup partner out of the portal
-     * permanently, with no self-service fix.
+     * ⛔ EMAIL IS NOT AN ANCHOR, deliberately — it is not a verified identity in
+     * this product. `PATCH /auth/profile` lets ANY authenticated user set an
+     * arbitrary `users.email` with no verification step, and the column is not
+     * unique (duplicate addresses exist in production — see the schema note on
+     * idx_users_email_lower). Auto-binding on it meant any merchant who knew a
+     * rep's address could set it as their own, open /partner before the rep
+     * ever did, take permanent possession of the row, and read every attributed
+     * merchant's name, phone and note — locking the real rep out with no
+     * self-service fix.
+     *
+     * `users.phone` carries neither weakness: it is unique, and it can only be
+     * set by proving possession via OTP (authController.linkPhone), which is
+     * exactly the property an auto-bind anchor needs.
+     *
+     * An email-only partner is therefore bound by an admin explicitly, through
+     * `PUT /admin/partners/:id { userId }` — the same endpoint that unbinds a
+     * wrong link. `partners.email` remains what it always was: contact info.
      */
     async resolvePartnerForUser(user: { id: string; email?: string | null; phone?: string | null }) {
         const [byId] = await db
@@ -213,18 +256,13 @@ class PartnerPortalService {
             .limit(1);
         if (byId) return byId;
 
-        const email = user.email?.trim().toLowerCase() || null;
         const phone = user.phone?.trim() || null;
-        if (!email && !phone) return null;
+        if (!phone) return null;
 
-        const anchors = [
-            ...(email ? [sql`lower(${partners.email}) = ${email}`] : []),
-            ...(phone ? [sql`${partners.phone} = ${phone}`] : []),
-        ];
         const [matched] = await db
             .select()
             .from(partners)
-            .where(and(or(...anchors), eq(partners.isActive, true)))
+            .where(and(eq(partners.phone, phone), eq(partners.isActive, true)))
             .limit(1);
         if (!matched) return null;
 
@@ -232,10 +270,26 @@ class PartnerPortalService {
         if (matched.userId && matched.userId !== user.id) return null;
 
         if (!matched.userId) {
-            await db
+            // First-write-wins: the IS NULL guard makes a concurrent claim lose
+            // at the database. Check that it actually won — falling through on
+            // a 0-row update would serve this request the merchant book anyway,
+            // which is the whole thing the guard exists to prevent.
+            const claimed = await db
                 .update(partners)
                 .set({ userId: user.id, updatedAt: new Date() })
-                .where(and(eq(partners.id, matched.id), sql`${partners.userId} IS NULL`));
+                .where(and(eq(partners.id, matched.id), sql`${partners.userId} IS NULL`))
+                .returning({ id: partners.id });
+            if (claimed.length === 0) return null;
+
+            // A login acquiring read access to merchant PII is a security-
+            // relevant state change; without this row "which account claimed
+            // this partner, and when?" has no answer after the fact.
+            await db.insert(adminAuditLogs).values({
+                targetUserId: user.id,
+                action: 'partner_portal_bound',
+                newValue: { partnerId: matched.id, userId: user.id, anchor: 'phone' },
+            });
+            return { ...matched, userId: user.id };
         }
         return matched;
     }

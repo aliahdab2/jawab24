@@ -48,6 +48,10 @@ function adminDetailFixture() {
             currentPeriodEnd: new Date('2026-08-10'),
             maxAiRepliesPerMonth: 200, maxPages: 1, paymentMethod: null,
             currentPeriodStart: new Date('2026-08-03'), planId: 'plan-1',
+            // Stands in for whatever the support console adds to this select
+            // next. The projection is an allowlist, so an unknown field must
+            // NOT ride along to a reseller just because it appeared upstream.
+            stripeCustomerId: 'cus_MUSTNOTLEAK',
         },
         settings: {
             values: {
@@ -121,6 +125,23 @@ describe('partnerPortalService.getMerchantDetail', () => {
             const serialized = JSON.stringify(result);
             expect(serialized).not.toContain('merchant@example.com');
             expect(serialized).not.toContain('owner@example.com');
+        });
+
+        it('drops an unknown subscription field instead of passing it through', async () => {
+            const result = await partnerPortalService.getMerchantDetail('partner-1', 'merchant-1');
+
+            // The point of the allowlist: `getUserDetail` grows, and a billing
+            // identifier added there for the support console must not reach a
+            // reseller with no diff in the projection and no failing test.
+            expect(result!.subscription).not.toHaveProperty('stripeCustomerId');
+            expect(result!.subscription).not.toHaveProperty('id');
+            expect(JSON.stringify(result)).not.toContain('cus_MUSTNOTLEAK');
+            // …while the fields the portal genuinely renders survive.
+            expect(result!.subscription).toMatchObject({
+                status: 'trialing',
+                planName: 'Starter',
+                maxAiRepliesPerMonth: 200,
+            });
         });
 
         it('collapses merchant-authored text to booleans, never shipping the wording', async () => {

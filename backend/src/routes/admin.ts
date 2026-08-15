@@ -297,6 +297,39 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         adminProtected.put(
+            '/partners/:partnerId',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Update a partner: contact, commission, active state, or portal binding',
+                    security: auth,
+                    params: {
+                        type: 'object',
+                        properties: { partnerId: { type: 'string', format: 'uuid' } },
+                        required: ['partnerId'],
+                    },
+                    body: {
+                        type: 'object',
+                        // Every field optional: omitted = unchanged.
+                        properties: {
+                            name: { type: 'string', minLength: 1, maxLength: 255 },
+                            email: { type: ['string', 'null'], format: 'email', maxLength: 255 },
+                            phone: { type: ['string', 'null'], pattern: '^\\+[1-9]\\d{6,18}$' },
+                            commissionPct: { type: 'integer', minimum: 0, maximum: 100 },
+                            // false = cut portal access on the next request.
+                            isActive: { type: 'boolean' },
+                            // null = unbind (recovery); a uuid = link an
+                            // email-only partner who cannot auto-bind.
+                            userId: { type: ['string', 'null'], format: 'uuid' },
+                        },
+                        additionalProperties: false,
+                    },
+                },
+            },
+            adminController.updatePartner,
+        );
+
+        adminProtected.put(
             '/users/:userId/partner',
             {
                 schema: {

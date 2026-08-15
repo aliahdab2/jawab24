@@ -41,6 +41,7 @@ import type {
     TopupBody,
     PlaygroundRequestBody,
     CreatePartnerBody,
+    UpdatePartnerBody,
     AssignPartnerBody,
 } from '../types/admin';
 
@@ -494,6 +495,27 @@ export class AdminController {
             }
             request.log.error(error, 'Admin create partner failed');
             return reply.status(500).send({ success: false, error: 'Failed to create partner' });
+        }
+    }
+
+    /**
+     * PUT /admin/partners/:partnerId — update contact/commission/active state,
+     * and link (`userId`) or unbind (`userId: null`) the portal login.
+     */
+    async updatePartner(
+        request: FastifyRequest<{ Params: { partnerId: string }; Body: UpdatePartnerBody }>,
+        reply: FastifyReply,
+    ) {
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        try {
+            const data = await adminPartnersService.update(request.params.partnerId, request.body, adminUserId);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            if (error instanceof AppError) {
+                return reply.status(error.statusCode).send({ success: false, error: error.message });
+            }
+            request.log.error(error, 'Admin update partner failed');
+            return reply.status(500).send({ success: false, error: 'Failed to update partner' });
         }
     }
 
