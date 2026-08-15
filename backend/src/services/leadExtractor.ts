@@ -137,8 +137,9 @@ export interface MaybeCaptureLeadParams {
     /** Comment-only: the reply we just sent, so the AI sees a 2-turn exchange. */
     replyText?: string;
     /**
-     * Effective reply mode of the page ('sales' | 'info') — 'info' keeps the
-     * capture (row, bell, SSE) but mutes the push: the merchant chose an
+     * Effective reply mode of the capturing page ('sales' | 'info'), resolved by
+     * the caller. 'info' = passive capture: the lead row, bell entry, and SSE are
+     * stored/sent as usual, but the PUSH alert is suppressed — the merchant chose
      * "information source" and doesn't work leads. Absent = 'sales'.
      */
     replyMode?: string;
@@ -630,7 +631,7 @@ class LeadExtractorService {
                     // card directly (the leads page reads ?leadId via useUrlSelectedResource),
                     // rather than dropping the merchant on the unfiltered list.
                     { leadId: upserted.id, pageId, deepLink: `/leads?leadId=${upserted.id}` },
-                    { gatePushBySetting: 'newLeadAlertsEnabled' },
+                    { gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: params.replyMode === 'info' },
                 ).catch(err => this.logger.error('New lead notification failed', { err }));
             } else if (upserted.status !== 'new') {
                 // Re-engagement: a lead the merchant ALREADY handled (contacted/
@@ -641,6 +642,7 @@ class LeadExtractorService {
                 await this.notifyReengaged({
                     userId, workspaceId, leadId: upserted.id, pageId,
                     senderName, phone: upserted.phone, reason: 'reshared_contact',
+                    replyMode: params.replyMode,
                 });
             }
         } catch (error) {
@@ -664,6 +666,8 @@ class LeadExtractorService {
         senderName?: string;
         phone?: string | null;
         reason: 'reshared_contact' | 'returned_intent';
+        /** See MaybeCaptureLeadParams.replyMode — 'info' mutes the push. */
+        replyMode?: string;
     }): Promise<void> {
         // Dedup window — Redis down → allow (never silently lose the signal).
         let fresh: string | null = 'OK';
@@ -687,7 +691,7 @@ class LeadExtractorService {
             'lead_reengaged',
             { senderName: p.senderName || 'Unknown' },
             { leadId: p.leadId, pageId: p.pageId, deepLink: `/leads?leadId=${p.leadId}`, urgent: true },
-            { gatePushBySetting: 'newLeadAlertsEnabled' },
+            { gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: p.replyMode === 'info' },
         ).catch(err => this.logger.error('Lead re-engaged notification failed', { err }));
     }
 
