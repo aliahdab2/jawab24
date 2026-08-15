@@ -1834,6 +1834,13 @@ That would be a new decision with new evidence — this entry does not pre-autho
 `IF EXISTS` because the dev DB is push-maintained), field removed from `config/plans.ts`,
 `services/plans.ts`, `utils/validation.ts`, `seed-plans.ts`, shared `Plan` type, `fallbackPlans.ts`;
 pricing + landing + scale-tier bullets removed; i18n keys `branding`, `brandingShown`,
-`brandingHidden` deleted (en+ar); `businessFeature3` repointed to a TRUE differentiator
-(store integrations — Starter has `ecommerceEnabled: false`). Test fixtures updated across both
-workspaces.
+`brandingHidden` deleted (en+ar); `businessFeature3` repointed to the Business reply quota
+(«4500 رد ذكي» / "4,500 Smart Replies"). Review rejected the first replacement, «ربط المتاجر» —
+entitlement-true but not experience-true, since every integration still renders «قريباً» in-product;
+the quota is unambiguously live. Test fixtures updated across both workspaces.
+`docs/pricing-management.md` row deleted in the same PR (Rule 15).
+
+**Deploy window, accepted explicitly.** The drop ships in the same release as the code swap; between
+`db:migrate` and the container swap the old image's explicit `select` of `show_branding` errors on
+plan reads. Repo precedent for column drops, seconds-wide, `/pricing` is ISR-cached — accepted
+rather than split into a two-release expand/contract.
