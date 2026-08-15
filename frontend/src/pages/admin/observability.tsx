@@ -65,6 +65,10 @@ function funnelStepLabel(key: ActivationEvent, t: ReturnType<typeof useTranslati
     case 'kb_filled': return t('observability.funnelKbFilled');
     case 'autoreply_enabled': return t('observability.funnelAutoreplyEnabled');
     case 'first_autoreply_sent': return t('observability.funnelFirstReply');
+    // Demand signals — not funnel steps (never in ACTIVATION_FUNNEL_STEPS), but
+    // the exhaustiveness guard requires a label should they ever be rendered.
+    case 'no_fb_pages': return t('observability.funnelNoFbPages');
+    case 'ig_direct_interest': return t('observability.funnelIgDirectInterest');
     // Exhaustiveness guard: a new ActivationEvent must add a label here (compile error).
     default: { const _exhaustive: never = key; return _exhaustive; }
   }

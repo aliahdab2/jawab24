@@ -533,6 +533,15 @@ export class PagesController {
             }
 
             if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0 && skippedCount === 0) {
+                // /me/accounts came back empty — every non-empty Facebook response
+                // increments one of the counters above. Count the drop-off only for
+                // merchants with no previously-connected pages either: a revoked-
+                // permission re-sync of an established workspace is not an
+                // "Instagram-only merchant" prospect.
+                const existingPages = await pagesService.getPages(workspaceId);
+                if (existingPages.length === 0) {
+                    void recordActivationEvent(userId, 'no_fb_pages');
+                }
                 return reply.send({
                     synced: 0,
                     pages: [],
@@ -752,6 +761,21 @@ export class PagesController {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to dismiss KB gap' });
         }
+    }
+
+    /**
+     * Record the merchant's interest in connecting Instagram without a
+     * Facebook Page — the demand signal for a future Instagram-Login connect
+     * path. Idempotent per user via activation_events' unique index.
+     * POST /pages/instagram-direct-interest
+     */
+    async recordInstagramDirectInterest(request: FastifyRequest, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        void recordActivationEvent(req.user.userId, 'ig_direct_interest');
+        return reply.status(204).send();
     }
 
     /**

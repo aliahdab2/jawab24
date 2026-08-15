@@ -2621,6 +2621,11 @@ Internal **ops-only** dashboard — system health, not cost (all AI cost visibil
   - Breakdowns by method, intent, platform
   - Activation funnel, cache management, lead-digest tooling
 - **Data source**: Existing backend analytics endpoints
+- **Demand signals** (in `activation_events`, one row per user, NOT funnel steps):
+  `no_fb_pages` — Facebook login completed but `/me/accounts` was empty and the
+  workspace has no pages (Instagram-only merchant candidate); `ig_direct_interest` —
+  merchant clicked the empty-state CTA asking for Instagram-without-Facebook connect.
+  Read directly via SQL; no admin panel renders them yet.
 
 ### Admin AI Cost & Quota Panel
 

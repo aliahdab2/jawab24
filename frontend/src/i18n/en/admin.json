@@ -579,6 +579,8 @@
     "funnelKbFilled": "Filled knowledge base",
     "funnelAutoreplyEnabled": "Enabled auto-reply",
     "funnelFirstReply": "Sent first auto-reply",
+    "funnelNoFbPages": "No Facebook Pages at login",
+    "funnelIgDirectInterest": "Wants Instagram-direct connect",
     "funnelDropoff": "▼ {pct}% drop-off",
     "funnelGain": "▲ {pct}% gain",
     "funnelNoDropoff": "no drop-off",

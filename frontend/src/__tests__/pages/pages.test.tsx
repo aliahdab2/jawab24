@@ -1752,3 +1752,34 @@ describe('PagesPage - Instagram-direct cards', () => {
         });
     });
 });
+
+describe('PagesPage - Instagram-only demand signal', () => {
+    beforeEach(() => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockUsagePlan(false);
+        // The empty list auto-fires /pages/sync; the interest click shares api.post.
+        mockedApi.post.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('shows the interest CTA in the empty state and records the click', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.igOnlyPrompt)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText(enPages.igOnlyCta));
+
+        await waitFor(() => {
+            expect(mockedApi.post).toHaveBeenCalledWith('/pages/instagram-direct-interest');
+        });
+        expect(screen.getByText(enPages.igOnlyThanks)).toBeInTheDocument();
+        expect(screen.queryByText(enPages.igOnlyCta)).not.toBeInTheDocument();
+    });
+});
