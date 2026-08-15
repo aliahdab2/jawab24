@@ -16,8 +16,8 @@
 | **Legacy per-user row** | `settings` (keyed by `user_id`) | What the settings UI writes |
 | **Per-workspace JSONB** | `workspaces.settings` | What the reply pipeline reads |
 
-The overlap between them is `PIPELINE_FIELDS` (`services/pipelineFields.ts`) — 29 fields
-including `commentsAutoReply`, `commentReplyMode`, `replyStyle`, `brandVoiceNotes`,
+The overlap between them is `PIPELINE_FIELDS` (`services/pipelineFields.ts`) — 30 fields
+including `commentsAutoReply`, `commentReplyMode`, `replyStyle`, `replyMode`, `brandVoiceNotes`,
 `brandVoiceNotesMulti`, `defaultReplyLanguage`, `timezone`, `businessHours*`.
 
 They are **not** kept identical, and that is deliberate: `NEW_SIGNUP_SETTINGS_SEED` writes

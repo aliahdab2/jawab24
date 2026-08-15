@@ -1844,3 +1844,42 @@ the quota is unambiguously live. Test fixtures updated across both workspaces.
 `db:migrate` and the container swap the old image's explicit `select` of `show_branding` errors on
 plan reads. Repo precedent for column drops, seconds-wide, `/pricing` is ISR-cached — accepted
 rather than split into a two-release expand/contract.
+
+## D-083 · Reply mode: the information desk is a first-class mode, switched by demonstrations, scoped by cache keys — never by a PROMPT_VERSION bump
+
+**Ruling (owner, 2026-08-15).** `replyMode: 'sales' | 'info'` ships as a per-page setting
+(`pages.reply_mode`, NULL = inherit `settings.reply_mode`, default `'sales'`), requested by
+InMedia (`inmedia.sy@gmail.com`): his team wants Jawab as an information source only — no
+collecting customer numbers, no promising follow-ups nobody delivers. Measured on Shahin Resort
+(08-09→08-15, 1,105 outgoing): ~16 contact-asks, ~8+ team-follow-up promises, 5 leads never
+opened. Industry survey (Chatbase, Intercom Fin, Zendesk, Tidio): the base agent everywhere is
+an information desk and lead collection is an opt-in capability — Jawab had it inverted, with
+sales behavior hard-coded in the static prompt's demonstrations.
+
+Four sub-rulings, each load-bearing:
+
+1. **The mode is switched by counter-DEMONSTRATIONS, not a rule line.** The sales behavior
+   lives in Ex 14/15 (contact-asking) and Ex 6/6b (callback promises) of `STATIC_SYSTEM_PREFIX`,
+   and D-019/D-051 measured that the model imitates examples over rules. The INFO-DESK MODE
+   block (`promptBuilder.ts`, per-call, gated on `replyMode === 'info'`) therefore carries its
+   own purchase-intent and cancellation examples. Intents/flags stay unchanged in info mode —
+   a cancellation still sets `cancellation_request`, so Needs Attention and merchant alerts
+   fire; only the customer-facing ask/promise disappears.
+2. **No PROMPT_VERSION bump.** v65's rule is "two prompt shapes never share one cache row";
+   pv is one mechanism, a dedicated scope key is the other (how persona-name shipped bump-free
+   via `brandVoiceHash`). The mode joins BOTH caches — a conditional `rm:i` exact-key segment
+   (the `sg:`/`bv:` pattern) and a semantic-cache `replyMode` metadata scope (strict both-ways,
+   'sales' normalized to omitted ⇒ legacy rows = sales rows). Sales-fleet prompts and cache
+   keys stay byte-identical; bumping pv to launch a 2-page pilot would retire every warmed key
+   fleet-wide — exactly the "bump to be safe" Rule 17.1 forbids.
+3. **Info mode stores leads passively, silently.** A volunteered number still creates the
+   `leads` row, bell entry, and SSE; only the PUSH is suppressed (`suppressPush` at the two
+   lead notification call sites). Reversible — the merchant changing their mind later loses
+   nothing.
+4. **Allowlist at the WRITE path only.** `config.replyMode.workspaceIds` (default = InMedia)
+   gates storing `'info'` in the settings and pages controllers; the reply pipeline reads
+   whatever is stored with no hot-path env check. Frontend `isReplyModeVisible` only hides the
+   card. GA = drop both gates; no data migration.
+
+Ship gate before merge: byte-identity of rendered sales prompts vs main, plus a temp-0 probe
+on InMedia's real messages — info arm must show 0 contact-asks and 0 callback promises.

@@ -69,6 +69,10 @@ interface TestCase {
     ourFacebookPageId?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    /** Reply-mode override for this case ('sales' | 'info'). OMITTED = the stored
+     *  default = sales, so every pre-existing case automatically pins sales-mode
+     *  behavior. Category 77 passes 'info' to exercise the INFO-DESK block. */
+    replyMode?: 'sales' | 'info';
     brandVoiceNotes?: string;
     customerContext?: string;
     /** Customer display name (DM only) — exercises name-based gender inference (category 59). */
@@ -246,6 +250,31 @@ const CALLBACK_PROMISE_PHRASES = [
     'سيتواصلون معك', 'يتواصلو معاك', 'سأحوّلها للفريق', 'نوصّلها للفريق',
     'بسأل الفريق', 'يردّوا عليك',
     'contact you', "they'll contact", 'check with the team',
+];
+// ONE exception to the "never attach CALLBACK_PROMISE_PHRASES to an urgent-flag
+// case" rule above: `replyMode: 'info'` cases (Category 77). In info mode the
+// merchant chose "information desk" — the INFO-DESK MODE block bans callback
+// promises for EVERY request including cancel/refund/angry (the customer is
+// routed to the business's own channel instead), so the urgency exemption does
+// not apply and the ban is exactly what those cases pin.
+
+/**
+ * Contact-ask grader for reply-mode cases (D-083): phrases that ask the CUSTOMER
+ * for their own name/phone/order details. ASK-SHAPED bigrams only — never bare
+ * «رقم»/«اسم», which legitimately appear when the reply shares the BUSINESS's own
+ * number («اتصل على رقمنا», «رقم الإدارة») or thanks a customer who volunteered
+ * theirs («شكراً لمشاركة رقمك» must NOT trip the grader — info mode allows the
+ * thank-you, forbids requesting more). Forms harvested from the Shahin Resort
+ * prod audit (2026-08-15) + the static prompt's own Ex 14/15 demonstrations.
+ */
+const CONTACT_ASK_PHRASES = [
+    // Ex 14/15 demonstration shapes
+    'اسمك ورقمك', 'ورقمك', 'باقي رقمك', 'اسم مدينتك', 'بيانات المستلم', 'زوديني',
+    // Prod ask shapes (Shahin audit 08-09→08-15)
+    'عطيني اسمك', 'ابعتلي اسمك', 'أعرف اسمك', 'تعطيني رقمك', 'تعطيني اسمك',
+    'أخد رقمك', 'خليلي رقمك', 'اتركلي رقمك', 'خبرني اسمك',
+    // English
+    'your name and', 'your phone number', 'your number so', 'send me your',
 ];
 
 /**
@@ -5181,6 +5210,89 @@ const TEST_CASES: TestCase[] = [
         notes: 'PROD replay (2026-03-30, Jawab24 page): the plans question that produced the «باقة الورد – 150 ريال» sheet from old Example 1. The support fixture KB deliberately holds NO plan names or prices — only the pricing URL + free-trial line — so the reply must be built from THAT (URL or free-trial mention both count as grounded), and ANY plan enumeration on this fixture can only be prompt leakage. Routing to the URL specifically is pinned for direct website asks by #750; at temp 0 this question answers with the free-trial line and omits the URL — grounded, just terse.',
     },
 
+    // ── Category 77: Info Reply Mode (D-083) ─────────────────────────────────
+    // `replyMode: 'info'` = the merchant chose "information desk" (InMedia's
+    // request): the INFO-DESK MODE block must beat the static prompt's sales
+    // demonstrations — no contact-asks (Ex 14/15) and no callback promises
+    // (Ex 6/6b, including the urgent cases the sales prompt deliberately
+    // exempts) — while intents/flags stay untouched and the business's OWN
+    // contact info still flows freely. Every case that OMITS replyMode
+    // elsewhere in this file doubles as a sales-mode pin (omitted = stored
+    // default = sales), so Cat 71's contact-asking cases are the standing
+    // control group; #773 pins that an EXPLICIT 'sales' equals that default.
+    {
+        id: 772, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'بدي أطلب عبايتين، كيف بطلب؟',
+        page: 'fashion', replyMode: 'info',
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['0509876543'],
+            replyNotContains: CONTACT_ASK_PHRASES,
+        },
+        notes: 'Ex-14 inversion: the exact order shape whose static demonstration answers «ابعتلي اسم مدينتك ورقمك». Info mode must answer + route to the business\'s own number, never ask for the customer\'s details.',
+    },
+    {
+        id: 773, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'بدي أطلب عبايتين، كيف بطلب؟',
+        page: 'fashion', replyMode: 'sales',
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['اسمك', 'رقمك', 'بيانات'],
+        },
+        notes: 'Explicit-sales control for #772: pins that passing replyMode:\'sales\' explicitly ≡ omitting it (today\'s Ex-14 behavior asks for order details). If the sales path ever stops asking here, that is a REAL regression of the default mode, not a Cat-77 artifact.',
+    },
+    {
+        id: 774, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'ابي الغي طلبي رقم 5678',
+        page: 'electronics', replyMode: 'info',
+        expected: {
+            flags: ['cancellation_request'],
+            replyContainsAny: ['0501234567'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
+        },
+        notes: 'Ex-6b inversion (the urgency exemption does NOT survive info mode): cancellation is routed to the business\'s own line with no «بيتواصلون معك». The cancellation_request flag MUST survive — merchant-side alerts and Needs Attention are unchanged by the mode.',
+    },
+    {
+        id: 775, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'الجهاز وصل خربان وأبي أرجع فلوسي، وين أروح؟',
+        page: 'electronics', replyMode: 'info',
+        expected: {
+            flags: ['refund_request'],
+            replyContainsAny: ['0501234567'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
+        },
+        notes: 'Ex-6 inversion (angry refund — the strongest promise-pull in the static prompt): info mode apologizes and routes to the store\'s own number; never «رفعت طلبك لفريقنا وبيتواصلون معك».',
+    },
+    {
+        id: 776, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'حابة سجل بدورة الانجليزي، رقمي 0501119999',
+        page: 'training', replyMode: 'info',
+        expected: {
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES],
+        },
+        notes: 'Volunteered-contact continuation (guards the Ex-15 leak): the customer sent their number unprompted. Info mode may thank them («شكراً لمشاركة رقمك» does not trip the ask grader) but must not request MORE details (Ex 15 would ask «باقي نوع الدورة») and must not promise the team will call the volunteered number.',
+    },
+    {
+        id: 777, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'عندي عطل بالغسالة وبدي حدا يتواصل معي',
+        page: 'electro', replyMode: 'info',
+        expected: {
+            replyContainsAny: ['0911000202'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
+        },
+        notes: 'Cat-76 interplay under the hardest pull: the customer literally ASKS to be contacted. Info mode serves the after-sales line (the structured phones description routes it, per #770) and inverts the request — THEY call — instead of promising an outbound call.',
+    },
+    {
+        id: 778, category: 77, categoryName: 'Info Reply Mode', channel: 'dm',
+        message: 'شو رقمكم للتواصل؟',
+        page: 'training', replyMode: 'info',
+        expected: {
+            replyContainsAny: ['0112345678', '0501112233'],
+            replyNotContains: CONTACT_ASK_PHRASES,
+        },
+        notes: 'Info mode must not DEGRADE ordinary answers (the 193-replay lesson): a plain contact question still gets the business\'s own number instantly. Also proves the CONTACT_ASK grader tolerates the business\'s numbers — the ban is on asking for the CUSTOMER\'s.',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at
@@ -5355,6 +5467,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.ourFacebookPageId) body.ourFacebookPageId = test.ourFacebookPageId;
     if (test.conversationHistory) body.conversationHistory = test.conversationHistory;
     if (test.replyStyle) body.replyStyle = test.replyStyle;
+    if (test.replyMode) body.replyMode = test.replyMode;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
     if (test.customerContext) body.customerContext = test.customerContext;
     if (test.senderName) body.senderName = test.senderName;
