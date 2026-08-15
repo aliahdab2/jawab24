@@ -76,7 +76,6 @@ function makeScalePlan(overrides: Partial<Plan> = {}): Plan {
         instagramEnabled: true,
         ecommerceEnabled: true,
         whatsappEnabled: true,
-        showBranding: false,
         prioritySupport: true,
         trialDays: 0,
         regionalPricing: {},

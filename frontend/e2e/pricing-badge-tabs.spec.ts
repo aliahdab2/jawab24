@@ -23,7 +23,7 @@ const MOCK_PLANS = [
     price: 1500, currency: 'USD', interval: 'month', trialDays: 30,
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true, instagramEnabled: true,
-    whatsappEnabled: false, showBranding: true, prioritySupport: false,
+    whatsappEnabled: false, prioritySupport: false,
     ecommerceEnabled: false, regionalPricing: {}, sortOrder: 1,
   },
   {
@@ -31,7 +31,7 @@ const MOCK_PLANS = [
     price: 2900, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 2500, maxPages: 2,
     maxTemplates: null, maxRules: null, maxProducts: 200, facebookEnabled: true, instagramEnabled: true,
-    whatsappEnabled: false, showBranding: false, prioritySupport: true,
+    whatsappEnabled: false, prioritySupport: true,
     ecommerceEnabled: true, regionalPricing: {}, sortOrder: 2,
   },
   {
@@ -39,7 +39,7 @@ const MOCK_PLANS = [
     price: 7900, currency: 'USD', interval: 'month', trialDays: 0,
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10000, maxPages: 5,
     maxTemplates: null, maxRules: null, maxProducts: null, facebookEnabled: true, instagramEnabled: true,
-    whatsappEnabled: false, showBranding: false, prioritySupport: true,
+    whatsappEnabled: false, prioritySupport: true,
     ecommerceEnabled: true, regionalPricing: {}, sortOrder: 3,
   },
 ];

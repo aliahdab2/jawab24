@@ -842,7 +842,6 @@ export const plans = pgTable('plans', {
     instagramEnabled: boolean('instagram_enabled').default(true),
     whatsappEnabled: boolean('whatsapp_enabled').default(false),
     ecommerceEnabled: boolean('ecommerce_enabled').default(true),
-    showBranding: boolean('show_branding').default(true), // Show "Powered by Jawab24"
     prioritySupport: boolean('priority_support').default(false),
 
     // Trial

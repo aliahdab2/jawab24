@@ -23,7 +23,6 @@ const mockPlans = [
     maxAiRepliesPerMonth: 500,
     maxTemplates: 5,
     maxRules: 5,
-    showBranding: true,
     trialDays: 7,
     isActive: true,
   },
@@ -36,7 +35,6 @@ const mockPlans = [
     maxAiRepliesPerMonth: 5000,
     maxTemplates: 20,
     maxRules: 20,
-    showBranding: false,
     trialDays: 0,
     isActive: true,
   },
@@ -49,7 +47,6 @@ const mockPlans = [
     maxAiRepliesPerMonth: null,
     maxTemplates: null,
     maxRules: null,
-    showBranding: false,
     trialDays: 0,
     isActive: true,
   },
@@ -139,12 +136,6 @@ describe('Pricing Page Data Parsing', () => {
       expect(proPlan.maxAiRepliesPerMonth).toBeNull(); // unlimited
       expect(proPlan.maxTemplates).toBeNull(); // unlimited
       expect(proPlan.maxRules).toBeNull(); // unlimited
-    });
-
-    it('should identify branding visibility correctly', () => {
-      expect(mockPlans[0].showBranding).toBe(true); // Starter shows branding
-      expect(mockPlans[1].showBranding).toBe(false); // Business hides branding
-      expect(mockPlans[2].showBranding).toBe(false); // Pro hides branding
     });
 
     it('should identify trial days correctly', () => {

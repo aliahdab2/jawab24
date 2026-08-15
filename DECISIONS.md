@@ -1807,3 +1807,40 @@ check. Idempotent, so no already-clean line moves.
 real production profile — 122/122 identical here, plus the lead-exclusion invariant. Rendering is a
 pure function, so byte-equal input means the reply cannot differ: no sampling, no error bar. Gates:
 `scripts/fleet-prompt-identity.ts`, `scripts/fleet-save-lockout.ts`.
+
+## D-082 · The "Powered by Jawab24" watermark is removed, not built
+
+**Ruling (owner, 2026-08-15).** `plans.show_branding` and every surface that sold it are deleted.
+The column existed since the plans table was created, defaulted `true` on Starter and `false` on
+paid plans, and was **never read by the reply path** — not in `messageProcessor`, `commentProcessor`,
+`generator.ts`, nor the ai-worker. No reply ever carried a watermark. The only readers were plan
+CRUD plumbing and two marketing surfaces (`/pricing` FeatureRow, landing Business card) that
+advertised «بدون علامة تجارية» as a paid feature — i.e. we charged for the removal of something no
+free user ever had. That is a false pricing claim, and the same defect class as a doc claiming an
+unshipped feature exists (Rule 15).
+
+**Why remove instead of build.** The ManyChat-style viral loop is real in principle (public comment
+replies are a free distribution surface), but it contradicts the product's core promise: replies
+that read as the merchant — human, dialect-mirrored, undisclosed automation. A watermark would brand
+exactly the users we are trying to convert (trial/Starter) as automated, during evaluation, in a
+market where that costs customer trust. It also collides with the standing rule that Jawab24 is
+never called a "bot" in anything customer-visible.
+
+**Revisit-if.** If acquisition ever needs a reply-borne loop, the acceptable shape is: public
+COMMENT replies only (never DMs), free/trial tiers only, and measured against conversion before GA.
+That would be a new decision with new evidence — this entry does not pre-authorize it.
+
+**Blast radius of the removal.** Column dropped (`0166_drop_plans_show_branding.sql`,
+`IF EXISTS` because the dev DB is push-maintained), field removed from `config/plans.ts`,
+`services/plans.ts`, `utils/validation.ts`, `seed-plans.ts`, shared `Plan` type, `fallbackPlans.ts`;
+pricing + landing + scale-tier bullets removed; i18n keys `branding`, `brandingShown`,
+`brandingHidden` deleted (en+ar); `businessFeature3` repointed to the Business reply quota
+(«4500 رد ذكي» / "4,500 Smart Replies"). Review rejected the first replacement, «ربط المتاجر» —
+entitlement-true but not experience-true, since every integration still renders «قريباً» in-product;
+the quota is unambiguously live. Test fixtures updated across both workspaces.
+`docs/pricing-management.md` row deleted in the same PR (Rule 15).
+
+**Deploy window, accepted explicitly.** The drop ships in the same release as the code swap; between
+`db:migrate` and the container swap the old image's explicit `select` of `show_branding` errors on
+plan reads. Repo precedent for column drops, seconds-wide, `/pricing` is ISR-cached — accepted
+rather than split into a two-release expand/contract.

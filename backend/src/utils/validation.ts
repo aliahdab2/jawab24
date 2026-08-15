@@ -41,7 +41,6 @@ export const CreatePlanSchema = z.object({
     facebookEnabled: z.boolean().default(true),
     instagramEnabled: z.boolean().default(true),
     whatsappEnabled: z.boolean().default(false),
-    showBranding: z.boolean().default(true),
     prioritySupport: z.boolean().default(false),
     trialDays: z.number().int().min(0).default(0),
     regionalPricing: z.record(z.string(), z.number()).optional(),

@@ -779,7 +779,6 @@ export interface Plan {
   instagramEnabled: boolean;
   ecommerceEnabled: boolean;
   whatsappEnabled: boolean;
-  showBranding: boolean;
   prioritySupport: boolean;
   // Trial
   trialDays: number;

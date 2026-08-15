@@ -67,7 +67,6 @@ curl -s https://jawab24.com/api/plans | python3 -m json.tool
 | `maxAiRepliesPerMonth` | integer\|null | AI reply limit (null = unlimited) |
 | `maxTemplates` | integer\|null | Template limit (null = unlimited) |
 | `maxRules` | integer\|null | Rule limit (null = unlimited) |
-| `showBranding` | boolean | Show "Powered by Jawab24" |
 | `trialDays` | integer | Free trial duration (0 = no trial) |
 | `stripePriceId` | string | Stripe Price ID for billing |
 | `isActive` | boolean | Show on pricing page |

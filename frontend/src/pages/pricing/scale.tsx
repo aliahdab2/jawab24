@@ -135,7 +135,6 @@ function ScalePlanCard({
             ...(isWhatsAppMarketable() ? [tPricing('featureWhatsApp')] : []),
             tPricing('ecommerceIntegration'),
             tPricing('prioritySupport'),
-            tPricing('brandingHidden'),
             tPricing('featurePostRepliesUnlimited'),
           ].map((feature) => (
             <li key={feature} className="flex items-start gap-2.5">

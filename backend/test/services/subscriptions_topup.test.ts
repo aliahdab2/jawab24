@@ -101,7 +101,6 @@ function makeSubRow(s: SubscriptionShape) {
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
-            showBranding: false,
             prioritySupport: false,
         },
     };

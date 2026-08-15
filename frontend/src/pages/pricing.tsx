@@ -232,11 +232,6 @@ function PlanCard({
           />
         )}
 
-        <FeatureRow
-          included={plan.showBranding === false}
-          text={t('pricing.brandingHidden')}
-        />
-
         {plan.ecommerceEnabled && (
           <FeatureRow
             included={true}
