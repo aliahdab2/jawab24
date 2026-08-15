@@ -22,7 +22,7 @@ export const PIPELINE_FIELDS = [
     'handoffPauseDurationMinutes', 'commentEscalationMinutes',
     'messageEscalationMinutes', 'defaultReplyLanguage',
     'supportedLanguages', 'autoDetectLanguage',
-    'replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
+    'replyStyle', 'replyMode', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
 ] as const;
 
 export type PipelineField = typeof PIPELINE_FIELDS[number];

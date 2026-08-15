@@ -800,6 +800,23 @@ export class PagesService {
     }
 
     /**
+     * Save a page's reply-mode override. Minimal sibling of updateLeadConfig —
+     * no kbVersion bump and no KB ingestion: the mode takes effect at read time
+     * because it is a segment of the exact reply-cache key (`rm:i`) and a
+     * metadata scope of the semantic cache, so no stored key can serve the
+     * wrong mode. `null` reverts the page to the workspace default.
+     */
+    async updateReplyMode(workspaceId: string, pageId: string, replyMode: 'sales' | 'info' | null) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({ replyMode, updatedAt: new Date() })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage ?? null;
+    }
+
+    /**
      * Fetch active products for a page's linked e-commerce store (if any).
      * Returns empty array if no store is linked or on error.
      */

@@ -414,6 +414,7 @@ export class SettingsService {
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
             handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
             replyStyle: (record.replyStyle as 'professional' | 'casual' | 'enthusiastic') || 'professional',
+            replyMode: record.replyMode === 'info' ? 'info' : 'sales',
             brandVoiceNotes: record.brandVoiceNotes || '',
             brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
             holdLowConfidence: record.holdLowConfidence ?? false,

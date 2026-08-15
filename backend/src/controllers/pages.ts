@@ -9,7 +9,7 @@ import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { logAutoReplyToggle, auditLog } from '../services/auditLog';
-import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, UpdateReplyModeDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
@@ -278,6 +278,41 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update lead config' });
+        }
+    }
+
+    /**
+     * Set a page's reply-mode override.
+     * PATCH /pages/:id/reply-mode  (admin+ only)
+     * Body: { replyMode: 'sales' | 'info' | null } — null reverts to the
+     * workspace default. 'info' is allowlist-gated at this WRITE path
+     * (config.replyMode.workspaceIds; empty list = GA) — the reply pipeline
+     * itself just reads whatever is stored.
+     */
+    async updateReplyMode(request: FastifyRequest<{ Params: { id: string }; Body: UpdateReplyModeDTO }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const body = request.body ?? ({} as UpdateReplyModeDTO);
+        if (!('replyMode' in body) || (body.replyMode !== null && body.replyMode !== 'sales' && body.replyMode !== 'info')) {
+            return reply.status(400).send({ error: 'replyMode must be \'sales\', \'info\', or null' });
+        }
+        const allowlist = config.replyMode.workspaceIds;
+        if (body.replyMode === 'info' && allowlist.length > 0 && !allowlist.includes(req.workspaceId)) {
+            return reply.status(403).send({ error: 'Reply mode \'info\' is not enabled for this workspace', code: 'REPLY_MODE_NOT_ENABLED' });
+        }
+
+        try {
+            const page = await pagesService.updateReplyMode(req.workspaceId, id, body.replyMode);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            return reply.send(serializePage(page));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to update reply mode' });
         }
     }
 
