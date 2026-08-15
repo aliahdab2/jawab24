@@ -6,8 +6,6 @@ import { toast } from 'sonner';
 import { Button, InfoPopover, ViewOnlyBanner } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { pagesApi, factCollectionsApi } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
-import { isCatalogVisible } from '@/lib/featureFlags';
 import { writeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useWorkspaceRole } from '@/hooks';
@@ -73,14 +71,13 @@ export function KnowledgeBasePanel({
   const tc = useTranslations('common');
   const tPages = useTranslations('pages');
   const router = useRouter();
-  const { user, workspaces } = useAuthStore();
   // Workspace role gate: `member` (عضو) gets a read-only editor, owner/admin
   // (مشرف) get the full one. Same `canEdit` flag Settings and Integrations
   // already use, so all three surfaces answer "who may change this?" identically.
   const { canEdit } = useWorkspaceRole();
-  // Catalog canary gate (cosmetic — the catalog endpoints stay admin-gated
-  // server-side). Outside the allowlist the banner keeps its pre-import shape.
-  const canImportToCatalog = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id)) && !page.ecommerceStoreId;
+  // GA for all merchants (2026-08-15; the catalog endpoints stay admin-gated
+  // server-side). Store-linked pages keep the pre-import banner shape.
+  const canImportToCatalog = !page.ecommerceStoreId;
   // The CTA is a WRITE (it saves the KB before handing off to the import
   // sheet), so it needs the role on top of the canary. Deliberately NOT folded
   // into canImportToCatalog: that flag also drives the collections probe and

@@ -180,13 +180,6 @@ vi.mock('@/components/ui', () => ({
         ) : null,
 }));
 
-vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
-    // Render the target page's name so deep-link tests can assert WHICH page's
-    // editor opened (needs-first vs most-active).
-    KnowledgeBaseModal: ({ page }: { page?: { name?: string } }) =>
-        <div data-testid="kb-modal">{page?.name}</div>,
-}));
-
 const mockedPagesApi = vi.mocked(pagesApi);
 const mockedApi = vi.mocked(api, true);
 const mockedSubscriptionApi = vi.mocked(subscriptionApi);
@@ -1456,51 +1449,26 @@ describe('PagesPage — Business Info deep-links', () => {
         mockRouterQuery = {};
     });
 
-    it('?openKbActive=true opens the MOST-ACTIVE page even when another page needs info', async () => {
+    it('?openKbActive=true routes to /business for the MOST-ACTIVE page even when another page needs info', async () => {
         mockRouterQuery = { openKbActive: 'true' };
         renderPage(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Active Filled Page');
+            expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page_active');
         });
         expect(mockRouterReplace).toHaveBeenCalledTimes(1);
     });
 
-    it('?openKb=true keeps needs-first: opens the page missing Business Info', async () => {
-        mockRouterQuery = { openKb: 'true' };
-        renderPage(<PagesPage />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Dormant Empty Page');
-        });
-    });
-
-    it('Business-Surface workspace: ?openKb routes to /business instead of the free-text modal', async () => {
-        // isCatalogVisible is exercised for REAL via its admin path (a platform
-        // admin passes the gate; allowlisted merchant workspaces take the same
-        // branch through the workspace-id Set). The contract: every Business
-        // Info entry point funnels through openKbEditorFor, and for gated users
-        // that funnel must land on /business with the target page preselected —
-        // never on the legacy modal.
-        mockIsAdmin = true;
+    it('?openKb=true keeps needs-first: routes to /business for the page missing Business Info', async () => {
+        // The structured /business page is the canonical Business Info surface
+        // for ALL merchants (GA 2026-08-15) — every entry point funnels through
+        // openKbEditorFor and lands on /business with the target preselected.
         mockRouterQuery = { openKb: 'true' };
         renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page_dormant');
         });
-        expect(screen.queryByTestId('kb-modal')).toBeNull();
-        mockIsAdmin = false;
-    });
-
-    it('non-gated workspace: ?openKb keeps the legacy free-text modal (no redirect)', async () => {
-        mockRouterQuery = { openKb: 'true' };
-        renderPage(<PagesPage />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Dormant Empty Page');
-        });
-        expect(mockRouterPush).not.toHaveBeenCalledWith(expect.stringContaining('/business'));
     });
 
     it('REGRESSION (RQ v5): a disabled pages query must NOT consume the param', async () => {
@@ -1513,18 +1481,18 @@ describe('PagesPage — Business Info deep-links', () => {
 
         await act(async () => { /* flush effects */ });
         expect(mockRouterReplace).not.toHaveBeenCalled();
-        expect(screen.queryByTestId('kb-modal')).toBeNull();
+        expect(mockRouterPush).not.toHaveBeenCalledWith(expect.stringContaining('/business'));
 
-        // Auth hydrates → query runs → the SAME un-consumed param now opens the editor.
+        // Auth hydrates → query runs → the SAME un-consumed param now routes to /business.
         mockIsAuthenticated = true;
         rerender(<PagesPage />);
         await waitFor(() => {
-            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Active Filled Page');
+            expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page_active');
         });
         expect(mockRouterReplace).toHaveBeenCalledTimes(1);
     });
 
-    it('zero pages: consumes the param without opening a modal (no delayed pop)', async () => {
+    it('zero pages: consumes the param without navigating (no delayed pop)', async () => {
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -1534,7 +1502,7 @@ describe('PagesPage — Business Info deep-links', () => {
         await waitFor(() => {
             expect(mockRouterReplace).toHaveBeenCalledTimes(1);
         });
-        expect(screen.queryByTestId('kb-modal')).toBeNull();
+        expect(mockRouterPush).not.toHaveBeenCalledWith(expect.stringContaining('/business'));
     });
 });
 

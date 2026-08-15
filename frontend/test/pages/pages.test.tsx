@@ -32,11 +32,13 @@ vi.mock('@capacitor/core', () => ({
   },
 }));
 
-// Mock Next.js router
+// Mock Next.js router — shared push spy so tests can assert the /business
+// routing (the canonical Business Info surface for all merchants, GA 2026-08-15).
+const { mockRouterPush } = vi.hoisted(() => ({ mockRouterPush: vi.fn() }));
 vi.mock('next/router', () => ({
   useRouter: vi.fn(() => ({
     query: {},
-    push: vi.fn(),
+    push: mockRouterPush,
     replace: vi.fn(),
     pathname: '/pages',
   })),
@@ -241,8 +243,8 @@ describe('PagesPage', () => {
     });
   });
 
-  describe('Knowledge Base Modal', () => {
-    it('should open knowledge base modal when business info is clicked', async () => {
+  describe('Business Info entry point', () => {
+    it('routes to /business when business info is clicked (GA: the structured surface is canonical)', async () => {
       mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
@@ -265,9 +267,8 @@ describe('PagesPage', () => {
       const businessInfoButton = screen.getByText('Add Your Business Info');
       fireEvent.click(businessInfoButton);
 
-      // Modal should be open
       await waitFor(() => {
-        expect(screen.getByText('Your Business Info')).toBeInTheDocument();
+        expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page-1');
       });
     });
   });
@@ -340,7 +341,7 @@ describe('PagesPage', () => {
       expect(screen.queryByText('Add info')).not.toBeInTheDocument();
     });
 
-    it('should open KB modal when "Add info" chip is clicked', async () => {
+    it('routes to /business when "Add info" chip is clicked', async () => {
       mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
@@ -363,7 +364,7 @@ describe('PagesPage', () => {
       fireEvent.click(screen.getByText('Add info'));
 
       await waitFor(() => {
-        expect(screen.getByText('Your Business Info')).toBeInTheDocument();
+        expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page-1');
       });
     });
   });

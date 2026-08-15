@@ -28,7 +28,7 @@ import { BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
-import { PHONE_AUTH_ENABLED, isWhatsAppVisible, isCatalogVisible } from '@/lib/featureFlags';
+import { PHONE_AUTH_ENABLED, isWhatsAppVisible } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -136,7 +136,7 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean; showCatalog?: boolean } = {}) {
+export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean } = {}) {
   const accountItems = [
     // Team is workspace owner/admin-only (canManageTeam = workspace role, NOT
     // the platform `isAdmin` super-admin flag). Placed first so it sits between
@@ -159,15 +159,12 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
   // Store listing, Salla/Zid backend reliability parity). Once those land
   // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
   // this so deep-links also fail closed.
-  // Products & Services (native catalog) is platform-admin-only during the
-  // canary (isCatalogVisible — same gate as Stores). Once dogfooded we drop
-  // the gate (Phase D).
   const overviewItems = [
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },
-    ...(options.showCatalog
-      ? [{ key: 'nav.business', href: '/business', icon: Tag }]
-      : []),
+    // Business surface (/business): GA for all merchants (owner ruling
+    // 2026-08-15) — previously behind a workspace allowlist during dogfooding.
+    { key: 'nav.business', href: '/business', icon: Tag },
     ...(options.isAdmin
       ? [{ key: 'nav.integrations', href: '/integrations', icon: Store }]
       : []),
@@ -348,8 +345,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const workspaceIds = useAuthStore((s) => s.workspaces ?? []).map((w) => w.id);
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user, workspaceIds) });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing, isAdmin);
 

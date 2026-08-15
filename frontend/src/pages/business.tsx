@@ -25,7 +25,6 @@ import {
 } from '@jawab24/shared';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { computeFactCoverage, isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
@@ -72,8 +71,7 @@ function BusinessPageInner() {
   const tCatalog = useTranslations('catalog');
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated, user, _hasHydrated, workspaces } = useAuthStore();
-  const canSee = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id));
+  const { isAuthenticated } = useAuthStore();
   // Every write on this page — catalog items, fact rows, fact lists, and the
   // Business Info text — is `requireRole('admin')` server-side. One flag feeds
   // all four sections so the page can never end up half-gated: a banner saying
@@ -81,20 +79,10 @@ function BusinessPageInner() {
   // state on its own.
   const { canEdit } = useWorkspaceRole();
 
-  // Platform-admin canary (same guard as /catalog): deep links fail closed —
-  // anyone outside the allowlist is bounced to the dashboard. Wait for store
-  // hydration so we don't bounce the founder on first paint.
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (isAuthenticated && !canSee) {
-      router.replace('/dashboard');
-    }
-  }, [_hasHydrated, isAuthenticated, canSee, router]);
-
   const { data: pagesData, isLoading } = useQuery<Page[]>({
     queryKey: ['pages'],
     queryFn: () => pagesApi.getAll().then((r) => r.data),
-    enabled: canSee,
+    enabled: isAuthenticated,
   });
   // Store-linked pages are INCLUDED. The old exclusion was inherited from
   // /catalog, where it guarded manual catalog writes (409 PAGE_HAS_STORE) —
