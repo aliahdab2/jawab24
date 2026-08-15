@@ -972,6 +972,43 @@ describe('NotificationService', () => {
             expect(spy).toHaveBeenCalledWith('u-absent', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: true });
         });
 
+        it('suppressPush mutes EVERY member regardless of their per-user setting (info reply mode, D-083)', async () => {
+            // 1. workspace members query
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { userId: 'u-on' },
+                        { userId: 'u-off' },
+                    ]),
+                }),
+            });
+            // 2. batched settings preference query — u-on has alerts ENABLED, yet
+            //    the page-level info mode must still win.
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { userId: 'u-on', enabled: true },
+                        { userId: 'u-off', enabled: false },
+                    ]),
+                }),
+            });
+
+            const spy = vi.spyOn(notificationService, 'sendNotification').mockResolvedValue('notif-z');
+
+            await notificationService.sendTemplateNotificationToWorkspace(
+                'ws-1',
+                'new_lead',
+                { senderName: 'Ali', phone: '+9647701234567' },
+                { leadId: 'l-1', pageId: 'p-1', deepLink: '/leads' },
+                { gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: true },
+            );
+
+            // Bell rows still store for everyone (sendNotification is still called),
+            // but push is off for ALL members — including the alerts-enabled one.
+            expect(spy).toHaveBeenCalledWith('u-on', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: false });
+            expect(spy).toHaveBeenCalledWith('u-off', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: false });
+        });
+
         it('does not gate push (and runs no preference query) when no options are passed', async () => {
             // Only the workspace members query runs — no settings preference query.
             (db.select as any).mockReturnValueOnce({

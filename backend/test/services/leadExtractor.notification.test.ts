@@ -100,8 +100,37 @@ describe('leadExtractor — new_lead notification firing', () => {
             expect.objectContaining({ senderName: 'Ali', phone: PHONE }),
             // Deep-link targets the exact lead so the bell opens that customer's card directly.
             expect.objectContaining({ leadId: 'lead-1', pageId: 'page-1', deepLink: '/leads?leadId=lead-1' }),
-            { gatePushBySetting: 'newLeadAlertsEnabled' },
+            { gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: false },
         );
+    });
+
+    it('info reply mode: the lead row still stores, but the push is suppressed (D-083 passive capture)', async () => {
+        selectLimitMock.mockResolvedValue([]); // no existing lead → isNew = true
+
+        await leadExtractorService.maybeCaptureLead({ ...baseParams, replyMode: 'info' });
+
+        // The capture itself is untouched — the bell/notification call still
+        // fires (bell row stored) with the push force-muted.
+        expect(sendWorkspaceMock).toHaveBeenCalledTimes(1);
+        expect(sendWorkspaceMock).toHaveBeenCalledWith(
+            'ws-1',
+            'new_lead',
+            expect.anything(),
+            expect.anything(),
+            { gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: true },
+        );
+    });
+
+    it('info reply mode: lead_reengaged is also push-suppressed', async () => {
+        selectLimitMock.mockResolvedValue([{ id: 'lead-existing' }]);
+        insertReturningMock.mockResolvedValue([{ id: 'lead-1', phone: PHONE, status: 'contacted' }]);
+
+        await leadExtractorService.maybeCaptureLead({ ...baseParams, replyMode: 'info' });
+
+        expect(sendWorkspaceMock).toHaveBeenCalledTimes(1);
+        const [, template, , , options] = sendWorkspaceMock.mock.calls[0];
+        expect(template).toBe('lead_reengaged');
+        expect(options).toEqual({ gatePushBySetting: 'newLeadAlertsEnabled', suppressPush: true });
     });
 
     it('fires lead_reengaged (not new_lead) for a handled lead that shares a number again', async () => {

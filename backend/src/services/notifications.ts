@@ -141,6 +141,13 @@ export interface NotificationPayload {
  */
 export interface WorkspaceNotifyOptions {
     gatePushBySetting?: 'newLeadAlertsEnabled';
+    /**
+     * Force-mute the push for every member regardless of their per-user setting
+     * (bell row and SSE untouched — same semantics as a muted member). Used by
+     * lead alerts when the capturing page runs replyMode 'info': the merchant
+     * chose "information source", so volunteered numbers are stored silently.
+     */
+    suppressPush?: boolean;
 }
 
 /** Default fallback language when the requested locale has no translation */
@@ -993,7 +1000,9 @@ class NotificationService {
 
         await Promise.all(
             members.map(m => {
-                const pushEnabled = pushPrefByUser ? (pushPrefByUser.get(m.userId) ?? true) : undefined;
+                const pushEnabled = options?.suppressPush
+                    ? false
+                    : pushPrefByUser ? (pushPrefByUser.get(m.userId) ?? true) : undefined;
                 return this.sendNotification(m.userId, payload, { pushEnabled }).catch(err =>
                     captureError(err, 'Failed to send workspace notification to member', {
                         tags: { service: 'notifications' },
