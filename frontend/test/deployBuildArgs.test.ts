@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -140,6 +140,118 @@ describe('frontend image build args', () => {
     for (const other of rest) {
       expect(other.args, `${other.composeFile} drifted from ${baseline.composeFile}`)
         .toEqual(baseline.args);
+    }
+  });
+});
+
+/**
+ * Every `NEXT_PUBLIC_*` the app READS must be one the image BUILDS with.
+ *
+ * The parity block above compares the Dockerfile to compose — it cannot see a
+ * var that is missing from BOTH. When that happens the two sides agree, every
+ * assertion passes, and the feature is still dead: `next build` inlines the
+ * unknown var as `undefined`, so `=== 'true'` is constant-folded to `false` and
+ * the code is dropped from the bundle entirely.
+ *
+ * That is how Instagram-direct connect shipped dark on 2026-08-16.
+ * `NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED` was read by `isInstagramDirectEnabled()`
+ * but declared nowhere, so the connect option could not appear no matter what
+ * the server's env said — and setting it there was the natural (wrong) fix to
+ * reach for, because nothing in the repo hinted the var was never wired.
+ *
+ * The same sweep found two more levers in that state, both of which look ready
+ * until the day you need them: NEXT_PUBLIC_CHECKOUT_MAINTENANCE (the
+ * kill switch for a payments incident) and NEXT_PUBLIC_PHONE_AUTH_ENABLED (the
+ * flag that turns phone auth back on when WhatsApp OTP ships).
+ *
+ * So this block asserts the direction the parity check cannot: source → build.
+ */
+describe('every NEXT_PUBLIC_* read by the app is a real build input', () => {
+  /**
+   * Vars deliberately NOT passed at build time. Each needs a reason — an
+   * unexplained entry here recreates exactly the blind spot this test exists to
+   * close, so treat adding one as a decision, not a formality.
+   */
+  const NOT_BUILD_INPUTS: Record<string, string> = {
+    // Supplied by next.config.js `env`, which defaults it to the production
+    // origin — so the build never depends on the deploy passing it.
+    NEXT_PUBLIC_SITE_URL: 'defaulted to the production origin in next.config.js env',
+    // GENERATED, not passed: next.config.js `env` sets it to new Date() at build
+    // time. Wiring a build arg for it would be dead config — nothing to pass.
+    NEXT_PUBLIC_BUILD_TIME: 'generated at build time by next.config.js env',
+    // Documented in featureFlags.ts as a LOCAL-DEV override of the hardcoded
+    // pilot list; production is meant to use the built-in list.
+    NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS: 'local-dev override by design',
+  };
+
+  /** `NEXT_PUBLIC_*` names the Dockerfile puts into the build environment. */
+  function inlinedByDockerfile(): Set<string> {
+    const dockerfile = readFileSync(path.join(repoRoot, 'frontend', 'Dockerfile'), 'utf8');
+    // Match the ENV side, not ARG: NEXT_PUBLIC_APP_VERSION is fed by the
+    // differently-named SEMANTIC_VERSION arg, and what `next build` can see is
+    // precisely the set of exported ENV names.
+    return new Set(
+      [...dockerfile.matchAll(/^ENV\s+(NEXT_PUBLIC_[A-Z0-9_]+)=/gm)].map((m) => m[1]),
+    );
+  }
+
+  /** Every `process.env.NEXT_PUBLIC_*` read in shipped frontend source. */
+  function publicVarsReadInSource(): Map<string, string> {
+    const srcRoot = path.join(repoRoot, 'frontend', 'src');
+    const found = new Map<string, string>();
+
+    for (const entry of readdirSync(srcRoot, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(entry.name)) continue;
+
+      const full = path.join(entry.parentPath ?? entry.path, entry.name);
+      const rel = path.relative(repoRoot, full);
+      // Tests stub env freely (vi.stubEnv) — they are not shipped code and must
+      // not drag a var into the required set.
+      if (/(?:^|[\\/])__tests__[\\/]/.test(rel) || /\.(?:test|spec)\./.test(entry.name)) continue;
+
+      for (const m of readFileSync(full, 'utf8').matchAll(/process\.env\.(NEXT_PUBLIC_[A-Z0-9_]+)/g)) {
+        if (!found.has(m[1])) found.set(m[1], rel);
+      }
+    }
+    return found;
+  }
+
+  it('finds the vars it is meant to police', () => {
+    // Guards the scanner itself: a regex or walker that silently matched
+    // nothing would make every assertion below pass vacuously.
+    const read = publicVarsReadInSource();
+    expect(read.size).toBeGreaterThan(5);
+    expect([...read.keys()]).toContain('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY');
+  });
+
+  it('passes every var the source reads as a build arg', () => {
+    const inlined = inlinedByDockerfile();
+    const missing = [...publicVarsReadInSource()]
+      .filter(([name]) => !inlined.has(name) && !(name in NOT_BUILD_INPUTS))
+      .map(([name, file]) => `${name} (read in ${file})`);
+
+    expect(
+      missing,
+      'These are read at runtime but never supplied at build time, so Next.js ' +
+      'inlines them as `undefined` and the feature is dead in the image. Add an ' +
+      'ARG + ENV in frontend/Dockerfile and the build arg to all three compose ' +
+      'files — or, if the var is genuinely not a deploy input, add it to ' +
+      'NOT_BUILD_INPUTS with a reason.',
+    ).toEqual([]);
+  });
+
+  it('keeps the allowlist honest — no entry for a var nothing reads', () => {
+    // A stale exemption is how a real gap sneaks back in under cover of an
+    // entry that looks reviewed.
+    const read = new Set(publicVarsReadInSource().keys());
+    const stale = Object.keys(NOT_BUILD_INPUTS).filter((name) => !read.has(name));
+    expect(stale, 'remove these from NOT_BUILD_INPUTS — the source no longer reads them').toEqual([]);
+  });
+
+  it('documents a reason for every allowlisted var', () => {
+    for (const [name, reason] of Object.entries(NOT_BUILD_INPUTS)) {
+      expect(reason.trim().length, `${name} needs a real reason`).toBeGreaterThan(15);
     }
   });
 });
