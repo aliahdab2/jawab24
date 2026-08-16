@@ -74,6 +74,15 @@ process.env.DATABASE_URL = 'postgres://unit-tests:unit-tests@127.0.0.1:1/unit_te
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.NODE_ENV = 'test';
 
+// Demo mode is a PRODUCTION code path, not a test one: `pages.sync`,
+// `ai.*` and `subscriptions` all branch on `config.demo.enabled` into
+// `authService.getUserById()`, which no route test mocks. Left to the ambient
+// environment this makes unit tests depend on whether the checkout happens to
+// have a `backend/.env` with `DEMO_MODE_ENABLED=true` — a worktree (no .env)
+// went green while the main checkout went red on the same commit, which reads
+// as a flake and is not one. Pin it off so the flag can never leak in.
+process.env.DEMO_MODE_ENABLED = 'false';
+
 
 
 
