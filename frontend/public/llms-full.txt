@@ -260,4 +260,4 @@ Blog index: https://jawab24.com/blog
 - Privacy Policy: https://jawab24.com/privacy
 - Terms of Service: https://jawab24.com/terms
 - Facebook: https://facebook.com/jawab24app
-- Instagram: https://instagram.com/jawab24
+- Instagram: https://instagram.com/jawab24app
