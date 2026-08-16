@@ -90,8 +90,9 @@ interface TestCase {
         /** Which script carries the reply's LETTERS. Substring assertions cannot
          *  express "the reply is in English" — a legitimate English reply may quote
          *  Arabic proper nouns (outlet names, city names), so dominance by letter
-         *  count is the robust form. An empty reply fails (counts as a tie). */
-        replyDominantScript?: 'arabic' | 'latin';
+         *  count is the robust form. An empty reply fails (counts as a tie).
+         *  Scripts are counted from SCRIPT_COUNTERS; add one there to assert on it. */
+        replyDominantScript?: 'arabic' | 'latin' | 'bengali';
     };
     notes?: string;
     /**
@@ -3036,6 +3037,17 @@ const TEST_CASES: TestCase[] = [
         notes: 'Prod replay Shahin World 2026-08-08: accent-free French must be mirrored in French even though the detector reads it as uncertain English and the thread anchor is English. Guard for the VISIBLY_FOREIGN_MIRROR demonstration.',
     },
     {
+        id: 773, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
+        message: 'অনেক সুন্দর',
+        page: 'support',
+        postMessage: '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا باستخدام الذكاء الصناعي!\nردود فورية وذكية، على مدار الساعة، على فيسبوك وإنستجرام وواتساب الأعمال ✨\n🎁 جرّب مجانًا لمدة شهر كامل على jawab24.com',
+        expected: {
+            replyMethod: ['ai'],
+            replyDominantScript: 'bengali',
+        },
+        notes: 'PROD REPLAY (2026-08-16, same boosted post as #772): a BENGALI comment («অনেক সুন্দর» — "very beautiful") was answered in Arabic («شكراً على كلامك الجميل! 🌟»). Different mechanism from #772: the backend cannot NAME the Bengali script, detectCommentLanguage fell back to the POST language, and that travelled as an EXPLICIT hint — which outranks every link of the worker chain, including its own script detection. So the worker\'s Unicode resolver was dead code here, and Thai / Hindi / Cyrillic / Chinese comments were answered in Arabic too. Fixed by (a) resolveCommentLanguage deferring with \'unknown\' when the comment carries letters in a script the backend cannot name, and (b) Bengali + Tamil added to detectLanguageOrNull. Emoji-only and punctuation-only comments still mirror the post — that contract is pinned in commentPreprocess.test.ts.',
+    },
+    {
         id: 772, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
         message: 'Very nice',
         page: 'support',
@@ -5221,6 +5233,14 @@ function mechCourseStartForms(): string[] {
 // Evaluation logic
 // ---------------------------------------------------------------------------
 
+/** Scripts the replyDominantScript check counts. Keys are the values a case may
+ *  assert; add an entry to make a new script assertable. */
+const SCRIPT_COUNTERS: Record<string, RegExp> = {
+    arabic: /\p{Script=Arabic}/gu,
+    latin: /\p{Script=Latin}/gu,
+    bengali: /\p{Script=Bengali}/gu,
+};
+
 function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict; reasons: string[] } {
     const d = resp.data;
     const checks: { field: string; pass: boolean; detail: string }[] = [];
@@ -5315,16 +5335,23 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
 
     // replyDominantScript — dominance by letter count, so an English reply quoting
     // Arabic proper nouns still reads 'latin'. Empty reply → tie → fail.
+    // Counting every script in SCRIPT_COUNTERS (not just the expected one) is what
+    // makes this a DOMINANCE check rather than a presence check: a Bengali reply
+    // that quotes the Arabic page name must still read 'bengali', and an Arabic
+    // reply must not satisfy an expectation of 'bengali' merely by containing a
+    // stray Latin character. Add a script here to assert on it.
     if (e.replyDominantScript) {
         const reply = d.reply || '';
-        const arabicLetters = (reply.match(/\p{Script=Arabic}/gu) || []).length;
-        const latinLetters = (reply.match(/\p{Script=Latin}/gu) || []).length;
-        const dominant = arabicLetters > latinLetters ? 'arabic' : latinLetters > arabicLetters ? 'latin' : 'tie';
+        const counts = Object.entries(SCRIPT_COUNTERS)
+            .map(([name, re]) => [name, (reply.match(re) || []).length] as const);
+        const top = Math.max(...counts.map(([, n]) => n));
+        const leaders = counts.filter(([, n]) => n === top);
+        const dominant = top === 0 || leaders.length > 1 ? 'tie' : leaders[0][0];
         const pass = dominant === e.replyDominantScript;
         checks.push({
             field: 'replyDominantScript',
             pass,
-            detail: `expected ${e.replyDominantScript} got ${dominant} (arabic ${arabicLetters} / latin ${latinLetters})${d.reply ? '' : ' — reply was empty'}`,
+            detail: `expected ${e.replyDominantScript} got ${dominant} (${counts.map(([n, c]) => `${n} ${c}`).join(' / ')})${d.reply ? '' : ' — reply was empty'}`,
         });
     }
 
