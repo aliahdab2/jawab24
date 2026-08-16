@@ -15,7 +15,13 @@
                     <imageView key="view" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Splash" id="snD-IY-ifK">
                         <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                         <autoresizingMask key="autoresizingMask"/>
-                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <!-- Fixed brand dark (#060D18), NOT systemBackgroundColor. The Splash
+                             image is opaque and scaleAspectFill, so this is normally covered —
+                             but a theme-following color here is a trap: any change to the image
+                             or the content mode uncovers a white launch screen for merchants
+                             using the dark in-app theme, which is the exact Android bug fixed in
+                             #782. Keep it pinned to the same value as the image's own canvas. -->
+                        <color key="backgroundColor" red="0.023529411764705882" green="0.050980392156862744" blue="0.09411764705882353" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                     </imageView>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
@@ -25,8 +31,5 @@
     </scenes>
     <resources>
         <image name="Splash" width="1366" height="1366"/>
-        <systemColor name="systemBackgroundColor">
-            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-        </systemColor>
     </resources>
 </document>

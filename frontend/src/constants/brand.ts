@@ -49,7 +49,7 @@ export const BRAND_ASSETS = {
     },
     social: {
         facebook: 'https://facebook.com/jawab24app',
-        instagram: 'https://instagram.com/jawab24',
+        instagram: 'https://instagram.com/jawab24app',
         twitter: '@jawab24',
     },
     stores: {

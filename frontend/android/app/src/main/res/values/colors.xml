@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Launch/splash background, theme-aware. This is the LIGHT value (the app's
-         light page background #f6f9fa from globals.css); values-night/colors.xml
-         overrides it with the dark page background. The splash thus follows the
-         phone's system theme, matching the app, which defaults to the system theme.
-         The colorful app icon (mipmap/ic_launcher) is shown on top in both modes. -->
-    <color name="splash_background">#F6F9FA</color>
+    <!-- Launch/splash background — FIXED dark brand color (#060d18, the app's dark
+         page background from globals.css), identical in light and dark system themes.
+
+         ⛔ Do NOT re-add a values-night/ override. It was removed in 2026-08 because
+         it tied the splash to the PHONE's system theme, while the app's theme is a
+         stored user preference (light / dark / system — see hooks/useTheme.ts).
+         Android resolves the launch theme before any JS runs, so it can never know
+         that preference: a merchant on a light phone who picked dark in-app got a
+         white splash followed by a dark app (reported on a real device 2026-08-16).
+         A single fixed brand background is the only value that is correct for every
+         combination, and is the standard behaviour for apps with an in-app theme
+         switch. The colorful app icon (mipmap/ic_launcher) sits on top in both modes. -->
+    <color name="splash_background">#060D18</color>
 </resources>

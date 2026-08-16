@@ -24,7 +24,7 @@ vi.mock('@/components/ui', () => ({
     ThemeToggleButton: () => null,
 }));
 
-import { resolveNavKey } from '../Sidebar';
+import { resolveNavKey, getNavigationGroups } from '../Sidebar';
 
 const tNav = (k: string) => `nav:${k}`;
 const tPricing = (k: string) => `pricing:${k}`;
@@ -63,5 +63,45 @@ describe('resolveNavKey — other keys unaffected', () => {
         expect(resolveNavKey('nav.settings', tNav, tPricing, false)).toBe('nav:settings');
         expect(resolveNavKey('pricing.title', tNav, tPricing, false)).toBe('pricing:title');
         expect(resolveNavKey('other', tNav, tPricing, false)).toBe('other');
+    });
+});
+
+/**
+ * The Partner entry is the ONLY way a reseller reaches /partner: the page has
+ * no other link, and the app WebView has no address bar, so a missing entry
+ * means the portal is unreachable on mobile entirely.
+ */
+describe('getNavigationGroups — Partner entry', () => {
+    const hrefs = (options: Parameters<typeof getNavigationGroups>[0]) =>
+        getNavigationGroups(options).flatMap((g) => g.items.map((i) => i.href));
+
+    it('is hidden from an ordinary merchant', () => {
+        expect(hrefs({ isPartner: false })).not.toContain('/partner');
+        // Absent option, not merely false — the flag arrives undefined on a
+        // session persisted before this shipped.
+        expect(hrefs({})).not.toContain('/partner');
+    });
+
+    it('is shown to a partner', () => {
+        expect(hrefs({ isPartner: true })).toContain('/partner');
+    });
+
+    it('reaches the native app too — the reseller has no browser bar there', () => {
+        expect(hrefs({ isPartner: true, isNative: true })).toContain('/partner');
+    });
+
+    it('does not depend on admin or workspace-role privileges', () => {
+        // Ahmad is a rep, not a Jawab24 admin, and often only a member of the
+        // workspace he signed up with. Gating on either would hide the portal.
+        expect(hrefs({ isPartner: true, isAdmin: false, canManageTeam: false }))
+            .toContain('/partner');
+    });
+
+    it('resolves its label through the nav namespace', () => {
+        const item = getNavigationGroups({ isPartner: true })
+            .flatMap((g) => g.items)
+            .find((i) => i.href === '/partner');
+        expect(item).toBeDefined();
+        expect(resolveNavKey(item!.key, tNav, tPricing, false)).toBe('nav:partner');
     });
 });

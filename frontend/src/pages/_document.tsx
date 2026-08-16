@@ -138,7 +138,7 @@ export default function MyDocument({ locale }: DocProps) {
               "@id": "https://jawab24.com/#organization",
               "sameAs": [
                 "https://www.facebook.com/jawab24app",
-                "https://www.instagram.com/jawab24",
+                "https://www.instagram.com/jawab24app",
                 "https://x.com/jawab24"
               ],
               "foundingDate": "2024",

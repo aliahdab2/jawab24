@@ -13,7 +13,7 @@
  * without reading those gates; the sibling resolveChain.ts (ai-worker surface)
  * has a DIFFERENT, intentionally-unmerged contract.
  */
-import { maybeLatinOverride, OVERRIDE_CONFIDENCE } from './engine';
+import { isConfidentAsciiEnglish, maybeLatinOverride, OVERRIDE_CONFIDENCE } from './engine';
 
 // Unicode ranges for different scripts
 const HEBREW_RANGE = /[\u0590-\u05FF]/;
@@ -340,6 +340,30 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         if (override) {
             return {
                 language: override,
+                confidence: OVERRIDE_CONFIDENCE,
+                script: 'Latin',
+                isRTL: false,
+            };
+        }
+
+        // Same fallthrough, ASCII side. The override above can never fire for
+        // pure-ASCII text (its non-ASCII-letter gate is what keeps Arabizi safe),
+        // so genuine English that matched no ENGLISH_COMMON word stayed on the 0.5
+        // floor — indistinguishable from the acronym "ICDL". Downstream that floor
+        // means "no language signal": isLowSignalLatinToken is true, and
+        // resolveCommentLanguage mirrors the POST's language, so "Very nice" on an
+        // Arabic post was answered in Arabic (production, 2026-08-16).
+        //
+        // The promotion changes CERTAINTY only, never the language — 'en' is what
+        // this branch returns either way — and it is gated to text tinyld reads as
+        // English at ≥0.9 with ≥2 words and no Arabizi digit-fusion. Prod corpus
+        // (2026-08-16): 3 of 21,510 answered ASCII comments change, all genuine
+        // English, no transliterated name and no Arabizi in the promoted set;
+        // 254 of 15,780 inbound ASCII DMs stop deferring to the thread's language,
+        // including "Speak English pls" and "I don't understand arabic".
+        if (isConfidentAsciiEnglish(cleanText)) {
+            return {
+                language: 'en',
                 confidence: OVERRIDE_CONFIDENCE,
                 script: 'Latin',
                 isRTL: false,

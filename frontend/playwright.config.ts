@@ -45,6 +45,7 @@ export default defineConfig({
         'ssr.spec.ts',
         'seo.spec.ts',
         'keyboard-modal-layout.spec.ts',
+        'safe-area-cascade.spec.ts',
       ],
     },
     {
@@ -56,6 +57,7 @@ export default defineConfig({
         'login.spec.ts',
         'ssr.spec.ts',
         'seo.spec.ts',
+        'safe-area-cascade.spec.ts',
       ],
     },
   ],

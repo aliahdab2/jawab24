@@ -146,7 +146,7 @@ export const authApi = {
     api.post('/auth/facebook/native', { accessToken }),
 
   getProfile: () =>
-    api.get('/auth/me'),
+    api.get<{ id: string; isAdmin?: boolean; isPartner?: boolean; hasEcommerceStore?: boolean }>('/auth/me'),
 
   logout: () =>
     api.post('/auth/logout'),
@@ -981,10 +981,49 @@ export interface AdminPartner {
   phone: string | null;
   commissionPct: number;
   isActive: boolean;
-  /** True once the partner has signed in and the portal bound their account. */
+  /**
+   * Whether a login is bound to this reseller (`partners.user_id IS NOT NULL`).
+   *
+   * ⛔ NOT a statement about whether they have signed in. A reseller can sign in
+   * repeatedly and stay unlinked (their phone is the only auto-bind anchor, and
+   * it only fires when a user account actually carries that verified number),
+   * and an admin can bind a reseller who has never signed in at all. Labelling
+   * this "signed in" told the operator to wait for something that would never
+   * happen on its own.
+   */
   linked: boolean;
   merchantCount: number;
   createdAt: string | null;
+}
+
+/** A row of the admin customer table — the shape `listUsers` returns. */
+export interface AdminCustomer {
+  id: string;
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+  phoneCountry: string | null;
+  facebookId: string | null;
+  createdAt: string | null;
+  partner: { id: string; name: string } | null;
+  partnerNote: string | null;
+  subscription: {
+    id: string;
+    status: string;
+    planId: string;
+    planName: string | null;
+    planSlug: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    paymentMethod: string | null;
+  } | null;
+}
+
+export interface AdminPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export type PartnerMerchantStatus =
@@ -1140,8 +1179,12 @@ export const adminApi = {
     if (filters.search) params.append('search', filters.search);
     if (filters.status) params.append('status', filters.status);
     if (filters.plan) params.append('plan', filters.plan);
-    
-    const response = await api.get(`/admin/users/all?${params.toString()}`);
+
+    const response = await api.get<{
+      success: boolean;
+      data: AdminCustomer[];
+      pagination: AdminPagination;
+    }>(`/admin/users/all?${params.toString()}`);
     return response.data;
   },
 

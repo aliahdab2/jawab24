@@ -14,6 +14,7 @@
   "business": "نشاطك التجاري",
   "integrations": "المتاجر",
   "team": "الفريق",
+  "partner": "بوابة الموزّع",
   "theme": "المظهر",
   "workspace": "مساحة العمل",
   "badgeUnreadComments": "{count, plural, zero {لا تعليقات غير مقروءة} one {تعليق واحد غير مقروء} two {تعليقان غير مقروءين} few {# تعليقات غير مقروءة} many {# تعليقاً غير مقروء} other {# تعليق غير مقروء}}",

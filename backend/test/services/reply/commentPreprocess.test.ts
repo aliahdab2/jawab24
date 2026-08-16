@@ -5,6 +5,7 @@ import {
     resolveCommentLanguage,
     rewriteContentFreeCta,
 } from '../../../src/services/reply/commentPreprocess';
+import { detectCommentLanguage } from '../../../src/utils/language';
 import type { FacebookMessageTag } from '../../../src/utils/commentText';
 
 const userTag = (name: string, offset: number): FacebookMessageTag => ({
@@ -182,6 +183,27 @@ describe('resolveCommentLanguage', () => {
         expect(resolveCommentLanguage('Icdl', arabicPost, '')).toBe('ar');
     });
 
+    it('does NOT mirror the post for genuine English prose (prod 2026-08-16)', () => {
+        // The reported bug: an English comment under Jawab24's own Arabic boosted
+        // post was answered in Arabic. "Very nice" matches no ENGLISH_COMMON word,
+        // so it used to score en@0.5 — identical to the acronym "ICDL" — and got
+        // mirrored. The dual-mode public nudge, which resolves via
+        // detectCommentLanguage, said English on the SAME comment.
+        const arabicPost = '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا باستخدام الذكاء الصناعي';
+        expect(resolveCommentLanguage('Very nice', arabicPost, undefined)).toBe('en');
+        expect(resolveCommentLanguage('Good morning man', arabicPost, undefined)).toBe('en');
+    });
+
+    it('still mirrors the post for a name-shaped or Arabizi comment', () => {
+        // The two classes that must keep deferring: a tagged friend's display name
+        // (tinyld reads transliterated names as en@1.00) and romanized Arabic.
+        const arabicPost = '#عروض على دورات #الكومبيوتر دورة icdl';
+        expect(resolveCommentLanguage('Weaam Aldoukha', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('Kawthar Mohammed', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('kam el se3r', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('sho hal as3ar', arabicPost, undefined)).toBe('ar');
+    });
+
     it('mirrors the post language for a Latin token in ANY detector-named language (not just Arabic)', () => {
         // French post → French reply
         expect(resolveCommentLanguage('iPhone', 'Découvrez les nouvelles offres à prix réduit', undefined)).toBe('fr');
@@ -189,6 +211,52 @@ describe('resolveCommentLanguage', () => {
         expect(resolveCommentLanguage('iPhone', 'Yeni ürünlerimizi mağazamızda görebilirsiniz', undefined)).toBe('tr');
         // Swedish post → Swedish reply
         expect(resolveCommentLanguage('iPhone', 'Vi har öppet hela veckan välkommen', undefined)).toBe('sv');
+    });
+
+    it('defers a COMMENT written in a script the backend cannot name (prod 2026-08-16)', () => {
+        // The Bengali case: «অনেক সুন্দر» on Jawab24's Arabic boosted post was
+        // answered in Arabic. The backend has no name for these scripts, so
+        // detectCommentLanguage fell back to the POST — and that travelled as an
+        // EXPLICIT hint, which outranks the worker's own script detection. Every
+        // one of these is nameable BY THE WORKER, so the backend must stand aside.
+        const arabicPost = '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا';
+        for (const comment of [
+            'অনেক সুন্দর',                    // Bengali — the reported case
+            'ยินดีต้อนรับสู่ร้านของเรา',        // Thai
+            'Сколько это стоит',              // Cyrillic
+            '这个多少钱',                       // Chinese
+            'כמה זה עולה',                    // Hebrew
+            'வணக்கம்',                        // Tamil
+        ]) {
+            expect(resolveCommentLanguage(comment, arabicPost, undefined)).toBe('unknown');
+        }
+    });
+
+    it('leaves the PUBLIC NUDGE language untouched — it is a different decision', () => {
+        // The dual-mode nudge resolves through detectCommentLanguage directly
+        // (facebookCommentAdapter / instagramCommentAdapter), NOT through this
+        // function, and it deliberately keeps mirroring the post: the nudge is a
+        // public comment under the merchant's own post, and we ship variations in
+        // Arabic and English only — resolving a Bengali comment to 'bn' here would
+        // fall through pickNudgeVariation to the Arabic default anyway on an Arabic
+        // post, and would flip an English post's nudge to Arabic. Whether an
+        // unnameable language should get the English nudge instead is an open
+        // product question, deliberately NOT decided by this change.
+        const arabicPost = '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا';
+        const englishPost = 'Jawab24 replies to your customers automatically';
+        expect(detectCommentLanguage('অনেক সুন্দর', arabicPost)).toBe('ar');
+        expect(detectCommentLanguage('অনেক সুন্দর', englishPost)).toBe('en');
+    });
+
+    it('still mirrors the post for comments with NO letters at all', () => {
+        // The documented purpose of the post fallback, and what the engagement-post
+        // CTA cases depend on: "." / "0" / an emoji is the customer following the
+        // post's instruction, not a language signal. Deferring these would strand
+        // the reply on the merchant default instead of the post's language.
+        const arabicPost = '#عروض على دورات #الكومبيوتر دورة icdl';
+        for (const comment of ['👍👍', '...', '٠', '!!']) {
+            expect(resolveCommentLanguage(comment, arabicPost, undefined)).toBe('ar');
+        }
     });
 
     it('defers (returns "unknown") for a foreign script the backend cannot name, so the worker resolves it', () => {

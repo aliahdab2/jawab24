@@ -250,6 +250,7 @@ Blog index: https://jawab24.com/blog
 - Homepage: https://jawab24.com
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
+- Instagram auto-reply: https://jawab24.com/instagram
 - Pricing: https://jawab24.com/pricing
 - Blog: https://jawab24.com/blog
 - Compare tools: https://jawab24.com/compare
@@ -259,4 +260,4 @@ Blog index: https://jawab24.com/blog
 - Privacy Policy: https://jawab24.com/privacy
 - Terms of Service: https://jawab24.com/terms
 - Facebook: https://facebook.com/jawab24app
-- Instagram: https://instagram.com/jawab24
+- Instagram: https://instagram.com/jawab24app

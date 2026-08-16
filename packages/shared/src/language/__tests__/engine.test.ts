@@ -4,6 +4,8 @@ import {
     tinyldLatinOverride,
     maybeLatinOverride,
     displayLanguageName,
+    isConfidentAsciiEnglish,
+    isNameShaped,
 } from '../engine';
 
 /**
@@ -102,6 +104,69 @@ describe('maybeLatinOverride — flag awareness', () => {
         process.env.LANG_ENGINE = 'tinyld';
         expect(maybeLatinOverride('Hur kan man anmäla sig')).toBe('sv');
         expect(maybeLatinOverride('sho hal as3ar')).toBeNull();
+    });
+});
+
+describe('isNameShaped', () => {
+    it('is true for display names — every token capitalized', () => {
+        expect(isNameShaped('Weaam Aldoukha')).toBe(true);
+        expect(isNameShaped('Kawthar Mohammed')).toBe(true);
+        expect(isNameShaped('Rana AL Akhras')).toBe(true);
+    });
+
+    it('is false for prose, which capitalizes its first word only', () => {
+        expect(isNameShaped('Very nice')).toBe(false);
+        expect(isNameShaped('Good morning man')).toBe(false);
+        expect(isNameShaped("I don't understand arabic")).toBe(false);
+    });
+
+    it('ignores leading non-letters, and is false for caseless scripts', () => {
+        expect(isNameShaped('@Ali (Sara')).toBe(true);
+        // Arabic has no uppercase letters at all — the predicate must not claim
+        // a name-shape it cannot see (matters as more languages are added).
+        expect(isNameShaped('مرحبا كيف حالك')).toBe(false);
+        expect(isNameShaped('')).toBe(false);
+    });
+});
+
+describe('isConfidentAsciiEnglish — the ASCII half of the en@0.5 floor', () => {
+    it('accepts genuine English prose that matched no ENGLISH_COMMON word', () => {
+        // The production case: an English comment under an Arabic post was
+        // answered in Arabic because this text scored en@0.5 (2026-08-16).
+        expect(isConfidentAsciiEnglish('Very nice')).toBe(true);
+        expect(isConfidentAsciiEnglish('Good morning man')).toBe(true);
+        expect(isConfidentAsciiEnglish('Speak English pls')).toBe(true);
+    });
+
+    it('refuses Arabizi — the class the whole design protects', () => {
+        // tinyld mislabels these confidently (Kirundi@1.00, Esperanto@1.00,
+        // Spanish@0.23), so the guard is structural: never 'en' => never promoted.
+        expect(isConfidentAsciiEnglish('sho hal as3ar')).toBe(false);
+        expect(isConfidentAsciiEnglish('bkam el course')).toBe(false);
+        expect(isConfidentAsciiEnglish('kam el se3r')).toBe(false);
+        // Digit fused to letters is romanized-Arabic orthography, whatever tinyld says.
+        expect(isConfidentAsciiEnglish('el se3r please tell')).toBe(false);
+    });
+
+    it('refuses display names — tinyld reads transliterated names as en@1.00', () => {
+        expect(isConfidentAsciiEnglish('Weaam Aldoukha')).toBe(false);
+        expect(isConfidentAsciiEnglish('Kawthar Mohammed')).toBe(false);
+    });
+
+    it('refuses bare tokens and diacritic-bearing text (other rules own those)', () => {
+        expect(isConfidentAsciiEnglish('ICDL')).toBe(false);
+        expect(isConfidentAsciiEnglish('Nice')).toBe(false);
+        // Non-ASCII letters are tinyldLatinOverride's business, not this rule's.
+        expect(isConfidentAsciiEnglish('Hur kan man anmäla sig')).toBe(false);
+        expect(isConfidentAsciiEnglish('   ')).toBe(false);
+    });
+
+    it('KNOWN LIMITATION: ASCII-only non-English reads as English', () => {
+        // Taglish scores en@1.00 in tinyld's normal AND heavy models. Harmless
+        // today (those threads are English), but this is the tripwire for when
+        // this product supports a romanized non-English language — see the
+        // "WHEN THIS PRODUCT ADDS MORE LANGUAGES" note in engine.ts.
+        expect(isConfidentAsciiEnglish('Mag kano naman po down payment kung sakali?')).toBe(true);
     });
 });
 

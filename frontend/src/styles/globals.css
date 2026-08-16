@@ -1658,20 +1658,42 @@ html [data-sonner-toaster] {
   height: var(--sai-top);
 }
 
-/* Bottom safe area background (for gesture nav) */
+/* Bottom safe area background (for gesture nav).
+
+   INVARIANT: this strip's height MUST equal the lift `.bottom-nav-position`
+   gives the fixed bottom nav (`bottom: var(--sai-bottom)`) — on EVERY surface,
+   not just native. Both read --sai-bottom, so they track each other by
+   construction; pinned by __tests__/styles/bottomSafeArea.test.ts.
+
+   It used to be `height: 0` on web and only got a height under `.is-native`,
+   while the nav's lift was never gated that way. Any browser reporting a
+   non-zero env(safe-area-inset-bottom) therefore floated the nav above the
+   viewport bottom over a TRANSPARENT strip, and the page scrolled through the
+   gap underneath it. Android 15 lays WebViews out edge-to-edge, so the in-app
+   browsers (Facebook, Instagram) report a real inset and hit exactly that.
+
+   Where the inset is 0 — desktop, and mobile browsers that keep their own
+   chrome outside the viewport — this resolves to 0px and paints nothing. */
 .bottom-safe-bg {
   bottom: 0;
-  height: 0px; /* Hidden by default on web */
-}
-
-/* Native apps: show bottom safe area in portrait */
-html.is-native .bottom-safe-bg,
-body.is-native .bottom-safe-bg {
-  display: block;
   height: var(--sai-bottom);
 }
 
-/* Landscape: hide bottom safe area */
+/* ⚠️ LOAD-BEARING, DO NOT "CLEAN UP" AS REDUNDANT. A div is display:block
+   already, so this looks like dead weight — it is not. Its specificity (0,2,1)
+   outranks the `display: none` in the landscape block below (0,1,0), which is
+   what keeps the strip painted for NATIVE landscape. iOS reports a 21px
+   home-indicator inset in landscape, and on native pages with no bottom nav
+   (login clean layout, landing, legal, payment/success) that strip is the only
+   thing behind the home indicator. Deleting this rule silently drops it.
+   Verified by measuring the real cascade in Chrome, not by reading the file. */
+html.is-native .bottom-safe-bg,
+body.is-native .bottom-safe-bg {
+  display: block;
+}
+
+/* Landscape (WEB): the nav sits at bottom: 0, so there is no gap to fill.
+   Deliberately does NOT reach native — see the specificity note above. */
 @media (orientation: landscape) {
   .bottom-safe-bg {
     display: none;
@@ -1857,7 +1879,11 @@ body.is-native .pt-hero {
   }
 }
 
-/* Bottom nav positioning - above safe area in portrait, at bottom in landscape */
+/* Bottom nav positioning - above safe area in portrait, at bottom in landscape.
+   Deliberately NOT gated on .is-native: an edge-to-edge WebView (Android 15 —
+   Facebook/Instagram in-app browsers) reports a real inset on the web too, and
+   the nav must clear the system nav bar there as well. The gap this opens is
+   painted opaque by .bottom-safe-bg, which reads the same token. */
 .bottom-nav-position {
   bottom: var(--sai-bottom);
 }

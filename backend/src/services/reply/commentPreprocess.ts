@@ -103,6 +103,10 @@ export function preprocessCommentText(opts: {
  * is, NOT a hardcoded Arabic. All other comments defer to `detectCommentLanguage`,
  * which already falls back to post language when the comment is script-less.
  *
+ * A comment written in a script this backend cannot NAME (Bengali, Thai, CJK,
+ * Cyrillic, Hebrew …) is handled first and separately: it resolves to 'unknown'
+ * so the ai-worker names it, never to the post's language. See the body.
+ *
  * "No language signal" is decided by the detector's CONFIDENCE, not word count: a
  * Latin comment that matched zero English function words sits at the 0.5 floor
  * (acronyms, lone product names like "course"/"iPhone"), whereas a genuine English
@@ -128,6 +132,27 @@ export function resolveCommentLanguage(
     postMessage: string | undefined,
     kbText: string | undefined,
 ): string {
+    // A script the BACKEND cannot name is still a positive signal — the customer
+    // wrote in a real language, we simply have no name for it here. Defer: return
+    // 'unknown' so the generator omits the explicit override and the ai-worker's
+    // Unicode resolver names it (Thai, Cyrillic, CJK, Hebrew, Bengali, …).
+    //
+    // Without this, detectCommentLanguage's post fallback fires for ANY 'unknown'
+    // and the post's language travels as an EXPLICIT hint — which outranks every
+    // link of the worker's chain, including its own script detection. That made
+    // the worker's Unicode resolver dead code on this path: a Bengali comment on
+    // an Arabic post was answered in Arabic in production (2026-08-16,
+    // «অনেক সুন্দর» → «شكراً على كلامك الجميل! 🌟»), and so were Thai, Hindi,
+    // Cyrillic and Chinese comments, all of which the worker can name.
+    //
+    // Deliberately keyed on the COMMENT's own script, not on `effectiveLang`:
+    // emoji-only and punctuation-only comments carry no letters at all, so they
+    // keep falling through to the post language (their documented purpose, and
+    // what the engagement-post CTA cases depend on).
+    if (detectLanguageCode(commentForAI) === 'unknown' && hasNonLatinScript(commentForAI)) {
+        return 'unknown';
+    }
+
     const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
     if (!isLowSignalLatinToken(commentForAI)) return effectiveLang;
 

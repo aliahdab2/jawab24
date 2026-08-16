@@ -77,6 +77,14 @@ export function detectLanguageOrNull(text: string): string | null {
     if (/\p{Script=Myanmar}/u.test(text)) return 'my';
     if (/\p{Script=Thai}/u.test(text)) return 'th';
     if (/\p{Script=Devanagari}/u.test(text)) return 'hi';
+    // Bengali and Tamil: same 1:1 script→language reasoning as the branches
+    // above, added when real traffic arrived (62 Bengali comments, 2026-08-16 —
+    // one of them answered in Arabic). Bengali script also writes Assamese; 'bn'
+    // is the majority approximation, exactly as Han→'zh' is above. To add the
+    // next script, add a line here — `displayLanguageName` names any ISO code
+    // via Intl, so no second table needs touching.
+    if (/\p{Script=Bengali}/u.test(text)) return 'bn';
+    if (/\p{Script=Tamil}/u.test(text)) return 'ta';
     if (/\p{Script=Cyrillic}/u.test(text)) return 'ru';
     if (/\p{Script=Hebrew}/u.test(text)) return 'he';
     if (/\p{Script=Latin}/u.test(text)) {

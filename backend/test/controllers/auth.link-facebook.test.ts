@@ -57,6 +57,13 @@ vi.mock('../../src/services/pages', () => ({
     pagesService: { syncFromFacebook: vi.fn().mockResolvedValue(undefined) },
 }));
 
+// Login/link paths resolve the caller's partner status for the nav entry.
+// Stubbed here so this suite keeps its narrow db mock; the restricted-caller
+// test below asserts the controller never even asks on a scoped session.
+vi.mock('../../src/services/partnerAccess', () => ({
+    isPartnerUser: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'ws-1' }]),
@@ -71,6 +78,7 @@ import { authService, ACCESS_TOKEN_EXPIRY, EMBEDDED_BREAKOUT_TOKEN_EXPIRY } from
 import { facebookService } from '../../src/services/facebook';
 import { pagesService } from '../../src/services/pages';
 import { workspaceService } from '../../src/services/workspace';
+import { isPartnerUser } from '../../src/services/partnerAccess';
 
 describe('AuthController - linkFacebook', () => {
     let authController: AuthController;
@@ -276,7 +284,12 @@ describe('AuthController - linkFacebook', () => {
                 // switcher whose every other entry 403s.
                 [{ id: 'ws-9' }],
                 'ws-9',
+                // A RESTRICTED session proves a store, not a person: the Partner
+                // entry must be force-cleared here exactly as isAdmin is, and
+                // the lookup skipped entirely rather than merely ignored.
+                { isPartner: false },
             );
+            expect(isPartnerUser).not.toHaveBeenCalled();
         });
     });
 });

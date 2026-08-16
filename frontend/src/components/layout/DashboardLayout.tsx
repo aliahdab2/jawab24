@@ -10,7 +10,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
-import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { syncSessionState } from '@/lib/sessionSync';
 import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -68,6 +68,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isRTL = isRTLLocale(locale);
   const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
   const isAdmin = !!user?.isAdmin;
+  const isPartner = !!user?.isPartner;
   // Workspace role (owner/admin) gates the Team tile in the More overlay —
   // distinct from the platform `isAdmin` super-admin flag.
   const { isAdmin: canManageTeam } = useWorkspaceRole();
@@ -89,10 +90,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // those paths — derived from the same nav config the overlay uses, so
   // adding a nav entry can never silently miss this active-state check.
   const moreOverlayPaths = useMemo(
-    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam })
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, isPartner })
       .flatMap((g) => g.items.map((i) => i.href))
       .filter((href) => !BOTTOM_NAV_PATHS.includes(href)),
-    [isAdmin, canManageTeam],
+    [isAdmin, canManageTeam, isPartner],
   );
 
   // "More" stands in for every destination hidden behind it, so its badge is the
@@ -115,27 +116,13 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const pageTitle = title || tDashboard('title');
 
   useEffect(() => {
-    // Session Verification for Web (Cookie-based)
-    // We trust Zustand 'isAuthenticated' initially to show UI instantly,
-    // but we must verify the actual cookie is still valid in the background.
-    const verifySession = async () => {
-        if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
-            const { Capacitor } = await import('@capacitor/core');
-            if (!Capacitor.isNativePlatform()) {
-                 try {
-                     // Dynamic import to avoid circular dependencies
-                     const { authApi } = await import('@/lib/api');
-                     await authApi.getProfile();
-                 } catch {
-                     // If 401, the interceptor will handle redirect
-                     // But if network error or other, we might want to log it
-                     addErrorBreadcrumb('auth', 'Session verification failed');
-                 }
-            }
-        }
-    };
-
-    verifySession();
+    // Verifies the standing session AND re-reads server-resolved flags
+    // (isPartner). Runs on every platform — see the no-platform-branch note in
+    // lib/sessionSync.ts; gating it on web froze the Partner nav entry inside
+    // the app, which is the only surface that cannot reach /partner by URL.
+    if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
+      syncSessionState();
+    }
   }, [_hasHydrated, isAuthenticated]);
 
   useEffect(() => {
@@ -464,6 +451,10 @@ function MobileMenuOverlay({
   const tAdmin = useTranslations('admin');
   const isLandscape = useLandscape();
   const user = useAuthStore((s) => s.user);
+  // Read from the store rather than taken as a prop, like `user?.email` below:
+  // the More overlay is where a reseller on a phone actually finds the portal,
+  // so it must not depend on a parent remembering to pass the flag down.
+  const isPartner = !!user?.isPartner;
   // Workspace role gates the Team tile here (mirrors the desktop sidebar).
   const { isAdmin: canManageTeam } = useWorkspaceRole();
   useBodyScrollLock(isOpen);
@@ -484,7 +475,7 @@ function MobileMenuOverlay({
   // these, so whatever made it light up must be findable on a tile in here.
   const badgeCounts = useNavBadgeCounts();
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, isPartner });
   const menuItems = [
     ...navigationGroups
       .flatMap((group) => group.items)

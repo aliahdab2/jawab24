@@ -5,6 +5,7 @@ import { authService } from '../services/auth';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
 import { auditLog } from '../services/auditLog';
+import { isPartnerUser } from '../services/partnerAccess';
 
 // Mock dependencies
 vi.mock('../services/facebook', () => ({
@@ -48,6 +49,13 @@ vi.mock('../services/pages', () => ({
     pagesService: {
         syncFromFacebook: vi.fn(),
     }
+}));
+
+// Every login path resolves the caller's partner status for the nav entry.
+// Mocked at the module, not the db: the login controllers own WHETHER it is
+// asked, and partnerAccess.test.ts owns what the answer is built from.
+vi.mock('../services/partnerAccess', () => ({
+    isPartnerUser: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock('../services/settings', () => ({
@@ -152,6 +160,17 @@ describe('AuthController - Native Login', () => {
             'long-lived-token',
             undefined,
             expect.objectContaining({ info: expect.any(Function), warn: expect.any(Function), error: expect.any(Function), debug: expect.any(Function) }),
+        );
+        // Partner status must ride the login response: a standing session is
+        // the only thing the nav entry reads, and this path (native FB login)
+        // never revisits /auth/me on a device that stays signed in.
+        expect(isPartnerUser).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'user-id' }),
+        );
+        expect(authService.createAuthResponse).toHaveBeenCalledWith(
+            expect.anything(), expect.anything(), expect.anything(), expect.anything(),
+            expect.anything(), expect.anything(),
+            { isPartner: false },
         );
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
             token: 'session-jwt'

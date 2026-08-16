@@ -77,6 +77,10 @@ export interface AuthResponse {
         phone?: string | null;
         picture?: string;
         isAdmin?: boolean;
+        // Reseller / country rep: gates the Partner menu entry client-side. The
+        // /partner endpoints re-resolve it server-side on every call, so this is
+        // navigation only and never an authorization decision.
+        isPartner?: boolean;
     };
     settings?: {
         dashboardLanguage: string;

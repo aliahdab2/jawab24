@@ -6,7 +6,8 @@
         "http://localhost:3001/pricing",
         "http://localhost:3001/login",
         "http://localhost:3001/blog",
-        "http://localhost:3001/what-is-jawab24"
+        "http://localhost:3001/what-is-jawab24",
+        "http://localhost:3001/instagram"
       ],
       "numberOfRuns": 3,
       "settings": {

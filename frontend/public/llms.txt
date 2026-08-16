@@ -90,6 +90,7 @@ Native e-commerce integrations that sync product catalogs and verify prices so r
 
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
+- Instagram auto-reply: https://jawab24.com/instagram
 - Pricing: https://jawab24.com/pricing
 - Blog: https://jawab24.com/blog
 - Compare tools: https://jawab24.com/compare
