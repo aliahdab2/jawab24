@@ -403,5 +403,46 @@ describe('WorkspaceController', () => {
 
             expect(reply.send).toHaveBeenCalledWith(updated);
         });
+
+        it('drops unknown keys before they reach the JSONB merge (mass-assignment pin)', async () => {
+            // The route has no body schema and the service merges its input
+            // straight into workspaces.settings JSONB — this filter is the only
+            // guard. Break it (remove the isWorkspaceSettingsKey filter) and
+            // this test fails on the smuggled keys reaching the service.
+            vi.mocked(workspaceSettingsService.updateSettings).mockResolvedValue({} as any);
+            const reply = makeReply();
+
+            await workspaceController.updateSettings(
+                makeRequest({
+                    body: {
+                        aiEnabled: true,                       // known — must pass
+                        replyDelay: 7,                         // known — must pass
+                        notAField: 'planted',                  // unknown — must drop
+                        __proto__pollution: 'x',               // unknown — must drop
+                        futureFeatureFlag: true,               // unknown — must drop
+                    },
+                }),
+                reply,
+            );
+
+            expect(workspaceSettingsService.updateSettings).toHaveBeenCalledTimes(1);
+            const [wsId, forwarded] = vi.mocked(workspaceSettingsService.updateSettings).mock.calls[0];
+            expect(wsId).toBe(WS_ID);
+            expect(forwarded).toEqual({ aiEnabled: true, replyDelay: 7 });
+        });
+
+        it('keeps the leadStages sanitize path working through the filter', async () => {
+            // leadStages is a known key — the filter must not interfere with its
+            // dedicated sanitizer (invalid config still 400s).
+            const reply = makeReply();
+
+            await workspaceController.updateSettings(
+                makeRequest({ body: { leadStages: 'not-a-config' } }),
+                reply,
+            );
+
+            expect(reply.status).toHaveBeenCalledWith(400);
+            expect(workspaceSettingsService.updateSettings).not.toHaveBeenCalled();
+        });
     });
 });

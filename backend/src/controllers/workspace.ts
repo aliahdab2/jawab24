@@ -6,6 +6,7 @@ import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/w
 import { ROLE_HIERARCHY } from '../utils/roles';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import type { WorkspaceRole } from '@jawab24/shared';
+import { isWorkspaceSettingsKey } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 // Lead-config sanitizers are shared with the per-page override path
 // (PATCH /pages/:id/lead-config) so validation stays identical on both.
@@ -280,7 +281,17 @@ async function getSettings(request: WorkspaceRequest, reply: FastifyReply) {
 
 async function updateSettings(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        const updates = request.body as Record<string, unknown>;
+        // Key allowlist — this route has no body schema and merges straight into
+        // the workspaces.settings JSONB, so without the filter any admin-role
+        // member could plant arbitrary keys there (including future field names,
+        // pre-seeding a feature that has not shipped). isWorkspaceSettingsKey is
+        // compile-checked against the WorkspaceSettings interface, so schema and
+        // filter cannot drift. Unknown keys are dropped, not 400ed: stale clients
+        // sending a since-removed field must not lose the whole save.
+        const updates = Object.fromEntries(
+            Object.entries(request.body as Record<string, unknown>)
+                .filter(([key]) => isWorkspaceSettingsKey(key)),
+        );
         if ('leadStages' in updates) {
             const sanitized = sanitizeLeadStages(updates.leadStages);
             if (sanitized === undefined) {

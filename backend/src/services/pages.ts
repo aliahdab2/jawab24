@@ -596,12 +596,19 @@ export class PagesService {
         data: UpdatePageDTO,
         opts?: { skipGapResolution?: boolean },
     ) {
-        // Not a column — consumed below by applyMerchantEdit only.
-        const { businessProfileConfirmFields, ...columnData } = data;
-        const setData: Record<string, unknown> = {
-            ...columnData,
-            updatedAt: new Date(),
-        };
+        // EXPLICIT column allowlist — never spread the request body into .set().
+        // PUT /pages/:id registers no body schema (routes/pages.ts), so a spread
+        // let any admin-role caller write any column on a page row they own:
+        // workspace_id, user_id, access_token, whatsapp_* credentials, the kb_*
+        // version counters. Same shape as updateLeadConfig below.
+        // `businessProfileConfirmFields` is not a column (consumed by
+        // applyMerchantEdit), and `businessProfile` is assigned in the block
+        // below only after validation + provenance merge — neither belongs here.
+        const setData: Record<string, unknown> = { updatedAt: new Date() };
+        if ('name' in data) setData.name = data.name;
+        if ('accessToken' in data) setData.accessToken = data.accessToken;
+        if ('autoReplyEnabled' in data) setData.autoReplyEnabled = data.autoReplyEnabled;
+        if ('knowledgeBase' in data) setData.knowledgeBase = data.knowledgeBase;
 
         // Bump KB version when knowledge base content changes
         if (data.knowledgeBase !== undefined) {
@@ -630,7 +637,7 @@ export class PagesService {
             // Only tracked-field names are meaningful confirm targets; anything
             // else in the client list is dropped (defense against typos and
             // stale clients, not a validation error).
-            const confirmFields = (Array.isArray(businessProfileConfirmFields) ? businessProfileConfirmFields : [])
+            const confirmFields = (Array.isArray(data.businessProfileConfirmFields) ? data.businessProfileConfirmFields : [])
                 .filter((f): f is keyof BusinessProfile =>
                     (TRACKED_FIELDS as readonly string[]).includes(f));
             const { merchant, merchantProvenance } = applyMerchantEdit(
