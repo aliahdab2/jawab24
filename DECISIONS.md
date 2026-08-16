@@ -1852,12 +1852,18 @@ rather than split into a two-release expand/contract.
 **The measurement that redirected the work.** The owner asked why reply modes (D-083, PR #769,
 65 files) was needed when a merchant could write the purpose into their persona. Measured before
 answering: all 12 real production contact-asks from Shahin Resort (2026-08-01→08-15), each
-replayed at its exact thread state, temp 0, 2 runs — control (his live persona) **5/12 failing
-situations**; persona + explicit info instruction **0/12**; same in identity framing **0/12**;
-PR #769's INFO-DESK block **0/12**. A persona instruction equals the built feature on every case
+replayed at its exact thread state, temp 0, 2 runs/arm. Two control numbers exist and they are
+DIFFERENT measurements, not a contradiction: the prompt-arm replay
+(`reply-mode-full-replay-2026-08-16.md`) scored the live persona at **5/12 failing situations
+· 9 asks**, while the end-to-end effect gate (`per-page-persona-effect-gate-2026-08-16.md`,
+the full pipeline this PR ships through) scored the same control at **8/12 · 14 asks**. The
+treatment arms were clean in BOTH: persona + explicit info instruction **0/12**; same in
+identity framing **0/12**; PR #769's INFO-DESK block **0/12**; the shipped page override
+end-to-end **0/12, 0 promises**. A persona instruction equals the built feature on every case
 that actually fails. The D-019/D-051 argument ("rules lose to demonstrations") did not hold here
 and was withdrawn for this class. Transcripts:
-`~/.claude/plans/reply-mode-{persona-arm-probe,multiturn-replay,full-replay}-2026-08-16.md`.
+`~/.claude/plans/reply-mode-{persona-arm-probe,multiturn-replay,full-replay}-2026-08-16.md` and
+`~/.claude/plans/per-page-persona-effect-gate-2026-08-16.md`.
 
 **The ruling (owner, generic-first).** The behaviour is self-serve persona text; what is NOT
 self-serve is scope — `brandVoiceNotes*` was workspace-level while businesses are page-level
@@ -1891,5 +1897,8 @@ case pinning attribution. The E-4 grader gap (bare «ورقمك» punishing the 
 
 **PR #769 stays parked, not closed** (owner). Its unique remainders — `suppressPush` on lead
 alerts and leads-tab hiding — are re-evaluated after the InMedia pilot week; the INFO-DESK
-prompt block is redundant once page personas exist. UI surface (page-card row vs settings scope
-switcher) is deliberately deferred to pilot evidence; the backend is identical under either.
+prompt block is redundant once page personas exist. UI surface: the **settings scope switcher
+(option B) SHIPPED in the same PR** (owner call, 2026-08-16) — multi-page workspaces get a
+scope selector on the persona card; single-page merchants see no change. What stays deferred
+to pilot evidence is the page-card row (option A) and whether the switcher remains the
+long-term surface; the backend contract is identical under either.
