@@ -188,6 +188,10 @@ export const pagesApi = {
   // default; an omitted key leaves it unchanged; a value is a full override.
   updateLeadConfig: (id: string, data: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null }) =>
     api.patch(`/pages/${id}/lead-config`, data),
+  // Per-page persona override (D-084). null reverts to the workspace persona;
+  // a record pins this page's own persona (backend auto-translates on save).
+  updateBrandVoice: (id: string, brandVoiceNotesMulti: Record<string, string> | null) =>
+    api.patch(`/pages/${id}/brand-voice`, { brandVoiceNotesMulti }),
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };

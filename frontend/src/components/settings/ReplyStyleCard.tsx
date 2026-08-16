@@ -122,6 +122,71 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     setTestPage(selectedPage);
   };
 
+  // ── Per-page persona scope (D-084) ──────────────────────────────────────
+  // The switcher renders only for multi-page workspaces (the agency case the
+  // feature exists for) — a single-page merchant keeps today's card untouched.
+  // 'workspace' scope = the existing settings-save flow, byte-identical.
+  // A page scope edits pages.brand_voice_notes_multi via its own PATCH: an
+  // EXPLICIT customize/revert pair — never a silent fork on first keystroke.
+  const connectedPages = pages.filter((p) => p.isConnected !== false);
+  const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
+  const scopedPage = personaScope === 'workspace' ? null : connectedPages.find((p) => p.id === personaScope) ?? null;
+
+  // A page override counts only when a language entry has real content —
+  // sourceLang bookkeeping and cleared values mean "inherit" (mirrors the
+  // backend resolver's rule exactly).
+  const pageOverride = (scopedPage?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
+  const pageHasOverride = Object.entries(pageOverride)
+    .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
+  const pageOverrideText = pageOverride[currentLang]
+    || Object.entries(pageOverride).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
+    || '';
+
+  const [pageEditing, setPageEditing] = useState(false);
+  const [pageDraft, setPageDraft] = useState('');
+  const [pageSaving, setPageSaving] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const switchScope = (next: 'workspace' | string) => {
+    setPersonaScope(next);
+    setPageEditing(false);
+    setPageError(null);
+  };
+
+  const startCustomizing = () => {
+    // Prefill with what the page effectively uses today (its own text, else the
+    // inherited workspace text) so the merchant edits, not retypes.
+    setPageDraft(pageHasOverride ? pageOverrideText : value);
+    setPageEditing(true);
+    setPageError(null);
+  };
+
+  const applyPagePatch = async (payload: Record<string, string> | null) => {
+    if (!scopedPage) return;
+    setPageSaving(true);
+    setPageError(null);
+    try {
+      const response = await pagesApi.updateBrandVoice(scopedPage.id, payload);
+      const updated = response.data as Page;
+      setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, brandVoiceNotesMulti: updated.brandVoiceNotesMulti } : p)));
+      setPageEditing(false);
+    } catch {
+      setPageError(t('replyStyle.pageSaveError'));
+    } finally {
+      setPageSaving(false);
+    }
+  };
+
+  const savePagePersona = () => {
+    const text = pageDraft.trim();
+    if (!text) return;
+    // Send only the current language — the backend runs the same auto-translate
+    // helper as the workspace save and fills the other supported languages.
+    void applyPagePatch({ [currentLang]: text.slice(0, MAX_BRAND_VOICE_LENGTH) });
+  };
+
+  const revertPagePersona = () => void applyPagePatch(null);
+
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
 
@@ -186,20 +251,127 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
 
       {/* Brand voice notes — promoted to hero. */}
       <div className="mb-3">
+        {/* Persona scope switcher (D-084) — multi-page workspaces only. */}
+        {connectedPages.length > 1 && (
+          <div className="mb-2 flex items-center gap-2 flex-wrap p-2 rounded-xl bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/30">
+            <span id="persona-scope-label" className="text-xs font-bold text-brand-700 dark:text-brand-300 shrink-0">
+              {t('replyStyle.scopeLabel')}
+            </span>
+            <Select
+              value={personaScope}
+              onChange={switchScope}
+              options={[
+                { value: 'workspace', label: t('replyStyle.scopeAllPages') },
+                ...connectedPages.map((p) => ({ value: p.id, label: p.name ?? '' })),
+              ]}
+              aria-labelledby="persona-scope-label"
+              compact
+            />
+            {scopedPage && (
+              <span
+                className={clsx(
+                  'text-[11px] font-bold px-2 py-0.5 rounded-full',
+                  pageHasOverride
+                    ? 'bg-accent-100 text-accent-700 dark:bg-accent-500/20 dark:text-accent-300'
+                    : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {pageHasOverride ? t('replyStyle.customChip') : t('replyStyle.inheritedChip')}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between mb-1.5">
           <label htmlFor="brandVoiceNotes" className="text-sm font-bold text-foreground">
-            {t('replyStyle.brandVoice')}
+            {scopedPage ? t('replyStyle.pageBrandVoice', { page: scopedPage.name ?? '' }) : t('replyStyle.brandVoice')}
           </label>
-          {isAutoTranslated && (
+          {!scopedPage && isAutoTranslated && (
             <span className="text-[11px] text-muted-foreground">{t('replyStyle.autoTranslated')}</span>
           )}
         </div>
+
+        {/* Page scope: explicit inherit/customize states — no silent fork. */}
+        {scopedPage && !pageEditing && (
+          <div className="rounded-2xl border border-theme-border p-3 flex flex-col gap-2">
+            <p className="text-sm leading-relaxed whitespace-pre-line" dir="auto">
+              {pageHasOverride
+                ? pageOverrideText
+                : <span className="text-muted-foreground italic">{value || t('replyStyle.noWorkspacePersona')}</span>}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={startCustomizing}
+                disabled={pageSaving}
+                className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 transition-colors"
+              >
+                {pageHasOverride ? t('replyStyle.editPagePersona') : t('replyStyle.customizeBtn')}
+              </button>
+              {pageHasOverride && (
+                <button
+                  type="button"
+                  onClick={revertPagePersona}
+                  disabled={pageSaving}
+                  aria-busy={pageSaving}
+                  className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  {t('replyStyle.revertBtn')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {scopedPage && pageEditing && (
+          <div className="flex flex-col gap-2">
+            <InputFieldWrapper
+              className="border border-theme-border hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+              trailing={
+                pageDraft.length >= MAX_BRAND_VOICE_LENGTH * 0.8
+                  ? <CharCounter value={pageDraft.length} max={MAX_BRAND_VOICE_LENGTH} />
+                  : null
+              }
+            >
+              <textarea
+                aria-label={t('replyStyle.pageBrandVoice', { page: scopedPage.name ?? '' })}
+                className="w-full bg-transparent border-none p-4 pe-14 rounded-2xl resize-y text-sm leading-relaxed min-h-[140px] placeholder:text-muted-foreground placeholder:italic focus:outline-none focus:ring-0"
+                dir="auto"
+                maxLength={MAX_BRAND_VOICE_LENGTH}
+                rows={5}
+                placeholder={t('replyStyle.brandVoicePlaceholder')}
+                value={pageDraft}
+                onChange={(e) => setPageDraft(e.target.value)}
+              />
+            </InputFieldWrapper>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={savePagePersona}
+                disabled={pageSaving || !pageDraft.trim()}
+                aria-busy={pageSaving}
+                className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              >
+                {t('replyStyle.savePageBtn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPageEditing(false); setPageError(null); }}
+                disabled={pageSaving}
+                className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                {t('replyStyle.cancelPageEdit')}
+              </button>
+            </div>
+          </div>
+        )}
+        {scopedPage && pageError && (
+          <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{pageError}</p>
+        )}
 
         {/* Empty state — offer the generic persona skeleton (name · voice · style · goal),
             modeled on the structure high-converting merchants use. Business-agnostic, so it
             fits any merchant; the old hardcoded retail examples were dropped as misleading
             (e.g. "free shipping over 200 SAR" makes no sense for a travel or training page). */}
-        {isEmpty && (
+        {!scopedPage && isEmpty && (
           <div className="mb-2">
             <button
               type="button"
@@ -212,6 +384,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           </div>
         )}
 
+        {!scopedPage && (
         <InputFieldWrapper
           className="border border-theme-border hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
           trailing={
@@ -239,6 +412,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             onChange={(e) => updateValue(e.target.value)}
           />
         </InputFieldWrapper>
+        )}
       </div>
 
       {/* Tone + Test — single compact row. */}

@@ -13,6 +13,7 @@ vi.mock('next/dynamic', () => ({
 vi.mock('@/lib/api', () => ({
   pagesApi: {
     getAll: vi.fn(),
+    updateBrandVoice: vi.fn(),
   },
 }));
 
@@ -174,5 +175,75 @@ describe('ReplyStyleCard', () => {
     expect(screen.queryByText(/moved to Advanced Settings/i)).not.toBeInTheDocument();
 
     window.localStorage.removeItem('hold_relocation_seen');
+  });
+
+  // ── Per-page persona scope (D-084) ──────────────────────────────────────
+  describe('persona scope switcher', () => {
+    const TWO_PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: { ar: 'شخصية الصفحة', sourceLang: 'manual' } },
+    ];
+
+    it('renders only for multi-page workspaces', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [{ id: 'p1', name: 'Only Page', isConnected: true }],
+      } as never);
+      const { rerender } = render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText(/Testing on/i)).toBeInTheDocument());
+      expect(screen.queryByText(/Assistant persona for/i)).not.toBeInTheDocument();
+
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      rerender(<ReplyStyleCard key="two" settings={makeSettings()} setSettings={vi.fn()} />);
+      expect(await screen.findByText(/Assistant persona for/i)).toBeInTheDocument();
+    });
+
+    it('page scope without override shows inherit state; customize → save PATCHes the page', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateBrandVoice).mockResolvedValue({
+        data: { ...TWO_PAGES[0], brandVoiceNotesMulti: { en: 'Info desk only', sourceLang: 'en' } },
+      } as never);
+
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await screen.findByText(/Assistant persona for/i);
+
+      // Scope select is the first combobox (rendered above the test-page picker).
+      const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+      fireEvent.change(scopeSelect, { target: { value: 'p1' } });
+
+      expect(screen.getByText(/Inherited from settings/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Customize for this page/i }));
+
+      const textarea = screen.getByRole('textbox', { name: /Persona for Resort Page/i });
+      fireEvent.change(textarea, { target: { value: 'Info desk only' } });
+      fireEvent.click(screen.getByRole('button', { name: /Save page persona/i }));
+
+      await waitFor(() => {
+        // Sends ONLY the current language — backend auto-translates the rest.
+        expect(pagesApi.updateBrandVoice).toHaveBeenCalledWith('p1', { en: 'Info desk only' });
+      });
+      expect(await screen.findByText(/Custom for this page/i)).toBeInTheDocument();
+    });
+
+    it('a page with an override shows the custom chip; revert PATCHes null', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateBrandVoice).mockResolvedValue({
+        data: { ...TWO_PAGES[1], brandVoiceNotesMulti: null },
+      } as never);
+
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await screen.findByText(/Assistant persona for/i);
+
+      const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+      fireEvent.change(scopeSelect, { target: { value: 'p2' } });
+
+      expect(screen.getByText(/Custom for this page/i)).toBeInTheDocument();
+      expect(screen.getByText('شخصية الصفحة')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Revert to default/i }));
+      await waitFor(() => {
+        expect(pagesApi.updateBrandVoice).toHaveBeenCalledWith('p2', null);
+      });
+      expect(await screen.findByText(/Inherited from settings/i)).toBeInTheDocument();
+    });
   });
 });
