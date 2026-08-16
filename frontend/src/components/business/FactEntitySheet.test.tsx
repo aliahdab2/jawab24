@@ -335,4 +335,46 @@ describe('FactEntitySheet — save preserves what the form does not display', ()
     // …and never our word for someone else's business.
     expect(screen.queryByRole('region', { name: 'Dates' })).toBeNull();
   });
+
+  /** The Damascene note regression (2026-08-16): a 152-char «ملاحظة» died on
+   *  the server's old 100-char cap behind a misleading toast. The cap is now
+   *  600, and crossing it must say so AND hold the save — never a silent 400. */
+  it('an over-limit note blocks Save with a visible alert; the 152-char note saves', () => {
+    const NOTE_152 =
+      'محاور الدورة: مفهوم الجودة وإدارة الجودة، رواد الجودة، مفاهيم أساسية ضبط وتأكيد الجودة وإدارة الجودة الشاملة، ادوات الجودة، مقاييس الجودة، تكاليف الجودة';
+    const courseRow = row({
+      id: 'row-course',
+      name: 'دورة إدارة الجودة',
+      attributes: [{ label: 'ملاحظة', value: 'توقيت مسائي' }],
+    });
+    const prices = collection({ id: 'col-prices', label: 'أسعار الدورات', rows: [courseRow] });
+    const unit: FactEntityUnit = {
+      title: 'دورة إدارة الجودة',
+      faceLabel: null,
+      faceValue: null,
+      base: { row: courseRow, collection: prices },
+      sessions: [],
+      sessionCollection: null,
+    };
+    const onSave = vi.fn();
+    render(
+      <FactEntitySheet unit={unit} baseCollection={prices} saving={false} onSave={onSave} onClose={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /ملاحظة/ }));
+    const note = screen.getByLabelText('ملاحظة');
+
+    fireEvent.change(note, { target: { value: 'م'.repeat(601) } });
+    expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(saveButton()).toBeDisabled();
+    fireEvent.click(saveButton());
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(note, { target: { value: NOTE_152 } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const body = onSave.mock.calls[0][0] as FactEntitySaveBody;
+    expect(body.upserts[0].attributes).toEqual([{ label: 'ملاحظة', value: NOTE_152 }]);
+  });
 });

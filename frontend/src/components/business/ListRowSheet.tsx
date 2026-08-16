@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Trash2, Plus } from 'lucide-react';
-import { parseMerchantPrice } from '@jawab24/shared';
+import { parseMerchantPrice, MAX_FACT_ATTR_LABEL_LENGTH, MAX_FACT_ROW_ATTRIBUTES } from '@jawab24/shared';
+import { ValueLengthFeedback, factValueTooLong } from './ValueLengthFeedback';
 import { DetailSheet, Button, InfoPopover, Toggle } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { formatCatalogPrice } from '@/utils/priceFormat';
@@ -9,8 +10,10 @@ import { formatPlainDate } from '@/utils/dateUtils';
 import type { FactRowDto } from '@/lib/api';
 
 /** Attributes per row are capped so a merchant can't balloon the prompt block
- *  one field at a time — 12 is far above any real row (max seen: 4). */
-const MAX_ATTRS = 12;
+ *  one field at a time — 12 is far above any real row (max seen: 4). The
+ *  SERVER'S constant, not a local literal: the server used to cap at the
+ *  catalog's 6 and silently sliced off fields 7–12 that this sheet accepted. */
+const MAX_ATTRS = MAX_FACT_ROW_ATTRIBUTES;
 
 /** Mirrors the server's `name` cap. A silent client cap is friendlier than a
  *  400 the merchant cannot read, and it keeps VALIDATION responses meaningful:
@@ -155,6 +158,10 @@ export function ListRowSheet({
   };
   const anyLabelTaken = attrs.some((a, i) => a.added && labelTaken(a.label, i));
   const dateRangeInvalid = !!date && !!endDate && endDate < date;
+  /** Over-limit fields say so inline (ValueLengthFeedback) and block Save,
+   *  instead of the server's 400 that used to surface as a misleading
+   *  «راجع السعر والتواريخ» toast on a long note. */
+  const anyValueTooLong = attrs.some((a) => factValueTooLong(a.value));
   /** The SAME reader the server validates with (@jawab24/shared), so what the
    *  sheet accepts and what the API accepts cannot drift. Empty is valid — a
    *  row without a price is an ordinary row, not an incomplete one. */
@@ -201,7 +208,7 @@ export function ListRowSheet({
       ]);
 
   const submit = () => {
-    if (saving || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid) return;
+    if (saving || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid || anyValueTooLong) return;
     const keptAttrs = attrs
       .map((a) => ({ label: a.label.trim(), value: a.value.trim() }))
       .filter((a) => a.label.length > 0 && a.value.length > 0);
@@ -278,6 +285,7 @@ export function ListRowSheet({
                     onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, label: e.target.value } : p)))}
                     dir={a.label ? 'auto' : undefined}
                     aria-invalid={labelTaken(a.label, i) || undefined}
+                    maxLength={MAX_FACT_ATTR_LABEL_LENGTH}
                     className={inputClass}
                   />
                   {labelTaken(a.label, i) && (
@@ -296,8 +304,11 @@ export function ListRowSheet({
                     value={a.value}
                     onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
                     dir={a.value ? 'auto' : undefined}
+                    aria-invalid={factValueTooLong(a.value) || undefined}
+                    aria-describedby={`list-row-attr-${i}-length`}
                     className={inputClass}
                   />
+                  <ValueLengthFeedback value={a.value} fieldId={`list-row-attr-${i}`} />
                 </div>
                 <button
                   type="button"
@@ -319,8 +330,11 @@ export function ListRowSheet({
                   value={a.value}
                   onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
                   dir={a.value ? 'auto' : undefined}
+                  aria-invalid={factValueTooLong(a.value) || undefined}
+                  aria-describedby={`list-row-attr-${i}-length`}
                   className={inputClass}
                 />
+                <ValueLengthFeedback value={a.value} fieldId={`list-row-attr-${i}`} />
               </>
             )}
           </div>
@@ -480,7 +494,7 @@ export function ListRowSheet({
           size="sm"
           onClick={submit}
           loading={saving && !confirmingDelete}
-          disabled={!dirty || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid}
+          disabled={!dirty || !name.trim() || anyLabelTaken || dateRangeInvalid || priceInvalid || anyValueTooLong}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >
