@@ -525,6 +525,19 @@ export const MAX_ROWS_PER_COLLECTION = 500;
  *  say so, which it cannot do from a literal that only the column and the Zod
  *  schema know about. */
 export const MAX_LIST_LABEL_LENGTH = 120;
+/** A fact-row attribute VALUE. The entity editor renders note fields (ملاحظة)
+ *  as an open textarea — a paragraph surface, not a label:value chip — so this
+ *  is a paragraph cap. 600 matches the catalog description cap; total prompt
+ *  cost stays bounded by the renderer's FACT_BLOCK_MAX_CHARS regardless.
+ *  (Was 100 via the catalog attr schema: real merchant notes at ~150 chars
+ *  failed with a misleading «check price and dates» error, 2026-08-16.) */
+export const MAX_FACT_ATTR_VALUE_LENGTH = 600;
+/** A fact-row attribute LABEL («ملاحظة», «التوقيت») — a chip, kept short. */
+export const MAX_FACT_ATTR_LABEL_LENGTH = 30;
+/** Per-row cap on attributes. 12, NOT the catalog's 6: the entity form itself
+ *  offers up to 12 fields (and 12 structured shadows) — a lower server cap
+ *  would silently slice off what the form accepted. */
+export const MAX_FACT_ROW_ATTRIBUTES = 12;
 
 /** A label+value detail on a catalog item ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
  *  Free text by design — the AI consumes these only as rendered prompt TEXT, so

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Trash2, Plus, CalendarClock, ChevronDown, CalendarDays, Clock, Calendar, Tag, Banknote, AlignLeft } from 'lucide-react';
-import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
+import { MAX_FACT_ATTR_VALUE_LENGTH, type FactStructuredFieldValue, type FactStructuredValues } from '@jawab24/shared';
 import { SidePanel, Button, Select, InfoPopover } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { formatPlainDate } from '@/utils/dateUtils';
@@ -14,6 +14,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { normalizeForGrouping } from '@/utils/factListGrouping';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
 import { collectionAttributeLabels, sessionValueKind, unitHasSchedules, type FactEntityUnit } from '@/utils/factListLayout';
+import { ValueLengthFeedback, factValueTooLong } from './ValueLengthFeedback';
 
 interface SessionDraft {
   /** undefined = a new session authored in this sheet. */
@@ -266,6 +267,16 @@ export function FactEntitySheet({
     (s) => s.startsAt && s.endsAt && s.endsAt < s.startsAt,
   );
 
+  /** Over-limit guard, counted on exactly what buildBody would SEND
+   *  (resolveSessionField / trim), never on raw draft state — a stale long
+   *  draft behind an active structured control is not sent, so it must not
+   *  block the save either. Fields say so inline (ValueLengthFeedback) and
+   *  Save is disabled on the same predicate. */
+  const anyValueTooLong =
+    factValueTooLong(faceValue) ||
+    baseLabels.some((l) => factValueTooLong(baseValues[l] ?? '')) ||
+    sessions.some((s) => sessionLabels.some((l) => factValueTooLong(resolveSessionField(s, l).value)));
+
   /** The session key value carried over to every session row: whatever the
    *  existing sessions already use, so gating keeps finding them. */
   const sessionKeyValue = (): string | null => {
@@ -399,7 +410,7 @@ export function FactEntitySheet({
   };
 
   const submit = () => {
-    if (saving || !name.trim() || anyDateInvalid) return;
+    if (saving || !name.trim() || anyDateInvalid || anyValueTooLong) return;
     const body = buildBody();
     if (body.upserts.length + body.deletes.length === 0) return;
     onSave(body);
@@ -547,15 +558,20 @@ export function FactEntitySheet({
             unit.faceLabel,
             <Tag className="w-3.5 h-3.5" />,
             faceValue.trim() || null,
-            <input
-              id="entity-face"
-              type="text"
-              value={faceValue}
-              onChange={(e) => setFaceValue(e.target.value)}
-              aria-label={unit.faceLabel}
-              dir={faceValue ? 'auto' : undefined}
-              className={inputClass}
-            />,
+            <>
+              <input
+                id="entity-face"
+                type="text"
+                value={faceValue}
+                onChange={(e) => setFaceValue(e.target.value)}
+                aria-label={unit.faceLabel}
+                aria-invalid={factValueTooLong(faceValue) || undefined}
+                aria-describedby="entity-face-length"
+                dir={faceValue ? 'auto' : undefined}
+                className={inputClass}
+              />
+              <ValueLengthFeedback value={faceValue} fieldId="entity-face" />
+            </>,
           )}
           {baseCollection && propertyRow(
             'base:price',
@@ -690,9 +706,12 @@ export function FactEntitySheet({
                                 setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
                               }
                               aria-label={label}
+                              aria-invalid={factValueTooLong(s.values[label] ?? '') || undefined}
+                              aria-describedby={`${fieldId}-length`}
                               dir={s.values[label] ? 'auto' : undefined}
                               className={inputClass}
                             />
+                            <ValueLengthFeedback value={s.values[label] ?? ''} fieldId={fieldId} />
                             {switchLink(false)}
                           </>
                         ));
@@ -837,18 +856,23 @@ export function FactEntitySheet({
                       (s.values[label] ?? '').trim()
                         ? <span className="block truncate" dir="auto">{(s.values[label] ?? '').trim()}</span>
                         : null,
-                      <textarea
-                        id={`entity-session-${i}-${label}`}
-                        value={s.values[label] ?? ''}
-                        onChange={(e) =>
-                          setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
-                        }
-                        aria-label={label}
-                        dir={s.values[label] ? 'auto' : undefined}
-                        rows={2}
-                        placeholder={t('lists.notePlaceholder')}
-                        className={`${inputClass} !min-h-[64px] py-2 resize-y`}
-                      />,
+                      <>
+                        <textarea
+                          id={`entity-session-${i}-${label}`}
+                          value={s.values[label] ?? ''}
+                          onChange={(e) =>
+                            setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
+                          }
+                          aria-label={label}
+                          aria-invalid={factValueTooLong(s.values[label] ?? '') || undefined}
+                          aria-describedby={`entity-session-${i}-${label}-length`}
+                          dir={s.values[label] ? 'auto' : undefined}
+                          rows={2}
+                          placeholder={t('lists.notePlaceholder')}
+                          className={`${inputClass} !min-h-[64px] py-2 resize-y`}
+                        />
+                        <ValueLengthFeedback value={s.values[label] ?? ''} fieldId={`entity-session-${i}-${label}`} />
+                      </>,
                     ))}
                     </div>
                     )}
@@ -882,16 +906,21 @@ export function FactEntitySheet({
               (baseValues[label] ?? '').trim()
                 ? <span className="block truncate" dir="auto">{(baseValues[label] ?? '').trim()}</span>
                 : null,
-              <textarea
-                id={`entity-base-${label}`}
-                value={baseValues[label] ?? ''}
-                onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
-                aria-label={label}
-                dir={baseValues[label] ? 'auto' : undefined}
-                rows={3}
-                placeholder={t('lists.notePlaceholder')}
-                className={`${inputClass} !min-h-[88px] py-2.5 resize-y`}
-              />,
+              <>
+                <textarea
+                  id={`entity-base-${label}`}
+                  value={baseValues[label] ?? ''}
+                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
+                  aria-label={label}
+                  aria-invalid={factValueTooLong(baseValues[label] ?? '') || undefined}
+                  aria-describedby={`entity-base-${label}-length`}
+                  dir={baseValues[label] ? 'auto' : undefined}
+                  rows={3}
+                  placeholder={t('lists.notePlaceholder')}
+                  className={`${inputClass} !min-h-[88px] py-2.5 resize-y`}
+                />
+                <ValueLengthFeedback value={baseValues[label] ?? ''} fieldId={`entity-base-${label}`} />
+              </>,
             ))}
           </div>
         )}
@@ -923,22 +952,32 @@ export function FactEntitySheet({
       </div>
 
       {/* Sticky footer inside the panel's scroll area */}
-      <div className="sticky bottom-0 inset-x-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
-          {tc('cancel')}
-        </Button>
-        {/* The primary action owns the footer (expert point 8): full remaining
-            width and a verb that says what it saves, on every viewport. */}
-        <Button
-          size="sm"
-          onClick={submit}
-          loading={saving && !confirmingDelete}
-          disabled={!name.trim() || anyDateInvalid}
-          icon={<Check className="w-4 h-4" />}
-          className="flex-1 h-11"
-        >
-          {t('lists.saveChanges')}
-        </Button>
+      <div className="sticky bottom-0 inset-x-0 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
+        {/* Why Save is dead, said WHERE the merchant is looking: the offending
+            field can sit inside a collapsed row, so its inline alert alone can
+            leave a mysteriously disabled button. */}
+        {anyValueTooLong && (
+          <p role="alert" className="mb-2 text-xs text-red-600 dark:text-red-400">
+            {t('lists.valueTooLong', { max: MAX_FACT_ATTR_VALUE_LENGTH })}
+          </p>
+        )}
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
+            {tc('cancel')}
+          </Button>
+          {/* The primary action owns the footer (expert point 8): full remaining
+              width and a verb that says what it saves, on every viewport. */}
+          <Button
+            size="sm"
+            onClick={submit}
+            loading={saving && !confirmingDelete}
+            disabled={!name.trim() || anyDateInvalid || anyValueTooLong}
+            icon={<Check className="w-4 h-4" />}
+            className="flex-1 h-11"
+          >
+            {t('lists.saveChanges')}
+          </Button>
+        </div>
       </div>
     </SidePanel>
   );

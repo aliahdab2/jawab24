@@ -3,6 +3,9 @@ import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
     MAX_ROWS_PER_COLLECTION,
     MAX_LIST_LABEL_LENGTH,
+    MAX_FACT_ATTR_VALUE_LENGTH,
+    MAX_FACT_ATTR_LABEL_LENGTH,
+    MAX_FACT_ROW_ATTRIBUTES,
     MAX_PHONE_DESCRIPTION_LENGTH,
     normalizePhoneEntries,
     isUsablePhoneEntry,
@@ -412,8 +415,12 @@ const CatalogDateInput = z.preprocess(
 
 /** Label+value details. Lenient by design (the extractor and the form both
  *  feed this): non-string sides are coerced, blank rows dropped, overflow
- *  sliced to the cap — a bad detail must never sink the whole item. */
-const CatalogAttributesInput = z.preprocess(
+ *  sliced to the cap — a bad detail must never sink the whole item.
+ *  Parameterized because the two consumers cap differently: catalog attrs are
+ *  chips on one prompt line (short value, 6 per item), fact-row attrs carry the
+ *  entity editor's open note textarea (paragraph value, 12 per row — the form's
+ *  own field cap; a lower server cap silently sliced off accepted fields). */
+const makeAttributesInput = (maxValueLength: number, maxCount: number) => z.preprocess(
     (raw) => {
         if (raw === null || raw === undefined) return null;
         if (!Array.isArray(raw)) return raw; // let the array schema reject it
@@ -427,14 +434,16 @@ const CatalogAttributesInput = z.preprocess(
                 };
             })
             .filter((r): r is { label: string; value: string } => !!r && r.label !== '' && r.value !== '')
-            .slice(0, MAX_CATALOG_ITEM_ATTRIBUTES);
+            .slice(0, maxCount);
         return rows.length === 0 ? null : rows;
     },
     z.array(z.object({
-        label: z.string().min(1).max(30),
-        value: z.string().min(1).max(100),
-    })).max(MAX_CATALOG_ITEM_ATTRIBUTES).nullable(),
+        label: z.string().min(1).max(MAX_FACT_ATTR_LABEL_LENGTH),
+        value: z.string().min(1).max(maxValueLength),
+    })).max(maxCount).nullable(),
 );
+const CatalogAttributesInput = makeAttributesInput(100, MAX_CATALOG_ITEM_ATTRIBUTES);
+const FactAttributesInput = makeAttributesInput(MAX_FACT_ATTR_VALUE_LENGTH, MAX_FACT_ROW_ATTRIBUTES);
 
 export const CatalogItemSchema = z.object({
     type: z.enum(['product', 'service', 'course', 'vehicle', 'custom']).default('product'),
@@ -503,7 +512,7 @@ export const FactStructuredValuesInput = z
 
 const FactRowFields = {
     name: z.string().trim().min(1, 'Name is required').max(200),
-    attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
+    attributes: FactAttributesInput.optional().transform(v => v ?? null),
     structured: FactStructuredValuesInput.nullable().optional().transform(v => (v && Object.keys(v).length ? v : null)),
     price: PriceInput.optional().transform(v => v ?? null),
     currency: CurrencyInput.optional().transform(v => v ?? null),
@@ -529,7 +538,7 @@ export const FactRowSchema = z.object(FactRowFields)
  */
 const FactRowSparseFields = {
     name: z.string().trim().min(1).max(200).optional(),
-    attributes: CatalogAttributesInput.optional(),
+    attributes: FactAttributesInput.optional(),
     /** An EMPTY shadow map means "no shadow" — normalize {} to an explicit
      *  clear so jsonb never stores a meaningless {} (absence still passes
      *  through untouched). */
