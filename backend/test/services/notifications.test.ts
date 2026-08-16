@@ -1280,6 +1280,31 @@ describe('NotificationService', () => {
             }
         });
 
+        // The channel-reconnect notices exist to make a merchant ACT, and they can
+        // only be acted on if the copy names the number/account that died. The
+        // sweeps assert their half (that they pass `{number}`); this asserts the
+        // other half against the REAL templates — drop the placeholder from either
+        // locale and the merchant gets a notice about an unnamed channel.
+        it('whatsapp templates render the number', () => {
+            const reconnect = buildTemplatePayload('whatsapp_reconnect_needed', { number: '+966 55 000 0000' });
+            expect(reconnect.bodies.en).toContain('+966 55 000 0000');
+            expect(reconnect.bodies.ar).toContain('+966 55 000 0000');
+
+            const expiring = buildTemplatePayload('whatsapp_token_expiring', { number: '+966 55 000 0000', days: '3' });
+            expect(expiring.bodies.en).toContain('+966 55 000 0000');
+            expect(expiring.bodies.ar).toContain('+966 55 000 0000');
+            expect(expiring.bodies.en).toContain('3');
+            expect(expiring.bodies.ar).toContain('3');
+        });
+
+        it('instagram reconnect template renders the account handle', () => {
+            const payload = buildTemplatePayload('instagram_reconnect_needed', { account: '@shop' });
+            expect(payload.bodies.en).toContain('@shop');
+            expect(payload.bodies.ar).toContain('@shop');
+            expect(payload.bodies.en).not.toContain('{account}');
+            expect(payload.bodies.ar).not.toContain('{account}');
+        });
+
         it('renders the shared English label into the English push body', () => {
             for (const reason of KB_GAP_REASONS) {
                 const payload = buildTemplatePayload(

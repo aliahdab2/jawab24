@@ -307,15 +307,15 @@ export async function markWhatsAppNeedsReconnect(
 
         if (!page.userId) return;
         const label = page.whatsappDisplayPhoneNumber || page.name || 'WhatsApp';
-        await notificationService.sendNotification(page.userId, {
-            type: 'whatsapp_reconnect_needed',
-            titles: { en: 'WhatsApp Reconnection Needed', ar: 'يلزم إعادة ربط واتساب' },
-            bodies: {
-                en: `Your WhatsApp connection for ${label} has expired. Reconnect to keep replying to your customers.`,
-                ar: `انتهت صلاحية ربط واتساب للرقم ${label}. أعد الربط لمتابعة الرد على عملائك.`,
-            },
-            data: { action: 'reconnect_whatsapp' },
-        });
+        // Through the template registry — the copy below used to be restated here
+        // verbatim, which is how a merchant-facing string can drift from the one
+        // place every other notification is translated from (Rule 10.8).
+        await notificationService.sendTemplateNotification(
+            page.userId,
+            'whatsapp_reconnect_needed',
+            { number: label },
+            { action: 'reconnect_whatsapp' },
+        );
     } catch (error) {
         captureError(error, 'Failed to flag WhatsApp reconnect', {
             tags: { service: 'whatsapp-token-health' },
@@ -336,15 +336,12 @@ async function warnExpiringSoon(
     if (!page.userId) return;
     try {
         const label = page.whatsappDisplayPhoneNumber || page.name || 'WhatsApp';
-        await notificationService.sendNotification(page.userId, {
-            type: 'whatsapp_token_expiring',
-            titles: { en: 'WhatsApp Connection Expiring', ar: 'ربط واتساب على وشك الانتهاء' },
-            bodies: {
-                en: `Your WhatsApp connection for ${label} expires in ${days} day(s). Reconnect now so replies never stop.`,
-                ar: `ينتهي ربط واتساب للرقم ${label} خلال ${days} يوم. أعد الربط الآن حتى لا تتوقف الردود.`,
-            },
-            data: { action: 'reconnect_whatsapp' },
-        });
+        await notificationService.sendTemplateNotification(
+            page.userId,
+            'whatsapp_token_expiring',
+            { number: label, days: String(days) },
+            { action: 'reconnect_whatsapp' },
+        );
     } catch (error) {
         captureError(error, 'Failed to send WhatsApp expiry warning', {
             tags: { service: 'whatsapp-token-health' },
