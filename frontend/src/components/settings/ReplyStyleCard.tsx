@@ -309,6 +309,15 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 {t('replyStyle.overriddenCount', { count: overriddenCount })}
               </span>
             )}
+            {/* Live explainer — teaches the feature in the merchant's own words:
+                what the current selection means and what saving here will do. */}
+            <p className="w-full text-[11px] text-brand-700/80 dark:text-brand-300/80 mt-0.5" dir="auto">
+              {!scopedPage
+                ? t('replyStyle.allPagesExplainer')
+                : pageHasOverride
+                  ? t('replyStyle.customExplainer')
+                  : t('replyStyle.inheritedExplainer')}
+            </p>
           </div>
         )}
         <div className="flex items-center justify-between mb-1.5">
@@ -427,6 +436,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             onChange={(e) => updateValue(e.target.value)}
           />
         </InputFieldWrapper>
+        )}
+        {/* The general persona saves through the page-bottom «حفظ الإعدادات»
+            button (it batches with tone + the other settings), unlike the
+            page-scope inline save — say so the moment the merchant edits,
+            or they look for an inline button that isn't there. */}
+        {!scopedPage && hasChanges && (
+          <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.workspaceSaveHint')}</p>
         )}
       </div>
 

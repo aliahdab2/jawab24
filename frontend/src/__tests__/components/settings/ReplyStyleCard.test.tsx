@@ -147,11 +147,11 @@ describe('ReplyStyleCard', () => {
       } as never);
       const { rerender } = render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
       await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
-      expect(screen.queryByText(/Assistant persona for/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Editing persona for/i)).not.toBeInTheDocument();
 
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       rerender(<ReplyStyleCard key="two" settings={makeSettings()} setSettings={vi.fn()} />);
-      expect(await screen.findByText(/Assistant persona for/i)).toBeInTheDocument();
+      expect(await screen.findByText(/Editing persona for/i)).toBeInTheDocument();
     });
 
     it('page scope shows the editor directly; save is the fork point and PATCHes the page', async () => {
@@ -161,12 +161,12 @@ describe('ReplyStyleCard', () => {
       } as never);
 
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Assistant persona for/i);
+      await screen.findByText(/Editing persona for/i);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
 
-      expect(screen.getByText(/Inherited from settings/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Uses the general persona/i).length).toBeGreaterThan(0);
       // No «customize» step (owner call, 2026-08-16): the editor is immediate,
       // and the SAVE button — disabled until the draft differs — is the fork.
       const saveBtn = screen.getByRole('button', { name: /Save page persona/i });
@@ -181,7 +181,7 @@ describe('ReplyStyleCard', () => {
         // Sends ONLY the current language — backend auto-translates the rest.
         expect(pagesApi.updateBrandVoice).toHaveBeenCalledWith('p1', { en: 'Info desk only' });
       });
-      expect(await screen.findByText(/Custom for this page/i)).toBeInTheDocument();
+      expect((await screen.findAllByText(/Has its own persona/i)).length).toBeGreaterThan(0);
     });
 
     it('a page with an override shows the custom chip; revert PATCHes null', async () => {
@@ -191,19 +191,19 @@ describe('ReplyStyleCard', () => {
       } as never);
 
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Assistant persona for/i);
+      await screen.findByText(/Editing persona for/i);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p2' } });
 
-      expect(screen.getByText(/Custom for this page/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Has its own persona/i).length).toBeGreaterThan(0);
       expect(screen.getByDisplayValue('شخصية الصفحة')).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /Revert to default/i }));
       await waitFor(() => {
         expect(pagesApi.updateBrandVoice).toHaveBeenCalledWith('p2', null);
       });
-      expect(await screen.findByText(/Inherited from settings/i)).toBeInTheDocument();
+      expect((await screen.findAllByText(/Uses the general persona/i)).length).toBeGreaterThan(0);
     });
 
     it('never renders a separate «Testing on» row — the scope switcher is the one selector', async () => {
@@ -211,7 +211,7 @@ describe('ReplyStyleCard', () => {
       // the persona they just wrote and see no effect (owner call, 2026-08-16).
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
-      await screen.findByText(/Assistant persona for/i);
+      await screen.findByText(/Editing persona for/i);
       expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
