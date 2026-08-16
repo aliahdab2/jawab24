@@ -173,12 +173,12 @@ describe('every NEXT_PUBLIC_* read by the app is a real build input', () => {
    * close, so treat adding one as a decision, not a formality.
    */
   const NOT_BUILD_INPUTS: Record<string, string> = {
-    // Reads `process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com'` — the
-    // fallback IS the production value, so an unset var is already correct.
-    NEXT_PUBLIC_SITE_URL: 'has the production value as its literal fallback',
-    // Cosmetic only: a build date in the legal/marketing page footer, already
-    // written with an "unknown" branch.
-    NEXT_PUBLIC_BUILD_TIME: 'cosmetic footer stamp with an explicit fallback',
+    // Supplied by next.config.js `env`, which defaults it to the production
+    // origin — so the build never depends on the deploy passing it.
+    NEXT_PUBLIC_SITE_URL: 'defaulted to the production origin in next.config.js env',
+    // GENERATED, not passed: next.config.js `env` sets it to new Date() at build
+    // time. Wiring a build arg for it would be dead config — nothing to pass.
+    NEXT_PUBLIC_BUILD_TIME: 'generated at build time by next.config.js env',
     // Documented in featureFlags.ts as a LOCAL-DEV override of the hardcoded
     // pilot list; production is meant to use the built-in list.
     NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS: 'local-dev override by design',
