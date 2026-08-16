@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Dark-mode launch/splash background: the app's dark page background
-         (#060d18 from globals.css). Overrides values/colors.xml when the phone's
-         system theme is dark, so the splash matches the dark app. -->
-    <color name="splash_background">#060D18</color>
-</resources>

@@ -9,7 +9,8 @@
         picks this -v31 variant automatically on API 31+.
     -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <!-- Fixed dark-brand background, identical in light and dark. -->
+        <!-- Fixed dark-brand background, identical in light and dark — see the
+             comment on @color/splash_background before adding any night variant. -->
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <!-- The actual app icon (teal/orange gradient + white bubble), so the
              splash shows the recognizable brand mark, not a monochrome shape.
