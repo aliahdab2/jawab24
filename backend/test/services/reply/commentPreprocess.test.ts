@@ -182,6 +182,27 @@ describe('resolveCommentLanguage', () => {
         expect(resolveCommentLanguage('Icdl', arabicPost, '')).toBe('ar');
     });
 
+    it('does NOT mirror the post for genuine English prose (prod 2026-08-16)', () => {
+        // The reported bug: an English comment under Jawab24's own Arabic boosted
+        // post was answered in Arabic. "Very nice" matches no ENGLISH_COMMON word,
+        // so it used to score en@0.5 — identical to the acronym "ICDL" — and got
+        // mirrored. The dual-mode public nudge, which resolves via
+        // detectCommentLanguage, said English on the SAME comment.
+        const arabicPost = '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا باستخدام الذكاء الصناعي';
+        expect(resolveCommentLanguage('Very nice', arabicPost, undefined)).toBe('en');
+        expect(resolveCommentLanguage('Good morning man', arabicPost, undefined)).toBe('en');
+    });
+
+    it('still mirrors the post for a name-shaped or Arabizi comment', () => {
+        // The two classes that must keep deferring: a tagged friend's display name
+        // (tinyld reads transliterated names as en@1.00) and romanized Arabic.
+        const arabicPost = '#عروض على دورات #الكومبيوتر دورة icdl';
+        expect(resolveCommentLanguage('Weaam Aldoukha', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('Kawthar Mohammed', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('kam el se3r', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('sho hal as3ar', arabicPost, undefined)).toBe('ar');
+    });
+
     it('mirrors the post language for a Latin token in ANY detector-named language (not just Arabic)', () => {
         // French post → French reply
         expect(resolveCommentLanguage('iPhone', 'Découvrez les nouvelles offres à prix réduit', undefined)).toBe('fr');

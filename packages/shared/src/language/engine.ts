@@ -135,6 +135,127 @@ export function tinyldLatinOverride(text: string): string | null {
 }
 
 /**
+ * Minimum tinyld accuracy for reading pure-ASCII text as genuine English.
+ * Deliberately far above `tinyldLatinOverride`'s thresholds: that rule picks a
+ * language among many candidates, this one only ever confirms the language
+ * legacy already defaulted to, so it can afford to accept nothing but a
+ * top-of-scale call. Measured over the whole prod corpus (2026-08-16): at 0.9
+ * the promoted set is genuine English prose with zero transliterated names and
+ * zero Arabizi; lowering it buys nothing (every promotion in that corpus scores
+ * 1.00) and only widens the door.
+ */
+export const ASCII_ENGLISH_MIN_ACCURACY = 0.9;
+
+/**
+ * True when every token starts with a capital letter — how a display name is
+ * written ("Weaam Aldoukha", "Kawthar Mohammed"), and how prose is not.
+ *
+ * Script-agnostic by construction: `\p{Lu}` is "uppercase letter in ANY script",
+ * and scripts without case (Arabic, Thai, CJK) have no `\p{Lu}` at all, so this
+ * returns false for them rather than mislabelling them. That matters for the
+ * languages this product has not added yet — the predicate does not need
+ * revisiting when it does.
+ */
+export function isNameShaped(text: string): boolean {
+    const words = text.trim().split(/\s+/).filter(w => /\p{L}/u.test(w));
+    // Leading non-letters are skipped so "@Ali", "(Sara" still read as capitalized.
+    return words.length > 0 && words.every(w => /^[^\p{L}]*\p{Lu}/u.test(w));
+}
+
+/**
+ * True when pure-ASCII Latin text is CONFIDENTLY English — the half of the
+ * `en @ 0.5` floor that is real English prose rather than "Latin script,
+ * recognized nothing".
+ *
+ * WHY THIS EXISTS, AND WHY IT IS NOT `tinyldLatinOverride` ————————————————————
+ * The override above requires a NON-ASCII letter, which makes "ASCII input is
+ * never overridden" true by construction and keeps Arabizi safe. The cost of
+ * that gate is that ASCII English gets no help either: legacy scores English by
+ * counting ENGLISH_COMMON function words, so a short phrase that contains none
+ * — "Very nice", "Good morning man", "I don't understand arabic" — lands on the
+ * same 0.5 floor as the acronym "ICDL". `isLowSignalLatinToken` then reads that
+ * floor as "no language signal", and `resolveCommentLanguage` mirrors the POST's
+ * language: an English comment on an Arabic post was answered in Arabic
+ * (production, 2026-08-16 — Jawab24's own boosted post).
+ *
+ * This predicate is therefore the mirror image of the override's gate, narrowed
+ * on every axis that could let the dangerous classes in:
+ *
+ *   - ASCII LETTERS ONLY: the exact complement of `tinyldLatinOverride`, so the
+ *     two rules partition the input space and neither can shadow the other. A
+ *     diacritic-bearing sentence stays that rule's business.
+ *   - ENGLISH ONLY: the single language legacy already defaults to for Latin
+ *     script, so a promotion can only ever change our CERTAINTY, never the
+ *     language. This is what makes the Arabizi mislabels harmless — "sho hal
+ *     as3ar" → Kirundi@1.00 and "kam el se3r" → Spanish@0.23 are not 'en', so
+ *     they keep deferring to context exactly as before.
+ *   - ≥2 words: a bare token ("ICDL", "Nice", "Up") carries no sentence
+ *     structure to read, and is precisely what the low-signal rule protects.
+ *   - NO DIGIT FUSED TO LETTERS: a structural (not lexical) marker of romanized
+ *     Arabic, where digits stand in for Arabic letters — se3r (ع), 3ayez, 2ana,
+ *     7abibi. A word list would be the banned approach here; orthography is a
+ *     property of the text itself.
+ *   - NOT NAME-SHAPED: every token capitalized is how a display name is written
+ *     ("Weaam Aldoukha", "Kawthar Mohammed"), and tinyld reads transliterated
+ *     Arabic names as en@1.00 — its `accuracy` is a ranking, not a probability,
+ *     so no threshold can separate them. Prose capitalizes its first word, not
+ *     all of them. This guard is why the 2026-08-01 defer-to-history contract
+ *     survives (backend/test/services/deferToHistory.test.ts pins it, and caught
+ *     this rule's first draft). It fails SAFE in both directions: an excluded
+ *     phrase ("Good Morning", "ONE LOVE") simply keeps today's behaviour.
+ *   - accuracy ≥ {@link ASCII_ENGLISH_MIN_ACCURACY}.
+ *
+ * Unlike the override this is NOT flag-gated: the class it fixes is live in
+ * production today, and the promotion is confined to text legacy scored as
+ * "recognized nothing" (see the `englishMatches === 0` caller in detector.ts),
+ * so it can never overrule a positive reading.
+ *
+ * WHEN THIS PRODUCT ADDS MORE LANGUAGES ——————————————————————————————————————
+ * English here is NOT a product preference; it is the one language legacy
+ * already assigns to any unrecognized Latin script, which is why confirming it
+ * can change certainty but never the language. Other Latin-script languages are
+ * named by {@link tinyldLatinOverride} + OVERRIDE_LANGS (24 codes today) — that
+ * is the list to extend, not this rule.
+ *
+ * The hazard this rule DOES carry into a wider language set is ASCII-only
+ * non-English text that tinyld reads as English. Real traffic already has it:
+ * Taglish ("Mag kano naman po down payment kung sakali?") scores en@1.00 in both
+ * the normal and heavy models. Today that is harmless — those merchants' threads
+ * are English anyway — but a merchant replying in Tagalog (or any romanized
+ * language we later support) would have this assert English over their thread.
+ * The fix at that point is a promotion allowlist keyed on the languages we
+ * actually support, not a threshold change: tinyld's `accuracy` is a ranking,
+ * not a probability, and reads 1.00 for all of these.
+ */
+export function isConfidentAsciiEnglish(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.split(/\s+/).length < 2) return false;
+
+    const letters = trimmed.replace(/[^\p{L}]/gu, '');
+    if (!letters) return false;
+    // \x00-\x7F is an ASCII-range bound, not a control-character match — same
+    // pattern and same suppression as the gate in tinyldLatinOverride.
+    // eslint-disable-next-line no-control-regex
+    if (/[^\x00-\x7F]/.test(letters)) return false;
+
+    // Arabizi orthography: a digit adjacent to a letter INSIDE a token. Plain
+    // numbers ("Sun 4 o'clock", "Year 2027") are untouched — they are separate
+    // tokens and carry no such fusion.
+    if (/[a-zA-Z][0-9]|[0-9][a-zA-Z]/.test(trimmed)) return false;
+
+    if (isNameShaped(trimmed)) return false;
+
+    let guesses: { lang: string; accuracy: number }[];
+    try {
+        guesses = getDetectAll()(trimmed);
+    } catch {
+        return false; // detector failure (incl. load failure) must never break reply generation
+    }
+    const top = guesses[0];
+    return !!top && top.lang === 'en' && top.accuracy >= ASCII_ENGLISH_MIN_ACCURACY;
+}
+
+/**
  * Flag-aware entry point for the detector surfaces.
  *
  * - LANG_ENGINE=tinyld → run the override.

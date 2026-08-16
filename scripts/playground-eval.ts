@@ -3035,6 +3035,17 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Prod replay Shahin World 2026-08-08: accent-free French must be mirrored in French even though the detector reads it as uncertain English and the thread anchor is English. Guard for the VISIBLY_FOREIGN_MIRROR demonstration.',
     },
+    {
+        id: 772, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
+        message: 'Very nice',
+        page: 'support',
+        postMessage: '🤖 جواب24 بيرد على تعليقات ورسائل عملائك تلقائيًا باستخدام الذكاء الصناعي!\nردود فورية وذكية، على مدار الساعة، على فيسبوك وإنستجرام وواتساب الأعمال ✨\n🎁 جرّب مجانًا لمدة شهر كامل على jawab24.com',
+        expected: {
+            replyMethod: ['ai'],
+            replyDominantScript: 'latin',
+        },
+        notes: 'PROD REPLAY (2026-08-16, Jawab24\'s own boosted post): an English comment on an Arabic post was answered in Arabic. "Very nice" matches no ENGLISH_COMMON word, so it scored en@0.5 — the same "recognized nothing" floor as the acronym "ICDL" — and resolveCommentLanguage mirrored the POST language. The dual-mode public nudge said English on the SAME comment, which is how the split surfaced. Fixed by isConfidentAsciiEnglish (engine.ts): pure-ASCII text tinyld reads as English at ≥0.9, ≥2 words, no Arabizi digit-fusion, not name-shaped. The counter-cases (Arabizi, transliterated names, bare tokens still mirroring the post) are pinned as unit tests in commentPreprocess.test.ts + language.test.ts — this case is the end-to-end mirror.',
+    },
 
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)
