@@ -10,7 +10,10 @@ export default defineConfig({
     // an assertion change here "fails" in N unrelated branches. Only test THIS tree.
     exclude: ['test/integration/**', 'node_modules/**', 'dist/**', '**/.claude/worktrees/**'],
     // Coverage instrumentation can slow tests ~3-10x; default 5s timeout is
-    // too tight for some heavier suites (instagramReply takes ~4.5s under coverage).
+    // too tight for the heavier pipeline suites under load. (The original
+    // culprit — instagramReply at ~4.5s — turned out to be unmocked real HTTPS
+    // to graph.facebook.com, killed by the network guard in test/setup.ts; it
+    // now runs in ~0.1s. The margin stays for genuinely heavy files.)
     testTimeout: 15000,
     coverage: {
       provider: 'v8',

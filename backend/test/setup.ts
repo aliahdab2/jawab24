@@ -1,5 +1,29 @@
 import { vi } from 'vitest';
 
+// Unit tests must never reach the real network. Without this guard they silently
+// did: instagramAdapter.fetchSenderName issued real HTTPS calls to graph.facebook.com
+// (~300ms each, ~2s for the first TLS handshake), and fbAxios retries transient
+// errors with backoff — under CPU/network load those round trips exceeded vitest's
+// 15s testTimeout and failed the pre-deploy gate with a mass false red (2026-08-16).
+// The guard is a lazy vi.mock, NOT a top-level `import axios` + defaults patch:
+// a static import here re-loads axios for every isolated test file (~80ms × 368
+// files ≈ 27s of aggregate setup, measured), while the factory below only runs
+// for files whose module graph actually pulls axios in — which were already
+// paying the import. Instances from axios.create merge defaults at create time,
+// so they inherit the throwing adapter too. The rejection carries no
+// `code`/`response`, so fbAxios's getRetryDelay classifies it as non-retryable —
+// no backoff, no hang. A test file's own vi.mock('axios') still wins over this
+// one. Regression-pinned by test/lib/networkGuard.test.ts.
+vi.mock('axios', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('axios')>();
+  actual.default.defaults.adapter = (config) => {
+    throw new Error(
+      `Unit tests must not make real HTTP requests: ${config.method?.toUpperCase()} ${actual.default.getUri(config)} — mock the service or module boundary instead`,
+    );
+  };
+  return actual;
+});
+
 // Mock the database module BEFORE any services are imported
 vi.mock('../src/db', () => ({
   db: {
