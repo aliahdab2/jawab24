@@ -46,11 +46,24 @@ describe('bottom safe-area strip tracks the bottom nav lift', () => {
     expect(stripHeight).toBe(navLift);
   });
 
-  it('does not gate the strip behind .is-native (the web gap bug)', () => {
-    // Any `.is-native`-scoped rule that sets a height on this strip means the
-    // web case has been left transparent again.
-    expect(bodiesOf('.is-native .bottom-safe-bg')).toHaveLength(0);
+  it('does not gate the strip HEIGHT behind .is-native (the web gap bug)', () => {
+    // A `.is-native`-scoped height means the web case is transparent again.
+    for (const body of bodiesOf('.is-native .bottom-safe-bg')) {
+      expect(declaration(body, 'height')).toBeNull();
+    }
     expect(css).not.toMatch(/\.bottom-safe-bg\s*\{[^}]*height:\s*0/);
+  });
+
+  it('keeps the .is-native display rule that survives the landscape hide', () => {
+    // Looks redundant (a div is display:block already) and is NOT: specificity
+    // (0,2,1) outranks the landscape `display: none` (0,1,0), which is the only
+    // reason the strip still paints behind the iOS home indicator in native
+    // landscape. Deleting it as a cleanup is a silent native regression — it
+    // happened while fixing the web gap. The painted outcome is pinned in the
+    // browser by e2e/safe-area-cascade.spec.ts; this guards the source.
+    const bodies = bodiesOf('.is-native .bottom-safe-bg');
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.some((b) => declaration(b, 'display') === 'block')).toBe(true);
   });
 
   it('collapses the strip in landscape, where the nav sits at bottom: 0', () => {
