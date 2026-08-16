@@ -89,7 +89,12 @@ async function demoPlugin(fastify: FastifyInstance) {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 8. Build response — mirror the real Facebook login (workspaces)
+            // 8. Build response — mirror the real Facebook login (workspaces).
+            // No `isPartner` flag on purpose: the demo user is SHARED, so a
+            // partner row that happened to match it would put a reseller's
+            // portal entry in front of every demo visitor. The flag stays false
+            // here; `/auth/me` reconciles the real answer on the first page load
+            // for anyone who genuinely is a partner (see lib/sessionSync.ts).
             const response: AuthResponse = authService.createAuthResponse(
                 user,
                 token,
