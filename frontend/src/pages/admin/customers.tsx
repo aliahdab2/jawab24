@@ -10,38 +10,14 @@ import { isRTLLocale } from '@/utils/locale';
 import { Card, Button, Modal } from '@/components/ui';
 import { PartnerManagerModal } from '@/components/admin/PartnerManagerModal';
 import clsx from 'clsx';
-import { adminApi, type AdminPartner } from '@/lib/api';
+import { adminApi, type AdminCustomer, type AdminPagination, type AdminPartner } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useDebounce } from '@/hooks';
 
-interface Customer {
-    id: string;
-    email: string | null;
-    name: string | null;
-    phone: string | null;
-    phoneCountry: string | null;
-    facebookId: string | null;
-    createdAt: string | null;
-    partner: { id: string; name: string } | null;
-    partnerNote: string | null;
-    subscription: {
-        id: string;
-        status: string;
-        planId: string;
-        planName: string | null;
-        planSlug: string | null;
-        currentPeriodStart: string | null;
-        currentPeriodEnd: string | null;
-        paymentMethod: string | null;
-    } | null;
-}
-
-interface Pagination {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-}
+// Shapes live in lib/api next to the call that returns them — the partner
+// manager's account picker reads the same rows.
+type Customer = AdminCustomer;
+type Pagination = AdminPagination;
 
 const STATUS_COLORS: Record<string, string> = {
     active: 'status-success',
