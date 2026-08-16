@@ -13,6 +13,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { Card } from '@/components/ui';
 import { PartnerStatusPill } from '@/components/partner/PartnerStatusPill';
 import { formatTimestampDate, formatDaysAgo } from '@/utils/dateUtils';
+import { formatUsd } from '@/utils/pricing';
 
 /**
  * Partner Portal — the read-only page a reseller / country rep sees.
@@ -23,7 +24,7 @@ import { formatTimestampDate, formatDaysAgo } from '@/utils/dateUtils';
  * redirect them to their dashboard.
  */
 
-type StatusFilter = 'all' | 'trialing' | 'trial_expired' | 'active' | 'at_risk';
+type StatusFilter = 'all' | 'trialing' | 'trial_expired' | 'active' | 'at_risk' | 'unpaid';
 
 const AT_RISK: PartnerMerchantStatus[] = ['past_due', 'expired', 'canceled', 'paused'];
 
@@ -31,7 +32,7 @@ export default function PartnerPortalPage() {
     const router = useRouter();
     const t = useTranslations('partner');
     const tc = useTranslations('common');
-    const { intlLocale } = useLanguage();
+    const { intlLocale, language } = useLanguage();
     const { isAuthenticated, _hasHydrated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
     const [filter, setFilter] = useState<StatusFilter>('all');
@@ -80,11 +81,13 @@ export default function PartnerPortalPage() {
         trialEnded: merchants.filter(m => m.status === 'trial_expired').length,
         active: merchants.filter(m => m.status === 'active').length,
         atRisk: merchants.filter(m => AT_RISK.includes(m.status)).length,
+        unpaid: merchants.filter(m => m.unpaid).length,
     }), [merchants]);
 
     const visible = useMemo(() => {
         if (filter === 'all') return merchants;
         if (filter === 'at_risk') return merchants.filter(m => AT_RISK.includes(m.status));
+        if (filter === 'unpaid') return merchants.filter(m => m.unpaid);
         return merchants.filter(m => m.status === filter);
     }, [merchants, filter]);
 
@@ -97,6 +100,7 @@ export default function PartnerPortalPage() {
         { id: 'trial_expired', label: t('filterTrialEnded') },
         { id: 'active', label: t('filterActive') },
         { id: 'at_risk', label: t('filterAtRisk') },
+        { id: 'unpaid', label: t('filterUnpaid') },
     ];
 
     if (!mounted || !_hasHydrated || !isAuthenticated || (!data && !isLoading && !error)) {
@@ -146,13 +150,14 @@ export default function PartnerPortalPage() {
                     ) : (
                         <>
                             {/* Stats */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                                 {[
                                     { n: counts.total, label: t('statTotal') },
                                     { n: counts.trialing, label: t('statTrialing') },
                                     { n: counts.trialEnded, label: t('statTrialEnded') },
                                     { n: counts.active, label: t('statActive') },
                                     { n: counts.atRisk, label: t('statAtRisk') },
+                                    { n: counts.unpaid, label: t('statUnpaid') },
                                 ].map((stat) => (
                                     <Card key={stat.label} padding="md">
                                         <div className="text-2xl font-display font-bold text-foreground tabular-nums">
@@ -162,6 +167,32 @@ export default function PartnerPortalPage() {
                                     </Card>
                                 ))}
                             </div>
+
+                            {/* Money. Gross and what is still with the rep — never a
+                                percentage (owner ruling 2026-08-16); the server does
+                                not send one. */}
+                            {data && (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {[
+                                        { cents: data.payments.collectedCents, label: t('moneyCollected'), emphasis: false },
+                                        { cents: data.payments.outstandingCents, label: t('moneyOutstanding'), emphasis: true },
+                                        { cents: data.payments.settledCents, label: t('moneySettled'), emphasis: false },
+                                    ].map((tile) => (
+                                        <Card key={tile.label} padding="md">
+                                            <div
+                                                className={clsx(
+                                                    'text-xl font-display font-bold tabular-nums',
+                                                    tile.emphasis && tile.cents > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-foreground',
+                                                )}
+                                                dir="ltr"
+                                            >
+                                                {formatUsd(tile.cents, language, 2)}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">{tile.label}</div>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Status filters */}
                             <div className="flex flex-wrap gap-2" role="group" aria-label={t('tableStatus')}>
@@ -199,6 +230,7 @@ export default function PartnerPortalPage() {
                                                         t('tablePlan'),
                                                         t('tableStatus'),
                                                         t('tableEnds'),
+                                                        t('tableLastPaid'),
                                                         t('tableSignedUp'),
                                                         t('tableLastSeen'),
                                                     ].map((h) => (
@@ -248,10 +280,23 @@ export default function PartnerPortalPage() {
                                                                 {m.planName || '—'}
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                                <PartnerStatusPill status={m.status} />
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <PartnerStatusPill status={m.status} />
+                                                                    {/* Payment state is orthogonal to subscription
+                                                                        state — an 'active' merchant can still owe us —
+                                                                        so it is its own chip, not a status value. */}
+                                                                    {m.unpaid && (
+                                                                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full alert-warning">
+                                                                            {t('chipUnpaid')}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </td>
                                                             <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap tabular-nums">
                                                                 {formatTimestampDate(endDate(m), intlLocale)}
+                                                            </td>
+                                                            <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap tabular-nums">
+                                                                {m.lastPaidAt ? formatTimestampDate(m.lastPaidAt, intlLocale) : '—'}
                                                             </td>
                                                             <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap tabular-nums">
                                                                 {formatTimestampDate(m.createdAt, intlLocale)}

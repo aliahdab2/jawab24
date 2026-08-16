@@ -1006,12 +1006,44 @@ export interface PartnerMerchant {
   lastSeenAt: string | null;
   /** Admin-authored follow-up note for this merchant. */
   adminNote: string | null;
+  /** When money was last received from this merchant, by any method. */
+  lastPaidAt: string | null;
+  /** Behind on payment: the billed period ended and nothing covers past it. */
+  unpaid: boolean;
+}
+
+/** Payment methods a reseller can record. `stripe` is system-only. */
+export type PaymentMethod = 'cash' | 'sham_cash' | 'bank_transfer' | 'other';
+export type PaymentCollector = 'stripe' | 'partner' | 'admin';
+export type PaymentStatus = 'recorded' | 'settled' | 'void';
+
+export interface PartnerPayment {
+  id: string;
+  amountCents: number;
+  /** Gross minus the rep's cut — what he hands over. No rate is ever sent. */
+  netOwedCents: number;
+  currency: string;
+  method: PaymentMethod | 'stripe';
+  collectedBy: PaymentCollector;
+  status: PaymentStatus;
+  paidAt: string;
+  settledAt: string | null;
+  coversPeriodStart: string | null;
+  coversPeriodEnd: string | null;
+  externalRef: string | null;
+  note: string | null;
 }
 
 export interface PartnerOverview {
-  // Commission % is deliberately absent — the portal never shows it.
+  // The commission PERCENTAGE is deliberately absent from this whole surface —
+  // the portal shows money (gross, owed, handed over), never the rate.
   partner: { name: string };
   merchants: PartnerMerchant[];
+  payments: {
+    collectedCents: number;
+    outstandingCents: number;
+    settledCents: number;
+  };
 }
 
 export interface PartnerMerchantPage {
@@ -1103,6 +1135,46 @@ export interface PartnerMerchantDetail {
     ownerName: string | null;
     memberCount: number;
   }>;
+  payments: PartnerPayment[];
+}
+
+/**
+ * A ledger row as the ADMIN console sees it — the same row the partner gets,
+ * plus the commission snapshot. `commissionPct`/`commissionCents` exist on this
+ * type and NOT on `PartnerPayment` because the reseller surface must never
+ * receive them (owner ruling 2026-08-16).
+ */
+export interface AdminPayment {
+  id: string;
+  userId: string;
+  partnerId: string | null;
+  amountCents: number;
+  currency: string;
+  method: PaymentMethod | 'stripe';
+  collectedBy: PaymentCollector;
+  status: PaymentStatus;
+  commissionPct: number;
+  commissionCents: number;
+  coversPeriodStart: string | null;
+  coversPeriodEnd: string | null;
+  externalRef: string | null;
+  note: string | null;
+  paidAt: string;
+  settledAt: string | null;
+  createdAt: string;
+}
+
+export interface RecordPaymentPayload {
+  amountCents: number;
+  method: PaymentMethod;
+  paidAt: string;
+  currency?: string;
+  coversPeriodStart?: string;
+  coversPeriodEnd?: string;
+  externalRef?: string;
+  note?: string;
+  /** Per submission attempt — a double-tap must not become two payments. */
+  idempotencyKey?: string;
 }
 
 // Partner Portal API — read-only surface for resellers. Any authenticated user
@@ -1116,6 +1188,16 @@ export const partnerApi = {
   // 404 when the merchant is not attributed to the calling partner.
   getMerchant: async (userId: string) => {
     const response = await api.get<{ success: boolean; data: PartnerMerchantDetail }>(`/partner/merchants/${userId}`);
+    return response.data;
+  },
+
+  // Record money the reseller collected by hand. The only write on this
+  // surface; 404 when the merchant is not attributed to the caller.
+  recordPayment: async (userId: string, payload: RecordPaymentPayload) => {
+    const response = await api.post<{ success: boolean; data: { id: string } }>(
+      `/partner/merchants/${userId}/payments`,
+      payload,
+    );
     return response.data;
   },
 };
@@ -1383,6 +1465,41 @@ export const adminApi = {
         createdAt: string;
         paidAt: string | null;
       }>;
+      error?: string;
+    };
+  },
+
+  // Payments ledger — every dollar received from this merchant, whoever
+  // collected it. Unlike `listPaymentRequests` (Stripe collect LINKS, which may
+  // never be paid) these rows are money that actually arrived.
+  listPayments: async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}/payments`);
+    return response.data as { success: boolean; data?: AdminPayment[]; error?: string };
+  },
+
+  recordPayment: async (userId: string, payload: RecordPaymentPayload & { collectedByPartner?: boolean }) => {
+    const response = await api.post(`/admin/users/${userId}/payments`, payload);
+    return response.data as { success: boolean; data?: AdminPayment; error?: string };
+  },
+
+  // Confirm a reseller-collected payment reached us (تسليم المبلغ).
+  settlePayment: async (paymentId: string) => {
+    const response = await api.post(`/admin/payments/${paymentId}/settle`);
+    return response.data as { success: boolean; data?: AdminPayment; error?: string };
+  },
+
+  // Void a mistaken/duplicate/bounced row. Kept in the ledger, never deleted.
+  voidPayment: async (paymentId: string, reason: string) => {
+    const response = await api.post(`/admin/payments/${paymentId}/void`, { reason });
+    return response.data as { success: boolean; data?: AdminPayment; error?: string };
+  },
+
+  // What each reseller has collected but not yet handed over.
+  getPartnerOutstanding: async () => {
+    const response = await api.get('/admin/partners/outstanding');
+    return response.data as {
+      success: boolean;
+      data?: Array<{ partnerId: string; partnerName: string; outstandingCents: number; paymentCount: number }>;
       error?: string;
     };
   },

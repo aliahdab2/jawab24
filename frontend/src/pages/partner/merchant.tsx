@@ -2,27 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { ArrowLeft, StickyNote } from 'lucide-react';
+import { ArrowLeft, StickyNote, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
-import { partnerApi, type PartnerMerchantDetail, type PartnerMerchantPage } from '@/lib/api';
+import { partnerApi, type PartnerMerchantDetail, type PartnerMerchantPage, type PartnerPayment } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { Card } from '@/components/ui';
+import { Button, Card } from '@/components/ui';
 import { PartnerStatusPill } from '@/components/partner/PartnerStatusPill';
+import { RecordPaymentModal } from '@/components/payments/RecordPaymentModal';
 import { formatTimestampDate, formatDaysAgo } from '@/utils/dateUtils';
+import { formatUsd } from '@/utils/pricing';
 
 /**
- * Partner-facing merchant detail — read-only drill-down from the portal list.
+ * Partner-facing merchant detail — the drill-down from the portal list.
  *
  * Mirrors the support console's sections so a reseller can answer "why isn't
  * this merchant getting value yet?", but every field is served by the
  * partner-scoped endpoint, which enforces attribution and strips merchant
- * content (see services/partnerPortal.ts). There are no actions here at all.
+ * content (see services/partnerPortal.ts).
+ *
+ * Read-only except for one action: recording a payment he collected. Money
+ * amounts here are GROSS and NET-OWED — the commission rate is never sent to
+ * this surface (owner ruling 2026-08-16), so it cannot be rendered by accident.
  */
 
 /** Label + value row; the shared shape of every field in the sections below. */
@@ -106,17 +112,62 @@ function PageCard({ page }: { page: PartnerMerchantPage }) {
     );
 }
 
+/** One ledger row. Shows gross, and — for money the rep still holds — what he
+ *  owes us. A settled row needs no "owed" line: it is already with us. */
+function PaymentRow({ payment }: { payment: PartnerPayment }) {
+    const t = useTranslations('partner');
+    // Method labels are shared with the admin ledger, so they live in the
+    // `payments` namespace rather than being duplicated per surface.
+    const tp = useTranslations('payments');
+    const { intlLocale, language } = useLanguage();
+    const outstanding = payment.status === 'recorded';
+
+    return (
+        <div className="flex items-start justify-between gap-3 py-2 border-b border-theme-border last:border-b-0">
+            <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground tabular-nums" dir="ltr">
+                    {formatUsd(payment.amountCents, language, 2)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                    {tp(`paymentMethod_${payment.method}` as Parameters<typeof tp>[0])}
+                    {' · '}
+                    {formatTimestampDate(payment.paidAt, intlLocale)}
+                </div>
+                {payment.note && (
+                    <div className="text-xs text-muted-foreground mt-0.5" dir="auto">{payment.note}</div>
+                )}
+            </div>
+            <div className="text-end shrink-0">
+                <span className={clsx(
+                    'inline-flex px-2 py-0.5 text-xs font-medium rounded-full',
+                    outstanding ? 'alert-warning' : 'status-success',
+                )}>
+                    {outstanding ? t('paymentWithYou') : t('paymentSettled')}
+                </span>
+                {outstanding && (
+                    <div className="text-xs text-muted-foreground mt-1 tabular-nums" dir="ltr">
+                        {t('paymentOwed')} {formatUsd(payment.netOwedCents, language, 2)}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function PartnerMerchantDetailPage() {
     const router = useRouter();
     // `?merchantId=` — see the getStaticProps note at the bottom of this file.
     // Undefined on the very first render of a static page; the query gates on it.
     const merchantId = typeof router.query.merchantId === 'string' ? router.query.merchantId : null;
     const t = useTranslations('partner');
+    const tp = useTranslations('payments');
     const tc = useTranslations('common');
     const { language, intlLocale } = useLanguage();
     const isRTL = isRTLLocale(language);
     const { isAuthenticated, _hasHydrated } = useAuthStore();
+    const queryClient = useQueryClient();
     const [mounted, setMounted] = useState(false);
+    const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -306,6 +357,23 @@ export default function PartnerMerchantDetailPage() {
                                 )}
                             </Section>
 
+                            <Section title={t('sectionPayments')}>
+                                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                                    <p className="text-xs text-muted-foreground">{t('paymentsHint')}</p>
+                                    <Button size="sm" onClick={() => setPaymentModalOpen(true)}>
+                                        <Plus className="w-4 h-4 me-1" aria-hidden="true" />
+                                        {tp('recordPaymentTitle')}
+                                    </Button>
+                                </div>
+                                {data.payments.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">{t('paymentsNone')}</p>
+                                ) : (
+                                    <div>
+                                        {data.payments.map(p => <PaymentRow key={p.id} payment={p} />)}
+                                    </div>
+                                )}
+                            </Section>
+
                             <Section title={t('sectionTopup')}>
                                 <Field label={t('topupBalance')}>
                                     <span className="tabular-nums font-medium">{data.topupBalance}</span>
@@ -335,6 +403,22 @@ export default function PartnerMerchantDetailPage() {
                     ) : null}
                 </main>
             </div>
+
+            {merchantId && (
+                <RecordPaymentModal
+                    isOpen={paymentModalOpen}
+                    onClose={() => setPaymentModalOpen(false)}
+                    merchantName={data?.name ?? null}
+                    onSubmit={(payload) => partnerApi.recordPayment(merchantId, payload)}
+                    // Both queries move: this merchant's ledger, and the list's
+                    // totals + unpaid chip. Invalidating only the detail leaves
+                    // the rep looking at a stale "مستحق" on the way back.
+                    onRecorded={() => {
+                        queryClient.invalidateQueries({ queryKey: ['partner', 'merchant', merchantId] });
+                        queryClient.invalidateQueries({ queryKey: ['partner', 'overview'] });
+                    }}
+                />
+            )}
         </>
     );
 }

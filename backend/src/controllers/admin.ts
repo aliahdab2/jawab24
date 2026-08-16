@@ -22,6 +22,10 @@ import {
     UnknownTopupPackError,
     DuplicateTopupError,
 } from '../services/topup';
+import { paymentsService, PaymentValidationError } from '../services/payments';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import type { AdminUserAiCostPeriod } from '../services/analytics';
 import { getActivationFunnel } from '../services/activation';
 import { businessAuditService } from '../services/businessAudit';
@@ -34,6 +38,7 @@ import type {
     AiCreditBalanceBody,
     ActivationFunnelQuery,
     PaymentRequestBody,
+    AdminRecordPaymentBody,
     KbUpdateBody,
     ReIngestBody,
     WaitlistListQuery,
@@ -374,6 +379,137 @@ export class AdminController {
         } catch (error) {
             request.log.error(error, 'Admin payment request list failed');
             return reply.status(500).send({ success: false, error: 'Failed to list payment requests' });
+        }
+    }
+
+    /** GET /admin/users/:userId/payments — the merchant's full ledger. */
+    async listPayments(request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) {
+        try {
+            const data = await paymentsService.listForMerchant(request.params.userId);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin payment list failed');
+            return reply.status(500).send({ success: false, error: 'Failed to list payments' });
+        }
+    }
+
+    /**
+     * POST /admin/users/:userId/payments — record money we received.
+     *
+     * `collectedByPartner` decides whether this is an outstanding rep debt or
+     * money already in hand; the partner it is attributed to comes from
+     * `users.partner_id`, never from the body — an admin recording Ahmad's cash
+     * should not have to know a partner uuid, and a mistyped one would credit
+     * the wrong rep's payout.
+     */
+    async recordPayment(
+        request: FastifyRequest<{ Params: { userId: string }; Body: AdminRecordPaymentBody }>,
+        reply: FastifyReply,
+    ) {
+        const { userId } = request.params;
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        if (!adminUserId) {
+            return reply.status(401).send({ success: false, error: 'Authentication required' });
+        }
+
+        try {
+            const body = request.body;
+            const [merchant] = await db
+                .select({ id: users.id, partnerId: users.partnerId })
+                .from(users)
+                .where(eq(users.id, userId))
+                .limit(1);
+            if (!merchant) {
+                return reply.status(404).send({ success: false, error: 'User not found' });
+            }
+
+            const collectedByPartner = Boolean(body.collectedByPartner && merchant.partnerId);
+            const payment = await paymentsService.record(
+                {
+                    userId,
+                    amountCents: body.amountCents,
+                    currency: body.currency,
+                    method: body.method,
+                    paidAt: new Date(body.paidAt),
+                    coversPeriodStart: body.coversPeriodStart ? new Date(body.coversPeriodStart) : null,
+                    coversPeriodEnd: body.coversPeriodEnd ? new Date(body.coversPeriodEnd) : null,
+                    externalRef: body.externalRef ?? null,
+                    note: body.note ?? null,
+                    idempotencyKey: body.idempotencyKey ?? null,
+                },
+                {
+                    userId: adminUserId,
+                    collectedBy: collectedByPartner ? 'partner' : 'admin',
+                    // Attribute to the merchant's rep whenever there is one, so
+                    // a direct admin collection still counts toward that rep's
+                    // book — it is his merchant either way.
+                    partnerId: merchant.partnerId ?? null,
+                },
+            );
+
+            request.log.info(
+                { adminUserId, targetUserId: userId, paymentId: payment.id, amountCents: payment.amountCents },
+                'Admin payment recorded',
+            );
+            return reply.status(201).send({ success: true, data: payment });
+        } catch (error) {
+            if (error instanceof PaymentValidationError) {
+                return reply.status(400).send({ success: false, error: error.message, code: error.code });
+            }
+            request.log.error(error, 'Admin payment record failed');
+            return reply.status(500).send({ success: false, error: 'Failed to record payment' });
+        }
+    }
+
+    /** POST /admin/payments/:paymentId/settle */
+    async settlePayment(request: FastifyRequest<{ Params: { paymentId: string } }>, reply: FastifyReply) {
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        if (!adminUserId) {
+            return reply.status(401).send({ success: false, error: 'Authentication required' });
+        }
+        try {
+            const updated = await paymentsService.settle(request.params.paymentId, adminUserId);
+            // Null means the row is missing or is no longer 'recorded' — a
+            // replayed click, not an error worth a 500.
+            if (!updated) {
+                return reply.status(409).send({ success: false, error: 'Payment is not awaiting settlement' });
+            }
+            return reply.send({ success: true, data: updated });
+        } catch (error) {
+            request.log.error(error, 'Admin payment settle failed');
+            return reply.status(500).send({ success: false, error: 'Failed to settle payment' });
+        }
+    }
+
+    /** POST /admin/payments/:paymentId/void */
+    async voidPayment(
+        request: FastifyRequest<{ Params: { paymentId: string }; Body: { reason: string } }>,
+        reply: FastifyReply,
+    ) {
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        if (!adminUserId) {
+            return reply.status(401).send({ success: false, error: 'Authentication required' });
+        }
+        try {
+            const updated = await paymentsService.void(request.params.paymentId, adminUserId, request.body.reason);
+            if (!updated) {
+                return reply.status(409).send({ success: false, error: 'Payment not found or already void' });
+            }
+            return reply.send({ success: true, data: updated });
+        } catch (error) {
+            request.log.error(error, 'Admin payment void failed');
+            return reply.status(500).send({ success: false, error: 'Failed to void payment' });
+        }
+    }
+
+    /** GET /admin/partners/outstanding — what each rep still owes us. */
+    async partnerOutstanding(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const data = await paymentsService.outstandingByPartner();
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin partner outstanding failed');
+            return reply.status(500).send({ success: false, error: 'Failed to load outstanding totals' });
         }
     }
 

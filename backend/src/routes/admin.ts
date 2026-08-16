@@ -234,6 +234,100 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             adminController.listPaymentRequests,
         );
 
+        // ============================================
+        // Payments ledger — every dollar received, however it arrived
+        // ============================================
+
+        adminProtected.get(
+            '/users/:userId/payments',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'One merchant\'s payment ledger (all methods and collectors)',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                },
+            },
+            adminController.listPayments,
+        );
+
+        adminProtected.post(
+            '/users/:userId/payments',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Record a payment received from a merchant (cash, Sham Cash, transfer, or off-Stripe)',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        additionalProperties: false,
+                        required: ['amountCents', 'method', 'paidAt'],
+                        properties: {
+                            amountCents: { type: 'integer', minimum: 1, maximum: 10_000_000 },
+                            currency: { type: 'string', minLength: 3, maxLength: 3 },
+                            method: { type: 'string', enum: ['cash', 'sham_cash', 'bank_transfer', 'other'] },
+                            paidAt: { type: 'string', format: 'date-time' },
+                            coversPeriodStart: { type: 'string', format: 'date-time' },
+                            coversPeriodEnd: { type: 'string', format: 'date-time' },
+                            externalRef: { type: 'string', maxLength: 255 },
+                            note: { type: 'string', maxLength: 1000 },
+                            idempotencyKey: { type: 'string', maxLength: 64 },
+                            // An admin recording a payment a REP collected must
+                            // say so, or the money looks settled and drops out
+                            // of what that rep still owes us.
+                            collectedByPartner: { type: 'boolean' },
+                        },
+                    },
+                },
+            },
+            adminController.recordPayment,
+        );
+
+        adminProtected.post(
+            '/payments/:paymentId/settle',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Confirm a rep-collected payment reached us (تسليم المبلغ)',
+                    security: auth,
+                    params: { type: 'object', properties: { paymentId: { type: 'string', format: 'uuid' } }, required: ['paymentId'] },
+                },
+            },
+            adminController.settlePayment,
+        );
+
+        adminProtected.post(
+            '/payments/:paymentId/void',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Void a payment row (mistake, duplicate, bounced transfer) — kept, never deleted',
+                    security: auth,
+                    params: { type: 'object', properties: { paymentId: { type: 'string', format: 'uuid' } }, required: ['paymentId'] },
+                    body: {
+                        type: 'object',
+                        additionalProperties: false,
+                        required: ['reason'],
+                        properties: { reason: { type: 'string', minLength: 3, maxLength: 500 } },
+                    },
+                },
+            },
+            adminController.voidPayment,
+        );
+
+        adminProtected.get(
+            '/partners/outstanding',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'What each reseller has collected but not yet handed over',
+                    security: auth,
+                },
+            },
+            adminController.partnerOutstanding,
+        );
+
         adminProtected.post(
             '/topup',
             {

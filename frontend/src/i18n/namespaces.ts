@@ -74,13 +74,15 @@ export const PAGE_NAMESPACES = {
   // ── Admin pages (include ADMIN_LAYOUT) ────────────────────────
   adminWaitlist:      [...ADMIN_LAYOUT],
   adminCustomers:     [...ADMIN_LAYOUT],
-  adminCustomerDetail:[...ADMIN_LAYOUT],
+  // The customer detail renders the shared payments modal + ledger, whose
+  // strings live in their own namespace (also used by the reseller portal).
+  adminCustomerDetail:[...ADMIN_LAYOUT, 'payments'],
   adminPlayground:    [...ADMIN_LAYOUT, 'kb'],
   adminObservability: [...ADMIN_LAYOUT],
   adminAiCost:        [...ADMIN_LAYOUT],
 
   // ── Partner portal (reseller-facing, standalone layout) ───────
-  partner:            ['partner'],
+  partner:            ['partner', 'payments'],
 
   // ── Integration onboarding ────────────────────────────────────
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],

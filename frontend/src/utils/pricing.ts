@@ -60,14 +60,19 @@ export function formatCostUsd(usd: number, digits: number = 4): string {
   return `$${usd.toFixed(digits)}`;
 }
 
-/** Format a USD price (in cents) with the locale's currency style, no decimals.
- *  Arabic uses Latin numerals (`ar-u-nu-latn`) to match the rest of the pricing UI. */
-export function formatUsd(cents: number, locale?: string): string {
+/** Format a USD price (in cents) with the locale's currency style.
+ *  Arabic uses Latin numerals (`ar-u-nu-latn`) to match the rest of the pricing UI.
+ *
+ *  Defaults to whole dollars, which is what plan prices are. Pass
+ *  `fractionDigits: 2` for LEDGER amounts — a recorded payment can carry cents,
+ *  and rounding them away in a money view misstates what was actually paid. */
+export function formatUsd(cents: number, locale?: string, fractionDigits: number = 0): string {
   const numberLocale = locale === 'ar' ? 'ar-u-nu-latn' : locale || 'en';
   return new Intl.NumberFormat(numberLocale, {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(cents / 100);
 }
 

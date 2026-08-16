@@ -86,6 +86,26 @@ export interface PaymentRequestBody {
     topupPurchaseId?: string;
 }
 
+/**
+ * Body for recording a received payment in the ledger. Note what is NOT here:
+ * `collectedBy`, `status`, `settledAt`, `partnerId`, and any commission field.
+ * The service derives every one of them — a body that could set them would let
+ * a caller file money as already settled, or credit the wrong rep's payout.
+ */
+export interface AdminRecordPaymentBody {
+    amountCents: number;
+    currency?: string;
+    method: 'cash' | 'sham_cash' | 'bank_transfer' | 'other';
+    paidAt: string;
+    coversPeriodStart?: string;
+    coversPeriodEnd?: string;
+    externalRef?: string;
+    note?: string;
+    idempotencyKey?: string;
+    /** True when a reseller took the money and still owes us the handover. */
+    collectedByPartner?: boolean;
+}
+
 export interface KbUpdateBody {
     knowledgeBase: string;
 }

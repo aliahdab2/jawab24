@@ -1,7 +1,13 @@
 import { db } from '../db';
-import { partners, users, subscriptions, plans, pages, adminAuditLogs } from '../db/schema';
+import { partners, users, subscriptions, plans, pages, adminAuditLogs, payments } from '../db/schema';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { adminUsersService } from './admin/users';
+import {
+    paymentsService,
+    isUnpaid,
+    type MerchantPaymentState,
+    type PaymentMethod,
+} from './payments';
 
 /**
  * Partner Portal service — the read-only surface a reseller / country rep sees.
@@ -37,14 +43,29 @@ export interface PartnerMerchantRow {
     lastSeenAt: Date | null;
     /** Admin-authored follow-up note for this merchant (users.partner_note). */
     adminNote: string | null;
+    /** When we last saw money from this merchant, by any method. */
+    lastPaidAt: Date | null;
+    /** Behind on payment as of now — see `isUnpaid` for the (conservative) rule. */
+    unpaid: boolean;
 }
 
-// The partner's commission % is deliberately NOT exposed here (owner ruling
-// 2026-08-15) — the portal shows the merchant book only; commission stays an
-// admin-console concern.
+// ⛔ The commission PERCENTAGE is never exposed on this surface (owner rulings
+// 2026-08-15 and 2026-08-16). The rep sees what he collected and what he still
+// owes us in money; the rate itself stays an admin-console concern. That is why
+// the totals below are gross + net-owed and carry no `commissionPct`.
+export interface PartnerPaymentTotals {
+    /** Gross the rep has collected, all time, voided rows excluded. */
+    collectedCents: number;
+    /** Still in his hands — recorded but not yet handed over. */
+    outstandingCents: number;
+    /** Already handed over. */
+    settledCents: number;
+}
+
 export interface PartnerOverview {
     partner: { name: string };
     merchants: PartnerMerchantRow[];
+    payments: PartnerPaymentTotals;
 }
 
 /**
@@ -152,6 +173,7 @@ function toPartnerSettings(settings: NonNullable<
 function toPartnerMerchantDetail(
     detail: NonNullable<Awaited<ReturnType<typeof adminUsersService.getUserDetail>>>,
     adminNote: string | null,
+    paymentRows: Array<typeof payments.$inferSelect>,
     now: Date,
 ) {
     return {
@@ -234,6 +256,26 @@ function toPartnerMerchantDetail(
             isOwner: w.isOwner,
             ownerName: w.ownerName,
             memberCount: w.memberCount,
+        })),
+        // ⛔ `commissionPct` and `commissionCents` are NOT projected — the rep
+        // sees gross and what he owes us, never the rate (owner ruling
+        // 2026-08-16). `netOwedCents` is computed here rather than in the UI so
+        // the browser is never sent the two numbers it could subtract to
+        // recover the percentage.
+        payments: paymentRows.map(p => ({
+            id: p.id,
+            amountCents: p.amountCents,
+            netOwedCents: p.amountCents - p.commissionCents,
+            currency: p.currency,
+            method: p.method,
+            collectedBy: p.collectedBy,
+            status: p.status,
+            paidAt: p.paidAt,
+            settledAt: p.settledAt,
+            coversPeriodStart: p.coversPeriodStart,
+            coversPeriodEnd: p.coversPeriodEnd,
+            externalRef: p.externalRef,
+            note: p.note,
         })),
     };
 }
@@ -391,11 +433,25 @@ class PartnerPortalService {
             }
         }
 
+        // Payment state for the whole batch in one grouped query, plus this
+        // partner's own totals. Both are independent of each other and of the
+        // work above, so they run together (Rule 17.3 — no sequential hops).
+        const [paymentState, partnerPayments] = await Promise.all([
+            paymentsService.getPaymentStateFor(rows.map(r => r.id)),
+            paymentsService.listForPartner(partner.id),
+        ]);
+
         const now = new Date();
         return {
             partner: { name: partner.name },
+            payments: {
+                collectedCents: partnerPayments.totals.collectedCents,
+                outstandingCents: partnerPayments.totals.outstandingCents,
+                settledCents: partnerPayments.totals.settledCents,
+            },
             merchants: rows.map(r => {
                 const sub = subByUser.get(r.id);
+                const pay: MerchantPaymentState | undefined = paymentState.get(r.id);
                 return {
                     id: r.id,
                     name: r.name,
@@ -413,9 +469,62 @@ class PartnerPortalService {
                     createdAt: r.createdAt,
                     lastSeenAt: r.lastSeenAt,
                     adminNote: r.partnerNote,
+                    lastPaidAt: pay?.lastPaidAt ?? null,
+                    unpaid: isUnpaid(
+                        {
+                            subscriptionStatus: sub?.status ?? null,
+                            currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+                            coveredUntil: pay?.coveredUntil ?? null,
+                        },
+                        now,
+                    ),
                 };
             }),
         };
+    }
+
+    /**
+     * Record a payment the rep collected for one of HIS merchants.
+     *
+     * The portal's first and only mutation. The ownership gate is the same one
+     * `getMerchantDetail` uses and it is the whole security boundary: a rep may
+     * only write against a merchant carrying his `partner_id`, and a merchant
+     * belonging to someone else is indistinguishable from one that does not
+     * exist (null → 404 at the controller), so the write path cannot be used to
+     * enumerate the merchant table either.
+     *
+     * `collectedBy` is forced to 'partner' here — it is NOT taken from the
+     * request. A rep-supplied 'stripe'/'admin' would land the row as already
+     * settled and remove it from the outstanding total, which is precisely the
+     * number he is accountable for.
+     */
+    async recordPayment(
+        partner: { id: string },
+        userId: string,
+        input: {
+            amountCents: number;
+            currency?: string;
+            method: PaymentMethod;
+            paidAt: Date;
+            coversPeriodStart?: Date | null;
+            coversPeriodEnd?: Date | null;
+            externalRef?: string | null;
+            note?: string | null;
+            idempotencyKey?: string | null;
+        },
+        actingUserId: string,
+    ) {
+        const [owned] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.id, userId), eq(users.partnerId, partner.id)))
+            .limit(1);
+        if (!owned) return null;
+
+        return paymentsService.record(
+            { ...input, userId },
+            { userId: actingUserId, collectedBy: 'partner', partnerId: partner.id },
+        );
     }
 
     /**
@@ -435,10 +544,13 @@ class PartnerPortalService {
             .limit(1);
         if (!owned) return null;
 
-        const detail = await adminUsersService.getUserDetail(userId);
+        const [detail, paymentRows] = await Promise.all([
+            adminUsersService.getUserDetail(userId),
+            paymentsService.listForMerchant(userId),
+        ]);
         if (!detail) return null;
 
-        return toPartnerMerchantDetail(detail, owned.partnerNote, new Date());
+        return toPartnerMerchantDetail(detail, owned.partnerNote, paymentRows, new Date());
     }
 }
 

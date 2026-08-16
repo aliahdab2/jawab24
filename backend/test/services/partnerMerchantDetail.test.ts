@@ -26,9 +26,45 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/admin/users', () => ({
     adminUsersService: { getUserDetail: vi.fn() },
 }));
+// The ledger is fetched alongside the detail; stub it so these tests stay about
+// the PROJECTION. The fixture row carries a commission snapshot precisely so the
+// leak test below can prove it is stripped.
+vi.mock('../../src/services/payments', () => ({
+    paymentsService: { listForMerchant: vi.fn() },
+    isUnpaid: vi.fn(() => false),
+}));
 
 import { partnerPortalService } from '../../src/services/partnerPortal';
 import { adminUsersService } from '../../src/services/admin/users';
+import { paymentsService } from '../../src/services/payments';
+
+/** One ledger row as stored — including the two fields a reseller must never
+ *  see (owner ruling 2026-08-16: money yes, rate no). */
+function paymentRowFixture() {
+    return {
+        id: 'pay-1',
+        userId: 'merchant-1',
+        partnerId: 'partner-1',
+        amountCents: 79000,
+        currency: 'usd',
+        method: 'cash',
+        collectedBy: 'partner',
+        status: 'recorded',
+        commissionPct: 20,
+        commissionCents: 15800,
+        coversPeriodStart: null,
+        coversPeriodEnd: null,
+        externalRef: null,
+        note: 'استلمه أحمد في دمشق',
+        idempotencyKey: null,
+        recordedByUserId: 'partner-user-1',
+        confirmedByAdminUserId: null,
+        paidAt: new Date('2026-08-16'),
+        settledAt: null,
+        createdAt: new Date('2026-08-16'),
+        updatedAt: new Date('2026-08-16'),
+    };
+}
 
 /** A full admin payload, including every field a partner must NOT receive. */
 function adminDetailFixture() {
@@ -106,12 +142,35 @@ describe('partnerPortalService.getMerchantDetail', () => {
         expect(result).toBeNull();
         // The gate must short-circuit BEFORE any merchant data is fetched.
         expect(adminUsersService.getUserDetail).not.toHaveBeenCalled();
+        expect(paymentsService.listForMerchant).not.toHaveBeenCalled();
     });
 
     describe('when the merchant IS attributed to the partner', () => {
         beforeEach(() => {
             selectChain.limit.mockResolvedValue([{ id: 'merchant-1', partnerNote: 'اتصل به قبل الخميس' }]);
             vi.mocked(adminUsersService.getUserDetail).mockResolvedValue(adminDetailFixture() as never);
+            vi.mocked(paymentsService.listForMerchant).mockResolvedValue([paymentRowFixture()] as never);
+        });
+
+        it('shows the payment amount and what is owed, but never the commission rate', async () => {
+            const result = await partnerPortalService.getMerchantDetail('partner-1', 'merchant-1');
+
+            expect(result!.payments).toHaveLength(1);
+            const [payment] = result!.payments;
+            // Money the rep can act on…
+            expect(payment).toMatchObject({
+                amountCents: 79000,
+                netOwedCents: 63200,          // 79000 − 15800, computed server-side
+                status: 'recorded',
+                method: 'cash',
+            });
+            // …and neither half of the rate, in any form. Sending both the gross
+            // and the commission would let the browser subtract its way back to
+            // the percentage the owner ruled must not be shown.
+            expect(payment).not.toHaveProperty('commissionPct');
+            expect(payment).not.toHaveProperty('commissionCents');
+            expect(JSON.stringify(result)).not.toContain('15800');
+            expect(JSON.stringify(result)).not.toContain('"commissionPct"');
         });
 
         it('never exposes the merchant email, facebook id, or AI model', async () => {

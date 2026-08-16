@@ -13,6 +13,7 @@ import {
     handlePaymentRecovery,
 } from '../services/dunningNotices';
 import { topupService } from '../services/topup';
+import { paymentsService } from '../services/payments';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
@@ -489,6 +490,22 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     // Drop the boolean status cache so a `past_due → active` recovery is
     // visible to the reply pipeline immediately, not after a 60s TTL.
     await subscriptionsService.invalidateStatusCache(updatedRow.userId);
+
+    // Book the money in the payments ledger, so "who paid" is one query across
+    // Stripe and cash instead of two half-answers. Keyed on the invoice id, so
+    // a replayed webhook books nothing twice; never throws (see the service).
+    await paymentsService.recordStripePayment({
+        userId: updatedRow.userId,
+        amountCents: invoice.amount_paid ?? 0,
+        currency: invoice.currency ?? 'usd',
+        stripeRef: typeof invoice.id === 'string' ? invoice.id : `sub:${stripeSubscriptionId}:${Date.now()}`,
+        // `status_transitions.paid_at` is when the money actually moved; the
+        // webhook can arrive minutes later, and on a replay much later.
+        paidAt: stripeTsToDate(invoice.status_transitions?.paid_at ?? invoice.created) ?? new Date(),
+        coversPeriodStart: periodStart,
+        coversPeriodEnd: periodEnd,
+        log: request.log,
+    });
 
     // Close any open dunning episode: resets the notified stamps and — only
     // when an episode WAS open — emails the payment-recovered confirmation.

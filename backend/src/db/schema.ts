@@ -1845,6 +1845,99 @@ export const partners = pgTable('partners', {
     userIdIdx: index('idx_partners_user_id').on(table.userId),
 }));
 
+// 18. Payments — the single revenue ledger: every dollar a merchant pays us,
+// however it arrived. Before this table "who paid" was scattered across
+// `payment_requests` (Stripe collect links), `topup_purchases` (credit packs)
+// and Stripe subscription state, and cash collected by a country rep was
+// recorded NOWHERE — which is why production Syria revenue read 0 despite
+// paying merchants.
+//
+// ⛔ This ledger grants NOTHING. It never extends a subscription, never credits
+// `users.topup_balance`, never unblocks replies. Entitlement stays where it is
+// (admin manual upgrade / the Stripe webhooks), so a mis-keyed payment row can
+// corrupt a report but can never hand out service. Keep it that way.
+export const payments = pgTable('payments', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    // The partner attributed AT PAYMENT TIME. Denormalised from
+    // `users.partner_id` on purpose: reassigning a merchant to another rep must
+    // not silently move last year's money — and a direct customer has none.
+    partnerId: uuid('partner_id').references(() => partners.id, { onDelete: 'set null' }),
+    amountCents: integer('amount_cents').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('usd'),
+    // How the money moved: 'stripe' | 'cash' | 'sham_cash' | 'bank_transfer' | 'other'.
+    method: varchar('method', { length: 24 }).notNull(),
+    // Who took receipt: 'stripe' (the system collected it) | 'partner' (a rep
+    // holds it) | 'admin' (we took it directly). Drives settlement: only a
+    // 'partner' row can be outstanding — the others are settled on arrival.
+    collectedBy: varchar('collected_by', { length: 16 }).notNull(),
+    // What the payment buys, when known — the anchor the unpaid derivation
+    // compares against `subscriptions.current_period_end`.
+    coversPeriodStart: timestamp('covers_period_start'),
+    coversPeriodEnd: timestamp('covers_period_end'),
+    // SNAPSHOT of the rate at record time, never re-read from `partners`:
+    // raising a rep's rate must not rewrite what he already handed over.
+    // ⛔ Admin-only — the partner projection exposes amount and net owed, never
+    // these two (owner ruling 2026-08-16: no percentage on the reseller's screen).
+    commissionPct: integer('commission_pct').notNull().default(0),
+    commissionCents: integer('commission_cents').notNull().default(0),
+    // 'recorded' (a rep says he collected it) | 'settled' (the money reached us)
+    // | 'void' (mistake or reversal; kept, never deleted — it is a ledger).
+    status: varchar('status', { length: 16 }).notNull().default('recorded'),
+    // Free-form trail: Stripe PaymentIntent, Sham Cash reference, "سُلّم بدمشق
+    // 2026-08-20", a WhatsApp date. Mirrors topup_purchases.external_ref.
+    externalRef: varchar('external_ref', { length: 255 }),
+    note: text('note'),
+    // Idempotency: a double-tapped submit must not become two payments. Unique
+    // when present; the client sends a UUID per submission attempt.
+    idempotencyKey: varchar('idempotency_key', { length: 64 }).unique(),
+    // Who put the row in — a partner's user id, or the admin's.
+    recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    confirmedByAdminUserId: uuid('confirmed_by_admin_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When the MERCHANT paid (rep-reported, may predate the row).
+    paidAt: timestamp('paid_at').notNull(),
+    // When we actually received our share. NULL while a rep still holds it.
+    settledAt: timestamp('settled_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdIdx: index('idx_payments_user_id').on(table.userId),
+    partnerIdIdx: index('idx_payments_partner_id').on(table.partnerId),
+    statusIdx: index('idx_payments_status').on(table.status),
+    paidAtIdx: index('idx_payments_paid_at').on(table.paidAt),
+    // The unpaid derivation walks "newest payment covering the period" per
+    // merchant; without this it is a sort of the whole ledger per merchant.
+    userCoversIdx: index('idx_payments_user_covers_end').on(table.userId, table.coversPeriodEnd),
+    methodCheck: check(
+        'payments_method_check',
+        sql`${table.method} IN ('stripe', 'cash', 'sham_cash', 'bank_transfer', 'other')`
+    ),
+    collectedByCheck: check(
+        'payments_collected_by_check',
+        sql`${table.collectedBy} IN ('stripe', 'partner', 'admin')`
+    ),
+    statusCheck: check(
+        'payments_status_check',
+        sql`${table.status} IN ('recorded', 'settled', 'void')`
+    ),
+    // A ledger of zero- or negative-value rows is a reporting bug that looks
+    // like revenue. Reversals are `status='void'`, never a negative amount.
+    amountPositiveCheck: check('payments_amount_positive', sql`${table.amountCents} > 0`),
+    // The snapshot must stay internally consistent: a 20% cut of $790 cannot be
+    // $700. Bounds only — the exact rounding rule lives in the service.
+    commissionSaneCheck: check(
+        'payments_commission_sane',
+        sql`${table.commissionPct} BETWEEN 0 AND 100 AND ${table.commissionCents} BETWEEN 0 AND ${table.amountCents}`
+    ),
+    // 'settled' and settled_at must agree in BOTH directions, or "what is still
+    // out with a rep" silently misses rows — the one number this table exists
+    // to answer. Stripe/admin rows are settled on arrival (enforced in service).
+    settledConsistencyCheck: check(
+        'payments_settled_consistency',
+        sql`(${table.status} = 'settled') = (${table.settledAt} IS NOT NULL)`
+    ),
+}));
+
 // Stripe Webhook Events - idempotency deduplication
 export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
     eventId: varchar('event_id', { length: 255 }).primaryKey(), // Stripe event ID (evt_*)
