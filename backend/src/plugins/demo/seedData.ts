@@ -227,9 +227,13 @@ export const DEMO_PAGES = [
 - شقة فندقية (حتى 6 أشخاص): 275$ لليلة
 
 🏊 المسبح مفتوح من 9 صباحاً حتى 8 مساءً
-🍽 المطعم يقدم فطوراً مجانياً لنزلاء الأجنحة
-
-📌 الحجز حصراً عبر الهاتف 0119876543 — لا يوجد تثبيت حجز عبر وسائل التواصل الاجتماعي.`,
+🍽 المطعم يقدم فطوراً مجانياً لنزلاء الأجنحة`,
+        // ⚠️ Deliberately NO booking-channel imperative in this KB («الحجز حصراً
+        // عبر الهاتف…»). The Cat 72/76 precedent (the deleted electro XGAP case):
+        // a KB imperative routes bookings BY ITSELF, so with one present the
+        // Cat 78 cases would pass with the persona broken — a pin that passes
+        // for the wrong reason. The ONLY force overriding the Ex-14 contact-ask
+        // here must be the page persona below.
         autoReplyEnabled: true,
         instagramUsername: null,
         brandVoiceNotesMulti: {
@@ -2216,6 +2220,10 @@ export async function seedDemoData(
                     // Stage 2.6: refresh business_profile container so re-seeding picks up
                     // any new structured fields. Falls through cleanly when undefined.
                     ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                    // D-084: refresh the page persona too — the Cat 78 fixture is only
+                    // probative when the override is actually on the row.
+                    ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
+                        && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
                 })
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
@@ -2236,6 +2244,10 @@ export async function seedDemoData(
                 instagramUsername: pageData.instagramUsername,
                 instagramAutoReplyEnabled: false,
                 ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                // D-084: mirror the create-path insert — a missed site here shipped the
+                // resort fixture WITHOUT its persona on refresh logins (caught 2026-08-16).
+                ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
+                    && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
             });
             logger.debug('[DemoData] Inserted newly-added demo page on refresh', { name: pageData.name });
         }
