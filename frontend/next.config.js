@@ -109,7 +109,7 @@ const nextConfig = {
       },
       // Public pages — cache 1 hour, serve stale for 1 day
       {
-        source: '/:locale(en|ar)?/:page(landing|pricing|login|what-is-jawab24|compare/:slug*)',
+        source: '/:locale(en|ar)?/:page(landing|pricing|login|what-is-jawab24|instagram|compare/:slug*)',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=3600, stale-while-revalidate=86400' }],
       },
       // Blog pages — cache 1 day, serve stale for 1 week (content changes rarely)

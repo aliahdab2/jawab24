@@ -1,0 +1,93 @@
+{
+  "seoTitle": "Instagram Auto-Reply for Direct Messages and Comments | Jawab24",
+  "seoDescription": "Jawab24 answers your Instagram direct messages and post comments automatically, in Arabic or English, from the business information you write yourself. Connect an Instagram professional account, set keyword replies on your posts, and take over any conversation whenever you want.",
+  "backToHome": "Back to Home",
+  "heroTitle": "Instagram auto-reply for messages and comments",
+  "heroSubtitle": "Jawab24 answers the direct messages and post comments your Instagram business account receives — in the same language and dialect the customer wrote in, within seconds, around the clock. Every reply is composed from the business information you wrote yourself, and you can take over any conversation at any moment.",
+  "badge": "Jawab24 is an official Meta Tech Provider and connects only through Meta's official Instagram APIs.",
+  "howItWorks": {
+    "title": "How it works",
+    "step1Title": "Connect your Instagram professional account",
+    "step1Desc": "From your Jawab24 dashboard, choose the Instagram account you want answered and grant the permissions Instagram asks for. Nothing is read or sent before you finish this step.",
+    "step2Title": "Write your business information",
+    "step2Desc": "Opening hours, prices, delivery areas, return policy, the questions customers keep asking. This is the only source the replies are built from.",
+    "step3Title": "Jawab24 replies automatically",
+    "step3Desc": "A direct message arrives, or someone comments on one of your posts — Jawab24 answers in seconds, in the customer's own language and dialect.",
+    "step4Title": "You step in whenever you want",
+    "step4Desc": "Every conversation lands in your Jawab24 inbox. Reply yourself, switch automation off for an account, or let an away message cover the hours you are closed."
+  },
+  "connect": {
+    "title": "Two ways to connect",
+    "text": "Instagram requires a professional account — Business or Creator — in both cases. A personal Instagram account cannot receive automated replies.",
+    "viaPageTitle": "Instagram linked to a Facebook Page",
+    "viaPageText": "If your Instagram account is linked to a Facebook Page, you connect that Page and Jawab24 answers Instagram and Facebook from one inbox. This is the path available to merchants today.",
+    "directTitle": "Instagram on its own, with no Facebook Page",
+    "directText": "You sign in with the Instagram account itself. No Facebook Page and no Facebook account is involved, and Jawab24 answers your Instagram direct messages and comments only.",
+    "directStatus": "Status: built, and not yet switched on. It opens to merchants once Meta approves the Instagram Login permissions."
+  },
+  "features": {
+    "title": "What Jawab24 does on Instagram",
+    "f1": "Answers direct messages automatically, using only the business information you wrote.",
+    "f2": "Replies publicly to comments left on your posts.",
+    "f3": "Post Reply: you set a keyword on a specific post, and a matching comment gets the reply you pre-wrote — posted publicly, sent to the commenter as a direct message, or both, as you choose.",
+    "f4": "Answers in Arabic — Gulf, Levantine, Egyptian, Maghrebi and Iraqi — or in English, mirroring the language the customer used.",
+    "f5": "Voice notes, images and other non-text messages reach your inbox, so a customer is never silently dropped.",
+    "f6": "Sends the away message you wrote outside your business hours, and gives every connected account its own on/off switch."
+  },
+  "permissions": {
+    "title": "The permissions we ask for, and what each one is used for",
+    "intro": "When you connect an account, Instagram asks you to grant the permissions below. Jawab24 requests nothing beyond them and uses each one only for the purpose described here.",
+    "basicName": "Read the account's basic profile",
+    "basicUse": "We read the account id, username and profile picture, so the connected account is recognisable in your dashboard and so incoming messages and comments are routed to the right workspace. Nothing else about the profile is read.",
+    "messagesName": "Receive and send direct messages",
+    "messagesUse": "We receive the direct messages people send your account, and we send replies — either the automatic reply built from your business information, or the reply you type yourself in the Jawab24 inbox. Replies go out only inside Instagram's standard messaging window, only in threads a customer started, and never as bulk messages to people who did not write to you.",
+    "commentsName": "Read and reply to comments on your own posts",
+    "commentsUse": "We read the comments left on media published by the connected account — that account's own media only — so we can answer them. The answer is posted as a public reply to the comment, or sent to the commenter as a direct message, or both, according to the setting you choose.",
+    "notRequestedTitle": "What Jawab24 does not do",
+    "notRequestedText": "We do not request permission to publish, edit or delete posts, stories or reels, and Jawab24 never publishes anything to your account. We do not read comments or messages belonging to accounts you have not connected, we do not sell your data, and your customers' messages are never used to train AI models."
+  },
+  "data": {
+    "title": "What we store, and for how long",
+    "text": "Running the service requires storing the conversation; nothing beyond that is kept.",
+    "p1": "The messages and comments received from Instagram and the replies sent back are stored, so you can read the conversation in your inbox and so later replies stay consistent with earlier ones.",
+    "p2": "Access tokens are encrypted at rest with AES-256-GCM and decrypted only at the moment of an outbound call to Instagram.",
+    "p3": "Data is hosted on dedicated servers we operate in the European Union (Germany and Finland).",
+    "p4": "Disconnect the account from your dashboard at any time and Jawab24 stops receiving and sending on it immediately. On a deletion request, personal data is removed from active systems within 30 days.",
+    "privacyLink": "Privacy Policy",
+    "deletionLink": "Delete my data"
+  },
+  "control": {
+    "title": "You stay in control",
+    "text": "Automation is never something you have to live with:",
+    "c1": "One switch turns automatic replies off for a connected account — messages still arrive in your inbox, but nothing is sent without you.",
+    "c2": "Any conversation can be taken over: read it in the Jawab24 inbox and answer it yourself.",
+    "c3": "Automatic replies can be limited to your business hours, with your away message covering the rest."
+  },
+  "faq": {
+    "title": "Frequently asked questions",
+    "q1": "Do I need a Facebook Page to use Jawab24 with Instagram?",
+    "a1": "Today, yes: you connect the Facebook Page your Instagram account is linked to. Connecting an Instagram account on its own, with no Facebook Page at all, is already built and will open to merchants once Meta approves the Instagram Login permissions.",
+    "q2": "Will Jawab24 post anything to my Instagram account?",
+    "a2": "No. Jawab24 never publishes posts, stories or reels — we do not even request the permission that would allow it. It only replies to comments on posts you published, and to direct messages people send you.",
+    "q3": "Where do the replies come from?",
+    "a3": "From the business information you write in Jawab24 — hours, prices, delivery areas, policies, frequently asked questions — plus your product catalogue if you connect a store. Automated checks run on every reply before it is sent and flag any that states a price or a fact you never provided.",
+    "q4": "Can I answer a customer myself?",
+    "a4": "Yes. Every Instagram direct message appears in the Jawab24 inbox, including voice notes and images, and you can answer it yourself at any time.",
+    "q5": "What happens outside my working hours?",
+    "a5": "You can limit automatic replies to your business hours. Outside them, the away message you wrote is sent so the customer knows when to expect an answer, and the conversation is waiting for you when you open.",
+    "q6": "How do I disconnect, or delete my data?",
+    "a6": "Disconnect the account from the dashboard whenever you like — Jawab24 immediately stops receiving and sending on it. To delete your data, use the data deletion page or delete your account from settings; personal data leaves active systems within 30 days."
+  },
+  "cta": {
+    "title": "Answer every Instagram message, day and night",
+    "text": "Connect your account and watch the first automatic reply go out in minutes.",
+    "button": "Get started"
+  },
+  "related": {
+    "title": "Related",
+    "whatIs": "What is Jawab24?",
+    "compare": "Compare Jawab24 with other tools",
+    "help": "Help centre"
+  },
+  "disclaimer": "Instagram and Meta are trademarks of Meta Platforms, Inc. Jawab24 is an independent product built on Meta's official APIs."
+}
