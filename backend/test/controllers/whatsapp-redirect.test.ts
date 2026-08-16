@@ -40,6 +40,9 @@ vi.mock('../../src/db', () => ({
 }));
 vi.mock('../../src/db/schema', () => ({
     users: {}, workspaces: { ownerId: 'ownerId' }, workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
+    // Module-load access only (PLAYGROUND_PAGE_COLUMNS reads schema.pages at
+    // import time); no select runs against it in this suite.
+    pages: {},
 }));
 vi.mock('drizzle-orm', () => ({ eq: vi.fn(), and: vi.fn() }));
 

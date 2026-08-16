@@ -39,7 +39,7 @@ import { db } from '../db';
 import { comments, posts, instagramComments, instagramMedia, pages } from '../db/schema';
 import { redis } from '../lib/redis';
 import { settingsService } from '../services/settings';
-import { buildPlaygroundContext, type PlaygroundPageData } from '../services/reply/playgroundContext';
+import { buildPlaygroundContext, PLAYGROUND_PAGE_COLUMNS, type PlaygroundPageData } from '../services/reply/playgroundContext';
 import { replyGenerator } from '../services/reply/generator';
 import { rankWarmCandidates, type WarmCandidateRow } from '../services/cacheWarming';
 
@@ -108,17 +108,11 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
     if (pageIds.length === 0) return contexts;
 
     const pageRows = await db
-        .select({
-            id: pages.id,
-            name: pages.name,
-            userId: pages.userId,
-            workspaceId: pages.workspaceId,
-            knowledgeBase: pages.knowledgeBase,
-            kbActiveVersion: pages.kbActiveVersion,
-            ecommerceStoreId: pages.ecommerceStoreId,
-            businessProfile: pages.businessProfile,
-            facebookPageId: pages.facebookPageId,
-        })
+        // The shared prompt-column subset (incl. the D-084 page persona — a
+        // `bv:` cache-key segment; warming an override page without it writes
+        // keys production never reads). One definition, spread by both this
+        // select and the admin playground preview.
+        .select({ ...PLAYGROUND_PAGE_COLUMNS, facebookPageId: pages.facebookPageId })
         .from(pages)
         .where(inArray(pages.id, pageIds));
 

@@ -1,6 +1,6 @@
 {
-  "id": "3f4710fe-6bb3-47ae-8831-0fd7a9bb50f7",
-  "prevId": "450ee6e9-755f-4eae-b783-954e0d211e40",
+  "id": "51b51e50-c3f6-4d21-9543-da10a8d416b6",
+  "prevId": "02502b2d-2df4-4d10-8316-e5e56b23e871",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5567,6 +5567,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "brand_voice_notes_multi": {
+          "name": "brand_voice_notes_multi",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "consecutive_send_failures": {
           "name": "consecutive_send_failures",
           "type": "integer",
@@ -5663,7 +5669,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

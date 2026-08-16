@@ -4,7 +4,7 @@ import { pages, kbChunks, kbGaps, users } from '../../db/schema';
 import { eq, desc, and, sql, isNotNull } from 'drizzle-orm';
 import { getIngestionService } from '../pages';
 import { replyGenerator } from '../reply/generator';
-import { buildPlaygroundContext } from '../reply/playgroundContext';
+import { buildPlaygroundContext, PLAYGROUND_PAGE_COLUMNS } from '../reply/playgroundContext';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import type { PlaygroundRequestBody } from '../../types/admin';
 
@@ -242,16 +242,11 @@ class AdminKbService {
         }
 
         const [page] = await db
-            .select({
-                id: pages.id,
-                name: pages.name,
-                userId: pages.userId,
-                workspaceId: pages.workspaceId,
-                knowledgeBase: pages.knowledgeBase,
-                kbActiveVersion: pages.kbActiveVersion,
-                ecommerceStoreId: pages.ecommerceStoreId,
-                businessProfile: pages.businessProfile,
-            })
+            // The shared prompt-column subset (incl. the D-084 page persona) —
+            // hand-listing columns here is how a preview drifts from production
+            // (wrong reply AND wrong `bv:` cache key), so the list lives in ONE
+            // place both this select and warm-reply-cache spread.
+            .select({ ...PLAYGROUND_PAGE_COLUMNS })
             .from(pages)
             .where(eq(pages.id, pageId))
             .limit(1);

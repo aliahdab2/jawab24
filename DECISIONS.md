@@ -1844,3 +1844,61 @@ the quota is unambiguously live. Test fixtures updated across both workspaces.
 `db:migrate` and the container swap the old image's explicit `select` of `show_branding` errors on
 plan reads. Repo precedent for column drops, seconds-wide, `/pricing` is ISR-cached — accepted
 rather than split into a two-release expand/contract.
+
+## D-084 · Per-page persona scoping replaces the reply-modes build; PR #769 parked on measurement
+
+**Decided:** 2026-08-16 · **Status:** Active · (D-083 is recorded on the parked `feat/reply-modes` branch, PR #769 — the number stays reserved for it.)
+
+**The measurement that redirected the work.** The owner asked why reply modes (D-083, PR #769,
+65 files) was needed when a merchant could write the purpose into their persona. Measured before
+answering: all 12 real production contact-asks from Shahin Resort (2026-08-01→08-15), each
+replayed at its exact thread state, temp 0, 2 runs/arm. Two control numbers exist and they are
+DIFFERENT measurements, not a contradiction: the prompt-arm replay
+(`reply-mode-full-replay-2026-08-16.md`) scored the live persona at **5/12 failing situations
+· 9 asks**, while the end-to-end effect gate (`per-page-persona-effect-gate-2026-08-16.md`,
+the full pipeline this PR ships through) scored the same control at **8/12 · 14 asks**. The
+treatment arms were clean in BOTH: persona + explicit info instruction **0/12**; same in
+identity framing **0/12**; PR #769's INFO-DESK block **0/12**; the shipped page override
+end-to-end **0/12, 0 promises**. A persona instruction equals the built feature on every case
+that actually fails. The D-019/D-051 argument ("rules lose to demonstrations") did not hold here
+and was withdrawn for this class. Transcripts:
+`~/.claude/plans/reply-mode-{persona-arm-probe,multiturn-replay,full-replay}-2026-08-16.md` and
+`~/.claude/plans/per-page-persona-effect-gate-2026-08-16.md`.
+
+**The ruling (owner, generic-first).** The behaviour is self-serve persona text; what is NOT
+self-serve is scope — `brandVoiceNotes*` was workspace-level while businesses are page-level
+(17 multi-page workspaces / 87 pages; 4 run one persona over different businesses, incl. the
+flagship 9-page الفريق الدمشقي; InMedia's own persona says «نطاق المنتجع» while serving a travel
+agency page). So build the generic scoping layer instead of a mode:
+
+1. `pages.brand_voice_notes_multi` JSONB NULL — NULL/`{}`/all-cleared = inherit; language
+   content = a PIN (no workspace, no legacy fallback). Fourth instance of the established
+   page-override pattern (leadStages / leadFields).
+2. One choke point: `resolveBrandVoiceNotes(settings, message, pageOverride?)`; both callers
+   (production `enrichPageContext`, playground/eval/cache-warm `buildPlaygroundContext`) pass
+   the page row's value. `mapToPlatformPage` MUST carry the field — the processors hand that
+   mapped object to the enricher, and dropping it there makes the feature playground-only
+   (pinned by `platformPageMapping.test.ts`).
+3. **No new cache mechanism and no PROMPT_VERSION bump** — the persona text already scopes both
+   cache layers (`bv:` exact-key segment + semantic `brandVoiceHash`), so a page override lands
+   in its own bucket exactly like a workspace persona edit. **No allowlist** — scoping an
+   existing field is not a behaviour change; a NULL column is byte-identical behaviour, so GA
+   from day one, inert until set.
+4. Write path `PATCH /pages/:id/brand-voice` (admin+, `null` reverts), auto-translated through
+   the same `smartTranslateMultiLang` the workspace save uses.
+
+**Multi-turn eval is mandatory for this class.** Production is clean at turn 1 and asks from
+turn 3 onward (11 of the 12 harvested failures had ≥4-turn history) — the 08-15 ship-gate probe
+and the parked branch's Cat-77 cases are all single-turn, i.e. they measure the easy case.
+Cat 78's replay cases therefore all carry `conversationHistory`, with a no-override control
+case pinning attribution. The E-4 grader gap (bare «ورقمك» punishing the permitted
+«شكراً لمشاركة رقمك» thank-you) was confirmed on real prod data and fixed in
+`CONTACT_ASK_PHRASES`.
+
+**PR #769 stays parked, not closed** (owner). Its unique remainders — `suppressPush` on lead
+alerts and leads-tab hiding — are re-evaluated after the InMedia pilot week; the INFO-DESK
+prompt block is redundant once page personas exist. UI surface: the **settings scope switcher
+(option B) SHIPPED in the same PR** (owner call, 2026-08-16) — multi-page workspaces get a
+scope selector on the persona card; single-page merchants see no change. What stays deferred
+to pilot evidence is the page-card row (option A) and whether the switcher remains the
+long-term surface; the backend contract is identical under either.

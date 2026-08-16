@@ -452,6 +452,14 @@ export interface Page {
   // for this page (see resolveEffectiveLeadStages / resolveEffectiveLeadFields).
   leadStages?: LeadStagesConfig | null;
   leadFields?: LeadCustomFieldDef[] | null;
+  /**
+   * Per-page persona override. null/absent OR an empty record = inherit the
+   * workspace's settings.brandVoiceNotesMulti; a record with language keys is
+   * this page's own persona (resolved via resolveBrandVoiceNotes' pageOverride
+   * parameter — language pick + sourceLang bookkeeping identical to the
+   * workspace field).
+   */
+  brandVoiceNotesMulti?: Record<string, string> | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)

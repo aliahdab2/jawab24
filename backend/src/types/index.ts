@@ -171,6 +171,16 @@ export interface UpdateLeadConfigDTO {
     leadFields?: import('@jawab24/shared').LeadCustomFieldDef[] | null;
 }
 
+/**
+ * Per-page persona override payload (PATCH /pages/:id/brand-voice, D-084).
+ * `null` reverts the page to the workspace persona; a record with language
+ * keys pins this page's own persona (auto-translated on save exactly like the
+ * workspace field).
+ */
+export interface UpdateBrandVoiceDTO {
+    brandVoiceNotesMulti: Record<string, string> | null;
+}
+
 // Post Types
 export interface Post {
     id: string;

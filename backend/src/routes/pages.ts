@@ -106,6 +106,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.updateLeadConfig);
 
+        adminRoutes.patch('/pages/:id/brand-voice', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Set per-page persona override (null reverts to workspace persona)',
+                security: auth,
+            },
+        }, pagesController.updateBrandVoice);
+
         adminRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
             schema: {
                 tags: ['Pages'],

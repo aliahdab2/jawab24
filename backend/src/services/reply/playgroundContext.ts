@@ -9,6 +9,7 @@ import { pickNudgeVariation } from './nudge';
 import { resolveBrandVoiceNotes } from './contextEnricher';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
+import { pages } from '../../db/schema';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import type { PlaygroundSource } from '../../types/aiPipeline';
 import {
@@ -18,6 +19,27 @@ import {
 } from '@jawab24/shared';
 
 /** Minimal page shape needed to build playground context */
+/**
+ * The `pages` columns a playground/eval/cache-warm context needs — the single
+ * definition BOTH column-subset selects spread (`admin/kb.ts` preview and
+ * `scripts/warm-reply-cache.ts`). A prompt-relevant column added to the schema
+ * gets added HERE, and both paths inherit it; before this constant each select
+ * hand-listed its columns, and a column missed in one produced a preview or a
+ * warmed `bv:` cache key that silently disagreed with production (the drift
+ * this PR's own comments warn about). Pinned by cacheWarming.test.ts.
+ */
+export const PLAYGROUND_PAGE_COLUMNS = {
+    id: pages.id,
+    name: pages.name,
+    userId: pages.userId,
+    workspaceId: pages.workspaceId,
+    knowledgeBase: pages.knowledgeBase,
+    kbActiveVersion: pages.kbActiveVersion,
+    ecommerceStoreId: pages.ecommerceStoreId,
+    businessProfile: pages.businessProfile,
+    brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
+} as const;
+
 export interface PlaygroundPageData {
     id: string;
     name?: string | null;
@@ -28,6 +50,8 @@ export interface PlaygroundPageData {
     ecommerceStoreId?: string | null;
     /** Stage 2.6: needed to build the structured BUSINESS_INFO prompt block. */
     businessProfile?: unknown;
+    /** Per-page persona override (D-084) — resolved exactly like production. */
+    brandVoiceNotesMulti?: Record<string, string> | null;
 }
 
 interface PlaygroundContextOptions {
@@ -129,7 +153,10 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
             defaultReplyLanguage = wsSettings.defaultReplyLanguage;
             timezone = wsSettings.timezone;
-            storedBrandVoiceNotes = resolveBrandVoiceNotes(wsSettings, question);
+            // Page override → workspace default (D-084) — the same third argument
+            // production's enrichPageContext passes, so playground/eval/cache-warm
+            // previews resolve the persona exactly like the reply pipeline.
+            storedBrandVoiceNotes = resolveBrandVoiceNotes(wsSettings, question, page.brandVoiceNotesMulti);
             storedReplyStyle = wsSettings.replyStyle || undefined;
         } catch {
             // Non-critical — fall back to default

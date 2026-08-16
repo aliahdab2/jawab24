@@ -9,13 +9,16 @@ import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { logAutoReplyToggle, auditLog } from '../services/auditLog';
-import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, UpdateBrandVoiceDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { merchantBusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek, removeKbLines, businessPhoneList, unwrapBusinessProfile } from '@jawab24/shared';
+import { canonicalizeHoursWeek, removeKbLines, businessPhoneList, unwrapBusinessProfile, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
+import { smartTranslateMultiLang } from '../services/multiLangTranslation';
+import { translateText } from '../services/translation';
+import { workspaceSettingsService } from '../services/workspaceSettings';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -296,6 +299,98 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update lead config' });
+        }
+    }
+
+    /**
+     * Save a page's persona override (D-084).
+     * PATCH /pages/:id/brand-voice  (admin+ only)
+     * Body: { brandVoiceNotesMulti: Record<lang, string> | null } — null reverts
+     * to the workspace persona; a record with language content pins this page's
+     * own persona. Auto-translated on save with the SAME helper the workspace
+     * field uses (smartTranslateMultiLang) — never a second translation path.
+     */
+    async updateBrandVoice(request: FastifyRequest<{ Params: { id: string }; Body: UpdateBrandVoiceDTO }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId || !req.user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const body = request.body ?? ({} as UpdateBrandVoiceDTO);
+        if (!('brandVoiceNotesMulti' in body)) {
+            return reply.status(400).send({ error: 'brandVoiceNotesMulti is required (record of language → text, or null to inherit)' });
+        }
+
+        const raw = body.brandVoiceNotesMulti;
+        let next: Record<string, string> | null = null;
+        if (raw !== null) {
+            if (typeof raw !== 'object' || Array.isArray(raw)) {
+                return reply.status(400).send({ error: 'brandVoiceNotesMulti must be an object or null' });
+            }
+            const entries = Object.entries(raw);
+            // Defensive cap: language variants + sourceLang, never a dumping ground.
+            if (entries.length > 12) {
+                return reply.status(400).send({ error: 'Too many language entries' });
+            }
+            for (const [key, value] of entries) {
+                if (typeof value !== 'string') {
+                    return reply.status(400).send({ error: 'brandVoiceNotesMulti values must be strings' });
+                }
+                // Keys are language codes (BCP-47-ish) plus the sourceLang
+                // bookkeeping key — anything else ('notes', '__proto__', 'zz9…')
+                // would land in jsonb, and the resolver's any-language tail would
+                // serve it as a live persona the merchant's UI can't display or
+                // clear.
+                if (key !== 'sourceLang' && !/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(key)) {
+                    return reply.status(400).send({ error: `brandVoiceNotesMulti keys must be language codes ("${key}" is not)` });
+                }
+                // sourceLang holds a language code or 'manual'/'default' — cap it
+                // too, or an unbounded string rides the bookkeeping key into jsonb.
+                const maxLen = key === 'sourceLang' ? 32 : MAX_BRAND_VOICE_LENGTH;
+                if (value.length > maxLen) {
+                    return reply.status(400).send({ error: `Persona must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer per language` });
+                }
+            }
+            next = raw as Record<string, string>;
+        }
+
+        try {
+            // Auto-translate exactly like the workspace persona save: the changed
+            // language is the source, the other supported languages are derived.
+            // Current stored value = this PAGE's own override (not the workspace
+            // text — inherit is resolved at read time, never copied into the row).
+            if (next !== null) {
+                const existing = await pagesService.getPage(req.workspaceId, id);
+                if (!existing) {
+                    return reply.status(404).send({ error: 'Page not found' });
+                }
+                // getPage already filtered on req.workspaceId, so the page's own
+                // workspaceId is that value — no conditional needed.
+                const wsSettings = await workspaceSettingsService.getSettings(req.workspaceId).catch(() => null);
+                const userId = req.user.userId;
+                next = await smartTranslateMultiLang(
+                    next,
+                    (existing.brandVoiceNotesMulti as Record<string, string> | null) ?? {},
+                    'brandVoiceNotes',
+                    {
+                        supportedLanguages: wsSettings?.supportedLanguages || ['ar', 'en'],
+                        maxLength: MAX_BRAND_VOICE_LENGTH,
+                        translate: async (text, sourceLanguage, targetLanguage) =>
+                            (await translateText({ text, sourceLanguage, targetLanguage, userId })).translatedText,
+                        onError: ({ fieldName, sourceLang, targetLang, error }) =>
+                            request.log.error({ error: String(error) }, `Translation failed for ${fieldName} (${sourceLang}->${targetLang})`),
+                    },
+                );
+            }
+
+            const page = await pagesService.updateBrandVoice(req.workspaceId, id, next);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            return reply.send(serializePage(page));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to update page persona' });
         }
     }
 

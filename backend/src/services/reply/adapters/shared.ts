@@ -50,6 +50,7 @@ export function mapToPlatformPage(
         kbActiveVersion: number | null;
         ecommerceStoreId: string | null;
         businessProfile: unknown;
+        brandVoiceNotesMulti?: Record<string, string> | null;
     },
     overrides: {
         autoReplyEnabled: boolean;
@@ -72,6 +73,9 @@ export function mapToPlatformPage(
         instagramCredential: overrides.instagramCredential,
         ecommerceStoreId: page.ecommerceStoreId,
         businessProfile: page.businessProfile as Record<string, unknown> | null,
+        // D-084: the processors hand this object to enrichPageContext — dropping
+        // the field here would leave page personas dark in production.
+        brandVoiceNotesMulti: page.brandVoiceNotesMulti ?? null,
     };
 }
 

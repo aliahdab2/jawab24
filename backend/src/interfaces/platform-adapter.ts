@@ -37,6 +37,13 @@ export interface PlatformPage {
     ecommerceStoreId?: string | null;
     /** Structured business profile from Facebook sync (hours, phone, address, etc.) */
     businessProfile?: Record<string, unknown> | null;
+    /**
+     * Per-page persona override (D-084). Must ride the adapter mapping: the
+     * processors hand THIS object to enrichPageContext, so a field missing here
+     * is a feature that works in the playground and is silently dark in
+     * production (the Rule 19.2 drift, inverted).
+     */
+    brandVoiceNotesMulti?: Record<string, string> | null;
 }
 
 /** Stored message returned by the adapter's storeIncomingMessage */
