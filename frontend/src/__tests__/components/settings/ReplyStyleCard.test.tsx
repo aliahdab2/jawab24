@@ -94,7 +94,9 @@ describe('ReplyStyleCard', () => {
 
     const btn = screen.getByRole('button', { name: /Test with the AI/i });
     expect(btn).toBeDisabled();
-    expect(screen.getByText(/Save settings to test/i)).toBeInTheDocument();
+    // The why lives in the tooltip only — no standalone visible line next to
+    // the button (owner call, 2026-08-16); the textarea hint carries it.
+    expect(btn).toHaveAttribute('title', expect.stringMatching(/Save your changes first/i));
   });
 
   it('test button is enabled when there are no unsaved changes', () => {

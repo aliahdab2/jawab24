@@ -64,7 +64,7 @@
     "templateHint": "Describe your assistant — not a sample reply. Fill in each line for your business.",
     "exampleTemplate": "Name: [your assistant's name]\nVoice & dialect: [how it should sound — e.g. friendly, Saudi dialect]\nSignature phrases: [a few it should use, with emojis]\nReply style: short, a few emojis, sounds human — no dry replies\nGoal: [what to steer the customer toward — e.g. collect their name and phone to complete the order or booking]",
     "openTestModal": "Test with the AI",
-    "testSaveFirst": "Save settings to test",
+    "testSaveFirst": "Save your changes first to test with them",
     "testNoPages": "Connect a Facebook or Instagram page first to test.",
     "holdLowConfidence": "Review Uncertain Replies",
     "holdLowConfidenceDesc": "Hold replies the AI isn't sure about for your review.",
@@ -75,7 +75,7 @@
     "allPagesExplainer": "This persona applies to all your pages. Pick a page from the list to give it its own persona.",
     "inheritedExplainer": "This page uses the general persona. Edit the text and save to give this page its own.",
     "customExplainer": "This page has its own persona — edits here don't touch your other pages.",
-    "workspaceSaveHint": "Your changes to the general persona are saved with the “Save” button at the bottom of the page."
+    "workspaceSaveHint": "Changes are saved with the “Save” button at the bottom of the page — after saving you can test the reply."
   },
   "saveSettings": "Save",
   "settingsSaved": "Saved ✓",

@@ -495,17 +495,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       </div>
       {/* No separate «التجربة على» row (owner call, 2026-08-16): the persona
           scope switcher is the ONE page selector — the test follows it
-          (scopedPage ?? first connected page). A second picker here could
-          contradict the scope: write a page persona, test a different page,
-          see no effect of what was just written. */}
-      {(hasChanges || testError) && (
+          (scopedPage ?? first connected page). No standalone «save to test»
+          line either (owner call): the single hint under the textarea carries
+          both messages, and the disabled button keeps its tooltip. */}
+      {testError && (
         <div className="mt-1.5 flex items-center justify-end gap-1.5 flex-wrap">
-          {hasChanges && (
-            <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
-          )}
-          {testError && (
-            <p className="text-xs text-destructive w-full text-end" role="alert">{testError}</p>
-          )}
+          <p className="text-xs text-destructive w-full text-end" role="alert">{testError}</p>
         </div>
       )}
 
