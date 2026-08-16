@@ -529,7 +529,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
         )}
       </div>
 
-      {/* Tone + Test — single compact row. */}
+      {/* Tone + Test — single compact row. ⚠️ Known, accepted for now (owner,
+          2026-08-17): the tone is WORKSPACE-level (replyStyle feeds the
+          ai-worker tone directive and the reply-cache key; D-084 scoped only
+          the persona text), yet it renders under the page-scope editor too,
+          where it can read as per-page. Deliberately left as-is pending the
+          InMedia pilot; a page needing its own tone states it in its persona
+          text. Recorded in backend/docs/SETTINGS.md. */}
       <div className="flex flex-wrap items-center gap-2">
         <span id="replyStyleToneLabel" className="text-xs font-medium text-foreground/80 shrink-0">
           {t('replyStyle.tone')}
