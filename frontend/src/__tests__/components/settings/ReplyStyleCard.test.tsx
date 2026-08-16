@@ -4,10 +4,13 @@ import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { ReplyStyleCard } from '@/components/settings/ReplyStyleCard';
 import type { SettingsState } from '@/components/settings/types';
 
-// Mock the lazy-loaded test modal — we don't need to render it for the
-// settings-card tests, only assert that the trigger button works.
+// Mock the lazy-loaded test modal as a probe exposing WHICH page it was opened
+// on — the default-target pins below assert the card's page selection without
+// rendering the real modal.
 vi.mock('next/dynamic', () => ({
-  default: () => () => null,
+  default: () => (props: { page?: { name?: string } }) => (
+    <div data-testid="test-modal">{props.page?.name}</div>
+  ),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -23,6 +26,7 @@ vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
 import { pagesApi } from '@/lib/api';
 import { makeSettings } from '../../testUtils/settingsFactory';
+import { intlState } from '../../testUtils/intlState';
 
 describe('ReplyStyleCard', () => {
   beforeEach(() => {
@@ -111,7 +115,39 @@ describe('ReplyStyleCard', () => {
   // 2026-08-16): the persona scope switcher is the ONE page selector and the
   // test follows it (scopedPage ?? first connected page). The first-connected
   // default still lives in the component (selectedPage) and feeds the modal —
-  // its picker-based pins were removed with the picker.
+  // the two pins below re-assert it through the modal probe, replacing the
+  // picker-based originals (regression: `fetched[0]` used to default the test
+  // to whatever page was created last, often a stale/disconnected one).
+
+  it('test defaults to the first CONNECTED page, not the most-recent disconnected one', async () => {
+    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+      data: [
+        { id: 'p2', name: 'New Disconnected Page', isConnected: false },
+        { id: 'p1', name: 'Connected Page', isConnected: true },
+      ],
+    } as never);
+
+    render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
+    await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Test with the AI/i }));
+    expect(await screen.findByTestId('test-modal')).toHaveTextContent('Connected Page');
+  });
+
+  it('test falls back to the first page when none are connected', async () => {
+    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+      data: [
+        { id: 'p2', name: 'Disconnected A', isConnected: false },
+        { id: 'p1', name: 'Disconnected B', isConnected: false },
+      ],
+    } as never);
+
+    render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
+    await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Test with the AI/i }));
+    expect(await screen.findByTestId('test-modal')).toHaveTextContent('Disconnected A');
+  });
 
   it('shows hold-relocation notice only when holdLowConfidence is on and not yet seen', () => {
     // localStorage clean — notice should appear.
@@ -201,11 +237,90 @@ describe('ReplyStyleCard', () => {
       expect(screen.getAllByText(/Has its own persona/i).length).toBeGreaterThan(0);
       expect(screen.getByDisplayValue('شخصية الصفحة')).toBeInTheDocument();
 
+      // Revert is destructive — it must pass through the confirmation modal,
+      // never fire on the first click.
       fireEvent.click(screen.getByRole('button', { name: /Revert to default/i }));
+      expect(pagesApi.updateBrandVoice).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTestId('confirm-modal-confirm'));
       await waitFor(() => {
         expect(pagesApi.updateBrandVoice).toHaveBeenCalledWith('p2', null);
       });
       expect((await screen.findAllByText(/Uses the general persona/i)).length).toBeGreaterThan(0);
+      // Explicit success signal for the revert.
+      expect(await screen.findByText(/Reverted to the general persona/i)).toBeInTheDocument();
+    });
+
+    it('an inheriting page seeds its editor from the SAVED workspace persona, never the unsaved draft', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      // The live settings draft is DIRTY (hasChanges): the page editor must
+      // show what the page actually inherits — the persisted text.
+      const dirty = makeSettings({ brandVoiceNotesMulti: { en: 'UNSAVED draft text', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={dirty}
+          setSettings={vi.fn()}
+          hasChanges
+          savedBrandVoiceNotesMulti={{ en: 'Saved workspace persona', sourceLang: 'en' }}
+        />,
+      );
+      await screen.findByText(/Editing persona for/i);
+
+      const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+      fireEvent.change(scopeSelect, { target: { value: 'p1' } });
+
+      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('Saved workspace persona');
+    });
+
+    it('a disconnected page WITH an override stays in the switcher (visible and revertable)', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [
+          { id: 'p1', name: 'Live Page', isConnected: true, brandVoiceNotesMulti: null },
+          // Token revoked, override still on the row — hiding it would orphan
+          // the persona: invisible in the UI, still winning after a reconnect.
+          { id: 'p3', name: 'Dead Page', isConnected: false, brandVoiceNotesMulti: { ar: 'شخصية قديمة', sourceLang: 'manual' } },
+        ],
+      } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await screen.findByText(/Editing persona for/i);
+
+      const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+      fireEvent.change(scopeSelect, { target: { value: 'p3' } });
+
+      expect(screen.getByDisplayValue('شخصية قديمة')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Revert to default/i })).toBeEnabled();
+    });
+
+    it('flipping the editing language reseeds the draft — a save never writes the OLD language text under the NEW key', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'English workspace persona', ar: 'شخصية عربية', sourceLang: 'manual' } });
+      const { rerender } = render(
+        <ReplyStyleCard settings={settings} setSettings={vi.fn()} savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti} />,
+      );
+      await screen.findByText(/Editing persona for/i);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('English workspace persona');
+
+      // Merchant flips the dashboard locale mid-scope. The draft must follow —
+      // keeping the English text would save it under the Arabic key.
+      intlState.locale = 'ar';
+      rerender(<ReplyStyleCard settings={settings} setSettings={vi.fn()} savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti} />);
+      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('شخصية عربية');
+    });
+
+    it('save shows an explicit success notice', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateBrandVoice).mockResolvedValue({
+        data: { ...TWO_PAGES[0], brandVoiceNotesMulti: { en: 'Info desk only', sourceLang: 'en' } },
+      } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await screen.findByText(/Editing persona for/i);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+      fireEvent.change(screen.getByRole('textbox', { name: /Persona for Resort Page/i }), { target: { value: 'Info desk only' } });
+      fireEvent.click(screen.getByRole('button', { name: /Save page persona/i }));
+
+      expect(await screen.findByText(/Page persona saved/i)).toBeInTheDocument();
     });
 
     it('never renders a separate «Testing on» row — the scope switcher is the one selector', async () => {

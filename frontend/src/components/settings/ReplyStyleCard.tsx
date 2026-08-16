@@ -3,7 +3,8 @@ import dynamic from 'next/dynamic';
 import clsx from 'clsx';
 import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
-import { Card, InputFieldWrapper, CharCounter, Select } from '@/components/ui';
+import { Card, InputFieldWrapper, CharCounter, Select, ConfirmationModal } from '@/components/ui';
+import { captureError } from '@/lib/sentryHelpers';
 import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
@@ -22,12 +23,35 @@ const TestSmartReplyModal = dynamic(
 const STYLES = ['professional', 'casual', 'enthusiastic'] as const;
 const HOLD_RELOCATION_SEEN_KEY = 'hold_relocation_seen';
 
+// A page counts as overridden only on real language content (mirrors the
+// backend resolver: sourceLang bookkeeping / cleared values = inherit).
+const hasOverrideContent = (multi: Page['brandVoiceNotesMulti']) =>
+  Object.entries((multi ?? {}) as Record<string, string>)
+    .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
+
+// The page override's display text for an editing language: that language's
+// variant, else the first real content in any language (same any-language
+// tail as the backend resolver).
+const pageOverrideTextFor = (page: Page | null | undefined, lang: string) => {
+  const override = (page?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
+  return override[lang]
+    || Object.entries(override).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
+    || '';
+};
+
 interface ReplyStyleCardProps extends SettingsCardProps {
   hasChanges?: boolean;
   onScrollToAdvanced?: () => void;
+  /**
+   * The PERSISTED workspace persona (parent's initialSettings) — the text an
+   * inheriting page actually inherits. The page-scope editor seeds from this,
+   * never from the live `settings` draft, which can be dirty. Optional only
+   * for legacy call sites/tests; when absent the draft is assumed clean.
+   */
+  savedBrandVoiceNotesMulti?: Record<string, string>;
 }
 
-export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced }: ReplyStyleCardProps) {
+export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti }: ReplyStyleCardProps) {
   const t = useTranslations('settings');
   const field = useMultilingualSettingsField(settings.brandVoiceNotesMulti);
   const { currentLang, value, sourceLang } = field;
@@ -131,64 +155,95 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // feature exists for) — a single-page merchant keeps today's card untouched.
   // 'workspace' scope = the existing settings-save flow, byte-identical.
   // A page scope shows the editor DIRECTLY, prefilled with the page's effective
-  // persona (its own text, else the inherited workspace text). The SAVE button
+  // persona (its own text, else the SAVED workspace text). The SAVE button
   // is the explicit fork point — it only enables once the draft differs, so an
   // override is never created by merely looking (owner call, 2026-08-16: the
   // extra «تخصيص» step was redundant friction on top of that).
-  const connectedPages = pages.filter((p) => p.isConnected !== false);
+  // The switcher lists every connected page PLUS any disconnected page still
+  // carrying an override: the override lives on the row, not the token, so a
+  // revoked token must not make the persona invisible and unrevertable while
+  // a reconnect silently revives it.
+  const switcherPages = pages.filter((p) => p.isConnected !== false || hasOverrideContent(p.brandVoiceNotesMulti));
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
-  const scopedPage = personaScope === 'workspace' ? null : connectedPages.find((p) => p.id === personaScope) ?? null;
+  const scopedPage = personaScope === 'workspace' ? null : switcherPages.find((p) => p.id === personaScope) ?? null;
 
-  // A page counts as overridden only on real language content (mirrors the
-  // backend resolver: sourceLang bookkeeping / cleared values = inherit).
-  const hasOverrideContent = (multi: Page['brandVoiceNotesMulti']) =>
-    Object.entries((multi ?? {}) as Record<string, string>)
-      .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
-  const overriddenCount = connectedPages.filter((p) => hasOverrideContent(p.brandVoiceNotesMulti)).length;
+  const overriddenCount = pages.filter((p) => hasOverrideContent(p.brandVoiceNotesMulti)).length;
 
-  // A page override counts only when a language entry has real content —
-  // sourceLang bookkeeping and cleared values mean "inherit" (mirrors the
-  // backend resolver's rule exactly).
-  const pageOverride = (scopedPage?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
   const pageHasOverride = hasOverrideContent(scopedPage?.brandVoiceNotesMulti);
-  const pageOverrideText = pageOverride[currentLang]
-    || Object.entries(pageOverride).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
-    || '';
+  const pageOverrideText = pageOverrideTextFor(scopedPage, currentLang);
 
-  // The page's effective text: its own override, else the inherited workspace text.
-  const pageEffectiveText = pageHasOverride ? pageOverrideText : value;
+  // The inherited text a page-scope editor shows is the PERSISTED workspace
+  // persona, never the live draft: `value` can be dirty (hasChanges exists
+  // precisely because of that), and presenting an unsaved draft as "this page
+  // uses the general persona" is false — one «حفظ شخصية الصفحة» away from
+  // pinning words the merchant never saved anywhere.
+  const savedWorkspaceMulti = savedBrandVoiceNotesMulti ?? settings.brandVoiceNotesMulti;
+  const savedWorkspaceValue = savedWorkspaceMulti?.[currentLang] || '';
+
+  // The page's effective text: its own override, else the saved workspace text.
+  const pageEffectiveText = pageHasOverride ? pageOverrideText : savedWorkspaceValue;
 
   const [pageDraft, setPageDraft] = useState('');
   const [pageSaving, setPageSaving] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
+  const [confirmRevert, setConfirmRevert] = useState(false);
   const pageDraftChanged = pageDraft.trim() !== pageEffectiveText.trim();
+
+  // Single seeding source: reseed whenever the scoped page OR the editing
+  // language changes. Without the language leg, flipping the dashboard locale
+  // mid-scope kept the OLD language's text in the draft and saved it under the
+  // NEW language key. The ref keys the last seed, so re-renders (or a
+  // workspace save changing savedWorkspaceValue) never clobber typing; the
+  // guard makes the no-deps effect idempotent per (page, language) pair.
+  const pageSeedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scopedPage) {
+      pageSeedKeyRef.current = null;
+      return;
+    }
+    const seedKey = `${scopedPage.id}:${currentLang}`;
+    if (pageSeedKeyRef.current === seedKey) return;
+    pageSeedKeyRef.current = seedKey;
+    setPageDraft(hasOverrideContent(scopedPage.brandVoiceNotesMulti) ? pageOverrideTextFor(scopedPage, currentLang) : savedWorkspaceValue);
+    setPageError(null);
+    setPageNotice(null);
+  }, [scopedPage, currentLang, savedWorkspaceValue]);
+
+  // Success notices are transient — the chip carries the durable state.
+  useEffect(() => {
+    if (!pageNotice) return;
+    const timer = setTimeout(() => setPageNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [pageNotice]);
 
   const switchScope = (next: 'workspace' | string) => {
     setPersonaScope(next);
     setPageError(null);
-    if (next !== 'workspace') {
-      const page = connectedPages.find((p) => p.id === next);
-      const override = (page?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
-      const overrideText = override[currentLang]
-        || Object.entries(override).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
-        || '';
-      setPageDraft(hasOverrideContent(page?.brandVoiceNotesMulti) ? overrideText : value);
-    }
+    setPageNotice(null);
   };
 
   const applyPagePatch = async (payload: Record<string, string> | null) => {
     if (!scopedPage) return;
     setPageSaving(true);
     setPageError(null);
+    setPageNotice(null);
     try {
       const response = await pagesApi.updateBrandVoice(scopedPage.id, payload);
       const updated = response.data as Page;
       setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, brandVoiceNotesMulti: updated.brandVoiceNotesMulti } : p)));
       if (payload === null) {
-        // Reverted to inherit — the editor now shows the workspace text again.
-        setPageDraft(value);
+        // Reverted to inherit — the editor shows the saved workspace text again.
+        setPageDraft(savedWorkspaceValue);
+        setPageNotice(t('replyStyle.pageReverted'));
+      } else {
+        setPageNotice(t('replyStyle.pageSaved'));
       }
-    } catch {
+    } catch (err) {
+      captureError(err, 'Failed to save page persona', {
+        tags: { component: 'ReplyStyleCard' },
+        extra: { pageId: scopedPage.id, revert: payload === null },
+      });
       setPageError(t('replyStyle.pageSaveError'));
     } finally {
       setPageSaving(false);
@@ -203,7 +258,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     void applyPagePatch({ [currentLang]: text.slice(0, MAX_BRAND_VOICE_LENGTH) });
   };
 
-  const revertPagePersona = () => void applyPagePatch(null);
+  // A persona is merchant-authored writing (up to MAX_BRAND_VOICE_LENGTH per
+  // language, auto-translated variants included) and the PATCH has no undo —
+  // deleting it needs an explicit confirmation, not a one-click button beside
+  // the save.
+  const revertPagePersona = () => setConfirmRevert(true);
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -270,7 +329,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       {/* Brand voice notes — promoted to hero. */}
       <div className="mb-3">
         {/* Persona scope switcher (D-084) — multi-page workspaces only. */}
-        {connectedPages.length > 1 && (
+        {switcherPages.length > 1 && (
           <div className="mb-2 flex items-center gap-2 flex-wrap p-2 rounded-xl bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/30">
             <span id="persona-scope-label" className="text-xs font-bold text-brand-700 dark:text-brand-300 shrink-0">
               {t('replyStyle.scopeLabel')}
@@ -281,11 +340,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               options={[
                 { value: 'workspace', label: t('replyStyle.scopeAllPages') },
                 // Overridden pages are marked IN the list — the merchant sees
-                // which pages diverge before opening each one.
-                ...connectedPages.map((p) => ({
+                // which pages diverge before opening each one. A disconnected
+                // page appears only because it carries an override, and says so.
+                ...switcherPages.map((p) => ({
                   value: p.id,
                   label: hasOverrideContent(p.brandVoiceNotesMulti)
-                    ? t('replyStyle.overriddenOption', { page: p.name ?? '' })
+                    ? (p.isConnected === false
+                      ? t('replyStyle.overriddenOptionDisconnected', { page: p.name ?? '' })
+                      : t('replyStyle.overriddenOption', { page: p.name ?? '' }))
                     : p.name ?? '',
                 })),
               ]}
@@ -321,7 +383,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           </div>
         )}
         <div className="flex items-center justify-between mb-1.5">
-          <label htmlFor="brandVoiceNotes" className="text-sm font-bold text-foreground">
+          {/* The htmlFor follows the scope — in page scope the workspace
+              textarea (#brandVoiceNotes) is not in the DOM, and a label with a
+              dangling `for` neither focuses the visible field on click nor
+              associates it for assistive tech. */}
+          <label htmlFor={scopedPage ? 'pageBrandVoiceNotes' : 'brandVoiceNotes'} className="text-sm font-bold text-foreground">
             {scopedPage ? t('replyStyle.pageBrandVoice', { page: scopedPage.name ?? '' }) : t('replyStyle.brandVoice')}
           </label>
           {!scopedPage && isAutoTranslated && (
@@ -343,6 +409,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               }
             >
               <textarea
+                id="pageBrandVoiceNotes"
                 aria-label={t('replyStyle.pageBrandVoice', { page: scopedPage.name ?? '' })}
                 className={clsx(
                   'w-full bg-transparent border-none p-4 pe-14 rounded-2xl resize-y text-sm leading-relaxed min-h-[140px]',
@@ -385,6 +452,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 not through the page-bottom «حفظ الإعدادات» button. Without this
                 line the merchant edits, scrolls down, and doubts it saved. */}
             <p className="text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.pageSaveHint')}</p>
+            {/* Explicit success signal — the workspace path confirms its save
+                («تم حفظ الإعدادات بنجاح ✓»), so must this one; the chip alone
+                doesn't move when an EXISTING override is edited. */}
+            <p aria-live="polite" className={clsx('text-xs text-brand-600 dark:text-brand-400', !pageNotice && 'sr-only')} dir="auto">
+              {pageNotice ?? ''}
+            </p>
           </div>
         )}
         {scopedPage && pageError && (
@@ -512,6 +585,21 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           onClose={() => setTestPage(null)}
         />
       )}
+
+      {/* Revert is destructive (deletes the page's persona in every language,
+          no undo) — never one click. */}
+      <ConfirmationModal
+        isOpen={confirmRevert}
+        onClose={() => setConfirmRevert(false)}
+        onConfirm={() => {
+          setConfirmRevert(false);
+          void applyPagePatch(null);
+        }}
+        title={t('replyStyle.revertConfirmTitle')}
+        message={t('replyStyle.revertConfirmBody', { page: scopedPage?.name ?? '' })}
+        confirmText={t('replyStyle.revertBtn')}
+        variant="danger"
+      />
     </Card>
   );
 }

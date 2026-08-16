@@ -50,3 +50,25 @@ export const CharCounter = ({ value, max }: { value: string | number; max: numbe
 // AND its info trigger (e.g. businessHoursLabel), so a labeled mock here makes
 // getByLabelText ambiguous for the control the test actually targets.
 export const InfoPopover = ({ children }: { children: React.ReactNode }) => <span>{children}</span>;
+
+// Minimal ConfirmationModal: render nothing while closed; expose stable
+// testids so tests don't collide with same-named buttons in the card.
+export const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: string;
+  loading?: boolean;
+}) => (
+  isOpen ? (
+    <div role="dialog" aria-label={title}>
+      <p>{message}</p>
+      <button type="button" data-testid="confirm-modal-confirm" onClick={onConfirm}>confirm</button>
+      <button type="button" data-testid="confirm-modal-cancel" onClick={onClose}>cancel</button>
+    </div>
+  ) : null
+);

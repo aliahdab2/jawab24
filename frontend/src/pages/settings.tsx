@@ -500,6 +500,7 @@ const SettingsPage: NextPageWithLayout = () => {
             settings={settings}
             setSettings={setSettings}
             hasChanges={hasChanges}
+            savedBrandVoiceNotesMulti={initialSettings.brandVoiceNotesMulti}
             onScrollToAdvanced={() => {
               setShowAdvanced(true);
               requestAnimationFrame(() => {
