@@ -1,8 +1,14 @@
 # Instagram-Direct Connect (Instagram Login, no Facebook Page) — Plan
 
-> Status: **Phase A in progress** (demand measurement + App Review prep). Build (Phase B) is
-> gated — see the gate at the bottom. Owner improves/edits this doc directly; it is the
-> single source of truth for this track. Created 2026-08-16.
+> Status: **Phase B BUILT AND MERGED** — PR #772 (`cdbebfea`, 2026-08-16) shipped the full
+> connect while this PR was in review; the Phase-B gate below was superseded by direct
+> demand (a live customer asked, and a token scan confirmed 6 of 9 zero-page users have no
+> Facebook Pages). The feature stays **dark** until `INSTAGRAM_APP_*` +
+> `NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED` are configured and Meta App Review (A3) passes.
+> Phase A's signals are therefore REFRAMED, not retired: `ig_direct_interest` is the
+> **onboarding list** — who to contact the day the feature lights up — and the same CTA
+> starts the REAL connect for owners once the flag is on. Owner improves/edits this doc
+> directly; it is the single source of truth for this track. Created 2026-08-16.
 
 ## Why (and why not yet)
 
@@ -51,7 +57,15 @@ linked FB Page · screencast (connect → DM auto-reply + inbox reply → Post R
 comment → hide comment → automation-off switch) · reviewer credentials.
 Approval does not commit us to building — it removes the calendar bottleneck.
 
-## Phase B — build (≈1–2 weeks) — ⛔ GATED
+## Phase B — build — ✅ SHIPPED (PR #772, merged 2026-08-16; re-review fixes in `e60df507`)
+
+Everything below landed as planned, with two corrections Meta's docs forced during the
+build (both verified 2026-08-16, recorded in `.planning/codebase/INTEGRATIONS.md`):
+the Instagram-Login send edge is `POST /{ig-id}/messages` (NOT `/me/messages`), and the
+app-level webhook subscription is NOT sufficient — each account must install the app on
+itself (`POST /{ig-id}/subscribed_apps`), done at connect and re-issued by a daily
+self-heal sweep. Host+token travel together as an `InstagramCredential`
+(`backend/src/services/instagramCredential.ts`). Original plan kept for the record:
 
 1. **Schema**: `pages.instagram_access_token` (encrypted `enc:v1:`) +
    `instagram_token_expires_at` — mirror the WhatsApp per-channel block
@@ -71,15 +85,15 @@ Approval does not commit us to building — it removes the calendar bottleneck.
 6. **Tests**: unit + integration for the token path; E2E connect mock; Android release
    after (bundled frontend lags web).
 
-## Gate for Phase B (all three)
-1. **Demand signal**: meaningful `no_fb_pages` / `ig_direct_interest` counts after 2–3
-   weeks of signups (owner judges the threshold against the effort).
-2. **App Review approved.**
-3. **Owner go** — after Phase-0 billing fixes land (see the study plan).
+## Gate for Phase B — OUTCOME (recorded 2026-08-16)
+The gate was superseded before the measurement window ran: the owner green-lit the build
+on direct demand (a live customer request + the 6/9 token-scan). What REMAINS gated is the
+**launch**, on: (1) `INSTAGRAM_APP_*` + `NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED` configured,
+(2) Meta App Review (A3) approved for external merchants. Until then the signals run dark
+and `ig_direct_interest` accumulates the launch-day contact list.
 
 ## Open questions (owner input welcome — edit here)
-- Threshold: how many interest clicks justify the build?
-- Should the Libya ad test (still unlaunched) run BEFORE judging demand, so the signal
-  reflects paid traffic too?
+- Should the Libya ad test (still unlaunched) run BEFORE launch, so day-one traffic
+  includes Instagram-only merchants?
 - Pricing: does an IG-direct-only merchant land on the same plans? (Pricing decisions are
   deferred overall.)

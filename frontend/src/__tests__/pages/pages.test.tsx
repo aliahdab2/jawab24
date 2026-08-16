@@ -1782,4 +1782,42 @@ describe('PagesPage - Instagram-only demand signal', () => {
         expect(screen.getByText(enPages.igOnlyThanks)).toBeInTheDocument();
         expect(screen.queryByText(enPages.igOnlyCta)).not.toBeInTheDocument();
     });
+
+    // Two eras, one button: once Instagram-direct is LIT (flag on), asking an
+    // owner to "register interest" in a feature one click away would be absurd —
+    // the same CTA starts the real Instagram Login connect instead. The dark-era
+    // test above keeps pinning the interest path (flag unset there).
+    // Mutation-checked: reverting the onClick to handleIgDirectInterest
+    // unconditionally fails this.
+    it('when the flag is on, an owner click starts the REAL Instagram connect instead of recording interest', async () => {
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        const originalLocation = window.location;
+        const assign = vi.fn();
+        Object.defineProperty(window, 'location', {
+            value: { ...originalLocation, assign }, writable: true, configurable: true,
+        });
+        try {
+            mockedApi.post.mockResolvedValue({
+                data: { url: 'https://www.instagram.com/oauth/authorize?client_id=x' },
+            } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+            renderPage(<PagesPage />);
+            await waitFor(() => {
+                expect(screen.getByText(enPages.igOnlyCta)).toBeInTheDocument();
+            });
+
+            fireEvent.click(screen.getByText(enPages.igOnlyCta));
+
+            await waitFor(() => {
+                expect(mockedApi.post).toHaveBeenCalledWith('/auth/instagram/start', expect.anything());
+            });
+            expect(assign).toHaveBeenCalledWith('https://www.instagram.com/oauth/authorize?client_id=x');
+            expect(mockedApi.post).not.toHaveBeenCalledWith('/pages/instagram-direct-interest');
+        } finally {
+            Object.defineProperty(window, 'location', {
+                value: originalLocation, writable: true, configurable: true,
+            });
+            vi.unstubAllEnvs();
+        }
+    });
 });

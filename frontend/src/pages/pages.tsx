@@ -1605,7 +1605,20 @@ const PagesPage: NextPageWithLayout = () => {
             ) : (
               <>
                 <p className="text-sm text-muted-foreground mb-2">{t('igOnlyPrompt')}</p>
-                <Button variant="secondary" size="sm" onClick={handleIgDirectInterest}>
+                {/* Same label, two eras: while Instagram-direct is dark this
+                    records interest (the onboarding list to contact once Meta
+                    App Review lands); once the flag is on, an OWNER clicking it
+                    goes straight into the real Instagram Login connect — asking
+                    a merchant to "register interest" in a feature that is one
+                    click away would be absurd. Non-owners keep the interest
+                    path either way (the /start route is owner-only). */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={isInstagramDirectEnabled() && isOwner
+                    ? () => void startInstagramConnect()
+                    : handleIgDirectInterest}
+                >
                   {t('igOnlyCta')}
                 </Button>
               </>
