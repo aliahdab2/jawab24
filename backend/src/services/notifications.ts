@@ -117,6 +117,10 @@ export type NotificationType =
     // notice. See services/whatsappTokenHealth.ts.
     | 'whatsapp_token_expiring'
     | 'whatsapp_reconnect_needed'
+    // Instagram-direct (Instagram Login) tokens die on the same Meta-forced
+    // 60-day clock; a Graph 190 on the refresh sweep means only the merchant's
+    // one-minute OAuth redo can revive the channel. See services/instagramLogin.ts.
+    | 'instagram_reconnect_needed'
     // The daily image-reading cap is the one limit a merchant can hit without
     // any signal at all: past it we simply stop reading customer photos. The
     // merchant must be told — their CUSTOMERS never are (see nonTextHandler).
@@ -380,6 +384,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
             ar: 'انتهت صلاحية ربط واتساب للرقم {number}. أعد الربط لمتابعة الرد على عملائك.',
         },
     },
+    instagram_reconnect_needed: {
+        titles: { en: 'Instagram Reconnection Needed', ar: 'يلزم إعادة ربط إنستغرام' },
+        bodies: {
+            en: 'Your Instagram connection for {account} is no longer valid. Reconnect to keep replying to your customers.',
+            ar: 'لم يعد ربط إنستغرام للحساب {account} صالحًا. أعد الربط لمتابعة الرد على عملائك.',
+        },
+    },
 };
 
 /** Internal-only flag fragments that carry metadata, not user-facing reasons.
@@ -510,10 +521,13 @@ export function buildNotificationTag(payload: NotificationPayload): string | und
  * Two constraints for whoever picks that up:
  * - `apns-collapse-id` is capped at 64 BYTES; APNs rejects the request above it,
  *   and the failure surfaces as an error row in notification_send_log, not as a
- *   compile error. The tag is `${type}:${uuid}` and the longest NotificationType
- *   is 25 chars (`auto_reply_paused_billing`, `whatsapp_reconnect_needed`), so
- *   the worst case today is 25+1+36 = 62 bytes — two bytes of headroom. Assert
- *   it when the header is added.
+ *   compile error. The tag is `${type}:${uuid}`, and only types carrying a TARGET
+ *   key (messageId / commentId / leadId) are ever tagged. The longest of those is
+ *   25 chars (`auto_reply_paused_billing`, `whatsapp_reconnect_needed`), so the
+ *   worst case today is 25+1+36 = 62 bytes — two bytes of headroom. Measure the
+ *   longest TAGGABLE type, not the longest type: `instagram_reconnect_needed` is
+ *   26 chars and would leave one byte, but it is page-scoped and never tagged.
+ *   Assert it when the header is added.
  * - Web push (`webpush.notification.tag`) is NOT a missing leg: both push
  *   registration entry points are gated on Capacitor.isNativePlatform()
  *   (frontend/src/lib/notifications.ts), so platform='web' tokens are never

@@ -36,8 +36,8 @@ const {
 } = vi.hoisted(() => ({
     mockEnqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
-    mockGetPageByFacebookId: vi.fn().mockResolvedValue({ id: 'internal-page-123', accessToken: 'token-abc', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' }),
-    mockGetPageByInstagramId: vi.fn().mockResolvedValue({ id: 'internal-ig-123', accessToken: 'token-ig', name: 'IG Page', userId: 'user-1', workspaceId: 'ws-1' }),
+    mockGetPageByFacebookId: vi.fn().mockResolvedValue({ id: 'internal-page-123', facebookPageId: 'page_123', accessToken: 'token-abc', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' }),
+    mockGetPageByInstagramId: vi.fn().mockResolvedValue({ id: 'internal-ig-123', facebookPageId: 'page_123', accessToken: 'token-ig', name: 'IG Page', userId: 'user-1', workspaceId: 'ws-1' }),
     mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1', enrichmentStatus: 'pending' }, isNew: true }),
     mockFinalizeEnrichment: vi.fn().mockResolvedValue(true),
     mockStoreOutgoingMessage: vi.fn().mockResolvedValue({}),
@@ -93,12 +93,16 @@ vi.mock('../../src/config', () => ({
 }));
 
 // Mock all services used by webhook controller
-vi.mock('../../src/services/pages', () => ({
+vi.mock('../../src/services/pages', async () => ({
     pagesService: {
         getPageByFacebookId: mockGetPageByFacebookId,
         getPageByInstagramId: mockGetPageByInstagramId,
     },
-    isPageDisconnected: vi.fn().mockReturnValue(false),
+    // The REAL predicate, never a stub (Rule 19.3). This suite's job includes the
+    // webhook front door, and a stub here is exactly how PR #772 shipped a gate
+    // that dropped every Instagram-direct event while the suite stayed green
+    // (review C2): the fixture's `accessToken: ''` never met the real rule.
+    isPageDisconnected: (await vi.importActual<typeof import('../../src/services/pages')>('../../src/services/pages')).isPageDisconnected,
     invalidateWorkspaceStatsCache: vi.fn(),
 }));
 
@@ -1036,6 +1040,9 @@ describe('Webhook Controller', () => {
         const mockPage = {
             id: 'internal-page-id',
             workspaceId: 'ws-id',
+            // Page-backed row: the real isPageDisconnected reads the discriminator,
+            // so fixtures must carry it or they read as dead pageless cards.
+            facebookPageId: 'fb_page_1',
             accessToken: 'test-token',
             instagramAccountId: 'ig_account_123',
         };
@@ -1473,11 +1480,11 @@ describe('Webhook Controller', () => {
     describe('POST /webhook (Shared Post Handling)', () => {
         beforeEach(() => {
             mockGetPageByFacebookId.mockReset().mockResolvedValue({
-                id: 'internal-page-id', accessToken: 'test-token', name: 'Test Page',
+                id: 'internal-page-id', facebookPageId: 'page_123', accessToken: 'test-token', name: 'Test Page',
                 userId: 'user-1', workspaceId: 'ws-1',
             });
             mockGetPageByInstagramId.mockReset().mockResolvedValue({
-                id: 'internal-ig-id', accessToken: 'test-token', name: 'IG Page',
+                id: 'internal-ig-id', facebookPageId: 'page_123', accessToken: 'test-token', name: 'IG Page',
                 userId: 'user-1', workspaceId: 'ws-1',
             });
             mockEnqueueMessage.mockReset().mockResolvedValue('mock-job-id');
@@ -1733,7 +1740,7 @@ describe('Webhook Controller', () => {
 
     describe('page lookup efficiency', () => {
         it('should call getPageByFacebookId once per entry even with multiple messages', async () => {
-            const mockPage = { id: 'internal-page-1', accessToken: 'token', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' };
+            const mockPage = { id: 'internal-page-1', facebookPageId: 'page_123', accessToken: 'token', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' };
             mockGetPageByFacebookId.mockResolvedValue(mockPage);
 
             const webhookPayload = {

@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX, isPlausiblePlatformPostId } from '@jawab24/shared';
 import { postsService, PostNotOwnedError, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
+import { resolveInstagramCredential } from '../services/instagramCredential';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
 import { imageStorage } from '../services/imageStorage';
 import { bufferMatchesMime } from '../services/kb/file-extractor';
@@ -105,11 +106,26 @@ export class PostsController {
             // is the 2026-08-14 screen — «لا توجد منشورات حديثة على هذه الصفحة» — with
             // its one remaining clue removed. The reconnect card is raised separately;
             // this keeps the picker itself from contradicting it.
-            if (!page.accessToken) return reply.send({ posts: [], nextCursor: null, partial: true });
+            //
+            // Channel-aware (PR #772 review H2): an Instagram-direct row keeps
+            // `access_token` at the '' sentinel and holds its credential in
+            // `instagram_access_token`, so the guard must ask about the token the
+            // REQUESTED source actually sends with — the bare `!page.accessToken`
+            // read returned a confidently empty picker for every such page.
+            const sourceToken = source === 'instagram'
+                ? resolveInstagramCredential(page).accessToken
+                : page.accessToken;
+            if (!sourceToken) return reply.send({ posts: [], nextCursor: null, partial: true });
 
             const includeScheduled = request.query.includeScheduled === '1' || request.query.includeScheduled === 'true';
             const result = await postsService.listPublishedPosts(
-                { id: page.id, facebookPageId: page.facebookPageId, instagramAccountId: page.instagramAccountId, accessToken: page.accessToken },
+                {
+                    id: page.id,
+                    facebookPageId: page.facebookPageId,
+                    instagramAccountId: page.instagramAccountId,
+                    accessToken: page.accessToken,
+                    instagramAccessToken: page.instagramAccessToken,
+                },
                 { source, after: request.query.after, includeScheduled },
             );
             return reply.send(result);
@@ -151,7 +167,13 @@ export class PostsController {
             if (!page) return reply.status(404).send({ error: 'Page not found' });
 
             const content = await postsService.ensureContent(
-                { id: page.id, facebookPageId: page.facebookPageId, instagramAccountId: page.instagramAccountId, accessToken: page.accessToken },
+                {
+                    id: page.id,
+                    facebookPageId: page.facebookPageId,
+                    instagramAccountId: page.instagramAccountId,
+                    accessToken: page.accessToken,
+                    instagramAccessToken: page.instagramAccessToken,
+                },
                 source, platformPostId.trim(),
             );
             return reply.send(content);

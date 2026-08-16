@@ -21,12 +21,13 @@ vi.mock('../../src/services/messages', () => ({
     },
 }));
 
-vi.mock('../../src/services/pages', () => ({
+vi.mock('../../src/services/pages', async () => ({
     pagesService: {
         getPage: vi.fn(),
     },
-    isPageDisconnected: (page: { accessToken: string } | null | undefined) =>
-        !!page && page.accessToken === '',
+    // The REAL predicate, never a copy (Rule 19.3): the inline copy this replaced
+    // held the pre-#772 Facebook-only rule and could not drift with production.
+    isPageDisconnected: (await vi.importActual<typeof import('../../src/services/pages')>('../../src/services/pages')).isPageDisconnected,
 }));
 
 vi.mock('../../src/services/conversations', () => ({
@@ -439,7 +440,7 @@ describe('MessagesController', () => {
     // ─── reply ──────────────────────────────────────────────
 
     describe('reply', () => {
-        const mockPage = { id: 'page-uuid', accessToken: 'token-123', instagramAccountId: null };
+        const mockPage = { id: 'page-uuid', facebookPageId: 'fb-1', accessToken: 'token-123', instagramAccountId: null };
         const mockMessage = { id: 'msg-1', pageId: 'page-uuid', senderId: 'sender-1', platform: 'facebook' };
 
         beforeEach(() => {
@@ -474,6 +475,37 @@ describe('MessagesController', () => {
             await messagesController.reply(mockRequest as any, mockReply as any);
 
             expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-123', 'sender-1', 'Thank you!', pageLinkedInstagramCredential('token-123'));
+        });
+
+        // H1 regression (PR #772 review): an Instagram-direct row keeps
+        // `accessToken: ''` by construction, and the old Facebook-only
+        // disconnect rule 409'd every manual reply on it — with "reconnect via
+        // Facebook" for an account that has no Facebook. Runs against the REAL
+        // isPageDisconnected (mocked to importActual above); mutation-checked by
+        // reverting the predicate to `accessToken === ''`.
+        it('sends a manual reply on an Instagram-DIRECT page (empty FB token) instead of 409 PAGE_DISCONNECTED', async () => {
+            const igMessage = { ...mockMessage, platform: 'instagram' };
+            const igDirectPage = {
+                ...mockPage,
+                facebookPageId: null,
+                accessToken: '',
+                instagramAccountId: 'ig-direct-9',
+                instagramAccessToken: 'ig-direct-token',
+            };
+            vi.mocked(messagesService.getMessageById).mockResolvedValue(igMessage as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue(igDirectPage as any);
+            vi.mocked(instagramService.sendDirectMessage).mockResolvedValue(undefined as any);
+            vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+            vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({ id: 'out-1' } as any);
+
+            await messagesController.reply(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).not.toHaveBeenCalledWith(409);
+            // The send rides the Instagram credential — its own token, its own host.
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
+                'ig-direct-9', 'sender-1', 'Thank you!',
+                expect.objectContaining({ accessToken: 'ig-direct-token', direct: true }),
+            );
         });
 
         it('should send reply via WhatsApp with the WABA token (never the FB path)', async () => {
@@ -741,7 +773,7 @@ describe('MessagesController', () => {
     // row instead of the message row.
 
     describe('replyToConversation', () => {
-        const mockPage = { id: 'page-uuid', accessToken: 'token-123', instagramAccountId: null };
+        const mockPage = { id: 'page-uuid', facebookPageId: 'fb-1', accessToken: 'token-123', instagramAccountId: null };
         const mockConversationFb = { id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1', platform: 'facebook' };
         const mockOutgoing = { id: 'out-1', message: 'Hello' };
 

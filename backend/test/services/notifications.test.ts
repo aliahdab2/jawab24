@@ -115,6 +115,10 @@ const PRODUCTION_PAYLOADS: Record<NotificationType, ProductionPayloadSpec> = {
     page_disconnected: { source: 'services/tokenRefresh.ts:275', data: { action: 'reconnect_page' } },
     whatsapp_reconnect_needed: { source: 'services/whatsappTokenHealth.ts:311', data: { action: 'reconnect_whatsapp' } },
     whatsapp_token_expiring: { source: 'services/whatsappTokenHealth.ts:340', data: { action: 'reconnect_whatsapp' } },
+    // `pageId` is deliberately NOT a target key (packages/shared/src/notifications.ts),
+    // so this stacks rather than collapsing — correct: a merchant with two dead
+    // Instagram cards must see both.
+    instagram_reconnect_needed: { source: 'services/instagramLogin.ts:369', data: { action: 'reconnect_instagram', pageId: 'p1' } },
     provider_failover: { source: 'services/ai.ts:947', data: { urgent: true } },
     page_trial_used: { source: 'controllers/pages.ts:541 — no data argument' },
     trial_ending: { source: 'services/trialReminders.ts:267 — no data argument' },

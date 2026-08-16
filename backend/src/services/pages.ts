@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores, postSuggestions } from '../db/schema';
-import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
+import { eq, and, or, ne, desc, sql, count, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
@@ -23,6 +23,7 @@ import { STATS_CACHE_TTL, pagesStatsCacheKey } from './statsCache';
 // other stats-cache invalidation helpers.
 export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
+import { isUniqueViolation } from '../utils/dbErrors';
 import { clearReconnectAlertClaims } from './pageTokenRecovery';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
@@ -328,27 +329,38 @@ export class PagesService {
             return { taken: false, page: updated };
         }
 
-        const [created] = await db
-            .insert(pages)
-            .values({
-                workspaceId,
-                userId,
-                facebookPageId: null,
-                name: profile.name || `@${profile.username}`,
-                accessToken: '',
-                // The Facebook channel toggle is meaningless without a page; off
-                // keeps the card's state honest. Instagram replies stay opt-in
-                // like every linked-IG page (D-026 comments-opt-in-forever).
-                autoReplyEnabled: false,
-                instagramAccountId: profile.userId,
-                instagramUsername: profile.username,
-                instagramProfilePicUrl: profile.profilePictureUrl,
-                instagramAutoReplyEnabled: false,
-                instagramAccessToken: maybeEncryptToken(token.accessToken),
-                instagramTokenExpiresAt: token.expiresAt,
-            })
-            .returning();
-        return { taken: false, page: created };
+        try {
+            const [created] = await db
+                .insert(pages)
+                .values({
+                    workspaceId,
+                    userId,
+                    facebookPageId: null,
+                    name: profile.name || `@${profile.username}`,
+                    accessToken: '',
+                    // The Facebook channel toggle is meaningless without a page; off
+                    // keeps the card's state honest. Instagram replies stay opt-in
+                    // like every linked-IG page (D-026 comments-opt-in-forever).
+                    autoReplyEnabled: false,
+                    instagramAccountId: profile.userId,
+                    instagramUsername: profile.username,
+                    instagramProfilePicUrl: profile.profilePictureUrl,
+                    instagramAutoReplyEnabled: false,
+                    instagramAccessToken: maybeEncryptToken(token.accessToken),
+                    instagramTokenExpiresAt: token.expiresAt,
+                })
+                .returning();
+            return { taken: false, page: created };
+        } catch (error) {
+            // The select-then-insert race: two OAuth completions for the same IG
+            // account can both pass the `existing` read above. The unique index on
+            // instagram_account_id makes the second INSERT fail here instead of
+            // silently creating a twin row that would split webhook routing — and
+            // the loser of the race gets the same honest answer as a sequential
+            // second connect (PR #772 review M2).
+            if (isUniqueViolation(error)) return { taken: true };
+            throw error;
+        }
     }
 
     /**
@@ -1216,8 +1228,43 @@ export class PagesService {
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
         // or potential race conditions if multiple syncs happen simultaneously.
         for (const result of results) {
-            const { fbPage, instagramAccountId, instagramUsername, instagramProfilePicUrl } = result;
+            let { instagramAccountId, instagramUsername, instagramProfilePicUrl } = result;
+            const { fbPage } = result;
             const existingPage = existingPagesMap.get(fbPage.id);
+
+            // The linked IG account may already live on ANOTHER row — an
+            // Instagram-direct card (connectInstagramDirect refuses the reverse
+            // direction for the same reason), or a stale link on a different page.
+            // instagram_account_id is UNIQUE, so writing it here would abort the
+            // whole sync; and even before the index, the duplicate split webhook
+            // routing arbitrarily. The claimed row stays authoritative: this FB
+            // page syncs without the IG link, loudly, and support merges the two
+            // rows deliberately when the merchant asks — never as a silent side
+            // effect of a page sync.
+            if (instagramAccountId) {
+                const [claimedElsewhere] = await db
+                    .select({ id: pages.id, facebookPageId: pages.facebookPageId })
+                    .from(pages)
+                    .where(and(
+                        eq(pages.instagramAccountId, instagramAccountId),
+                        or(isNull(pages.facebookPageId), ne(pages.facebookPageId, fbPage.id)),
+                    ))
+                    .limit(1);
+                if (claimedElsewhere) {
+                    logger.warn(`[Pages] IG account ${instagramAccountId} already owned by page ${claimedElsewhere.id} — syncing ${fbPage.id} without the IG link`);
+                    captureError(
+                        new Error('Instagram account already claimed by another page row'),
+                        'FB sync skipped Instagram link — account owned by another row',
+                        {
+                            tags: { service: 'pages-sync' },
+                            extra: { fbPageId: fbPage.id, instagramAccountId, claimedByPageId: claimedElsewhere.id, claimedRowIsDirect: !claimedElsewhere.facebookPageId },
+                        },
+                    );
+                    instagramAccountId = null;
+                    instagramUsername = null;
+                    instagramProfilePicUrl = null;
+                }
+            }
 
             if (existingPage) {
                 // Industry standard (ManyChat / Chatfuel model): the access token belongs to
@@ -1693,9 +1740,36 @@ export class PagesService {
 
 export const pagesService = new PagesService();
 
-/** Check if a page's Facebook access has been revoked (empty accessToken sentinel) */
-export function isPageDisconnected(page: { accessToken: string } | null | undefined): boolean {
-    return !!page && page.accessToken === '';
+/**
+ * Is this row's PRIMARY channel credential dead?
+ *
+ * THE THIRD TWIN of the connection rule — the other two are
+ * `serializePage.isConnected` (controllers/pages.ts) and the admin SQL
+ * `disconnected` CASE (services/admin/users.ts). All three MUST answer
+ * identically for the same row; this one existed unlisted and unextended, which
+ * is how Instagram-direct shipped with every webhook dropped at the front door
+ * (PR #772 review C1). Change one, change all three.
+ *
+ * The rule: a Facebook-backed row is disconnected when its Facebook token was
+ * blanked (the '' revocation sentinel written by pages sync / tokenRefresh). A
+ * PAGELESS row (facebookPageId null — WhatsApp-only or Instagram-direct) is
+ * disconnected only when it holds NO channel credential at all: the Facebook
+ * token is '' on those rows by construction, so reading it there calls every
+ * such page dead.
+ *
+ * `facebookPageId` is deliberately REQUIRED in the parameter type: it is the
+ * discriminator, and an object that compiles without it would silently take the
+ * pageless branch for a Facebook row — the same class of bug this function had.
+ */
+export function isPageDisconnected(page: {
+    accessToken: string;
+    facebookPageId: string | null;
+    whatsappAccessToken?: string | null;
+    instagramAccessToken?: string | null;
+} | null | undefined): boolean {
+    if (!page) return false;
+    if (page.facebookPageId) return page.accessToken === '';
+    return !page.whatsappAccessToken && !page.instagramAccessToken;
 }
 
 /**

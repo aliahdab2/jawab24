@@ -326,8 +326,10 @@ class AdminUsersService {
                 whatsappDisconnectReason: pages.whatsappDisconnectReason,
                 autoReplyEnabled: pages.autoReplyEnabled,
                 autoReplyDisabledReason: pages.autoReplyDisabledReason,
-                // "Is this card's PRIMARY credential valid?" — mirrors serializePage
-                // in controllers/pages.ts. Keying this on the Facebook token alone
+                // "Is this card's PRIMARY credential valid?" — one of THREE twins:
+                // serializePage in controllers/pages.ts and the isPageDisconnected
+                // predicate in services/pages.ts express the same rule. Change one,
+                // change all three. Keying this on the Facebook token alone
                 // reported every healthy WhatsApp-only card (facebook_page_id NULL,
                 // access_token NULL by definition) as disconnected, which sent
                 // support hunting a fault that was never there.

@@ -40,7 +40,7 @@ export const config = {
     instagram: {
         appId: process.env.INSTAGRAM_APP_ID || '',
         appSecret: process.env.INSTAGRAM_APP_SECRET || '',
-        redirectUri: process.env.INSTAGRAM_REDIRECT_URI || '',
+        redirectUri: process.env.INSTAGRAM_APP_REDIRECT_URI || '',
     },
 
     // JWT (validated by validateEnv — no insecure fallbacks)

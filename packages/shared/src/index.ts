@@ -456,6 +456,9 @@ export interface Page {
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
   whatsappConnected?: boolean;
+  // True when an Instagram Login (Instagram-direct) token is stored — the card
+  // is an Instagram-only channel with no Facebook Page behind it.
+  instagramDirectConnected?: boolean;
   // True when WhatsApp WAS connected and the token has since died (Meta forces a
   // 60-day expiry on Embedded Signup tokens). Distinct from "never connected":
   // only this state should raise the reconnect banner.

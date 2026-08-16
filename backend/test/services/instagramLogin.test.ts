@@ -7,12 +7,26 @@ vi.mock('axios', () => ({
     default: {
         get: vi.fn(),
         post: vi.fn(),
+        // `create` returning undefined is what makes lib/fbAxios fall back to this
+        // same mocked default (`instance ?? axios`), so the subscribed_apps call
+        // routed through fbAxios lands on the `post` spy below. Omit it and the
+        // module throws at import.
+        create: vi.fn(),
         isAxiosError: (e: unknown) => Boolean((e as { isAxiosError?: boolean })?.isAxiosError),
     },
 }));
 
 vi.mock('../../src/db', () => ({
     db: { select: vi.fn(), update: vi.fn() },
+}));
+
+// Mirror the method the service ACTUALLY calls. A mock that exposes a different
+// one turns every `not.toHaveBeenCalled()` below into a vacuous pass — the call
+// throws on `undefined is not a function`, the service's catch swallows it, and
+// the spy is legitimately never called.
+const mockSendTemplateNotification = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: { sendTemplateNotification: (...a: unknown[]) => mockSendTemplateNotification(...a) },
 }));
 
 vi.mock('../../src/config', () => ({
@@ -143,7 +157,7 @@ describe('instagramLoginService.runRefreshSweep', () => {
 
         const result = await instagramLoginService.runRefreshSweep();
 
-        expect(result).toEqual({ refreshed: 1, failed: 0 });
+        expect(result).toEqual({ refreshed: 1, failed: 0, dead: 0 });
         const setArg = (vi.mocked(db.update).mock.results[0].value as { set: ReturnType<typeof vi.fn> }).set.mock.calls[0][0];
         expect(setArg.instagramAccessToken).toBe('new_long_tok'); // no key configured → stored as-is
         expect(setArg.instagramTokenExpiresAt).toBeInstanceOf(Date);
@@ -163,9 +177,77 @@ describe('instagramLoginService.runRefreshSweep', () => {
 
         const result = await instagramLoginService.runRefreshSweep();
 
-        expect(result).toEqual({ refreshed: 1, failed: 1 });
+        expect(result).toEqual({ refreshed: 1, failed: 1, dead: 0 });
         expect(whereSpy).toHaveBeenCalledTimes(1); // only the healthy row was written
     }, 10_000);
+});
+
+describe('instagramLoginService.runRefreshSweep — terminal 190 (review M1)', () => {
+    const selectRows = (rows: Record<string, unknown>[]) => {
+        vi.mocked(db.select).mockReturnValue({
+            from: () => ({ where: () => Promise.resolve(rows) }),
+        } as never);
+    };
+    const graph190 = {
+        isAxiosError: true,
+        message: 'Error validating access token',
+        response: { data: { error: { message: 'Error validating access token: The session has been invalidated', type: 'OAuthException', code: 190 } } },
+    };
+
+    it("Meta's 190 clears the credential (to '', the was-connected sentinel) and notifies the merchant once", async () => {
+        selectRows([{ id: 'page_dead', token: 'revoked_tok', userId: 'user-1', name: 'متجر', instagramUsername: 'shop' }]);
+        const returningSpy = vi.fn().mockResolvedValue([{ id: 'page_dead' }]);
+        const whereSpy = vi.fn().mockReturnValue({ returning: returningSpy });
+        const setSpy = vi.fn().mockReturnValue({ where: whereSpy });
+        vi.mocked(db.update).mockReturnValue({ set: setSpy } as never);
+        mockedAxios.get.mockRejectedValue(graph190);
+
+        const result = await instagramLoginService.runRefreshSweep();
+
+        expect(result).toEqual({ refreshed: 0, failed: 0, dead: 1 });
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({ instagramAccessToken: '' }));
+        // Sent THROUGH the template registry, with the account label as the
+        // `{account}` variable — the merchant-facing copy lives in exactly one
+        // place (NOTIFICATION_TEMPLATES), never restated at the call site.
+        expect(mockSendTemplateNotification).toHaveBeenCalledWith(
+            'user-1',
+            'instagram_reconnect_needed',
+            { account: '@shop' },
+            expect.objectContaining({ action: 'reconnect_instagram', pageId: 'page_dead' }),
+        );
+    });
+
+    // The guarded UPDATE is the idempotency gate: a second sweep racing the first
+    // finds '' already written, gets no row back, and must NOT notify again.
+    it('does not notify when another sweep already cleared the row', async () => {
+        selectRows([{ id: 'page_dead', token: 'revoked_tok', userId: 'user-1', name: null, instagramUsername: null }]);
+        const returningSpy = vi.fn().mockResolvedValue([]);
+        vi.mocked(db.update).mockReturnValue({
+            set: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: returningSpy }) }),
+        } as never);
+        mockedAxios.get.mockRejectedValue(graph190);
+
+        await instagramLoginService.runRefreshSweep();
+
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
+    });
+
+    // A transient failure carries no Graph verdict — the token MUST survive for
+    // tomorrow's retry. Mutation-checked: classifying every failure as terminal
+    // fails here (the credential-destroying false positive the WhatsApp sweep's
+    // history warns about).
+    it('a network error keeps the token — no clear, no notification', async () => {
+        selectRows([{ id: 'page_blip', token: 'ok_tok', userId: 'user-1', name: null, instagramUsername: null }]);
+        const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }) });
+        vi.mocked(db.update).mockReturnValue({ set: setSpy } as never);
+        mockedAxios.get.mockRejectedValue({ isAxiosError: true, message: 'ETIMEDOUT', code: 'ETIMEDOUT' });
+
+        const result = await instagramLoginService.runRefreshSweep();
+
+        expect(result).toEqual({ refreshed: 0, failed: 1, dead: 0 });
+        expect(setSpy).not.toHaveBeenCalled();
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
+    });
 });
 
 describe('instagramLoginService.subscribeToWebhooks', () => {

@@ -397,6 +397,20 @@ const start = async () => {
     // Instagram-direct (Instagram Login) token refresh — same reason as WhatsApp
     // above: these tokens die on a 60-day CLOCK, not on revocation, and webhooks
     // keep arriving after expiry. Dark unless the Instagram app is configured.
+    //
+    // A PARTIAL trio is always a mistake and must say so: the feature goes dark
+    // by design when any of the three is missing, so a typo'd variable name would
+    // otherwise be diagnosable only by reading this code (PR #772 review M3 —
+    // the docs and the code briefly disagreed on the redirect-URI name).
+    {
+        const igTrio = [config.instagram.appId, config.instagram.appSecret, config.instagram.redirectUri];
+        if (igTrio.some(Boolean) && !igTrio.every(Boolean)) {
+            server.log.warn(
+                '[InstagramLogin] Partial configuration: set ALL of INSTAGRAM_APP_ID, ' +
+                'INSTAGRAM_APP_SECRET, INSTAGRAM_APP_REDIRECT_URI — the connect flow stays dark until then',
+            );
+        }
+    }
     startInstagramTokenRefreshCron(workerLogger);
 
     const logJobError = (err: unknown, msg: string) => server.log.error(err, msg);

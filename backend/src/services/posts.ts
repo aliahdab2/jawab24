@@ -93,6 +93,10 @@ type PickerPage = {
     facebookPageId: string | null;
     instagramAccountId?: string | null;
     accessToken: string;
+    /** Required, not optional: `resolveInstagramCredential` discriminates on it, and
+     *  an object literal that silently omitted it routed every Instagram-direct
+     *  picker read to graph.facebook.com with the '' token (PR #772 review H2). */
+    instagramAccessToken: string | null;
 };
 
 export class PostsService {

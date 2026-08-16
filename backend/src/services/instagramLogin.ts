@@ -3,8 +3,10 @@ import { db } from '../db';
 import { pages } from '../db/schema';
 import { and, eq, isNotNull, lt, ne } from 'drizzle-orm';
 import { config } from '../config';
+import { fbAxios } from '../lib/fbAxios';
 import { maybeDecryptToken, maybeEncryptToken } from './facebookCrypto';
 import { captureError } from '../utils/sentryHelpers';
+import { notificationService } from './notifications';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
@@ -51,10 +53,33 @@ const PER_ACCOUNT_DELAY_MS = 1000;
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export class InstagramLoginError extends Error {
-    constructor(message: string, public readonly code: string) {
+    constructor(
+        message: string,
+        public readonly code: string,
+        /** Meta's own error code from the Graph response (e.g. 190), when present. */
+        public readonly graphCode?: number,
+        /** Meta's error type (e.g. 'OAuthException'), when present. */
+        public readonly graphType?: string,
+    ) {
         super(message);
         this.name = 'InstagramLoginError';
     }
+}
+
+/**
+ * Is this refresh failure Meta's own verdict that the CREDENTIAL is dead —
+ * expired, revoked, or invalidated — rather than a blip on the way to asking?
+ *
+ * Deliberately narrow: only a Graph-level 190 counts. A network error, a 5xx,
+ * a rate limit, or a decrypt failure on our side carries no graphCode and must
+ * keep the token for tomorrow's retry — the same caution that made the WhatsApp
+ * sweep flag-not-destroy. Clearing IS safe on a true 190 here, unlike there:
+ * this classification has exactly one call site (the refresh sweep), the verdict
+ * is Meta's response to the exact credential we hold, and recovery is a
+ * one-minute OAuth redo rather than a fresh 60-day Embedded Signup clock.
+ */
+export function isTerminalRefreshFailure(error: unknown): boolean {
+    return error instanceof InstagramLoginError && error.graphCode === 190;
 }
 
 export interface InstagramProfile {
@@ -201,13 +226,23 @@ export const instagramLoginService = {
      */
     async subscribeToWebhooks(instagramUserId: string, token: string, logger: Logger = noopLogger): Promise<boolean> {
         try {
-            const { data } = await axios.post(
+            // Through fbAxios — the repo's ONE Graph retry policy (429 honouring
+            // Retry-After, app-limit codes 4/32, 5xx and network errors, 2 tries,
+            // 15s socket timeout). It is host-agnostic (full URLs, no baseURL), so
+            // graph.instagram.com rides the same interceptor the IG-direct send
+            // path already uses; a second hand-rolled retry here would be a worse
+            // copy of it (flat 2s on a 429, ignoring Retry-After).
+            //
+            // Retried at all — unlike the OAuth exchanges above, where a retry could
+            // double-spend a single-use code — because this call is idempotent
+            // (Meta answers a repeat subscribe with the same success) and it is the
+            // most load-bearing call of the connect flow: without it the channel is
+            // silently deaf, and the only recovery is the merchant re-running the
+            // entire OAuth dance off an igWarn toast.
+            const { data } = await fbAxios.post(
                 `${GRAPH_BASE}/${config.facebook.graphApiVersion}/${instagramUserId}/subscribed_apps`,
                 null,
-                {
-                    params: { subscribed_fields: WEBHOOK_FIELDS, access_token: token },
-                    timeout: 15_000,
-                },
+                { params: { subscribed_fields: WEBHOOK_FIELDS, access_token: token } },
             );
             const ok = data?.success === true;
             if (!ok) {
@@ -235,10 +270,16 @@ export const instagramLoginService = {
      * abort the sweep; a row whose refresh fails keeps its token so the next
      * sweep retries until real expiry.
      */
-    async runRefreshSweep(logger: Logger = noopLogger): Promise<{ refreshed: number; failed: number }> {
+    async runRefreshSweep(logger: Logger = noopLogger): Promise<{ refreshed: number; failed: number; dead: number }> {
         const cutoff = new Date(Date.now() + REFRESH_BEFORE_EXPIRY_MS);
         const rows = await db
-            .select({ id: pages.id, token: pages.instagramAccessToken })
+            .select({
+                id: pages.id,
+                token: pages.instagramAccessToken,
+                userId: pages.userId,
+                name: pages.name,
+                instagramUsername: pages.instagramUsername,
+            })
             .from(pages)
             .where(and(
                 isNotNull(pages.instagramAccessToken),
@@ -249,6 +290,7 @@ export const instagramLoginService = {
 
         let refreshed = 0;
         let failed = 0;
+        let dead = 0;
         for (const row of rows) {
             try {
                 const current = maybeDecryptToken(row.token);
@@ -263,15 +305,79 @@ export const instagramLoginService = {
                 refreshed++;
                 logger.info(`[InstagramLogin] Refreshed token for page ${row.id}`);
             } catch (error) {
-                failed++;
-                captureError(error, 'Instagram-direct token refresh failed', {
-                    tags: { service: 'instagram-login' },
-                    extra: { pageId: row.id },
-                });
+                // Meta's own 190 = the credential is dead (revoked, deauthorized,
+                // invalidated). Retrying tomorrow can never fix it — only the
+                // merchant re-running the one-minute OAuth can — so retrying forever
+                // means daily Sentry noise, a card that claims "connected"
+                // indefinitely, and a merchant who is never told (review M1).
+                if (isTerminalRefreshFailure(error)) {
+                    dead++;
+                    await this.markCredentialDead(row, error, logger);
+                } else {
+                    failed++;
+                    captureError(error, 'Instagram-direct token refresh failed', {
+                        tags: { service: 'instagram-login' },
+                        extra: { pageId: row.id },
+                    });
+                }
             }
             await sleep(PER_ACCOUNT_DELAY_MS);
         }
-        return { refreshed, failed };
+        if (rows.length > 0 || refreshed + failed + dead > 0) {
+            logger.info(`[InstagramLogin] Sweep done: ${refreshed} refreshed, ${failed} failed, ${dead} dead`);
+        }
+        return { refreshed, failed, dead };
+    },
+
+    /**
+     * A terminal 190: clear the credential and tell the merchant, exactly once.
+     *
+     * Clearing (to '', never NULL — '' preserves "was connected") is what makes
+     * every downstream surface honest in one write: `instagramDirectConnected`
+     * flips false, `isPageDisconnected` reports the row dead, the webhook gate
+     * stops queueing events no reply could answer, and the sweep query's
+     * `ne('')` stops re-trying a credential Meta has pronounced dead. See
+     * `isTerminalRefreshFailure` for why clearing is safe HERE when the WhatsApp
+     * sweep deliberately flags instead.
+     *
+     * The guarded UPDATE is the idempotency gate: only the caller that performs
+     * the '' transition sends the notification, however many sweeps race.
+     */
+    async markCredentialDead(
+        row: { id: string; userId: string | null; name: string | null; instagramUsername: string | null },
+        error: unknown,
+        logger: Logger,
+    ): Promise<void> {
+        const [updated] = await db.update(pages)
+            .set({ instagramAccessToken: '', updatedAt: new Date() })
+            .where(and(eq(pages.id, row.id), ne(pages.instagramAccessToken, '')))
+            .returning({ id: pages.id });
+        if (!updated) return;
+
+        logger.warn(`[InstagramLogin] Credential dead (Meta 190) — cleared for page ${row.id}`);
+        captureError(error, 'Instagram-direct credential dead — cleared, merchant notified', {
+            tags: { service: 'instagram-login' },
+            extra: { pageId: row.id },
+        });
+
+        if (!row.userId) return;
+        const label = row.instagramUsername ? `@${row.instagramUsername}` : (row.name || 'Instagram');
+        try {
+            // Copy lives ONCE, in NOTIFICATION_TEMPLATES. Restating it here would
+            // fork the merchant-facing strings from the registry every other type
+            // is translated through (Rule 10.8).
+            await notificationService.sendTemplateNotification(
+                row.userId,
+                'instagram_reconnect_needed',
+                { account: label },
+                { action: 'reconnect_instagram', pageId: row.id },
+            );
+        } catch (notifyError) {
+            captureError(notifyError, 'Failed to notify Instagram-direct reconnect', {
+                tags: { service: 'instagram-login' },
+                extra: { pageId: row.id },
+            });
+        }
     },
 };
 
@@ -323,7 +429,15 @@ function toLoginError(error: unknown, fallbackCode: string): InstagramLoginError
         const igError = error.response?.data?.error_message
             ?? error.response?.data?.error?.message
             ?? error.message;
-        return new InstagramLoginError(String(igError), fallbackCode);
+        // Preserve Meta's own code/type — flattening them away is the same
+        // classification-destroying mistake DmSendError.fromAxios exists to
+        // prevent on the send path (§13c precedent).
+        const graph = error.response?.data?.error as { code?: number; type?: string } | undefined;
+        return new InstagramLoginError(
+            String(igError), fallbackCode,
+            typeof graph?.code === 'number' ? graph.code : undefined,
+            typeof graph?.type === 'string' ? graph.type : undefined,
+        );
     }
     return new InstagramLoginError(error instanceof Error ? error.message : String(error), fallbackCode);
 }

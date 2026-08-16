@@ -325,7 +325,13 @@ export const pages = pgTable('pages', {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
         workspaceIdIdx: index('idx_pages_workspace_id').on(table.workspaceId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
-        instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
+        // UNIQUE: one IG account, one row — `getPageByInstagramId` takes result[0]
+        // and routes every webhook by it, so a duplicate would split a merchant's
+        // Instagram between two rows arbitrarily. Uniqueness also backstops the
+        // connectInstagramDirect select-then-insert race (Postgres treats NULLs as
+        // distinct, so FB-only and WhatsApp-only rows are unaffected). Prod checked
+        // clean of duplicates 2026-08-16 before this tightened (PR #772 review M2).
+        instagramAccountIdIdx: uniqueIndex('idx_pages_instagram_account_id').on(table.instagramAccountId),
         // UNIQUE: one WhatsApp number belongs to exactly one page across the
         // platform. Makes the "number taken" invariant structural (a concurrent
         // double-connect gets 23505 → 409) instead of relying only on the
