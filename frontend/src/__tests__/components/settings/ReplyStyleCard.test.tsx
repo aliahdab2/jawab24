@@ -154,7 +154,7 @@ describe('ReplyStyleCard', () => {
       expect(await screen.findByText(/Assistant persona for/i)).toBeInTheDocument();
     });
 
-    it('page scope without override shows inherit state; customize → save PATCHes the page', async () => {
+    it('page scope shows the editor directly; save is the fork point and PATCHes the page', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       vi.mocked(pagesApi.updateBrandVoice).mockResolvedValue({
         data: { ...TWO_PAGES[0], brandVoiceNotesMulti: { en: 'Info desk only', sourceLang: 'en' } },
@@ -163,16 +163,19 @@ describe('ReplyStyleCard', () => {
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
       await screen.findByText(/Assistant persona for/i);
 
-      // Scope select is the first combobox (rendered above the test-page picker).
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
 
       expect(screen.getByText(/Inherited from settings/i)).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: /Customize for this page/i }));
+      // No «customize» step (owner call, 2026-08-16): the editor is immediate,
+      // and the SAVE button — disabled until the draft differs — is the fork.
+      const saveBtn = screen.getByRole('button', { name: /Save page persona/i });
+      expect(saveBtn).toBeDisabled();
 
       const textarea = screen.getByRole('textbox', { name: /Persona for Resort Page/i });
       fireEvent.change(textarea, { target: { value: 'Info desk only' } });
-      fireEvent.click(screen.getByRole('button', { name: /Save page persona/i }));
+      expect(saveBtn).not.toBeDisabled();
+      fireEvent.click(saveBtn);
 
       await waitFor(() => {
         // Sends ONLY the current language — backend auto-translates the rest.
@@ -194,7 +197,7 @@ describe('ReplyStyleCard', () => {
       fireEvent.change(scopeSelect, { target: { value: 'p2' } });
 
       expect(screen.getByText(/Custom for this page/i)).toBeInTheDocument();
-      expect(screen.getByText('شخصية الصفحة')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('شخصية الصفحة')).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /Revert to default/i }));
       await waitFor(() => {

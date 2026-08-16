@@ -130,8 +130,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // The switcher renders only for multi-page workspaces (the agency case the
   // feature exists for) — a single-page merchant keeps today's card untouched.
   // 'workspace' scope = the existing settings-save flow, byte-identical.
-  // A page scope edits pages.brand_voice_notes_multi via its own PATCH: an
-  // EXPLICIT customize/revert pair — never a silent fork on first keystroke.
+  // A page scope shows the editor DIRECTLY, prefilled with the page's effective
+  // persona (its own text, else the inherited workspace text). The SAVE button
+  // is the explicit fork point — it only enables once the draft differs, so an
+  // override is never created by merely looking (owner call, 2026-08-16: the
+  // extra «تخصيص» step was redundant friction on top of that).
   const connectedPages = pages.filter((p) => p.isConnected !== false);
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
   const scopedPage = personaScope === 'workspace' ? null : connectedPages.find((p) => p.id === personaScope) ?? null;
@@ -152,23 +155,25 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     || Object.entries(pageOverride).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
     || '';
 
-  const [pageEditing, setPageEditing] = useState(false);
+  // The page's effective text: its own override, else the inherited workspace text.
+  const pageEffectiveText = pageHasOverride ? pageOverrideText : value;
+
   const [pageDraft, setPageDraft] = useState('');
   const [pageSaving, setPageSaving] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const pageDraftChanged = pageDraft.trim() !== pageEffectiveText.trim();
 
   const switchScope = (next: 'workspace' | string) => {
     setPersonaScope(next);
-    setPageEditing(false);
     setPageError(null);
-  };
-
-  const startCustomizing = () => {
-    // Prefill with what the page effectively uses today (its own text, else the
-    // inherited workspace text) so the merchant edits, not retypes.
-    setPageDraft(pageHasOverride ? pageOverrideText : value);
-    setPageEditing(true);
-    setPageError(null);
+    if (next !== 'workspace') {
+      const page = connectedPages.find((p) => p.id === next);
+      const override = (page?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
+      const overrideText = override[currentLang]
+        || Object.entries(override).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
+        || '';
+      setPageDraft(hasOverrideContent(page?.brandVoiceNotesMulti) ? overrideText : value);
+    }
   };
 
   const applyPagePatch = async (payload: Record<string, string> | null) => {
@@ -179,7 +184,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       const response = await pagesApi.updateBrandVoice(scopedPage.id, payload);
       const updated = response.data as Page;
       setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, brandVoiceNotesMulti: updated.brandVoiceNotesMulti } : p)));
-      setPageEditing(false);
+      if (payload === null) {
+        // Reverted to inherit — the editor now shows the workspace text again.
+        setPageDraft(value);
+      }
     } catch {
       setPageError(t('replyStyle.pageSaveError'));
     } finally {
@@ -312,38 +320,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           )}
         </div>
 
-        {/* Page scope: explicit inherit/customize states — no silent fork. */}
-        {scopedPage && !pageEditing && (
-          <div className="rounded-2xl border border-theme-border p-3 flex flex-col gap-2">
-            <p className="text-sm leading-relaxed whitespace-pre-line" dir="auto">
-              {pageHasOverride
-                ? pageOverrideText
-                : <span className="text-muted-foreground italic">{value || t('replyStyle.noWorkspacePersona')}</span>}
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={startCustomizing}
-                disabled={pageSaving}
-                className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 transition-colors"
-              >
-                {pageHasOverride ? t('replyStyle.editPagePersona') : t('replyStyle.customizeBtn')}
-              </button>
-              {pageHasOverride && (
-                <button
-                  type="button"
-                  onClick={revertPagePersona}
-                  disabled={pageSaving}
-                  aria-busy={pageSaving}
-                  className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  {t('replyStyle.revertBtn')}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-        {scopedPage && pageEditing && (
+        {/* Page scope: the editor directly, prefilled with the effective persona.
+            The SAVE button is the fork point — disabled until the draft differs,
+            so an override is never created by merely looking. */}
+        {scopedPage && (
           <div className="flex flex-col gap-2">
             <InputFieldWrapper
               className="border border-theme-border hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
@@ -355,7 +335,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             >
               <textarea
                 aria-label={t('replyStyle.pageBrandVoice', { page: scopedPage.name ?? '' })}
-                className="w-full bg-transparent border-none p-4 pe-14 rounded-2xl resize-y text-sm leading-relaxed min-h-[140px] placeholder:text-muted-foreground placeholder:italic focus:outline-none focus:ring-0"
+                className={clsx(
+                  'w-full bg-transparent border-none p-4 pe-14 rounded-2xl resize-y text-sm leading-relaxed min-h-[140px]',
+                  'placeholder:text-muted-foreground placeholder:italic focus:outline-none focus:ring-0',
+                  // Inherited text renders muted-italic until the merchant makes
+                  // it this page's own — same signal the workspace card uses for
+                  // auto-translated text.
+                  !pageHasOverride && !pageDraftChanged && 'text-muted-foreground italic',
+                )}
                 dir="auto"
                 maxLength={MAX_BRAND_VOICE_LENGTH}
                 rows={5}
@@ -368,20 +355,22 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               <button
                 type="button"
                 onClick={savePagePersona}
-                disabled={pageSaving || !pageDraft.trim()}
+                disabled={pageSaving || !pageDraft.trim() || !pageDraftChanged}
                 aria-busy={pageSaving}
                 className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
               >
                 {pageSaving ? t('replyStyle.savingPage') : t('replyStyle.savePageBtn')}
               </button>
-              <button
-                type="button"
-                onClick={() => { setPageEditing(false); setPageError(null); }}
-                disabled={pageSaving}
-                className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                {t('replyStyle.cancelPageEdit')}
-              </button>
+              {pageHasOverride && (
+                <button
+                  type="button"
+                  onClick={revertPagePersona}
+                  disabled={pageSaving}
+                  className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  {t('replyStyle.revertBtn')}
+                </button>
+              )}
             </div>
             {/* Save-model disambiguation: page personas save HERE, immediately —
                 not through the page-bottom «حفظ الإعدادات» button. Without this
