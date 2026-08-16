@@ -73,8 +73,8 @@ export default function InstagramChannelPage() {
               'url': BRAND_ASSETS.urls.canonical('/instagram'),
               'isPartOf': {
                 '@type': 'WebSite',
-                'name': 'Jawab24',
-                'url': 'https://jawab24.com',
+                'name': BRAND_ASSETS.meta.appName,
+                'url': BRAND_ASSETS.urls.base,
               },
             }),
           }}

@@ -30,7 +30,7 @@
     "f1": "Answers direct messages automatically, using only the business information you wrote.",
     "f2": "Replies publicly to comments left on your posts.",
     "f3": "Post Reply: you set a keyword on a specific post, and a matching comment gets the reply you pre-wrote — posted publicly, sent to the commenter as a direct message, or both, as you choose.",
-    "f4": "Answers in Arabic — Gulf, Levantine, Egyptian, Maghrebi and Iraqi — or in English, mirroring the language the customer used.",
+    "f4": "Answers in Arabic — Gulf, Levantine, Egyptian and Maghrebi — or in English, mirroring the language and dialect the customer used.",
     "f5": "Voice notes, images and other non-text messages reach your inbox, so a customer is never silently dropped.",
     "f6": "Sends the away message you wrote outside your business hours, and gives every connected account its own on/off switch."
   },
@@ -51,7 +51,7 @@
     "text": "Running the service requires storing the conversation; nothing beyond that is kept.",
     "p1": "The messages and comments received from Instagram and the replies sent back are stored, so you can read the conversation in your inbox and so later replies stay consistent with earlier ones.",
     "p2": "Access tokens are encrypted at rest with AES-256-GCM and decrypted only at the moment of an outbound call to Instagram.",
-    "p3": "Data is hosted on dedicated servers we operate in the European Union (Germany and Finland).",
+    "p3": "The application and its database run on dedicated servers we operate in the European Union.",
     "p4": "Disconnect the account from your dashboard at any time and Jawab24 stops receiving and sending on it immediately. On a deletion request, personal data is removed from active systems within 30 days.",
     "privacyLink": "Privacy Policy",
     "deletionLink": "Delete my data"
@@ -60,7 +60,7 @@
     "title": "You stay in control",
     "text": "Automation is never something you have to live with:",
     "c1": "One switch turns automatic replies off for a connected account — messages still arrive in your inbox, but nothing is sent without you.",
-    "c2": "Any conversation can be taken over: read it in the Jawab24 inbox and answer it yourself.",
+    "c2": "Any direct message conversation can be taken over: read it in the Jawab24 inbox and answer it yourself.",
     "c3": "Automatic replies can be limited to your business hours, with your away message covering the rest."
   },
   "faq": {
@@ -70,7 +70,7 @@
     "q2": "Will Jawab24 post anything to my Instagram account?",
     "a2": "No. Jawab24 never publishes posts, stories or reels — we do not even request the permission that would allow it. It only replies to comments on posts you published, and to direct messages people send you.",
     "q3": "Where do the replies come from?",
-    "a3": "From the business information you write in Jawab24 — hours, prices, delivery areas, policies, frequently asked questions — plus your product catalogue if you connect a store. Automated checks run on every reply before it is sent and flag any that states a price or a fact you never provided.",
+    "a3": "From the business information you write in Jawab24 — hours, prices, delivery areas, policies, frequently asked questions — plus your product catalogue if you connect a store. Before a reply goes out, automated checks verify that any price it quotes appears in your own information; a further automated review then examines sent replies and flags ones that may state a detail your information does not contain, so you can correct it.",
     "q4": "Can I answer a customer myself?",
     "a4": "Yes. Every Instagram direct message appears in the Jawab24 inbox, including voice notes and images, and you can answer it yourself at any time.",
     "q5": "What happens outside my working hours?",
