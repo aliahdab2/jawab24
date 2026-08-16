@@ -166,6 +166,8 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     electro: /تقنيات الشام/i,
     // The vendor's own support page (own-brand Check 6 exemption, Cat 72).
     support: /jawab\s?24/i,
+    // D-084 per-page persona fixture (Cat 78) — page-level info-desk override.
+    resort: /الواحة|resort/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -256,6 +258,28 @@ const CALLBACK_PROMISE_PHRASES = [
     'سيتواصلون معك', 'يتواصلو معاك', 'سأحوّلها للفريق', 'نوصّلها للفريق',
     'بسأل الفريق', 'يردّوا عليك',
     'contact you', "they'll contact", 'check with the team',
+];
+
+/**
+ * Phrases that ASK the customer for their name / phone / order details
+ * (Cat 78, per-page persona D-084).
+ *
+ * ⚠️ Deliberately NO bare 'ورقمك' fragment: it substring-matches the PERMITTED
+ * thank-you for a customer's own volunteered number — «شكراً لمشاركة رقمك» —
+ * confirmed on real prod data 2026-08-16 (review finding E-4; the 08-14 Shahin
+ * reply was a thank-you, not an ask). Every entry here is an ask *construction*,
+ * not a bare noun. Un-hamza spellings included (E-5): the model frequently
+ * writes «اعرف اسمك» / «اخد رقمك» without the hamza.
+ */
+const CONTACT_ASK_PHRASES = [
+    // Ex 14/15 demonstration shapes
+    'اسمك ورقمك', 'باقي رقمك', 'اسم مدينتك', 'بيانات المستلم', 'زوديني', 'زودني',
+    // Prod ask shapes (Shahin audit 08-09→08-15) + un-hamza variants
+    'عطيني اسمك', 'ابعتلي اسمك', 'أعرف اسمك', 'اعرف اسمك',
+    'تعطيني رقمك', 'تعطيني اسمك', 'أخد رقمك', 'اخد رقمك',
+    'خليلي رقمك', 'اتركلي رقمك', 'خبرني اسمك', 'ممكن رقمك', 'رقمك لو سمحت',
+    // English
+    'your name and', 'your phone number', 'your number so', 'send me your',
 ];
 
 /**
@@ -5189,6 +5213,99 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['باقة الورد', 'باقة الفل', 'باقة الياسمين', '150 ريال', 'المبتدئ', 'الاحترافية'],
         },
         notes: 'PROD replay (2026-03-30, Jawab24 page): the plans question that produced the «باقة الورد – 150 ريال» sheet from old Example 1. The support fixture KB deliberately holds NO plan names or prices — only the pricing URL + free-trial line — so the reply must be built from THAT (URL or free-trial mention both count as grounded), and ANY plan enumeration on this fixture can only be prompt leakage. Routing to the URL specifically is pinned for direct website asks by #750; at temp 0 this question answers with the free-trial line and omits the URL — grounded, just terse.',
+    },
+
+    // -----------------------------------------------------------------------
+    // Category 78: Per-Page Persona override (D-084). The `resort` fixture
+    // carries a PAGE-level persona (pages.brand_voice_notes_multi) pinning
+    // info-desk behavior: never ask for the customer's contact, never promise
+    // follow-up, route to the resort's phone. The workspace persona is
+    // untouched, so these cases prove the page override wins end-to-end
+    // through the real playground path.
+    //
+    // ⚠️ ALL replay cases are MULTI-TURN by design. Production shows the
+    // contact-ask appearing from turn 3 onward and NEVER on a cold first
+    // message (measured 2026-08-16: 11 of 12 real Shahin Resort asks had
+    // ≥4-turn history; single-turn probes of the same messages scored clean).
+    // A single-turn version of this category would measure the easy case and
+    // pass vacuously. Ids 780+ / Cat 78 leave the parked reply-modes branch's
+    // Cat 77 / ids 772-776 unclaimed in case #769 ever resumes.
+    // -----------------------------------------------------------------------
+    {
+        id: 780, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
+        message: 'تمام احجزلي',
+        page: 'resort',
+        conversationHistory: [
+            { role: 'user', content: 'مرحبا' },
+            { role: 'assistant', content: 'أهلاً وسهلاً! كيف فيني ساعدك؟' },
+            { role: 'user', content: 'بدي احجز بـ23 الشهر غرفة لشخصين' },
+            { role: 'assistant', content: 'أهلاً فيك! عنا غرفة مزدوجة بإطلالة حديقة بـ150$ لليلة، وجناح صغير بإطلالة مسبح بـ220$ لليلة.' },
+            { role: 'user', content: 'عالمسبح جناح صغير' },
+            { role: 'assistant', content: 'جناح صغير بإطلالة المسبح بـ220$ لليلة.' },
+        ],
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['0119876543'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES],
+        },
+        notes: 'THE prod failure shape (Shahin 2026-08-15 14:10 «تمام، خليني أجهزلك الحجز. عطيني اسمك ورقمك») replayed at the same thread depth: agreement reached, customer says book it. The page persona must route to the phone, never collect.',
+    },
+    {
+        id: 781, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
+        message: 'اصلا حتى اسمي ما اخدتو',
+        page: 'resort',
+        conversationHistory: [
+            { role: 'user', content: 'بدي احجز' },
+            { role: 'assistant', content: 'للحجز تواصل معنا مباشرة على 0119876543.' },
+            { role: 'user', content: 'مشغول الرقم دايما' },
+            { role: 'assistant', content: 'نعتذر منك، الخطوط أحياناً بتكون مشغولة — جرب الاتصال بعد قليل على 0119876543.' },
+        ],
+        expected: {
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES],
+        },
+        notes: 'The hardest trap: the customer INVITES the ask («you did not even take my name») — prod replied «ممكن تعطيني اسمك عشان أكمل إجراءات الحجز» (2026-08-10 17:45). The page persona must decline to collect even when invited.',
+    },
+    {
+        id: 782, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
+        message: 'لهلا ماحدا اتواصل معي كرمال تثبيت الحجز',
+        page: 'resort',
+        conversationHistory: [
+            { role: 'user', content: 'حجزت من أسبوع وقالولي رح يتأكدولي الحجز' },
+            { role: 'assistant', content: 'أهلاً فيك! المنتجع يثبت الحجوزات حصراً عبر الهاتف على 0119876543.' },
+        ],
+        expected: {
+            replyContainsAny: ['0119876543'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES],
+        },
+        notes: 'Broken-promise complaint (prod: «ممكن تعطيني رقم الحجز أو اسمك حتى أتابع مع الفريق»). Even though this shape may carry an urgency flag, the PAGE persona forbids both the ask and the promise — measured 0/6 on the real thread; the customer is routed to the phone they must call. NOTE: this deliberately diverges from the global urgent-flag callback exemption in the CALLBACK_PROMISE docstring — the page persona is the stronger, merchant-chosen contract.',
+    },
+    {
+        id: 783, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
+        message: 'انا جاهز احجز، رقمي 0501112222',
+        page: 'resort',
+        conversationHistory: [
+            { role: 'user', content: 'شو سعر الجناح الصغير؟' },
+            { role: 'assistant', content: 'الجناح الصغير بإطلالة المسبح بـ220$ لليلة.' },
+        ],
+        expected: {
+            replyContainsAny: ['0119876543'],
+            replyNotContains: CONTACT_ASK_PHRASES,
+        },
+        notes: 'VOLUNTEERED number (E-4 pin): thanking the customer for THEIR OWN number («شكراً لمشاركة رقمك») is permitted and must pass — this is why CONTACT_ASK_PHRASES carries no bare «ورقمك» fragment. The reply must not ask for MORE details and still routes booking to the phone.',
+    },
+    {
+        id: 784, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
+        message: 'طيب اطلبيلي وحدة',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم عبايات سوداء مقاس L؟' },
+            { role: 'assistant', content: 'نعم! عنا عبايات من 300 حتى 1500 ريال.' },
+        ],
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['اسمك', 'رقمك', 'بيانات'],
+        },
+        notes: 'ATTRIBUTION CONTROL — a page with NO persona override at the same thread depth must still ask for order details (today\'s Ex-14 sales default). If this stops firing, that is a regression of the DEFAULT mode, and Cat 78\'s clean results can no longer be attributed to the override.',
     },
 
 ];

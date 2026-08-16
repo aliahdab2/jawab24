@@ -123,7 +123,7 @@ the merchant, so the settings below resolve from the **page's own workspace** �
 
 | Setting | How the test reply resolves it |
 |---------|-------------------------------|
-| `brandVoiceNotes` / `brandVoiceNotesMulti` | `resolveBrandVoiceNotes(wsSettings, question)` — the same choke point `enrichPageContext` uses for production replies |
+| `brandVoiceNotes` / `brandVoiceNotesMulti` | `resolveBrandVoiceNotes(wsSettings, question, page.brandVoiceNotesMulti)` — the same choke point `enrichPageContext` uses for production replies, including the per-page override (D-084) |
 | `replyStyle` | `wsSettings.replyStyle` (the ai-worker defaults to `professional` when absent) |
 | `defaultReplyLanguage`, `timezone` | `wsSettings` |
 | `commentReplyMode` + `dualReplyNudgeVariations` | the owner row, `settingsService.getSettings(page.userId)`. ⚠️ **Known drift** — see below |
@@ -174,7 +174,7 @@ moves every eval baseline, so it is tracked separately rather than folded in her
 | `commentEscalationMinutes` / `messageEscalationMinutes` | `escalation.ts` cron | Unanswered-thread thresholds (defaults 60 / 30) before Needs Attention escalation. |
 | `handoffPauseDurationMinutes` | gate 3 | How long a manual reply pauses the AI on that thread. |
 | `holdLowConfidence` | gate 6 | Park low-confidence replies for review. See lead-capture defect above. |
-| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. Always resolved through `resolveBrandVoiceNotes(settings, message)` (`services/reply/contextEnricher.ts`) — it is also a reply-cache key segment (`bv:`), so a second copy of the language-pick rule strands warmed entries. |
+| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. Always resolved through `resolveBrandVoiceNotes(settings, message, pageOverride?)` (`services/reply/contextEnricher.ts`) — it is also a reply-cache key segment (`bv:`), so a second copy of the language-pick rule strands warmed entries. **Per-page override (D-084):** `pages.brand_voice_notes_multi` — NULL/`{}`/all-cleared = inherit the workspace persona; a record with language content is a PIN (no workspace and no legacy fallback). Written via `PATCH /pages/:id/brand-voice` (admin+, `null` reverts, auto-translated with the same `smartTranslateMultiLang` helper as the workspace save). No cache bump on change — the persona text itself scopes both cache layers (`bv:` exact segment + semantic `brandVoiceHash`). Resolution chain: page → workspace → legacy column. Greeting/away are planned for the same chain — ❌ NOT IMPLEMENTED for them today. |
 | `replyStyle` | prompt builder + `ai.ts` context + reply-cache key | `professional` / `casual` / `enthusiastic`. Selects the tone directive in the ai-worker's `styleMap` (`promptBuilder.ts:379`) and is part of the semantic cache key. (The `[future]` markers next to it in `services/pages.ts:537` are about wiring its *writer* into prompt-cache invalidation, NOT about whether the prompt reads it — it does, today.) |
 | `dashboardLanguage` | frontend | UI locale only — never reply language. |
 | `defaultReplyLanguage` + `supportedLanguages` + `autoDetectLanguage` | language resolution | Template/reply language pick (`resolveLanguage`). |

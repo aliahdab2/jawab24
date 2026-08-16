@@ -897,6 +897,28 @@ export class PagesService {
     }
 
     /**
+     * Save a page's persona override (D-084). Same minimal shape as
+     * updateLeadConfig: one column, tenant-scoped WHERE, null reverts to
+     * inherit. No cache bump is needed — the persona TEXT itself scopes both
+     * cache layers (exact-key `bv:` segment + semantic brandVoiceHash
+     * metadata), exactly like a workspace persona edit today: old entries
+     * become unreachable under the new hash and expire on their TTLs.
+     */
+    async updateBrandVoice(
+        workspaceId: string,
+        pageId: string,
+        brandVoiceNotesMulti: Record<string, string> | null,
+    ) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({ brandVoiceNotesMulti, updatedAt: new Date() })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage ?? null;
+    }
+
+    /**
      * Fetch active products for a page's linked e-commerce store (if any).
      * Returns empty array if no store is linked or on error.
      */

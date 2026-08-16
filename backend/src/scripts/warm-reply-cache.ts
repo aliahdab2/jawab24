@@ -118,6 +118,10 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
             ecommerceStoreId: pages.ecommerceStoreId,
             businessProfile: pages.businessProfile,
             facebookPageId: pages.facebookPageId,
+            // Per-page persona (D-084): the persona is a `bv:` cache-key
+            // segment — warming an override page without it writes keys
+            // production never reads.
+            brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
         })
         .from(pages)
         .where(inArray(pages.id, pageIds));

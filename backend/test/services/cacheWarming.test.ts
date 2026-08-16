@@ -97,3 +97,43 @@ describe('resolveBrandVoiceNotes (extracted from enrichPageContext — parity wi
         expect(resolveBrandVoiceNotes({}, 'hello')).toBeUndefined();
     });
 });
+
+describe('resolveBrandVoiceNotes — per-page override (D-084)', () => {
+    const ws = { brandVoiceNotesMulti: { ar: 'صوت المساحة', en: 'Workspace voice' }, brandVoiceNotes: 'legacy voice', supportedLanguages: ['ar', 'en'] };
+
+    it('page override wins over the workspace persona, per language', () => {
+        const override = { ar: 'صوت الصفحة', en: 'Page voice' };
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', override)).toBe('صوت الصفحة');
+        expect(resolveBrandVoiceNotes(ws, 'How much?', override)).toBe('Page voice');
+    });
+
+    it('an explicit page persona is a PIN — no workspace and no legacy fallback', () => {
+        // Override has only EN; an Arabic message picks the first supported
+        // language with a value INSIDE the override — never the workspace text.
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', { en: 'Page voice' })).toBe('Page voice');
+    });
+
+    it('NULL, {} and an all-cleared record all inherit the workspace persona', () => {
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', null)).toBe('صوت المساحة');
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', {})).toBe('صوت المساحة');
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', undefined)).toBe('صوت المساحة');
+        // Cleared languages + leftover bookkeeping key = inherit, not silence.
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', { ar: '', en: '  ', sourceLang: 'ar' })).toBe('صوت المساحة');
+    });
+
+    it('sourceLang bookkeeping never counts as persona content', () => {
+        expect(resolveBrandVoiceNotes(ws, 'hello', { sourceLang: 'ar' })).toBe('Workspace voice');
+    });
+
+    it('a page persona stored only outside supportedLanguages still applies (pin must not silence)', () => {
+        expect(resolveBrandVoiceNotes(ws, 'hello', { fr: 'Voix de la page' })).toBe('Voix de la page');
+    });
+
+    it('workspace path stays byte-identical when no override is passed (fleet inertness)', () => {
+        // Same four assertions as the legacy describe above, through the new signature.
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟')).toBe('صوت المساحة');
+        expect(resolveBrandVoiceNotes({ brandVoiceNotesMulti: {}, brandVoiceNotes: 'legacy voice' }, 'hello')).toBe('legacy voice');
+        expect(resolveBrandVoiceNotes({ brandVoiceNotesMulti: { fr: 'voix' }, brandVoiceNotes: 'legacy voice', supportedLanguages: ['ar', 'en'] }, 'hello')).toBeUndefined();
+        expect(resolveBrandVoiceNotes({}, 'hello')).toBeUndefined();
+    });
+});

@@ -9,12 +9,28 @@ vi.mock('../../src/services/pages', () => ({
         getPages: vi.fn(),
         getPage: vi.fn(),
         updatePage: vi.fn(),
+        updateBrandVoice: vi.fn(),
         deletePage: vi.fn(),
         archivePage: vi.fn(),
         toggleAutoReply: vi.fn(),
         syncFromFacebook: vi.fn(),
     },
     isPageDisconnected: vi.fn((page: any) => !!page && page.accessToken === ''),
+}));
+
+// Persona save path (D-084): the controller reuses the workspace persona's
+// translation machinery — identity-stub it so tests assert routing, not
+// translation content (that behavior is pinned by multiLangTranslation.test.ts).
+vi.mock('../../src/services/multiLangTranslation', () => ({
+    smartTranslateMultiLang: vi.fn(async (update: Record<string, string>) => ({ ...update, sourceLang: 'ar' })),
+}));
+vi.mock('../../src/services/translation', () => ({
+    translateText: vi.fn(async () => ({ translatedText: 'translated' })),
+}));
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getSettings: vi.fn(async () => ({ supportedLanguages: ['ar', 'en'] })),
+    },
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({
@@ -466,6 +482,101 @@ describe('Pages Controller', () => {
 
             expect(mockReply.status).toHaveBeenCalledWith(400);
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Access token is required' }));
+        });
+    });
+
+    // ---- updateBrandVoice (PATCH /pages/:id/brand-voice, D-084) ----
+    describe('updateBrandVoice', () => {
+        const PAGE_ROW = { id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok', workspaceId: 'test_workspace_id', brandVoiceNotesMulti: null };
+
+        beforeEach(() => {
+            mockRequest.params = { id: 'page-1' };
+            vi.mocked(pagesService.getPage).mockResolvedValue(PAGE_ROW as any);
+            vi.mocked(pagesService.updateBrandVoice).mockResolvedValue({ ...PAGE_ROW, brandVoiceNotesMulti: { ar: 'شخصية' } } as any);
+        });
+
+        it('401 without a resolved workspace', async () => {
+            mockRequest.workspaceId = undefined as any;
+            mockRequest.body = { brandVoiceNotesMulti: null };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('400 when the key is missing entirely', async () => {
+            mockRequest.body = {};
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('400 on a non-object value and on an array', async () => {
+            for (const bad of ['text', 42, ['ar']]) {
+                vi.mocked(mockReply.status as any).mockClear();
+                mockRequest.body = { brandVoiceNotesMulti: bad };
+                await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+                expect(mockReply.status).toHaveBeenCalledWith(400);
+            }
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('400 when a language exceeds MAX_BRAND_VOICE_LENGTH', async () => {
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'ع'.repeat(5000) } };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('null reverts to inherit — no translation, no page prefetch', async () => {
+            vi.mocked(pagesService.updateBrandVoice).mockResolvedValue({ ...PAGE_ROW, brandVoiceNotesMulti: null } as any);
+            mockRequest.body = { brandVoiceNotesMulti: null };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.updateBrandVoice).toHaveBeenCalledWith('test_workspace_id', 'page-1', null);
+            expect(pagesService.getPage).not.toHaveBeenCalled();
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent.brandVoiceNotesMulti).toBeNull();
+            expect(sent.accessToken).toBeUndefined(); // serializePage strips tokens
+        });
+
+        it('a record saves through the shared translation helper and the tenant-scoped service', async () => {
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'أنتِ موظفة استعلامات' } };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            // The identity-stubbed helper adds sourceLang — proving the save went
+            // THROUGH smartTranslateMultiLang, not around it.
+            expect(pagesService.updateBrandVoice).toHaveBeenCalledWith(
+                'test_workspace_id',
+                'page-1',
+                { ar: 'أنتِ موظفة استعلامات', sourceLang: 'ar' },
+            );
+        });
+
+        it('404 when the page is not in this workspace (tenant isolation)', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'نص' } };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('404 when the tenant-scoped write matches no row', async () => {
+            vi.mocked(pagesService.updateBrandVoice).mockResolvedValue(null as any);
+            mockRequest.body = { brandVoiceNotesMulti: null };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
         });
     });
 });

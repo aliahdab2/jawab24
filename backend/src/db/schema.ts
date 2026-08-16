@@ -300,6 +300,15 @@ export const pages = pgTable('pages', {
     // distinguishable from an empty {} / [] override.
     leadStages: jsonb('lead_stages').$type<LeadStagesConfig>(),
     leadFields: jsonb('lead_fields').$type<LeadCustomFieldDef[]>(),
+    // Per-page persona override (workspace settings.brandVoiceNotesMulti is the
+    // default). Same inherit semantics as leadStages: NULL = inherit — and an
+    // empty {} also inherits, mirroring resolveBrandVoiceNotes' "no keys = no
+    // persona written" rule, so clearing every language reverts to the
+    // workspace persona instead of silencing it. Resolved through
+    // resolveBrandVoiceNotes' pageOverride parameter (single choke point);
+    // cache isolation is free — the persona TEXT is already a cache scope on
+    // both layers (exact-key `bv:` segment + semantic brandVoiceHash metadata).
+    brandVoiceNotesMulti: jsonb('brand_voice_notes_multi').$type<Record<string, string>>(),
     // Defensive auto-pause: when Facebook persistently rejects our reply sends
     // (Page restricted, unpublished, permission lost mid-flight), we bump the
     // counter on every page-level failure (our_fault / unknown buckets), reset

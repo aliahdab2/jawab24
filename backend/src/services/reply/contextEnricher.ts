@@ -179,8 +179,8 @@ export async function enrichPageContext(
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
-    // 4. Language-appropriate brand voice notes
-    const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
+    // 4. Language-appropriate brand voice notes (page override → workspace default)
+    const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText, page.brandVoiceNotesMulti);
 
     return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated };
 }
@@ -189,9 +189,17 @@ export async function enrichPageContext(
  * Pick the brand-voice notes matching the customer message's language.
  *
  * Single source of truth for the selection rule — used by enrichPageContext
- * (production replies) AND scripts/warm-reply-cache.ts (post-deploy cache
- * warming). Brand voice is a cache-key segment (`bv:`), so the warm path must
- * resolve it exactly like production or warmed entries land under unread keys.
+ * (production replies) AND buildPlaygroundContext (playground / eval /
+ * post-deploy cache warming). Brand voice is a cache-key segment (`bv:`), so
+ * every path must resolve it exactly like production or warmed entries land
+ * under unread keys.
+ *
+ * `pageOverride` is the page's own persona (`pages.brand_voice_notes_multi`,
+ * D-084). When it carries any language content it is a PIN: the language pick
+ * runs entirely within it — no workspace fallback and no legacy single-column
+ * fallback, so a page persona can never be diluted by workspace text. The
+ * `sourceLang` bookkeeping key and empty strings do not count as content:
+ * NULL, {} and an all-cleared record all mean "inherit the workspace persona".
  */
 export function resolveBrandVoiceNotes(
     userSettings: {
@@ -200,16 +208,30 @@ export function resolveBrandVoiceNotes(
         supportedLanguages?: unknown;
     },
     messageText: string,
+    pageOverride?: Record<string, string> | unknown,
 ): string | undefined {
-    const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     const lang = detectLanguageCode(messageText);
     const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
+    const pick = (multi: Record<string, string>) =>
+        multi[lang] || supportedLangs.map(l => multi[l]).find(Boolean);
+
+    const { sourceLang: _overrideSource, ...overrideLangs } = (pageOverride || {}) as Record<string, string>;
+    if (Object.values(overrideLangs).some(v => typeof v === 'string' && v.trim().length > 0)) {
+        // Any-language tail: a page persona stored only in a language outside
+        // supportedLanguages must still apply — the pin already suppressed the
+        // workspace fallback, so dropping it here would silence the page
+        // entirely rather than fall back.
+        return pick(overrideLangs)
+            || Object.values(overrideLangs).find(v => typeof v === 'string' && v.trim().length > 0)
+            || undefined;
+    }
+
+    const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     // Only fall back to the legacy brandVoiceNotes text column if brandVoiceNotesMulti has
     // never been written (i.e. it has no keys). Once the user has used the new UI, the multi
     // column is authoritative — falling back to the old column would resurrect cleared values.
     const legacyFallback = Object.keys(bvMulti).length === 0 ? userSettings.brandVoiceNotes : undefined;
-    return bvMulti[lang]
-        || supportedLangs.map(l => bvMulti[l]).find(Boolean)
+    return pick(bvMulti)
         || legacyFallback
         || undefined;
 }

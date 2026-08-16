@@ -204,6 +204,40 @@ export const DEMO_PAGES = [
         instagramUsername: 'gulf_fashion_sa',
     },
     {
+        // D-084 per-page persona fixture (playground-eval Cat 78). A resort page
+        // whose PAGE-level persona (pages.brand_voice_notes_multi) pins info-desk
+        // behavior: never ask for the customer's contact, never promise follow-up,
+        // route bookings to the resort's own phone. The workspace persona is left
+        // to the demo defaults, so the eval proves the page override WINS — the
+        // exact prod failure this models (Shahin Resort «عطيني اسمك ورقمك» at
+        // thread depth 3+, 2026-08-15) happened WITH a workspace persona live.
+        // Named without «متجر/أزياء/معهد…» so no other eval alias pattern matches.
+        facebookPageId: 'demo_page_resort',
+        name: 'منتجع الواحة السياحي',
+        suggestedKnowledgeBase: `🏖 منتجع الواحة السياحي
+
+📍 الموقع: طريق الساحل، اللاذقية
+📞 للحجز والاستفسار: 0119876543
+
+⏰ الاستقبال: يومياً 24 ساعة
+
+🛏 الغرف والأجنحة:
+- غرفة مزدوجة بإطلالة حديقة: 150$ لليلة
+- جناح صغير بإطلالة مسبح: 220$ لليلة
+- شقة فندقية (حتى 6 أشخاص): 275$ لليلة
+
+🏊 المسبح مفتوح من 9 صباحاً حتى 8 مساءً
+🍽 المطعم يقدم فطوراً مجانياً لنزلاء الأجنحة
+
+📌 الحجز حصراً عبر الهاتف 0119876543 — لا يوجد تثبيت حجز عبر وسائل التواصل الاجتماعي.`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+        brandVoiceNotesMulti: {
+            ar: 'أنتِ سارة، موظفة استعلامات في منتجع الواحة.\nأنتِ مصدر معلومات فقط: الحجز والمتابعة يتمّان عبر هاتف المنتجع، لا عبر هذه المحادثة.\nلا تأخذين اسم الزبون ولا رقمه ولا تفاصيل حجزه، ولا تعدين بمتابعة أو باتصال لاحق.\nعملكِ أن تعطي المعلومة ثم توجّهي الزبون لرقم المنتجع 0119876543.',
+            sourceLang: 'manual',
+        },
+    },
+    {
         // The real Damascus training institute — since the schedules slice (D-052)
         // the enumerable facts (course prices, cohort slots with self-expiring start
         // dates, the closed online list) live in fact_collections rows
@@ -2400,6 +2434,9 @@ export async function seedDemoData(
                 // Stage 2.6: seed the structured BUSINESS_INFO container when defined,
                 // letting eval cases drive the prompt-injection path with realistic data.
                 ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+                // D-084: per-page persona override (Cat 78 fixture).
+                ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
+                    && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
             })
             .returning({ id: pages.id, facebookPageId: pages.facebookPageId });
         createdPages.push(created);

@@ -251,6 +251,10 @@ class AdminKbService {
                 kbActiveVersion: pages.kbActiveVersion,
                 ecommerceStoreId: pages.ecommerceStoreId,
                 businessProfile: pages.businessProfile,
+                // Per-page persona (D-084): without it the playground/eval would
+                // preview override pages with the WORKSPACE persona — a wrong
+                // reply AND a wrong `bv:` cache key vs production.
+                brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
             })
             .from(pages)
             .where(eq(pages.id, pageId))
