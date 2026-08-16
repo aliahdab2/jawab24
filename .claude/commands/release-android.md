@@ -83,21 +83,29 @@ main checkout:
 git add frontend/android/app/build.gradle
 git commit -m "chore(android): release v<X.Y.Z> (code <code>)"
 git push origin HEAD:refs/heads/chore/android-v<X.Y.Z>
-gh pr create --base main --head chore/android-v<X.Y.Z> \
-  --title "chore(android): release v<X.Y.Z> (code <code>)"
-gh pr merge <n> --squash --admin --delete-branch
+prUrl=$(gh pr create --base main --head chore/android-v<X.Y.Z> \
+  --title "chore(android): release v<X.Y.Z> (code <code>)" \
+  --body "Version record for the v<X.Y.Z> Play release.")
+gh pr merge "$prUrl" --squash --admin --delete-branch
 ```
 
 ⛔ **Create the tag only AFTER the merge — never before.** A squash merge gives the record commit a
 **new SHA**, so a tag made pre-merge points at an orphaned commit that is not on `origin/main`. This
-has stranded a published tag three times (2.0.27, 2.0.28, 2.0.39):
+has stranded a published tag three times (2.0.27, 2.0.28, 2.0.39).
+
+⛔ **Tag the merge SHA explicitly — do NOT tag local `HEAD`.** The squash left local `main` holding
+the *original* record commit while `origin/main` holds the new squashed one, so the two branches have
+**diverged**: `git merge --ff-only origin/main` aborts with `Not possible to fast-forward`, and
+tagging `HEAD` anyway re-creates the exact orphan this step exists to prevent. Take the SHA from the
+PR instead — it needs nothing from local `main`:
 
 ```bash
 git fetch origin --tags
-git merge --ff-only origin/main                       # local main now has the squashed commit
-git tag -a "android-v<X.Y.Z>" -m "Android release v<X.Y.Z> (versionCode <code>)"
+mergeSha=$(gh pr view "$prUrl" --json mergeCommit --jq .mergeCommit.oid)
+git tag -a "android-v<X.Y.Z>" "$mergeSha" -m "Android release v<X.Y.Z> (versionCode <code>)"
 git push origin "android-v<X.Y.Z>"
 git merge-base --is-ancestor "android-v<X.Y.Z>" origin/main && echo "tag OK"   # must print
+git reset --hard origin/main    # re-sync local main; check `git status --short` is clean first
 ```
 
 > If a tag was already pushed at the wrong commit, repair it with
