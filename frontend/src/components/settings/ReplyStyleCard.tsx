@@ -433,7 +433,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 onClick={savePagePersona}
                 disabled={pageSaving || !pageDraft.trim() || !pageDraftChanged}
                 aria-busy={pageSaving}
-                className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                // Disabled = INERT (muted), not a faded primary: at rest there is
+                // nothing to save, and a half-opacity teal block was the loudest
+                // element on the card. The teal state now means exactly one
+                // thing — "you have an unsaved page change".
+                className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
               >
                 {pageSaving ? t('replyStyle.savingPage') : t('replyStyle.savePageBtn')}
               </button>
@@ -442,7 +446,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                   type="button"
                   onClick={revertPagePersona}
                   disabled={pageSaving}
-                  className="min-h-[44px] px-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  // Bordered ghost, not bare text: on narrow screens this wraps
+                  // to its own row, and without an outline it read as a stray
+                  // caption rather than an action (mobile audit 2026-08-17).
+                  className="min-h-[44px] px-4 rounded-xl text-sm font-medium border border-theme-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   {t('replyStyle.revertBtn')}
                 </button>
