@@ -23,8 +23,8 @@ def releaseKeyPassword = localProperties.getProperty('RELEASE_KEY_PASSWORD', '')
 
 // Version is overridable from CI via -PappVersionName / -PappVersionCode.
 // Local/dev builds fall back to the literals below (kept at the last released values).
-def appVersionName = project.findProperty('appVersionName') ?: "2.0.39"
-def appVersionCode = (project.findProperty('appVersionCode') ?: "20039") as Integer
+def appVersionName = project.findProperty('appVersionName') ?: "2.0.40"
+def appVersionCode = (project.findProperty('appVersionCode') ?: "20040") as Integer
 
 if (facebookAppId.isEmpty()) {
     logger.warn("WARNING: FACEBOOK_APP_ID not set in local.properties. Facebook login will not work.")
