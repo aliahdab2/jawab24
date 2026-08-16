@@ -1658,20 +1658,28 @@ html [data-sonner-toaster] {
   height: var(--sai-top);
 }
 
-/* Bottom safe area background (for gesture nav) */
+/* Bottom safe area background (for gesture nav).
+
+   INVARIANT: this strip's height MUST equal the lift `.bottom-nav-position`
+   gives the fixed bottom nav (`bottom: var(--sai-bottom)`) — on EVERY surface,
+   not just native. Both read --sai-bottom, so they track each other by
+   construction; pinned by __tests__/styles/bottomSafeArea.test.ts.
+
+   It used to be `height: 0` on web and only got a height under `.is-native`,
+   while the nav's lift was never gated that way. Any browser reporting a
+   non-zero env(safe-area-inset-bottom) therefore floated the nav above the
+   viewport bottom over a TRANSPARENT strip, and the page scrolled through the
+   gap underneath it. Android 15 lays WebViews out edge-to-edge, so the in-app
+   browsers (Facebook, Instagram) report a real inset and hit exactly that.
+
+   Where the inset is 0 — desktop, and mobile browsers that keep their own
+   chrome outside the viewport — this resolves to 0px and paints nothing. */
 .bottom-safe-bg {
   bottom: 0;
-  height: 0px; /* Hidden by default on web */
-}
-
-/* Native apps: show bottom safe area in portrait */
-html.is-native .bottom-safe-bg,
-body.is-native .bottom-safe-bg {
-  display: block;
   height: var(--sai-bottom);
 }
 
-/* Landscape: hide bottom safe area */
+/* Landscape: the nav sits at bottom: 0, so there is no gap to fill */
 @media (orientation: landscape) {
   .bottom-safe-bg {
     display: none;
@@ -1857,7 +1865,11 @@ body.is-native .pt-hero {
   }
 }
 
-/* Bottom nav positioning - above safe area in portrait, at bottom in landscape */
+/* Bottom nav positioning - above safe area in portrait, at bottom in landscape.
+   Deliberately NOT gated on .is-native: an edge-to-edge WebView (Android 15 —
+   Facebook/Instagram in-app browsers) reports a real inset on the web too, and
+   the nav must clear the system nav bar there as well. The gap this opens is
+   painted opaque by .bottom-safe-bg, which reads the same token. */
 .bottom-nav-position {
   bottom: var(--sai-bottom);
 }
