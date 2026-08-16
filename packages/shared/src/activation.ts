@@ -2,13 +2,24 @@
 // frontend (admin observability panel). Single source of truth so the step
 // vocabulary and response shape can't drift across the two sides.
 
-/** The five activation milestones, in funnel order. */
+/**
+ * The five activation milestones (funnel order), plus standalone demand
+ * signals that reuse the same one-row-per-user store but are NOT funnel
+ * steps — they must never be added to ACTIVATION_FUNNEL_STEPS:
+ *  - 'no_fb_pages'        — Facebook login completed but /me/accounts was empty
+ *                           and the workspace has no connected pages (the
+ *                           "Instagram-only merchant" drop-off candidate)
+ *  - 'ig_direct_interest' — merchant explicitly asked for Instagram-without-
+ *                           Facebook connect from the empty-pages state
+ */
 export type ActivationEvent =
     | 'signup'
     | 'page_connected'
     | 'kb_filled'
     | 'autoreply_enabled'
-    | 'first_autoreply_sent';
+    | 'first_autoreply_sent'
+    | 'no_fb_pages'
+    | 'ig_direct_interest';
 
 /**
  * Minimum knowledge-base length (trimmed chars) for a page to count as having
@@ -42,14 +53,18 @@ export function isBusinessInfoProvided(
     return kb !== (suggestedKnowledgeBase ?? '').trim();
 }
 
-/** Ordered funnel steps — the sequence rendered signup → first reply. */
-export const ACTIVATION_FUNNEL_STEPS: readonly ActivationEvent[] = [
+/**
+ * Ordered funnel steps — the sequence rendered signup → first reply.
+ * `satisfies` (not an annotation) keeps the literal element types, so
+ * consumers can type step-keyed records without covering the demand signals.
+ */
+export const ACTIVATION_FUNNEL_STEPS = [
     'signup',
     'page_connected',
     'kb_filled',
     'autoreply_enabled',
     'first_autoreply_sent',
-] as const;
+] as const satisfies readonly ActivationEvent[];
 
 export interface ActivationFunnelStep {
     /** One of the ActivationEvent milestones. */

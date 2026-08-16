@@ -34,6 +34,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.getKbGaps);
 
+        readRoutes.post('/pages/instagram-direct-interest', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Record interest in Instagram-without-Facebook connect (demand signal)',
+                security: auth,
+            },
+        }, pagesController.recordInstagramDirectInterest);
+
         readRoutes.post('/pages/:id/test-reply', {
             schema: {
                 tags: ['Pages'],

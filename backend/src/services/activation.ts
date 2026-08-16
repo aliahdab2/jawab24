@@ -193,7 +193,10 @@ export async function getActivationFunnel(days: number): Promise<ActivationFunne
     `);
 
     const row = rows[0] as unknown as FunnelRow | undefined;
-    const counts: Record<ActivationEvent, number> = {
+    // Keyed by the FUNNEL steps only — demand signals (no_fb_pages,
+    // ig_direct_interest) share the ActivationEvent union but are not part of
+    // the funnel query or this pivot.
+    const counts: Record<(typeof ACTIVATION_FUNNEL_STEPS)[number], number> = {
         signup: Number(row?.signup ?? 0),
         page_connected: Number(row?.page_connected ?? 0),
         kb_filled: Number(row?.kb_filled ?? 0),

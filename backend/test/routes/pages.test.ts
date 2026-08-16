@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import pagesRoutes from '../../src/routes/pages';
 import { pagesService } from '../../src/services/pages';
+import { recordActivationEvent } from '../../src/services/activation';
 
 // Mock services
 vi.mock('../../src/services/pages');
@@ -23,6 +24,17 @@ vi.mock('../../src/middleware/workspace', () => ({
     },
     requireRole: () => async () => {},
 }));
+// The controller re-imports the pure helpers alongside the emitters, so the
+// mock must provide both: emitters as spies, helpers from the real shared pkg.
+vi.mock('../../src/services/activation', async () => {
+    const { isBusinessInfoProvided, KB_FILLED_MIN_CHARS } = await import('@jawab24/shared');
+    return {
+        recordActivationEvent: vi.fn(),
+        recordAutoreplyEnabledIfEffective: vi.fn(),
+        isBusinessInfoProvided,
+        KB_FILLED_MIN_CHARS,
+    };
+});
 
 describe('Pages Routes', () => {
     let app: any;
@@ -253,6 +265,58 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(404);
+        });
+    });
+
+    describe('POST /pages/sync — no_fb_pages demand signal', () => {
+        // Exactly the shape syncFromFacebook returns when /me/accounts is empty.
+        const EMPTY_SYNC = {
+            syncedPages: [], skippedCount: 0, skippedPages: [], skipReason: undefined,
+            pageLimit: null, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [],
+            revokedCount: 0, alreadyMemberOf: [],
+        };
+
+        it('records no_fb_pages when Facebook returns no pages and none exist', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(EMPTY_SYNC as any);
+            vi.mocked(pagesService.getPages).mockResolvedValue([]);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/pages/sync',
+                payload: { accessToken: 'tok' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload).synced).toBe(0);
+            expect(recordActivationEvent).toHaveBeenCalledWith('test_user_id', 'no_fb_pages');
+        });
+
+        it('does NOT record no_fb_pages when the workspace already has pages', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(EMPTY_SYNC as any);
+            vi.mocked(pagesService.getPages).mockResolvedValue([
+                { id: 'page_1', name: 'Existing', facebookPageId: 'fb_1' } as any,
+            ]);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/pages/sync',
+                payload: { accessToken: 'tok' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(recordActivationEvent).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('POST /pages/instagram-direct-interest', () => {
+        it('records the interest signal for the acting user and returns 204', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/pages/instagram-direct-interest',
+            });
+
+            expect(response.statusCode).toBe(204);
+            expect(recordActivationEvent).toHaveBeenCalledWith('test_user_id', 'ig_direct_interest');
         });
     });
 });

@@ -73,6 +73,7 @@ const PagesPage: NextPageWithLayout = () => {
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
+  const [igInterestSent, setIgInterestSent] = useState(false);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
@@ -218,6 +219,20 @@ const PagesPage: NextPageWithLayout = () => {
       toast.error(t(code === 'PAGE_LIMIT_REACHED' ? 'pageLimitReached' : 'instagramConnectFailed'));
     }
   }, [locale, t]);
+
+  // Interest capture for Instagram-without-Facebook connect, shown while the
+  // real connect is dark (no INSTAGRAM_APP_* configured / App Review pending).
+  // Optimistic: the thanks state shows even if the POST fails — the recording
+  // is best-effort and re-asking a merchant to re-click a metrics ping would
+  // be worse UX.
+  const handleIgDirectInterest = useCallback(async () => {
+    setIgInterestSent(true);
+    try {
+      await api.post('/pages/instagram-direct-interest');
+    } catch {
+      // Best-effort — the backend dedupes per user; a lost click is acceptable.
+    }
+  }, []);
 
   const handleSync = useCallback(async () => {
     if (!fbToken) {
@@ -1584,6 +1599,31 @@ const PagesPage: NextPageWithLayout = () => {
               : undefined
             }
           />
+          <div className="border-t border-theme-border mt-6 pt-4 pb-2 text-center">
+            {igInterestSent ? (
+              <p className="text-sm text-muted-foreground" aria-live="polite">{t('igOnlyThanks')}</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-2">{t('igOnlyPrompt')}</p>
+                {/* Same label, two eras: while Instagram-direct is dark this
+                    records interest (the onboarding list to contact once Meta
+                    App Review lands); once the flag is on, an OWNER clicking it
+                    goes straight into the real Instagram Login connect — asking
+                    a merchant to "register interest" in a feature that is one
+                    click away would be absurd. Non-owners keep the interest
+                    path either way (the /start route is owner-only). */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={isInstagramDirectEnabled() && isOwner
+                    ? () => void startInstagramConnect()
+                    : handleIgDirectInterest}
+                >
+                  {t('igOnlyCta')}
+                </Button>
+              </>
+            )}
+          </div>
         </Card>
       )}
 

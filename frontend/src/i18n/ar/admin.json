@@ -579,6 +579,8 @@
     "funnelKbFilled": "تعبئة قاعدة المعرفة",
     "funnelAutoreplyEnabled": "تفعيل الرد التلقائي",
     "funnelFirstReply": "إرسال أول رد تلقائي",
+    "funnelNoFbPages": "لا صفحات فيسبوك عند الدخول",
+    "funnelIgDirectInterest": "يرغب بربط إنستغرام مباشرة",
     "funnelDropoff": "▼ تراجع {pct}%",
     "funnelGain": "▲ زيادة {pct}%",
     "funnelNoDropoff": "بدون تراجع",
