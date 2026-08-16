@@ -35,6 +35,17 @@ export function serializePage<T extends {
     const { accessToken, whatsappAccessToken, instagramAccessToken, ...rest } = page;
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     const instagramDirectConnected = !!instagramAccessToken && instagramAccessToken !== '';
+    // IDENTITY, distinct from the liveness flag above: is this card the
+    // Instagram-direct kind at all? NULL means "never was" — while '' is the
+    // was-connected sentinel the refresh sweep writes when Meta pronounces the
+    // credential dead (markCredentialDead). The card must keep its Instagram
+    // identity in exactly that state, or the dead card re-renders as a
+    // WhatsApp-only one and the reconnect banner becomes unreachable (PR #772
+    // re-review, High): for a pageless IG row `isConnected` and
+    // `instagramDirectConnected` flip false TOGETHER, so no liveness-derived
+    // discriminator can survive the death it exists to surface.
+    const instagramDirect = !page.facebookPageId
+        && instagramAccessToken !== null && instagramAccessToken !== undefined;
     return {
         ...rest,
         // "Is the card's PRIMARY channel credential valid?" — Facebook token for a
@@ -48,6 +59,7 @@ export function serializePage<T extends {
         // the merchant's card, and the reply pipeline start disagreeing about the
         // same row. All pinned by tests.
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : (whatsappConnected || instagramDirectConnected),
+        instagramDirect,
         instagramDirectConnected,
         whatsappConnected,
         // "The token needs attention" — driven by the REASON, not by the absence of a

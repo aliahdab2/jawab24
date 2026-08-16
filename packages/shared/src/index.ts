@@ -456,8 +456,13 @@ export interface Page {
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
   whatsappConnected?: boolean;
-  // True when an Instagram Login (Instagram-direct) token is stored — the card
-  // is an Instagram-only channel with no Facebook Page behind it.
+  // IDENTITY: this card is the Instagram-direct kind (Instagram Login, no
+  // Facebook Page) — true whether the stored token is live OR cleared to the
+  // '' was-connected sentinel by the refresh sweep. Key card rendering on THIS,
+  // never on the liveness flag below: liveness dies exactly when the reconnect
+  // UI must still say "this is an Instagram card".
+  instagramDirect?: boolean;
+  // LIVENESS: a non-empty Instagram Login token is currently stored.
   instagramDirectConnected?: boolean;
   // True when WhatsApp WAS connected and the token has since died (Meta forces a
   // 60-day expiry on Embedded Signup tokens). Distinct from "never connected":

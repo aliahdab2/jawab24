@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { db } from '../db';
 import { pages } from '../db/schema';
-import { and, eq, isNotNull, lt, ne } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, ne } from 'drizzle-orm';
 import { config } from '../config';
 import { fbAxios } from '../lib/fbAxios';
 import { maybeDecryptToken, maybeEncryptToken } from './facebookCrypto';
@@ -237,8 +237,9 @@ export const instagramLoginService = {
             // double-spend a single-use code — because this call is idempotent
             // (Meta answers a repeat subscribe with the same success) and it is the
             // most load-bearing call of the connect flow: without it the channel is
-            // silently deaf, and the only recovery is the merchant re-running the
-            // entire OAuth dance off an igWarn toast.
+            // silently deaf. A connect-time failure is surfaced (igWarn toast) AND
+            // self-heals: `runWebhookResubscribeSweep` re-issues this install for
+            // every live direct row daily.
             const { data } = await fbAxios.post(
                 `${GRAPH_BASE}/${config.facebook.graphApiVersion}/${instagramUserId}/subscribed_apps`,
                 null,
@@ -330,6 +331,54 @@ export const instagramLoginService = {
     },
 
     /**
+     * Daily webhook re-subscribe for every LIVE Instagram-direct row.
+     *
+     * The per-account `subscribed_apps` install is load-bearing (see
+     * `subscribeToWebhooks`) and its failure at connect time used to survive
+     * only as one transient toast (`igWarn=webhooks`) — a merchant who missed
+     * it kept a healthy-looking card on a channel that receives nothing, the
+     * silent-deaf-channel state this feature has already paid for twice
+     * (PR #772 re-review, Medium). The call is idempotent (Meta answers a
+     * repeat subscribe with the same success), so re-issuing it daily makes the
+     * state self-healing within 24h with no schema or UI surface: prevention
+     * over detection (Rule 14). It also re-installs after Meta-side drops
+     * (deauthorize → re-authorize) that no connect-time call could see.
+     */
+    async runWebhookResubscribeSweep(logger: Logger = noopLogger): Promise<{ resubscribed: number; failed: number }> {
+        const rows = await db
+            .select({
+                id: pages.id,
+                token: pages.instagramAccessToken,
+                instagramAccountId: pages.instagramAccountId,
+            })
+            .from(pages)
+            .where(and(
+                // Identity, not just token presence: only a PAGELESS row is
+                // Instagram-direct (a Facebook-backed page must never have the
+                // Instagram-Login install pushed onto it from here).
+                isNull(pages.facebookPageId),
+                isNotNull(pages.instagramAccessToken),
+                ne(pages.instagramAccessToken, ''),
+            ));
+
+        let resubscribed = 0;
+        let failed = 0;
+        for (const row of rows) {
+            if (!row.instagramAccountId) continue;
+            const ok = await this.subscribeToWebhooks(
+                row.instagramAccountId, maybeDecryptToken(row.token), logger,
+            );
+            if (ok) resubscribed++;
+            else failed++; // already captured to Sentry inside subscribeToWebhooks
+            await sleep(PER_ACCOUNT_DELAY_MS);
+        }
+        if (rows.length > 0) {
+            logger.info(`[InstagramLogin] Webhook re-subscribe done: ${resubscribed} ok, ${failed} failed`);
+        }
+        return { resubscribed, failed };
+    },
+
+    /**
      * A terminal 190: clear the credential and tell the merchant, exactly once.
      *
      * Clearing (to '', never NULL — '' preserves "was connected") is what makes
@@ -395,11 +444,15 @@ export function startInstagramTokenRefreshCron(logger: Logger = noopLogger): voi
     if (sweepHandle || !instagramLoginService.isConfigured()) return;
     logger.info(`[InstagramLogin] Refresh cron started — sweeps every ${SWEEP_INTERVAL_MS / 3600000}h`);
     sweepHandle = setInterval(() => {
-        instagramLoginService.runRefreshSweep(logger).catch(err => {
-            captureError(err, 'Instagram-direct token refresh cron failed', {
-                tags: { service: 'instagram-login' },
+        // Sequential on purpose: the two sweeps share the same per-account Graph
+        // budget, and the re-subscribe must see any token the refresh just wrote.
+        instagramLoginService.runRefreshSweep(logger)
+            .then(() => instagramLoginService.runWebhookResubscribeSweep(logger))
+            .catch(err => {
+                captureError(err, 'Instagram-direct token refresh cron failed', {
+                    tags: { service: 'instagram-login' },
+                });
             });
-        });
     }, SWEEP_INTERVAL_MS);
 }
 

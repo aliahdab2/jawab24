@@ -1641,8 +1641,13 @@ describe('PagesPage - Instagram-direct cards', () => {
         commentsCount: 0,
         knowledgeBase: 'We sell homemade sweets.',
         isConnected: true,
-        // Both halves of the IG-direct identity: the serializer ships this flag
-        // precisely so the card does not have to guess from a null page id.
+        // IDENTITY vs LIVENESS, exactly as serializePage ships them: the card
+        // keys its Instagram identity on `instagramDirect` (true even after the
+        // sweep clears a dead credential to ''), while `instagramDirectConnected`
+        // and `isConnected` carry liveness and die together. Fixtures here must
+        // stay serializer-POSSIBLE — a hand-mixed state the serializer cannot
+        // emit turns these tests vacuous (PR #772 re-review, Medium).
+        instagramDirect: true,
         instagramDirectConnected: true,
         instagramAccountId: '17841400000000',
         instagramUsername: 'sweets.by.oum.anas',
@@ -1696,12 +1701,19 @@ describe('PagesPage - Instagram-direct cards', () => {
         expect(screen.queryByText(enPages.instagramReconnectRequired)).not.toBeInTheDocument();
     });
 
-    // The M1 sweep clears the credential when Meta pronounces it dead (Graph 190),
-    // which is what flips isConnected false. The merchant must be told to re-run
-    // Instagram Login — NOT to "reconnect via Facebook", which does not exist here.
-    it('a dead credential raises the INSTAGRAM reconnect banner, never the Facebook one', async () => {
+    // The M1 sweep clears the credential when Meta pronounces it dead (Graph 190):
+    // `instagramAccessToken` becomes '' and the serializer flips BOTH liveness
+    // flags false together while `instagramDirect` (identity) stays true. This
+    // fixture is exactly that serializer output — the previous one hand-mixed
+    // `isConnected: false` with `instagramDirectConnected: true`, a state the
+    // serializer cannot emit, so it green-lit a banner that was dead code in
+    // production (PR #772 re-review, High + Medium). The merchant must be told
+    // to re-run Instagram Login — NOT to "reconnect via Facebook".
+    // Mutation-checked: keying isInstagramOnly on `instagramDirectConnected`
+    // again fails all three assertions below.
+    it('a dead credential keeps the Instagram card and raises the INSTAGRAM reconnect banner, never the Facebook one', async () => {
         mockedPagesApi.getAll.mockResolvedValue({
-            data: { data: [{ ...IG_ONLY_PAGE, isConnected: false, instagramDirectConnected: true }] },
+            data: { data: [{ ...IG_ONLY_PAGE, isConnected: false, instagramDirectConnected: false }] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
 
         renderPage(<PagesPage />);
@@ -1712,6 +1724,9 @@ describe('PagesPage - Instagram-direct cards', () => {
 
         expect(screen.getByText(enPages.instagramReconnectRequired)).toBeInTheDocument();
         expect(screen.queryByText(enPages.reconnectRequired)).not.toBeInTheDocument();
+        // The card must KEEP its Instagram identity in death — not re-render as a
+        // WhatsApp-only card offering a WhatsApp connect row for an IG outage.
+        expect(screen.queryByText(enPages.platformWhatsApp)).not.toBeInTheDocument();
     });
 
     it('removing the card confirms then deletes the page row', async () => {

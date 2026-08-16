@@ -63,8 +63,10 @@ covers our own test accounts, so App Review gates external merchants only.
   `POST graph.instagram.com/{ig-id}/subscribed_apps?subscribed_fields=messages,comments`,
   called at connect (`instagramLoginService.subscribeToWebhooks`). Without it the
   connect looks healthy and not one message arrives. A failed subscription is
-  REPORTED, not assumed: the return page carries `igWarn=webhooks` and the
-  merchant is told to reconnect.
+  REPORTED, not assumed (the return page carries `igWarn=webhooks`) AND
+  self-heals: the daily cron's `runWebhookResubscribeSweep` re-issues the
+  idempotent install for every live Instagram-direct row, so a missed toast —
+  or a Meta-side subscription drop — recovers within 24h without the merchant.
 - **Token lifecycle**: 60-day clock like WhatsApp's, refreshed daily by
   `startInstagramTokenRefreshCron` → `runRefreshSweep` (10-day window, per-row
   failure isolation).

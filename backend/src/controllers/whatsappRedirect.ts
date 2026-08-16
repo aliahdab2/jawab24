@@ -25,6 +25,7 @@ import { cookiesService } from '../services/cookies';
 import { workspaceService } from '../services/workspace';
 import { escapeHtml } from '../utils/htmlUtils';
 import { t } from '../utils/i18n';
+import { appReturnPage } from '../utils/appReturnPage';
 import { isUniqueViolation } from '../utils/dbErrors';
 
 /**
@@ -159,55 +160,12 @@ function appReturn(params: Record<string, string>): string {
     return `${config.frontendUrl}/auth/app-sync?redirect=${encodeURIComponent(`/pages${qs}`)}`;
 }
 
-/**
- * …delivered as a PAGE that navigates, not as a 302.
- *
- * Android App Links intercept a navigation a PAGE starts; a redirect the
- * browser follows inside its own request chain is not one. Sending the
- * App Link as a `Location:` header therefore just renders our web fallback in
- * the tab (observed 2026-07-31: `/auth/app-sync?redirect=/pages?whatsappConnected=1`
- * fetched with 200, merchant left in the browser). The shipped Facebook flow
- * gets this right — `auth/callback.tsx` finishes its work and then does
- * `window.location.href = <app-sync>` — so this mirrors it: a document whose
- * script performs the navigation.
- *
- * The anchor is not decoration: if the script is blocked or the App Link
- * verification has lapsed, the merchant still has a way back instead of a
- * blank tab.
+/*
+ * …delivered as a PAGE that navigates, not as a 302 — the shared
+ * `utils/appReturnPage` document (observed 2026-07-31: an App Link sent as a
+ * `Location:` header renders the web fallback with a 200 and leaves the
+ * merchant in the browser; only a page-started navigation is intercepted).
  */
-function appReturnPage(appSyncUrl: string, locale: 'ar' | 'en'): string {
-    const href = escapeHtml(appSyncUrl);
-    return `<!DOCTYPE html>
-<html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="${config.frontendUrl}/brand/favicon-32x32.png">
-<title>${escapeHtml(t('waReturnTitle', locale))}</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-         padding:24px; box-sizing:border-box; background:#f8fafc; color:#0f172a;
-         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; text-align:center; }
-  img { width:64px; height:64px; margin:0 auto 16px; display:block; }
-  p { font-size:15px; color:#475569; margin:0 0 16px; }
-  a { color:#0f9d76; font-weight:600; }
-  @media (prefers-color-scheme: dark) {
-    body { background:#0f172a; color:#f1f5f9; } p { color:#94a3b8; }
-  }
-</style>
-</head>
-<body>
-  <main>
-    <img src="${config.frontendUrl}/brand/icon-vector.svg" width="64" height="64" alt="Jawab24">
-    <p>${escapeHtml(t('waReturnBody', locale))}</p>
-    <a href="${href}">${escapeHtml(t('waReturnCta', locale))}</a>
-  </main>
-  <script>location.replace(${JSON.stringify(appSyncUrl)});</script>
-</body>
-</html>`;
-}
 
 /** The redirect_uri registered at Meta. Must match byte-for-byte on both legs. */
 export function whatsappCallbackUri(): string {

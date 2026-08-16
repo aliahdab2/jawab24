@@ -5,8 +5,7 @@ import { instagramLoginService, InstagramLoginError } from '../services/instagra
 import { pagesService } from '../services/pages';
 import { subscriptionsService } from '../services/subscriptions';
 import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
-import { escapeHtml } from '../utils/htmlUtils';
-import { t } from '../utils/i18n';
+import { appReturnPage } from '../utils/appReturnPage';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 /**
@@ -33,46 +32,15 @@ interface IgConnectState {
 }
 
 /**
- * The return leg: a document whose SCRIPT navigates to the App Link (a page
- * navigation is interceptable by Android; a server redirect is not), with a
- * manual anchor for when the script or the App-Link verification doesn't fire.
- * Mirrors the shipped WhatsApp return page; the waReturn* strings are generic
- * ("Returning to Jawab24") and deliberately shared, not duplicated.
+ * The return leg: the shared app-return document (`utils/appReturnPage`) —
+ * a page whose SCRIPT navigates to the App Link (a page navigation is
+ * interceptable by Android; a server redirect is not). This wrapper only
+ * builds the /pages?{qs} destination the Instagram flow returns to.
  */
-function appReturnPage(params: Record<string, string>, locale: 'ar' | 'en'): string {
+function igReturnPage(params: Record<string, string>, locale: 'ar' | 'en'): string {
     const qs = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : '';
     const appSyncUrl = `${config.frontendUrl}/auth/app-sync?redirect=${encodeURIComponent(`/pages${qs}`)}`;
-    const href = escapeHtml(appSyncUrl);
-    return `<!DOCTYPE html>
-<html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="${config.frontendUrl}/brand/favicon-32x32.png">
-<title>${escapeHtml(t('waReturnTitle', locale))}</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-         padding:24px; box-sizing:border-box; background:#f8fafc; color:#0f172a;
-         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; text-align:center; }
-  img { width:64px; height:64px; margin:0 auto 16px; display:block; }
-  p { font-size:15px; color:#475569; margin:0 0 16px; }
-  a { color:#0f9d76; font-weight:600; }
-  @media (prefers-color-scheme: dark) {
-    body { background:#0f172a; color:#f1f5f9; } p { color:#94a3b8; }
-  }
-</style>
-</head>
-<body>
-  <main>
-    <img src="${config.frontendUrl}/brand/icon-vector.svg" width="64" height="64" alt="Jawab24">
-    <p>${escapeHtml(t('waReturnBody', locale))}</p>
-    <a href="${href}">${escapeHtml(t('waReturnCta', locale))}</a>
-  </main>
-  <script>location.replace(${JSON.stringify(appSyncUrl)});</script>
-</body>
-</html>`;
+    return appReturnPage(appSyncUrl, locale);
 }
 
 export class InstagramConnectController {
@@ -132,7 +100,7 @@ export class InstagramConnectController {
         }
         const { code, state: nonce, error } = request.query;
         const sendPage = (params: Record<string, string>, locale: 'ar' | 'en' = 'ar') =>
-            reply.header('content-type', 'text/html; charset=utf-8').send(appReturnPage(params, locale));
+            reply.header('content-type', 'text/html; charset=utf-8').send(igReturnPage(params, locale));
 
         // State first: without it we can't even trust the locale. A missing or
         // replayed nonce ends the flow — a signed-but-replayable state would let
@@ -167,6 +135,9 @@ export class InstagramConnectController {
             // skipped it would look healthy and answer no one. It runs after the
             // row exists so a merchant whose subscription fails still has a page
             // to retry from, and its outcome is reported rather than assumed.
+            // The toast is not the only recovery: the daily
+            // `runWebhookResubscribeSweep` re-issues the idempotent install for
+            // every live direct row, so a missed toast heals within 24h.
             const subscribed = await instagramLoginService.subscribeToWebhooks(
                 profile.userId, token.accessToken, request.log,
             );

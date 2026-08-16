@@ -1038,7 +1038,13 @@ const PagesPage: NextPageWithLayout = () => {
                       // WHICH direct channel owns the card decides its identity —
                       // an Instagram-direct card rendered as a WhatsApp one hid the
                       // only toggle that governs its channel (PR #772 review H3).
-                      const isInstagramOnly = !page.facebookPageId && !!page.instagramDirectConnected;
+                      // Keyed on the IDENTITY flag, never the liveness one: for a
+                      // pageless IG row `instagramDirectConnected` and `isConnected`
+                      // flip false TOGETHER when the sweep clears a dead credential,
+                      // so a liveness-keyed identity re-renders the dead card as a
+                      // WhatsApp one and hides the reconnect banner in exactly the
+                      // state it exists for (PR #772 re-review, High).
+                      const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
                       const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
                       return (
                         <Card

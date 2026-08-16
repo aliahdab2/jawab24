@@ -285,3 +285,60 @@ describe('instagramLoginService.subscribeToWebhooks', () => {
         await expect(instagramLoginService.subscribeToWebhooks('ig-user-1', 'ig-token')).resolves.toBe(false);
     });
 });
+
+describe('instagramLoginService.runWebhookResubscribeSweep — the deaf-channel self-heal (re-review)', () => {
+    const selectRows = (rows: Record<string, unknown>[]) => {
+        vi.mocked(db.select).mockReturnValue({
+            from: () => ({ where: () => Promise.resolve(rows) }),
+        } as never);
+    };
+
+    // A connect-time subscription failure used to survive only as one transient
+    // toast; this sweep is what turns that state self-healing. Mutation-checked:
+    // dropping the runWebhookResubscribeSweep call from the cron chain (or the
+    // subscribeToWebhooks call inside it) fails here.
+    it('re-issues the idempotent subscribed_apps install for every live direct row', async () => {
+        selectRows([
+            { id: 'p1', token: 'ig-tok-1', instagramAccountId: 'ig-acct-1' },
+            { id: 'p2', token: 'ig-tok-2', instagramAccountId: 'ig-acct-2' },
+        ]);
+        mockedAxios.post.mockResolvedValue({ data: { success: true } });
+
+        const result = await instagramLoginService.runWebhookResubscribeSweep();
+
+        expect(result).toEqual({ resubscribed: 2, failed: 0 });
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+            'https://graph.instagram.com/v23.0/ig-acct-1/subscribed_apps',
+            null,
+            expect.objectContaining({ params: expect.objectContaining({ access_token: 'ig-tok-1' }) }),
+        );
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+            'https://graph.instagram.com/v23.0/ig-acct-2/subscribed_apps',
+            null,
+            expect.objectContaining({ params: expect.objectContaining({ access_token: 'ig-tok-2' }) }),
+        );
+    }, 10_000);
+
+    it('a failing row is counted and never aborts the sweep', async () => {
+        selectRows([
+            { id: 'p_bad', token: 'dead-tok', instagramAccountId: 'ig-bad' },
+            { id: 'p_ok', token: 'ok-tok', instagramAccountId: 'ig-ok' },
+        ]);
+        mockedAxios.post
+            .mockRejectedValueOnce(Object.assign(new Error('boom'), { isAxiosError: true }))
+            .mockResolvedValueOnce({ data: { success: true } });
+
+        await expect(instagramLoginService.runWebhookResubscribeSweep())
+            .resolves.toEqual({ resubscribed: 1, failed: 1 });
+    }, 10_000);
+
+    // A direct row without an account id has nothing to install onto — skip,
+    // never call Meta with an empty path segment.
+    it('skips rows with no instagramAccountId', async () => {
+        selectRows([{ id: 'p_null', token: 'tok', instagramAccountId: null }]);
+
+        await expect(instagramLoginService.runWebhookResubscribeSweep())
+            .resolves.toEqual({ resubscribed: 0, failed: 0 });
+        expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+});
