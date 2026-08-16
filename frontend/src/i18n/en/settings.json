@@ -78,8 +78,7 @@
     "holdMovedAction": "Go to Advanced Settings",
     "holdMovedDismiss": "Got it",
     "allPagesExplainer": "This persona applies to all your pages. Pick a page from the list to give it its own persona.",
-    "inheritedExplainer": "This page uses the general persona. Edit the text and save to give this page its own.",
-    "customExplainer": "This page has its own persona — edits here don't touch your other pages.",
+    "pageInheritedHint": "Edit the text and save to give this page its own persona — other pages aren't affected.",
     "workspaceSaveHint": "Changes are saved with the “Save” button at the bottom of the page — after saving you can test the reply."
   },
   "saveSettings": "Save",

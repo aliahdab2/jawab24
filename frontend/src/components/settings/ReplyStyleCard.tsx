@@ -371,15 +371,15 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 {t('replyStyle.overriddenCount', { count: overriddenCount })}
               </span>
             )}
-            {/* Live explainer — teaches the feature in the merchant's own words:
-                what the current selection means and what saving here will do. */}
-            <p className="w-full text-[11px] text-brand-700/80 dark:text-brand-300/80 mt-0.5" dir="auto">
-              {!scopedPage
-                ? t('replyStyle.allPagesExplainer')
-                : pageHasOverride
-                  ? t('replyStyle.customExplainer')
-                  : t('replyStyle.inheritedExplainer')}
-            </p>
+            {/* The teaching line renders ONLY in «كل الصفحات» view — in a page
+                scope the chip already states the page's mode and the save-hint
+                below the button carries the how-to; a paragraph here repeated
+                both (merchant feedback 2026-08-17: crowded, duplicated info). */}
+            {!scopedPage && (
+              <p className="w-full text-[11px] text-brand-700/80 dark:text-brand-300/80 mt-0.5" dir="auto">
+                {t('replyStyle.allPagesExplainer')}
+              </p>
+            )}
           </div>
         )}
         <div className="flex items-center justify-between mb-1.5">
@@ -448,10 +448,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 </button>
               )}
             </div>
-            {/* Save-model disambiguation: page personas save HERE, immediately —
-                not through the page-bottom «حفظ الإعدادات» button. Without this
-                line the merchant edits, scrolls down, and doubts it saved. */}
-            <p className="text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.pageSaveHint')}</p>
+            {/* ONE state-aware line owns the how-to: inherited pages get the
+                fork instruction (edit + save = own persona), overridden pages
+                get the save-model disambiguation (saves HERE, immediately — not
+                the page-bottom «حفظ الإعدادات» button). */}
+            <p className="text-[11px] text-muted-foreground" dir="auto">
+              {pageHasOverride ? t('replyStyle.pageSaveHint') : t('replyStyle.pageInheritedHint')}
+            </p>
             {/* Explicit success signal — the workspace path confirms its save
                 («تم حفظ الإعدادات بنجاح ✓»), so must this one; the chip alone
                 doesn't move when an EXISTING override is edited. */}
