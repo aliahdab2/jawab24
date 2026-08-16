@@ -110,11 +110,14 @@ describe('PagesService', () => {
                 ]
             });
 
-            // Mock existing pages (Empty initially)
+            // Mock existing pages (Empty initially). `where().limit()` serves the
+            // IG-claim check the sync runs per linked account — empty means no other
+            // row owns it, so the link is written normally.
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }),
+                        limit: vi.fn().mockResolvedValue([])
                     })
                 })
             } as any);

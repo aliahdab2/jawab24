@@ -16,10 +16,16 @@ export async function deliverReplyImageBestEffort(
     pageAccessToken: string,
     recipientId: string,
     imageUrl: string,
-    ctx: { platform: 'facebook' | 'instagram'; component: string; extra?: Record<string, unknown> },
+    ctx: {
+        platform: 'facebook' | 'instagram';
+        component: string;
+        extra?: Record<string, unknown>;
+        /** Messages endpoint override — Instagram Login pages only (their own host+path). */
+        endpoint?: string;
+    },
 ): Promise<boolean> {
     try {
-        await sendMetaImageAttachment(pageAccessToken, recipientId, imageUrl);
+        await sendMetaImageAttachment(pageAccessToken, recipientId, imageUrl, undefined, ctx.endpoint);
         return true;
     } catch (error) {
         captureError(error, 'Post Reply image attachment failed (text delivered)', {

@@ -42,7 +42,9 @@ vi.mock('../../src/services/imageStorage', () => ({
 
 // Small, controllable quota so the over-quota boundary is testable.
 vi.mock('../../src/config', () => ({
-    config: { objectStorage: { quotaBytes: 1000 } },
+    // `facebook.graphApiVersion` is read at import time by fbAxios (and through it
+    // by instagramCredential), so the mock has to carry it or collection fails.
+    config: { objectStorage: { quotaBytes: 1000 }, facebook: { graphApiVersion: 'v18.0' } },
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
@@ -61,6 +63,7 @@ vi.mock('../../src/services/pageTokenRecovery', () => ({
 // Import after mocking
 const { facebookService } = await import('../../src/services/facebook');
 const { instagramService } = await import('../../src/services/instagram');
+const { pageLinkedInstagramCredential } = await import('../../src/services/instagramCredential');
 const { imageStorage } = await import('../../src/services/imageStorage');
 const { captureError } = await import('../../src/utils/sentryHelpers');
 const { notificationService } = await import('../../src/services/notifications');
@@ -702,7 +705,9 @@ describe('PostsService', () => {
             const wrapped = vi.mocked(withPageTokenRetry).mock.calls[0][1];
             vi.mocked(instagramService.getMedia).mockClear();
             await wrapped('fresh-ig-token');
-            expect(instagramService.getMedia).toHaveBeenCalledWith('ig1', 'fresh-ig-token', expect.any(Object));
+            expect(instagramService.getMedia).toHaveBeenCalledWith(
+                'ig1', pageLinkedInstagramCredential('fresh-ig-token'), expect.any(Object),
+            );
         });
 
         it('does NOT treat a scheduled-edge failure as a page-credential verdict', async () => {

@@ -25,6 +25,14 @@ export interface PlatformPage {
     autoReplyDisabledReason?: string | null;
     /** Platform-specific account ID (e.g., instagramAccountId) — set by adapter */
     platformAccountId?: string;
+    /**
+     * Which credential + Graph host this page's INSTAGRAM traffic rides on.
+     * Set by the two Instagram adapters (`resolveInstagramCredential`); absent on
+     * Facebook and WhatsApp pages. Instagram Login accounts live on
+     * graph.instagram.com with their own token, so anything issuing an Instagram
+     * Graph call must take the host from here rather than assume graph.facebook.com.
+     */
+    instagramCredential?: import('../services/instagramCredential').InstagramCredential;
     /** Linked e-commerce store ID for product-aware AI replies */
     ecommerceStoreId?: string | null;
     /** Structured business profile from Facebook sync (hours, phone, address, etc.) */
@@ -55,8 +63,13 @@ export interface MessagePlatformAdapter {
     /** Look up the page/account by the platform-specific ID. Must set autoReplyEnabled for this platform. */
     getPage(platformPageId: string): Promise<PlatformPage | null>;
 
-    /** Fetch the sender's display name (best-effort, may return undefined). pageId enables DB cache lookup; platformPageId enables platform API fallback. */
-    fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined>;
+    /**
+     * Fetch the sender's display name (best-effort, may return undefined). pageId enables DB cache
+     * lookup; platformPageId enables platform API fallback. `baseUrl` overrides the Graph host —
+     * only Instagram Login pages need it (graph.instagram.com); every other page omits it and the
+     * adapter falls back to graph.facebook.com.
+     */
+    fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string, baseUrl?: string): Promise<string | undefined>;
 
     /** Store the incoming message and return { message, isNew } */
     storeIncomingMessage(

@@ -5,6 +5,7 @@ import type { WorkspaceRequest } from '../../src/middleware/workspace';
 // Mock dependencies before imports
 vi.mock('../../src/services/posts', () => ({
     postsService: {
+        listPublishedPosts: vi.fn(),
         getPostsByWorkspace: vi.fn(),
         getPostsByPage: vi.fn(),
         getPost: vi.fn(),
@@ -45,6 +46,55 @@ describe('Posts Controller', () => {
             body: {},
             log: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } as any,
         };
+    });
+
+    // ---- getPublishedPosts (Post Reply picker) ----
+    describe('getPublishedPosts', () => {
+        // H2 regression (PR #772 review): the guard read `!page.accessToken`, which is
+        // the '' sentinel on EVERY Instagram-direct row, so the picker returned a
+        // confidently empty list and the service's Instagram-direct branch was dead
+        // code. The guard must ask about the token the requested source sends with.
+        it('serves the picker for an Instagram-DIRECT page (empty FB token, Instagram credential set)', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({
+                id: 'page-ig',
+                facebookPageId: null,
+                accessToken: '',
+                instagramAccountId: 'ig-9',
+                instagramAccessToken: 'ig-direct-token',
+            } as any);
+            const picker = { posts: [{ platformPostId: 'm1', source: 'instagram' }], nextCursor: null, partial: false };
+            vi.mocked(postsService.listPublishedPosts).mockResolvedValue(picker as any);
+
+            mockRequest.params = { pageId: 'page-ig' };
+            mockRequest.query = { source: 'instagram' };
+            await postsController.getPublishedPosts(mockRequest as any, mockReply as FastifyReply);
+
+            // The service runs — and receives the Instagram token the resolver needs.
+            expect(postsService.listPublishedPosts).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'page-ig', instagramAccessToken: 'ig-direct-token' }),
+                expect.objectContaining({ source: 'instagram' }),
+            );
+            expect(mockReply.send).toHaveBeenCalledWith(picker);
+        });
+
+        // The 2026-08-14 contract this guard exists for must survive the H2 fix: a
+        // Facebook page whose token was revoked still gets the honest partial-empty.
+        it('still answers partial-empty for a Facebook page with a blanked token', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({
+                id: 'page-fb',
+                facebookPageId: 'fb-1',
+                accessToken: '',
+                instagramAccountId: null,
+                instagramAccessToken: null,
+            } as any);
+
+            mockRequest.params = { pageId: 'page-fb' };
+            mockRequest.query = { source: 'facebook' };
+            await postsController.getPublishedPosts(mockRequest as any, mockReply as FastifyReply);
+
+            expect(postsService.listPublishedPosts).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith({ posts: [], nextCursor: null, partial: true });
+        });
     });
 
     // ---- getAll ----

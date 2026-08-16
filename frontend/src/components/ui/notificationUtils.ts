@@ -1,6 +1,6 @@
 import {
     Bell, MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen, Mail, Clock, UserPlus,
-    CalendarClock,
+    CalendarClock, Instagram,
     type LucideIcon,
 } from 'lucide-react';
 import { isIOSNative } from '@/lib/capacitor';
@@ -66,6 +66,7 @@ export const ACCOUNT_HEALTH_TYPES = new Set<string>([
     'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup',
     'ai_usage_topup_low',
     'auto_reply_paused_billing', 'auto_reply_paused', 'page_disconnected', 'page_trial_used', 'kb_gap', 'provider_failover',
+    'instagram_reconnect_needed',
 ]);
 
 /**
@@ -92,6 +93,9 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
     payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
+    // Dead Instagram-direct credential: red like the other dead-channel notices —
+    // replies are stopped until the merchant acts.
+    instagram_reconnect_needed: { icon: Instagram, iconColor: 'text-red-600 dark:text-red-400',        bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     // Same red billing family as payment_failed: it is the same incident one
     // step later (the gate actually froze replies). Without this entry the
     // card fell through to DEFAULT_STYLE's neutral bell.
@@ -184,6 +188,9 @@ export function resolveNotificationRoute(
             // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
             return isIOSNative() ? '/dashboard' : '/pricing';
         case 'page_disconnected':
+        // Instagram-direct credential died (Meta 190) — the reconnect action lives
+        // on /pages, same as every other dead-channel notice.
+        case 'instagram_reconnect_needed':
         // The whole point of the auto-pause alert is "go reconnect this page and
         // switch replies back on" — both live on /pages. A null route here would
         // render the card unclickable (no chevron), stranding the merchant on the

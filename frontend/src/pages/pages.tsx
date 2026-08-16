@@ -37,7 +37,7 @@ import dynamic from 'next/dynamic';
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
-import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -118,6 +118,7 @@ const PagesPage: NextPageWithLayout = () => {
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
   const [removeWhatsAppOnlyPage, setRemoveWhatsAppOnlyPage] = useState<Page | null>(null);
+  const [removeInstagramOnlyPage, setRemoveInstagramOnlyPage] = useState<Page | null>(null);
   // Disconnected page whose archive confirmation is open (null = none). Archiving
   // only hides the card — the page and its data are restored on reconnect.
   const [archiveCandidate, setArchiveCandidate] = useState<Page | null>(null);
@@ -193,6 +194,30 @@ const PagesPage: NextPageWithLayout = () => {
 
   // Create a stable reference to handleSync
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
+
+  /*
+   * Instagram-DIRECT connect (Instagram Login, no Facebook Page). Rule 17b:
+   * the backend mints single-use state and hands back the instagram.com
+   * authorize URL; the tab's FIRST document must be instagram.com, so this
+   * navigates to it directly — natively via the external browser (the App-Link
+   * return leg reopens the app), on web as a full-page navigation.
+   */
+  const startInstagramConnect = useCallback(async () => {
+    try {
+      const { data } = await api.post<{ url: string }>('/auth/instagram/start', { locale });
+      if (Capacitor.isNativePlatform()) {
+        // A Custom Tab is fine here (unlike WhatsApp's popup-based signup):
+        // the tab starts at instagram.com and returns via the App Link page.
+        const { openExternalUrl } = await import('@/lib/openExternalUrl');
+        await openExternalUrl(data.url);
+      } else {
+        window.location.assign(data.url);
+      }
+    } catch (error) {
+      const code = (error as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      toast.error(t(code === 'PAGE_LIMIT_REACHED' ? 'pageLimitReached' : 'instagramConnectFailed'));
+    }
+  }, [locale, t]);
 
   const handleSync = useCallback(async () => {
     if (!fbToken) {
@@ -463,6 +488,41 @@ const PagesPage: NextPageWithLayout = () => {
   }, [router, t, fetchPages]);
 
   /*
+   * ?instagramConnected=1 / ?igError=<code> → the RETURN leg of the
+   * Instagram-direct connect (the backend callback serves the app-sync page;
+   * a navigation cannot carry a JSON body). Same once-then-strip contract as
+   * the WhatsApp block above.
+   */
+  const igReturnHandledRef = useRef(false);
+  useEffect(() => {
+    if (igReturnHandledRef.current || !router.isReady) return;
+    const connected = router.query.instagramConnected === '1';
+    const errorCode = typeof router.query.igError === 'string' ? router.query.igError : null;
+    if (!connected && !errorCode) return;
+    igReturnHandledRef.current = true;
+    if (connected) {
+      // The account is connected either way; the warning says replies won't
+      // arrive until the webhook subscription is retried, which is the merchant's
+      // cue to reconnect rather than to wait in silence.
+      if (router.query.igWarn === 'webhooks') toast.error(t('instagramWebhooksFailed'));
+      else toast.success(t('instagramConnectSuccess'));
+      void fetchPages();
+    } else if (errorCode === 'linked') {
+      // Already reachable through its Facebook Page — nothing failed, and the
+      // merchant's page is right there in the list. Info, not an error.
+      toast.info(t('instagramAlreadyLinked'));
+    } else if (errorCode && errorCode !== 'cancelled') {
+      // A deliberate dialog cancel is not an error — no toast for it.
+      toast.error(t(errorCode === 'taken' ? 'instagramAccountTaken' : 'instagramConnectFailed'));
+    }
+    const remaining = { ...router.query };
+    delete remaining.instagramConnected;
+    delete remaining.igError;
+    delete remaining.igWarn;
+    void router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
+  }, [router, t, fetchPages]);
+
+  /*
    * Post-connect Business-Info nudge, redirect-flow edition: the popup flow
    * nudges inline because it holds the fresh page object; here the page row
    * arrives with the refetch, so the nudge waits for it. A WhatsApp-only card
@@ -594,6 +654,20 @@ const PagesPage: NextPageWithLayout = () => {
       toast.success(t('whatsappDisconnected'));
     } catch (error) {
       captureError(error, 'Failed to remove WhatsApp-only page', { tags: { page: 'pages', action: 'whatsapp-remove-page' } });
+      toast.error(tc('error'));
+    }
+  };
+
+  const handleRemoveInstagramOnlyPage = async (pageId: string) => {
+    setRemoveInstagramOnlyPage(null);
+    try {
+      // Same delete as the WhatsApp-only card: the row (and with it the stored
+      // Instagram credential) is removed; the account is re-connectable anytime.
+      await api.delete(`/pages/${pageId}`);
+      setPages(prev => prev.filter(p => p.id !== pageId));
+      toast.success(t('instagramRemoved'));
+    } catch (error) {
+      captureError(error, 'Failed to remove Instagram-only page', { tags: { page: 'pages', action: 'instagram-remove-page' } });
       toast.error(tc('error'));
     }
   };
@@ -960,9 +1034,18 @@ const PagesPage: NextPageWithLayout = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {sectionPages.map((page) => {
                       const i = globalIndex++;
-                      // WhatsApp-only card: a pages row with no Facebook page behind it
-                      // (Shopify/Salla/Zid sellers, or an extra number for a branch).
-                      const isWhatsAppOnly = !page.facebookPageId;
+                      // Pageless cards: a pages row with no Facebook page behind it.
+                      // WHICH direct channel owns the card decides its identity —
+                      // an Instagram-direct card rendered as a WhatsApp one hid the
+                      // only toggle that governs its channel (PR #772 review H3).
+                      // Keyed on the IDENTITY flag, never the liveness one: for a
+                      // pageless IG row `instagramDirectConnected` and `isConnected`
+                      // flip false TOGETHER when the sweep clears a dead credential,
+                      // so a liveness-keyed identity re-renders the dead card as a
+                      // WhatsApp one and hides the reconnect banner in exactly the
+                      // state it exists for (PR #772 re-review, High).
+                      const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
+                      const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
                       return (
                         <Card
                           key={page.id}
@@ -979,7 +1062,8 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Page avatar */}
                 <div className={clsx(
                   'w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden flex items-center justify-center',
-                  isWhatsAppOnly ? 'bg-[#25D366]' : 'bg-brand-600'
+                  isInstagramOnly ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                    : isWhatsAppOnly ? 'bg-[#25D366]' : 'bg-brand-600'
                 )}>
                   {getPageAvatarUrl(page) && !imgError[page.id] ? (
                     <img
@@ -988,6 +1072,8 @@ const PagesPage: NextPageWithLayout = () => {
                       className="w-full h-full object-cover"
                       onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
                     />
+                  ) : isInstagramOnly ? (
+                    <Instagram className="w-7 h-7 text-white" aria-hidden="true" />
                   ) : isWhatsAppOnly ? (
                     <WhatsAppIcon className="w-7 h-7 text-white" aria-hidden="true" />
                   ) : (
@@ -1070,6 +1156,33 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
               )}
 
+              {/* Instagram-direct reconnect banner — the M1 sweep clears the stored
+                  credential when Meta pronounces it dead (Graph 190), which flips
+                  isConnected false on this card. There is no Facebook to reconnect
+                  through: the fix is re-running the same Instagram Login connect,
+                  which updates the SAME row (connectInstagramDirect reconnect path). */}
+              {isInstagramOnly && page.isConnected === false && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('instagramReconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('instagramReconnectDescription')}</p>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      onClick={() => void startInstagramConnect()}
+                      className="w-full"
+                      icon={<LinkIcon className="w-3.5 h-3.5" />}
+                    >
+                      {t('reconnect')}
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {/* WhatsApp reconnect banner — a SEPARATE banner from the Facebook one
                   above, because the two channels fail independently: a page can have a
                   healthy Facebook token and a dead WhatsApp one (Meta forces a 60-day
@@ -1108,7 +1221,10 @@ const PagesPage: NextPageWithLayout = () => {
                 <div className="flex flex-col gap-3">
                   {/* Facebook + Instagram rows — hidden on a WhatsApp-only card */}
                   {!isWhatsAppOnly && (<div className={clsx('flex flex-col gap-3', page.isConnected === false && 'opacity-60 pointer-events-none')}>
-                  {/* Facebook row */}
+                  {/* Facebook row — meaningless on an Instagram-only card (there is no
+                      Messenger to answer), and its toggle would be the same dead
+                      affordance the hidden Instagram row used to be. */}
+                  {!isInstagramOnly && (
                   <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'icon-bg-blue' : 'bg-surface-200 text-icon-muted'}`}>
@@ -1130,6 +1246,7 @@ const PagesPage: NextPageWithLayout = () => {
                       />
                     </span>
                   </div>
+                  )}
 
                   {/* Instagram row */}
                   <div
@@ -1176,14 +1293,33 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     {page.instagramUsername && (
-                      <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
-                        <Toggle
-                          enabled={page.instagramAutoReplyEnabled ?? false}
-                          onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                          disabled={!canEdit}
-                          aria-label={`${t('autoReply')} Instagram - ${page.name}`}
-                        />
-                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isInstagramOnly && isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => setRemoveInstagramOnlyPage(page)}
+                            className={clsx(
+                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
+                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
+                              // Same expanded hit area as the WhatsApp Unlink button —
+                              // destructive control beside a toggle.
+                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
+                            )}
+                            aria-label={`${t('instagramOnlyRemoveTitle')} - ${page.name}`}
+                            title={t('instagramOnlyRemoveTitle')}
+                          >
+                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
+                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                          <Toggle
+                            enabled={page.instagramAutoReplyEnabled ?? false}
+                            onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                            disabled={!canEdit}
+                            aria-label={`${t('autoReply')} Instagram - ${page.name}`}
+                          />
+                        </span>
+                      </div>
                     )}
                   </div>
                   </div>)}
@@ -1191,7 +1327,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {/* WhatsApp row — master-switch gated so a dark deploy shows
                       no WhatsApp surface; the whatsappConnected OR never hides
                       an already-connected number. */}
-                  {(whatsappVisible || page.whatsappConnected) && (
+                  {!isInstagramOnly && (whatsappVisible || page.whatsappConnected) && (
                   <div
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
@@ -1472,8 +1608,13 @@ const PagesPage: NextPageWithLayout = () => {
           setShowChannelPicker(false);
           void requestConnectWhatsApp(null);
         }}
+        onPickInstagram={() => {
+          setShowChannelPicker(false);
+          void startInstagramConnect();
+        }}
         whatsappAvailable={whatsappVisible && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
+        instagramAvailable={isInstagramDirectEnabled()}
       />
 
       {/* Desktop guidance before a phone attempts Embedded Signup. Meta's wizard
@@ -1565,6 +1706,19 @@ const PagesPage: NextPageWithLayout = () => {
         title={t('whatsappOnlyRemoveTitle')}
         message={t('whatsappOnlyRemoveMessage', { number: removeWhatsAppOnlyPage?.whatsappDisplayPhoneNumber ?? '' })}
         confirmText={t('whatsappOnlyRemoveConfirm')}
+        variant="danger"
+      />
+
+      {/* Remove Instagram-only card confirmation dialog */}
+      <ConfirmationModal
+        isOpen={!!removeInstagramOnlyPage}
+        onClose={() => setRemoveInstagramOnlyPage(null)}
+        onConfirm={() => {
+          if (removeInstagramOnlyPage) handleRemoveInstagramOnlyPage(removeInstagramOnlyPage.id);
+        }}
+        title={t('instagramOnlyRemoveTitle')}
+        message={t('instagramOnlyRemoveMessage', { account: removeInstagramOnlyPage?.instagramUsername ? `@${removeInstagramOnlyPage.instagramUsername}` : (removeInstagramOnlyPage?.name ?? '') })}
+        confirmText={t('instagramOnlyRemoveConfirm')}
         variant="danger"
       />
 

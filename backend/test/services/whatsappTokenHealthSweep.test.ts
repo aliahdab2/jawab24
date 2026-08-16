@@ -19,14 +19,14 @@ const {
     mockDbSelect,
     mockDbUpdate,
     mockDebugToken,
-    mockSendNotification,
+    mockSendTemplateNotification,
     mockCaptureError,
     mockDecrypt,
 } = vi.hoisted(() => ({
     mockDbSelect: vi.fn(),
     mockDbUpdate: vi.fn(),
     mockDebugToken: vi.fn(),
-    mockSendNotification: vi.fn().mockResolvedValue('notif-id'),
+    mockSendTemplateNotification: vi.fn().mockResolvedValue('notif-id'),
     mockCaptureError: vi.fn(),
     mockDecrypt: vi.fn((t: string | null | undefined) =>
         t && t.startsWith('enc:v1:') ? t.slice('enc:v1:'.length) : (t ?? '')),
@@ -86,8 +86,12 @@ vi.mock('../../src/services/facebookCrypto', () => ({
     maybeEncryptToken: (t: string) => t,
 }));
 
+// Mirror the method the sweep ACTUALLY calls. Exposing a different one would make
+// every `not.toHaveBeenCalled()` below pass vacuously: the call would throw
+// "not a function", the service's catch would swallow it, and the spy would
+// legitimately never fire.
 vi.mock('../../src/services/notifications', () => ({
-    notificationService: { sendNotification: mockSendNotification },
+    notificationService: { sendTemplateNotification: mockSendTemplateNotification },
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: mockCaptureError }));
@@ -188,7 +192,7 @@ describe('verifyWhatsAppTokens — healthy numbers are never disconnected', () =
         expect(sets[0].whatsappTokenLastVerifiedAt).toBeInstanceOf(Date);
         expect(sets[0].whatsappDisconnectReason).toBeNull();
         expect(sets.some(destroysCredential)).toBe(false);
-        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
     });
 
     it('decrypts the stored token before calling Meta', async () => {
@@ -238,7 +242,7 @@ describe('verifyWhatsAppTokens — transient failures must not disconnect', () =
         // A bad minute at Meta must never cost a merchant their WhatsApp.
         expect(result.dead).toBe(0);
         expect(sets.some(destroysCredential)).toBe(false);
-        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
         expect(mockCaptureError).toHaveBeenCalled();
     });
 
@@ -277,14 +281,16 @@ describe('verifyWhatsAppTokens — expiring soon', () => {
 
         expect(result).toMatchObject({ checked: 1, expiringSoon: 1, dead: 0 });
         expect(sets.some(destroysCredential)).toBe(false);
-        expect(mockSendNotification).toHaveBeenCalledTimes(1);
-        const [userId, payload] = mockSendNotification.mock.calls[0];
+        expect(mockSendTemplateNotification).toHaveBeenCalledTimes(1);
+        const [userId, type, variables, data] = mockSendTemplateNotification.mock.calls[0];
         expect(userId).toBe('user-1');
-        expect(payload.type).toBe('whatsapp_token_expiring');
-        expect(payload.data).toEqual({ action: 'reconnect_whatsapp' });
-        // The merchant must be able to act — the number has to appear in the copy.
-        expect(payload.bodies.en).toContain('+966 55 000 0000');
-        expect(payload.bodies.ar).toContain('+966 55 000 0000');
+        expect(type).toBe('whatsapp_token_expiring');
+        expect(data).toEqual({ action: 'reconnect_whatsapp' });
+        // The merchant must be able to act — the number has to reach the copy. The
+        // sweep's half of that contract is passing it as `{number}`; that the
+        // template actually renders it is asserted against the REAL template in
+        // notifications.test.ts ("whatsapp templates render the number").
+        expect(variables).toMatchObject({ number: '+966 55 000 0000' });
     });
 
     it('records the freshly-learned deadline so pre-existing numbers get warned too', async () => {
@@ -331,10 +337,11 @@ describe('verifyWhatsAppTokens — dead tokens', () => {
 
         await verifyWhatsAppTokens();
 
-        const [userId, payload] = mockSendNotification.mock.calls[0];
+        const [userId, type, variables, data] = mockSendTemplateNotification.mock.calls[0];
         expect(userId).toBe('user-1');
-        expect(payload.type).toBe('whatsapp_reconnect_needed');
-        expect(payload.data).toEqual({ action: 'reconnect_whatsapp' });
+        expect(type).toBe('whatsapp_reconnect_needed');
+        expect(data).toEqual({ action: 'reconnect_whatsapp' });
+        expect(variables).toMatchObject({ number: '+966 55 000 0000' });
     });
 
     it('treats a 190 from debug_token as OUR app-token fault, not the merchant\'s', async () => {
@@ -350,7 +357,7 @@ describe('verifyWhatsAppTokens — dead tokens', () => {
         expect(result.checkerFaults).toBe(1);
         expect(result.dead).toBe(0);
         expect(sets.some(flagsReconnect)).toBe(false);
-        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
     });
 
     it('treats an elapsed expiry as dead even when Meta still says is_valid', async () => {
@@ -370,7 +377,7 @@ describe('verifyWhatsAppTokens — dead tokens', () => {
         // A workspace page with a detached owner must not crash the whole sweep
         // and strand every number behind it.
         await expect(verifyWhatsAppTokens()).resolves.toBeDefined();
-        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
     });
 });
 

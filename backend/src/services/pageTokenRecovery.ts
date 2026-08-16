@@ -307,6 +307,13 @@ async function runRecovery(pageId: string, cause: TokenFailureCause): Promise<st
         .where(eq(pages.id, pageId))
         .limit(1);
 
+    // No Facebook Page ⇒ nothing to re-mint. This is the single guard that keeps
+    // Facebook page-token recovery away from an Instagram LOGIN row, which holds
+    // its own `instagram_access_token` and has no Facebook Page behind it: without
+    // it, an Instagram-direct send failure would run /me/accounts and — when the
+    // user session is also gone — mail the merchant "reconnect your Facebook page"
+    // to explain an Instagram outage. Same class of mistake the WhatsApp gate in
+    // `recordSendFailure` exists to prevent, one layer lower.
     if (!page?.facebookPageId || !page.userId) return null;
 
     const [user] = await db

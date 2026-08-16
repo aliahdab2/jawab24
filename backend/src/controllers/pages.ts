@@ -28,21 +28,39 @@ import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 export function serializePage<T extends {
     accessToken?: string | null;
     whatsappAccessToken?: string | null;
+    instagramAccessToken?: string | null;
     facebookPageId?: string | null;
     whatsappDisconnectReason?: string | null;
 }>(page: T) {
-    const { accessToken, whatsappAccessToken, ...rest } = page;
+    const { accessToken, whatsappAccessToken, instagramAccessToken, ...rest } = page;
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
+    const instagramDirectConnected = !!instagramAccessToken && instagramAccessToken !== '';
+    // IDENTITY, distinct from the liveness flag above: is this card the
+    // Instagram-direct kind at all? NULL means "never was" — while '' is the
+    // was-connected sentinel the refresh sweep writes when Meta pronounces the
+    // credential dead (markCredentialDead). The card must keep its Instagram
+    // identity in exactly that state, or the dead card re-renders as a
+    // WhatsApp-only one and the reconnect banner becomes unreachable (PR #772
+    // re-review, High): for a pageless IG row `isConnected` and
+    // `instagramDirectConnected` flip false TOGETHER, so no liveness-derived
+    // discriminator can survive the death it exists to surface.
+    const instagramDirect = !page.facebookPageId
+        && instagramAccessToken !== null && instagramAccessToken !== undefined;
     return {
         ...rest,
         // "Is the card's PRIMARY channel credential valid?" — Facebook token for a
-        // page-backed card, WABA token for a WhatsApp-only one.
-        // ⚠️ The admin console asks the same question of the same rows, but in SQL
-        // (`services/admin/users.ts`, the `disconnected` column) because it must not
-        // pull token values into memory. Two expressions of ONE rule: change this and
-        // change that, or the admin badge starts disagreeing with the merchant's own
-        // page card. Both are pinned by tests.
-        isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
+        // page-backed card; for a page-less card (facebookPageId null) whichever
+        // direct channel it carries: the WABA token or the Instagram-direct token.
+        // ⚠️ THREE expressions of ONE rule. The admin console asks the same question
+        // in SQL (`services/admin/users.ts`, the `disconnected` column) because it
+        // must not pull token values into memory, and the backend gates ask it as a
+        // predicate (`services/pages.ts` `isPageDisconnected` — webhook front door,
+        // manual replies, archive). Change one, change all three, or the admin badge,
+        // the merchant's card, and the reply pipeline start disagreeing about the
+        // same row. All pinned by tests.
+        isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : (whatsappConnected || instagramDirectConnected),
+        instagramDirect,
+        instagramDirectConnected,
         whatsappConnected,
         // "The token needs attention" — driven by the REASON, not by the absence of a
         // token. The health sweep deliberately keeps the credential and only flags
@@ -376,7 +394,28 @@ export class PagesController {
 
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
-                // Block enabling if page access was revoked in Facebook
+                // Block enabling if page access was revoked in Facebook.
+                //
+                // ⚠️ The `facebookPageId` half is NOT redundant. This endpoint governs
+                // the FACEBOOK channel only (Instagram and WhatsApp own
+                // /instagram-auto-reply and their own toggle), and since #772
+                // `isPageDisconnected` reports a PAGELESS row — WhatsApp-only or
+                // Instagram-direct — as CONNECTED, because its credential simply
+                // lives in another column. Those rows used to land here as
+                // "disconnected" purely because `access_token` is '' on them, so
+                // without this half the widened predicate would newly ALLOW enabling
+                // Facebook auto-reply on a card that has no Facebook Page to reply
+                // as. Asking the channel's own question keeps this endpoint's answer
+                // byte-identical to pre-#772 for every pageless row.
+                //
+                // `existingPage &&` preserves the not-found path: an unknown id must
+                // still fall through to the 404 below, not answer 400 here.
+                if (existingPage && !existingPage.facebookPageId) {
+                    return reply.status(400).send({
+                        error: 'This page is disconnected. Please reconnect via Facebook to resume auto-replies.',
+                        code: 'PAGE_DISCONNECTED',
+                    });
+                }
                 if (isPageDisconnected(existingPage)) {
                     return reply.status(400).send({
                         error: 'This page is disconnected. Please reconnect via Facebook to resume auto-replies.',

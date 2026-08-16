@@ -225,6 +225,16 @@ export const pages = pgTable('pages', {
     instagramUsername: varchar('instagram_username', { length: 255 }),
     instagramProfilePicUrl: text('instagram_profile_pic_url'),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(false),
+    // Instagram-DIRECT connect (Instagram Login, no Facebook Page). When set, this
+    // row is an Instagram-only channel: the send path uses graph.instagram.com with
+    // THIS token instead of graph.facebook.com with access_token (which stays '' —
+    // there is no page). Presence of this token IS the discriminator; do not add a
+    // separate source column. AES-256-GCM encrypted (enc:v1: prefix), 60-day
+    // long-lived Instagram User token refreshed by the sweep like the WhatsApp one.
+    instagramAccessToken: text('instagram_access_token'),
+    // NULL means "unknown" — never compute days-until from it (same contract as
+    // whatsapp_token_expires_at below).
+    instagramTokenExpiresAt: timestamp('instagram_token_expires_at'),
     // WhatsApp Business Account linked to this page
     whatsappPhoneNumberId: varchar('whatsapp_phone_number_id', { length: 255 }),
     whatsappBusinessAccountId: varchar('whatsapp_business_account_id', { length: 255 }),
@@ -315,7 +325,13 @@ export const pages = pgTable('pages', {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
         workspaceIdIdx: index('idx_pages_workspace_id').on(table.workspaceId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
-        instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
+        // UNIQUE: one IG account, one row — `getPageByInstagramId` takes result[0]
+        // and routes every webhook by it, so a duplicate would split a merchant's
+        // Instagram between two rows arbitrarily. Uniqueness also backstops the
+        // connectInstagramDirect select-then-insert race (Postgres treats NULLs as
+        // distinct, so FB-only and WhatsApp-only rows are unaffected). Prod checked
+        // clean of duplicates 2026-08-16 before this tightened (PR #772 review M2).
+        instagramAccountIdIdx: uniqueIndex('idx_pages_instagram_account_id').on(table.instagramAccountId),
         // UNIQUE: one WhatsApp number belongs to exactly one page across the
         // platform. Makes the "number taken" invariant structural (a concurrent
         // double-connect gets 23505 → 409) instead of relying only on the

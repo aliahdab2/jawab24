@@ -5,6 +5,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { invalidateEndpointStatsCaches } from '../services/statsCache';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
+import { resolveInstagramCredential } from '../services/instagramCredential';
 import { whatsappService, META_TOKEN_EXPIRED } from '../services/whatsapp';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
@@ -95,7 +96,16 @@ function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppErro
  */
 async function sendAndStoreManualReply(opts: {
     workspaceId: string;
-    page: { accessToken: string; instagramAccountId: string | null; whatsappPhoneNumberId?: string | null; whatsappAccessToken?: string | null };
+    page: {
+        accessToken: string;
+        // Required by isPageDisconnected: the discriminator between "Facebook token
+        // revoked" and "pageless card whose credential lives in another column".
+        facebookPageId: string | null;
+        instagramAccountId: string | null;
+        instagramAccessToken?: string | null;
+        whatsappPhoneNumberId?: string | null;
+        whatsappAccessToken?: string | null;
+    };
     platform: DmPlatform;
     pageId: string;
     recipientId: string;
@@ -147,7 +157,7 @@ async function sendAndStoreManualReply(opts: {
                 page.instagramAccountId,
                 recipientId,
                 replyText,
-                page.accessToken
+                resolveInstagramCredential(page)
             );
         } else {
             await facebookService.sendPrivateMessage(

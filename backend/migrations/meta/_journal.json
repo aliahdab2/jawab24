@@ -1177,6 +1177,20 @@
       "when": 1786818872672,
       "tag": "0168_partners_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1786834429804,
+      "tag": "0169_instagram_direct_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1786842101449,
+      "tag": "0170_instagram_account_unique",
+      "breakpoints": true
     }
   ]
 }

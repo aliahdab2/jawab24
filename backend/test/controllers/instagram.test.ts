@@ -78,6 +78,7 @@ const BUSINESS_INFO_REFUSAL = {
 } as const;
 import { pagesService } from '../../src/services/pages';
 import { instagramService } from '../../src/services/instagram';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
 import { db } from '../../src/db';
 
 describe('InstagramController', () => {
@@ -275,7 +276,7 @@ describe('InstagramController', () => {
 
             await instagramController.replyToComment(mockRequest as any, mockReply as any);
 
-            expect(instagramService.replyToComment).toHaveBeenCalledWith('ig-c-1', 'Thanks!', 'tok-abc');
+            expect(instagramService.replyToComment).toHaveBeenCalledWith('ig-c-1', 'Thanks!', pageLinkedInstagramCredential('tok-abc'));
             expect(db.update).toHaveBeenCalled();
             expect(mockReply.send).toHaveBeenCalledWith(
                 expect.objectContaining({ success: true, replyId: 'reply-id-1' }),
@@ -388,7 +389,7 @@ describe('InstagramController', () => {
 
             await instagramController.syncMedia(mockRequest as any, mockReply as any);
 
-            expect(instagramService.getMedia).toHaveBeenCalledWith('ig-123', 'tok');
+            expect(instagramService.getMedia).toHaveBeenCalledWith('ig-123', pageLinkedInstagramCredential('tok'));
             expect(mockReply.send).toHaveBeenCalledWith(
                 expect.objectContaining({
                     success: true,

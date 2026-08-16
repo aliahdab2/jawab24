@@ -1,6 +1,7 @@
 import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
 import { messagesService } from '../../messages';
 import type { PlatformPage, StoredMessage } from '../../../interfaces';
+import type { InstagramCredential } from '../../instagramCredential';
 
 type ConversationParticipant = { id: string; name?: string; username?: string };
 type ConversationEntry = { participants?: { data?: ConversationParticipant[] } };
@@ -15,8 +16,9 @@ export async function fetchNameFromConversationsApi(
     senderId: string,
     accessToken: string,
     platform?: 'instagram',
+    baseUrl: string = GRAPH_API_BASE,
 ): Promise<string | undefined> {
-    const res = await fbAxios.get(`${GRAPH_API_BASE}/${platformPageId}/conversations`, {
+    const res = await fbAxios.get(`${baseUrl}/${platformPageId}/conversations`, {
         params: {
             user_id: senderId,
             fields: 'participants',
@@ -53,6 +55,7 @@ export function mapToPlatformPage(
         autoReplyEnabled: boolean;
         autoReplyDisabledReason?: string | null;
         platformAccountId?: string;
+        instagramCredential?: InstagramCredential;
     },
 ): PlatformPage {
     return {
@@ -66,6 +69,7 @@ export function mapToPlatformPage(
         autoReplyEnabled: overrides.autoReplyEnabled,
         autoReplyDisabledReason: overrides.autoReplyDisabledReason ?? null,
         platformAccountId: overrides.platformAccountId,
+        instagramCredential: overrides.instagramCredential,
         ecommerceStoreId: page.ecommerceStoreId,
         businessProfile: page.businessProfile as Record<string, unknown> | null,
     };

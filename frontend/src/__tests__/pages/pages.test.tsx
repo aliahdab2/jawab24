@@ -139,8 +139,11 @@ vi.mock('@/components/ui', () => ({
     Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
         <button onClick={onClick} disabled={disabled}>{children}</button>
     ),
-    Toggle: ({ enabled, onChange }: { enabled: boolean; onChange: (val: boolean) => void }) => (
-        <button role="switch" aria-checked={enabled} onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
+    // `aria-label` is forwarded because it is the ONLY thing distinguishing one
+    // channel's toggle from another's in the rendered card — without it a test can
+    // count switches but never assert WHICH channel it just found.
+    Toggle: ({ enabled, onChange, 'aria-label': ariaLabel }: { enabled: boolean; onChange: (val: boolean) => void; 'aria-label'?: string }) => (
+        <button role="switch" aria-checked={enabled} aria-label={ariaLabel} onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
     ),
     EmptyState: ({ title }: { title: string }) => <div>{title}</div>,
     PageHeader: ({ title, action }: { title: string; action?: React.ReactNode }) => <div><h1>{title}</h1>{action}</div>,
@@ -1613,5 +1616,139 @@ describe('PagesPage - archiving a disconnected page', () => {
         });
 
         expect(screen.queryByText(enPages.archiveAction)).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * Instagram-direct cards (Instagram Login — no Facebook Page behind the row).
+ *
+ * This block exists because PR #772 shipped the backend for this channel while
+ * the card still keyed pageless rows on ONE predicate (`!facebookPageId`), so an
+ * Instagram-direct connect rendered a green WhatsApp card whose Instagram toggle
+ * — the only switch that governs the channel — was hidden (review H3). The
+ * feature was unusable from the UI with every backend gate correct.
+ *
+ * Mirrors the WhatsApp-only block above, which is the working precedent.
+ */
+describe('PagesPage - Instagram-direct cards', () => {
+    const IG_ONLY_PAGE = {
+        id: 'ig_only_1',
+        facebookPageId: null,
+        name: 'Sweets by Oum Anas',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        whatsappAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: 'We sell homemade sweets.',
+        isConnected: true,
+        // IDENTITY vs LIVENESS, exactly as serializePage ships them: the card
+        // keys its Instagram identity on `instagramDirect` (true even after the
+        // sweep clears a dead credential to ''), while `instagramDirectConnected`
+        // and `isConnected` carry liveness and die together. Fixtures here must
+        // stay serializer-POSSIBLE — a hand-mixed state the serializer cannot
+        // emit turns these tests vacuous (PR #772 re-review, Medium).
+        instagramDirect: true,
+        instagramDirectConnected: true,
+        instagramAccountId: '17841400000000',
+        instagramUsername: 'sweets.by.oum.anas',
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+        // WhatsApp fully visible on purpose: the card must stay Instagram even when
+        // the WhatsApp surface is switched on, or the assertion proves nothing.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+        mockUsagePlan(true);
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [IG_ONLY_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    // ⛔ THE H3 REGRESSION. Mutation-check: force `isInstagramOnly = false` in
+    // pages.tsx and this goes red on the missing Instagram row — which is exactly
+    // the shipped state the review caught.
+    it('renders as an Instagram card: the Instagram toggle is reachable, no Facebook or WhatsApp rows', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Sweets by Oum Anas')[0]).toBeInTheDocument();
+        });
+
+        // The Instagram channel row is present and carries the account handle
+        expect(screen.getByText(enPages.platformInstagram)).toBeInTheDocument();
+        expect(screen.getByText('@sweets.by.oum.anas')).toBeInTheDocument();
+
+        // The toggle that governs this channel EXISTS and is the only one on the
+        // card — hidden behind the WhatsApp-only branch, the channel could never
+        // be enabled at all.
+        const toggles = screen.getAllByRole('switch');
+        expect(toggles.length).toBe(1);
+        expect(screen.getByLabelText(`${enPages.autoReply} Instagram - Sweets by Oum Anas`)).toBeInTheDocument();
+
+        // No Facebook row (no Page to answer as) and no WhatsApp affordance
+        expect(screen.queryByText('Facebook')).not.toBeInTheDocument();
+        expect(screen.queryByText(enPages.platformWhatsApp)).not.toBeInTheDocument();
+
+        // Neither reconnect banner: this card is healthy
+        expect(screen.queryByText(enPages.reconnectRequired)).not.toBeInTheDocument();
+        expect(screen.queryByText(enPages.instagramReconnectRequired)).not.toBeInTheDocument();
+    });
+
+    // The M1 sweep clears the credential when Meta pronounces it dead (Graph 190):
+    // `instagramAccessToken` becomes '' and the serializer flips BOTH liveness
+    // flags false together while `instagramDirect` (identity) stays true. This
+    // fixture is exactly that serializer output — the previous one hand-mixed
+    // `isConnected: false` with `instagramDirectConnected: true`, a state the
+    // serializer cannot emit, so it green-lit a banner that was dead code in
+    // production (PR #772 re-review, High + Medium). The merchant must be told
+    // to re-run Instagram Login — NOT to "reconnect via Facebook".
+    // Mutation-checked: keying isInstagramOnly on `instagramDirectConnected`
+    // again fails all three assertions below.
+    it('a dead credential keeps the Instagram card and raises the INSTAGRAM reconnect banner, never the Facebook one', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...IG_ONLY_PAGE, isConnected: false, instagramDirectConnected: false }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Sweets by Oum Anas')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(enPages.instagramReconnectRequired)).toBeInTheDocument();
+        expect(screen.queryByText(enPages.reconnectRequired)).not.toBeInTheDocument();
+        // The card must KEEP its Instagram identity in death — not re-render as a
+        // WhatsApp-only card offering a WhatsApp connect row for an IG outage.
+        expect(screen.queryByText(enPages.platformWhatsApp)).not.toBeInTheDocument();
+    });
+
+    it('removing the card confirms then deletes the page row', async () => {
+        mockedApi.delete.mockResolvedValue({ data: { success: true } } as unknown as Awaited<ReturnType<typeof mockedApi.delete>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Sweets by Oum Anas')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByLabelText(`${enPages.instagramOnlyRemoveTitle} - Sweets by Oum Anas`));
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(screen.getByText(enPages.instagramOnlyRemoveTitle)).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.instagramOnlyRemoveConfirm, { selector: 'button' }));
+        });
+
+        expect(mockedApi.delete).toHaveBeenCalledWith('/pages/ig_only_1');
+        await waitFor(() => {
+            expect(screen.queryByText('Sweets by Oum Anas')).not.toBeInTheDocument();
+        });
     });
 });

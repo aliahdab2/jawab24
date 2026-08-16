@@ -115,6 +115,10 @@ const PRODUCTION_PAYLOADS: Record<NotificationType, ProductionPayloadSpec> = {
     page_disconnected: { source: 'services/tokenRefresh.ts:275', data: { action: 'reconnect_page' } },
     whatsapp_reconnect_needed: { source: 'services/whatsappTokenHealth.ts:311', data: { action: 'reconnect_whatsapp' } },
     whatsapp_token_expiring: { source: 'services/whatsappTokenHealth.ts:340', data: { action: 'reconnect_whatsapp' } },
+    // `pageId` is deliberately NOT a target key (packages/shared/src/notifications.ts),
+    // so this stacks rather than collapsing — correct: a merchant with two dead
+    // Instagram cards must see both.
+    instagram_reconnect_needed: { source: 'services/instagramLogin.ts:369', data: { action: 'reconnect_instagram', pageId: 'p1' } },
     provider_failover: { source: 'services/ai.ts:947', data: { urgent: true } },
     page_trial_used: { source: 'controllers/pages.ts:541 — no data argument' },
     trial_ending: { source: 'services/trialReminders.ts:267 — no data argument' },
@@ -1274,6 +1278,31 @@ describe('NotificationService', () => {
                     .toContain((flagReasonAr as Record<string, string>)[reason]);
                 expect(payload.bodies.ar, `raw flag code leaked into the AR body`).not.toContain(reason);
             }
+        });
+
+        // The channel-reconnect notices exist to make a merchant ACT, and they can
+        // only be acted on if the copy names the number/account that died. The
+        // sweeps assert their half (that they pass `{number}`); this asserts the
+        // other half against the REAL templates — drop the placeholder from either
+        // locale and the merchant gets a notice about an unnamed channel.
+        it('whatsapp templates render the number', () => {
+            const reconnect = buildTemplatePayload('whatsapp_reconnect_needed', { number: '+966 55 000 0000' });
+            expect(reconnect.bodies.en).toContain('+966 55 000 0000');
+            expect(reconnect.bodies.ar).toContain('+966 55 000 0000');
+
+            const expiring = buildTemplatePayload('whatsapp_token_expiring', { number: '+966 55 000 0000', days: '3' });
+            expect(expiring.bodies.en).toContain('+966 55 000 0000');
+            expect(expiring.bodies.ar).toContain('+966 55 000 0000');
+            expect(expiring.bodies.en).toContain('3');
+            expect(expiring.bodies.ar).toContain('3');
+        });
+
+        it('instagram reconnect template renders the account handle', () => {
+            const payload = buildTemplatePayload('instagram_reconnect_needed', { account: '@shop' });
+            expect(payload.bodies.en).toContain('@shop');
+            expect(payload.bodies.ar).toContain('@shop');
+            expect(payload.bodies.en).not.toContain('{account}');
+            expect(payload.bodies.ar).not.toContain('{account}');
         });
 
         it('renders the shared English label into the English push body', () => {

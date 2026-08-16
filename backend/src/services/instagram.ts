@@ -9,11 +9,10 @@ import {
     InstagramCommentsResponse
 } from '../types';
 
-import { GRAPH_API_BASE, fbAxios } from '../lib/fbAxios';
+import { fbAxios } from '../lib/fbAxios';
 import { DmSendError } from '../utils/fbGraphErrors';
 import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
-
-const INSTAGRAM_GRAPH_API = GRAPH_API_BASE;
+import { instagramMessagesEndpoint, type InstagramCredential } from './instagramCredential';
 
 export class InstagramService {
     private logger: Logger = noopLogger;
@@ -27,14 +26,14 @@ export class InstagramService {
      * Get Instagram Business Account linked to a Facebook Page
      * Requires: instagram_business_basic permission
      */
-    async getLinkedInstagramAccount(pageId: string, pageAccessToken: string): Promise<InstagramAccount | null> {
+    async getLinkedInstagramAccount(pageId: string, cred: InstagramCredential): Promise<InstagramAccount | null> {
         try {
             this.logger.debug('[Instagram] Fetching linked Instagram account', { pageId });
             
-            const response = await fbAxios.get(`${INSTAGRAM_GRAPH_API}/${pageId}`, {
+            const response = await fbAxios.get(`${cred.baseUrl}/${pageId}`, {
                 params: {
                     fields: 'instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}',
-                    access_token: pageAccessToken,
+                    access_token: cred.accessToken,
                 },
             });
 
@@ -66,20 +65,20 @@ export class InstagramService {
      */
     async getMedia(
         instagramAccountId: string,
-        pageAccessToken: string,
+        cred: InstagramCredential,
         opts: { limit?: number; after?: string } = {},
     ): Promise<{ media: InstagramMedia[]; nextCursor: string | null }> {
         try {
             this.logger.debug('[Instagram] Fetching media', { instagramAccountId });
 
             const response = await fbAxios.get<InstagramMediaResponse>(
-                `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/media`,
+                `${cred.baseUrl}/${instagramAccountId}/media`,
                 {
                     params: {
                         fields: 'id,media_type,caption,permalink,media_url,thumbnail_url,timestamp,comments_count',
                         limit: opts.limit ?? 25,
                         ...(opts.after ? { after: opts.after } : {}),
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );
@@ -106,16 +105,16 @@ export class InstagramService {
      * Get comments on an Instagram media object
      * Requires: instagram_business_basic permission
      */
-    async getComments(mediaId: string, pageAccessToken: string): Promise<InstagramComment[]> {
+    async getComments(mediaId: string, cred: InstagramCredential): Promise<InstagramComment[]> {
         try {
             this.logger.debug('[Instagram] Fetching comments', { mediaId });
             
             const response = await fbAxios.get<InstagramCommentsResponse>(
-                `${INSTAGRAM_GRAPH_API}/${mediaId}/comments`,
+                `${cred.baseUrl}/${mediaId}/comments`,
                 {
                     params: {
                         fields: 'id,text,timestamp,from{id,username},replies{id,text,timestamp,from{id,username}}',
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );
@@ -135,13 +134,13 @@ export class InstagramService {
      * Get Instagram media content (caption) by media ID.
      * Returns the caption text or null if unavailable.
      */
-    async getPostContent(mediaId: string, pageAccessToken: string): Promise<string | null> {
+    async getPostContent(mediaId: string, cred: InstagramCredential): Promise<string | null> {
         try {
             this.logger.debug('[Instagram] Fetching media content', { mediaId });
-            const response = await fbAxios.get(`${INSTAGRAM_GRAPH_API}/${mediaId}`, {
+            const response = await fbAxios.get(`${cred.baseUrl}/${mediaId}`, {
                 params: {
                     fields: 'caption',
-                    access_token: pageAccessToken,
+                    access_token: cred.accessToken,
                 },
             });
 
@@ -168,18 +167,18 @@ export class InstagramService {
      * Reply to an Instagram comment
      * Requires: instagram_business_manage_comments permission
      */
-    async replyToComment(commentId: string, message: string, pageAccessToken: string): Promise<string> {
+    async replyToComment(commentId: string, message: string, cred: InstagramCredential): Promise<string> {
         try {
             this.logger.debug('[Instagram] Replying to comment', { commentId });
             
             const response = await fbAxios.post(
-                `${INSTAGRAM_GRAPH_API}/${commentId}/replies`,
+                `${cred.baseUrl}/${commentId}/replies`,
                 {
                     message,
                 },
                 {
                     params: {
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );
@@ -208,18 +207,18 @@ export class InstagramService {
      * Hide a comment on Instagram
      * Requires: instagram_business_manage_comments permission
      */
-    async hideComment(commentId: string, pageAccessToken: string): Promise<void> {
+    async hideComment(commentId: string, cred: InstagramCredential): Promise<void> {
         try {
             this.logger.debug('[Instagram] Hiding comment', { commentId });
             
             await fbAxios.post(
-                `${INSTAGRAM_GRAPH_API}/${commentId}`,
+                `${cred.baseUrl}/${commentId}`,
                 {
                     hide: true,
                 },
                 {
                     params: {
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );
@@ -238,15 +237,15 @@ export class InstagramService {
      * Delete a comment on Instagram (only for comments on own media)
      * Requires: instagram_business_manage_comments permission
      */
-    async deleteComment(commentId: string, pageAccessToken: string): Promise<void> {
+    async deleteComment(commentId: string, cred: InstagramCredential): Promise<void> {
         try {
             this.logger.debug('[Instagram] Deleting comment', { commentId });
             
             await fbAxios.delete(
-                `${INSTAGRAM_GRAPH_API}/${commentId}`,
+                `${cred.baseUrl}/${commentId}`,
                 {
                     params: {
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );
@@ -269,17 +268,17 @@ export class InstagramService {
     private async sendSenderAction(
         instagramAccountId: string,
         recipientId: string,
-        pageAccessToken: string,
+        cred: InstagramCredential,
         action: 'typing_on' | 'typing_off',
     ): Promise<void> {
         try {
             await fbAxios.post(
-                `${INSTAGRAM_GRAPH_API}/me/messages`,
+                instagramMessagesEndpoint(cred, instagramAccountId),
                 {
                     recipient: { id: recipientId },
                     sender_action: action,
                 },
-                { params: { access_token: pageAccessToken } },
+                { params: { access_token: cred.accessToken } },
             );
         } catch (error) {
             const igError = (error as { response?: { data?: unknown; status?: number } })?.response;
@@ -295,9 +294,9 @@ export class InstagramService {
     async sendTypingIndicator(
         instagramAccountId: string,
         recipientId: string,
-        pageAccessToken: string,
+        cred: InstagramCredential,
     ): Promise<void> {
-        return this.sendSenderAction(instagramAccountId, recipientId, pageAccessToken, 'typing_on');
+        return this.sendSenderAction(instagramAccountId, recipientId, cred, 'typing_on');
     }
 
     /**
@@ -307,25 +306,25 @@ export class InstagramService {
     async sendTypingOff(
         instagramAccountId: string,
         recipientId: string,
-        pageAccessToken: string,
+        cred: InstagramCredential,
     ): Promise<void> {
-        return this.sendSenderAction(instagramAccountId, recipientId, pageAccessToken, 'typing_off');
+        return this.sendSenderAction(instagramAccountId, recipientId, cred, 'typing_off');
     }
 
     async sendDirectMessage(
         instagramAccountId: string,
         recipientId: string,
         message: string,
-        pageAccessToken: string,
+        cred: InstagramCredential,
         opts?: SendMessageOptions,
     ): Promise<string> {
         try {
             this.logger.debug('[Instagram] Sending DM', { instagramAccountId, recipientId });
 
             const response = await fbAxios.post(
-                `${INSTAGRAM_GRAPH_API}/me/messages`,
+                instagramMessagesEndpoint(cred, instagramAccountId),
                 buildMessagePayload(recipientId, { text: message }, opts),
-                { params: { access_token: pageAccessToken } },
+                { params: { access_token: cred.accessToken } },
             );
 
             this.logger.info('[Instagram] DM sent successfully', { messageId: response.data.message_id });
@@ -344,17 +343,17 @@ export class InstagramService {
      * Get Instagram conversations (DMs)
      * Requires: instagram_business_manage_messages permission
      */
-    async getConversations(instagramAccountId: string, pageAccessToken: string): Promise<unknown[]> {
+    async getConversations(instagramAccountId: string, cred: InstagramCredential): Promise<unknown[]> {
         try {
             this.logger.debug('[Instagram] Fetching conversations', { instagramAccountId });
             
             const response = await fbAxios.get(
-                `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/conversations`,
+                `${cred.baseUrl}/${instagramAccountId}/conversations`,
                 {
                     params: {
                         platform: 'instagram',
                         fields: 'participants,messages{id,message,from,to,created_time}',
-                        access_token: pageAccessToken,
+                        access_token: cred.accessToken,
                     },
                 }
             );

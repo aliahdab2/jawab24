@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import { Modal, FacebookIcon, WhatsAppIcon, Badge, ChoiceRow } from '@/components/ui';
+import { Modal, FacebookIcon, InstagramIcon, WhatsAppIcon, Badge, ChoiceRow } from '@/components/ui';
 
 interface ChannelPickerModalProps {
   isOpen: boolean;
@@ -8,10 +8,14 @@ interface ChannelPickerModalProps {
   onPickFacebook: () => void;
   /** WhatsApp Number → Embedded Signup, creates a WhatsApp-only card */
   onPickWhatsApp: () => void;
+  /** Instagram professional account → Instagram Login, no Facebook Page needed */
+  onPickInstagram: () => void;
   /** Embedded Signup env config present — hides the WhatsApp option until Meta approval */
   whatsappAvailable: boolean;
   /** A WhatsApp Embedded Signup popup is currently running */
   whatsappConnecting: boolean;
+  /** Instagram-direct connect flag on — hidden until the backend is configured */
+  instagramAvailable: boolean;
 }
 
 /**
@@ -24,8 +28,10 @@ export function ChannelPickerModal({
   onClose,
   onPickFacebook,
   onPickWhatsApp,
+  onPickInstagram,
   whatsappAvailable,
   whatsappConnecting,
+  instagramAvailable,
 }: ChannelPickerModalProps) {
   const t = useTranslations('pages');
 
@@ -41,6 +47,16 @@ export function ChannelPickerModal({
           description={t('channelFacebookDesc')}
           onClick={onPickFacebook}
         />
+
+        {instagramAvailable && (
+          <ChoiceRow
+            accent="violet"
+            icon={<InstagramIcon size={20} />}
+            title={t('channelInstagram')}
+            description={t('channelInstagramDesc')}
+            onClick={onPickInstagram}
+          />
+        )}
 
         {whatsappAvailable && (
           <ChoiceRow

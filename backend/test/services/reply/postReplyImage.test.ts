@@ -21,7 +21,7 @@ describe('deliverReplyImageBestEffort', () => {
             platform: 'facebook', component: 'sender',
         });
         expect(delivered).toBe(true);
-        expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('tok', 'psid-1', 'https://cdn/x.jpg');
+        expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('tok', 'psid-1', 'https://cdn/x.jpg', undefined, undefined);
         expect(mockCaptureError).not.toHaveBeenCalled();
     });
 

@@ -11,6 +11,12 @@ import { db } from '../../../db';
 import { instagramComments } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
 import { mapToPlatformPage } from './shared';
+import {
+    resolveInstagramCredential,
+    pageLinkedInstagramCredential,
+    instagramMessagesEndpoint,
+    type InstagramCredential,
+} from '../../instagramCredential';
 import type { ReplyMode } from '../sender';
 import type {
     CommentPlatformAdapter,
@@ -32,9 +38,13 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
     async getPage(instagramAccountId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByInstagramId(instagramAccountId);
         if (!page) return null;
-        return mapToPlatformPage(page, {
+        const credential = resolveInstagramCredential(page);
+        // See instagramAdapter.getPage — `accessToken` carries the credential this
+        // platform actually sends with, WhatsApp-adapter style.
+        return mapToPlatformPage({ ...page, accessToken: credential.accessToken }, {
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             platformAccountId: page.instagramAccountId ?? undefined,
+            instagramCredential: credential,
         });
     }
 
@@ -102,11 +112,19 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         replyText: string;
         commentMessage: string;
         accessToken: string;
+        instagramCredential?: InstagramCredential;
         fromId?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
         replyImageUrl?: string | null;
     }): Promise<SendCommentResult> {
+        // HOST from the resolved credential, TOKEN from `opts`: the page-token
+        // retry wrapper hands this method a freshly re-minted Facebook token when
+        // the stored one died, and the send must adopt it — the credential
+        // snapshot predates the re-mint. On an Instagram Login page no re-mint
+        // happens (there is no Facebook Page to mint from), so the two agree.
+        const base = opts.instagramCredential ?? pageLinkedInstagramCredential(opts.accessToken);
+        const cred: InstagramCredential = { ...base, accessToken: opts.accessToken };
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         // Strip @mentions/URLs before language detection — their Latin characters
         // otherwise force an English nudge on Arabic pages.
@@ -126,16 +144,17 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             try {
                 // Text first — the reliable, primary delivery (sent to the commenter's PSID).
                 await instagramService.sendDirectMessage(
-                    opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
+                    opts.platformPageId, opts.fromId, opts.replyText, cred,
                 );
                 // An attached image (Post Reply only) follows as its OWN native-image message —
                 // full, uncropped, tap-to-open. Best-effort (the text already delivered); see
                 // deliverReplyImageBestEffort for why it never throws.
                 if (opts.replyImageUrl) {
-                    imageDelivered = await deliverReplyImageBestEffort(opts.accessToken, opts.fromId, opts.replyImageUrl, {
+                    imageDelivered = await deliverReplyImageBestEffort(cred.accessToken, opts.fromId, opts.replyImageUrl, {
                         platform: 'instagram',
                         component: 'instagramCommentAdapter',
                         extra: { platformCommentId: opts.platformCommentId, replyMode },
+                        endpoint: instagramMessagesEndpoint(cred, opts.platformPageId),
                     });
                 }
             } catch (error) {
@@ -154,7 +173,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         // Public mode: post the full reply as a comment
         if (replyMode === 'public') {
             try {
-                await instagramService.replyToComment(opts.platformCommentId, opts.replyText, opts.accessToken);
+                await instagramService.replyToComment(opts.platformCommentId, opts.replyText, cred);
                 return { success: true };
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error);
@@ -185,7 +204,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             // DM succeeded → post nudge publicly
             const nudgeText = dualReplyNudge || t('dualNudgeDefault', effectiveLang as 'ar' | 'en');
             try {
-                await instagramService.replyToComment(opts.platformCommentId, nudgeText, opts.accessToken);
+                await instagramService.replyToComment(opts.platformCommentId, nudgeText, cred);
             } catch {
                 // nudge failure is logged at higher levels; DM already succeeded
             }
@@ -195,7 +214,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         // DM failed in dual mode — nudge only for window_expired, nothing otherwise.
         if (dmFailure.bucket === 'window_expired' && dualReplyNudge) {
             try {
-                await instagramService.replyToComment(opts.platformCommentId, dualReplyNudge, opts.accessToken);
+                await instagramService.replyToComment(opts.platformCommentId, dualReplyNudge, cred);
             } catch {
                 // nudge post failure is non-fatal here
             }

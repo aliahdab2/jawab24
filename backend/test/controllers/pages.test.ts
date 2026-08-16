@@ -349,6 +349,31 @@ describe('Pages Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_DISCONNECTED' }));
         });
 
+        // ⛔ BLAST-RADIUS GUARD for the widened `isPageDisconnected` (#772 C1).
+        //
+        // A WhatsApp-only card holds a LIVE WhatsApp credential, so the widened
+        // predicate correctly reports it CONNECTED — but this endpoint governs the
+        // FACEBOOK channel, and that card has no Facebook Page to reply as. Before
+        // #772 it answered 400 here (only because `access_token` is '' on pageless
+        // rows); it must still answer 400, or the predicate change silently hands a
+        // live WhatsApp merchant a Facebook toggle Messenger can never honour.
+        //
+        // Mutation-checked: drop the `!existingPage.facebookPageId` half of the
+        // guard in controllers/pages.ts and this goes green-to-red.
+        it('still 400s the FACEBOOK toggle on a WhatsApp-only card (live WABA token, no Facebook Page)', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({
+                id: 'wa-only-1', facebookPageId: null, accessToken: '', whatsappAccessToken: 'wa-tok',
+            } as any);
+            mockRequest.params = { id: 'wa-only-1' };
+            mockRequest.body = { enabled: true };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_DISCONNECTED' }));
+            expect(pagesService.toggleAutoReply).not.toHaveBeenCalled();
+        });
+
         it('audits WHO flipped the switch on a real off → on transition', async () => {
             // Page is currently OFF; merchant turns it ON — this is the exact event
             // that was previously unrecoverable (no actor/timestamp anywhere).

@@ -23,6 +23,7 @@ import commentsRoutes from "./routes/comments";
 import settingsRoutes from "./routes/settings";
 import messagesRoutes from "./routes/messages";
 import instagramRoutes from "./routes/instagram";
+import instagramConnectRoutes from "./routes/instagramConnect";
 import whatsappRoutes from "./routes/whatsapp";
 import versionRoutes from "./routes/version";
 import plansRoutes from "./routes/plans";
@@ -63,6 +64,7 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { setPageTokenRecoveryLogger } from "./services/pageTokenRecovery";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
+import { startInstagramTokenRefreshCron, stopInstagramTokenRefreshCron } from "./services/instagramLogin";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { setPostSuggestionsLogger, postSuggestionsService } from "./services/postSuggestions";
 import { imageStorage } from "./services/imageStorage";
@@ -290,6 +292,7 @@ const start = async () => {
     await server.register(messagesRoutes);
     await server.register(leadsRoutes);
     await server.register(instagramRoutes);
+    await server.register(instagramConnectRoutes);
     await server.register(whatsappRoutes);
     await server.register(plansRoutes, { prefix: "/plans" });
     await server.register(subscriptionsRoutes, { prefix: "/subscription" });
@@ -390,6 +393,25 @@ const start = async () => {
     // customers would otherwise just get silence.
     setWhatsAppTokenHealthLogger(workerLogger);
     startWhatsAppTokenHealthCron();
+
+    // Instagram-direct (Instagram Login) token refresh — same reason as WhatsApp
+    // above: these tokens die on a 60-day CLOCK, not on revocation, and webhooks
+    // keep arriving after expiry. Dark unless the Instagram app is configured.
+    //
+    // A PARTIAL trio is always a mistake and must say so: the feature goes dark
+    // by design when any of the three is missing, so a typo'd variable name would
+    // otherwise be diagnosable only by reading this code (PR #772 review M3 —
+    // the docs and the code briefly disagreed on the redirect-URI name).
+    {
+        const igTrio = [config.instagram.appId, config.instagram.appSecret, config.instagram.redirectUri];
+        if (igTrio.some(Boolean) && !igTrio.every(Boolean)) {
+            server.log.warn(
+                '[InstagramLogin] Partial configuration: set ALL of INSTAGRAM_APP_ID, ' +
+                'INSTAGRAM_APP_SECRET, INSTAGRAM_APP_REDIRECT_URI — the connect flow stays dark until then',
+            );
+        }
+    }
+    startInstagramTokenRefreshCron(workerLogger);
 
     const logJobError = (err: unknown, msg: string) => server.log.error(err, msg);
     const DAILY_MS = 24 * 60 * 60 * 1000;
@@ -711,6 +733,7 @@ const gracefulShutdown = async (signal: string) => {
     stopEscalationCron();
     stopTokenRefreshCron();
     stopWhatsAppTokenHealthCron();
+    stopInstagramTokenRefreshCron();
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");

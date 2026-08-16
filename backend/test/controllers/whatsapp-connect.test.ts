@@ -603,4 +603,29 @@ describe('serializePage isConnected semantics', () => {
         expect(serializePage({ facebookPageId: null, accessToken: '', whatsappAccessToken: 'wa' }).isConnected).toBe(true);
         expect(serializePage({ facebookPageId: null, accessToken: '', whatsappAccessToken: null }).isConnected).toBe(false);
     });
+
+    // IDENTITY must survive LIVENESS death (PR #772 re-review, High). The sweep
+    // clears a Meta-190 credential to '' — the was-connected sentinel — and in
+    // that exact state the card must still say "Instagram-direct" or the
+    // reconnect banner has no card to render on. Mutation-checked: deriving
+    // instagramDirect from `instagramDirectConnected` (the liveness bit) fails
+    // the dead-credential case below.
+    it('Instagram-direct identity: instagramDirect stays true when the credential is cleared to the \'\' sentinel', async () => {
+        const { serializePage } = await import('../../src/controllers/pages');
+
+        const live = serializePage({ facebookPageId: null, accessToken: '', instagramAccessToken: 'enc:v1:ig' });
+        expect(live.instagramDirect).toBe(true);
+        expect(live.instagramDirectConnected).toBe(true);
+        expect(live.isConnected).toBe(true);
+
+        const dead = serializePage({ facebookPageId: null, accessToken: '', instagramAccessToken: '' });
+        expect(dead.instagramDirect).toBe(true);          // identity survives
+        expect(dead.instagramDirectConnected).toBe(false); // liveness does not
+        expect(dead.isConnected).toBe(false);
+
+        // NULL = never was Instagram-direct: a WhatsApp-only card and a
+        // Facebook-backed page must not acquire the identity.
+        expect(serializePage({ facebookPageId: null, accessToken: '', whatsappAccessToken: 'wa', instagramAccessToken: null }).instagramDirect).toBe(false);
+        expect(serializePage({ facebookPageId: 'fb-1', accessToken: 'tok', instagramAccessToken: 'enc:v1:ig' }).instagramDirect).toBe(false);
+    });
 });

@@ -24,6 +24,8 @@ describe('resolveNotificationRoute — types that demand an action must be tappa
         ['auto_reply_paused', '/pages'],
         ['page_disconnected', '/pages'],
         ['kb_gap', '/pages'],
+        // Dead Instagram-direct credential — reconnect lives on /pages.
+        ['instagram_reconnect_needed', '/pages'],
     ];
 
     it.each(ACTION_DEMANDING)('%s routes to %s', (type, route) => {
@@ -62,6 +64,7 @@ describe('auto_reply_paused presentation', () => {
     it('is pinned as account health, like the billing pause it mirrors', () => {
         expect(ACCOUNT_HEALTH_TYPES.has('auto_reply_paused')).toBe(true);
         expect(ACCOUNT_HEALTH_TYPES.has('auto_reply_paused_billing')).toBe(true);
+        expect(ACCOUNT_HEALTH_TYPES.has('instagram_reconnect_needed')).toBe(true);
     });
 });
 
@@ -78,5 +81,14 @@ describe('auto_reply_paused_billing presentation', () => {
     it('routes via the backend-supplied deepLink', () => {
         expect(resolveNotificationRoute('auto_reply_paused_billing', { deepLink: '/settings' }))
             .toBe('/settings');
+    });
+});
+
+
+describe('instagram_reconnect_needed — the dead Instagram-direct credential notice', () => {
+    it('has its own style (not the generic bell) with the dead-channel red severity', () => {
+        const style = getNotificationStyle('instagram_reconnect_needed');
+        expect(style).not.toBe(DEFAULT_STYLE);
+        expect(style.iconColor).toContain('red');
     });
 });

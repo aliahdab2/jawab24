@@ -11,12 +11,15 @@ vi.mock('../../src/config', () => ({
 const mockedAxios = vi.mocked(axios, true);
 
 import { InstagramService } from '../../src/services/instagram';
+import { pageLinkedInstagramCredential } from '../../src/services/instagramCredential';
 import { DmSendError, isTokenRevoked } from '../../src/utils/fbGraphErrors';
 
 describe('InstagramService', () => {
     let service: InstagramService;
     const pageAccessToken = 'test-token';
     const BASE = 'https://graph.facebook.com/v18.0';
+    /** Page-linked credential — the Facebook page token on graph.facebook.com. */
+    const cred = pageLinkedInstagramCredential(pageAccessToken);
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -35,7 +38,7 @@ describe('InstagramService', () => {
             const igAccount = { id: 'ig-123', username: 'testuser', name: 'Test' };
             mockedAxios.get.mockResolvedValue({ data: { instagram_business_account: igAccount } });
 
-            const result = await service.getLinkedInstagramAccount('page-1', pageAccessToken);
+            const result = await service.getLinkedInstagramAccount('page-1', cred);
 
             expect(result).toEqual(igAccount);
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/page-1`, {
@@ -49,7 +52,7 @@ describe('InstagramService', () => {
         it('should return null when no Instagram account is linked', async () => {
             mockedAxios.get.mockResolvedValue({ data: {} });
 
-            const result = await service.getLinkedInstagramAccount('page-1', pageAccessToken);
+            const result = await service.getLinkedInstagramAccount('page-1', cred);
             expect(result).toBeNull();
         });
 
@@ -60,7 +63,7 @@ describe('InstagramService', () => {
             mockedAxios.get.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.getLinkedInstagramAccount('page-1', pageAccessToken))
+            await expect(service.getLinkedInstagramAccount('page-1', cred))
                 .rejects.toThrow('Access token expired');
         });
 
@@ -71,7 +74,7 @@ describe('InstagramService', () => {
             mockedAxios.get.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            const result = await service.getLinkedInstagramAccount('page-1', pageAccessToken);
+            const result = await service.getLinkedInstagramAccount('page-1', cred);
             expect(result).toBeNull();
         });
 
@@ -79,7 +82,7 @@ describe('InstagramService', () => {
             mockedAxios.get.mockRejectedValue(new TypeError('unexpected'));
             mockedAxios.isAxiosError.mockReturnValue(false);
 
-            await expect(service.getLinkedInstagramAccount('page-1', pageAccessToken))
+            await expect(service.getLinkedInstagramAccount('page-1', cred))
                 .rejects.toThrow('unexpected');
         });
     });
@@ -89,7 +92,7 @@ describe('InstagramService', () => {
             const media = [{ id: 'm1' }, { id: 'm2' }];
             mockedAxios.get.mockResolvedValue({ data: { data: media, paging: { cursors: { after: 'CUR2' } } } });
 
-            const result = await service.getMedia('ig-123', pageAccessToken, { limit: 10 });
+            const result = await service.getMedia('ig-123', cred, { limit: 10 });
 
             expect(result).toEqual({ media, nextCursor: 'CUR2' });
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/ig-123/media`, {
@@ -103,7 +106,7 @@ describe('InstagramService', () => {
 
         it('passes the after cursor through when paginating', async () => {
             mockedAxios.get.mockResolvedValue({ data: { data: [] } });
-            await service.getMedia('ig-123', pageAccessToken, { limit: 5, after: 'CUR1' });
+            await service.getMedia('ig-123', cred, { limit: 5, after: 'CUR1' });
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/ig-123/media`, {
                 params: expect.objectContaining({ limit: 5, after: 'CUR1', access_token: pageAccessToken }),
             });
@@ -111,7 +114,7 @@ describe('InstagramService', () => {
 
         it('should return an empty page (no cursor) when data is undefined', async () => {
             mockedAxios.get.mockResolvedValue({ data: {} });
-            const result = await service.getMedia('ig-123', pageAccessToken);
+            const result = await service.getMedia('ig-123', cred);
             expect(result).toEqual({ media: [], nextCursor: null });
         });
 
@@ -121,7 +124,7 @@ describe('InstagramService', () => {
             mockedAxios.get.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.getMedia('ig-123', pageAccessToken))
+            await expect(service.getMedia('ig-123', cred))
                 .rejects.toThrow('Instagram API error: Rate limited');
         });
 
@@ -137,7 +140,7 @@ describe('InstagramService', () => {
             mockedAxios.isAxiosError.mockReturnValue(true);
 
             let thrown: unknown;
-            try { await service.getMedia('ig-123', pageAccessToken); } catch (e) { thrown = e; }
+            try { await service.getMedia('ig-123', cred); } catch (e) { thrown = e; }
             expect(thrown).toBeInstanceOf(DmSendError);
             expect((thrown as DmSendError).code).toBe(190);
             expect((thrown as DmSendError).subcode).toBe(460);
@@ -150,7 +153,7 @@ describe('InstagramService', () => {
             const comments = [{ id: 'c1', text: 'hello' }];
             mockedAxios.get.mockResolvedValue({ data: { data: comments } });
 
-            const result = await service.getComments('media-1', pageAccessToken);
+            const result = await service.getComments('media-1', cred);
 
             expect(result).toEqual(comments);
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/media-1/comments`, {
@@ -163,7 +166,7 @@ describe('InstagramService', () => {
 
         it('should return empty array when no comments', async () => {
             mockedAxios.get.mockResolvedValue({ data: {} });
-            const result = await service.getComments('media-1', pageAccessToken);
+            const result = await service.getComments('media-1', cred);
             expect(result).toEqual([]);
         });
     });
@@ -172,7 +175,7 @@ describe('InstagramService', () => {
         it('should post a reply and return the reply ID', async () => {
             mockedAxios.post.mockResolvedValue({ data: { id: 'reply-1' } });
 
-            const result = await service.replyToComment('comment-1', 'Thanks!', pageAccessToken);
+            const result = await service.replyToComment('comment-1', 'Thanks!', cred);
 
             expect(result).toBe('reply-1');
             expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -188,7 +191,7 @@ describe('InstagramService', () => {
             mockedAxios.post.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.replyToComment('c1', 'text', pageAccessToken))
+            await expect(service.replyToComment('c1', 'text', cred))
                 .rejects.toThrow('Instagram API error: Cannot reply');
         });
 
@@ -206,7 +209,7 @@ describe('InstagramService', () => {
             mockedAxios.post.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            const thrown = await service.replyToComment('c1', 'text', pageAccessToken).catch((e: unknown) => e);
+            const thrown = await service.replyToComment('c1', 'text', cred).catch((e: unknown) => e);
 
             expect(thrown).toBeInstanceOf(DmSendError);
             expect(thrown).toMatchObject({ code: 190, subcode: 460, isTransport: false });
@@ -229,7 +232,7 @@ describe('InstagramService', () => {
             mockedAxios.post.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            const thrown = await service.replyToComment('c1', 'text', pageAccessToken).catch((e: unknown) => e);
+            const thrown = await service.replyToComment('c1', 'text', cred).catch((e: unknown) => e);
 
             expect(thrown).toMatchObject({ isTransport: true });
             expect(isTokenRevoked(thrown)).toBe(false);
@@ -240,7 +243,7 @@ describe('InstagramService', () => {
         it('should hide a comment', async () => {
             mockedAxios.post.mockResolvedValue({ data: { success: true } });
 
-            await service.hideComment('comment-1', pageAccessToken);
+            await service.hideComment('comment-1', cred);
 
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 `${BASE}/comment-1`,
@@ -255,7 +258,7 @@ describe('InstagramService', () => {
             mockedAxios.post.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.hideComment('c1', pageAccessToken))
+            await expect(service.hideComment('c1', cred))
                 .rejects.toThrow('Instagram API error: Not found');
         });
     });
@@ -264,7 +267,7 @@ describe('InstagramService', () => {
         it('should delete a comment', async () => {
             mockedAxios.delete.mockResolvedValue({ data: { success: true } });
 
-            await service.deleteComment('comment-1', pageAccessToken);
+            await service.deleteComment('comment-1', cred);
 
             expect(mockedAxios.delete).toHaveBeenCalledWith(`${BASE}/comment-1`, {
                 params: { access_token: pageAccessToken },
@@ -275,7 +278,7 @@ describe('InstagramService', () => {
             mockedAxios.delete.mockRejectedValue(new TypeError('boom'));
             mockedAxios.isAxiosError.mockReturnValue(false);
 
-            await expect(service.deleteComment('c1', pageAccessToken))
+            await expect(service.deleteComment('c1', cred))
                 .rejects.toThrow('boom');
         });
     });
@@ -284,7 +287,7 @@ describe('InstagramService', () => {
         it('should send a DM and return message ID', async () => {
             mockedAxios.post.mockResolvedValue({ data: { message_id: 'msg-1' } });
 
-            const result = await service.sendDirectMessage('ig-123', 'user-1', 'Hello', pageAccessToken);
+            const result = await service.sendDirectMessage('ig-123', 'user-1', 'Hello', cred);
 
             expect(result).toBe('msg-1');
             expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -300,7 +303,7 @@ describe('InstagramService', () => {
             mockedAxios.post.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.sendDirectMessage('ig-123', 'u1', 'Hi', pageAccessToken))
+            await expect(service.sendDirectMessage('ig-123', 'u1', 'Hi', cred))
                 .rejects.toThrow('Instagram API error: Blocked');
         });
     });
@@ -310,7 +313,7 @@ describe('InstagramService', () => {
             const convos = [{ id: 'conv-1' }];
             mockedAxios.get.mockResolvedValue({ data: { data: convos } });
 
-            const result = await service.getConversations('ig-123', pageAccessToken);
+            const result = await service.getConversations('ig-123', cred);
 
             expect(result).toEqual(convos);
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/ig-123/conversations`, {
@@ -324,7 +327,7 @@ describe('InstagramService', () => {
 
         it('should return empty array when no conversations', async () => {
             mockedAxios.get.mockResolvedValue({ data: {} });
-            const result = await service.getConversations('ig-123', pageAccessToken);
+            const result = await service.getConversations('ig-123', cred);
             expect(result).toEqual([]);
         });
 
@@ -334,7 +337,7 @@ describe('InstagramService', () => {
             mockedAxios.get.mockRejectedValue(error);
             mockedAxios.isAxiosError.mockReturnValue(true);
 
-            await expect(service.getConversations('ig-123', pageAccessToken))
+            await expect(service.getConversations('ig-123', cred))
                 .rejects.toThrow('Instagram API error: Unauthorized');
         });
     });

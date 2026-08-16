@@ -2,6 +2,7 @@ import { pagesService, invalidateWorkspaceStatsCache } from '../pages';
 import { messagesService } from '../messages';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
+import { instagramCredentialOf, resolveInstagramCredential, type InstagramCredential } from '../instagramCredential';
 import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
 import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached } from '../imageUnderstanding';
@@ -208,7 +209,17 @@ export async function handleNonTextMessage(
             ? await pagesService.getPageByFacebookId(platformPageId)
             : await pagesService.getPageByInstagramId(platformPageId);
 
-        if (!page?.accessToken) return;
+        if (!page) return;
+
+        // Which credential this page's sends ride on. An Instagram Login page keeps
+        // its Facebook page-token column at the '' sentinel and holds the real
+        // credential in `instagram_access_token`, so guarding on `page.accessToken`
+        // would drop every voice note, image and sticker such a page receives.
+        // Same shape the WhatsApp branch below already uses.
+        const igCredential = platform === 'instagram' ? resolveInstagramCredential(page) : null;
+        const accessToken = igCredential?.accessToken || page.accessToken;
+        if (!accessToken) return;
+        const sendPage = { ...page, accessToken, instagramCredential: igCredential ?? undefined };
 
         // Guard: pages connected since 0073_backfill always have workspace_id; skip orphans.
         if (!page.workspaceId) {
@@ -222,7 +233,7 @@ export async function handleNonTextMessage(
         let senderName: string | undefined;
         try {
             const adapter = platform === 'facebook' ? facebookMessageAdapter : instagramMessageAdapter;
-            senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
+            senderName = await adapter.fetchSenderName(senderId, accessToken, page.id, platformPageId, igCredential?.baseUrl);
         } catch { /* non-critical */ }
 
         // Stickers (including the Facebook 👍 thumbs-up like button) carry no conversational
@@ -307,7 +318,7 @@ export async function handleNonTextMessage(
         // 6. Not enrichable (video / file / unknown; image without url/owner): the
         //    placeholder is terminal — send the text-only nudge, no AI job.
         if (!isEnrichable) {
-            await sendNudge(page, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
+            await sendNudge(sendPage, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
             return;
         }
 
@@ -328,7 +339,7 @@ export async function handleNonTextMessage(
             }
             logger.warn(`[${platform}] Voice transcription failed, falling back to nudge`, { senderId, messageId });
             await messagesService.finalizeEnrichment(stub.id, 'failed');
-            await sendNudge(page, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
+            await sendNudge(sendPage, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
             return;
         }
 
@@ -340,8 +351,8 @@ export async function handleNonTextMessage(
                 if (resolvedId) {
                     const isIg = attachmentType === 'ig_post' || attachmentType === 'ig_reel';
                     postContent = isIg
-                        ? await instagramService.getPostContent(resolvedId, page.accessToken)
-                        : await facebookService.getPostContent(resolvedId, page.accessToken);
+                        ? await instagramService.getPostContent(resolvedId, instagramCredentialOf(sendPage))
+                        : await facebookService.getPostContent(resolvedId, accessToken);
                 }
             } catch {
                 // Non-critical — continue with fallback context
@@ -414,7 +425,7 @@ export async function handleNonTextMessage(
                 logger.info(`[${platform}] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
             }
             await messagesService.finalizeEnrichment(stub.id, 'failed');
-            await sendNudge(page, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
+            await sendNudge(sendPage, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
             return;
         }
     } catch (error) {
@@ -644,7 +655,14 @@ export async function handleWhatsAppNonTextMessage(
  * For WhatsApp, `accessToken` carries the WABA business token.
  */
 async function sendNudge(
-    page: { id: string; accessToken: string; instagramAccountId?: string | null; whatsappPhoneNumberId?: string | null },
+    page: {
+        id: string;
+        accessToken: string;
+        instagramAccountId?: string | null;
+        whatsappPhoneNumberId?: string | null;
+        /** Instagram host + credential when the caller already resolved one. */
+        instagramCredential?: InstagramCredential;
+    },
     workspaceId: string,
     senderId: string,
     nudgeText: string,
@@ -681,7 +699,7 @@ async function sendNudge(
     } else {
         if (page.instagramAccountId) {
             await instagramService.sendDirectMessage(
-                page.instagramAccountId, senderId, nudgeText, page.accessToken,
+                page.instagramAccountId, senderId, nudgeText, instagramCredentialOf(page),
             );
         }
     }
