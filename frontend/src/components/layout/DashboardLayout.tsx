@@ -68,6 +68,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isRTL = isRTLLocale(locale);
   const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
   const isAdmin = !!user?.isAdmin;
+  const isPartner = !!user?.isPartner;
   // Workspace role (owner/admin) gates the Team tile in the More overlay —
   // distinct from the platform `isAdmin` super-admin flag.
   const { isAdmin: canManageTeam } = useWorkspaceRole();
@@ -89,10 +90,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // those paths — derived from the same nav config the overlay uses, so
   // adding a nav entry can never silently miss this active-state check.
   const moreOverlayPaths = useMemo(
-    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam })
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, isPartner })
       .flatMap((g) => g.items.map((i) => i.href))
       .filter((href) => !BOTTOM_NAV_PATHS.includes(href)),
-    [isAdmin, canManageTeam],
+    [isAdmin, canManageTeam, isPartner],
   );
 
   // "More" stands in for every destination hidden behind it, so its badge is the
@@ -125,7 +126,18 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                  try {
                      // Dynamic import to avoid circular dependencies
                      const { authApi } = await import('@/lib/api');
-                     await authApi.getProfile();
+                     const { data } = await authApi.getProfile();
+                     // Partner status is resolved server-side and can change
+                     // after this device signed in (an admin registers the rep,
+                     // or deactivates them). Standing sessions never re-run
+                     // login, so without this the nav entry would be frozen at
+                     // its login-time value. Written only on a real change —
+                     // the store is persisted, so an unconditional patch would
+                     // rewrite localStorage on every authenticated page mount.
+                     if (typeof data?.isPartner === 'boolean'
+                         && data.isPartner !== useAuthStore.getState().user?.isPartner) {
+                         useAuthStore.getState().updateUser({ isPartner: data.isPartner });
+                     }
                  } catch {
                      // If 401, the interceptor will handle redirect
                      // But if network error or other, we might want to log it
@@ -464,6 +476,10 @@ function MobileMenuOverlay({
   const tAdmin = useTranslations('admin');
   const isLandscape = useLandscape();
   const user = useAuthStore((s) => s.user);
+  // Read from the store rather than taken as a prop, like `user?.email` below:
+  // the More overlay is where a reseller on a phone actually finds the portal,
+  // so it must not depend on a parent remembering to pass the flag down.
+  const isPartner = !!user?.isPartner;
   // Workspace role gates the Team tile here (mirrors the desktop sidebar).
   const { isAdmin: canManageTeam } = useWorkspaceRole();
   useBodyScrollLock(isOpen);
@@ -484,7 +500,7 @@ function MobileMenuOverlay({
   // these, so whatever made it light up must be findable on a tile in here.
   const badgeCounts = useNavBadgeCounts();
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, isPartner });
   const menuItems = [
     ...navigationGroups
       .flatMap((group) => group.items)

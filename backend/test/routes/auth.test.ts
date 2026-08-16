@@ -19,6 +19,8 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/db/schema', () => ({
     users: { id: 'id', email: 'email', name: 'name', updatedAt: 'updated_at' },
     ecommerceStores: { id: 'id', userId: 'user_id', isActive: 'is_active' },
+    // Login and /auth/me resolve the caller's partner status for the nav entry.
+    partners: { id: 'id', phone: 'phone', userId: 'user_id', isActive: 'is_active' },
 }));
 
 vi.mock('../../src/config', () => ({
@@ -32,6 +34,8 @@ vi.mock('../../src/config', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args: unknown[]) => ({ op: 'and', conditions: args })),
+    or: vi.fn((...args: unknown[]) => ({ op: 'or', conditions: args })),
+    isNull: vi.fn((field) => ({ field, op: 'isNull' })),
 }));
 
 // Mock services

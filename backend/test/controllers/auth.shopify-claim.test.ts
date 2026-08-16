@@ -136,6 +136,12 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
 }));
 
+// Login resolves the caller's partner status for the nav entry. Not what this
+// suite is about — stubbed so the claim flow keeps its narrow db mock.
+vi.mock('../../src/services/partnerAccess', () => ({
+    isPartnerUser: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([]),

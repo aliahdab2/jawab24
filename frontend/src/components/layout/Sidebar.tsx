@@ -16,6 +16,7 @@ import {
   UsersRound,
   Store,
   Tag,
+  Handshake,
   ChevronDown as ChevronDownIcon,
   Check
 } from 'lucide-react';
@@ -136,11 +137,19 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean } = {}) {
+export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean; isPartner?: boolean } = {}) {
   const accountItems = [
+    // Reseller / country rep portal. Shown only to a registered partner, who is
+    // usually also a merchant — so this sits in their normal nav rather than
+    // replacing it. The /partner page and its endpoints re-check server-side;
+    // this flag decides visibility, never access.
+    ...(options.isPartner
+      ? [{ key: 'nav.partner', href: '/partner', icon: Handshake }]
+      : []),
     // Team is workspace owner/admin-only (canManageTeam = workspace role, NOT
-    // the platform `isAdmin` super-admin flag). Placed first so it sits between
-    // Leads (last inbox item) and Pricing in the flattened mobile More grid,
+    // the platform `isAdmin` super-admin flag). Placed first of the merchant
+    // tiles so it sits between Leads (last inbox item) — the Partner entry
+    // above is a reseller-only exception — and Pricing in the mobile More grid,
     // and directly above Pricing in the desktop ACCOUNT group. Members never
     // see the tile; the /team page itself stays read-only for them as a guard.
     ...(options.canManageTeam
@@ -345,7 +354,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, isPartner: !!user?.isPartner });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing, isAdmin);
 
