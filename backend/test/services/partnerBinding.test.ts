@@ -41,12 +41,14 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({
     and: (...a: unknown[]) => ({ and: a }),
     or: (...a: unknown[]) => ({ or: a.filter(Boolean) }),
+    isNull: (c: unknown) => ({ isNull: c }),
     desc: vi.fn(), eq: (a: unknown, b: unknown) => ({ eq: [a, b] }), inArray: vi.fn(),
     sql: Object.assign((s: unknown, ...v: unknown[]) => ({ sql: s, v }), { join: vi.fn(), raw: vi.fn() }),
 }));
 vi.mock('../../src/services/admin/users', () => ({ adminUsersService: { getUserDetail: vi.fn() } }));
 
 import { partnerPortalService } from '../../src/services/partnerPortal';
+import { partnerBoundToUser, partnerClaimableByPhone } from '../../src/services/partnerAccess';
 
 const PARTNER = { id: 'p-1', name: 'Ahmad', email: null, phone: '+963944123456', userId: null, isActive: true };
 
@@ -141,6 +143,28 @@ describe('resolvePartnerForUser', () => {
             expect(anchorWhere).not.toContain('ahmad.tabbaa@gmail.com');
             expect(anchorWhere).toContain('+963900000000');
         });
+    });
+
+    /**
+     * The nav entry (`isPartnerUser`) and this claim path must match a row on
+     * the SAME terms, or the menu advertises a portal that answers 403. They
+     * agree by construction — both call these builders — and this pins that
+     * construction rather than re-describing the expected SQL, which would
+     * drift the moment someone re-inlined the condition here.
+     */
+    it('matches on the shared anchor expressions, not a re-typed copy', async () => {
+        selectChain.limit
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([PARTNER]);
+
+        await partnerPortalService.resolvePartnerForUser({
+            id: 'u-1', email: null, phone: '+963944123456',
+        });
+
+        expect(JSON.stringify(selectChain.where.mock.calls[0][0]))
+            .toBe(JSON.stringify(partnerBoundToUser('u-1')));
+        expect(JSON.stringify(selectChain.where.mock.calls[1][0]))
+            .toBe(JSON.stringify(partnerClaimableByPhone('+963944123456')));
     });
 
     it('prefers the persisted user_id link without re-matching anchors', async () => {

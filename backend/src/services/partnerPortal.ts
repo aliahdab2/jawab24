@@ -2,6 +2,10 @@ import { db } from '../db';
 import { partners, users, subscriptions, plans, pages, adminAuditLogs } from '../db/schema';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { adminUsersService } from './admin/users';
+// The anchor expressions live in the low-dependency module on purpose — the
+// login path imports them without dragging this file's `adminUsersService` →
+// `lib/redis` graph along. Never invert this import.
+import { partnerBoundToUser, partnerClaimableByPhone, partnerPhoneAnchor } from './partnerAccess';
 
 /**
  * Partner Portal service — the read-only surface a reseller / country rep sees.
@@ -247,6 +251,11 @@ class PartnerPortalService {
      * match the PHONE anchor and persist the link, so a phone-first rep just
      * signs in normally and the admin never has to know their user id.
      *
+     * Both anchors come from `services/partnerAccess` — the same expressions
+     * `isPartnerUser` shows the nav entry on. They are shared as functions, not
+     * re-typed here: a nav entry matched on looser terms than this function
+     * grants would advertise a portal that answers 403.
+     *
      * ⛔ EMAIL IS NOT AN ANCHOR, deliberately — it is not a verified identity in
      * this product. `PATCH /auth/profile` lets ANY authenticated user set an
      * arbitrary `users.email` with no verification step, and the column is not
@@ -269,21 +278,25 @@ class PartnerPortalService {
         const [byId] = await db
             .select()
             .from(partners)
-            .where(and(eq(partners.userId, user.id), eq(partners.isActive, true)))
+            .where(partnerBoundToUser(user.id))
             .limit(1);
         if (byId) return byId;
 
-        const phone = user.phone?.trim() || null;
+        const phone = partnerPhoneAnchor(user.phone);
         if (!phone) return null;
 
         const [matched] = await db
             .select()
             .from(partners)
-            .where(and(eq(partners.phone, phone), eq(partners.isActive, true)))
+            .where(partnerClaimableByPhone(phone))
             .limit(1);
         if (!matched) return null;
 
         // Already bound to a different login — do not rebind silently.
+        // Belt-and-braces: `partnerClaimableByPhone` already excludes claimed
+        // rows in SQL. Kept because this is an access boundary and the SQL
+        // guard is invisible to any caller reading this function — if the WHERE
+        // is ever loosened, the boundary must not move with it.
         if (matched.userId && matched.userId !== user.id) return null;
 
         if (!matched.userId) {

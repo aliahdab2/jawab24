@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { Handshake, StickyNote } from 'lucide-react';
+import { ArrowLeft, Handshake, StickyNote } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store';
 import { useLanguage } from '@/i18n/hooks';
+import { isRTLLocale } from '@/utils/locale';
 import { partnerApi, type PartnerMerchant, type PartnerMerchantStatus } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { Card } from '@/components/ui';
@@ -31,7 +33,8 @@ export default function PartnerPortalPage() {
     const router = useRouter();
     const t = useTranslations('partner');
     const tc = useTranslations('common');
-    const { intlLocale } = useLanguage();
+    const { language, intlLocale } = useLanguage();
+    const isRTL = isRTLLocale(language);
     const { isAuthenticated, _hasHydrated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
     const [filter, setFilter] = useState<StatusFilter>('all');
@@ -114,21 +117,39 @@ export default function PartnerPortalPage() {
             </Head>
             <div className="h-full min-h-0 overflow-y-auto bg-surface-50">
                 <header className="bg-card border-b border-theme-border">
-                    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center">
-                                <Handshake className="w-5 h-5" aria-hidden="true" />
+                    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 landscape:px-6">
+                        {/*
+                          * The way OUT. A reseller is a merchant too, and the
+                          * portal is a standalone layout with no sidebar — so
+                          * without this the app is a one-way door: iOS has no
+                          * back gesture (capacitor.config sets none) and the
+                          * WebView has no address bar. Android's hardware back
+                          * covers it via nativeBackButton, but a system button
+                          * on one platform is not a visible affordance on any.
+                          */}
+                        <Link
+                            href="/dashboard"
+                            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                        >
+                            <ArrowLeft className={clsx('w-4 h-4', isRTL && 'rotate-180')} aria-hidden="true" />
+                            {t('backToDashboard')}
+                        </Link>
+                        <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center">
+                                    <Handshake className="w-5 h-5" aria-hidden="true" />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-display font-bold text-foreground">{t('title')}</h1>
+                                    <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
+                                </div>
                             </div>
-                            <div>
-                                <h1 className="text-xl font-display font-bold text-foreground">{t('title')}</h1>
-                                <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
-                            </div>
+                            {data && (
+                                <div className="rounded-lg bg-muted px-4 py-2 text-sm text-foreground">
+                                    {t('welcome', { name: data.partner.name })}
+                                </div>
+                            )}
                         </div>
-                        {data && (
-                            <div className="rounded-lg bg-muted px-4 py-2 text-sm text-foreground">
-                                {t('welcome', { name: data.partner.name })}
-                            </div>
-                        )}
                     </div>
                 </header>
 

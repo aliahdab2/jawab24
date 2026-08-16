@@ -10,7 +10,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
-import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { syncSessionState } from '@/lib/sessionSync';
 import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -116,38 +116,13 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const pageTitle = title || tDashboard('title');
 
   useEffect(() => {
-    // Session Verification for Web (Cookie-based)
-    // We trust Zustand 'isAuthenticated' initially to show UI instantly,
-    // but we must verify the actual cookie is still valid in the background.
-    const verifySession = async () => {
-        if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
-            const { Capacitor } = await import('@capacitor/core');
-            if (!Capacitor.isNativePlatform()) {
-                 try {
-                     // Dynamic import to avoid circular dependencies
-                     const { authApi } = await import('@/lib/api');
-                     const { data } = await authApi.getProfile();
-                     // Partner status is resolved server-side and can change
-                     // after this device signed in (an admin registers the rep,
-                     // or deactivates them). Standing sessions never re-run
-                     // login, so without this the nav entry would be frozen at
-                     // its login-time value. Written only on a real change —
-                     // the store is persisted, so an unconditional patch would
-                     // rewrite localStorage on every authenticated page mount.
-                     if (typeof data?.isPartner === 'boolean'
-                         && data.isPartner !== useAuthStore.getState().user?.isPartner) {
-                         useAuthStore.getState().updateUser({ isPartner: data.isPartner });
-                     }
-                 } catch {
-                     // If 401, the interceptor will handle redirect
-                     // But if network error or other, we might want to log it
-                     addErrorBreadcrumb('auth', 'Session verification failed');
-                 }
-            }
-        }
-    };
-
-    verifySession();
+    // Verifies the standing session AND re-reads server-resolved flags
+    // (isPartner). Runs on every platform — see the no-platform-branch note in
+    // lib/sessionSync.ts; gating it on web froze the Partner nav entry inside
+    // the app, which is the only surface that cannot reach /partner by URL.
+    if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
+      syncSessionState();
+    }
   }, [_hasHydrated, isAuthenticated]);
 
   useEffect(() => {

@@ -1,9 +1,10 @@
 import { db } from '../db';
 import { partners } from '../db/schema';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, type SQL } from 'drizzle-orm';
 
 /**
- * "Is this login a partner?" — the one partner question the LOGIN path asks.
+ * Partner identity anchors — the SINGLE definition of "which `partners` row
+ * belongs to this login", plus the read-only predicate the LOGIN path asks.
  *
  * Deliberately its own module rather than a method on `partnerPortalService`:
  * that service imports `adminUsersService` for the merchant-detail projection,
@@ -13,7 +14,49 @@ import { and, eq, isNull, or } from 'drizzle-orm';
  * check here means the login path imports `db` + the `partners` table, nothing
  * more. (Caught by two auth suites failing at import with
  * `Cannot read properties of undefined (reading 'host')`.)
+ *
+ * The dependency arrow therefore only ever points THIS way: `partnerPortal`
+ * imports these builders, never the reverse. Adding an import here that reaches
+ * `adminUsersService` / `lib/redis` re-creates the login-path regression above.
  */
+
+/**
+ * Anchor 1 — the persisted link. Once a partner has opened the portal, this is
+ * the only anchor that matters.
+ */
+export function partnerBoundToUser(userId: string): SQL | undefined {
+    return and(eq(partners.isActive, true), eq(partners.userId, userId));
+}
+
+/**
+ * Anchor 2 — the lazy-bind anchor, restricted to a row NOBODY has claimed.
+ *
+ * ⛔ EMAIL IS NOT AN ANCHOR — see the rationale on
+ * `partnerPortal.resolvePartnerForUser`. `users.phone` is unique and provable
+ * by OTP; `users.email` is neither.
+ *
+ * The `user_id IS NULL` restriction is what keeps the two callers honest with
+ * each other: the claim path refuses to re-bind a row that belongs to another
+ * login, so a predicate WITHOUT it would render a menu entry for a portal that
+ * answers 403 — a dead link that reads as a broken feature, and a free hint
+ * that some other account holds that row.
+ */
+export function partnerClaimableByPhone(phone: string): SQL | undefined {
+    return and(
+        eq(partners.isActive, true),
+        eq(partners.phone, phone),
+        isNull(partners.userId),
+    );
+}
+
+/**
+ * The one normalisation both callers must agree on. A stored phone is E.164;
+ * a whitespace-only `users.phone` is not an anchor at all and must never widen
+ * the query to "any partner row with a blank phone".
+ */
+export function partnerPhoneAnchor(phone?: string | null): string | null {
+    return phone?.trim() || null;
+}
 
 /**
  * Answers ONLY "should the Partner nav entry render?". Never an authorization
@@ -25,28 +68,19 @@ import { and, eq, isNull, or } from 'drizzle-orm';
  * passes through at login: it would hand permanent possession of a rep's
  * merchant book to whoever signed in first, with no portal request ever made.
  *
- * The predicate mirrors that function's anchors EXACTLY — `partners.user_id`
- * once bound, otherwise `users.phone` on a row nobody has claimed, never email
- * (see the anchor rationale in `partnerPortal.resolvePartnerForUser`; email is
- * unverified and non-unique in this product). Matching more loosely than the
- * claim path would put a menu entry in front of a user the portal answers 403
- * to; matching on email would re-open the hijack that rationale describes.
+ * It matches on the same two anchor expressions the claim path uses — shared
+ * as functions, not re-typed, so the entry cannot drift out of agreement with
+ * the access decision it advertises.
  */
 export async function isPartnerUser(user: { id: string; phone?: string | null }): Promise<boolean> {
-    const phone = user.phone?.trim() || null;
+    const phone = partnerPhoneAnchor(user.phone);
 
     const [row] = await db
         .select({ id: partners.id })
         .from(partners)
-        .where(and(
-            eq(partners.isActive, true),
-            phone
-                ? or(
-                    eq(partners.userId, user.id),
-                    and(eq(partners.phone, phone), isNull(partners.userId)),
-                )
-                : eq(partners.userId, user.id),
-        ))
+        .where(phone
+            ? or(partnerBoundToUser(user.id), partnerClaimableByPhone(phone))
+            : partnerBoundToUser(user.id))
         .limit(1);
 
     return !!row;
