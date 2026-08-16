@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "brand_voice_notes_multi" jsonb;
