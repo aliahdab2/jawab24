@@ -115,11 +115,15 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
 
   const openTestModal = () => {
     setTestError(null);
-    if (!selectedPage?.id) {
+    // With a page scope active, the test ALWAYS runs on that page — a separate
+    // picker here let the merchant write a page persona and then test on a
+    // DIFFERENT page, seeing no effect of what they just wrote.
+    const target = scopedPage ?? selectedPage;
+    if (!target?.id) {
       setTestError(t('replyStyle.testNoPages'));
       return;
     }
-    setTestPage(selectedPage);
+    setTestPage(target);
   };
 
   // ── Per-page persona scope (D-084) ──────────────────────────────────────
@@ -132,12 +136,18 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
   const scopedPage = personaScope === 'workspace' ? null : connectedPages.find((p) => p.id === personaScope) ?? null;
 
+  // A page counts as overridden only on real language content (mirrors the
+  // backend resolver: sourceLang bookkeeping / cleared values = inherit).
+  const hasOverrideContent = (multi: Page['brandVoiceNotesMulti']) =>
+    Object.entries((multi ?? {}) as Record<string, string>)
+      .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
+  const overriddenCount = connectedPages.filter((p) => hasOverrideContent(p.brandVoiceNotesMulti)).length;
+
   // A page override counts only when a language entry has real content —
   // sourceLang bookkeeping and cleared values mean "inherit" (mirrors the
   // backend resolver's rule exactly).
   const pageOverride = (scopedPage?.brandVoiceNotesMulti ?? {}) as Record<string, string>;
-  const pageHasOverride = Object.entries(pageOverride)
-    .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
+  const pageHasOverride = hasOverrideContent(scopedPage?.brandVoiceNotesMulti);
   const pageOverrideText = pageOverride[currentLang]
     || Object.entries(pageOverride).find(([k, v]) => k !== 'sourceLang' && v?.trim())?.[1]
     || '';
@@ -262,7 +272,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               onChange={switchScope}
               options={[
                 { value: 'workspace', label: t('replyStyle.scopeAllPages') },
-                ...connectedPages.map((p) => ({ value: p.id, label: p.name ?? '' })),
+                // Overridden pages are marked IN the list — the merchant sees
+                // which pages diverge before opening each one.
+                ...connectedPages.map((p) => ({
+                  value: p.id,
+                  label: hasOverrideContent(p.brandVoiceNotesMulti)
+                    ? t('replyStyle.overriddenOption', { page: p.name ?? '' })
+                    : p.name ?? '',
+                })),
               ]}
               aria-labelledby="persona-scope-label"
               compact
@@ -277,6 +294,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 )}
               >
                 {pageHasOverride ? t('replyStyle.customChip') : t('replyStyle.inheritedChip')}
+              </span>
+            )}
+            {!scopedPage && overriddenCount > 0 && (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-accent-100 text-accent-700 dark:bg-accent-500/20 dark:text-accent-300">
+                {t('replyStyle.overriddenCount', { count: overriddenCount })}
               </span>
             )}
           </div>
@@ -350,7 +372,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 aria-busy={pageSaving}
                 className="min-h-[44px] px-4 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
               >
-                {t('replyStyle.savePageBtn')}
+                {pageSaving ? t('replyStyle.savingPage') : t('replyStyle.savePageBtn')}
               </button>
               <button
                 type="button"
@@ -361,6 +383,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 {t('replyStyle.cancelPageEdit')}
               </button>
             </div>
+            {/* Save-model disambiguation: page personas save HERE, immediately —
+                not through the page-bottom «حفظ الإعدادات» button. Without this
+                line the merchant edits, scrolls down, and doubts it saved. */}
+            <p className="text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.pageSaveHint')}</p>
           </div>
         )}
         {scopedPage && pageError && (
@@ -467,7 +493,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           {hasChanges && (
             <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
           )}
-          {!hasChanges && selectedPage?.name && pages.length > 1 && (
+          {/* Page scope active → the scope bar already names the page and the
+              test follows it; a second «التجربة على» label + picker would be
+              redundant and could contradict the scope (owner call, 2026-08-16). */}
+          {!hasChanges && !scopedPage && selectedPage?.name && pages.length > 1 && (
             <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5" dir="auto">
               <span id="reply-style-test-page-label">{t('replyStyle.testingOnLabel')}</span>
               {/* Shared Select, not a native <select>: the OS draws a native
@@ -484,7 +513,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               </span>
             </span>
           )}
-          {!hasChanges && selectedPage?.name && pages.length <= 1 && (
+          {!hasChanges && !scopedPage && selectedPage?.name && pages.length <= 1 && (
             <p className="text-[11px] text-muted-foreground" dir="auto">
               {t('replyStyle.testingOnPage', { pageName: selectedPage.name })}
             </p>

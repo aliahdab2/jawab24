@@ -245,5 +245,23 @@ describe('ReplyStyleCard', () => {
       });
       expect(await screen.findByText(/Inherited from settings/i)).toBeInTheDocument();
     });
+
+    it('hides the separate «Testing on» picker while a page scope is active', async () => {
+      // The scope bar already names the page and the test follows it — a second
+      // picker could let the merchant test on a DIFFERENT page than the persona
+      // they just wrote (owner call, 2026-08-16).
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
+      await screen.findByText(/Assistant persona for/i);
+      expect(screen.getByText(/Testing on/i)).toBeInTheDocument();
+
+      const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+      fireEvent.change(scopeSelect, { target: { value: 'p1' } });
+
+      expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
+      // Back to all-pages scope → the picker returns.
+      fireEvent.change(scopeSelect, { target: { value: 'workspace' } });
+      expect(screen.getByText(/Testing on/i)).toBeInTheDocument();
+    });
   });
 });
