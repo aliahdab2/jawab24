@@ -137,4 +137,15 @@ describe('resolveDmLanguageHint — the hint values both reply paths send', () =
         expect(resolveDmLanguageHint('كم سعر التوصيل؟', true)).toBe('ar');
         expect(resolveDmLanguageHint('How much is the price', true)).toBe('en');
     });
+
+    it('stops deferring for English the customer plainly wrote (prod 2026-08-16)', () => {
+        // These sit at the en@0.5 floor (no ENGLISH_COMMON word matched), so on an
+        // Arabic thread the hint used to be dropped and the reply came back in
+        // Arabic. 39 such messages on Arabic threads in the prod corpus, including
+        // customers asking, in English, to be answered in English.
+        process.env.LANG_ENGINE = 'tinyld';
+        expect(resolveDmLanguageHint('Speak English pls', true)).toBe('en');
+        expect(resolveDmLanguageHint('No ARAB only ENGLISH', true)).toBe('en');
+        expect(resolveDmLanguageHint('Good night', true)).toBe('en');
+    });
 });

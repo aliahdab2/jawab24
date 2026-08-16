@@ -416,6 +416,43 @@ describe('Language Detection Utility', () => {
         });
     });
 
+    describe('genuine short English is NOT a low-signal token (prod 2026-08-16)', () => {
+        /**
+         * "Very nice" on Jawab24's own Arabic boosted post was answered in Arabic.
+         * It matches no ENGLISH_COMMON word, so it scored en@0.5 — the same score as
+         * the acronym "ICDL" — and resolveCommentLanguage mirrored the post.
+         *
+         * The detector now consults tinyld for pure-ASCII text at that floor
+         * (isConfidentAsciiEnglish), which raises BOTH gates: the token predicate
+         * below and isCertainDetection, so the prompt asserts English instead of
+         * hinting at it. The guards that make this safe are pinned right after.
+         */
+        it('reads praise / short prose as certain English', () => {
+            for (const t of ['Very nice', 'Good morning man', 'Speak English pls', 'Good job']) {
+                expect(isLowSignalLatinToken(t)).toBe(false);
+                expect(detectLanguage(t).language).toBe('en');
+                expect(isCertainDetection(detectLanguage(t))).toBe(true);
+            }
+        });
+
+        it('leaves Arabizi, names and bare tokens exactly where they were', () => {
+            // Each of these keeps deferring to conversation / post context.
+            for (const t of ['kam el se3r', 'sho hal as3ar', 'Weaam Aldoukha', 'Kawthar Mohammed', 'icdl', 'ok']) {
+                expect(isLowSignalLatinToken(t)).toBe(true);
+                expect(isCertainDetection(detectLanguage(t))).toBe(false);
+            }
+        });
+
+        it('cannot overrule a positive reading — only the "recognized nothing" floor', () => {
+            // englishMatches > 0 short-circuits before the promotion, so text legacy
+            // already scored stays bit-identical.
+            expect(detectLanguage('how much').confidence).toBe(0.6);
+            expect(detectLanguage('what is the price?').confidence).toBeGreaterThanOrEqual(0.7);
+            // Arabic and other named scripts never reach the Latin branch at all.
+            expect(detectLanguage('مرحبا كيف حالك').language).toBe('ar');
+        });
+    });
+
     describe('detectTemplateLanguage (away / greeting / fallback variant picker)', () => {
         it('returns "unknown" for a bare Latin token so callers use the merchant default', () => {
             expect(detectTemplateLanguage('icdl')).toBe('unknown');
