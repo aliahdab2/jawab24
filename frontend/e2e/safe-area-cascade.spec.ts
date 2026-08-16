@@ -100,6 +100,36 @@ async function setNative(page: Page, native: boolean): Promise<void> {
   }, native);
 }
 
+/**
+ * Tailwind's `lg` breakpoint. The strip on /en/login carries `lg:hidden` — at
+ * this width and above there is no bottom nav, so there is no gap to fill and
+ * the strip must not paint at all.
+ *
+ * Derived from the actual viewport rather than the project name: this spec is
+ * NOT scoped to the mobile projects. The `chromium` project declares no
+ * `testMatch`, so it runs every spec in e2e/ — listing this file under the two
+ * mobile projects only ADDS runs, it does not exclude the desktop one. Assuming
+ * otherwise is what failed the deploy gate the first time.
+ */
+const LG_BREAKPOINT = 1024;
+
+/** The gap the nav leaves, per surface — i.e. what the strip must fill. */
+function expectedFill(page: Page, opts: { native: boolean; inset: number }): number {
+  const vp = page.viewportSize();
+  if (!vp) throw new Error('viewport size is unavailable');
+
+  // Native paints at EVERY width and orientation. `html.is-native
+  // .bottom-safe-bg { display: block }` is specificity (0,2,1), which outranks
+  // both `lg:hidden` and the landscape `display: none` — each (0,1,0), and
+  // neither gains anything from sitting in a media query. Pre-existing
+  // behaviour, byte-identical before and after the web fix; measured on the
+  // real cascade, not inferred from reading the file.
+  if (opts.native) return opts.inset;
+
+  if (vp.width >= LG_BREAKPOINT) return 0; // lg:hidden — no bottom nav on desktop
+  return vp.width > vp.height ? 0 : opts.inset; // landscape pins the nav to bottom: 0
+}
+
 test.describe('bottom safe-area strip', () => {
   test.beforeEach(async ({ page }) => {
     // /en/login is public and renders the strip (login.tsx: `lg:hidden
@@ -108,15 +138,16 @@ test.describe('bottom safe-area strip', () => {
     await expect(page.locator(SELECTOR).first()).toBeAttached();
   });
 
-  test('web portrait paints the strip; landscape does not', async ({ page }, testInfo) => {
-    const isLandscape = testInfo.project.name.includes('landscape');
+  test('web: portrait paints the strip, landscape and desktop do not', async ({ page }) => {
     await setNative(page, false);
     await primeInset(page, INSET_PX);
 
-    // Portrait: the nav is lifted by the inset, so the gap MUST be filled —
-    // this is the Facebook in-app browser bug. Landscape: the nav sits at
-    // bottom: 0, so there is no gap and nothing should paint.
-    expect(await paintedHeight(page, INSET_PX)).toBe(isLandscape ? 0 : INSET_PX);
+    // Mobile portrait: the nav is lifted by the inset, so the gap MUST be
+    // filled — this is the Facebook in-app browser bug. Landscape: the nav sits
+    // at bottom: 0. Desktop: no bottom nav at all (lg:hidden).
+    expect(await paintedHeight(page, INSET_PX)).toBe(
+      expectedFill(page, { native: false, inset: INSET_PX }),
+    );
   });
 
   test('native keeps the strip in BOTH orientations', async ({ page }) => {
@@ -125,14 +156,16 @@ test.describe('bottom safe-area strip', () => {
 
     // Unchanged by the web fix, in either orientation. Landscape is the one
     // that a "remove the redundant .is-native rule" cleanup silently drops.
-    expect(await paintedHeight(page, INSET_PX)).toBe(INSET_PX);
+    expect(await paintedHeight(page, INSET_PX)).toBe(
+      expectedFill(page, { native: true, inset: INSET_PX }),
+    );
   });
 
   test('the strip tracks the nav lift rather than a hard-coded height', async ({ page }) => {
     // Re-point the token; both the strip and the nav offset must follow it.
     await setNative(page, true);
     await primeInset(page, 17);
-    expect(await paintedHeight(page, 17)).toBe(17);
+    expect(await paintedHeight(page, 17)).toBe(expectedFill(page, { native: true, inset: 17 }));
 
     const navLift = await page.evaluate(() => {
       const probe = document.createElement('div');
