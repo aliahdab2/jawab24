@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { resolveInputLanguage, resolveInputLanguageWithSource } from '../resolveChain';
+import { detectLanguageOrNull, resolveInputLanguage, resolveInputLanguageWithSource } from '../resolveChain';
 
 /**
  * First coverage for `resolveInputLanguage` — the function that decides the
@@ -208,6 +208,25 @@ describe('resolveInputLanguage — the rest of the chain', () => {
     it('defers a bare token past post and KB, but still uses it as a last resort', () => {
         expect(resolveInputLanguage({ comment: 'ICDL', postMessage: 'منشور بالعربية' })).toBe('ar');
         expect(resolveInputLanguage({ comment: 'ICDL' })).toBe('en');
+    });
+
+    it('names Bengali and Tamil, so they outrank an Arabic post (prod 2026-08-16)', () => {
+        // «অনেক সুন্দর» on an Arabic post was answered in Arabic: this module had no
+        // Bengali branch, so the script named nothing and the chain fell through to
+        // the post. Script-certain input (no Latin at all) outranks post and history.
+        expect(detectLanguageOrNull('অনেক সুন্দর')).toBe('bn');
+        expect(detectLanguageOrNull('வணக்கம்')).toBe('ta');
+        expect(resolveInputLanguage({ comment: 'অনেক সুন্দর', postMessage: 'منشور بالعربية' })).toBe('bn');
+        expect(resolveInputLanguage({ comment: 'অনেক সুন্দর', conversationHistory: ARABIC_THREAD })).toBe('bn');
+    });
+
+    it('reads a named script as a POSITIVE signal, so the prompt may assert it', () => {
+        // fromCurrentMessage gates the strong reply-language directive. A script
+        // property cannot be a mis-guess, so these must be positive reads.
+        for (const [comment, lang] of [['অনেক সুন্দর', 'bn'], ['வணக்கம்', 'ta']] as const) {
+            const r = resolveInputLanguageWithSource({ comment, postMessage: 'منشور بالعربية' });
+            expect(r).toMatchObject({ language: lang, source: 'current-message-script-certain', fromCurrentMessage: true });
+        }
     });
 });
 
