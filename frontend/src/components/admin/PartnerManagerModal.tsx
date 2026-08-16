@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { Link2Off, Pencil, Plus } from 'lucide-react';
+import { Link2, Link2Off, Pencil, Plus } from 'lucide-react';
 import { Button, Input, Modal } from '@/components/ui';
-import { adminApi, type AdminPartner } from '@/lib/api';
+import { adminApi, type AdminCustomer, type AdminPartner } from '@/lib/api';
+import { useDebounce } from '@/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 
 /**
@@ -21,6 +22,14 @@ import { captureError } from '@/lib/sentryHelpers';
  * `users.email` is settable to any value by any authenticated user, so it is
  * contact information here, never an anchor — an email-only reseller is linked
  * to their account deliberately, by an admin, from this screen.
+ *
+ * ⛔ The auto-bind is narrower than "has a phone on file", which is why the
+ * LINK action is offered on every unlinked reseller rather than only the
+ * phone-less ones. `partners.phone` records the number we hold for a reseller;
+ * the anchor requires a USER ACCOUNT carrying that same number, verified. A rep
+ * who signs up with Facebook has `users.phone = NULL`, and a rep in a country
+ * where SMS never lands (Syria, +963 — blocked at the provider) can never
+ * verify one. Both look "phone on file" here and can never bind on their own.
  */
 
 /** Blank draft for the create form and the reset after a successful save. */
@@ -103,6 +112,10 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
     // stacking a second modal on top of this one.
     const [confirmUnlinkId, setConfirmUnlinkId] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    // Account picker for the manual link, opened per row.
+    const [linkingId, setLinkingId] = useState<string | null>(null);
+    const [linkSearch, setLinkSearch] = useState('');
+    const debouncedLinkSearch = useDebounce(linkSearch, 300);
 
     const { data: partners = [], isLoading } = useQuery<AdminPartner[]>({
         queryKey: ['admin', 'partners'],
@@ -114,10 +127,42 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
         staleTime: 10 * 60_000,
     });
 
+    // Candidate accounts for the manual link. Deliberately reuses the customer
+    // search the admin table already runs — there is no separate "user lookup"
+    // endpoint to add, and the reseller's own account is a customer row like
+    // any other. Two characters minimum so opening the picker doesn't fire a
+    // full unfiltered page load.
+    const linkQuery = debouncedLinkSearch.trim();
+    const { data: linkResults = [], isFetching: linkSearching } = useQuery<AdminCustomer[]>({
+        queryKey: ['admin', 'partner-link-search', linkQuery],
+        queryFn: async () => {
+            const response = await adminApi.listUsers({ search: linkQuery, limit: 8 });
+            return response.success ? response.data : [];
+        },
+        enabled: linkingId !== null && linkQuery.length >= 2,
+        staleTime: 60_000,
+    });
+
     const invalidate = () => {
         queryClient.invalidateQueries({ queryKey: ['admin', 'partners'] });
         // A reseller's name and assignment both render in the customers table.
         queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] });
+    };
+
+    const closeLinkPicker = () => {
+        setLinkingId(null);
+        setLinkSearch('');
+    };
+
+    /**
+     * Open the picker pre-filled with the reseller's own contact details, so
+     * the ordinary case ("this rep, on the account carrying their address") is
+     * one click rather than a typed search.
+     */
+    const startLinking = (partner: AdminPartner) => {
+        setLinkingId(partner.id);
+        setLinkSearch(partner.email || partner.phone || partner.name);
+        setActionError(null);
     };
 
     const createPartner = useMutation({
@@ -146,11 +191,23 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
             invalidate();
             setEditingId(null);
             setConfirmUnlinkId(null);
+            closeLinkPicker();
             setActionError(null);
         },
-        onError: (err) => {
+        // One endpoint serves three actions that fail for three different
+        // reasons, and the variables are the only thing that says which ran.
+        // Note `userId` is THREE-valued, not two: a string links, `null`
+        // unlinks, `undefined` means the call never touched the binding. A
+        // `!== undefined` test would answer a failed UNLINK with "that account
+        // already belongs to another reseller" — the opposite of what happened.
+        onError: (err, variables) => {
             captureError(err, 'Failed to update partner', { tags: { page: 'admin-customers' } });
-            setActionError(t('customers.resellerUpdateFailed'));
+            const { userId } = variables.input;
+            setActionError(t(
+                typeof userId === 'string' ? 'customers.resellerLinkFailed'
+                    : userId === null ? 'customers.resellerUnlinkFailed'
+                        : 'customers.resellerUpdateFailed',
+            ));
         },
     });
 
@@ -232,6 +289,7 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
                                         </div>
                                     </div>
                                 ) : (
+                                    <>
                                     <div className="flex items-start justify-between gap-3 flex-wrap">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
@@ -258,9 +316,12 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
                                                 {' · '}
                                                 {t('customers.resellerMerchants', { count: partner.merchantCount })}
                                             </div>
-                                            {/* Only the phone auto-binds, so an email-only reseller
-                                                needs the admin to link them once, deliberately. */}
-                                            {!partner.linked && !partner.phone && (
+                                            {/* Fires on every unlinked reseller, NOT only the
+                                                phone-less ones. Gating this on `!partner.phone`
+                                                hid the warning from exactly the reps who need it
+                                                most: a number we hold but no user account can
+                                                verify still reads as "phone on file" here. */}
+                                            {!partner.linked && (
                                                 <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
                                                     {t('customers.resellerNeedsManualLink')}
                                                 </p>
@@ -271,6 +332,18 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
                                                 <Pencil className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
                                                 {tc('edit')}
                                             </Button>
+                                            {!partner.linked && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => startLinking(partner)}
+                                                    disabled={busy}
+                                                    title={t('customers.resellerLinkHelper')}
+                                                >
+                                                    <Link2 className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
+                                                    {t('customers.resellerLink')}
+                                                </Button>
+                                            )}
                                             {partner.linked && (
                                                 confirmUnlinkId === partner.id ? (
                                                     <div className="flex items-center gap-2">
@@ -313,6 +386,61 @@ export function PartnerManagerModal({ isOpen, onClose }: { isOpen: boolean; onCl
                                             </Button>
                                         </div>
                                     </div>
+
+                                    {linkingId === partner.id && (
+                                        <div className="mt-3 border border-theme-border rounded-lg p-3 space-y-3">
+                                            <Input
+                                                label={t('customers.resellerLinkSearch')}
+                                                value={linkSearch}
+                                                onChange={(e) => setLinkSearch(e.target.value)}
+                                                dir="auto"
+                                                helperText={t('customers.resellerLinkSearchHelper')}
+                                            />
+                                            {linkQuery.length < 2 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('customers.resellerLinkMinChars')}
+                                                </p>
+                                            ) : linkSearching ? (
+                                                <p className="text-xs text-muted-foreground" aria-busy="true">{tc('loading')}</p>
+                                            ) : linkResults.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t('customers.resellerLinkNoMatches')}
+                                                </p>
+                                            ) : (
+                                                <ul className="divide-y divide-theme-border" aria-live="polite">
+                                                    {linkResults.map((candidate) => (
+                                                        <li key={candidate.id}>
+                                                            <button
+                                                                type="button"
+                                                                className="w-full text-start py-2 px-1 rounded hover:bg-muted disabled:opacity-50"
+                                                                onClick={() => updatePartner.mutate({
+                                                                    id: partner.id,
+                                                                    input: { userId: candidate.id },
+                                                                })}
+                                                                disabled={busy}
+                                                            >
+                                                                <span className="text-sm text-foreground block" dir="auto">
+                                                                    {candidate.name || t('customers.resellerLinkUnnamed')}
+                                                                </span>
+                                                                <span className="text-xs text-muted-foreground block" dir="auto">
+                                                                    {candidate.email || '—'}
+                                                                    {candidate.phone && (
+                                                                        <> · <span className="font-mono" dir="ltr">{candidate.phone}</span></>
+                                                                    )}
+                                                                </span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            <div className="flex justify-end">
+                                                <Button variant="ghost" size="sm" onClick={closeLinkPicker} disabled={busy}>
+                                                    {tc('cancel')}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    </>
                                 )}
                             </li>
                         ))}
