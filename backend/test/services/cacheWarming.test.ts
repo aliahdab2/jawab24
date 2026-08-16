@@ -137,3 +137,24 @@ describe('resolveBrandVoiceNotes — per-page override (D-084)', () => {
         expect(resolveBrandVoiceNotes({}, 'hello')).toBeUndefined();
     });
 });
+
+describe('resolveBrandVoiceNotes — override normalization (PR #777 review fixes)', () => {
+    const ws = { brandVoiceNotesMulti: { ar: 'صوت المساحة', en: 'Workspace voice' }, brandVoiceNotes: 'legacy voice', supportedLanguages: ['ar', 'en'] };
+
+    it('a whitespace-only variant neither pins alone nor is ever returned', () => {
+        // { ar: real, en: '  ' }: an EN message must get the AR text through the
+        // any-language tail — never the truthy whitespace string as the persona
+        // (the pin has already suppressed the workspace fallback).
+        expect(resolveBrandVoiceNotes(ws, 'hello', { ar: 'صوت الصفحة', en: '   ' })).toBe('صوت الصفحة');
+    });
+
+    it('a double-encoded override (jsonb persisted as a JSON string) still resolves', () => {
+        // The business_profile precedent: the same jsonb family has stored
+        // stringified JSON in production. coerceMultiLang unwraps it.
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', JSON.stringify({ ar: 'صوت الصفحة' }))).toBe('صوت الصفحة');
+    });
+
+    it('a malformed string override inherits the workspace persona instead of crashing', () => {
+        expect(resolveBrandVoiceNotes(ws, 'كم السعر؟', 'not-json')).toBe('صوت المساحة');
+    });
+});

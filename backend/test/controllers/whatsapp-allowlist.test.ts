@@ -15,7 +15,10 @@ const mockWhere = vi.fn();
 vi.mock('../../src/db', () => ({
     db: { select: () => ({ from: () => ({ where: mockWhere }) }) },
 }));
-vi.mock('../../src/db/schema', () => ({ users: {} }));
+// `pages: {}` satisfies module-load access from the reply pipeline's shared
+// column subset (PLAYGROUND_PAGE_COLUMNS reads schema.pages at import time);
+// nothing in this suite executes a select against it.
+vi.mock('../../src/db/schema', () => ({ users: {}, pages: {} }));
 vi.mock('drizzle-orm', () => ({ eq: vi.fn() }));
 
 vi.mock('../../src/services/pages', () => ({

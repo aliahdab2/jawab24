@@ -2,6 +2,7 @@ import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
 import { factCollectionsService } from '../factCollections';
+import { coerceMultiLang } from '../multiLangTranslation';
 import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
@@ -208,22 +209,31 @@ export function resolveBrandVoiceNotes(
         supportedLanguages?: unknown;
     },
     messageText: string,
-    pageOverride?: Record<string, string> | unknown,
+    pageOverride?: unknown,
 ): string | undefined {
     const lang = detectLanguageCode(messageText);
     const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
     const pick = (multi: Record<string, string>) =>
         multi[lang] || supportedLangs.map(l => multi[l]).find(Boolean);
 
-    const { sourceLang: _overrideSource, ...overrideLangs } = (pageOverride || {}) as Record<string, string>;
-    if (Object.values(overrideLangs).some(v => typeof v === 'string' && v.trim().length > 0)) {
+    // coerceMultiLang: the workspace multi arrives normalized by
+    // services/settings.ts, but the page row's jsonb is handed here raw — and
+    // this column family has a double-encoded-JSON precedent (business_profile),
+    // so the override goes through the same normalizer. The trim-filter then
+    // drops whitespace-only variants BEFORE the pin decision AND the pick:
+    // without it { ar: 'نص', en: '  ' } pins the page and answers English
+    // customers with the truthy whitespace string as the whole persona — while
+    // the pin has already suppressed the workspace fallback.
+    const { sourceLang: _overrideSource, ...overrideRaw } = coerceMultiLang(pageOverride);
+    const overrideLangs = Object.fromEntries(
+        Object.entries(overrideRaw).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
+    );
+    if (Object.keys(overrideLangs).length > 0) {
         // Any-language tail: a page persona stored only in a language outside
         // supportedLanguages must still apply — the pin already suppressed the
         // workspace fallback, so dropping it here would silence the page
         // entirely rather than fall back.
-        return pick(overrideLangs)
-            || Object.values(overrideLangs).find(v => typeof v === 'string' && v.trim().length > 0)
-            || undefined;
+        return pick(overrideLangs) || Object.values(overrideLangs)[0];
     }
 
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;

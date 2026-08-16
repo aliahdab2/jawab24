@@ -578,5 +578,34 @@ describe('Pages Controller', () => {
 
             expect(mockReply.status).toHaveBeenCalledWith(404);
         });
+
+        it('400 on non-language keys — junk keys and __proto__ never reach jsonb', async () => {
+            // JSON.parse so __proto__ is an OWN property, as it would arrive
+            // from a real request body — an object literal would set the prototype.
+            for (const bad of [{ notes: 'نص' }, { zz9x: 'نص' }, JSON.parse('{"__proto__":"نص"}')]) {
+                vi.mocked(mockReply.status as any).mockClear();
+                mockRequest.body = { brandVoiceNotesMulti: bad };
+                await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+                expect(mockReply.status).toHaveBeenCalledWith(400);
+            }
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
+
+        it('accepts regioned language codes (pt-BR)', async () => {
+            mockRequest.body = { brandVoiceNotesMulti: { 'pt-BR': 'Persona da página' } };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.updateBrandVoice).toHaveBeenCalled();
+        });
+
+        it('400 when sourceLang smuggles an unbounded string past the per-language cap', async () => {
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'نص', sourceLang: 'x'.repeat(64) } };
+
+            await pagesController.updateBrandVoice(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(pagesService.updateBrandVoice).not.toHaveBeenCalled();
+        });
     });
 });

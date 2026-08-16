@@ -333,10 +333,21 @@ export class PagesController {
                 return reply.status(400).send({ error: 'Too many language entries' });
             }
             for (const [key, value] of entries) {
-                if (typeof value !== 'string' || key.length > 12) {
+                if (typeof value !== 'string') {
                     return reply.status(400).send({ error: 'brandVoiceNotesMulti values must be strings' });
                 }
-                if (key !== 'sourceLang' && value.length > MAX_BRAND_VOICE_LENGTH) {
+                // Keys are language codes (BCP-47-ish) plus the sourceLang
+                // bookkeeping key — anything else ('notes', '__proto__', 'zz9…')
+                // would land in jsonb, and the resolver's any-language tail would
+                // serve it as a live persona the merchant's UI can't display or
+                // clear.
+                if (key !== 'sourceLang' && !/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(key)) {
+                    return reply.status(400).send({ error: `brandVoiceNotesMulti keys must be language codes ("${key}" is not)` });
+                }
+                // sourceLang holds a language code or 'manual'/'default' — cap it
+                // too, or an unbounded string rides the bookkeeping key into jsonb.
+                const maxLen = key === 'sourceLang' ? 32 : MAX_BRAND_VOICE_LENGTH;
+                if (value.length > maxLen) {
                     return reply.status(400).send({ error: `Persona must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer per language` });
                 }
             }
@@ -353,9 +364,9 @@ export class PagesController {
                 if (!existing) {
                     return reply.status(404).send({ error: 'Page not found' });
                 }
-                const wsSettings = existing.workspaceId
-                    ? await workspaceSettingsService.getSettings(existing.workspaceId).catch(() => null)
-                    : null;
+                // getPage already filtered on req.workspaceId, so the page's own
+                // workspaceId is that value — no conditional needed.
+                const wsSettings = await workspaceSettingsService.getSettings(req.workspaceId).catch(() => null);
                 const userId = req.user.userId;
                 next = await smartTranslateMultiLang(
                     next,
