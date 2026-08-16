@@ -41,6 +41,13 @@ export interface CircuitBreakerOptions {
     probeLockTtlSeconds?: number;
     /** Failure counter auto-expires after N idle seconds (default: 300) */
     inactivityResetSeconds?: number;
+    /**
+     * Decides whether a thrown error indicates the PROTECTED SERVICE is sick
+     * (count it toward opening) or is an application-level outcome delivered
+     * successfully over a healthy hop (rethrow without counting). Default:
+     * everything counts — the pre-2026-08-16 behavior.
+     */
+    countsAsFailure?: (err: unknown) => boolean;
 }
 
 export class CircuitBreaker {
@@ -53,6 +60,7 @@ export class CircuitBreaker {
     private readonly openDurationSeconds: number;
     private readonly probeLockTtlSeconds: number;
     private readonly inactivityResetSeconds: number;
+    private readonly countsAsFailure: (err: unknown) => boolean;
 
     constructor(private readonly client: RedisClient, name: string, opts: CircuitBreakerOptions = {}) {
         this.name = name;
@@ -64,6 +72,7 @@ export class CircuitBreaker {
         this.openDurationSeconds = opts.openDurationSeconds ?? 30;
         this.probeLockTtlSeconds = opts.probeLockTtlSeconds ?? 15;
         this.inactivityResetSeconds = opts.inactivityResetSeconds ?? 300;
+        this.countsAsFailure = opts.countsAsFailure ?? (() => true);
     }
 
     async getState(): Promise<CircuitState> {
@@ -97,6 +106,17 @@ export class CircuitBreaker {
             await this.client.del(this.failureKey, this.circuitOpenKey, this.probeLockKey);
             return result;
         } catch (error) {
+            // An application-level outcome (e.g. the ai-worker's typed AiRefusalError
+            // 500) reached us over a HEALTHY hop — the service answered. For circuit
+            // purposes that is evidence of health, identical to a success: reset state
+            // (a half-open probe that yields one heals the circuit) and rethrow for the
+            // caller to handle. Before 2026-08-16 these counted as failures, so five
+            // refusals from ONE corrupted thread opened the fleet-shared ai_worker
+            // circuit and starved every other page's replies for the open window.
+            if (!this.countsAsFailure(error)) {
+                await this.client.del(this.failureKey, this.circuitOpenKey, this.probeLockKey);
+                throw error;
+            }
             const count = await this.client.incr(this.failureKey);
             // Set inactivity expiry only on the first failure (don't refresh on subsequent ones)
             if (count === 1) {
@@ -135,7 +155,23 @@ export class CircuitBreaker {
     }
 }
 
+/**
+ * Typed ai-worker errors that are APPLICATION OUTCOMES, not worker sickness.
+ * The worker serializes them as `{ error: { name, message } }` on an HTTP 500
+ * (routes.ts) — the hop itself succeeded. AiTimeoutError and
+ * AiQuotaExhaustedError are deliberately NOT here: a sustained quota outage is
+ * *supposed* to trip this circuit (see the failover note in services/ai.ts).
+ */
+const NON_CIRCUIT_ERROR_NAMES = new Set(['AiRefusalError', 'AiEmptyReplyError']);
+
+export function isWorkerApplicationOutcome(err: unknown): boolean {
+    const name = (err as { response?: { data?: { error?: { name?: unknown } } } })
+        ?.response?.data?.error?.name;
+    return typeof name === 'string' && NON_CIRCUIT_ERROR_NAMES.has(name);
+}
+
 export const aiWorkerCircuit = new CircuitBreaker(redis, 'ai_worker', {
     failureThreshold: config.circuitBreaker.failureThreshold,
     openDurationSeconds: config.circuitBreaker.openDurationSeconds,
+    countsAsFailure: (err) => !isWorkerApplicationOutcome(err),
 });
