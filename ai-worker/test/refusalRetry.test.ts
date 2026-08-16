@@ -1,22 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Structured-output "refusal" — measured 2026-08-13 to be a MALFORMED ENVELOPE, not a
- * policy decline.
+ * Structured-output "refusal" — not a policy decline.
  *
- * All 512 stored refusal texts from 90 days of production were read one by one: every
- * single one was a normal, correct reply in the merchant's own voice. Four carried the
- * tell — a trailing second `{"reply":…}` envelope, an `</ai_reply>` tag, or a stray
- * `</assistant` token — i.e. the model answered and then kept emitting, breaking the
- * `strict: true` schema contract so the text surfaced under `refusal` instead of
- * `content`. Twenty were replayed 3× each against real page data that was provably
- * unchanged since the refusal fired: 60 replays, 60 normal replies, 0 refusals.
+ * 2026-08-13: all 512 stored refusal texts from 90 days of production were read one by
+ * one: every single one was a normal, correct reply in the merchant's own voice. The
+ * first fix retried with identical input, on an over-emission theory.
  *
- * (Emoji were ruled out as the trigger: 67% of refusals carry emoji vs 99% of the
- * successful replies from the same pages.)
+ * 2026-08-16 (Shahin Resort replay): two same-day prod incidents SURVIVED the identical
+ * retry. Raw envelopes showed `finish_reason:'stop'`, `content:null`, and the full
+ * well-formed reply inside `refusal` — the model deliberately picks the refusal channel,
+ * near-deterministically for some thread shapes (10/10 attempts). Causal ablation: the
+ * trigger is plain-text ASSISTANT history turns (the model's only grammar-legal way to
+ * "speak like its previous turns" is the refusal channel) combined with a phatic
+ * customer turn. Rewrapping assistant history as `{"reply":…}` envelopes on the retry
+ * measured 0/10 corrupt where the identical retry measured 10/10.
  *
- * These tests pin BOTH halves — the transient case now reaches the customer, and a
- * genuine deterministic refusal still throws exactly as it did before.
+ * These tests pin all three halves — the retry rewraps assistant history, the transient
+ * case reaches the customer, and a genuine deterministic refusal still throws.
  */
 describe('structured-output refusal retry', () => {
     const goodReply = {
@@ -103,6 +104,56 @@ describe('structured-output refusal retry', () => {
         await new OpenAIService().generateReply({ comment: 'بتفتحوا السبت؟' });
 
         expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * The 2026-08-16 mechanism fix: the refusal retry must resend the conversation with
+     * plain-text assistant history turns rewrapped as `{"reply":…}` envelopes — measured
+     * as the causal ingredient (identical retry: 10/10 still corrupt; wrapped: 0/10).
+     * User/system turns and the current customer message must pass through untouched.
+     */
+    it('the refusal retry rewraps assistant history as JSON envelopes', async () => {
+        const create = vi.fn().mockResolvedValueOnce(transientRefusal).mockResolvedValueOnce(goodReply);
+        mockOpenAI(create);
+
+        const { OpenAIService } = await import('../src/services/openai');
+        const history = [
+            { role: 'user' as const, content: 'شو أسعار الأجنحة؟' },
+            { role: 'assistant' as const, content: 'جناح صغير 170$ وجناح وسط 285$ بالليلة.' },
+        ];
+        await new OpenAIService().generateReply({
+            comment: 'خلص لازم نصيف عندكن',
+            context: { conversationHistory: history },
+        });
+
+        expect(create).toHaveBeenCalledTimes(2);
+        const retryMessages = create.mock.calls[1][0].messages as { role: string; content: string }[];
+        const assistantTurns = retryMessages.filter(m => m.role === 'assistant');
+        expect(assistantTurns).toHaveLength(1);
+        expect(JSON.parse(assistantTurns[0].content)).toEqual({ reply: 'جناح صغير 170$ وجناح وسط 285$ بالليلة.' });
+        // The user's turns and the final prompt are untouched.
+        const firstCallMessages = create.mock.calls[0][0].messages as { role: string; content: string }[];
+        expect(retryMessages.filter(m => m.role === 'user')).toEqual(firstCallMessages.filter(m => m.role === 'user'));
+        // And the FIRST call sent the history as plain text (the wrap is retry-only —
+        // the normal path must stay byte-identical for the prompt cache).
+        const firstAssistant = firstCallMessages.filter(m => m.role === 'assistant');
+        expect(firstAssistant[0].content).toBe('جناح صغير 170$ وجناح وسط 285$ بالليلة.');
+    });
+
+    it('an assistant turn already carrying JSON is not double-wrapped on retry', async () => {
+        const create = vi.fn().mockResolvedValueOnce(transientRefusal).mockResolvedValueOnce(goodReply);
+        mockOpenAI(create);
+
+        const { OpenAIService } = await import('../src/services/openai');
+        const jsonTurn = JSON.stringify({ reply: 'الفطور مشمول مع الأجنحة.' });
+        await new OpenAIService().generateReply({
+            comment: 'تمام شكراً',
+            context: { conversationHistory: [{ role: 'assistant' as const, content: jsonTurn }] },
+        });
+
+        const retryMessages = create.mock.calls[1][0].messages as { role: string; content: string }[];
+        const assistantTurns = retryMessages.filter(m => m.role === 'assistant');
+        expect(assistantTurns[0].content).toBe(jsonTurn);
     });
 
     /**

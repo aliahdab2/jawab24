@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CircuitBreaker, CircuitOpenError } from '../../src/lib/circuitBreaker';
+import { CircuitBreaker, CircuitOpenError, isWorkerApplicationOutcome } from '../../src/lib/circuitBreaker';
 
 vi.mock('@sentry/node', () => ({
     captureMessage: vi.fn(),
@@ -265,6 +265,68 @@ describe('CircuitBreaker', () => {
                 'cb:test:open',
                 'cb:test:probe_lock',
             );
+        });
+    });
+
+    // ------------------------------------------------------------------ //
+    // countsAsFailure — application outcomes must not open the circuit
+    // (2026-08-16: five AiRefusalError 500s from ONE corrupted thread opened
+    // the fleet-shared ai_worker circuit and starved every page's replies)
+    // ------------------------------------------------------------------ //
+    describe('countsAsFailure', () => {
+        function makeCb(countsAsFailure: (err: unknown) => boolean) {
+            return new CircuitBreaker(mockRedis as unknown as ConstructorParameters<typeof CircuitBreaker>[0], 'test', {
+                failureThreshold: 3, countsAsFailure,
+            });
+        }
+
+        it('an uncounted error resets state like a success and is rethrown', async () => {
+            mockRedis.exists.mockResolvedValue(0);
+            mockRedis.get.mockResolvedValue('2'); // one failure away from opening
+            const appError = new Error('refusal delivered over a healthy hop');
+            const breaker = makeCb(() => false);
+
+            await expect(breaker.execute(() => Promise.reject(appError))).rejects.toThrow(appError);
+
+            expect(mockRedis.incr).not.toHaveBeenCalledWith('cb:test:failures');
+            expect(mockRedis.del).toHaveBeenCalledWith(
+                'cb:test:failures', 'cb:test:open', 'cb:test:probe_lock',
+            );
+        });
+
+        it('a counted error still increments and can open the circuit', async () => {
+            mockRedis.exists.mockResolvedValue(0);
+            mockRedis.get.mockResolvedValue('0');
+            mockRedis.incr.mockResolvedValue(3);
+            const breaker = makeCb(() => true);
+
+            await expect(breaker.execute(() => Promise.reject(new Error('ECONNREFUSED')))).rejects.toThrow();
+
+            expect(mockRedis.incr).toHaveBeenCalledWith('cb:test:failures');
+            expect(mockRedis.set).toHaveBeenCalledWith('cb:test:open', '1', 'EX', expect.any(Number));
+        });
+    });
+
+    // ------------------------------------------------------------------ //
+    // isWorkerApplicationOutcome — the aiWorkerCircuit predicate
+    // ------------------------------------------------------------------ //
+    describe('isWorkerApplicationOutcome', () => {
+        const axiosish = (name: string) => ({ response: { data: { error: { name, message: 'x' } } } });
+
+        it('recognizes the worker’s typed refusal/empty 500 bodies', () => {
+            expect(isWorkerApplicationOutcome(axiosish('AiRefusalError'))).toBe(true);
+            expect(isWorkerApplicationOutcome(axiosish('AiEmptyReplyError'))).toBe(true);
+        });
+
+        it('quota and timeout still count as circuit failures — a sustained quota outage is supposed to trip it', () => {
+            expect(isWorkerApplicationOutcome(axiosish('AiQuotaExhaustedError'))).toBe(false);
+            expect(isWorkerApplicationOutcome(axiosish('AiTimeoutError'))).toBe(false);
+        });
+
+        it('network-level failures (no response body) count as circuit failures', () => {
+            expect(isWorkerApplicationOutcome(new Error('ECONNREFUSED'))).toBe(false);
+            expect(isWorkerApplicationOutcome({ response: {} })).toBe(false);
+            expect(isWorkerApplicationOutcome(undefined)).toBe(false);
         });
     });
 });

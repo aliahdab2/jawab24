@@ -78,6 +78,33 @@ function mergeUsage(
     };
 }
 
+/**
+ * Rewrap plain-text ASSISTANT history turns as minimal `{"reply":…}` envelopes
+ * for the structured-refusal retry (and only there — the normal path is
+ * untouched, so prompts stay byte-identical and no cache key moves).
+ *
+ * Why: prior assistant turns flow into the messages verbatim as plain Arabic
+ * text while the output grammar demands strict JSON. On phatic turns the model
+ * imitates its own prior format, and the refusal channel is the only
+ * grammar-legal plain-text output — so the reply lands under `refusal`
+ * (measured 2026-08-16, deterministic 10/10 on a real thread; 0/10 once the
+ * history "speaks JSON"). The wrap is minimal on purpose: a fuller envelope
+ * fabricates metadata (intent/gender) the model might echo, and the minimal
+ * form measured just as effective (5/5 + 5/5 clean).
+ *
+ * Turns already starting with `{` are left alone — double-wrapping a JSON turn
+ * would teach the model a nested shape it must never emit.
+ */
+export function wrapAssistantHistoryForRetry(
+    messages: OpenAI.ChatCompletionMessageParam[],
+): OpenAI.ChatCompletionMessageParam[] {
+    return messages.map(m => (
+        m.role === 'assistant' && typeof m.content === 'string' && !m.content.trimStart().startsWith('{')
+            ? { ...m, content: JSON.stringify({ reply: m.content }) }
+            : m
+    ));
+}
+
 export class OpenAIService {
     private client: OpenAI | null = null;
 
@@ -161,34 +188,39 @@ export class OpenAIService {
             // *after* — they fire recordAiFailedBeforeLog explicitly because
             // the OpenAI call was billed but the content is unusable.
 
-            // Structured-output refusal — RETRY ONCE before believing it.
+            // Structured-output refusal — RETRY ONCE, with the assistant history
+            // rewrapped as JSON envelopes, before believing it.
             //
-            // The old code threw here immediately, on the premise written in this very
-            // comment: "Non-transient: same input → same refusal." That premise was
-            // measured FALSE on 2026-08-13:
-            //   - all 512 stored refusal texts from 90 days of production were read
-            //     one by one. NOT ONE was a refusal — every one was a normal, correct
-            //     reply, median 82 chars, in the merchant's own voice and dialect;
-            //   - 20 of them were replayed against their real page data, 3 samples each,
-            //     on a page whose KB and settings were provably unchanged since the
-            //     refusal fired. 60 replays, 60 normal replies, 0 refusals.
+            // Two rounds of measurement:
             //
-            // The mechanism, visible in 4 of the 512: the reply text carries a trailing
-            // second `{"reply":…}` envelope, an `</ai_reply>` tag, or a stray
-            // `</assistant` token. The model emits the answer and then keeps going. That
-            // breaks the `strict: true` schema contract, and the structured-output layer
-            // surfaces the text under `refusal` instead of `content`. So the ENVELOPE is
-            // malformed — the content never was refused. Same root defect as the doubled
-            // JSON documented on `createCompletion`'s penalty settings (eval #46,
-            // 2026-05-20); it is stochastic, which is exactly why a retry clears it.
+            // 2026-08-13: all 512 stored refusal texts from 90 days of production were
+            // read one by one. NOT ONE was a refusal — every one was a normal, correct
+            // reply, median 82 chars, in the merchant's own voice and dialect. The fix
+            // then was an identical-input retry, on the theory that the corruption was
+            // stochastic over-emission past the schema.
             //
-            // Cost of throwing instead: ~170 discarded replies a month, ~33 customers
-            // left with total silence.
+            // 2026-08-16 (Shahin Resort replay — two same-day prod incidents survived
+            // the identical retry): the raw envelopes show `finish_reason:'stop'`,
+            // `content:null`, and the full well-formed reply inside `refusal` — the
+            // model DELIBERATELY picks the refusal channel and writes the reply there,
+            // and for some thread shapes it does so near-deterministically (10/10
+            // attempts on the real thread), so an identical retry cannot save them.
+            // A causal ablation isolated two ingredients, each necessary:
+            //   1. prior ASSISTANT turns in the conversation are plain text while the
+            //      output grammar demands strict JSON — the refusal channel is the only
+            //      grammar-legal way to "speak like my previous turns" (format echo).
+            //      Same history with assistant turns wrapped as JSON: 0/10 corrupt.
+            //      No history: 0/8. Plain-text history: 8/8 corrupt — even with fully
+            //      neutral content, which rules out a safety/content trigger.
+            //   2. a PHATIC turn (warm closing/compliment, no informational payload) —
+            //      the same plain-text history with an informational question: 0/5.
             //
-            // The guard is not weakened — it is finally accurate. A GENUINE policy
-            // refusal is deterministic by nature, so it refuses on the retry too and
-            // still throws, flags and notifies exactly as before. After this, reaching
-            // AiRefusalError means the model really did decline.
+            // So the retry resends the SAME conversation with assistant history turns
+            // wrapped as `{"reply":…}` envelopes (minimal wrap, measured as effective
+            // as the full envelope: 5/5 + 5/5 clean on the deterministic thread) — the
+            // in-context format then matches the output grammar and the escape hatch
+            // loses its pull. A GENUINE policy refusal is unaffected by history format,
+            // refuses again, and still throws, flags and notifies exactly as before.
             //
             // ⛔ The refusal text itself is never used as a reply: only the retry's
             // `content` is. A real refusal can therefore never reach a customer.
@@ -201,6 +233,7 @@ export class OpenAIService {
                     refusalChars: refusal.length,
                 }));
                 discardedUsage = mergeUsage(discardedUsage, completion.usage);
+                activeMessages = wrapAssistantHistoryForRetry(activeMessages);
                 completion = await this.createCompletion(activeMessages, request.context?.pipeline);
                 finishReason = completion.choices[0]?.finish_reason;
                 refusal = completion.choices[0]?.message?.refusal;
