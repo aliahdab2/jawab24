@@ -184,10 +184,20 @@ async function resolvePageIds(): Promise<void> {
     }
 
     for (const [alias, pattern] of Object.entries(PAGE_NAME_PATTERNS)) {
-        const match = data.data.find(p => pattern.test(p.name));
+        // Sessions clone production pages into the shared dev DB for experiments
+        // (named «… (نسخة إنتاج)», «… clone», etc.). Such a clone matching an
+        // alias pattern SHADOWS the real demo fixture — from 2026-08-08 to
+        // 2026-08-16 `damascus` silently resolved to an empty-KB clone and every
+        // damascus case (Cat 51/54/57) failed on missing data, reading as a
+        // 97%→95.2% model regression that never happened. Prefer the first match
+        // that is not a clone; fall back to any match so a renamed fixture still
+        // resolves loudly rather than not at all.
+        const matches = data.data.filter(p => pattern.test(p.name));
+        const match = matches.find(p => !/نسخة|clone|copy|test/i.test(p.name)) ?? matches[0];
         if (match) {
             PAGE_MAP[alias] = match.id;
-            console.log(`  ${alias} → ${match.name} (${match.id.slice(0, 8)}...)`);
+            const shadowed = matches.length > 1 ? `  [${matches.length - 1} clone(s) skipped]` : '';
+            console.log(`  ${alias} → ${match.name} (${match.id.slice(0, 8)}...)${shadowed}`);
         } else {
             console.error(`Warning: No page matching "${alias}" pattern. Available: ${data.data.map(p => p.name).join(', ')}`);
         }
