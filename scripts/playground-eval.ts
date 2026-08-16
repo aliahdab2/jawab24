@@ -168,7 +168,12 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     // The vendor's own support page (own-brand Check 6 exemption, Cat 72).
     support: /jawab\s?24/i,
     // D-084 per-page persona fixture (Cat 78) — page-level info-desk override.
-    resort: /الواحة|resort/i,
+    // Deliberately the fixture's full unique name, NOT a broad /resort/i: the
+    // alias scan covers every page in the shared dev DB and the clone-skip
+    // only filters names carrying نسخة/clone/copy/test markers — a broad word
+    // here re-opens the #774 shadowing class (e.g. a Shahin-derived page
+    // containing "Resort" hijacking the alias by fetch order).
+    resort: /منتجع الواحة/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -5312,9 +5317,9 @@ const TEST_CASES: TestCase[] = [
         ],
         expected: {
             replyContainsAny: ['0119876543'],
-            replyNotContains: CONTACT_ASK_PHRASES,
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES],
         },
-        notes: 'VOLUNTEERED number (E-4 pin): thanking the customer for THEIR OWN number («شكراً لمشاركة رقمك») is permitted and must pass — this is why CONTACT_ASK_PHRASES carries no bare «ورقمك» fragment. The reply must not ask for MORE details and still routes booking to the phone.',
+        notes: 'VOLUNTEERED number (E-4 pin): thanking the customer for THEIR OWN number («شكراً لمشاركة رقمك») is permitted and must pass — this is why CONTACT_ASK_PHRASES carries no bare «ورقمك» fragment. The reply must not ask for MORE details, must not promise a call-back to the number just volunteered (the persona forbids the promise in the same breath as the ask — and a just-received number is the strongest pull toward «رح نتواصل معك»), and still routes booking to the phone.',
     },
     {
         id: 784, category: 78, categoryName: 'Per-Page Persona', channel: 'dm',
