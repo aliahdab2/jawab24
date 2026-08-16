@@ -18,6 +18,7 @@ import errors from './en/errors.json';
 import exportNs from './en/export.json';
 import feedback from './en/feedback.json';
 import { flagReasonEn as flagReason } from '@jawab24/shared';
+import instagram from './en/instagram.json';
 import integrations from './en/integrations.json';
 import kb from './en/kb.json';
 import landing from './en/landing.json';
@@ -58,6 +59,7 @@ export type AllMessages = {
   export: typeof exportNs;
   feedback: typeof feedback;
   flagReason: typeof flagReason;
+  instagram: typeof instagram;
   integrations: typeof integrations;
   kb: typeof kb;
   landing: typeof landing;

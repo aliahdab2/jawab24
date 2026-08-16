@@ -19,6 +19,7 @@ export const PAGE_NAMESPACES = {
   login:              ['auth', 'salla', 'shopify', 'zid'],
   index:              ['landing'],
   whatIsJawab24:      ['about'],
+  instagram:          ['instagram'],
   compare:            ['compare'],
   blog:               ['blog', 'landing'],
   ecommerce:          ['ecommerce'],
