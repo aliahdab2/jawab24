@@ -105,54 +105,11 @@ describe('ReplyStyleCard', () => {
     expect(btn).not.toBeDisabled();
   });
 
-  it('shows "Testing on: <pageName>" once the first page is fetched', async () => {
-    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
-      data: [{ id: 'p1', name: 'Acme Riyadh' }],
-    } as never);
-
-    const current = makeSettings();
-    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Testing on: Acme Riyadh/i)).toBeInTheDocument();
-    });
-  });
-
-  it('defaults the test page to the first CONNECTED page, not the most-recent disconnected one', async () => {
-    // Backend returns pages most-recent-first (orderBy createdAt desc). The newest
-    // page here is disconnected; the default must skip it and land on the connected
-    // one — a disconnected page can't generate a test reply. Regression for the
-    // `fetched[0]` default that picked whatever page was created last.
-    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
-      data: [
-        { id: 'p2', name: 'New Disconnected Page', isConnected: false },
-        { id: 'p1', name: 'Connected Page', isConnected: true },
-      ],
-    } as never);
-
-    const current = makeSettings();
-    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges={false} />);
-
-    // With more than one page the card renders a page-picker <select>; its value is
-    // the defaulted selection. It must be the connected page, not the newest one.
-    const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
-    expect(select.value).toBe('p1');
-  });
-
-  it('falls back to the first page when none are connected', async () => {
-    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
-      data: [
-        { id: 'p2', name: 'Disconnected A', isConnected: false },
-        { id: 'p1', name: 'Disconnected B', isConnected: false },
-      ],
-    } as never);
-
-    const current = makeSettings();
-    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges={false} />);
-
-    const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
-    expect(select.value).toBe('p2');
-  });
+  // The separate «Testing on» label + picker was removed entirely (owner call,
+  // 2026-08-16): the persona scope switcher is the ONE page selector and the
+  // test follows it (scopedPage ?? first connected page). The first-connected
+  // default still lives in the component (selectedPage) and feeds the modal —
+  // its picker-based pins were removed with the picker.
 
   it('shows hold-relocation notice only when holdLowConfidence is on and not yet seen', () => {
     // localStorage clean — notice should appear.
@@ -189,7 +146,7 @@ describe('ReplyStyleCard', () => {
         data: [{ id: 'p1', name: 'Only Page', isConnected: true }],
       } as never);
       const { rerender } = render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await waitFor(() => expect(screen.getByText(/Testing on/i)).toBeInTheDocument());
+      await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
       expect(screen.queryByText(/Assistant persona for/i)).not.toBeInTheDocument();
 
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
@@ -246,22 +203,19 @@ describe('ReplyStyleCard', () => {
       expect(await screen.findByText(/Inherited from settings/i)).toBeInTheDocument();
     });
 
-    it('hides the separate «Testing on» picker while a page scope is active', async () => {
-      // The scope bar already names the page and the test follows it — a second
-      // picker could let the merchant test on a DIFFERENT page than the persona
-      // they just wrote (owner call, 2026-08-16).
+    it('never renders a separate «Testing on» row — the scope switcher is the one selector', async () => {
+      // A second picker could let the merchant test on a DIFFERENT page than
+      // the persona they just wrote and see no effect (owner call, 2026-08-16).
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
       await screen.findByText(/Assistant persona for/i);
-      expect(screen.getByText(/Testing on/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
-
       expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
-      // Back to all-pages scope → the picker returns.
-      fireEvent.change(scopeSelect, { target: { value: 'workspace' } });
-      expect(screen.getByText(/Testing on/i)).toBeInTheDocument();
+      // Exactly one combobox exists — the scope switcher itself.
+      expect(screen.getAllByRole('combobox')).toHaveLength(1);
     });
   });
 });

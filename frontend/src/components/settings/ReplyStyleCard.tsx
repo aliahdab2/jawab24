@@ -488,35 +488,15 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           {t('replyStyle.openTestModal')}
         </button>
       </div>
-      {(hasChanges || selectedPage?.name || testError) && (
+      {/* No separate «التجربة على» row (owner call, 2026-08-16): the persona
+          scope switcher is the ONE page selector — the test follows it
+          (scopedPage ?? first connected page). A second picker here could
+          contradict the scope: write a page persona, test a different page,
+          see no effect of what was just written. */}
+      {(hasChanges || testError) && (
         <div className="mt-1.5 flex items-center justify-end gap-1.5 flex-wrap">
           {hasChanges && (
             <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
-          )}
-          {/* Page scope active → the scope bar already names the page and the
-              test follows it; a second «التجربة على» label + picker would be
-              redundant and could contradict the scope (owner call, 2026-08-16). */}
-          {!hasChanges && !scopedPage && selectedPage?.name && pages.length > 1 && (
-            <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5" dir="auto">
-              <span id="reply-style-test-page-label">{t('replyStyle.testingOnLabel')}</span>
-              {/* Shared Select, not a native <select>: the OS draws a native
-                  select's open list, so dark mode got a WHITE popup here (same
-                  bug as the post picker's page selector, fixed together). */}
-              <span className="max-w-[12rem]">
-                <Select
-                  value={selectedPage.id}
-                  onChange={setSelectedPageId}
-                  options={pages.map((p) => ({ value: p.id, label: p.name }))}
-                  aria-labelledby="reply-style-test-page-label"
-                  compact
-                />
-              </span>
-            </span>
-          )}
-          {!hasChanges && !scopedPage && selectedPage?.name && pages.length <= 1 && (
-            <p className="text-[11px] text-muted-foreground" dir="auto">
-              {t('replyStyle.testingOnPage', { pageName: selectedPage.name })}
-            </p>
           )}
           {testError && (
             <p className="text-xs text-destructive w-full text-end" role="alert">{testError}</p>

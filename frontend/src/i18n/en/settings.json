@@ -70,8 +70,6 @@
     "openTestModal": "Test with the AI",
     "testSaveFirst": "Save settings to test",
     "testNoPages": "Connect a Facebook or Instagram page first to test.",
-    "testingOnPage": "Testing on: {pageName}",
-    "testingOnLabel": "Testing on:",
     "holdLowConfidence": "Review Uncertain Replies",
     "holdLowConfidenceDesc": "Hold replies the AI isn't sure about for your review.",
     "holdLowConfidenceInfo": "When the AI can't find the answer in your Business Info, it holds the reply for you to send manually — instead of sending a vague \"let me check\" response.",
