@@ -137,6 +137,45 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(capturedSetData.kbActiveVersion).toBeUndefined();
         });
 
+        it('ignores smuggled non-DTO columns (mass-assignment pin)', async () => {
+            // PUT /pages/:id registers no body schema, so updatePage's .set()
+            // payload is the only guard between a crafted body and the row.
+            // Before the explicit allowlist, ...spread let an admin-role caller
+            // rewrite ANY column of a page they own. This pins the allowlist:
+            // break it (restore the spread) and this test fails.
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.updatePage('user-1', 'page-1', {
+                name: 'Legit Name',
+                // Hostile extras a real request body can carry:
+                workspaceId: 'attacker-workspace',
+                userId: 'attacker-user',
+                accessToken2: 'x', // typo-shaped noise
+                kbActiveVersion: 999,
+                whatsappAccessToken: 'stolen',
+                facebookPageId: 'hijacked',
+            } as never);
+
+            expect(capturedSetData).toBeDefined();
+            expect(capturedSetData.name).toBe('Legit Name');
+            expect(capturedSetData.workspaceId).toBeUndefined();
+            expect(capturedSetData.userId).toBeUndefined();
+            expect(capturedSetData.accessToken2).toBeUndefined();
+            expect(capturedSetData.kbActiveVersion).toBeUndefined();
+            expect(capturedSetData.whatsappAccessToken).toBeUndefined();
+            expect(capturedSetData.facebookPageId).toBeUndefined();
+        });
+
         it('sets businessProfileUpdatedAt when businessProfile changes', async () => {
             // Stage 2.6: updatePage fetches existing row to preserve the
             // suggestions half of the container — mock the select call.

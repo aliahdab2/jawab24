@@ -1973,6 +1973,60 @@ export interface WorkspaceSettings {
   leadFields?: LeadCustomFieldDef[];
 }
 
+/**
+ * Every key `workspaces.settings` may hold — the write allowlist for
+ * `PUT /workspaces/current/settings`, which merges its body into that JSONB
+ * column. Without it, any admin-role member could plant arbitrary keys in the
+ * workspace's settings blob — including field names that have not shipped yet,
+ * silently pre-seeding a future feature's stored state.
+ *
+ * Declared as `Record<keyof WorkspaceSettings, true>` rather than a plain
+ * array so BOTH drift directions are compile errors: a new WorkspaceSettings
+ * field missing here fails tsc (missing property), and a key here that is not
+ * on the interface fails too (excess property).
+ */
+const WORKSPACE_SETTINGS_KEY_MAP: Record<keyof WorkspaceSettings, true> = {
+  defaultReplyLanguage: true,
+  supportedLanguages: true,
+  autoDetectLanguage: true,
+  aiEnabled: true,
+  aiModel: true,
+  commentReplyMode: true,
+  dualReplyNudge: true,
+  likeComments: true,
+  commentsAutoReply: true,
+  messagesAutoReply: true,
+  businessHoursOnly: true,
+  businessHoursStart: true,
+  businessHoursEnd: true,
+  timezone: true,
+  greetingMessageMulti: true,
+  greetingMessageEnabled: true,
+  awayMessageMulti: true,
+  limitFallbackEnabled: true,
+  limitFallbackMessageMulti: true,
+  dualReplyNudgeMulti: true,
+  dualReplyNudgeVariations: true,
+  replyDelay: true,
+  commentEscalationMinutes: true,
+  messageEscalationMinutes: true,
+  handoffPauseDurationMinutes: true,
+  replyStyle: true,
+  brandVoiceNotes: true,
+  brandVoiceNotesMulti: true,
+  holdLowConfidence: true,
+  leadStages: true,
+  leadFields: true,
+};
+
+/** All writable workspace-settings keys (derived from the compile-checked map). */
+export const WORKSPACE_SETTINGS_KEYS = Object.keys(WORKSPACE_SETTINGS_KEY_MAP) as (keyof WorkspaceSettings)[];
+
+/** Whether `key` names a writable workspace-settings field. */
+export function isWorkspaceSettingsKey(key: string): key is keyof WorkspaceSettings {
+  return Object.prototype.hasOwnProperty.call(WORKSPACE_SETTINGS_KEY_MAP, key);
+}
+
 // --- Business Info structured prompt block (Stage 2.6) ---
 export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative } from './businessInfoPrompt';
 // --- Merchant contact standard: number + optional free-text description ---
