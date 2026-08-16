@@ -32,6 +32,10 @@ interface User {
   phone?: string | null;
   picture?: string;
   isAdmin?: boolean;
+  // Reseller / country rep — gates the Partner nav entry only. Server-resolved
+  // at login and refreshed from /auth/me, so a partner registered after this
+  // device signed in picks it up without a re-login.
+  isPartner?: boolean;
   hasEcommerceStore?: boolean;
 }
 

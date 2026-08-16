@@ -15,6 +15,7 @@ import { config } from '../config';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
+import { isPartnerUser } from '../services/partnerAccess';
 import { SmsCountryUnsupportedError } from '../services/sms';
 import { isValidPhone, isValidEmail, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
 import { isDemoFacebookId } from '../utils/demo';
@@ -126,10 +127,13 @@ export class AuthController {
 
             // 9. Build response. Phone collection is intentionally NOT forced during
             // onboarding — see decoupling note in src/services/sms.ts / WHATSAPP_PLAN.md.
-            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
+            const [defaultWorkspaceId, isPartner] = await Promise.all([
+                workspaceService.resolveDefaultWorkspaceId(user.id),
+                isPartnerUser(user),
+            ]);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId, { isPartner });
 
             // 10. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -241,6 +245,7 @@ export class AuthController {
                 phone: user.phone,
                 picture: user.picture || undefined,
                 isAdmin: user.isAdmin || false,
+                isPartner: await isPartnerUser(user),
             };
 
             // 9. Determine where the app should navigate after auth.
@@ -355,10 +360,13 @@ export class AuthController {
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
             // 11. Build response. Phone collection is not forced during onboarding.
-            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
+            const [defaultWorkspaceId, isPartner] = await Promise.all([
+                workspaceService.resolveDefaultWorkspaceId(user.id),
+                isPartnerUser(user),
+            ]);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId, { isPartner });
 
             // 12. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -511,10 +519,14 @@ export class AuthController {
                 return reply.status(404).send({ error: 'User not found' });
             }
 
-            const storeRows = await db.select({ id: ecommerceStores.id })
-                .from(ecommerceStores)
-                .where(and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true)))
-                .limit(1);
+            const [storeRows, isPartner] = await Promise.all([
+                db.select({ id: ecommerceStores.id })
+                    .from(ecommerceStores)
+                    .where(and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true)))
+                    .limit(1),
+                // Restricted sessions never carry it — same rule as the link flow.
+                request.user?.embeddedPlatform ? Promise.resolve(false) : isPartnerUser(user),
+            ]);
 
             return reply.send({
                 id: user.id,
@@ -523,6 +535,7 @@ export class AuthController {
                 email: user.email,
                 hasEmail: !!user.email,
                 isAdmin: user.isAdmin || false,
+                isPartner,
                 hasEcommerceStore: storeRows.length > 0,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
@@ -779,10 +792,13 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
+            const [defaultWorkspaceId, isPartner] = await Promise.all([
+                workspaceService.resolveDefaultWorkspaceId(user.id),
+                isPartnerUser(user),
+            ]);
             const response: AuthResponse = authService.createAuthResponse(user, token, '', {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId, { isPartner });
 
             return reply.send(response);
         } catch (error) {
@@ -894,7 +910,12 @@ export class AuthController {
                 : workspaces;
             const defaultWorkspaceId = scope?.workspaceId
                 ?? await workspaceService.resolveDefaultWorkspaceId(updatedUser.id);
-            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, scopedWorkspaces, defaultWorkspaceId);
+            // A RESTRICTED session never shows the Partner entry, for the same
+            // reason generateToken force-clears isAdmin on one: the credential
+            // proves a store, not a person. The portal's own controller rejects
+            // `embeddedPlatform` sessions with 401, so the entry would be dead.
+            const isPartner = scope ? false : await isPartnerUser(updatedUser);
+            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, scopedWorkspaces, defaultWorkspaceId, { isPartner });
             return reply.send(response);
 
         } catch (error) {

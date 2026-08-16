@@ -8,8 +8,10 @@ import { partnerController } from '../controllers/partner';
  *
  * Access model: any authenticated user may call; the controller resolves
  * whether the caller is a registered partner (via partners.user_id, or a
- * lower(email) match on first visit) and returns 403 otherwise. There is no
- * partner "role" flag on the session — the partners table is the authority.
+ * `users.phone` match on first visit — never email, see the anchor rationale
+ * on resolvePartnerForUser) and returns 403 otherwise. The session's
+ * `isPartner` flag only decides whether the nav entry renders; the partners
+ * table is the authority for access, re-read on every call.
  */
 export default async function partnerRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

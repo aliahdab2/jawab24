@@ -591,6 +591,7 @@ export class AuthService {
         settings?: { dashboardLanguage: string },
         workspaces: AuthResponse['workspaces'] = [],
         defaultWorkspaceId: string | null = null,
+        flags: { isPartner?: boolean } = {},
     ): AuthResponse {
         return {
             token,
@@ -603,6 +604,10 @@ export class AuthService {
                 phone: user.phone,
                 picture: user.picture || undefined,
                 isAdmin: user.isAdmin || false,
+                // Kept a caller-supplied flag rather than resolved here: this
+                // method is synchronous and pure, and the demo plugin builds a
+                // response for a user it must never look up.
+                isPartner: flags.isPartner ?? false,
             },
             settings,
             workspaces,

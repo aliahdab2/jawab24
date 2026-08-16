@@ -55,6 +55,11 @@ vi.mock('../../src/services/pages', () => ({
     pagesService: { syncFromFacebook: vi.fn().mockResolvedValue(undefined) },
 }));
 
+// The deep-link user payload carries partner status for the nav entry.
+vi.mock('../../src/services/partnerAccess', () => ({
+    isPartnerUser: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'ws-1', role: 'owner' }]),

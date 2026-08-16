@@ -146,7 +146,7 @@ export const authApi = {
     api.post('/auth/facebook/native', { accessToken }),
 
   getProfile: () =>
-    api.get('/auth/me'),
+    api.get<{ id: string; isAdmin?: boolean; isPartner?: boolean; hasEcommerceStore?: boolean }>('/auth/me'),
 
   logout: () =>
     api.post('/auth/logout'),

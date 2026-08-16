@@ -14,6 +14,7 @@
   "business": "Your Business",
   "integrations": "Stores",
   "team": "Team",
+  "partner": "Partner Portal",
   "theme": "Theme",
   "workspace": "Workspace",
   "badgeUnreadComments": "{count, plural, one {# unread comment} other {# unread comments}}",
