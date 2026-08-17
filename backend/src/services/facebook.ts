@@ -910,6 +910,11 @@ export class FacebookService {
             this.logger.info('[Facebook] Subscribing page to webhooks', { pageId });
             await traced('subscribePageToWebhooks', () =>
                 fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                    // Replay-safe POST: subscribing an already-subscribed page is a no-op
+                    // (pages.ts re-subscribes on every sync for exactly that reason). Losing
+                    // this write leaves the page connected but silently webhook-less, so it
+                    // must keep its transport retry on ambiguous failures.
+                    semanticallyIdempotent: true,
                     params: {
                         // messaging_postbacks: the Post Reply «Read more» button tap. Without it Meta
                         // never delivers the postback, so existing pages must be re-subscribed.
@@ -928,6 +933,8 @@ export class FacebookService {
                 try {
                     await traced('subscribePageToWebhooks.messagesOnly', () =>
                         fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                            // Replay-safe: same converging write as above.
+                            semanticallyIdempotent: true,
                             params: {
                                 subscribed_fields: 'messages,messaging_postbacks',
                                 access_token: pageAccessToken,

@@ -808,6 +808,10 @@ describe('Facebook Service', () => {
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
                 {
+                    // The RFC 9110 escape hatch must stay on this call: without it a
+                    // transient blip at connect time loses the subscribe with no retry,
+                    // leaving the page connected but silently webhook-less.
+                    semanticallyIdempotent: true,
                     params: {
                         subscribed_fields: 'feed,messages,messaging_postbacks',
                         access_token: 'page_token_abc',
@@ -846,12 +850,12 @@ describe('Facebook Service', () => {
             expect(fbAxios.post).toHaveBeenNthCalledWith(1,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'feed,messages,messaging_postbacks', access_token: 'page_token' } },
+                { semanticallyIdempotent: true, params: { subscribed_fields: 'feed,messages,messaging_postbacks', access_token: 'page_token' } },
             );
             expect(fbAxios.post).toHaveBeenNthCalledWith(2,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'messages,messaging_postbacks', access_token: 'page_token' } },
+                { semanticallyIdempotent: true, params: { subscribed_fields: 'messages,messaging_postbacks', access_token: 'page_token' } },
             );
         });
 

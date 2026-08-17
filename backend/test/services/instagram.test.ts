@@ -248,7 +248,9 @@ describe('InstagramService', () => {
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 `${BASE}/comment-1`,
                 { hide: true },
-                { params: { access_token: pageAccessToken } },
+                // semanticallyIdempotent: hiding twice converges — the write must keep
+                // its transport retry on ambiguous failures (fbAxios escape hatch).
+                { semanticallyIdempotent: true, params: { access_token: pageAccessToken } },
             );
         });
 

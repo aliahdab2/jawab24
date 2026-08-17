@@ -38,6 +38,11 @@ import { facebookService } from '../services/facebook';
 import { maybeDecryptToken, maybeEncryptToken } from '../services/facebookCrypto';
 import { FacebookApiError, isTokenRevoked } from '../utils/fbGraphErrors';
 import { clearReconnectAlertClaims } from '../services/pageTokenRecovery';
+import { installGraphRetryConsoleObserver } from '../lib/graphRetryMetrics';
+
+// Standalone entrypoint — index.ts's observer bootstrap never runs here, so wire the
+// console-backed one or every Graph retry decision below is silent and uncounted.
+installGraphRetryConsoleObserver();
 
 interface Args {
     apply: boolean;

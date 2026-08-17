@@ -11,7 +11,7 @@ import { vi } from 'vitest';
 // for files whose module graph actually pulls axios in — which were already
 // paying the import. Instances from axios.create merge defaults at create time,
 // so they inherit the throwing adapter too. The rejection carries no
-// `code`/`response`, so fbAxios's getRetryDelay classifies it as non-retryable —
+// `code`/`response`, so fbAxios's classifyRetry returns null (non-retryable) —
 // no backoff, no hang. A test file's own vi.mock('axios') still wins over this
 // one. Regression-pinned by test/lib/networkGuard.test.ts.
 vi.mock('axios', async (importOriginal) => {

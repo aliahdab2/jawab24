@@ -66,9 +66,24 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   `dmFailure` + `suppressedPublic` fields (no behavior change yet)
 - ✅ Step 4: retry queue verified — BullMQ has 3 attempts + exp backoff
   ([`replyQueue.ts:27-35`](../backend/src/lib/replyQueue.ts#L27-L35)), `fbAxios`
-  has axios-level retries for 429/5xx/4/17/32. Currently unused for DM failures
+  has axios-level retries. Currently unused for DM failures
   because sender.ts catches & swallows; step 5 lets `transient` propagate so
   BullMQ picks them up.
+  > **Corrected 2026-08-17.** This step recorded `fbAxios` as retrying
+  > "429/5xx/4/17/32". Code 17 was never implemented, and blanket 5xx/network
+  > retries were the cause of a duplicate public comment reply: `fbAxios` replayed
+  > `POST /{comment-id}/comments` after an ambiguous failure, and Meta applies no
+  > duplicate protection to that write. `fbAxios` now retries a **non-idempotent**
+  > request (POST/PATCH) only when the failure PROVES it was never applied — 429,
+  > FB codes 4/32, DNS failure, refused connection — or when the call site declares
+  > the write semantically idempotent (`semanticallyIdempotent: true`, RFC 9110's
+  > own escape hatch; used by converging writes like `subscribed_apps`, comment
+  > hide, and the mention-guard repair). Ambiguous failures (5xx,
+  > ECONNABORTED/ECONNRESET/ETIMEDOUT/EPIPE) are otherwise retried for idempotent
+  > methods only, per RFC 9110 §9.2.2, and handed to BullMQ job-level retry —
+  > the layer that owns the de-duplication context. Note `whatsapp.ts` does NOT
+  > go through `fbAxios` — the Cloud API client uses a bare axios with no
+  > transport retry. See [`fbAxios.ts`](../backend/src/lib/fbAxios.ts).
 - ✅ Step 5: **sender.ts refactored** — privacy leak fixed for Facebook.
   Private-mode DM failure no longer posts the full reply publicly. Dual-mode
   DM failure posts the short nudge only on `window_expired`, nothing on any

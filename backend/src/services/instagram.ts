@@ -217,6 +217,9 @@ export class InstagramService {
                     hide: true,
                 },
                 {
+                    // Replay-safe POST: hiding an already-hidden comment is a no-op — the
+                    // write converges, so it keeps its transport retry on ambiguous failures.
+                    semanticallyIdempotent: true,
                     params: {
                         access_token: cred.accessToken,
                     },

@@ -197,7 +197,13 @@ export class CommentMentionGuard {
         await fbAxios.post(
             `${FACEBOOK_GRAPH_API}/${encodeURIComponent(commentId)}`,
             { message: plainText },
-            { params: { access_token: accessToken } },
+            {
+                // Replay-safe POST: this UPDATES our own existing comment to a fixed
+                // text — replaying converges on the same final state, it cannot create
+                // a second comment.
+                semanticallyIdempotent: true,
+                params: { access_token: accessToken },
+            },
         );
     }
 

@@ -75,6 +75,7 @@ import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
 import { createRequestLogger } from "./types";
+import { installGraphRetryObserver } from "./lib/graphRetryMetrics";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
 import swaggerPlugin from "./plugins/swagger";
@@ -344,6 +345,15 @@ const start = async () => {
     // Start the reply processing worker
     // Create a logger adapter for the worker
     const workerLogger = createRequestLogger(server.log);
+
+    // Graph retry visibility. ONE wiring point covers this whole server process: fbAxios
+    // is a module singleton and the reply worker runs in this same process, so every Graph
+    // call — HTTP request path and worker alike — reports through it. Without this the
+    // interceptor's decisions stay silent, which is how a replayed POST duplicated a public
+    // comment unnoticed. Standalone tsx scripts do NOT run this bootstrap — they wire
+    // installGraphRetryConsoleObserver() themselves (see graphRetryMetrics.ts).
+    installGraphRetryObserver(workerLogger);
+
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
 
