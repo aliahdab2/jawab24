@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { ReplyStyleCard } from '@/components/settings/ReplyStyleCard';
 import type { SettingsState } from '@/components/settings/types';
+import enSettings from '@/i18n/en/settings.json';
 
 // Mock the lazy-loaded test modal as a probe exposing WHICH page it was opened
 // on — the default-target pins below assert the card's page selection without
@@ -35,6 +36,12 @@ vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 import { pagesApi } from '@/lib/api';
 import { makeSettings } from '../../testUtils/settingsFactory';
 import { intlState } from '../../testUtils/intlState';
+
+// The page-scope editor's accessible name comes from the SHIPPED string, not a
+// copy of it. Five selectors hardcoded «Persona for {page}» and all five broke
+// the day the label was reworded — the same drift Rule 10.6 bans in e2e.
+const pageEditorName = (page: string) =>
+  enSettings.replyStyle.pageBrandVoice.replace('{page}', page);
 
 describe('ReplyStyleCard', () => {
   beforeEach(() => {
@@ -218,7 +225,7 @@ describe('ReplyStyleCard', () => {
       const saveBtn = screen.getByRole('button', { name: /Save page persona/i });
       expect(saveBtn).toBeDisabled();
 
-      const textarea = screen.getByRole('textbox', { name: /Persona for Resort Page/i });
+      const textarea = screen.getByRole('textbox', { name: pageEditorName('Resort Page') });
       fireEvent.change(textarea, { target: { value: 'Info desk only' } });
       expect(saveBtn).not.toBeDisabled();
       fireEvent.click(saveBtn);
@@ -276,7 +283,7 @@ describe('ReplyStyleCard', () => {
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
 
-      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('Saved workspace persona');
+      expect(screen.getByRole('textbox', { name: pageEditorName('Resort Page') })).toHaveValue('Saved workspace persona');
     });
 
     it('a disconnected page WITH an override stays in the switcher (visible and revertable)', async () => {
@@ -307,13 +314,13 @@ describe('ReplyStyleCard', () => {
       await screen.findByText(/Editing persona for/i);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
-      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('English workspace persona');
+      expect(screen.getByRole('textbox', { name: pageEditorName('Resort Page') })).toHaveValue('English workspace persona');
 
       // Merchant flips the dashboard locale mid-scope. The draft must follow —
       // keeping the English text would save it under the Arabic key.
       intlState.locale = 'ar';
       rerender(<ReplyStyleCard settings={settings} setSettings={vi.fn()} savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti} />);
-      expect(screen.getByRole('textbox', { name: /Persona for Resort Page/i })).toHaveValue('شخصية عربية');
+      expect(screen.getByRole('textbox', { name: pageEditorName('Resort Page') })).toHaveValue('شخصية عربية');
     });
 
     it('save shows an explicit success notice', async () => {
@@ -325,7 +332,7 @@ describe('ReplyStyleCard', () => {
       await screen.findByText(/Editing persona for/i);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
-      fireEvent.change(screen.getByRole('textbox', { name: /Persona for Resort Page/i }), { target: { value: 'Info desk only' } });
+      fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), { target: { value: 'Info desk only' } });
       fireEvent.click(screen.getByRole('button', { name: /Save page persona/i }));
 
       expect(await screen.findByText(/Page persona saved/i)).toBeInTheDocument();
@@ -468,6 +475,126 @@ describe('ReplyStyleCard', () => {
       expect(info).toBeDisabled();
       fireEvent.click(info);
       expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Persona copy follows the assistant type (2026-08-17) ──────────────────
+  // The placeholder used to instruct EVERY merchant to write «ask for the
+  // customer's name and phone». In info mode the ai-worker's INFO-DESK block
+  // explicitly overrides that instruction; in sales mode it changes nothing,
+  // because asking is demonstrated by the static prefix, not by the persona.
+  // So the card taught a behavioural line that was inert in one mode and
+  // reversed in the other — and nothing on screen said so.
+  describe('persona copy follows the reply mode', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+    const salesPlaceholder = enSettings.replyStyle.brandVoicePlaceholder;
+    const infoPlaceholder = enSettings.replyStyle.brandVoicePlaceholderInfo;
+    const infoNote = enSettings.replyStyle.infoModeNote;
+
+    it('sales mode gets the sales placeholder and pays nothing for the info note', () => {
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'sales' })} setSettings={vi.fn()} workspaceId="mode-ws" />);
+
+      expect(screen.getByPlaceholderText(salesPlaceholder)).toBeInTheDocument();
+      // The extra line lands ONLY where an instruction would be reversed. A card
+      // that grows on every merchant to warn the few is the wrong trade on a phone.
+      expect(screen.queryByText(infoNote)).not.toBeInTheDocument();
+    });
+
+    it('info mode swaps the placeholder and states that a collect instruction will not run', () => {
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" />);
+
+      expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
+      expect(screen.getByText(infoNote)).toBeInTheDocument();
+    });
+
+    it('the copy follows the DRAFT, so guidance flips the moment the merchant picks a mode', () => {
+      let current = makeSettings({ replyMode: 'sales' });
+      const setSettings = vi.fn((next: SettingsState) => { current = next; });
+      const { rerender } = render(
+        <ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />,
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      rerender(<ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />);
+
+      // Waiting for the save would leave the merchant writing against the old
+      // guidance for the whole edit.
+      expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
+    });
+
+    it('outside the pilot the copy stays sales even when settings.replyMode reads info', () => {
+      // No mode control is rendered there, so info copy would describe a choice
+      // the merchant cannot see, make, or undo.
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="other-ws" />);
+
+      expect(screen.getByPlaceholderText(salesPlaceholder)).toBeInTheDocument();
+      expect(screen.queryByText(infoNote)).not.toBeInTheDocument();
+    });
+
+    it('a page pinned to info gets the info copy though the workspace default is sales', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [{ ...PAGES[0], replyMode: 'info' }, PAGES[1]],
+      } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'sales' })}
+          setSettings={vi.fn()}
+          savedReplyMode="sales"
+          workspaceId="mode-ws"
+        />,
+      );
+      await screen.findByText(/Editing persona for/i);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // A page scope must describe what THAT page runs, not the workspace default.
+      expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
+      expect(screen.getByText(infoNote)).toBeInTheDocument();
+    });
+  });
+
+  // ── Tone control (2026-08-17) ─────────────────────────────────────────────
+  describe('tone control', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+
+    it('every tone option clears the 44px touch floor the rest of the card uses', () => {
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      const tones = screen.getAllByRole('radio');
+      expect(tones).toHaveLength(3);
+
+      // jsdom has no layout, so the floor is pinned on the class that sets it.
+      // The reply-mode options above already use min-h-[44px]; the tone strip was
+      // 'px-2.5 py-1 text-xs' (~24px) — the only control on the card below the floor.
+      tones.forEach((tone) => expect(tone.className).toContain('min-h-[44px]'));
+    });
+
+    it('describes the SELECTED tone, and the line follows the selection', () => {
+      const { rerender } = render(
+        <ReplyStyleCard settings={makeSettings({ replyStyle: 'casual' })} setSettings={vi.fn()} />,
+      );
+      expect(screen.getByText(enSettings.replyStyle.casualDesc)).toBeInTheDocument();
+      expect(screen.queryByText(enSettings.replyStyle.professionalDesc)).not.toBeInTheDocument();
+
+      rerender(<ReplyStyleCard settings={makeSettings({ replyStyle: 'professional' })} setSettings={vi.fn()} />);
+      expect(screen.getByText(enSettings.replyStyle.professionalDesc)).toBeInTheDocument();
+    });
+
+    it('says the tone is workspace-wide ONLY inside a page scope, where that is invisible', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
+      await screen.findByText(/Editing persona for/i);
+
+      // In «All pages» the scope already says it — a second line would repeat it.
+      expect(screen.queryByText(enSettings.replyStyle.tonePageNote)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+      expect(screen.getByText(enSettings.replyStyle.tonePageNote)).toBeInTheDocument();
     });
   });
 });

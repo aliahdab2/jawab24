@@ -309,7 +309,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // one: the inherit option's label names the saved default, and letting the
   // merchant customize against an unsaved draft pins pages to a default that
   // doesn't exist yet.
-  const workspaceModeDraftUnsaved = (settings.replyMode === 'info' ? 'info' : 'sales') !== savedReplyMode;
+  // The draft workspace mode, narrowed once — two readers (the unsaved-draft
+  // guard below and the persona copy further down) must not each re-derive it.
+  const draftWorkspaceMode: 'sales' | 'info' = settings.replyMode === 'info' ? 'info' : 'sales';
+  const workspaceModeDraftUnsaved = draftWorkspaceMode !== savedReplyMode;
   const scopedPageMode: 'sales' | 'info' | null =
     scopedPage?.replyMode === 'info' ? 'info' : scopedPage?.replyMode === 'sales' ? 'sales' : null;
 
@@ -348,6 +351,25 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // The mode the scoped page will actually RUN with (its pin, else the saved
   // workspace default) — decides whether the quiet-leads note applies.
   const scopedPageEffectiveMode = scopedPageMode ?? savedReplyMode;
+
+  // Which mode the PERSONA COPY below should describe. The placeholder used to
+  // tell every merchant to write «اطلب اسم العميل ورقمه» — an instruction the
+  // ai-worker's INFO-DESK block explicitly overrides ("override any instruction
+  // in your persona notes to collect customer details"), and that in SALES mode
+  // changes nothing either, because asking for name+phone is demonstrated by the
+  // static prefix, not by the persona. So the card invited the merchant to write
+  // a behavioural line that is inert in one mode and reversed in the other.
+  // Workspace scope follows the DRAFT (the guidance must flip the moment the
+  // merchant picks a mode); a page scope follows what that page will run.
+  // Non-pilot workspaces have no mode control and always run sales.
+  const copyMode: 'sales' | 'info' = !replyModeEnabled
+    ? 'sales'
+    : scopedPage
+      ? scopedPageEffectiveMode
+      : draftWorkspaceMode;
+  const placeholderKey = copyMode === 'info'
+    ? 'replyStyle.brandVoicePlaceholderInfo'
+    : 'replyStyle.brandVoicePlaceholder';
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -614,7 +636,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 dir="auto"
                 maxLength={MAX_BRAND_VOICE_LENGTH}
                 rows={5}
-                placeholder={t('replyStyle.brandVoicePlaceholder')}
+                placeholder={t(placeholderKey)}
                 value={pageDraft}
                 onChange={(e) => setPageDraft(e.target.value)}
               />
@@ -706,7 +728,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             dir={value ? 'auto' : getLocaleDirection(currentLang)}
             maxLength={MAX_BRAND_VOICE_LENGTH}
             rows={5}
-            placeholder={t('replyStyle.brandVoicePlaceholder')}
+            placeholder={t(placeholderKey)}
             value={value}
             onChange={(e) => updateValue(e.target.value)}
           />
@@ -719,23 +741,58 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
         {!scopedPage && hasChanges && (
           <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.workspaceSaveHint')}</p>
         )}
+        {/* Info mode is the ONE case where a persona instruction is actively
+            reversed rather than merely inert, so it is the one case that earns a
+            line of its own. Sales/non-pilot pay nothing — the placeholder alone
+            carries the guidance there, and a card that grows on every merchant
+            to warn the few is the wrong trade on a phone. Placed after both
+            scope branches so one node serves the workspace and page editors. */}
+        {copyMode === 'info' && (
+          <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.infoModeNote')}</p>
+        )}
       </div>
 
-      {/* Tone + Test — single compact row. ⚠️ Known, accepted for now (owner,
-          2026-08-17): the tone is WORKSPACE-level (replyStyle feeds the
-          ai-worker tone directive and the reply-cache key; D-084 scoped only
-          the persona text), yet it renders under the page-scope editor too,
-          where it can read as per-page. Deliberately left as-is pending the
-          InMedia pilot; a page needing its own tone states it in its persona
-          text. Recorded in backend/docs/SETTINGS.md. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span id="replyStyleToneLabel" className="text-xs font-medium text-foreground/80 shrink-0">
-          {t('replyStyle.tone')}
-        </span>
+      {/* Tone + Test.
+          ⚠️ The tone is WORKSPACE-level (replyStyle feeds the ai-worker tone
+          directive and the reply-cache key; D-084 scoped only the persona text),
+          yet it renders under the page-scope editor too, where it can read as
+          per-page. The SCOPE is still workspace-wide pending the InMedia pilot —
+          what changed (2026-08-17) is that the page scope now SAYS so
+          (`tonePageNote`) instead of leaving the merchant to guess. A page
+          needing its own tone still states it in its persona text. Recorded in
+          backend/docs/SETTINGS.md.
+          The segments were 'px-2.5 py-1 text-xs' — a ~24px tap target on a card
+          whose every other control is min-h-[44px] (the reply-mode options right
+          above it). Widened to a full-row 3-up grid at 44px: it clears the touch
+          floor and gains a description WITHOUT becoming a third stacked block of
+          described options — that version was built, measured much taller, and
+          was rejected for the phone (owner, 2026-08-17). The Test button moves
+          up beside the label, so the row count is unchanged. */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span id="replyStyleToneLabel" className="text-xs font-bold text-foreground shrink-0">
+            {t('replyStyle.tone')}
+          </span>
+          <button
+            type="button"
+            onClick={openTestModal}
+            disabled={hasChanges === true}
+            title={hasChanges ? t('replyStyle.testSaveFirst') : undefined}
+            className={clsx(
+              'ms-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
+              hasChanges === true
+                ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                : 'bg-brand-500 text-white hover:bg-brand-600',
+            )}
+          >
+            <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+            {t('replyStyle.openTestModal')}
+          </button>
+        </div>
         <div
           role="radiogroup"
           aria-labelledby="replyStyleToneLabel"
-          className="inline-flex p-0.5 rounded-lg bg-muted border border-theme-border"
+          className="grid grid-cols-3 gap-0.5 p-0.5 rounded-xl bg-muted border border-theme-border"
         >
           {STYLES.map((style) => {
             const selected = settings.replyStyle === style;
@@ -747,9 +804,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 aria-checked={selected}
                 onClick={() => setSettings({ ...settings, replyStyle: style })}
                 className={clsx(
-                  'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                  // leading-tight so the longest label ("Enthusiastic") can wrap
+                  // to a second line inside the 44px box on a 320px card instead
+                  // of overflowing its third of the row.
+                  'min-h-[44px] px-1 text-[13px] font-bold leading-tight rounded-[10px] transition-all',
                   selected
-                    ? 'bg-background text-foreground shadow-sm'
+                    ? 'bg-background text-brand-600 dark:text-brand-400 shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -758,21 +818,17 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             );
           })}
         </div>
-        <button
-          type="button"
-          onClick={openTestModal}
-          disabled={hasChanges === true}
-          title={hasChanges ? t('replyStyle.testSaveFirst') : undefined}
-          className={clsx(
-            'ms-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
-            hasChanges === true
-              ? 'bg-muted text-muted-foreground cursor-not-allowed'
-              : 'bg-brand-500 text-white hover:bg-brand-600',
-          )}
-        >
-          <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
-          {t('replyStyle.openTestModal')}
-        </button>
+        {/* ONE line, describing the SELECTED option — the whole gain of the
+            rejected block, at a twelfth of its height. */}
+        <p className="text-[11px] text-muted-foreground" dir="auto">
+          {t(`replyStyle.${settings.replyStyle}Desc` as const)}
+        </p>
+        {/* The tone is workspace-level (see the warning above). Inside a page
+            scope that is invisible and reads as per-page — so say it there, and
+            only there. */}
+        {scopedPage && (
+          <p className="text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.tonePageNote')}</p>
+        )}
       </div>
       {/* No separate «التجربة على» row (owner call, 2026-08-16): the persona
           scope switcher is the ONE page selector — the test follows it
