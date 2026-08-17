@@ -2,10 +2,34 @@
 
 > Executable, in-order checklist for taking the Salla integration from "code done, dark" to
 > live on the Salla App Store. Companion to `.planning/SALLA_LAUNCH_ACTIONS.md` (specs, portal
-> recon, auto-responder text), `.planning/SALLA_LISTING_BRIEF.md` (listing copy), and
+> recon, auto-responder text), `.planning/SALLA_LISTING_BRIEF.md` (listing copy),
+> `docs/SALLA_TEST_PLAN.md` (what must be green and how to prove it), and
 > `DECISIONS.md` D-012 (Easy-Mode claim binding).
 > Created 2026-07-10, while both Salla and WhatsApp were staged dark
 > (WhatsApp awaiting Meta App Review; Salla awaiting Partners ID verification).
+
+## ⛔ STATUS 2026-08-17 — APPROVED, NOT PUBLISHED, AND NOT SAFE TO PUBLISH YET
+
+Salla approval is in hand. **Phase 2 completed while Phase 1 was never applied**, so the
+preconditions that were supposed to bind at submission time are still open. A live check on
+2026-08-17 found:
+
+| | State |
+|---|---|
+| Article-5 Stripe guard (D-065 / #695) | ✅ live in the running image |
+| Prod commit | ❌ `c6afb8e2` — **four commits behind `main`**, missing the tracking fix `4c6469a1` (#798) |
+| `SALLA_EASY_MODE_CLAIM_ENABLED` | ❌ absent |
+| `SALLA_APP_STORE_URL` | ❌ absent |
+| `SALLA_SKIP_PULL_REFRESH_EASY_MODE` | ❌ absent |
+| `shipping.read` in the portal | ❓ unticked as far as we know |
+
+**Publishing in this state strands every install.** A merchant installs → `app.store.authorize`
+stages a pending install → the claim endpoints 404 because the flag is off → `connectStore`
+falls back to the OAuth authorize URL, which Salla 404s for Easy-Mode apps (D-031). The
+merchant has installed the app with no route to their account, and unpublishing is **not
+self-serve**.
+
+Work Phase 2.5 below, then Phase 3. Do not skip Tier 0 of the test plan.
 
 ## How the switches work (read once)
 
@@ -24,11 +48,12 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
 
 ## Phase 0 — Prerequisites (before submission day)
 
-- [ ] **Partners ID verification complete** (founder; THE gate — the submission form is
-      unreachable until verified). Non-Saudi individual path: passport bio-data page as PDF +
-      international (non-KSA) bank with SWIFT/IBAN, holder name matching passport in English.
-      Portal → dropdown by your name → Account Settings → Verify My Account.
-      Start immediately: review time unknown, longest lead item.
+- [x] **Partners ID verification complete — ✅ APPROVED 2026-08-10** (5th request; the
+      defect was the payout form's account number, not any certificate — Individual /
+      non-Saudi path). ⛔ Never re-order a bank certificate or revisit Individual-vs-Company.
+      Transferable lesson: when a rejection reason repeats byte-identically, **ask support
+      which field fails** before ordering documents (support answered in ~29 min; each blind
+      cycle cost ~1 week).
 - [x] **Publish-timing strategy SETTLED (owner, 2026-07-18): no support email — accept
       auto-publish on approval.** Target is approval-in-hand without a *marketing* launch:
       submission = willingness to be listed; an unpromoted listing gets near-zero traffic
@@ -71,7 +96,12 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       `STRIPE_TEST_SECRET_KEY` restored (`gh secret set …`) so the pipeline + auto-deploy work
       on launch day (manual `scripts/deploy-production.sh` bypasses GitHub if needed).
 
-## Phase 1 — Submission-day preconditions (same day, BEFORE clicking submit)
+## Phase 1 — Submission-day preconditions ⚠️ NEVER APPLIED — carried into Phase 2.5
+
+> These were meant to be done *before* clicking submit. Submission happened without them, so
+> they are now **pre-publish** preconditions instead. The env flips and the portal
+> cross-check below are restated as executable steps in **Phase 2.5** — do them there, once,
+> and use this section as the reference for *why* each one matters.
 
 - [ ] **Open the WhatsApp canary first** — the listing copy claims WhatsApp as shipped, so it
       must be genuinely available at review time (`docs/WHATSAPP_LAUNCH_RUNBOOK.md` Phase 5:
@@ -92,37 +122,65 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
         added must **reconnect** to pick up the new grant.
       - Webhook secret in the portal == prod `SALLA_WEBHOOK_SECRET`.
       - Switch the production app to **Easy Mode** (mandatory for published apps).
-- [ ] **Prod env flips** (backend.env, then container recreate — NOT plain `docker restart`;
-      use `up -d --force-recreate` per deploy convention):
+- [ ] **Prod env flips** → **executed in Phase 2.5** (backend.env, then container recreate —
+      NOT plain `docker restart`; use `up -d --force-recreate` per deploy convention):
       - `SALLA_EASY_MODE_CLAIM_ENABLED=true` (binding merged 2026-07-18 — verify deployed)
       - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` (re-push confirmed in the 2026-07-18 dry-run)
-- [ ] **Live smoke**: from a browser, connect the dogfood Salla store against PROD
-      (`jawab24.com`) via the production app → store row created with refresh token +
+      - `SALLA_APP_STORE_URL=<listing URL>` (was Phase 3; the URL is known at approval)
+      **Verified absent from prod on 2026-08-17** — none of the three is set.
+- [ ] **Live smoke** → superseded by `docs/SALLA_TEST_PLAN.md` **Tier 3**, which covers this
+      plus the order/shipment/tracking gates: store row created with refresh token +
       `token_expires_at`; products sync; webhook delivery 200s in nginx/backend logs;
       test-reply returns real prices.
 
-## Phase 2 — Submit
+## Phase 2 — Submit — ✅ DONE, APPROVED 2026-08-17
 
-- [ ] Partners portal → production app → **"Start publishing your App"** (agrees to Apps T&C).
-      Fill the 6 sections: Basic Info, App Configurations, App Features, Pricing
+- [x] Partners portal → production app → **"Start publishing your App"** (agrees to Apps T&C).
+      6 sections: Basic Info, App Configurations, App Features, Pricing
       (**Salla-managed billing is mandatory for paid apps** — launch is free-tier-only per the
       2026-05-30 decision, so no billing integration needed), Contact, Service Trial.
-- [ ] Expect **5–10 day review**. Publish timing per Salla's answer to the §1 email
-      (owner strategy 2026-07-18: approval-in-hand, hold public go-live). Until Salla says
-      otherwise, assume **auto-publish on approval** (portal shows no hold control — recon
-      2026-06-12) and submit only when ready to be listed.
+- [x] Review completed; **approval in hand**. Assume **auto-publish on going live** (portal
+      shows no hold control — recon 2026-06-12).
 
-## Phase 3 — On approval (go-live verification)
+## Phase 2.5 — Catch up the skipped Phase-1 preconditions ⛔ DO THIS FIRST
 
-- [ ] **Set `SALLA_APP_STORE_URL=<public listing URL>`** in prod backend.env + container
-      recreate, so the dashboard "Connect Salla" action sends merchants to the listing
-      (the OAuth authorize URL is dead for Easy-Mode apps — D-031).
-- [ ] Install from the public App Store listing onto a real store → Easy-Mode token push lands →
-      pending install visible → claim flow binds it to the right Jawab24 account (owner-email
-      match — sign in with the account whose email matches the store's registered email) →
-      products sync.
-- [ ] `order.created` → customer SMS fires (dedup holds: exactly one shipped SMS, tracking
-      upgraded in place — see PR #411 design note).
+Phase 2 completed while Phase 1 was open. Close it before anything else — in this order,
+because each step depends on the previous.
+
+- [ ] **Deploy `main` to production.** Prod is behind and lacks the tracking fix (#798).
+      `./scripts/deploy-production.sh` (runs the full pre-deploy gate: lint, `tsc`,
+      schema drift, unit ×4 packages, backend integration, Playwright E2E).
+      ⚠️ Do not run two pre-deploy passes concurrently — it produces a false red.
+- [ ] **Set the three env vars** in `/var/www/jawab24/env/backend.env`:
+      - `SALLA_EASY_MODE_CLAIM_ENABLED=true`
+      - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`
+      - `SALLA_APP_STORE_URL=<public listing URL>` (known now that approval landed; makes
+        "Connect Salla" send merchants to the listing, since the OAuth authorize URL is dead
+        for Easy-Mode apps — D-031)
+      Then `docker compose up -d --force-recreate --no-deps <backend>` **and `nginx -s reload`**
+      — recreate changes the container IP and nginx 502s until reloaded.
+      ⚠️ The backend reads `env/backend.env`, **not** the root `.env`. Verify with
+      `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
+- [ ] **Tick `shipping.read`** on the production app in Salla Partners. Config alone does not
+      grant it: Easy Mode never calls `buildAuthUrl`, so `config.salla.scopes` has zero effect
+      in production and the portal is the whole grant.
+      **Ask Salla support whether a scope change on an approved app needs re-review.**
+- [ ] **Run Tier 0** of `docs/SALLA_TEST_PLAN.md` and confirm every row passes.
+
+## Phase 3 — Go-live verification (the rehearsal, before publishing)
+
+Full step table with pass criteria and failure handling: **`docs/SALLA_TEST_PLAN.md` Tier 3**.
+Summary of the gates:
+
+- [ ] Install onto a real store → token push → pending install → claim binds by owner-email
+      match → products sync.
+- [ ] Test reply quotes a real product name **and price** from the live catalog.
+- [ ] `order.created` → **exactly one** customer SMS.
+- [ ] `order.status.updated`(shipped) then `order.shipment.created` → still exactly one SMS,
+      tracking upgraded **in place** (PR #411 design note).
+- [ ] **`track_shipment` against a real shipped order** — the shipments call returns 200 (not
+      403), and the reply carries tracking number + courier + link. **This is the one gate
+      that has never been run: PR #798 was built from documentation, not from a live call.**
 - [ ] `app.uninstalled` → store deactivates.
 - [ ] Sentry quiet; `scripts/health-check.sh` green.
 - [ ] Docs same-commit rule: `SYSTEM_ANALYSIS.md` platform table → "Live in App Store";
