@@ -192,6 +192,10 @@ export const pagesApi = {
   // a record pins this page's own persona (backend auto-translates on save).
   updateBrandVoice: (id: string, brandVoiceNotesMulti: Record<string, string> | null) =>
     api.patch(`/pages/${id}/brand-voice`, { brandVoiceNotesMulti }),
+  // Per-page reply-mode override (D-085). null reverts the page to the
+  // workspace default; 'sales' | 'info' pins the mode for this page.
+  updateReplyMode: (id: string, replyMode: 'sales' | 'info' | null) =>
+    api.patch(`/pages/${id}/reply-mode`, { replyMode }),
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };

@@ -17,7 +17,15 @@ vi.mock('@/lib/api', () => ({
   pagesApi: {
     getAll: vi.fn(),
     updateBrandVoice: vi.fn(),
+    updateReplyMode: vi.fn(),
   },
+}));
+
+// The reply-mode section is workspace-gated (D-085 pilot). The flag fn itself
+// is the trivial allowlist pattern; the UI tests control it by workspace id.
+vi.mock('@/lib/featureFlags', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/featureFlags')>()),
+  isReplyModeVisible: (id: string | null | undefined) => id === 'mode-ws',
 }));
 
 vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
@@ -336,6 +344,96 @@ describe('ReplyStyleCard', () => {
       expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
       // Exactly one combobox exists — the scope switcher itself.
       expect(screen.getAllByRole('combobox')).toHaveLength(1);
+    });
+  });
+
+  // ── Reply mode (D-085) ────────────────────────────────────────────────────
+  describe('reply-mode section', () => {
+    const TWO_PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+    const QUESTION = /What should the assistant do when a customer wants to buy or book/i;
+
+    it('renders nothing for a workspace outside the pilot allowlist', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="other-ws" savedReplyMode="sales" />);
+      await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
+      expect(screen.queryByText(QUESTION)).not.toBeInTheDocument();
+    });
+
+    it('workspace scope: picking «Information source» updates the settings draft (saved via the settings path)', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      const setSettings = vi.fn();
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={setSettings} workspaceId="mode-ws" savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+
+      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ replyMode: 'info' }));
+      // Never a direct PATCH from the workspace scope — the page-bottom save owns it.
+      expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
+    });
+
+    it('shows the quiet-leads note exactly when the selection means info', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      const { rerender } = render(
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />,
+      );
+      await screen.findByText(QUESTION);
+      expect(screen.queryByText(/saved to Leads automatically without sending alerts/i)).not.toBeInTheDocument();
+
+      rerender(
+        <ReplyStyleCard key="info" settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="info" />,
+      );
+      expect(screen.getByText(/saved to Leads automatically without sending alerts/i)).toBeInTheDocument();
+    });
+
+    it('page scope: three options; picking one PATCHes immediately and pins the page', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: { ...TWO_PAGES[0], replyMode: 'info' } } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // Inherit option names the SAVED workspace default.
+      const inherit = screen.getByRole('radio', { name: /Default \(Sales assistant\)/i });
+      expect(inherit).toHaveAttribute('aria-checked', 'true');
+
+      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      await waitFor(() => expect(pagesApi.updateReplyMode).toHaveBeenCalledWith('p1', 'info'));
+      // The page's option list marks the pinned page in the switcher.
+      expect(await screen.findByText(/Resort Page — Information source/i)).toBeInTheDocument();
+    });
+
+    it('page scope: rolls the pin back and shows an error when the PATCH fails', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateReplyMode).mockRejectedValue({ response: { data: { code: 'REPLY_MODE_NOT_ENABLED' } } });
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/isn't enabled for your account/i);
+      // Rolled back: inherit is selected again.
+      expect(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i })).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('page scope: pins are disabled with a hint while the draft default is unsaved', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      // Draft says info, persisted default is still sales → block page pins.
+      render(
+        <ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />,
+      );
+      await screen.findByText(QUESTION);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      expect(screen.getByText(/Save the default first/i)).toBeInTheDocument();
+      const info = screen.getByRole('radio', { name: /Information source/i });
+      expect(info).toBeDisabled();
+      fireEvent.click(info);
+      expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
     });
   });
 });
