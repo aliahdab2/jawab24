@@ -25,9 +25,17 @@
   - ✅ `instagram_basic` — Approved (2026-04-07) — Instagram account access
   - ✅ `instagram_manage_comments` — Approved (2026-04-07) — reply to Instagram comments
   - ✅ `instagram_manage_messages` — Approved (2026-04-07) — Instagram DMs
-  - ⏳ `instagram_business_basic` — Not yet submitted (Instagram-direct; text ready at `.planning/IG_LOGIN_APP_REVIEW.md`)
-  - ⏳ `instagram_business_manage_messages` — Not yet submitted (Instagram-direct)
-  - ⏳ `instagram_business_manage_comments` — Not yet submitted (Instagram-direct)
+  - ⏳ `instagram_business_basic` — Standard Access only; not yet submitted (Instagram-direct; text ready at `.planning/IG_LOGIN_APP_REVIEW.md`)
+  - ⏳ `instagram_business_manage_messages` — Standard Access only; not yet submitted (Instagram-direct)
+  - ⏳ `instagram_business_manage_comments` — Standard Access only; not yet submitted (Instagram-direct)
+  - ⚠️ The dashboard shows the first two as **"App Review rejected"**. That verdict is
+    dated **6 March 2026**, predates the Instagram-direct feature, and rejected almost
+    every scope in that submission — the rest were resubmitted and approved (21 Mar,
+    7 Apr, 26 Jul) and serve production today. Its stated cause was the SCREENCAST
+    ("does not show a message being sent from your app UI and the same message
+    appearing in the native client"); Meta added that the "use case is allowed".
+    ⛔ Never press **"Request again"** on that page — it resubmits the whole old
+    bundle including the Facebook scopes already approved and in production.
 
 ### Instagram-direct — "Instagram API with Instagram Login" (no Facebook Page)
 
@@ -37,6 +45,29 @@ credentials, no Facebook Page involved. **Separate Meta app credentials**
 `config.instagram`) — never the Facebook app's. The whole feature is dark unless
 all three are set (`instagramLoginService.isConfigured`), and Standard Access
 covers our own test accounts, so App Review gates external merchants only.
+
+✅ **LIVE IN PRODUCTION since 2026-08-17.** Backend credentials configured, the
+frontend flag (`NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED`) built into the image, and
+the first real account — `@jawab24app` — connected end to end with
+`subscribeToWebhooks` reporting `ok`. ⚠️ Still Standard Access: only Instagram
+accounts holding a ROLE on app `774211662298446` (admin / developer / **Instagram
+Tester**) can complete the connect, so it is not yet usable by merchants. App
+Review for the three `instagram_business_*` scopes is the only remaining gate —
+draft and screencast plan in `.planning/IG_LOGIN_APP_REVIEW.md`.
+
+⭐⭐ **The two environment traps this feature hit, both costing hours:**
+1. `NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED` belongs in **`env/frontend.env`** on the
+   server, not the root `.env`: `deploy-on-server.sh build_images()` exports that
+   file into the shell before `docker-compose build`, and shell env WINS over the
+   root `.env` in compose interpolation. A full deploy with the var missing there
+   ships a correct-looking image whose flag is constant-folded to `false`.
+2. A **truncated `INSTAGRAM_APP_SECRET`** (20 chars instead of Meta's 32) makes
+   `POST api.instagram.com/oauth/access_token` answer with the canned message
+   *"Error validating verification code. Please make sure your redirect_uri is
+   identical to the one you used in the OAuth dialog request"*. The redirect URI
+   is a RED HERRING — Meta returns that text for a bad client secret too. Compare
+   the secret's length and hash against the dashboard value before touching any
+   redirect configuration.
 
 - **The row**: `facebook_page_id NULL`, `access_token ''`, and the credential in
   the encrypted `instagram_access_token` (+ `instagram_token_expires_at`,
