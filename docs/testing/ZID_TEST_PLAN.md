@@ -324,8 +324,21 @@ the first real delivery should be used to NARROW it, not merely to confirm it.
 ⚠️ **`plan_name` comes back in Arabic**, so the plan map keys on the Partner-Dashboard
 plan **id** first (3740 «الأعمال» → `business`, 3741 «الاحترافي» → `pro`) and falls back
 to the normalized Arabic name. Shopify's "lowercase display name == slug" shortcut does
-not port. The stray free plan **3956 «اختبار» is deliberately unmapped** — delete it in
-the dashboard; until then an install on it fails loud rather than activating a guess.
+not port. The free plan **3956 «اختبار» is deliberately unmapped** — an install on it
+fails loud rather than activating a guess.
+
+⛔ **It cannot be deleted, so that fail-loud path is PERMANENT, not a stopgap.** 3956 is a
+Zid **system** plan: `DELETE /v1/market/delete/7367/plan` returns
+`400 {"code":"cannot_delete_system_plan"}` (captured 2026-08-11, app 7367). The dashboard
+shows a delete icon for it regardless — the UI and the API disagree. So H-5's unknown-plan
+path is not a hypothetical: 3956 is a real, permanent, unmappable plan sitting in the same
+list as the two we sell.
+
+**Therefore capture this at step 5:** can a merchant actually END UP on 3956 — is it
+offered at install, or auto-assigned before a paid plan is chosen? If it is reachable,
+every such install books `unknown_plan` + Sentry and activates nobody, and we need a
+ruling (map it to no entitlement deliberately, vs. keep failing loud). If it is not
+reachable, the current behaviour is correct as-is and needs no change.
 
 ---
 
