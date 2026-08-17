@@ -11,7 +11,7 @@ import type { CtaButton } from '../metaMessaging';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
-export type ReplyMode = 'public' | 'private' | 'dual';
+export type CommentDeliveryMode = 'public' | 'private' | 'dual';
 
 export interface SendCommentReplyOptions {
     facebookCommentId: string;
@@ -26,7 +26,7 @@ export interface SendCommentReplyOptions {
     /** Post Reply option: mention the commenter in the PUBLIC comment. Never affects the DM
      *  (the customer is already the recipient there). Requires `fromId` + `platformPageId`. */
     tagCommenter?: boolean;
-    replyMode: ReplyMode;
+    replyMode: CommentDeliveryMode;
     dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
     isDemo?: boolean;
@@ -229,7 +229,7 @@ export class ReplySender {
         return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
     }
 
-    private logFailure(facebookCommentId: string, replyMode: ReplyMode, failure: DmFailure): void {
+    private logFailure(facebookCommentId: string, replyMode: CommentDeliveryMode, failure: DmFailure): void {
         const ctx = {
             facebookCommentId,
             replyMode,

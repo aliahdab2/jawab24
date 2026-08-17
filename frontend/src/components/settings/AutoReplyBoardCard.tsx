@@ -13,7 +13,7 @@ import { getLocaleDirection, isRTLLocale } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
 import { InlineFieldError } from './InlineFieldError';
 
-type ReplyMode = 'public' | 'private' | 'dual';
+type CommentDeliveryMode = 'public' | 'private' | 'dual';
 
 /**
  * The Auto-Reply board — ONE flat card answering "who replies, and where" (D-029).
@@ -70,7 +70,7 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
     if (settings.commentReplyMode === 'dual') dualNudgeAutoResize();
   }, [settings.commentReplyMode, dualNudgeRenderedValue, dualNudgeAutoResize]);
 
-  const modeOptions: Array<{ value: ReplyMode; label: string; recommended?: boolean }> = [
+  const modeOptions: Array<{ value: CommentDeliveryMode; label: string; recommended?: boolean }> = [
     { value: 'public', label: t('commentReplyMode.publicOnly') },
     { value: 'private', label: t('commentReplyMode.privateOnly') },
     { value: 'dual', label: t('commentReplyMode.dual'), recommended: true },

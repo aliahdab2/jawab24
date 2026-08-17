@@ -17,7 +17,7 @@ import {
     instagramMessagesEndpoint,
     type InstagramCredential,
 } from '../../instagramCredential';
-import type { ReplyMode } from '../sender';
+import type { CommentDeliveryMode } from '../sender';
 import type {
     CommentPlatformAdapter,
     PlatformPage,
@@ -125,7 +125,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         // happens (there is no Facebook Page to mint from), so the two agree.
         const base = opts.instagramCredential ?? pageLinkedInstagramCredential(opts.accessToken);
         const cred: InstagramCredential = { ...base, accessToken: opts.accessToken };
-        const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
+        const replyMode = (opts.userSettings.commentReplyMode || 'public') as CommentDeliveryMode;
         // Strip @mentions/URLs before language detection — their Latin characters
         // otherwise force an English nudge on Arabic pages.
         const effectiveLang = detectCommentLanguage(stripCommentNoise(opts.commentMessage), opts.postMessage);

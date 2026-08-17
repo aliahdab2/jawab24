@@ -2,7 +2,7 @@ import { pagesService } from '../../pages';
 import { postsService } from '../../posts';
 import { commentsService } from '../../comments';
 import { facebookService } from '../../facebook';
-import { replySender, ReplyMode } from '../sender';
+import { replySender, CommentDeliveryMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
 import { detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
@@ -90,7 +90,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         /** Post Reply option: mention (@-tag) the commenter in the public comment. */
         tagCommenter?: boolean;
     }): Promise<SendCommentResult> {
-        const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
+        const replyMode = (opts.userSettings.commentReplyMode || 'public') as CommentDeliveryMode;
         const isDemo = isDemoPlatformId(opts.platformPageId);
 
         // Pick a nudge variation in the comment's language. Strip @mentions/URLs first —
