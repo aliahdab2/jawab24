@@ -38,6 +38,26 @@ Run every row. All must pass before a single Tier-3 step.
 | 0.4 | `shipping.read` granted | Salla Partners portal → app → scopes | ticked. ⛔ Without it `track_shipment` returns status with no tracking (403 → degrade). Config alone does **not** grant it — Easy Mode never calls `buildAuthUrl` |
 | 0.5 | Article-5 Stripe guard live (D-065) | `docker exec jawab24-backend-<colour> sh -c "ls /app/backend/dist/config/sallaBilling.js"` | file present |
 | 0.6 | Container healthy after any recreate | `docker ps` + `scripts/health-check.sh` | all healthy; **`nginx -s reload` after `--force-recreate`** — recreate changes the container IP and nginx 502s until reloaded |
+| 0.7 | ⚠️ **Is the production app in Easy Mode?** | Salla Partners portal → app → mode | See the dead-end note below. Portal state — must be read by a human; not inspectable from the server |
+
+### ⚠️ 0.7 — the "Connect Salla" dead end (possible LIVE bug, not launch-only)
+
+Easy Mode is **mandatory for published apps**, so the production app is very likely already
+switched. In Easy Mode Salla drops the registered redirect URIs and
+`accounts.salla.sa/oauth2/auth` fails before any login screen (D-031, proven 2026-07-18).
+
+Meanwhile `connectStore` (`controllers/salla.ts`) returns the App Store listing URL **only**
+when `SALLA_EASY_MODE_CLAIM_ENABLED` **and** `SALLA_APP_STORE_URL` are both set. Neither is
+set in production. It therefore falls back to `oauthConnectStore` — handing the merchant the
+authorize URL that Salla no longer accepts.
+
+And the Salla card on `/integrations` keeps its **Connect button live** while showing the
+"coming soon" badge (deliberate — the flow stays open for early access, `integrations.tsx`).
+
+**⇒ If the app is already in Easy Mode, every merchant who clicks "Connect Salla" right now
+lands on a Salla error page.** This is not a launch-day concern; it is live today. Confirm
+0.7 first — if the app is in Easy Mode, Phase 2.5's env vars are an **urgent fix**, not a
+launch preparation.
 
 > Colour suffix alternates per deploy (`-blue` / `-green`). Read it from `docker ps`, don't assume.
 

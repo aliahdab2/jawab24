@@ -29,6 +29,13 @@ falls back to the OAuth authorize URL, which Salla 404s for Easy-Mode apps (D-03
 merchant has installed the app with no route to their account, and unpublishing is **not
 self-serve**.
 
+> ⚠️ **This may already be biting, before any publish.** Easy Mode is mandatory for published
+> apps, so the production app is likely switched already — and the Salla card on
+> `/integrations` keeps its **Connect button live** under the "coming soon" badge. If so,
+> merchants clicking "Connect Salla" **today** are being handed the dead authorize URL. First
+> action is therefore to read the app's mode in the portal (test plan Tier 0.7): if it is Easy
+> Mode, the Phase 2.5 env vars are an **urgent fix**, not launch prep.
+
 Work Phase 2.5 below, then Phase 3. Do not skip Tier 0 of the test plan.
 
 ## How the switches work (read once)
