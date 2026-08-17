@@ -5356,17 +5356,19 @@ const TEST_CASES: TestCase[] = [
     },
     {
         id: 778, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
-        message: 'طيب جهزولي واحد منهم',
+        message: 'تمام، جهزولي ياه',
         page: 'electronics',
         conversationHistory: [
             { role: 'user', content: 'عندكم لابتوبات للدراسة؟' },
-            { role: 'assistant', content: 'نعم! عنا لابتوبات تبدأ من 2500 ريال.' },
+            { role: 'assistant', content: 'نعم! عنا MacBook Air M3 يبدأ من 5200 ريال.' },
+            { role: 'user', content: 'قياس 13 بوصة بكم؟' },
+            { role: 'assistant', content: 'MacBook Air M3 قياس 13 بوصة بـ5200 ريال.' },
         ],
         expected: {
             intent: ['PURCHASE_INTENT'],
             replyContainsAny: ['اسمك', 'رقمك', 'بيانات'],
         },
-        notes: 'ATTRIBUTION CONTROL (mirror of 784, different page): a sales-mode page at the same thread depth must still ask for order details — today\'s Ex-14 default. If this stops firing, the DEFAULT mode regressed and Cat 77\'s clean results can no longer be attributed to the info mode. Also the byte-identity witness: sales prompts must not carry the INFO-DESK block.',
+        notes: 'ATTRIBUTION CONTROL (mirror of 784, different page): a sales-mode page with the ITEM AGREED at the same thread depth must still ask for order details — today\'s Ex-14 default. The item must be pinned in history first: an ambiguous «واحد منهم» legitimately draws the Example-11 clarify-which-item reply instead of the collect (measured 2026-08-17), which would fail this control for the wrong reason. If this stops firing, the DEFAULT mode regressed and Cat 77\'s clean results can no longer be attributed to the info mode. Also the byte-identity witness: sales prompts must not carry the INFO-DESK block.',
     },
 
     // -----------------------------------------------------------------------
