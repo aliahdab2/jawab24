@@ -432,13 +432,33 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     localStorage.setItem('jawab24_onboarding_complete', 'true');
   };
 
-  const routeMocks = async (page: import('@playwright/test').Page, onPatch?: (body: unknown) => void) => {
+  const routeMocks = async (
+    page: import('@playwright/test').Page,
+    onPatch?: (body: unknown) => void,
+    opts: { patchStatus?: number; patchCode?: string; onPut?: (body: unknown) => void; putStatus?: number; putCode?: string } = {},
+  ) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
       const method = route.request().method();
       if (url.includes('/reply-mode') && method === 'PATCH') {
         onPatch?.(route.request().postDataJSON());
+        if (opts.patchStatus && opts.patchStatus >= 400) {
+          return route.fulfill({
+            status: opts.patchStatus, contentType: 'application/json',
+            body: JSON.stringify({ error: 'nope', code: opts.patchCode ?? 'REPLY_MODE_NOT_ENABLED' }),
+          });
+        }
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], replyMode: 'info' }) });
+      }
+      if (url.includes('/settings') && method === 'PUT') {
+        opts.onPut?.(route.request().postDataJSON());
+        if (opts.putStatus && opts.putStatus >= 400) {
+          return route.fulfill({
+            status: opts.putStatus, contentType: 'application/json',
+            body: JSON.stringify({ error: 'nope', code: opts.putCode ?? 'REPLY_MODE_NOT_ENABLED' }),
+          });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...MOCK_SETTINGS, replyMode: 'info' }) });
       }
       if (url.includes('/pages') && method === 'GET') {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TWO_PAGES) });
@@ -476,6 +496,103 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     // Then pin «Information source» — the page-scope radio PATCHes immediately.
     await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
     await expect.poll(() => patched, { timeout: 15000 }).toEqual({ replyMode: 'info' });
+  });
+
+  /** The Save bar is `fixed` and always mounted; it slides in on hasChanges. */
+  const saveBar = (page: import('@playwright/test').Page) => page.locator('div.fixed.z-30').first();
+  const openPageScope = async (page: import('@playwright/test').Page, name = TWO_PAGES[0].name) => {
+    await page.getByRole('button', { name: t('settings.replyStyle.scopeLabel') }).click();
+    await page.getByRole('button', { name, exact: false }).click();
+  };
+
+  test('WORKSPACE scope: changing the mode reveals the Save bar and sends replyMode', async ({ page }) => {
+    // The owner-reported defect was "no Save button appears" — so this asserts
+    // the bar the MERCHANT sees, not just that a handler ran.
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    let put: unknown = null;
+    await routeMocks(page, undefined, { onPut: (b) => { put = b; } });
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+
+    await expect(saveBar(page)).toHaveCSS('opacity', '0');
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+
+    await expect(page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) })).toHaveAttribute('aria-checked', 'true');
+    await expect(saveBar(page)).toHaveCSS('opacity', '1');
+    const saveBtn = saveBar(page).getByRole('button').first();
+    await expect(saveBtn).toBeEnabled();
+
+    // And the value actually reaches the API — a visible button that saves
+    // nothing is the same defect wearing a different mask.
+    await saveBtn.click();
+    await expect.poll(() => put, { timeout: 15000 }).toMatchObject({ replyMode: 'info' });
+  });
+
+  test('WORKSPACE scope: a 403 names the reason instead of a generic error', async ({ page }) => {
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page, undefined, { putStatus: 403, putCode: 'REPLY_MODE_NOT_ENABLED' });
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await saveBar(page).getByRole('button').first().click();
+
+    await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
+  });
+
+  test('PAGE scope: the instant save CONFIRMS itself and shows no Save bar', async ({ page }) => {
+    // Regression pin for the owner-reported defect: the page scope saves on
+    // click with no Save button, so it MUST say it saved — silence read as
+    // "nothing happened / where is Save?".
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page);
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+    await openPageScope(page);
+
+    await expect(page.getByText(t('settings.replyMode.pageSaved'))).toHaveCount(0);
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+
+    await expect(page.getByText(t('settings.replyMode.pageSaved'))).toBeVisible({ timeout: 15000 });
+    // The page scope deliberately has NO Save bar — pinned so a later change
+    // can't quietly introduce one half-wired.
+    await expect(saveBar(page)).toHaveCSS('opacity', '0');
+  });
+
+  test('PAGE scope: a failed PATCH rolls the choice back and explains why', async ({ page }) => {
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page, undefined, { patchStatus: 403, patchCode: 'REPLY_MODE_NOT_ENABLED' });
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+    await openPageScope(page);
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+
+    await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
+    // Rolled back: the inherit option is selected again, so the UI never
+    // claims a pin the server refused.
+    await expect(page.getByRole('radio', { name: /Default \(/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByText(t('settings.replyMode.pageSaved'))).toHaveCount(0);
+  });
+
+  test('CORE REGRESSION: an ordinary settings change still reveals the Save bar and saves', async ({ page }) => {
+    // Settings is the product's core. This pins that the reply-mode work did
+    // not disturb the shared save path for a field that predates it.
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    let put: unknown = null;
+    await routeMocks(page, undefined, { onPut: (b) => { put = b; } });
+
+    await page.goto('/en/settings');
+    await expect(page.locator('h1').filter({ hasText: t('settings.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    await expect(saveBar(page)).toHaveCSS('opacity', '0');
+    await page.getByRole('radio', { name: t('settings.replyStyle.casual'), exact: true }).click();
+    await expect(saveBar(page)).toHaveCSS('opacity', '1');
+
+    await saveBar(page).getByRole('button').first().click();
+    await expect.poll(() => put, { timeout: 15000 }).toMatchObject({ replyStyle: 'casual' });
   });
 
   test('a workspace outside the allowlist never sees the section', async ({ page }) => {
