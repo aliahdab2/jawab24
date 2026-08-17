@@ -50,6 +50,14 @@ export interface AiGenerateRequest {
         kbActiveVersion?: number | null;
         queryEmbedding?: number[];
         replyStyle?: string;
+        /**
+         * Effective reply mode for this page ('sales' | 'info'), resolved via
+         * resolveEffectiveReplyMode(page.replyMode, workspace.replyMode).
+         * 'info' appends the INFO-DESK MODE block in ai-worker's promptBuilder
+         * and joins both reply-cache scopes (`rm:i` exact segment + semantic
+         * metadata). Absent = 'sales'.
+         */
+        replyMode?: string;
         brandVoiceNotes?: string;
         /**
          * Stage 2.6 structured BUSINESS_INFO prompt block, pre-formatted from
@@ -179,6 +187,15 @@ export interface UpdateLeadConfigDTO {
  */
 export interface UpdateBrandVoiceDTO {
     brandVoiceNotesMulti: Record<string, string> | null;
+}
+
+/**
+ * Per-page reply-mode override payload (PATCH /pages/:id/reply-mode).
+ * `null` reverts the page to the workspace default; 'sales' | 'info' pins the
+ * mode for this page (an explicit 'sales' pin survives a workspace-level flip).
+ */
+export interface UpdateReplyModeDTO {
+    replyMode: import('@jawab24/shared').ReplyMode | null;
 }
 
 // Post Types

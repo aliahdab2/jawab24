@@ -1,6 +1,6 @@
 {
-  "id": "450ee6e9-755f-4eae-b783-954e0d211e40",
-  "prevId": "5f5f321a-8a17-42ef-8cc7-f717c04ae90a",
+  "id": "71ff727b-eb9e-43f1-8135-149a1099d03a",
+  "prevId": "51b51e50-c3f6-4d21-9543-da10a8d416b6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5425,6 +5425,18 @@
           "notNull": false,
           "default": false
         },
+        "instagram_access_token": {
+          "name": "instagram_access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instagram_token_expires_at": {
+          "name": "instagram_token_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "whatsapp_phone_number_id": {
           "name": "whatsapp_phone_number_id",
           "type": "varchar(255)",
@@ -5555,6 +5567,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "brand_voice_notes_multi": {
+          "name": "brand_voice_notes_multi",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_mode": {
+          "name": "reply_mode",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "consecutive_send_failures": {
           "name": "consecutive_send_failures",
           "type": "integer",
@@ -5651,7 +5675,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -7409,6 +7433,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'professional'"
+        },
+        "reply_mode": {
+          "name": "reply_mode",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'sales'"
         },
         "brand_voice_notes": {
           "name": "brand_voice_notes",

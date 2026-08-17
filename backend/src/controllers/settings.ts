@@ -10,6 +10,7 @@ import { validateSchema } from '../utils/validation';
 import { translateText, generateNudgeVariations } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 import { auditLog } from '../services/auditLog';
+import { config } from '../config';
 
 import { t } from '../utils/i18n';
 
@@ -98,6 +99,20 @@ export class SettingsController {
             }
 
             const updates = validation.data as UpdateSettingsDTO;
+
+            // Reply-mode allowlist pilot: 'info' is gated at the WRITE path only
+            // (empty allowlist = GA). Uses the request's resolved workspace — the
+            // authoritative resolver per SETTINGS_RESOLUTION.md §2.
+            if (updates.replyMode === 'info') {
+                const allowlist = config.replyMode.workspaceIds;
+                const wsId = (request as WorkspaceRequest).workspaceId;
+                if (allowlist.length > 0 && (!wsId || !allowlist.includes(wsId))) {
+                    return reply.status(403).send({
+                        error: 'Reply mode \'info\' is not enabled for this workspace',
+                        code: 'REPLY_MODE_NOT_ENABLED',
+                    });
+                }
+            }
 
             // Fetch current settings for comparison
             const currentSettings = await settingsService.getSettings(userId);

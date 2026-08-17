@@ -189,6 +189,24 @@ export const config = {
         dailyCapPerPage: parseInt(process.env.POST_SUGGESTIONS_DAILY_CAP || '3', 10),
     },
 
+    // Reply-mode allowlist pilot (2026-08-15). Workspaces allowed to store
+    // replyMode='info' (information-desk mode). Enforced at the WRITE path only
+    // (settings + pages controllers) — the reply pipeline just reads whatever is
+    // stored, so there is no hot-path env check. EMPTY = every workspace (GA).
+    // Must stay in step with NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS in
+    // frontend/src/lib/featureFlags.ts (frontend only hides the card; this list
+    // is the enforcement).
+    replyMode: {
+        workspaceIds: (process.env.REPLY_MODE_WORKSPACE_IDS
+            || [
+                // InMedia agency (inmedia.sy@gmail.com) — the requesting merchant
+                // (Shahin Resort + Shahin World). Kept in the DEFAULT rather than
+                // the server env so the pilot is one reviewable deploy.
+                'd06ed500-74ea-42ee-bff6-37bee2cf412a',
+            ].join(','))
+            .split(',').map(id => id.trim()).filter(Boolean),
+    },
+
     // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds
     // for the admin AI Cost panel. The org credit wallet is drained by ALL keys, so
     // burn/runway are computed from the OpenAI Costs API org total, not ai_usage_log.

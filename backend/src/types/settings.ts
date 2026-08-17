@@ -1,8 +1,10 @@
 /**
  * Settings Types
- * 
+ *
  * Types for user settings and preferences.
  */
+
+import type { ReplyMode } from '@jawab24/shared';
 
 export interface UserSettings {
     id: string;
@@ -43,6 +45,7 @@ export interface UserSettings {
     messageEscalationMinutes: number;
     handoffPauseDurationMinutes: number;
     replyStyle: 'professional' | 'casual' | 'enthusiastic';
+    replyMode: ReplyMode;
     brandVoiceNotes: string;
     holdLowConfidence: boolean;
     notificationsEnabled: boolean;
@@ -81,6 +84,7 @@ export interface UpdateSettingsDTO {
     messageEscalationMinutes?: number;
     handoffPauseDurationMinutes?: number;
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    replyMode?: ReplyMode;
     brandVoiceNotes?: string;
     holdLowConfidence?: boolean;
     notificationsEnabled?: boolean;

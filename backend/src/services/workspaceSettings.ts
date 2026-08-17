@@ -42,6 +42,7 @@ export const DEFAULTS: WorkspaceSettings = {
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
     replyStyle: 'professional',
+    replyMode: 'sales',
     brandVoiceNotes: '',
     brandVoiceNotesMulti: {},
     holdLowConfidence: false,

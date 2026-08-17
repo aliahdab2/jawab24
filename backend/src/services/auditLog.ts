@@ -26,6 +26,7 @@ export type AuditAction =
     | 'page.auto_reply_toggled'
     | 'page.archived'
     | 'page.unarchived'
+    | 'page.reply_mode_changed'
     | 'shopify.connected'
     | 'shopify.disconnected'
     | 'shopify.synced'
