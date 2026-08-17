@@ -406,6 +406,22 @@ describe('ReplyStyleCard', () => {
       expect(await screen.findByText(/Resort Page — Information source/i)).toBeInTheDocument();
     });
 
+    it('page scope: CONFIRMS the save — an instant save with no button must not be silent', async () => {
+      // There is no Save button in page scope (the PATCH fires on click), so
+      // without a visible confirmation the click looks like nothing happened
+      // and the merchant hunts for a Save button that does not exist
+      // (owner report 2026-08-17).
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
+      vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: { ...TWO_PAGES[0], replyMode: 'info' } } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      expect(screen.queryByText(/Saved for this page/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      expect(await screen.findByText(/Saved for this page/i)).toBeInTheDocument();
+    });
+
     it('page scope: rolls the pin back and shows an error when the PATCH fails', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       vi.mocked(pagesApi.updateReplyMode).mockRejectedValue({ response: { data: { code: 'REPLY_MODE_NOT_ENABLED' } } });

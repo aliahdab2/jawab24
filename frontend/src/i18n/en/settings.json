@@ -48,6 +48,7 @@
     "inherit": "Default ({mode})",
     "pinnedOption": "{label} — {mode}",
     "pageAutoSaves": "This page's choice is saved immediately.",
+    "pageSaved": "Saved for this page ✓",
     "saveDefaultFirst": "Save the default first with “Save Settings”, then customize pages.",
     "pageUpdateError": "Couldn't save the choice for this page — please try again.",
     "notEnabled": "This feature isn't enabled for your account yet."
