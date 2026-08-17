@@ -48,8 +48,6 @@ const pageEditorName = (page: string) =>
 const INFO_DESK = new RegExp(enSettings.replyMode.infoDesk, 'i');
 const MODE_SAVED = new RegExp(enSettings.replyMode.pageSaved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 const SCOPE_LABEL = new RegExp(enSettings.replyStyle.scopeLabel, 'i');
-const inheritName = (mode: string) =>
-  enSettings.replyMode.inherit.replace('{mode}', mode);
 
 describe('ReplyStyleCard', () => {
   beforeEach(() => {

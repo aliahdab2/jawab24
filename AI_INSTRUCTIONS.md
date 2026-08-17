@@ -117,7 +117,7 @@ Checkout (`getPlanName`/`getPlanDesc` in `pages/checkout.tsx`) and `PlanCard` re
 | **Smart Reply** | AI-powered reply (never say "AI reply" in UI) |
 | **Post Reply** | Per-post keyword trigger (ManyChat-style). Comment matches keyword → sends configured reply via DM. UI: "رد البوست". Configured per-post from the comments page, not workspace-level |
 | **Away Message** | Sent when auto-reply is off / outside business hours |
-| **Greeting Message** | First message to a new customer |
+| **Greeting Message** | Welcome sent when a new customer taps "Get Started" / «بدء الاستخدام» (opener-only — typed first messages go straight to the AI) |
 | **Business Info** | The merchant-authored knowledge the AI replies from (products, prices, hours, policies, FAQs). UI: "معلومات نشاطك التجاري" (2nd-person in-app/marketing) / "معلومات النشاط التجاري" (impersonal legal copy). **Always the user-facing name** — never "Knowledge Base"/"قاعدة المعرفة" (kept only in admin tooling + as a RAG mechanism descriptor) or "business profile"/"ملف متجرك". Internally the code still calls it "knowledge base / kb" (folder, `page.knowledgeBase`, `?openKb=true`, i18n keys) — do not rename code |
 
 ### 7. Linting

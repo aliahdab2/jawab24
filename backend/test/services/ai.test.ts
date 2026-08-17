@@ -1109,42 +1109,6 @@ describe('AI Service', () => {
         });
     });
 
-    describe('suppressGreeting-scoped exact cache', () => {
-        it('produces different cache keys when suppressGreeting differs (prevents double-greeting via cache hit)', async () => {
-            const { redis } = await import('../../src/lib/redis');
-            const ctx = { language: 'ar', pageId: 'page-1', kbActiveVersion: 1 } as const;
-
-            await service.saveToCache('بكم السعر؟', 'السعر 100', { ...ctx, suppressGreeting: true });
-            const keySuppressed = vi.mocked(redis.set).mock.calls[0][0];
-
-            vi.clearAllMocks();
-
-            await service.saveToCache('بكم السعر؟', 'السعر 100', { ...ctx, suppressGreeting: false });
-            const keyNormal = vi.mocked(redis.set).mock.calls[0][0];
-
-            // A greeting-suppressed reply (merchant welcome prepended by the backend) must
-            // never share a bucket with an ordinary reply that greeted on its own.
-            expect(keySuppressed).not.toBe(keyNormal);
-        });
-
-        it('keeps the cache key byte-identical for suppressGreeting false vs omitted (no global cache invalidation)', async () => {
-            const { redis } = await import('../../src/lib/redis');
-            const ctx = { language: 'ar', pageId: 'page-1', kbActiveVersion: 1 } as const;
-
-            await service.saveToCache('بكم السعر؟', 'السعر 100', { ...ctx, suppressGreeting: false });
-            const keyFalse = vi.mocked(redis.set).mock.calls[0][0];
-
-            vi.clearAllMocks();
-
-            await service.saveToCache('بكم السعر؟', 'السعر 100', ctx);
-            const keyOmitted = vi.mocked(redis.set).mock.calls[0][0];
-
-            // Existing traffic (suppressGreeting falsy) must keep its pre-change key so the
-            // live cache is not wholesale-invalidated by this fix.
-            expect(keyFalse).toBe(keyOmitted);
-        });
-    });
-
     describe('replyMode-scoped exact cache (D-085)', () => {
         it('gives info mode its own bucket (an info page must never read a sales reply)', async () => {
             const { redis } = await import('../../src/lib/redis');

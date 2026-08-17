@@ -794,7 +794,7 @@ export const messages = pgTable('messages', {
         createdAtIdx: index('idx_messages_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_messages_created_time').on(table.createdTime),
         resolvedFilterIdx: index('idx_messages_resolved_filter').on(table.pageId, table.direction, table.resolved, table.replied),
-        // Composite index for sender inbox queries: isFirstIncomingMessage, hasNewerUnrepliedMessage, isPaused lookups
+        // Composite index for sender inbox queries: hasOutgoingMessage, hasNewerUnrepliedMessage, isPaused lookups
         senderInboxIdx: index('idx_messages_sender_inbox').on(table.pageId, table.senderId, table.direction, table.replied, table.createdAt),
         // Covering index for unreplied message queries (getUnrepliedFromSender, dashboard counts)
         unrepliedIdx: index('idx_messages_page_unreplied').on(table.pageId, table.replied, table.createdAt),

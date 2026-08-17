@@ -137,7 +137,6 @@ vi.mock('../../src/services/messages', () => ({
         isPaused: vi.fn(),
         getRemainingPauseMs: vi.fn().mockResolvedValue(60000),
         hasNewerUnrepliedMessage: vi.fn(),
-        isFirstIncomingMessage: vi.fn(),
         storeOutgoingMessage: vi.fn(),
         getUnrepliedFromSender: vi.fn(),
         markOlderMessagesAsReplied: vi.fn(),
@@ -316,7 +315,6 @@ describe('InstagramReplyService', () => {
         vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('Test Sender');
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([{ id: 'msg-uuid', message: 'hello' }]);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
@@ -457,9 +455,6 @@ describe('InstagramReplyService', () => {
         it('should send away message when auto-reply disabled and away message configured', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are currently away');
-            // Away message now gates on first incoming (not the legacy `isNew` flag which was
-            // always false under the webhook pre-store flow).
-            vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
             setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
@@ -475,7 +470,6 @@ describe('InstagramReplyService', () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('Away');
             vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('blocked'));
-            vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
             setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');

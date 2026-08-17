@@ -60,17 +60,6 @@ interface CacheContext {
      */
     brandVoiceHash?: string;
     /**
-     * First-contact greeting suppression (see messageProcessor). When true the AI
-     * is told NOT to greet because the backend prepends the merchant welcome. This
-     * changes the generated reply, so it MUST scope the cache: without it a
-     * suppressed (greeting-less) reply and an ordinary reply share a bucket — and a
-     * first contact (empty history, undefined customerContext) would otherwise read
-     * an ordinary cached reply that greeted, then get the merchant welcome prepended
-     * on top → double greeting. Only `true` alters the key (see buildCacheKey), so
-     * existing cache entries stay valid.
-     */
-    suppressGreeting?: boolean;
-    /**
      * Reply channel. Only the DM path personalizes gendered Arabic addressing
      * (comments stay neutral), so it drives the two gender-cache guards: the exact
      * key is bucketed by `senderName` for DMs (below), and the semantic cache is
@@ -220,13 +209,6 @@ export class AiService {
             `m:${ctx.model || DEFAULT_AI_MODEL}`,
             `pv:${PROMPT_VERSION}`,
         ];
-
-        // Only a true value alters the key — appended conditionally so the vast
-        // majority of traffic (suppressGreeting falsy) keeps byte-identical keys and
-        // existing cache entries stay valid. A suppressed reply (greeting-less, the
-        // merchant welcome is prepended by the backend) gets its own bucket so it can
-        // never collide with an ordinary reply that greeted on its own.
-        if (ctx.suppressGreeting) key.push('sg:1');
 
         // Brand voice is prompt-injected but settings saves never bump
         // kbActiveVersion, so it must live in the key (same read-side scoping as
@@ -443,7 +425,6 @@ export class AiService {
             replyMode: request.context?.replyMode,
             customerContext: request.context?.customerContext,
             model: resolvedModel,
-            suppressGreeting: request.context?.suppressGreeting,
             brandVoiceHash,
             channel: request.context?.channel,
             senderName: request.context?.senderName,
