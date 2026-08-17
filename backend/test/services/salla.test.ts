@@ -1119,37 +1119,60 @@ describe('Salla Service', () => {
             }));
         });
 
-        it('returns shipment tracking info when order has a shipment', async () => {
-            const orderBase = {
-                id: 5001,
-                reference_id: '12345',
-                status: { slug: 'shipped', name: 'Shipped' },
-                payment_method: 'card',
-                amounts: { total: { amount: 250, currency: 'SAR' }, cash_on_delivery: { amount: 0 } },
-                customer: { first_name: 'Ahmed', mobile: '+966512345678' },
-                shipping: { address: { city: 'Jeddah', district: 'Al Hamra' } },
-                items: [],
-                date: { date: '2026-01-15 10:00:00' },
-            };
-
-            // First fetch: keyword search
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ data: [orderBase] }),
+        /**
+         * Route each mocked fetch by URL rather than by call order — the order detail and the
+         * shipments lookup are issued concurrently, so sequential `mockResolvedValueOnce`
+         * would pin an ordering the implementation is free to change.
+         *
+         * ⚠️ Order payloads here deliberately carry NO `shipments` key. Salla serves order
+         * detail in "light" format to every app created after 15 Aug 2024 (ours dates from
+         * 2026-02-25), and light omits shipments entirely. Fixtures that inline a `shipments`
+         * array describe a response we can never receive — that is exactly how this bug
+         * survived review, so do not reintroduce one.
+         */
+        function mockSallaRoutes(opts: {
+            order: Record<string, unknown>;
+            shipments?: unknown[];
+            shipmentsStatus?: number;
+        }) {
+            mockFetch.mockImplementation(async (url: string) => {
+                if (url.includes('/shipments')) {
+                    if (opts.shipmentsStatus && opts.shipmentsStatus >= 400) {
+                        return { ok: false, status: opts.shipmentsStatus, json: async () => ({}) };
+                    }
+                    return { ok: true, json: async () => ({ data: opts.shipments ?? [] }) };
+                }
+                if (/\/orders\/\d+$/.test(url)) {
+                    return { ok: true, json: async () => ({ data: opts.order }) };
+                }
+                return { ok: true, json: async () => ({ data: [opts.order] }) };
             });
-            // Second fetch: order detail with shipments
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    data: {
-                        ...orderBase,
-                        shipments: [{
-                            tracking_number: 'TRK-ARX-001',
-                            courier_name: 'Aramex',
-                            tracking_link: 'https://www.aramex.com/track/TRK-ARX-001',
-                        }],
-                    },
-                }),
+        }
+
+        const shippedOrder = {
+            id: 5001,
+            reference_id: '12345',
+            status: { slug: 'shipped', name: 'Shipped' },
+            payment_method: 'card',
+            amounts: { total: { amount: 250, currency: 'SAR' }, cash_on_delivery: { amount: 0 } },
+            customer: { first_name: 'Ahmed', mobile: '+966512345678' },
+            shipping: { address: { city: 'Jeddah', district: 'Al Hamra' } },
+            items: [],
+            date: { date: '2026-01-15 10:00:00' },
+        };
+
+        // Regression (2026-08-17): tracking used to be read off `order.shipments[0]` on the
+        // order-detail payload. The light response never carries that field, so every Salla
+        // customer asking "where is my order" got a blank tracking number. Tracking must come
+        // from the separate List Shipments endpoint.
+        it('reads tracking from the List Shipments endpoint, not the order payload', async () => {
+            mockSallaRoutes({
+                order: shippedOrder,
+                shipments: [{
+                    tracking_number: 'TRK-ARX-001',
+                    courier_name: 'Aramex',
+                    tracking_link: 'https://www.aramex.com/track/TRK-ARX-001',
+                }],
             });
 
             const result = await getShipmentTracking('store-1', '12345');
@@ -1160,23 +1183,82 @@ describe('Salla Service', () => {
             expect(result?.courierName).toBe('Aramex');
             expect(result?.trackingUrl).toBe('https://www.aramex.com/track/TRK-ARX-001');
             expect(result?.status).toBe('shipped');
+            expect(result?.shippingCity).toBe('Jeddah');
+
+            // Scoped to the order — an unfiltered /shipments call would return the whole
+            // store's shipments and hand the customer somebody else's tracking number.
+            const shipmentCall = mockFetch.mock.calls.find((c: unknown[]) => String(c[0]).includes('/shipments'));
+            expect(shipmentCall?.[0]).toBe('https://api.salla.dev/admin/v2/shipments?order_id=5001');
+        });
+
+        // A store that authorised before `shipping.read` was added to the app answers 403.
+        // Losing tracking is acceptable; losing the whole answer is not.
+        it('degrades to status-only when the shipments lookup is forbidden', async () => {
+            mockSallaRoutes({ order: shippedOrder, shipmentsStatus: 403 });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.status).toBe('shipped');
+            expect(result?.customerPhone).toBe('+966512345678');
+            expect(result?.trackingNumber).toBeUndefined();
+            expect(result?.courierName).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('returns no tracking when the order has no shipment yet', async () => {
+            mockSallaRoutes({ order: shippedOrder, shipments: [] });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.trackingNumber).toBeUndefined();
+        });
+
+        // Multi-package orders (and a cancelled shipment followed by its replacement) return
+        // several shipments with no documented ordering. Taking [0] blindly would answer
+        // "no tracking" while the number the customer asked for sits in the next element.
+        it('prefers the shipment that actually carries a tracking number', async () => {
+            mockSallaRoutes({
+                order: shippedOrder,
+                shipments: [
+                    { tracking_number: null, courier_name: null, tracking_link: null },
+                    { tracking_number: 'TRK-REAL-9', courier_name: 'SMSA', tracking_link: 'https://smsa/9' },
+                ],
+            });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result?.trackingNumber).toBe('TRK-REAL-9');
+            expect(result?.courierName).toBe('SMSA');
+        });
+
+        // The List Shipments schema names the tracking URL both ways; accepting only one
+        // would drop the link for stores whose courier populates the other.
+        it('accepts tracking_url when the shipment has no tracking_link', async () => {
+            mockSallaRoutes({
+                order: shippedOrder,
+                shipments: [{ tracking_number: 'TRK-3', courier_name: 'Aramex', tracking_url: 'https://aramex/3' }],
+            });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result?.trackingUrl).toBe('https://aramex/3');
         });
 
         // Regression: customerPhone is used for Phase-2 identity verification
         // (phonesMatch). A bare local number would never match the customer's real
         // international number — compose mobile + mobile_code.
         it('composes the split mobile + mobile_code into the verification phone', async () => {
-            const orderBase = {
-                id: 5002,
-                reference_id: '67890',
-                status: { slug: 'shipped', name: 'Shipped' },
-                customer: { first_name: 'Sara', mobile: 501112222, mobile_code: '+966' },
-                date: { date: '2026-02-01 09:00:00' },
-            };
-            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [orderBase] }) });
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ data: { ...orderBase, shipments: [{ tracking_number: 'TRK-2', courier_name: 'SMSA', tracking_link: null }] } }),
+            mockSallaRoutes({
+                order: {
+                    id: 5002,
+                    reference_id: '67890',
+                    status: { slug: 'shipped', name: 'Shipped' },
+                    customer: { first_name: 'Sara', mobile: 501112222, mobile_code: '+966' },
+                    date: { date: '2026-02-01 09:00:00' },
+                },
+                shipments: [{ tracking_number: 'TRK-2', courier_name: 'SMSA', tracking_link: null }],
             });
 
             const result = await getShipmentTracking('store-1', '67890');
