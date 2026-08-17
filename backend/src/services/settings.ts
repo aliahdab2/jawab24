@@ -217,6 +217,18 @@ export class SettingsService {
         this.workspaceIdCache.clear();
     }
 
+    /**
+     * The workspace a settings write will sync pipeline fields to — the SAME
+     * resolver syncPipelineFieldsToWorkspace uses. Any gate that must hold on
+     * the write target (the reply-mode allowlist, finding H3) resolves through
+     * THIS, never through a parallel resolution path: for a multi-membership
+     * user the request's resolved workspace and this value can differ, and a
+     * gate checked on one while the write lands on the other is a bypass.
+     */
+    async resolveWriteTargetWorkspaceId(userId: string): Promise<string | null> {
+        return this.resolveWorkspaceId(userId);
+    }
+
     private async resolveWorkspaceId(userId: string): Promise<string | null> {
         const cached = this.workspaceIdCache.get(userId);
         if (cached) return cached;

@@ -192,10 +192,11 @@ export const config = {
     // Reply-mode allowlist pilot (2026-08-15). Workspaces allowed to store
     // replyMode='info' (information-desk mode). Enforced at the WRITE path only
     // (settings + pages controllers) — the reply pipeline just reads whatever is
-    // stored, so there is no hot-path env check. EMPTY = every workspace (GA).
-    // Must stay in step with NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS in
-    // frontend/src/lib/featureFlags.ts (frontend only hides the card; this list
-    // is the enforcement).
+    // stored, so there is no hot-path env check. FAIL-CLOSED: an empty list
+    // enables NOBODY (finding H4) — GA is deleting the gates in code, never
+    // emptying or flipping an env var. Must stay in step with
+    // NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS in frontend/src/lib/featureFlags.ts
+    // (frontend only hides the card; this list is the enforcement).
     replyMode: {
         workspaceIds: (process.env.REPLY_MODE_WORKSPACE_IDS
             || [

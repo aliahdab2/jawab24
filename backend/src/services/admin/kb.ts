@@ -6,6 +6,7 @@ import { getIngestionService } from '../pages';
 import { replyGenerator } from '../reply/generator';
 import { buildPlaygroundContext, PLAYGROUND_PAGE_COLUMNS } from '../reply/playgroundContext';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
+import { REPLY_MODES, type ReplyMode } from '@jawab24/shared';
 import type { PlaygroundRequestBody } from '../../types/admin';
 
 /**
@@ -256,9 +257,18 @@ class AdminKbService {
             throw new NotFoundError('Page not found');
         }
 
+        // B-1: the reply-mode override is an EVAL-harness input, not an admin UI
+        // experiment — honored only for source==='eval', and only as a valid enum
+        // value. Anything else (admin UI calls, garbage strings) falls through to
+        // page → workspace resolution exactly like production.
+        const replyModeOverride: ReplyMode | undefined =
+            source === 'eval' && REPLY_MODES.includes(replyMode as ReplyMode)
+                ? (replyMode as ReplyMode)
+                : undefined;
+
         const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
             page, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode: replyModeOverride, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         });
 
         replyGenerator.setLogger(log);

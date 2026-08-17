@@ -100,13 +100,25 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Reply-mode allowlist pilot: 'info' is gated at the WRITE path only
-            // (empty allowlist = GA). Uses the request's resolved workspace — the
-            // authoritative resolver per SETTINGS_RESOLUTION.md §2.
+            // Reply-mode allowlist pilot: 'info' is gated at the WRITE path only.
+            // The gate must hold on the workspace the write actually LANDS on:
+            // syncPipelineFieldsToWorkspace resolves its target from the user's
+            // membership (resolveWorkspaceId), which for a multi-membership user
+            // can differ from the request's resolved workspace — so resolve with
+            // the SAME resolver and refuse on disagreement (finding H3).
+            // Fail-closed: no empty-list GA escape — GA is deleting this gate in
+            // code, never emptying an env var (finding H4).
             if (updates.replyMode === 'info') {
-                const allowlist = config.replyMode.workspaceIds;
                 const wsId = (request as WorkspaceRequest).workspaceId;
-                if (allowlist.length > 0 && (!wsId || !allowlist.includes(wsId))) {
+                const writeTargetId = await settingsService.resolveWriteTargetWorkspaceId(userId);
+                if (!wsId || !writeTargetId || writeTargetId !== wsId) {
+                    return reply.status(403).send({
+                        error: 'Reply mode \'info\' cannot be enabled from this session: the settings write would land on a different workspace than this request resolved',
+                        code: 'REPLY_MODE_WORKSPACE_MISMATCH',
+                    });
+                }
+                const allowlist = config.replyMode.workspaceIds;
+                if (!allowlist.includes(writeTargetId)) {
                     return reply.status(403).send({
                         error: 'Reply mode \'info\' is not enabled for this workspace',
                         code: 'REPLY_MODE_NOT_ENABLED',
