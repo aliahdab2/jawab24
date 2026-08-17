@@ -291,6 +291,20 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     t(mode === 'info' ? 'replyMode.infoDesk' : 'replyMode.sales');
   const [pageModeSaving, setPageModeSaving] = useState(false);
   const [pageModeError, setPageModeError] = useState<string | null>(null);
+  // Its OWN notice, not the persona's `pageNotice`: sharing that state renders
+  // the confirmation twice — once here and once under the persona textarea,
+  // where "saved for this page" would be describing the wrong control.
+  const [pageModeNotice, setPageModeNotice] = useState<string | null>(null);
+  // Auto-dismiss is scheduled by the ONE event that raises the notice, not by
+  // an effect watching the state: the timer belongs to the save, and a ref
+  // keeps a rapid second save from letting the first save's timer clear the
+  // second one's message.
+  const pageModeNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashPageModeNotice = (text: string) => {
+    if (pageModeNoticeTimer.current) clearTimeout(pageModeNoticeTimer.current);
+    setPageModeNotice(text);
+    pageModeNoticeTimer.current = setTimeout(() => setPageModeNotice(null), 4000);
+  };
   // Page pins are disabled while the DRAFT default differs from the PERSISTED
   // one: the inherit option's label names the saved default, and letting the
   // merchant customize against an unsaved draft pins pages to a default that
@@ -313,6 +327,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, replyMode: mode } : p)));
     try {
       await pagesApi.updateReplyMode(pageId, mode);
+      // A save with NO button must SAY it saved. Without this the click was
+      // silent — no button, no ✓, nothing — so the merchant reasonably reads it
+      // as "nothing happened / where is Save?" (owner report 2026-08-17). The
+      // persona editor in this same scope confirms its save; so does this now.
+      flashPageModeNotice(t('replyMode.pageSaved'));   // «تم حفظ اختيار هذه الصفحة ✓»
     } catch (err) {
       setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, replyMode: previous } : p)));
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
@@ -542,6 +561,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             )}
             {((scopedPage && scopedPageEffectiveMode === 'info') || (!scopedPage && settings.replyMode === 'info')) && (
               <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyMode.infoLeadsNote')}</p>
+            )}
+            {/* Success is announced HERE, next to the control that saved —
+                the persona editor's notice lives further down the card and a
+                merchant who never scrolls there sees nothing at all. */}
+            {pageModeNotice && !pageModeError && (
+              <p aria-live="polite" className="mt-1.5 text-xs text-brand-600 dark:text-brand-400" dir="auto">{pageModeNotice}</p>
             )}
             {pageModeError && (
               <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{pageModeError}</p>
