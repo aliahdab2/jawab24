@@ -339,6 +339,7 @@
     "setting_commentsAutoReply": "الرد التلقائي على التعليقات",
     "setting_messagesAutoReply": "الرد التلقائي على الرسائل",
     "setting_commentReplyMode": "وضع الرد على التعليقات",
+    "setting_replyMode": "دور المساعد",
     "setting_holdLowConfidence": "حجز الردود منخفضة الثقة",
     "setting_replyDelay": "تأخير الرد (ثانية)",
     "setting_defaultReplyLanguage": "لغة الرد الافتراضية",

@@ -118,3 +118,27 @@ const POST_SUGGESTIONS_WORKSPACE_IDS: ReadonlySet<string> = new Set(
 export function isPostSuggestionsVisible(workspaceId: string | null | undefined): boolean {
   return Boolean(workspaceId && POST_SUGGESTIONS_WORKSPACE_IDS.has(workspaceId));
 }
+
+/**
+ * Reply-mode pilot (D-085, 2026-08-17): the reply-mode question inside the
+ * persona card — sales assistant vs information source, per page.
+ * WORKSPACE-gated with the requesting merchant (InMedia agency) as the
+ * built-in default — the POST_SUGGESTIONS pattern. This only hides the UI;
+ * the backend write-gate (REPLY_MODE_WORKSPACE_IDS in backend config) is the
+ * enforcement and must stay in step with this list. FAIL-CLOSED (finding H4):
+ * a workspace not in the effective list sees nothing, and GA is deleting both
+ * gates in a reviewed PR — never emptying or flipping an env var.
+ */
+const REPLY_MODE_WORKSPACE_IDS: ReadonlySet<string> = new Set(
+  ((process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS !== undefined
+    ? process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS
+    : [
+      'd06ed500-74ea-42ee-bff6-37bee2cf412a', // InMedia agency (inmedia.sy@gmail.com) — requesting merchant
+    ].join(','))
+  ).split(',').map((id) => id.trim()).filter(Boolean),
+);
+
+/** Whether the reply-mode section may render for this workspace. */
+export function isReplyModeVisible(workspaceId: string | null | undefined): boolean {
+  return Boolean(workspaceId && REPLY_MODE_WORKSPACE_IDS.has(workspaceId));
+}

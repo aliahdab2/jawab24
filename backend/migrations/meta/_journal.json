@@ -1198,6 +1198,13 @@
       "when": 1786874835819,
       "tag": "0171_chilly_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1786949484755,
+      "tag": "0172_curvy_hercules",
+      "breakpoints": true
     }
   ]
 }

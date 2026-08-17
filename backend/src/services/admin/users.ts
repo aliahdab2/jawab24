@@ -267,6 +267,10 @@ class AdminUsersService {
                 businessHoursEnd: settings.businessHoursEnd,
                 timezone: settings.timezone,
                 replyStyle: settings.replyStyle,
+                // D-085: the support console lists this read-only. Selecting it
+                // here is what makes the row real — the frontend key list alone
+                // renders an empty value (the reader half of the change).
+                replyMode: settings.replyMode,
                 brandVoiceNotes: settings.brandVoiceNotes,
                 brandVoiceNotesMulti: settings.brandVoiceNotesMulti,
                 greetingMessageEnabled: settings.greetingMessageEnabled,

@@ -19,6 +19,7 @@ describe('PLAYGROUND_PAGE_COLUMNS — shared prompt-column subset', () => {
                 'ecommerceStoreId',
                 'businessProfile',
                 'brandVoiceNotesMulti',
+                'replyMode',
             ]),
         );
     });

@@ -114,6 +114,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.updateBrandVoice);
 
+        adminRoutes.patch('/pages/:id/reply-mode', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Set per-page reply mode override (null reverts to workspace default)',
+                security: auth,
+            },
+        }, pagesController.updateReplyMode);
+
         adminRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
             schema: {
                 tags: ['Pages'],

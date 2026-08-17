@@ -396,3 +396,94 @@ test.describe('Settings Page', () => {
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 });
+
+/**
+ * Reply mode (D-085) — pilot-gated section inside the persona card.
+ * E2E-1: the auth store is seeded with an activeWorkspaceId that IS in the
+ * frontend flag's built-in allowlist (the InMedia pilot workspace), because
+ * the section is invisible for any other workspace — a spec that forgets the
+ * seed passes by asserting on nothing.
+ */
+test.describe('Settings — reply mode (pilot workspace)', () => {
+  const ALLOWED_WS = 'd06ed500-74ea-42ee-bff6-37bee2cf412a'; // frontend flag default (InMedia)
+  const TWO_PAGES = [
+    { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+  ];
+
+  // addInitScript serializes the function — no closures; the workspace id
+  // must travel as the argument.
+  const seed = ({ wsId }: { wsId: string }) => {
+    localStorage.setItem(
+      'auth-storage',
+      JSON.stringify({
+        state: {
+          user: { id: 'u1', email: 'test@test.com', name: 'Test' },
+          token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true,
+          activeWorkspaceId: wsId,
+        },
+        version: 0,
+      })
+    );
+    localStorage.setItem(
+      'ui-storage',
+      JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+    );
+    localStorage.setItem('jawab24_onboarding_complete', 'true');
+  };
+
+  const routeMocks = async (page: import('@playwright/test').Page, onPatch?: (body: unknown) => void) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+      if (url.includes('/reply-mode') && method === 'PATCH') {
+        onPatch?.(route.request().postDataJSON());
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], replyMode: 'info' }) });
+      }
+      if (url.includes('/pages') && method === 'GET') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TWO_PAGES) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+  };
+
+  test('allowlisted workspace sees the question; pinning a page PATCHes reply-mode', async ({ page }) => {
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    let patched: unknown = null;
+    await routeMocks(page, (body) => { patched = body; });
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+
+    // Workspace scope shows the two mode options.
+    await expect(page.getByRole('radio', { name: new RegExp(t('settings.replyMode.sales')) })).toBeVisible();
+
+    // Switch the persona scope to a page. `Select` is a custom listbox
+    // (button + option buttons), NOT a native <select> — the unit-test mock is
+    // the native one, so a `combobox` selector passes there and hangs here.
+    await page.getByRole('button', { name: t('settings.replyStyle.scopeLabel') }).click();
+    await page.getByRole('button', { name: TWO_PAGES[0].name, exact: false }).click();
+
+    // Then pin «Information source» — the page-scope radio PATCHes immediately.
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await expect.poll(() => patched, { timeout: 15000 }).toEqual({ replyMode: 'info' });
+  });
+
+  test('a workspace outside the allowlist never sees the section', async ({ page }) => {
+    await page.addInitScript(seed, { wsId: 'some-other-ws' });
+    await routeMocks(page);
+
+    await page.goto('/en/settings');
+    await expect(page.locator('h1').filter({ hasText: t('settings.title') }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('settings.replyMode.question'))).toHaveCount(0);
+  });
+});

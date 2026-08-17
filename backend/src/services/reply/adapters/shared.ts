@@ -51,6 +51,7 @@ export function mapToPlatformPage(
         ecommerceStoreId: string | null;
         businessProfile: unknown;
         brandVoiceNotesMulti?: Record<string, string> | null;
+        replyMode?: string | null;
     },
     overrides: {
         autoReplyEnabled: boolean;
@@ -76,6 +77,7 @@ export function mapToPlatformPage(
         // D-084: the processors hand this object to enrichPageContext — dropping
         // the field here would leave page personas dark in production.
         brandVoiceNotesMulti: page.brandVoiceNotesMulti ?? null,
+        replyMode: page.replyMode ?? null,
     };
 }
 

@@ -6,7 +6,7 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage, INFO_DEMO_PHONE } from '@jawab24/shared';
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
@@ -548,6 +548,36 @@ Only SPAM_OR_IRRELEVANT or OFFENSIVE may have an empty reply — any other class
         if (!isAnyImageMessage(request.comment)) {
             prompt += `\nThe image marker appears in the conversation history: when the customer's current message refers to "it" or asks a follow-up, resolve it against that photo's description.`;
         }
+    }
+
+    // INFO-DESK MODE (replyMode === 'info') — the merchant chose "information
+    // source" over "sales rep": never ask the customer for their contact/order
+    // details, never promise follow-up; route them to the business's own channel.
+    // The sales behavior it overrides lives in STATIC_SYSTEM_PREFIX as few-shot
+    // DEMONSTRATIONS (Ex 14/15 ask for name+phone, Ex 6/6b promise the team will
+    // reach out), and D-019's measurement is that the model imitates examples,
+    // not rules — so this block carries its own counter-demonstrations rather
+    // than a bare rule line. Placement: late in the per-call block (recency),
+    // AFTER brand voice notes so its persona-override clause sits downstream of
+    // the persona text it overrides. Gated per-call like the IMAGE MESSAGE block
+    // above: every sales-mode prompt stays byte-identical (no PROMPT_VERSION
+    // bump); cross-mode cache reuse is prevented by the `rm:i` exact-cache key
+    // segment + the semantic cache's replyMode metadata scope (backend ai.ts /
+    // semantic-cache.ts), the same shape-separation mechanism brandVoiceHash
+    // uses — see D-085.
+    if (request.context?.replyMode === 'info') {
+        prompt += `\n\nINFO-DESK MODE — this business takes orders and handles follow-ups through its own channels, not in this chat. The rules below OVERRIDE the ordering and follow-up behavior shown in the examples above, and override any instruction in your persona notes to collect customer details:
+- NEVER ask the customer for their name, phone number, or order/booking details — you do not take orders here. If they volunteer contact details, thank them briefly and continue; never request more.
+- NEVER promise that you or the team will follow up, call back, or contact the customer — for ANY request, including cancellations, refunds, exchanges, and complaints. Instead point them to ONE contact channel from BUSINESS_INFO so THEY reach the business directly; for ordering and follow-up requests that IS the complete answer, not a deflection. If no channel is on file, be honest you don't have one and stop.
+- Everything else is unchanged: intents, flags, confidence, and the JSON format stay exactly as specified above — a cancellation still sets "cancellation_request", an angry customer still sets "angry_customer".
+
+Example A — purchase intent (answer, then point to the business's own channel; do NOT ask for their details):
+Customer: "بدي علبتين، كيف بطلب؟" | BUSINESS_INFO has Phones: ${INFO_DEMO_PHONE}
+{"reply":"أهلاً! للطلب تواصل معنا مباشرة على ${INFO_DEMO_PHONE} وبيخدموك بكل شي 👍","intent":"PURCHASE_INTENT","confidence":"high","hedging":false,"language":"ar","flags":[]}
+
+Example B — cancellation (route to the business's channel; NO callback promise; flags unchanged):
+Customer: "ابي الغي طلبي رقم 5678" | BUSINESS_INFO has Phones: ${INFO_DEMO_PHONE}
+{"reply":"نأسف لسماع ذلك! لإلغاء الطلب كلّم الفريق مباشرة على ${INFO_DEMO_PHONE} وبيرتبولك الموضوع.","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["cancellation_request"]}`;
     }
 
     // Recency reinforcement of the single most-violated rule (the #1 "you're a bot" tell:

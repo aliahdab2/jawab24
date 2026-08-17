@@ -309,6 +309,12 @@ export const pages = pgTable('pages', {
     // cache isolation is free — the persona TEXT is already a cache scope on
     // both layers (exact-key `bv:` segment + semantic brandVoiceHash metadata).
     brandVoiceNotesMulti: jsonb('brand_voice_notes_multi').$type<Record<string, string>>(),
+    // Per-page override of the workspace reply mode (settings.reply_mode).
+    // NULL = inherit; 'sales' | 'info' is a deliberate pin for this page that
+    // survives a workspace-level flip. Resolved via resolveEffectiveReplyMode
+    // in @jawab24/shared. No default — null must stay distinguishable from an
+    // explicit 'sales' pin (same semantics as leadStages/leadFields above).
+    replyMode: varchar('reply_mode', { length: 10 }),
     // Defensive auto-pause: when Facebook persistently rejects our reply sends
     // (Page restricted, unpublished, permission lost mid-flight), we bump the
     // counter on every page-level failure (our_fault / unknown buckets), reset
@@ -672,6 +678,11 @@ export const settings = pgTable('settings', {
     handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(DEFAULT_HANDOFF_PAUSE_MINUTES),
     // Reply style & confidence routing
     replyStyle: varchar('reply_style', { length: 20 }).default('professional'),
+    // Workspace default reply mode: 'sales' (AI may ask customers for contact
+    // details and promise follow-up) | 'info' (information desk — never asks,
+    // never promises; passive lead storage only). Pages override via
+    // pages.reply_mode (NULL = inherit this value).
+    replyMode: varchar('reply_mode', { length: 10 }).default('sales'),
     brandVoiceNotes: text('brand_voice_notes').default(''),
     brandVoiceNotesMulti: jsonb('brand_voice_notes_multi').$type<Record<string, string>>().default({}),
     holdLowConfidence: boolean('hold_low_confidence').default(false),

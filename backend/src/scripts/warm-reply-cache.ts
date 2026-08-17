@@ -109,9 +109,10 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
 
     const pageRows = await db
         // The shared prompt-column subset (incl. the D-084 page persona — a
-        // `bv:` cache-key segment; warming an override page without it writes
-        // keys production never reads). One definition, spread by both this
-        // select and the admin playground preview.
+        // `bv:` cache-key segment — and the reply mode, an `rm:` segment;
+        // warming an override page without them writes keys production never
+        // reads). One definition, spread by both this select and the admin
+        // playground preview.
         .select({ ...PLAYGROUND_PAGE_COLUMNS, facebookPageId: pages.facebookPageId })
         .from(pages)
         .where(inArray(pages.id, pageIds));

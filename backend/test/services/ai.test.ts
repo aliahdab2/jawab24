@@ -1145,6 +1145,43 @@ describe('AI Service', () => {
         });
     });
 
+    describe('replyMode-scoped exact cache (D-085)', () => {
+        it('gives info mode its own bucket (an info page must never read a sales reply)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const ctx = { language: 'ar', pageId: 'page-1', kbActiveVersion: 1 } as const;
+
+            await service.saveToCache('كيف بطلب؟', 'ابعتلي اسمك ورقمك', { ...ctx, replyMode: 'sales' });
+            const keySales = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('كيف بطلب؟', 'تواصل معنا على 0912345678', { ...ctx, replyMode: 'info' });
+            const keyInfo = vi.mocked(redis.set).mock.calls[0][0];
+
+            // A cached sales reply may literally ask for the customer's phone —
+            // serving it to an info-mode page is the violation the mode exists
+            // to prevent (and vice versa).
+            expect(keyInfo).not.toBe(keySales);
+        });
+
+        it('keeps the cache key byte-identical for sales vs omitted (no fleet-wide invalidation, Rule 17)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const ctx = { language: 'ar', pageId: 'page-1', kbActiveVersion: 1 } as const;
+
+            await service.saveToCache('كيف بطلب؟', 'ابعتلي اسمك ورقمك', { ...ctx, replyMode: 'sales' });
+            const keySales = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('كيف بطلب؟', 'ابعتلي اسمك ورقمك', ctx);
+            const keyOmitted = vi.mocked(redis.set).mock.calls[0][0];
+
+            // Every existing key was written with no replyMode segment; explicit
+            // 'sales' must land on those same keys or the whole warm cache retires.
+            expect(keySales).toBe(keyOmitted);
+        });
+    });
+
     describe('Post-context scoped exact cache', () => {
         it('should produce different cache keys for different posts on the same page', async () => {
             const { redis } = await import('../../src/lib/redis');

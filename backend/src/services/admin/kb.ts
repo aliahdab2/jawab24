@@ -6,6 +6,7 @@ import { getIngestionService } from '../pages';
 import { replyGenerator } from '../reply/generator';
 import { buildPlaygroundContext, PLAYGROUND_PAGE_COLUMNS } from '../reply/playgroundContext';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
+import { REPLY_MODES, type ReplyMode } from '@jawab24/shared';
 import type { PlaygroundRequestBody } from '../../types/admin';
 
 /**
@@ -233,7 +234,7 @@ class AdminKbService {
     async runPlayground(body: PlaygroundRequestBody, log: FastifyBaseLogger): Promise<PlaygroundResult> {
         const {
             pageId, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         } = body;
         const startTime = Date.now();
 
@@ -242,10 +243,11 @@ class AdminKbService {
         }
 
         const [page] = await db
-            // The shared prompt-column subset (incl. the D-084 page persona) —
-            // hand-listing columns here is how a preview drifts from production
-            // (wrong reply AND wrong `bv:` cache key), so the list lives in ONE
-            // place both this select and warm-reply-cache spread.
+            // The shared prompt-column subset (incl. the D-084 page persona and
+            // the reply mode) — hand-listing columns here is how a preview
+            // drifts from production (wrong reply AND wrong cache key), so the
+            // list lives in ONE place both this select and warm-reply-cache
+            // spread.
             .select({ ...PLAYGROUND_PAGE_COLUMNS })
             .from(pages)
             .where(eq(pages.id, pageId))
@@ -255,9 +257,18 @@ class AdminKbService {
             throw new NotFoundError('Page not found');
         }
 
+        // B-1: the reply-mode override is an EVAL-harness input, not an admin UI
+        // experiment — honored only for source==='eval', and only as a valid enum
+        // value. Anything else (admin UI calls, garbage strings) falls through to
+        // page → workspace resolution exactly like production.
+        const replyModeOverride: ReplyMode | undefined =
+            source === 'eval' && REPLY_MODES.includes(replyMode as ReplyMode)
+                ? (replyMode as ReplyMode)
+                : undefined;
+
         const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
             page, question, channel, postMessage, messageTags, ourFacebookPageId,
-            conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
+            conversationHistory, replyStyle, replyMode: replyModeOverride, brandVoiceNotes, customerContext, senderName, minutesSinceLastMessage, model, source,
         });
 
         replyGenerator.setLogger(log);

@@ -145,6 +145,14 @@ describe('UpdateSettingsSchema', () => {
             expect(UpdateSettingsSchema.safeParse({ replyStyle: 'snarky' }).success).toBe(false);
         });
 
+        it.each(['sales', 'info'])('accepts replyMode=%s', (m) => {
+            expect(UpdateSettingsSchema.safeParse({ replyMode: m }).success).toBe(true);
+        });
+
+        it('rejects unknown replyMode', () => {
+            expect(UpdateSettingsSchema.safeParse({ replyMode: 'support' }).success).toBe(false);
+        });
+
         it.each(['public', 'private', 'dual'])('accepts commentReplyMode=%s', (m) => {
             expect(UpdateSettingsSchema.safeParse({ commentReplyMode: m }).success).toBe(true);
         });

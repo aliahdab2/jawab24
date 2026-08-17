@@ -67,6 +67,7 @@ export const UpdateSettingsSchema = z.object({
     notificationsEnabled: z.boolean().optional(),
     newLeadAlertsEnabled: z.boolean().optional(),
     replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
+    replyMode: z.enum(['sales', 'info']).optional(),
     brandVoiceNotes: z
         .string()
         .max(MAX_BRAND_VOICE_LENGTH, `Brand voice notes must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer`)

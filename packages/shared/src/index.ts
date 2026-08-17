@@ -460,6 +460,9 @@ export interface Page {
    * workspace field).
    */
   brandVoiceNotesMulti?: Record<string, string> | null;
+  // Per-page reply-mode override. null/absent = inherit settings.replyMode
+  // (see resolveEffectiveReplyMode).
+  replyMode?: string | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
@@ -1868,6 +1871,41 @@ export function resolveEffectiveLeadFields(
   return pageOverride ?? workspaceDefault ?? [];
 }
 
+// --- Reply mode (per-page override with workspace fallback) ---
+// 'sales' = today's behavior: the AI asks purchase-intent customers for their
+// name/phone and may promise team follow-up on complaints (lead capture active).
+// 'info' = information desk: the AI never asks the customer for contact details
+// and never promises follow-up — it routes the customer to the business's own
+// channels instead. Volunteered numbers are still stored (passive capture); only
+// push alerts are suppressed. Same override semantics as leadStages/leadFields:
+// page NULL/undefined = inherit the workspace default; an explicit page value is
+// a deliberate pin that survives a workspace-level flip.
+export type ReplyMode = 'sales' | 'info';
+
+export const REPLY_MODES: readonly ReplyMode[] = ['sales', 'info'] as const;
+
+export function resolveEffectiveReplyMode(
+  pageOverride: ReplyMode | string | null | undefined,
+  workspaceDefault: ReplyMode | string | undefined,
+): ReplyMode {
+  const page = pageOverride === 'sales' || pageOverride === 'info' ? pageOverride : undefined;
+  const ws = workspaceDefault === 'sales' || workspaceDefault === 'info' ? workspaceDefault : undefined;
+  return page ?? ws ?? 'sales';
+}
+
+/**
+ * The placeholder phone used inside the INFO-DESK prompt block's
+ * counter-demonstrations (ai-worker promptBuilder). Deliberately an
+ * all-zero-tail number no operator allocates: if the model ever echoes the
+ * EXAMPLE's number instead of the page's own BUSINESS_INFO phone, that leak
+ * must be (a) harmless to a real customer and (b) mechanically detectable.
+ * Eval guards assert replies never contain any of these tokens — a fixture
+ * page must therefore never use them as its own phone (finding E-1).
+ */
+export const INFO_DEMO_PHONE = '0900000000';
+
+export const INFO_DEMO_LEAK_TOKENS: readonly string[] = [INFO_DEMO_PHONE] as const;
+
 export interface LeadField {
   key: string;
   label_en: string;
@@ -1972,6 +2010,8 @@ export interface WorkspaceSettings {
   messageEscalationMinutes: number;
   handoffPauseDurationMinutes: number;
   replyStyle: 'professional' | 'casual' | 'enthusiastic';
+  /** Workspace default reply mode; pages may override (pages.reply_mode, NULL = inherit). */
+  replyMode: ReplyMode;
   brandVoiceNotes: string;
   brandVoiceNotesMulti: Record<string, string>;
   holdLowConfidence: boolean;
@@ -2020,6 +2060,7 @@ const WORKSPACE_SETTINGS_KEY_MAP: Record<keyof WorkspaceSettings, true> = {
   messageEscalationMinutes: true,
   handoffPauseDurationMinutes: true,
   replyStyle: true,
+  replyMode: true,
   brandVoiceNotes: true,
   brandVoiceNotesMulti: true,
   holdLowConfidence: true,

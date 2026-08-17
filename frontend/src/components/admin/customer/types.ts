@@ -43,6 +43,7 @@ export interface CustomerSettings {
         commentsAutoReply: boolean | null;
         messagesAutoReply: boolean | null;
         commentReplyMode: string | null;
+        replyMode: string | null;
         holdLowConfidence: boolean | null;
         businessHoursOnly: boolean | null;
         businessHoursStart: string | null;

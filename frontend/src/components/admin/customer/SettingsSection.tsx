@@ -16,7 +16,7 @@ type SettingsValues = CustomerSettings['values'];
 const SETTING_GROUPS: { titleKey: string; keys: (keyof SettingsValues)[] }[] = [
     {
         titleKey: 'customer.settingsGroupReplies',
-        keys: ['aiEnabled', 'aiModel', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'holdLowConfidence', 'replyDelay'],
+        keys: ['aiEnabled', 'aiModel', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'replyMode', 'holdLowConfidence', 'replyDelay'],
     },
     {
         titleKey: 'customer.settingsGroupLanguage',

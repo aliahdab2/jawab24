@@ -1,3 +1,5 @@
+import type { ReplyMode } from '@jawab24/shared';
+
 export interface SettingsState {
   dashboardLanguage: string;
   defaultReplyLanguage: string;
@@ -32,6 +34,10 @@ export interface SettingsState {
   messageEscalationMinutes: number;
   handoffPauseDurationMinutes: number;
   replyStyle: string;
+  /** Workspace default reply mode; pages may override per-page. Typed as the
+   *  shared union, not `string`, so a typo can never reach the PUT (the backend
+   *  would 400 the whole save) and the UI needs no defensive re-narrowing. */
+  replyMode: ReplyMode;
   brandVoiceNotes: string;
   holdLowConfidence: boolean;
 }

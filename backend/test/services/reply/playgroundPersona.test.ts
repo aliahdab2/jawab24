@@ -135,3 +135,36 @@ describe('buildPlaygroundContext — previews the merchant\'s stored persona and
         expect(commentReplyMode).toBe('private');
     });
 });
+
+describe('buildPlaygroundContext — reply mode resolution (D-085)', () => {
+    beforeEach(() => {
+        vi.mocked(settingsService.getSettings).mockResolvedValue(OWNER_ROW as never);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(STORED as never);
+    });
+
+    it('resolves to sales by default (no page override, no workspace value)', async () => {
+        const { playgroundInput } = await build();
+        expect(playgroundInput.replyMode).toBe('sales');
+    });
+
+    it('the PAGE override wins over the workspace default — the harness must match production, not resolve the workspace value (Rule 19.2)', async () => {
+        // A page pinned to info inside a sales workspace: production honors the
+        // pin, so the playground/eval must too — a page object missing the
+        // replyMode column would silently preview the wrong mode here.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ ...STORED, replyMode: 'sales' } as never);
+        const { playgroundInput } = await build({ page: { ...PAGE, replyMode: 'info' } as never });
+        expect(playgroundInput.replyMode).toBe('info');
+    });
+
+    it('inherits the workspace value when the page has no override', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ ...STORED, replyMode: 'info' } as never);
+        const { playgroundInput } = await build();
+        expect(playgroundInput.replyMode).toBe('info');
+    });
+
+    it('an explicit caller value still wins — the eval passes replyMode per case', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ ...STORED, replyMode: 'info' } as never);
+        const { playgroundInput } = await build({ replyMode: 'sales' });
+        expect(playgroundInput.replyMode).toBe('sales');
+    });
+});

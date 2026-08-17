@@ -145,6 +145,13 @@ export interface NotificationPayload {
  */
 export interface WorkspaceNotifyOptions {
     gatePushBySetting?: 'newLeadAlertsEnabled';
+    /**
+     * Force-mute the push for every member regardless of their per-user setting
+     * (bell row and SSE untouched — same semantics as a muted member). Used by
+     * lead alerts when the capturing page runs replyMode 'info': the merchant
+     * chose "information source", so volunteered numbers are stored silently.
+     */
+    suppressPush?: boolean;
 }
 
 /** Default fallback language when the requested locale has no translation */
@@ -992,9 +999,11 @@ class NotificationService {
             .where(eq(workspaceMembers.workspaceId, workspaceId));
 
         // Resolve per-user push preference once for the whole workspace (one query
-        // for N members) when a gating setting is requested.
+        // for N members) when a gating setting is requested. Skipped entirely when
+        // suppressPush already force-mutes the push — the preference could not
+        // change the outcome, so the query would be pure waste.
         let pushPrefByUser: Map<string, boolean> | null = null;
-        if (options?.gatePushBySetting === 'newLeadAlertsEnabled' && members.length > 0) {
+        if (options?.gatePushBySetting === 'newLeadAlertsEnabled' && !options?.suppressPush && members.length > 0) {
             const prefRows = await db
                 .select({ userId: settings.userId, enabled: settings.newLeadAlertsEnabled })
                 .from(settings)
@@ -1007,7 +1016,9 @@ class NotificationService {
 
         await Promise.all(
             members.map(m => {
-                const pushEnabled = pushPrefByUser ? (pushPrefByUser.get(m.userId) ?? true) : undefined;
+                const pushEnabled = options?.suppressPush
+                    ? false
+                    : pushPrefByUser ? (pushPrefByUser.get(m.userId) ?? true) : undefined;
                 return this.sendNotification(m.userId, payload, { pushEnabled }).catch(err =>
                     captureError(err, 'Failed to send workspace notification to member', {
                         tags: { service: 'notifications' },

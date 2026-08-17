@@ -8,6 +8,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
+import { isReplyModeVisible } from '@/lib/featureFlags';
 import { getLocaleDirection } from '@/utils/locale';
 import { usePersistedBoolean } from '@/hooks/usePersistedBoolean';
 import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
@@ -49,9 +50,20 @@ interface ReplyStyleCardProps extends SettingsCardProps {
    * for legacy call sites/tests; when absent the draft is assumed clean.
    */
   savedBrandVoiceNotesMulti?: Record<string, string>;
+  /**
+   * The PERSISTED workspace reply mode (parent's initialSettings) — what an
+   * inheriting page actually inherits TODAY. The page-scope options render the
+   * inherit label from this, never from the live draft (same rule as
+   * savedBrandVoiceNotesMulti), and page pins are disabled while the draft
+   * default is unsaved so the merchant never customizes against a default
+   * that doesn't exist yet.
+   */
+  savedReplyMode?: 'sales' | 'info';
+  /** Active workspace id — gates the reply-mode section (D-085 pilot). */
+  workspaceId?: string | null;
 }
 
-export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti }: ReplyStyleCardProps) {
+export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti, savedReplyMode = 'sales', workspaceId }: ReplyStyleCardProps) {
   const t = useTranslations('settings');
   const field = useMultilingualSettingsField(settings.brandVoiceNotesMulti);
   const { currentLang, value, sourceLang } = field;
@@ -163,7 +175,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // carrying an override: the override lives on the row, not the token, so a
   // revoked token must not make the persona invisible and unrevertable while
   // a reconnect silently revives it.
-  const switcherPages = pages.filter((p) => p.isConnected !== false || hasOverrideContent(p.brandVoiceNotesMulti));
+  // A page carrying ANY row-level override stays listed even when disconnected
+  // — the reply-mode pin (D-085) counts exactly like the persona does: it lives
+  // on the row, not the token, so a revoked token must not make the pin
+  // invisible and unrevertable while a reconnect silently revives it.
+  const hasRowOverride = (p: Page) => hasOverrideContent(p.brandVoiceNotesMulti) || p.replyMode === 'sales' || p.replyMode === 'info';
+  const switcherPages = pages.filter((p) => p.isConnected !== false || hasRowOverride(p));
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
   const scopedPage = personaScope === 'workspace' ? null : switcherPages.find((p) => p.id === personaScope) ?? null;
 
@@ -221,6 +238,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     setPersonaScope(next);
     setPageError(null);
     setPageNotice(null);
+    setPageModeError(null);
   };
 
   const applyPagePatch = async (payload: Record<string, string> | null) => {
@@ -263,6 +281,54 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // deleting it needs an explicit confirmation, not a one-click button beside
   // the save.
   const revertPagePersona = () => setConfirmRevert(true);
+
+  // ── Reply mode (D-085) — pilot workspaces only ───────────────────────────
+  // Workspace scope binds settings.replyMode through the page-bottom save
+  // (a PIPELINE_FIELDS member — no new save path). A page scope PATCHes
+  // immediately (optimistic, rolled back on error), like the lead config.
+  const replyModeEnabled = isReplyModeVisible(workspaceId);
+  const modeLabel = (mode: 'sales' | 'info') =>
+    t(mode === 'info' ? 'replyMode.infoDesk' : 'replyMode.sales');
+  const [pageModeSaving, setPageModeSaving] = useState(false);
+  const [pageModeError, setPageModeError] = useState<string | null>(null);
+  // Page pins are disabled while the DRAFT default differs from the PERSISTED
+  // one: the inherit option's label names the saved default, and letting the
+  // merchant customize against an unsaved draft pins pages to a default that
+  // doesn't exist yet.
+  const workspaceModeDraftUnsaved = (settings.replyMode === 'info' ? 'info' : 'sales') !== savedReplyMode;
+  const scopedPageMode: 'sales' | 'info' | null =
+    scopedPage?.replyMode === 'info' ? 'info' : scopedPage?.replyMode === 'sales' ? 'sales' : null;
+
+  const setWorkspaceMode = (mode: 'sales' | 'info') => {
+    if (settings.replyMode !== mode) setSettings({ ...settings, replyMode: mode });
+  };
+
+  const setPageMode = async (mode: 'sales' | 'info' | null) => {
+    if (!scopedPage || pageModeSaving || scopedPageMode === mode) return;
+    const pageId = scopedPage.id;
+    const previous = scopedPageMode;
+    setPageModeSaving(true);
+    setPageModeError(null);
+    // Optimistic: pin locally now, roll back on error.
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, replyMode: mode } : p)));
+    try {
+      await pagesApi.updateReplyMode(pageId, mode);
+    } catch (err) {
+      setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, replyMode: previous } : p)));
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      setPageModeError(code === 'REPLY_MODE_NOT_ENABLED' ? t('replyMode.notEnabled') : t('replyMode.pageUpdateError'));
+      captureError(err, 'Failed to save page reply mode', {
+        tags: { component: 'ReplyStyleCard' },
+        extra: { pageId },
+      });
+    } finally {
+      setPageModeSaving(false);
+    }
+  };
+
+  // The mode the scoped page will actually RUN with (its pin, else the saved
+  // workspace default) — decides whether the quiet-leads note applies.
+  const scopedPageEffectiveMode = scopedPageMode ?? savedReplyMode;
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -342,14 +408,21 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                 // Overridden pages are marked IN the list — the merchant sees
                 // which pages diverge before opening each one. A disconnected
                 // page appears only because it carries an override, and says so.
-                ...switcherPages.map((p) => ({
-                  value: p.id,
-                  label: hasOverrideContent(p.brandVoiceNotesMulti)
+                // A pinned reply mode (D-085) is marked the same way.
+                ...switcherPages.map((p) => {
+                  const base = hasOverrideContent(p.brandVoiceNotesMulti)
                     ? (p.isConnected === false
                       ? t('replyStyle.overriddenOptionDisconnected', { page: p.name ?? '' })
                       : t('replyStyle.overriddenOption', { page: p.name ?? '' }))
-                    : p.name ?? '',
-                })),
+                    : p.name ?? '';
+                  const pinnedMode = replyModeEnabled && (p.replyMode === 'sales' || p.replyMode === 'info')
+                    ? (p.replyMode as 'sales' | 'info')
+                    : null;
+                  return {
+                    value: p.id,
+                    label: pinnedMode ? t('replyMode.pinnedOption', { label: base, mode: modeLabel(pinnedMode) }) : base,
+                  };
+                }),
               ]}
               aria-labelledby="persona-scope-label"
               compact
@@ -382,6 +455,100 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             )}
           </div>
         )}
+        {/* Reply-mode question (D-085) — pilot workspaces only. Business
+            question, not a technical term: the merchant picks what the
+            assistant DOES with a buying customer. Workspace scope binds
+            settings.replyMode (saved by the page-bottom button); a page scope
+            PATCHes immediately with an inherit option naming the SAVED
+            default. */}
+        {replyModeEnabled && (
+          <div className="mb-3 p-3 rounded-xl border border-theme-border bg-muted/30">
+            <p id="reply-mode-question" className="text-sm font-bold text-foreground mb-2" dir="auto">
+              {t('replyMode.question')}
+            </p>
+            {!scopedPage ? (
+              <div role="radiogroup" aria-labelledby="reply-mode-question" className="flex flex-col gap-2">
+                {(['sales', 'info'] as const).map((mode) => {
+                  const selected = (settings.replyMode === 'info' ? 'info' : 'sales') === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setWorkspaceMode(mode)}
+                      className={clsx(
+                        'min-h-[44px] w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border text-start transition-colors',
+                        selected
+                          ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
+                          : 'border-theme-border hover:border-brand-300 dark:hover:border-brand-700',
+                      )}
+                    >
+                      <span className="text-sm font-bold text-foreground">{modeLabel(mode)}</span>
+                      <span className="text-xs text-muted-foreground" dir="auto">
+                        {t(mode === 'info' ? 'replyMode.infoDeskDesc' : 'replyMode.salesDesc')}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                role="radiogroup"
+                aria-labelledby="reply-mode-question"
+                aria-busy={pageModeSaving}
+                className="flex flex-col gap-2"
+              >
+                {([null, 'sales', 'info'] as const).map((mode) => {
+                  const selected = scopedPageMode === mode;
+                  const label = mode === null
+                    ? t('replyMode.inherit', { mode: modeLabel(savedReplyMode) })
+                    : modeLabel(mode);
+                  return (
+                    <button
+                      key={mode ?? 'inherit'}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={pageModeSaving || workspaceModeDraftUnsaved}
+                      onClick={() => void setPageMode(mode)}
+                      className={clsx(
+                        'min-h-[44px] w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border text-start transition-colors',
+                        selected
+                          ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
+                          : 'border-theme-border hover:border-brand-300 dark:hover:border-brand-700',
+                        (pageModeSaving || workspaceModeDraftUnsaved) && 'opacity-60 cursor-not-allowed',
+                      )}
+                    >
+                      <span className="text-sm font-bold text-foreground">{label}</span>
+                      {mode !== null && (
+                        <span className="text-xs text-muted-foreground" dir="auto">
+                          {t(mode === 'info' ? 'replyMode.infoDeskDesc' : 'replyMode.salesDesc')}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* ONE hint line: page pins blocked until the draft default is
+                saved; otherwise page choices save immediately. The quiet-leads
+                note appears exactly when the shown selection means 'info'. */}
+            {scopedPage && workspaceModeDraftUnsaved && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyMode.saveDefaultFirst')}</p>
+            )}
+            {scopedPage && !workspaceModeDraftUnsaved && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyMode.pageAutoSaves')}</p>
+            )}
+            {((scopedPage && scopedPageEffectiveMode === 'info') || (!scopedPage && settings.replyMode === 'info')) && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyMode.infoLeadsNote')}</p>
+            )}
+            {pageModeError && (
+              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{pageModeError}</p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-1.5">
           {/* The htmlFor follows the scope — in page scope the workspace
               textarea (#brandVoiceNotes) is not in the DOM, and a label with a

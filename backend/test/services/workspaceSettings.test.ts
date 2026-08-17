@@ -112,6 +112,7 @@ const FULL_JSONB = {
     supportedLanguages: ['en', 'ar'],
     autoDetectLanguage: true,
     replyStyle: 'professional',
+    replyMode: 'sales',
     brandVoiceNotes: '',
     brandVoiceNotesMulti: {},
     holdLowConfidence: false,

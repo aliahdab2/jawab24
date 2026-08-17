@@ -9,7 +9,7 @@ import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { logAutoReplyToggle, auditLog } from '../services/auditLog';
-import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, UpdateBrandVoiceDTO, createRequestLogger } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, UpdateBrandVoiceDTO, UpdateReplyModeDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
@@ -391,6 +391,60 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update page persona' });
+        }
+    }
+
+    /**
+     * Set a page's reply-mode override.
+     * PATCH /pages/:id/reply-mode  (admin+ only)
+     * Body: { replyMode: 'sales' | 'info' | null } — null reverts to the
+     * workspace default. 'info' is allowlist-gated at this WRITE path
+     * (config.replyMode.workspaceIds) — the reply pipeline itself just reads
+     * whatever is stored. GA = deleting the gate in code, not emptying the env.
+     */
+    async updateReplyMode(request: FastifyRequest<{ Params: { id: string }; Body: UpdateReplyModeDTO }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId || !req.user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const body = request.body ?? ({} as UpdateReplyModeDTO);
+        if (!('replyMode' in body) || (body.replyMode !== null && body.replyMode !== 'sales' && body.replyMode !== 'info')) {
+            return reply.status(400).send({ error: 'replyMode must be \'sales\', \'info\', or null' });
+        }
+        const allowlist = config.replyMode.workspaceIds;
+        if (body.replyMode === 'info' && !allowlist.includes(req.workspaceId)) {
+            return reply.status(403).send({ error: 'Reply mode \'info\' is not enabled for this workspace', code: 'REPLY_MODE_NOT_ENABLED' });
+        }
+
+        try {
+            const existing = await pagesService.getPage(req.workspaceId, id);
+            if (!existing) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            const previous = (existing.replyMode as 'sales' | 'info' | null) ?? null;
+
+            const page = await pagesService.updateReplyMode(req.workspaceId, id, body.replyMode);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            // Audit only an actual change (same shape as page.archived above):
+            // a no-op PATCH must not fabricate history.
+            if (previous !== body.replyMode) {
+                void auditLog({
+                    userId: req.user.userId,
+                    workspaceId: req.workspaceId,
+                    pageId: id,
+                    action: 'page.reply_mode_changed',
+                    entityType: 'page',
+                    entityId: id,
+                    metadata: { previous, next: body.replyMode },
+                });
+            }
+            return reply.send(serializePage(page));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to update reply mode' });
         }
     }
 

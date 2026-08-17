@@ -27,6 +27,7 @@ describe('PIPELINE_FIELDS sync guard', () => {
             'dualReplyNudgeVariations',
             'aiEnabled',
             'replyStyle',
+            'replyMode',
             'holdLowConfidence',
         ];
         for (const field of required) {
