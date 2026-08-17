@@ -371,6 +371,20 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     ? 'replyStyle.brandVoicePlaceholderInfo'
     : 'replyStyle.brandVoicePlaceholder';
 
+  // Testing must never run against text the merchant can still see but has not
+  // saved. `hasChanges` only covers the WORKSPACE draft (`settings` vs
+  // `initialSettings`), and a page persona lives in local `pageDraft` — so a
+  // page-scope edit left the button ENABLED and the reply was generated from the
+  // SAVED persona while the new text sat on screen. Worse than a silent save: it
+  // answers plausibly from the wrong input, so the merchant reads it as "my words
+  // had no effect".
+  // ⚠️ The `scopedPage` guard is load-bearing. Outside a page scope the seeding
+  // effect returns early, so `pageDraft` stays '' (or holds the last page's text)
+  // while `pageEffectiveText` is the workspace persona — `pageDraftChanged` is
+  // then true for every merchant with a persona, which would disable the button
+  // for all of them.
+  const testBlocked = hasChanges === true || (!!scopedPage && pageDraftChanged);
+
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
 
@@ -776,11 +790,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           <button
             type="button"
             onClick={openTestModal}
-            disabled={hasChanges === true}
-            title={hasChanges ? t('replyStyle.testSaveFirst') : undefined}
+            disabled={testBlocked}
+            title={testBlocked ? t('replyStyle.testSaveFirst') : undefined}
             className={clsx(
               'ms-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
-              hasChanges === true
+              testBlocked
                 ? 'bg-muted text-muted-foreground cursor-not-allowed'
                 : 'bg-brand-500 text-white hover:bg-brand-600',
             )}

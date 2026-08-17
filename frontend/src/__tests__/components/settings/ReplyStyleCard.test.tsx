@@ -597,4 +597,77 @@ describe('ReplyStyleCard', () => {
       expect(screen.getByText(enSettings.replyStyle.tonePageNote)).toBeInTheDocument();
     });
   });
+
+  // ── Test button vs unsaved work (2026-08-17) ──────────────────────────────
+  // `hasChanges` covers only the WORKSPACE draft. A page persona lives in local
+  // `pageDraft`, so a page-scope edit left Test ENABLED and the reply came from
+  // the SAVED persona while the new text sat on screen — a plausible answer from
+  // the wrong input, which reads as "my words had no effect".
+  describe('test button vs unsaved work', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+    const testBtn = () => screen.getByRole('button', { name: new RegExp(enSettings.replyStyle.openTestModal, 'i') });
+
+    it('an unsaved PAGE persona edit blocks the test, with the save-first reason', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(/Editing persona for/i);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      expect(testBtn()).toBeEnabled();
+
+      fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), {
+        target: { value: 'A brand new page persona the merchant has not saved' },
+      });
+
+      expect(testBtn()).toBeDisabled();
+      expect(testBtn()).toHaveAttribute('title', enSettings.replyStyle.testSaveFirst);
+    });
+
+    it('an untouched page scope still allows the test', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(/Editing persona for/i);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // Merely LOOKING at a page must not block testing it.
+      expect(testBtn()).toBeEnabled();
+    });
+
+    it('a saved workspace persona does NOT block the test outside a page scope', () => {
+      // The trap in the fix: outside a page scope the seeding effect returns
+      // early, so `pageDraft` is '' while `pageEffectiveText` is the workspace
+      // persona — an ungated `pageDraftChanged` reads true and would disable the
+      // button for EVERY merchant who has ever written a persona.
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+
+      expect(testBtn()).toBeEnabled();
+    });
+  });
 });
