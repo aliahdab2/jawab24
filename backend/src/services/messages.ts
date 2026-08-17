@@ -348,40 +348,14 @@ export class MessagesService {
     }
 
     /**
-     * Check if this is the first incoming message from a sender to a page.
-     * Used to gate greeting messages so they only fire on the first conversation,
-     * not on every new message.
-     */
-    async isFirstIncomingMessage(pageId: string, senderId: string): Promise<boolean> {
-        // Fetch at most 2 rows — if fewer than 2 exist, this is the first conversation.
-        // Uses the composite idx_messages_sender_inbox index and short-circuits early.
-        //
-        // Opener taps ("Get Started" / "بدء الاستخدام") count toward the total on
-        // purpose: when the opener fires the configured greeting (or an away message),
-        // the customer's next real message must see `isFirstIncoming=false` so the
-        // greeting/away message does NOT fire again. Filtering opener rows out here
-        // would cause a double-greeting / away-message-spam bug.
-        const rows = await db
-            .select({ id: messages.id })
-            .from(messages)
-            .where(and(
-                eq(messages.pageId, pageId),
-                eq(messages.senderId, senderId),
-                eq(messages.direction, 'incoming'),
-            ))
-            .limit(2);
-        return rows.length <= 1;
-    }
-
-    /**
      * True if the bot has already sent at least one outgoing message to this sender.
      *
-     * Used to gate the first-contact greeting. `isFirstIncomingMessage` only counts
-     * INCOMING rows, so in dual/private comment-reply mode it returns true even when
-     * the bot already DMed the customer the private reply to their comment (stored as
-     * an OUTGOING row — see commentProcessor.storeOutgoingMessage). Those customers
-     * are not fresh contacts and must not be greeted. Also makes the greeting send
-     * idempotent across job retries (a re-run sees the prior outgoing row).
+     * Used to gate the opener-tap greeting: in dual/private comment-reply mode the
+     * bot may have already DMed the customer the private reply to their comment
+     * (stored as an OUTGOING row — see commentProcessor.storeOutgoingMessage). Those
+     * customers are not fresh contacts and must not be greeted. Also makes the
+     * greeting send idempotent across job retries (a re-run sees the prior outgoing
+     * row).
      */
     async hasOutgoingMessage(pageId: string, senderId: string): Promise<boolean> {
         const rows = await db

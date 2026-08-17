@@ -434,13 +434,6 @@ ${isDM
         }
     }
 
-    if (request.context?.suppressGreeting) {
-        // A configured welcome message has already been prepended to this reply by
-        // the backend (the customer's first message). Greeting again here produces a
-        // visible double "welcome", so go straight to the answer.
-        prompt += `\n- A welcome greeting has ALREADY been added to the start of this reply for you. Do NOT greet, welcome, or say hello — begin directly with the answer to the customer's question.`;
-    }
-
     // The clock (2026-07-24) is NOT rendered here. It was, originally — and replay
     // testing showed the model ignored it in the system prompt entirely (three
     // wordings, zero behavior change). It now lives in buildUserPrompt, adjacent to

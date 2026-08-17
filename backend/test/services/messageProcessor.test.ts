@@ -1380,7 +1380,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'default' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
 
         const adapter = webhookPreStoredAdapter();
@@ -1403,7 +1402,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'default' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
 
         const adapter = webhookPreStoredAdapter();
@@ -1426,7 +1424,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'ar' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('مرحباً بك في متجرنا');
 
@@ -1451,7 +1448,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
 
@@ -1476,7 +1472,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'ar' },
             greetingMessageEnabled: false,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('مرحباً بك في متجرنا');
 
         const adapter = webhookPreStoredAdapter();
@@ -1492,19 +1487,21 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
-    it('prepends the greeting to the answer on a first real question — never drops the question', async () => {
-        // Regression for prod 2026-06-01: a first DM that carries an actual question
-        // ("what are your prices?") must be ANSWERED. The old behavior sent the welcome
-        // template and returned, so the customer had to ask twice. Now the welcome is
-        // prepended to the AI answer in one message, and the AI is told not to greet
-        // again (suppressGreeting) so there is no double "welcome".
+    it('answers a first typed question directly — the welcome is NEVER prepended to an AI reply (opener-only greeting)', async () => {
+        // Regression guard for the 2026-08-17 owner ruling: the configured welcome
+        // fires ONLY on the "Get Started" opener tap. It used to also be prepended
+        // to the AI answer on a customer's first typed message, with suppressGreeting
+        // telling the model not to greet again — but when the first message IS a bare
+        // greeting there is no question to "answer directly", so the model greeted
+        // back and ~30% of first contacts got a visible double welcome (measured in
+        // prod, 207 first contacts). A typed first message now goes straight to the
+        // AI with no prefix and no suppressGreeting plumbing.
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
 
@@ -1515,30 +1512,60 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
 
         expect(result.success).toBe(true);
-        // The question is answered, not dropped.
-        expect(replyGenerator.generateForMessage).toHaveBeenCalledWith(
-            expect.objectContaining({ suppressGreeting: true }),
-            expect.anything(),
-        );
-        // Welcome + answer are delivered in a single message.
+        // The question is answered by the AI alone — no welcome prefix, one message.
+        expect(adapter.sendReply).toHaveBeenCalledTimes(1);
         expect(adapter.sendReply).toHaveBeenCalledWith(
-            expect.anything(), 'sender-1', 'Welcome to our store!\n\nAI reply',
+            expect.anything(), 'sender-1', 'AI reply',
         );
+        // The greeting machinery is not even consulted for typed messages.
+        expect(workspaceSettingsService.getGreetingMessage).not.toHaveBeenCalled();
+        // The suppressGreeting plumbing is gone — a reintroduction must fail here.
+        const generatorInput = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0] as Record<string, unknown>;
+        expect('suppressGreeting' in generatorInput).toBe(false);
     });
 
-    it('does NOT greet when the bot already DMed the customer (dual-mode private reply) — answers directly', async () => {
-        // Repro of the dual-mode flow: the bot already sent the customer a detailed DM
-        // (the private reply to their comment, stored as an outgoing row), so when they
-        // type their first DM ("دورة محاسبة") they are NOT a fresh contact. The welcome
-        // must be suppressed and the question answered directly — no incongruous
-        // "welcome, how can I help?" mid-conversation.
+    it('a typed bare greeting («مرحبا») is NOT an opener — the AI replies once, with no merchant-welcome prefix', async () => {
+        // The exact prod scenario behind the double-greeting defect: a customer opens
+        // with a hand-typed «مرحبا». That is not the "Get Started" system phrase, so
+        // it must flow to the AI (which greets naturally) — NOT fire the configured
+        // welcome, and NOT get the welcome prepended on top of the AI's greeting.
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'ar' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('أهلا وسهلا كيف فيي ساعدك ؟');
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'مرحبا', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
+        // Exactly one message: the AI reply, bare — the double welcome is impossible.
+        expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'AI reply',
+        );
+        expect(workspaceSettingsService.getGreetingMessage).not.toHaveBeenCalled();
+    });
+
+    it('does NOT greet when the bot already DMed the customer (dual-mode private reply) — answers directly', async () => {
+        // Dual-mode flow: the bot already sent the customer a detailed DM (the private
+        // reply to their comment, stored as an outgoing row), so when they type their
+        // first DM ("دورة محاسبة") they are NOT a fresh contact. Typed messages never
+        // touch the greeting machinery — the question is answered directly, with no
+        // incongruous "welcome, how can I help?" mid-conversation.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'ar' },
+            greetingMessageEnabled: true,
+        } as any);
         vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(true); // bot already DMed
         vi.mocked(workspaceSettingsService.getGreetingMessage)
             .mockResolvedValue('الفريق الدمشقي للتدريب اهلا وسهلا بك , كيف فيني ساعدك');
@@ -1549,12 +1576,8 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             adapter, 'page-1', 'sender-1', 'دورة محاسبة', 'msg-1',
         );
 
-        // AI answers; not told to suppress (no greeting was prepended).
-        expect(replyGenerator.generateForMessage).toHaveBeenCalledWith(
-            expect.objectContaining({ suppressGreeting: false }),
-            expect.anything(),
-        );
         // The answer is sent as-is, with no welcome prefix.
+        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
         expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'AI reply');
         expect(adapter.sendReply).not.toHaveBeenCalledWith(
             expect.anything(), 'sender-1', expect.stringContaining('كيف فيني ساعدك'),
@@ -1570,7 +1593,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
 
@@ -1586,44 +1608,12 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
-    it('keeps the merchant greeting intact when greeting + answer exceeds the platform cap', async () => {
-        // The welcome is the merchant's configured text — it must survive truncation. The
-        // AI answer is truncated to the remaining budget instead, so on a tight cap
-        // (Instagram = 1000) the greeting can't be silently pushed out.
-        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
-            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
-            messagesAutoReply: true, replyDelay: 0,
-            greetingMessageMulti: { sourceLang: 'en' },
-            greetingMessageEnabled: true,
-        } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
-        vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
-        const greeting = 'Welcome to our store!';
-        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(greeting);
-        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
-            replyText: 'This is a sentence. '.repeat(90), // ~1800 chars, sentence boundaries
-            replyMethod: 'ai', needsAttention: false,
-        });
-
-        const adapter = webhookPreStoredAdapter({ maxReplyLength: 1000 } as Partial<MessagePlatformAdapter>);
-
-        await messageProcessor.processMessage(
-            adapter, 'page-1', 'sender-1', 'tell me everything', 'msg-1',
-        );
-
-        const sent = vi.mocked(adapter.sendReply).mock.calls[0][2] as string;
-        expect(sent.startsWith(greeting)).toBe(true);   // welcome preserved at the front
-        expect(sent).toContain('\n\n');                  // separator kept
-        expect(sent.length).toBeLessThanOrEqual(1000);   // within the platform cap
-    });
-
-    it('does NOT fire greeting on a non-opener message past the first one (regression: must still respect isFirstIncomingMessage)', async () => {
+    it('does NOT fire greeting on a mid-conversation typed message (greeting is opener-only)', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'en' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome!');
 
         const adapter = webhookPreStoredAdapter();
@@ -1644,7 +1634,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'en' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
 
         const adapter = webhookPreStoredAdapter();
@@ -1665,7 +1654,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'en' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome!');
 
         const adapter = webhookPreStoredAdapter();
@@ -1692,7 +1680,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: false,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
             { id: 'msg-uuid', message: '🥰', createdTime: new Date() } as any,
         ]);
@@ -1715,7 +1702,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageEnabled: false,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
             { id: 'msg-uuid', message: '...', createdTime: new Date() } as any,
         ]);
@@ -1736,7 +1722,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageEnabled: false,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
             { id: 'msg-uuid', message: 'ok 👍', createdTime: new Date() } as any,
         ]);
@@ -1753,7 +1738,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     // ── greetingMessageEnabled toggle (Greeting on/off) ──────────────────
     // The toggle is the explicit gate: only when greetingMessageEnabled=true
     // AND a non-empty configured message exists does the greeting fire on
-    // the first real incoming message. Anything else → AI handles it.
+    // the "Get Started" opener tap. Typed messages always go to the AI.
 
     it('does NOT fire greeting when toggle is OFF, even if a greeting is configured (AI takes over)', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
@@ -1762,7 +1747,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: false,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
 
         const adapter = webhookPreStoredAdapter();
@@ -1785,9 +1769,8 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             greetingMessageMulti: { sourceLang: 'en' },
             greetingMessageEnabled: true,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
-        // Empty/cleared greeting: lookup returns null → greeting branch returns
-        // early without sending; pipeline continues to AI which sends "AI reply".
+        // Empty/cleared greeting: the greeting machinery is opener-only, so a typed
+        // message flows straight to the AI which sends "AI reply".
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
 
         const adapter = webhookPreStoredAdapter();
@@ -1805,19 +1788,15 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     });
 
     it('does NOT re-fire the greeting on the customer’s real message after the opener already greeted (no double-greeting)', async () => {
-        // Regression: when greeting fires on an opener tap, the opener row is
-        // stored as incoming. The customer's NEXT real message must then see
-        // `isFirstIncoming=false` and fall through to AI. If isFirstIncoming
-        // filtered out opener rows, this test would fire the greeting twice.
+        // When the greeting fires on an opener tap, the customer's NEXT typed
+        // message must fall through to the AI — typed messages never touch the
+        // greeting machinery, so a second welcome is impossible.
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'ar' },
             greetingMessageEnabled: true,
         } as any);
-        // Simulating the second processMessage call (opener row already in DB,
-        // real message also in DB → 2 rows → returns false).
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('مرحبتين، نورتنا في Nourva');
 
         const adapter = webhookPreStoredAdapter();
@@ -1832,40 +1811,12 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).toHaveBeenCalled();
     });
 
-    it('sends welcome + answer as a single message on a first real question when toggle is ON', async () => {
-        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
-            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
-            messagesAutoReply: true, replyDelay: 0,
-            greetingMessageMulti: { sourceLang: 'ar' },
-            greetingMessageEnabled: true,
-        } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
-        vi.mocked(messagesService.hasOutgoingMessage).mockResolvedValue(false);
-        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('مرحبتين، نورتنا في Nourva');
-
-        const adapter = webhookPreStoredAdapter();
-
-        const result = await messageProcessor.processMessage(
-            adapter, 'page-1', 'sender-1', 'بكم السعر؟', 'msg-1',
-        );
-
-        expect(result.success).toBe(true);
-        // Exactly one send — the welcome and the answer combined, not two bubbles and
-        // not a dropped question.
-        expect(adapter.sendReply).toHaveBeenCalledTimes(1);
-        expect(adapter.sendReply).toHaveBeenCalledWith(
-            expect.anything(), 'sender-1', 'مرحبتين، نورتنا في Nourva\n\nAI reply',
-        );
-        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
-    });
-
     it('still silently suppresses a repeat opener tap even though it is not the first message (button is always a system phrase)', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
             greetingMessageMulti: { sourceLang: 'default' },
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
 
         const adapter = webhookPreStoredAdapter();
@@ -1987,7 +1938,6 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             messagesAutoReply: false, replyDelay: 0,
         } as any);
         // Not their first message ever — under the old gate this sent nothing.
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(redis.set).mockResolvedValue('OK');
         vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
 
@@ -2303,7 +2253,6 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.flagMessage).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
@@ -2605,7 +2554,6 @@ describe('MessageProcessor — attachment-enrichment park (store-then-enrich)', 
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({

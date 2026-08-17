@@ -1076,20 +1076,27 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         expect(systemPrompt).toContain('General business info here');
     });
 
-    it('adds the no-greeting directive when suppressGreeting is set', async () => {
+    it('never emits a no-greeting directive — the backend no longer prepends a welcome', async () => {
+        // Owner ruling 2026-08-17: the merchant welcome fires ONLY on the "Get Started"
+        // opener tap and is never prepended to an AI reply, so the prompt must never
+        // tell the model "a welcome has already been added — do not greet". That
+        // instruction was unsatisfiable when the customer's first message was a bare
+        // «مرحبا» (nothing to "answer directly"), and the model greeted back — ~30% of
+        // first contacts got a visible double welcome in prod. Reintroducing the line
+        // reintroduces the defect, so this test guards its absence.
         const capture: { messages: any[] } = { messages: [] };
         setupMockService(capture);
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
         const service = new FreshService();
         await service.generateReply({
-            comment: 'دورة محاسبة',
-            context: { channel: 'dm', suppressGreeting: true },
+            comment: 'مرحبا',
+            context: { channel: 'dm' },
         });
 
-        const systemPrompt = capture.messages[0].content;
-        // Backend prepended the merchant welcome; the model must not greet again.
-        expect(systemPrompt).toContain('welcome greeting has ALREADY been added');
+        const systemPrompt = capture.messages[0].content as string;
+        expect(systemPrompt).not.toContain('welcome greeting has ALREADY been added');
+        expect(systemPrompt).not.toContain('Do NOT greet, welcome, or say hello');
     });
 
     it('omits the no-greeting directive when suppressGreeting is absent', async () => {

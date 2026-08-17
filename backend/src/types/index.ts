@@ -97,13 +97,6 @@ export interface AiGenerateRequest {
          */
         timezone?: string;
         /**
-         * When true, the backend has prepended the merchant's configured welcome
-         * greeting to this reply (customer's first message). Tells ai-worker the
-         * model must NOT greet again — go straight to the answer — so the customer
-         * doesn't see a double "welcome". See messageProcessor first-message path.
-         */
-        suppressGreeting?: boolean;
-        /**
          * Minutes elapsed between the previous message in this thread (either
          * direction) and the current customer message. Platform-generic — computed
          * from messages.created_at, so FB/IG/WhatsApp all get it. Rendered by

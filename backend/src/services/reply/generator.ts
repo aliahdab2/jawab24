@@ -345,12 +345,6 @@ export interface GenerateReplyContext {
     defaultReplyLanguage?: string;
     /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */
     timezone?: string;
-    /**
-     * Set by messageProcessor when the merchant's welcome greeting has been prepended
-     * to this (first-contact) reply. Forwarded to the AI as `suppressGreeting` so the
-     * model answers directly instead of adding a second greeting.
-     */
-    suppressGreeting?: boolean;
     /** Facebook `message_tags` array from the Graph webhook — used to detect friend
      *  tags (peer-to-peer) vs page tags (real questions). Only populated for
      *  Facebook comments; undefined for DMs, Instagram, and older rows. */
@@ -750,7 +744,7 @@ export class ReplyGenerator {
                     // default). What must NOT happen is the prompt asserting "the customer
                     // wrote in English" over it; the ai-worker re-derives that from `comment`.
                     language: resolveDmLanguageHint(text, historyForAI.length > 0),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);

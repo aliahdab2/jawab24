@@ -45,8 +45,6 @@ export type Outcome =
     | 'held_self_identification'
     | 'greeting_sent'
     | 'greeting_suppressed'
-    | 'greeting_prefixed'
-    | 'greeting_skipped_already_engaged'
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'

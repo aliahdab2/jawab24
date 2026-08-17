@@ -81,7 +81,7 @@ since 2026-08-02.
 
 | Message | Trigger | Text source (in order) | Throttle |
 |---------|---------|------------------------|----------|
-| **Greeting** | First incoming message from a customer, `greetingMessageEnabled = true` | `greetingMessageMulti` (authored only — **no shipped default**) | Once per customer (`isFirstIncomingMessage` + no prior outgoing) |
+| **Greeting** | "Get Started" / «بدء الاستخدام» opener tap ONLY, `greetingMessageEnabled = true`. Typed messages never fire it — the first-message prepend was removed 2026-08-17 after ~30% of first contacts got a double welcome (the AI greets naturally on first contact) | `greetingMessageMulti` (authored only — **no shipped default**) | Once per customer (no prior outgoing row — `hasOutgoingMessage`) |
 | **Away** | Gate 5 blocks | `awayMessageMulti` → shipped `defaultAway` **only on the business-hours branch** | Once per (page, sender) per **24h** — Redis `SET NX EX`, key `away_msg:*`. **Fail-open**: Redis error ⇒ send (a duplicate beats silence). |
 | **Quota fallback** | Monthly Smart Reply limit exhausted, `limitFallbackEnabled = true` | `limitFallbackMessageMulti` → i18n `messageFallback` / `commentFallback` | — |
 | **Non-text nudge** | Media the CUSTOMER can act on: video / file / unknown type, an oversized or malformed image, failed transcription, or a standing limit (`env_disabled` / `no_subscription`). **Never sent when the failure is ours** — see below | i18n `nonTextNudge` | — |

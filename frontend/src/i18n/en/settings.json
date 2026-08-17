@@ -168,7 +168,6 @@
   "instant": "Instant",
   "delayed": "After delay",
   "delaySeconds": "Seconds",
-  "greetingMessageDesc": "First message to new customers",
   "greetingMessagePlaceholder": "Hello! How can we help you?",
   "simpleMode": "Simple Mode",
   "advancedMode": "Advanced Settings",
@@ -207,10 +206,10 @@
     "desc": "System interface language"
   },
   "greetingMessage": {
-    "title": "First Message to New Customers",
-    "desc": "Sent when a customer messages you for the first time",
-    "enabledLabel": "Send a greeting on first contact",
-    "enabledDescription": "When off, the AI handles the first message directly"
+    "title": "Welcome Message",
+    "desc": "Sent when a new customer opens the chat with the Get Started button",
+    "enabledLabel": "Send a welcome on Get Started",
+    "enabledDescription": "When off, the button sends nothing — the AI replies once the customer writes"
   },
   "awayMessage": {
     "title": "Away Message",
@@ -236,7 +235,6 @@
   "awayMessageLabel": "Away Message",
   "businessHoursLabel": "Jawab24 Reply Schedule",
   "businessHoursErrorMsg": "End time must be after start time",
-  "greetingMessageLabel": "Welcome Message",
   "replyDelayLabel": "Reply Delay",
   "autoReplyBoard": {
     "subtitle": "Who replies, and where",
