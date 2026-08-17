@@ -8,7 +8,8 @@ import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
-import { useIOSPaymentRedirect } from '@/hooks';
+// Direct import, not the '@/hooks' barrel — public page (see DashboardLayout.tsx).
+import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { useSelectPlan } from '@/hooks/useSelectPlan';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';

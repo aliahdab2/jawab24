@@ -71,30 +71,25 @@ export default function MyDocument({ locale }: DocProps) {
 
         {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
+        {/* Warm the cross-origin connections the app hits right after boot.
+            graph.facebook.com 302s every page avatar to an fbcdn host, and the
+            Android APK (served from app.jawab24.com) calls the API on
+            jawab24.com — each is a cold DNS+TCP+TLS handshake on first use.
+            Reasoned, not lab-measured: CDP throttling delays responses, not
+            handshakes, so only real devices show the win. Harmless otherwise. */}
+        <link rel="preconnect" href="https://jawab24.com" />
+        <link rel="preconnect" href="https://graph.facebook.com" />
+        <link rel="dns-prefetch" href="https://scontent.xx.fbcdn.net" />
+
         {/* Global Verification Tags */}
         <meta name="google-site-verification" content="tshkD5ag97rX0t8u87eKuEKTO3ezhPneMj3auK18Jjw" />
 
-        {/* Google Analytics - Global Site Tag (gtag.js) */}
-        {process.env.NEXT_PUBLIC_GA_ID && (
-          <>
-            <script
-              async
-              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
-            />
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `
-                  window.dataLayer = window.dataLayer || [];
-                  function gtag(){dataLayer.push(arguments);}
-                  gtag('js', new Date());
-                  gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}', {
-                    page_path: window.location.pathname,
-                  });
-                `,
-              }}
-            />
-          </>
-        )}
+        {/* Google Analytics moved to _app.tsx as <Script strategy="lazyOnload">.
+            As a raw <script async> here it was the FIRST resource in <head> —
+            163.9 kB (14% of all first-visit bytes) queued ahead of the
+            render-blocking stylesheet. Measured 2026-08-17 at Slow 3G: first
+            paint 16.2 s, CSS arriving 15th in line. Do not reintroduce any
+            third-party script in this file. */}
 
         {/* Organization Structured Data (Global) */}
         <script

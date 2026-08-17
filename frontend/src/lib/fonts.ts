@@ -35,6 +35,15 @@ export const cairo = localFont({
 });
 
 // Alternate Arabic font (static per-weight files)
+//
+// preload: false — deliberately. Tajawal has NO utility class of its own; it is
+// only the second fallback behind Cairo in the `font-sans` / `font-arabic`
+// stacks (tailwind.config.js), so it renders only for glyphs Cairo lacks.
+// next/font preloads EVERY declared src file by default, which put these
+// 8 files (73.4 kB) ahead of the render-blocking stylesheet in <head> — at
+// Slow 3G that alone delayed first paint by seconds (measured 2026-08-17:
+// CSS was 15th in line, first paint 16.2 s). With `display: 'swap'` the files
+// still load on demand if a Cairo-missing glyph ever needs them.
 export const tajawal = localFont({
     src: [
         { path: '../../public/fonts/tajawal-arabic-300.woff2', weight: '300' },
@@ -47,6 +56,7 @@ export const tajawal = localFont({
         { path: '../../public/fonts/tajawal-latin-700.woff2', weight: '700' },
     ],
     display: 'swap',
+    preload: false,
     variable: '--font-tajawal',
 });
 
@@ -60,9 +70,15 @@ export const outfit = localFont({
 });
 
 // Monospace font (variable font — single file covers weights 400–600)
+//
+// preload: false — `font-mono` appears nowhere on the landing / pricing /
+// login / blog-index pages; its public uses (404, /instagram, GDPR status,
+// e-commerce onboarding) tolerate a swap. See the tajawal comment above for
+// why every preload ahead of the stylesheet costs first paint on slow links.
 export const jetbrainsMono = localFont({
     src: '../../public/fonts/jetbrains-mono-latin.woff2',
     weight: '400 600',
     display: 'swap',
+    preload: false,
     variable: '--font-jetbrains-mono',
 });

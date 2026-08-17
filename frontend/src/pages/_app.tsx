@@ -3,6 +3,8 @@ import type { AppProps } from 'next/app';
 import type { NextPage } from 'next';
 import type { ReactElement, ReactNode } from 'react';
 import Head from 'next/head';
+import Script from 'next/script';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { NextIntlClientProvider } from 'next-intl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -22,10 +24,21 @@ import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
 import { resolveBackAction, createNavDepthTracker } from '@/lib/nativeBackButton';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
-import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { AUTH_BRIDGE_PATHS } from '@/constants/auth';
-import { useSSE, useTheme } from '@/hooks';
+// Direct imports, NOT the '@/hooks' barrel (53 re-exports): _app is in the
+// shared chunk every public visitor downloads, and the barrel drags
+// sonner/react-query/api-consuming hooks into it (measured 2026-08-17:
+// _app chunk 238.9 kB wire at Slow 3G).
+import { useSSE } from '@/hooks/useSSE';
+import { useTheme } from '@/hooks/useTheme';
+
+// PushDeniedBanner statically imports @capacitor/core; it renders only inside
+// the authed app, so keep the Capacitor package out of the public shared chunk.
+const PushDeniedBanner = dynamic(
+  () => import('@/components/ui/PushDeniedBanner').then((m) => m.PushDeniedBanner),
+  { ssr: false },
+);
 import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale, isRTLLocale } from '@/utils/locale';
 
 /**
@@ -586,6 +599,31 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
               --font-jetbrains-mono: ${jetbrainsMono.style.fontFamily};
             }
           `}</style>
+          {/* Google Analytics — lazyOnload, deliberately. As a raw
+              <script async> in _document's <Head> it was the FIRST resource
+              in <head>: 163.9 kB (14% of all first-visit bytes) queued ahead
+              of the render-blocking stylesheet (measured 2026-08-17, Slow 3G:
+              first paint 16.2 s). lazyOnload defers it to browser idle after
+              load; no gtag()/dataLayer consumer exists elsewhere in the app,
+              so nothing depends on it being ready early. */}
+          {process.env.NEXT_PUBLIC_GA_ID && (
+            <>
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+                strategy="lazyOnload"
+              />
+              <Script id="gtag-init" strategy="lazyOnload">
+                {`
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}', {
+                    page_path: window.location.pathname,
+                  });
+                `}
+              </Script>
+            </>
+          )}
           <AppShell>
             <ErrorBoundary name="root" resetKeys={router.asPath}>
               {getLayout(<Component {...pageProps} />)}
