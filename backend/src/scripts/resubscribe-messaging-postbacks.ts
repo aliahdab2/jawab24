@@ -12,6 +12,11 @@ import { pages } from '../db/schema';
 import { and, isNotNull, ne } from 'drizzle-orm';
 import { safeDecryptToken } from '../services/facebookCrypto';
 import { facebookService } from '../services/facebook';
+import { installGraphRetryConsoleObserver } from '../lib/graphRetryMetrics';
+
+// Standalone entrypoint — index.ts's observer bootstrap never runs here, so wire the
+// console-backed one or every Graph retry decision below is silent and uncounted.
+installGraphRetryConsoleObserver();
 
 type Stat = { ok: number; failed: number; skipped: number };
 

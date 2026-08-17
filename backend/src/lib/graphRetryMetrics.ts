@@ -72,9 +72,32 @@ export function graphRetryObserver(logger: Logger): GraphRetryObserver {
 /**
  * Wire logging + counters for every Graph retry decision.
  *
- * ONE call is enough: fbAxios is a module singleton and the reply worker runs in the same
- * process, so both the HTTP request path and the worker report through it.
+ * ONE call is enough FOR THE SERVER PROCESS: fbAxios is a module singleton and the reply
+ * worker runs in the same process, so both the HTTP request path and the worker report
+ * through it. Standalone scripts never run this bootstrap — they must call
+ * {@link installGraphRetryConsoleObserver} themselves or their decisions are silent.
  */
 export function installGraphRetryObserver(logger: Logger): void {
     setGraphRetryObserver(graphRetryObserver(logger));
+}
+
+/**
+ * Console-backed variant for standalone script entrypoints (tsx/node scripts that reach
+ * the Graph API without running index.ts's bootstrap). Without it a script's retry
+ * decisions emit to the default no-op observer — no log line, no counter — and
+ * `retry_suppressed` undercounts exactly the events a backfill is most likely to hit.
+ * Scripts print to stdout/stderr by design, so console IS the right sink here.
+ */
+export function installGraphRetryConsoleObserver(): void {
+    // The observer logs only at warn today; info/debug satisfy the Logger interface
+    // via stdout (the no-console lint rule allows only console.warn/error).
+    const stdout = (msg: string, data?: Record<string, unknown>): void => {
+        process.stdout.write(`${msg}${data ? ` ${JSON.stringify(data)}` : ''}\n`);
+    };
+    installGraphRetryObserver({
+        info: stdout,
+        debug: stdout,
+        warn: (msg, data) => console.warn(msg, data ?? {}),
+        error: (msg, data) => console.error(msg, data ?? {}),
+    });
 }

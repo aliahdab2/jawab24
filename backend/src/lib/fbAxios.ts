@@ -23,6 +23,15 @@
  *      rate-limit rejections, DNS failure, refused connection. Safe for any method.
  *   2. The method is idempotent per RFC 9110 §9.2.2, so a replay cannot create a
  *      second resource even if the first attempt did land.
+ *   3. The call site has DECLARED the request semantically idempotent
+ *      (`semanticallyIdempotent: true` on the request config) — RFC 9110's own
+ *      escape hatch: "unless it has some means to know that the request semantics
+ *      are actually idempotent". Some Graph writes are POST by shape but converge
+ *      by semantics (`POST /{page-id}/subscribed_apps` — subscribing twice is a
+ *      no-op). For those, LOSING the retry is the greater harm: a transient blip
+ *      at connect time would leave a page connected but silently webhook-less.
+ *      The claim is the call site's to make, with a justifying comment at the
+ *      call site.
  *
  * An ambiguous failure on a POST/PATCH is NOT retried here — it propagates to the caller,
  * whose own layer decides. Those layers differ, and the difference is the point:
@@ -51,12 +60,28 @@
  *
  * Max 2 automatic retries per request.
  *
- * Used by facebook.ts, instagram.ts, metaMessaging.ts, whatsapp.ts, sender.ts —
- * anything that calls the Facebook/Instagram Graph API. NOT used for cosmetic
- * calls (typing indicators).
+ * Used by everything that calls the Facebook/Instagram Graph API — facebook.ts,
+ * instagram.ts, metaMessaging.ts, sender.ts, commentMentionGuard.ts, the reply
+ * adapters. NOT by whatsapp.ts: the WhatsApp Cloud API client uses a bare axios
+ * with its own timeout, so it gets neither this guard nor its observability.
+ * Typing indicators are split: Facebook's bypass this file (bare axios in
+ * facebook.ts), Instagram's go through it (instagram.ts sendSenderAction).
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { config } from '../config';
+
+declare module 'axios' {
+    export interface AxiosRequestConfig {
+        /**
+         * RFC 9110 §9.2.2 escape hatch — set by a call site that KNOWS replaying this
+         * request cannot create a second resource even though its method is POST
+         * (header comment, condition 3). Honoured ONLY by fbAxios's retry interceptor;
+         * on a bare axios instance (whatsapp.ts) it does nothing. Every use must carry
+         * a comment justifying WHY the write converges.
+         */
+        semanticallyIdempotent?: boolean;
+    }
+}
 
 /** Single source of truth for the Facebook/Instagram Graph API base URL. */
 export const GRAPH_API_BASE = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
@@ -95,6 +120,23 @@ const REQUEST_TIMEOUT_MS = 15_000;
  * unknown method fails CLOSED (no automatic replay).
  */
 const IDEMPOTENT_METHODS = new Set(['get', 'head', 'put', 'delete', 'options', 'trace']);
+
+/**
+ * May THIS request be replayed after an AMBIGUOUS failure — one that does not prove
+ * the request went unapplied?
+ *
+ * True when the method is idempotent per RFC 9110 §9.2.2, or when the call site
+ * declared the request semantics idempotent (header comment, condition 3). An
+ * unrecorded method fails CLOSED.
+ *
+ * Exported for unit testing: the fail-closed branch is unreachable through axios's
+ * public API (axios defaults a missing method to 'get' before the interceptor ever
+ * runs), so it is pinned here directly rather than through the instance.
+ */
+export function replayIsSafe(method: string | undefined, semanticallyIdempotent?: boolean): boolean {
+    if (semanticallyIdempotent === true) return true;
+    return IDEMPOTENT_METHODS.has((method ?? '').toLowerCase());
+}
 
 interface RetryConfig extends InternalAxiosRequestConfig {
     _retryCount?: number;
@@ -185,9 +227,16 @@ function parseRetryAfter(header: unknown): number | null {
     // delta-seconds: a non-negative integer count of seconds.
     if (/^\d+$/.test(raw)) return Number(raw) * 1000;
 
-    // HTTP-date: absolute instant. A date already in the past means "retry now".
+    // HTTP-date: absolute instant. Only strings that can possibly BE a date are
+    // tried — every date form §10.2.3 permits (IMF-fixdate, rfc850-date, asctime)
+    // spells a month name, so a string with no letter is never a date. Without this
+    // guard V8's Date.parse reads a malformed delta like "5.5" as the DATE
+    // 2001-05-05 — a past instant, i.e. "retry now" — when the right answer for
+    // garbage is null → the caller's 60s default.
+    if (!/[a-zA-Z]/.test(raw)) return null;
     const at = Date.parse(raw);
     if (Number.isNaN(at)) return null;
+    // A date already in the past means "retry now".
     return Math.max(0, at - Date.now());
 }
 
@@ -259,7 +308,7 @@ if (instance?.interceptors) {
 
         // Unknown method → treated as non-idempotent (fail closed).
         const method = (cfg.method ?? '').toLowerCase();
-        const idempotent = IDEMPOTENT_METHODS.has(method);
+        const replaySafe = replayIsSafe(method, cfg.semanticallyIdempotent);
 
         // RFC 9110 §9.2.2 — the safety property this interceptor exists to hold.
         // An ambiguous failure on a non-idempotent write is handed to the caller, whose
@@ -272,7 +321,7 @@ if (instance?.interceptors) {
             status: error.response?.status,
         };
 
-        if (!decision.proven && !idempotent) {
+        if (!decision.proven && !replaySafe) {
             emit({ outcome: 'retry_suppressed', ...base });
             return Promise.reject(error);
         }

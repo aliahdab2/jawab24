@@ -17,6 +17,7 @@ import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import {
     fbAxios,
     classifyRetry,
+    replayIsSafe,
     setGraphRetryObserver,
     type GraphRetryEvent,
 } from '../../src/lib/fbAxios';
@@ -66,6 +67,13 @@ describe('classifyRetry', () => {
         expect(d?.waitMs).toBe(60_000);
     });
 
+    it('falls back to the default for a malformed numeric Retry-After ("5.5") — never a past-date parse', () => {
+        // Without the letter guard, V8's Date.parse reads '5.5' as the DATE 2001-05-05 —
+        // a past instant — turning garbage into "retry immediately" instead of the default.
+        const d = classifyRetry(axiosErrorFor(cfg, responseWith(429, { 'retry-after': '5.5' })));
+        expect(d?.waitMs).toBe(60_000);
+    });
+
     it('returns a ZERO wait — not a null decision — for Retry-After: 0', () => {
         // "retry immediately" and "never retry" are different answers; conflating them
         // would silently drop the retry Meta explicitly asked for.
@@ -107,6 +115,34 @@ describe('classifyRetry', () => {
 
     it('returns null for a bare Error with no code or response (the unit-test network guard)', () => {
         expect(classifyRetry(axiosErrorFor(cfg, {}))).toBeNull();
+    });
+});
+
+describe('replayIsSafe — the idempotency gate, pinned directly', () => {
+    // The fail-closed branch is unreachable through axios's public API (a missing
+    // method defaults to 'get' before the interceptor ever runs), so the property
+    // is asserted on the exported function rather than through the instance.
+    it('fails CLOSED for a missing or unknown method', () => {
+        expect(replayIsSafe(undefined)).toBe(false);
+        expect(replayIsSafe('')).toBe(false);
+        expect(replayIsSafe('connect')).toBe(false);
+    });
+
+    it('treats every RFC 9110 §9.2.2 idempotent method as replay-safe, case-insensitively', () => {
+        for (const method of ['get', 'head', 'put', 'delete', 'options', 'trace', 'GET', 'PUT']) {
+            expect(replayIsSafe(method)).toBe(true);
+        }
+    });
+
+    it('treats POST and PATCH as unsafe without the escape hatch', () => {
+        expect(replayIsSafe('post')).toBe(false);
+        expect(replayIsSafe('patch')).toBe(false);
+    });
+
+    it('honours the semanticallyIdempotent declaration only when it is literally true', () => {
+        expect(replayIsSafe('post', true)).toBe(true);
+        expect(replayIsSafe('post', false)).toBe(false);
+        expect(replayIsSafe('post', undefined)).toBe(false);
     });
 });
 
@@ -191,6 +227,23 @@ describe('fbAxios interceptor — RFC 9110 §9.2.2 replay safety', () => {
         await settle(fbAxios.delete(URL));
 
         expect(adapter.attempts()).toBe(3);
+    });
+
+    it('DOES replay a PUT after an ambiguous failure — idempotent per RFC 9110', async () => {
+        const adapter = installFailingAdapter(AMBIGUOUS_TIMEOUT);
+
+        await settle(fbAxios.put(URL, {}));
+
+        expect(adapter.attempts()).toBe(3);
+    });
+
+    it('DOES replay a POST declared semanticallyIdempotent — the RFC escape hatch (subscribed_apps shape)', async () => {
+        const adapter = installFailingAdapter(AMBIGUOUS_TIMEOUT);
+
+        await settle(fbAxios.post(URL, null, { semanticallyIdempotent: true }));
+
+        expect(adapter.attempts()).toBe(3);
+        expect(events.map(e => e.outcome)).toEqual(['retried', 'retried', 'exhausted']);
     });
 
     it('DOES replay a POST when the failure PROVES it was never applied (429 rate limit)', async () => {

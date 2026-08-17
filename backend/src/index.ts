@@ -346,10 +346,12 @@ const start = async () => {
     // Create a logger adapter for the worker
     const workerLogger = createRequestLogger(server.log);
 
-    // Graph retry visibility. ONE wiring point is enough: fbAxios is a module singleton
-    // and the reply worker runs in this same process, so every Graph call — HTTP request
-    // path and worker alike — reports through it. Without this the interceptor's decisions
-    // stay silent, which is how a replayed POST duplicated a public comment unnoticed.
+    // Graph retry visibility. ONE wiring point covers this whole server process: fbAxios
+    // is a module singleton and the reply worker runs in this same process, so every Graph
+    // call — HTTP request path and worker alike — reports through it. Without this the
+    // interceptor's decisions stay silent, which is how a replayed POST duplicated a public
+    // comment unnoticed. Standalone tsx scripts do NOT run this bootstrap — they wire
+    // installGraphRetryConsoleObserver() themselves (see graphRetryMetrics.ts).
     installGraphRetryObserver(workerLogger);
 
     startWorker(workerLogger);
