@@ -109,7 +109,7 @@ describe('buildSystemPrompt — structure (prompt-cache contract)', () => {
     });
 });
 
-describe('buildSystemPrompt — INFO-DESK MODE block (replyMode, D-083)', () => {
+describe('buildSystemPrompt — INFO-DESK MODE block (replyMode, D-085)', () => {
     it('sales / absent replyMode renders a prompt byte-identical to one built with no mode at all', () => {
         // Blast radius: the entire sales fleet must be untouched by the feature —
         // same guarantee the gender block pins for comments (:295 below). 'sales'

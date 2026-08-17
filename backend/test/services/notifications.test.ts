@@ -976,7 +976,7 @@ describe('NotificationService', () => {
             expect(spy).toHaveBeenCalledWith('u-absent', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: true });
         });
 
-        it('suppressPush mutes EVERY member regardless of their per-user setting (info reply mode, D-083)', async () => {
+        it('suppressPush mutes EVERY member regardless of their per-user setting (info reply mode, D-085)', async () => {
             // 1. workspace members query
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({

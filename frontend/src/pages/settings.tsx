@@ -381,7 +381,15 @@ const SettingsPage: NextPageWithLayout = () => {
           validationMessage,
         },
       });
-      toast.error(tc('error'));
+      // The reply-mode gates (D-085) 403 with a specific code. A generic
+      // "something went wrong" leaves the merchant clicking Save forever with
+      // a dirty draft and no idea why — the page-scope PATCH already names
+      // this case, and the workspace save must too.
+      if (validationCode === 'REPLY_MODE_NOT_ENABLED' || validationCode === 'REPLY_MODE_WORKSPACE_MISMATCH') {
+        toast.error(t('replyMode.notEnabled'));
+      } else {
+        toast.error(tc('error'));
+      }
     } finally {
       setSaving(false);
     }

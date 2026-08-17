@@ -104,7 +104,7 @@ describe('leadExtractor — new_lead notification firing', () => {
         );
     });
 
-    it('info reply mode: the lead row still stores, but the push is suppressed (D-083 passive capture)', async () => {
+    it('info reply mode: the lead row still stores, but the push is suppressed (D-085 passive capture)', async () => {
         selectLimitMock.mockResolvedValue([]); // no existing lead → isNew = true
 
         await leadExtractorService.maybeCaptureLead({ ...baseParams, replyMode: 'info' });

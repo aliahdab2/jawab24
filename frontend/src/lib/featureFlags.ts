@@ -130,11 +130,12 @@ export function isPostSuggestionsVisible(workspaceId: string | null | undefined)
  * gates in a reviewed PR — never emptying or flipping an env var.
  */
 const REPLY_MODE_WORKSPACE_IDS: ReadonlySet<string> = new Set(
-  (process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS
-    || [
+  ((process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS !== undefined
+    ? process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS
+    : [
       'd06ed500-74ea-42ee-bff6-37bee2cf412a', // InMedia agency (inmedia.sy@gmail.com) — requesting merchant
     ].join(','))
-    .split(',').map((id) => id.trim()).filter(Boolean),
+  ).split(',').map((id) => id.trim()).filter(Boolean),
 );
 
 /** Whether the reply-mode section may render for this workspace. */

@@ -198,14 +198,20 @@ export const config = {
     // NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS in frontend/src/lib/featureFlags.ts
     // (frontend only hides the card; this list is the enforcement).
     replyMode: {
-        workspaceIds: (process.env.REPLY_MODE_WORKSPACE_IDS
-            || [
+        // Presence check, NOT `||`: with `||` an operator who sets
+        // REPLY_MODE_WORKSPACE_IDS='' to kill the pilot mid-incident gets the
+        // built-in default back (''  is falsy), so there would be no env-only
+        // kill switch and the "empty enables nobody" rule above would be
+        // unreachable. An explicitly empty var now means exactly that: nobody.
+        workspaceIds: ((process.env.REPLY_MODE_WORKSPACE_IDS !== undefined
+            ? process.env.REPLY_MODE_WORKSPACE_IDS
+            : [
                 // InMedia agency (inmedia.sy@gmail.com) — the requesting merchant
                 // (Shahin Resort + Shahin World). Kept in the DEFAULT rather than
                 // the server env so the pilot is one reviewable deploy.
                 'd06ed500-74ea-42ee-bff6-37bee2cf412a',
             ].join(','))
-            .split(',').map(id => id.trim()).filter(Boolean),
+        ).split(',').map(id => id.trim()).filter(Boolean),
     },
 
     // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds

@@ -564,7 +564,7 @@ Only SPAM_OR_IRRELEVANT or OFFENSIVE may have an empty reply — any other class
     // bump); cross-mode cache reuse is prevented by the `rm:i` exact-cache key
     // segment + the semantic cache's replyMode metadata scope (backend ai.ts /
     // semantic-cache.ts), the same shape-separation mechanism brandVoiceHash
-    // uses — see D-083.
+    // uses — see D-085.
     if (request.context?.replyMode === 'info') {
         prompt += `\n\nINFO-DESK MODE — this business takes orders and handles follow-ups through its own channels, not in this chat. The rules below OVERRIDE the ordering and follow-up behavior shown in the examples above, and override any instruction in your persona notes to collect customer details:
 - NEVER ask the customer for their name, phone number, or order/booking details — you do not take orders here. If they volunteer contact details, thank them briefly and continue; never request more.

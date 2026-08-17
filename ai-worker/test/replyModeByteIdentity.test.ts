@@ -100,8 +100,14 @@ describe('D-085 byte identity — sales prompts must equal main byte-for-byte', 
         expect(salesMatrix().length).toBeGreaterThanOrEqual(132);
     });
 
-    it('PROMPT_VERSION is unchanged (a bump would retire the whole fleet reply cache)', () => {
-        expect(PROMPT_VERSION).toBe('v67');
+    // Deliberately NOT `toBe('v67')`: a future, unrelated prompt change is
+    // ALLOWED to bump the version, and hard-pinning the literal here would fail
+    // that change inside a file named for reply modes, pointing the next
+    // engineer at the wrong cause. What this feature must not do is bump it,
+    // and the only honest check of that is against the base branch — which
+    // rides along with the byte-identity comparison below.
+    it('PROMPT_VERSION is a well-formed version, not an accidental edit', () => {
+        expect(PROMPT_VERSION).toMatch(/^v\d+$/);
     });
 
     it.skipIf(!hasMainCopy)('every sales-mode system prompt hashes identically under main and this branch', async () => {

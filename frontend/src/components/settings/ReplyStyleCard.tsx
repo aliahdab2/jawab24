@@ -175,7 +175,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // carrying an override: the override lives on the row, not the token, so a
   // revoked token must not make the persona invisible and unrevertable while
   // a reconnect silently revives it.
-  const switcherPages = pages.filter((p) => p.isConnected !== false || hasOverrideContent(p.brandVoiceNotesMulti));
+  // A page carrying ANY row-level override stays listed even when disconnected
+  // — the reply-mode pin (D-085) counts exactly like the persona does: it lives
+  // on the row, not the token, so a revoked token must not make the pin
+  // invisible and unrevertable while a reconnect silently revives it.
+  const hasRowOverride = (p: Page) => hasOverrideContent(p.brandVoiceNotesMulti) || p.replyMode === 'sales' || p.replyMode === 'info';
+  const switcherPages = pages.filter((p) => p.isConnected !== false || hasRowOverride(p));
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
   const scopedPage = personaScope === 'workspace' ? null : switcherPages.find((p) => p.id === personaScope) ?? null;
 

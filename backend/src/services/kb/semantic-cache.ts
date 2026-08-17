@@ -137,6 +137,20 @@ export class SemanticCacheService {
             const vectorStr = `[${queryEmbedding.join(',')}]`;
             const threshold = INTENT_THRESHOLDS[intent] ?? DEFAULT_SIMILARITY_THRESHOLD;
 
+            // The reply-mode scope is pushed into SQL, unlike the channel /
+            // replyStyle filters below, because it is the one scope that is
+            // SYSTEMATICALLY mismatched the day a page is flipped: every row
+            // the page already has was written under sales (no `replyMode`
+            // key), so a top-5 taken before filtering is five sales rows and
+            // the info row ranked 6th is never seen — a guaranteed miss, and
+            // a fresh 2-4s OpenAI call, for up to the 30-day TTL (Rule 17.1).
+            // Filtering here makes the LIMIT draw from rows that can match.
+            // The JS predicate below is KEPT as the single source of truth for
+            // the rule — this only narrows the candidate set.
+            const replyModeScope = replyMode === 'info'
+                ? sql`AND metadata->>'replyMode' = 'info'`
+                : sql`AND (metadata->>'replyMode') IS NULL`;
+
             // Fetch top 5 candidates — application-level filtering by channel/replyStyle below
             const results = await db.execute(sql`
                 SELECT
@@ -152,6 +166,7 @@ export class SemanticCacheService {
                   AND prompt_version = ${PROMPT_VERSION}
                   AND created_at > NOW() - (${SEMANTIC_CACHE_TTL_DAYS} * INTERVAL '1 day')
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${threshold}
+                  ${replyModeScope}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
                 LIMIT 5
             `);

@@ -23,7 +23,7 @@ const RENDERED_SETTING_KEYS = [
     'holdLowConfidence', 'replyDelay', 'defaultReplyLanguage', 'autoDetectLanguage',
     'supportedLanguages', 'businessHoursOnly', 'businessHoursStart', 'businessHoursEnd',
     'timezone', 'greetingMessageEnabled', 'limitFallbackEnabled', 'newLeadAlertsEnabled',
-    'notificationsEnabled', 'replyStyle',
+    'notificationsEnabled', 'replyStyle', 'replyMode',
 ];
 
 function loadCustomer(locale: 'en' | 'ar'): Record<string, string> {

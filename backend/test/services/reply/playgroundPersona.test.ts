@@ -136,7 +136,7 @@ describe('buildPlaygroundContext — previews the merchant\'s stored persona and
     });
 });
 
-describe('buildPlaygroundContext — reply mode resolution (D-083)', () => {
+describe('buildPlaygroundContext — reply mode resolution (D-085)', () => {
     beforeEach(() => {
         vi.mocked(settingsService.getSettings).mockResolvedValue(OWNER_ROW as never);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(STORED as never);

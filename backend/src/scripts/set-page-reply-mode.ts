@@ -70,8 +70,13 @@ async function main(): Promise<void> {
     }
     // Same audit shape as PagesController.updateReplyMode — the actor is the
     // page's owning user (there is no admin session in a server-side flip).
+    // userId is OMITTED when the page has no owner: `logs.user_id` is a uuid
+    // column with an FK to users.id, so a 'system' sentinel makes the INSERT
+    // throw — and auditLog is fire-and-forget, so the row would vanish while
+    // this script printed "audit row written". The field is optional exactly
+    // for system-initiated events; workspaceId + pageId key the row instead.
     await auditLog({
-        userId: page.userId ?? 'system',
+        ...(page.userId ? { userId: page.userId } : {}),
         workspaceId: page.workspaceId,
         pageId: page.id,
         action: 'page.reply_mode_changed',

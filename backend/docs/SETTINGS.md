@@ -125,7 +125,7 @@ the merchant, so the settings below resolve from the **page's own workspace** �
 |---------|-------------------------------|
 | `brandVoiceNotes` / `brandVoiceNotesMulti` | `resolveBrandVoiceNotes(wsSettings, question, page.brandVoiceNotesMulti)` — the same choke point `enrichPageContext` uses for production replies, including the per-page override (D-084) |
 | `replyStyle` | `wsSettings.replyStyle` (the ai-worker defaults to `professional` when absent) |
-| `replyMode` | `resolveEffectiveReplyMode(page.replyMode, wsSettings.replyMode)` — the same shared resolver both processors use (D-085). The eval harness may force it via the playground body, honored only for `source==='eval'` |
+| `replyMode` | `resolveEffectiveReplyMode(page.replyMode, wsSettings.replyMode)` — the same shared resolver both processors use (D-085). An eval case may force an arm via `TestCase.replyMode` → the playground body (case 779 is the witness); the override is narrowed to the enum and honored ONLY for `source==='eval'`, so the merchant-facing test reply and the admin playground always resolve from the page/workspace |
 | `defaultReplyLanguage`, `timezone` | `wsSettings` |
 | `commentReplyMode` + `dualReplyNudgeVariations` | the owner row, `settingsService.getSettings(page.userId)`. ⚠️ **Known drift** — see below |
 

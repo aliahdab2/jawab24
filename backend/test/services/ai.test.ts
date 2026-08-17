@@ -1145,7 +1145,7 @@ describe('AI Service', () => {
         });
     });
 
-    describe('replyMode-scoped exact cache (D-083)', () => {
+    describe('replyMode-scoped exact cache (D-085)', () => {
         it('gives info mode its own bucket (an info page must never read a sales reply)', async () => {
             const { redis } = await import('../../src/lib/redis');
             const ctx = { language: 'ar', pageId: 'page-1', kbActiveVersion: 1 } as const;

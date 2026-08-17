@@ -74,6 +74,11 @@ interface TestCase {
     ourFacebookPageId?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    /** Force the reply mode for THIS case regardless of what the fixture page
+     *  stores (D-085). Honored by the backend only for `source: 'eval'`. Lets a
+     *  case pin an arm without a DB write — the Cat 77 cases deliberately do
+     *  NOT use it, so they prove the stored `pages.reply_mode` path end to end. */
+    replyMode?: 'sales' | 'info';
     brandVoiceNotes?: string;
     customerContext?: string;
     /** Customer display name (DM only) — exercises name-based gender inference (category 59). */
@@ -223,7 +228,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 469 total, defined inline below (docs/playground-edge-cases.md is
+// Test cases — 470 total, defined inline below (docs/playground-edge-cases.md is
 // the historical origin of the early categories, not the source of truth).
 // Latest additions: Cat 72 (own-brand Check 6 exemption), Cat 73 (few-shot data
 // leak — إجدابيا + Jawab24-page prod replays; v67 strips all price/plan data
@@ -5367,8 +5372,30 @@ const TEST_CASES: TestCase[] = [
         expected: {
             intent: ['PURCHASE_INTENT'],
             replyContainsAny: ['اسمك', 'رقمك', 'بيانات'],
+            // The category's leak guard applies to the control too: if a sales
+            // prompt ever carried the INFO-DESK block, echoing its placeholder
+            // phone is the visible symptom — without this the control would
+            // pass while proving the opposite of what its notes claim.
+            replyNotContains: [...INFO_DEMO_LEAK_TOKENS],
         },
         notes: 'ATTRIBUTION CONTROL (mirror of 784, different page): a sales-mode page with the ITEM AGREED at the same thread depth must still ask for order details — today\'s Ex-14 default. The item must be pinned in history first: an ambiguous «واحد منهم» legitimately draws the Example-11 clarify-which-item reply instead of the collect (measured 2026-08-17), which would fail this control for the wrong reason. If this stops firing, the DEFAULT mode regressed and Cat 77\'s clean results can no longer be attributed to the info mode. Also the byte-identity witness: sales prompts must not carry the INFO-DESK block.',
+    },
+
+    {
+        id: 779, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'تمام، جهزولي ياه',
+        page: 'electronics',
+        replyMode: 'info',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم لابتوبات للدراسة؟' },
+            { role: 'assistant', content: 'نعم! عنا MacBook Air M3 يبدأ من 5200 ريال.' },
+            { role: 'user', content: 'قياس 13 بوصة بكم؟' },
+            { role: 'assistant', content: 'MacBook Air M3 قياس 13 بوصة بـ5200 ريال.' },
+        ],
+        expected: {
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'THE witness for the `replyMode` REQUEST override — deliberately the SAME page, message and history as the 778 control, which asks for the customer details because the page runs sales. Forcing info here must silence that ask; if the override chain (PlaygroundRequestBody.replyMode → the eval-only narrowing in admin/kb.ts → buildPlaygroundContext\'s caller-wins branch) were dead, this case would fail rather than pass vacuously. Chosen over a resort-page version precisely because the resort fixture carries an info-shaped PERSONA that would produce a passing reply on its own (PR #797 review: the plumbing had no caller at all).',
     },
 
     // -----------------------------------------------------------------------
@@ -5653,6 +5680,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.ourFacebookPageId) body.ourFacebookPageId = test.ourFacebookPageId;
     if (test.conversationHistory) body.conversationHistory = test.conversationHistory;
     if (test.replyStyle) body.replyStyle = test.replyStyle;
+    if (test.replyMode) body.replyMode = test.replyMode;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
     if (test.customerContext) body.customerContext = test.customerContext;
     if (test.senderName) body.senderName = test.senderName;
