@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import enSettings from '@/i18n/en/settings.json';
 import SettingsPage from '@/pages/settings';
 import { settingsApi } from '@/lib/api';
 
@@ -346,7 +347,7 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
 
         // Edit the brand voice textarea — a field unrelated to commentReplyMode.
         // This flips hasChanges=true so the Save button becomes clickable.
-        const brandVoiceTextarea = screen.getByLabelText('Brand Voice Notes');
+        const brandVoiceTextarea = screen.getByLabelText(enSettings.replyStyle.brandVoice);
         await act(async () => {
             fireEvent.change(brandVoiceTextarea, { target: { value: 'New voice text' } });
         });
@@ -421,7 +422,7 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
         });
 
         // User edits brand voice.
-        const brandVoiceTextarea = screen.getByLabelText('Brand Voice Notes') as HTMLTextAreaElement;
+        const brandVoiceTextarea = screen.getByLabelText(enSettings.replyStyle.brandVoice) as HTMLTextAreaElement;
         await act(async () => {
             fireEvent.change(brandVoiceTextarea, { target: { value: 'Edited voice' } });
         });
