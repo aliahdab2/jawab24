@@ -464,10 +464,18 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
 
-    // Switch the persona scope to a page, then pin «Information source».
-    await page.getByRole('combobox').first().selectOption('p1');
-    await page.getByRole('radio', { name: t('settings.replyMode.infoDesk'), exact: false }).click();
-    await expect.poll(() => patched).toEqual({ replyMode: 'info' });
+    // Workspace scope shows the two mode options.
+    await expect(page.getByRole('radio', { name: new RegExp(t('settings.replyMode.sales')) })).toBeVisible();
+
+    // Switch the persona scope to a page. `Select` is a custom listbox
+    // (button + option buttons), NOT a native <select> — the unit-test mock is
+    // the native one, so a `combobox` selector passes there and hangs here.
+    await page.getByRole('button', { name: t('settings.replyStyle.scopeLabel') }).click();
+    await page.getByRole('button', { name: TWO_PAGES[0].name, exact: false }).click();
+
+    // Then pin «Information source» — the page-scope radio PATCHes immediately.
+    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await expect.poll(() => patched, { timeout: 15000 }).toEqual({ replyMode: 'info' });
   });
 
   test('a workspace outside the allowlist never sees the section', async ({ page }) => {
