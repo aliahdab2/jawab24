@@ -17,9 +17,14 @@
 
 import { db } from '../db';
 import { pages } from '../db/schema';
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { pagesService } from '../services/pages';
 import { auditLog } from '../services/auditLog';
+
+/** `pages.id` is a uuid COLUMN: comparing it to a non-uuid string makes
+ *  Postgres throw (invalid input syntax), so the ref is matched against ONE
+ *  column chosen by shape — never both in an OR. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function main(): Promise<void> {
     const [ref, modeArg, applyFlag] = process.argv.slice(2);
@@ -33,7 +38,7 @@ async function main(): Promise<void> {
     const [page] = await db
         .select({ id: pages.id, workspaceId: pages.workspaceId, userId: pages.userId, name: pages.name, replyMode: pages.replyMode, facebookPageId: pages.facebookPageId })
         .from(pages)
-        .where(or(eq(pages.facebookPageId, ref), eq(pages.id, ref)))
+        .where(UUID_RE.test(ref) ? eq(pages.id, ref) : eq(pages.facebookPageId, ref))
         .limit(1);
     if (!page) {
         process.stderr.write(`No page matches "${ref}" (by facebook_page_id or id)\n`);
