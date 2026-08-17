@@ -439,8 +439,24 @@ export interface Page {
    */
   storeAnswersPolicies?: boolean;
   // KB fields
+  //
+  // ⚠️ `knowledgeBase` / `suggestedKnowledgeBase` / `businessProfile` are NOT
+  // returned by the LIST endpoint (`GET /pages`) — only by the single-page read
+  // (`GET /pages/:id`). The list ships `kbFilled` instead, because the text was
+  // 48% of that response's bytes while its list-side readers only asked "is it
+  // filled?". They stay optional here because the same `Page` type describes
+  // both shapes, so TypeScript will NOT catch a list consumer reading the text:
+  // it silently reads `undefined`. If you need the text, fetch the page by id
+  // (`pagesApi.getById`) — see serializeListPage in backend controllers/pages.ts.
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
+  /**
+   * "Has the merchant actually provided business info?" — computed server-side
+   * with the shared `isBusinessInfoProvided` predicate and returned by the LIST
+   * endpoint in place of the raw text. Absent on single-page reads, which carry
+   * the text itself.
+   */
+  kbFilled?: boolean;
   kbVersion?: number;
   kbActiveVersion?: number;
   kbUpdatedAt?: string | Date | null;

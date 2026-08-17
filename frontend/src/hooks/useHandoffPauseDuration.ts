@@ -1,20 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
-import { settingsApi } from '@/lib/api';
+import { useSettingsQuery } from './useSettingsQuery';
 
 /**
  * Returns the workspace's configured handoff pause duration in minutes.
  * This is the same value used by both explicit pauses (button) and implicit
- * handoff pauses (manual reply). Cached across the session.
+ * handoff pauses (manual reply). Reads the shared settings query, so it costs no
+ * request of its own.
  */
 export function useHandoffPauseDuration(): number {
-  const { data } = useQuery({
-    queryKey: ['handoff-pause-duration'],
-    queryFn: async () => {
-      const res = await settingsApi.get();
-      return res.data?.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  return data ?? DEFAULT_HANDOFF_PAUSE_MINUTES;
+  const { data } = useSettingsQuery();
+  const minutes = data?.handoffPauseDurationMinutes;
+  return typeof minutes === 'number' ? minutes : DEFAULT_HANDOFF_PAUSE_MINUTES;
 }

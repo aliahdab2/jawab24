@@ -4,8 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OnboardingWizard } from './OnboardingWizard';
 
-const { getAll, sync, toggle, testReply, apiGet, apiPut } = vi.hoisted(() => ({
+const { getAll, getById, sync, toggle, testReply, apiGet, apiPut } = vi.hoisted(() => ({
   getAll: vi.fn(),
+  // The wizard prefills the info editor from the SINGLE-page read: the list
+  // endpoint no longer ships knowledgeBase / suggestedKnowledgeBase (see
+  // serializeListPage, backend controllers/pages.ts).
+  getById: vi.fn(),
   sync: vi.fn(),
   toggle: vi.fn(),
   testReply: vi.fn(),
@@ -14,7 +18,7 @@ const { getAll, sync, toggle, testReply, apiGet, apiPut } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  pagesApi: { getAll, sync, toggle, testReply },
+  pagesApi: { getAll, getById, sync, toggle, testReply },
   api: { get: apiGet, put: apiPut },
 }));
 
@@ -65,6 +69,8 @@ describe('OnboardingWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAll.mockResolvedValue({ data: [PAGE] });
+    // Same row, but this is the shape that carries the business-info TEXT.
+    getById.mockResolvedValue({ data: PAGE });
     sync.mockResolvedValue({ data: [PAGE] });
     toggle.mockResolvedValue({ data: {} });
     apiGet.mockResolvedValue({ data: { pages: { limit: 5 } } });

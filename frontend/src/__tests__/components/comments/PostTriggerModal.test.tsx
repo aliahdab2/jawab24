@@ -63,9 +63,19 @@ vi.mock('@/components/ui', () => ({
 
 import { PostTriggerModal } from '@/components/comments/PostTriggerModal';
 import { settingsApi, postsApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 
 const settingsGetMock = vi.mocked(settingsApi.get);
 const updateTriggerMock = vi.mocked(postsApi.updateTrigger);
+
+// The delivery-mode hooks read the shared `/settings` query (useSettingsQuery),
+// which is gated on `isAuthenticated` — `/settings` 401s without a session. This
+// modal only ever opens from the comments page, behind the dashboard auth guard,
+// so authenticated is the state production is in. Set at file level: the per-suite
+// `vi.clearAllMocks()` below clears mocks, not zustand state.
+beforeEach(() => {
+    useAuthStore.setState({ isAuthenticated: true });
+});
 
 /** Expand the «More options» disclosure — advanced fields (exclude, button, like,
  *  image) are collapsed by default for a NEW trigger; tests driving them must open

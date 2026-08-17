@@ -4,6 +4,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { getLocaleDirection } from '@/utils/locale';
 import clsx from 'clsx';
 import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X, FileText, ChevronDown, Minimize2 } from 'lucide-react';
+import { isKbFilled } from '@/utils/kb';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
@@ -79,7 +80,14 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmar
     return () => clearTimeout(timer);
   }, []);
 
-  const hasKb = !!(page.knowledgeBase || page.ecommerceStoreId);
+  // Gates an advisory "add business info" hint only. Uses the shared helper
+  // because this modal is opened from the settings screen with a LIST page,
+  // which no longer carries the KB text (see serializeListPage) — reading
+  // `knowledgeBase` here would be silently undefined and show the hint always.
+  // Note this is a deliberate tightening: `isKbFilled` also treats a KB that is
+  // still just the untouched Facebook auto-sync snapshot as not-filled, which is
+  // exactly when the hint SHOULD appear, and matches the setup checklist.
+  const hasKb = isKbFilled(page) || !!page.ecommerceStoreId;
   const hasMessages = messages.length > 0 || loading;
 
   const handleSend = async () => {

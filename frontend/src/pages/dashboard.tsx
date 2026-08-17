@@ -44,6 +44,7 @@ const CommentDetailModal = dynamic(() => import('@/components/comments').then(m 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
 import { useWorkspaceRole, useSubscriptionUsage, useNewLeadsSummary } from '@/hooks';
+import { useSettingsQuery, SETTINGS_QUERY_KEY } from '@/hooks/useSettingsQuery';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { deriveSetupState, isWithinSetupGrace } from '@/utils/setupChecklist';
 import { SETUP_CHECKLIST_COLLAPSE_KEY, SETUP_CHECKLIST_COLLAPSE_MS } from '@/components/dashboard/SetupChecklistCard';
@@ -258,18 +259,16 @@ const DashboardPage: NextPageWithLayout = () => {
 
   const { data: usage } = useSubscriptionUsage(isAuthenticated);
 
-  const { data: userSettings } = useQuery({
-    queryKey: ['dashboard-settings'],
-    queryFn: async () => {
-      const res = await settingsApi.get();
-      return {
-        commentsAutoReply: res.data?.commentsAutoReply ?? true,
-        messagesAutoReply: res.data?.messagesAutoReply ?? true,
-        onboardingCompletedAt: res.data?.onboardingCompletedAt ?? null,
-      };
-    },
-    enabled: isAuthenticated,
-  });
+  // Reads the shared `/settings` query rather than issuing its own. This used to
+  // be a second, independent fetch of the identical endpoint (measured: the
+  // dashboard boot burst issued `/api/settings` TWICE), which on a slow
+  // connection cost a full extra round trip for bytes already in flight.
+  const { data: settingsData } = useSettingsQuery();
+  const userSettings = useMemo(() => ({
+    commentsAutoReply: settingsData?.commentsAutoReply ?? true,
+    messagesAutoReply: settingsData?.messagesAutoReply ?? true,
+    onboardingCompletedAt: settingsData?.onboardingCompletedAt ?? null,
+  }), [settingsData]);
 
   // Two-path setup panel visibility — computed here (not inside the card) because
   // the EXPANDED form also SUPPRESSES the AutoReplyStatusCard warning: while it is
@@ -370,7 +369,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-recent-comments'] });
     queryClient.invalidateQueries({ queryKey: ['pages'] });
     queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
+    queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY });
     queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-ai-usage'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
@@ -540,7 +539,7 @@ const DashboardPage: NextPageWithLayout = () => {
       settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
     }
     queryClient.invalidateQueries({ queryKey: ['pages'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
+    queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY });
   }, [isOwner, setOnboardingVisible, queryClient]);
 
   const handleOnboardingComplete = markOnboardingDone;

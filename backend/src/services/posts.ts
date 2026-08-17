@@ -138,22 +138,28 @@ export class PostsService {
     }
 
     /**
-     * Get all posts for a user (across all their pages)
+     * Trigger state for every post in a workspace — the ⚡ badge on the comments
+     * screen and nothing else.
+     *
+     * ⚠️ TRIGGER FIELDS ONLY, deliberately. This used to `select` the full post
+     * `message` (plus pageName/createdTime/autoReplyEnabled) for all 200 rows,
+     * which measured up to **445 kB of post text per page load** on real
+     * workspaces — against 0–2.7 kB of `triggerReply` actually read. The whole
+     * dashboard API burst is 39 kB for comparison, so this single endpoint could
+     * outweigh it tenfold on a slow connection.
+     *
+     * Its ONLY consumer is `frontend/src/pages/comments.tsx`, which reduces the
+     * response to `{ id → { keyword, reply } }` on arrival and reads nothing
+     * else. If a caller ever needs the post body, give it a separate endpoint
+     * rather than widening this one back out — the body is what made it heavy.
      */
     async getPostsByWorkspace(workspaceId: string) {
         return db
             .select({
                 id: posts.id,
                 pageId: posts.pageId,
-                facebookPostId: posts.facebookPostId,
-                message: posts.message,
-                autoReplyEnabled: posts.autoReplyEnabled,
                 triggerKeyword: posts.triggerKeyword,
                 triggerReply: posts.triggerReply,
-                createdTime: posts.createdTime,
-                createdAt: posts.createdAt,
-                updatedAt: posts.updatedAt,
-                pageName: pages.name,
             })
             .from(posts)
             .innerJoin(pages, eq(posts.pageId, pages.id))

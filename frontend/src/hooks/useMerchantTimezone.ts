@@ -1,6 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { settingsApi } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
+import { useSettingsQuery } from './useSettingsQuery';
 
 /**
  * The workspace's configured timezone (`settings.timezone`).
@@ -15,18 +13,7 @@ import { useAuthStore } from '@/lib/store';
  * hint rather than show a wrong clock.
  */
 export function useMerchantTimezone(): string | undefined {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { data } = useQuery({
-    queryKey: ['merchant-timezone'],
-    // null, never undefined: react-query v5 rejects undefined query data, so
-    // a workspace with no timezone set would error (and retry ×3) on every
-    // mount of the hours sheet instead of just hiding the hint.
-    queryFn: async (): Promise<string | null> => {
-      const res = await settingsApi.get();
-      return res.data?.timezone || null;
-    },
-    staleTime: 5 * 60 * 1000,
-    enabled: isAuthenticated,
-  });
-  return data ?? undefined;
+  const { data } = useSettingsQuery();
+  const timezone = data?.timezone;
+  return typeof timezone === 'string' && timezone ? timezone : undefined;
 }
