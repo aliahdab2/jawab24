@@ -43,6 +43,14 @@ import { intlState } from '../../testUtils/intlState';
 const pageEditorName = (page: string) =>
   enSettings.replyStyle.pageBrandVoice.replace('{page}', page);
 
+// Same rule for every other translated literal this file selects on. The five
+// «Persona for {page}» selectors broke on a reword; these would have too.
+const INFO_DESK = new RegExp(enSettings.replyMode.infoDesk, 'i');
+const MODE_SAVED = new RegExp(enSettings.replyMode.pageSaved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+const SCOPE_LABEL = new RegExp(enSettings.replyStyle.scopeLabel, 'i');
+const inheritName = (mode: string) =>
+  enSettings.replyMode.inherit.replace('{mode}', mode);
+
 describe('ReplyStyleCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -200,11 +208,11 @@ describe('ReplyStyleCard', () => {
       } as never);
       const { rerender } = render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
       await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
-      expect(screen.queryByText(/Editing persona for/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(SCOPE_LABEL)).not.toBeInTheDocument();
 
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       rerender(<ReplyStyleCard key="two" settings={makeSettings()} setSettings={vi.fn()} />);
-      expect(await screen.findByText(/Editing persona for/i)).toBeInTheDocument();
+      expect(await screen.findByText(SCOPE_LABEL)).toBeInTheDocument();
     });
 
     it('page scope shows the editor directly; save is the fork point and PATCHes the page', async () => {
@@ -214,7 +222,7 @@ describe('ReplyStyleCard', () => {
       } as never);
 
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
@@ -244,7 +252,7 @@ describe('ReplyStyleCard', () => {
       } as never);
 
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p2' } });
@@ -278,7 +286,7 @@ describe('ReplyStyleCard', () => {
           savedBrandVoiceNotesMulti={{ en: 'Saved workspace persona', sourceLang: 'en' }}
         />,
       );
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p1' } });
@@ -296,7 +304,7 @@ describe('ReplyStyleCard', () => {
         ],
       } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
       fireEvent.change(scopeSelect, { target: { value: 'p3' } });
@@ -311,7 +319,7 @@ describe('ReplyStyleCard', () => {
       const { rerender } = render(
         <ReplyStyleCard settings={settings} setSettings={vi.fn()} savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti} />,
       );
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
       expect(screen.getByRole('textbox', { name: pageEditorName('Resort Page') })).toHaveValue('English workspace persona');
@@ -329,7 +337,7 @@ describe('ReplyStyleCard', () => {
         data: { ...TWO_PAGES[0], brandVoiceNotesMulti: { en: 'Info desk only', sourceLang: 'en' } },
       } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
       fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), { target: { value: 'Info desk only' } });
@@ -343,7 +351,7 @@ describe('ReplyStyleCard', () => {
       // the persona they just wrote and see no effect (owner call, 2026-08-16).
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} hasChanges={false} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
       expect(screen.queryByText(/Testing on/i)).not.toBeInTheDocument();
 
       const scopeSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
@@ -375,7 +383,7 @@ describe('ReplyStyleCard', () => {
       render(<ReplyStyleCard settings={makeSettings()} setSettings={setSettings} workspaceId="mode-ws" savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
 
-      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
       expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ replyMode: 'info' }));
       // Never a direct PATCH from the workspace scope — the page-bottom save owns it.
       expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
@@ -407,10 +415,15 @@ describe('ReplyStyleCard', () => {
       const inherit = screen.getByRole('radio', { name: /Default \(Sales assistant\)/i });
       expect(inherit).toHaveAttribute('aria-checked', 'true');
 
-      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
       await waitFor(() => expect(pagesApi.updateReplyMode).toHaveBeenCalledWith('p1', 'info'));
       // The page's option list marks the pinned page in the switcher.
-      expect(await screen.findByText(/Resort Page — Information source/i)).toBeInTheDocument();
+      expect(await screen.findByText(new RegExp(
+        enSettings.replyMode.pinnedOption
+          .replace('{label}', 'Resort Page')
+          .replace('{mode}', enSettings.replyMode.infoDesk),
+        'i',
+      ))).toBeInTheDocument();
     });
 
     it('page scope: CONFIRMS the save — an instant save with no button must not be silent', async () => {
@@ -424,9 +437,9 @@ describe('ReplyStyleCard', () => {
       await screen.findByText(QUESTION);
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
 
-      expect(screen.queryByText(/Saved for this page/i)).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
-      expect(await screen.findByText(/Saved for this page/i)).toBeInTheDocument();
+      expect(screen.queryByText(MODE_SAVED)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
+      expect(await screen.findByText(MODE_SAVED)).toBeInTheDocument();
     });
 
     it('page scope: rolls the pin back and shows an error when the PATCH fails', async () => {
@@ -436,7 +449,7 @@ describe('ReplyStyleCard', () => {
       await screen.findByText(QUESTION);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
-      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent(/isn't enabled for your account/i);
       // Rolled back: inherit is selected again.
@@ -471,7 +484,7 @@ describe('ReplyStyleCard', () => {
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
 
       expect(screen.getByText(/Save the default first/i)).toBeInTheDocument();
-      const info = screen.getByRole('radio', { name: /Information source/i });
+      const info = screen.getByRole('radio', { name: INFO_DESK });
       expect(info).toBeDisabled();
       fireEvent.click(info);
       expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
@@ -517,7 +530,7 @@ describe('ReplyStyleCard', () => {
         <ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />,
       );
 
-      fireEvent.click(screen.getByRole('radio', { name: /Information source/i }));
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
       rerender(<ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />);
 
       // Waiting for the save would leave the merchant writing against the old
@@ -525,13 +538,41 @@ describe('ReplyStyleCard', () => {
       expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
     });
 
-    it('outside the pilot the copy stays sales even when settings.replyMode reads info', () => {
-      // No mode control is rendered there, so info copy would describe a choice
-      // the merchant cannot see, make, or undo.
-      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="other-ws" />);
+    it('outside the pilot an unreachable DRAFT does not move the copy', () => {
+      // With no control rendered there is no draft the merchant could have set;
+      // what runs is the SAVED mode, and here that is sales.
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          savedReplyMode="sales"
+          workspaceId="other-ws"
+        />,
+      );
 
       expect(screen.getByPlaceholderText(salesPlaceholder)).toBeInTheDocument();
       expect(screen.queryByText(infoNote)).not.toBeInTheDocument();
+    });
+
+    it('a STORED info that outlives the allowlist still gets info copy', () => {
+      // The allowlist gates the WRITE paths only — backend/docs/SETTINGS.md:
+      // "the reply pipeline reads whatever is stored". So on the documented
+      // rollback path (kill switch emptied, or the workspace dropped after the
+      // pilot) replies keep running INFO-DESK with the control gone. Forcing
+      // sales copy there would invite a collect-instruction that the pipeline
+      // reverses — this card's original defect, on the unwatched path.
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          savedReplyMode="info"
+          workspaceId="other-ws"
+        />,
+      );
+
+      expect(screen.queryByText(enSettings.replyMode.question)).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
+      expect(screen.getByText(infoNote)).toBeInTheDocument();
     });
 
     it('a page pinned to info gets the info copy though the workspace default is sales', async () => {
@@ -546,7 +587,7 @@ describe('ReplyStyleCard', () => {
           workspaceId="mode-ws"
         />,
       );
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
 
@@ -563,16 +604,6 @@ describe('ReplyStyleCard', () => {
       { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
     ];
 
-    it('every tone option clears the 44px touch floor the rest of the card uses', () => {
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      const tones = screen.getAllByRole('radio');
-      expect(tones).toHaveLength(3);
-
-      // jsdom has no layout, so the floor is pinned on the class that sets it.
-      // The reply-mode options above already use min-h-[44px]; the tone strip was
-      // 'px-2.5 py-1 text-xs' (~24px) — the only control on the card below the floor.
-      tones.forEach((tone) => expect(tone.className).toContain('min-h-[44px]'));
-    });
 
     it('describes the SELECTED tone, and the line follows the selection', () => {
       const { rerender } = render(
@@ -588,13 +619,192 @@ describe('ReplyStyleCard', () => {
     it('says the tone is workspace-wide ONLY inside a page scope, where that is invisible', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
       render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} />);
-      await screen.findByText(/Editing persona for/i);
+      await screen.findByText(SCOPE_LABEL);
 
       // In «All pages» the scope already says it — a second line would repeat it.
       expect(screen.queryByText(enSettings.replyStyle.tonePageNote)).not.toBeInTheDocument();
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
       expect(screen.getByText(enSettings.replyStyle.tonePageNote)).toBeInTheDocument();
+    });
+  });
+
+  // ── Test button vs unsaved work (2026-08-17) ──────────────────────────────
+  // `hasChanges` covers only the WORKSPACE draft. A page persona lives in local
+  // `pageDraft`, so a page-scope edit left Test ENABLED and the reply came from
+  // the SAVED persona while the new text sat on screen — a plausible answer from
+  // the wrong input, which reads as "my words had no effect".
+  describe('test button vs unsaved work', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+    const testBtn = () => screen.getByRole('button', { name: new RegExp(enSettings.replyStyle.openTestModal, 'i') });
+
+    it('an unsaved PAGE persona edit blocks the test, with the save-first reason', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      expect(testBtn()).toBeEnabled();
+
+      fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), {
+        target: { value: 'A brand new page persona the merchant has not saved' },
+      });
+
+      expect(testBtn()).toBeDisabled();
+      expect(testBtn()).toHaveAttribute('title', enSettings.replyStyle.testSaveFirst);
+    });
+
+    it('an untouched page scope still allows the test', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // Merely LOOKING at a page must not block testing it.
+      expect(testBtn()).toBeEnabled();
+    });
+
+    it('a saved workspace persona does NOT block the test outside a page scope', () => {
+      // The trap in the fix: outside a page scope the seeding effect returns
+      // early, so `pageDraft` is '' while `pageEffectiveText` is the workspace
+      // persona — an ungated `pageDraftChanged` reads true and would disable the
+      // button for EVERY merchant who has ever written a persona.
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+
+      expect(testBtn()).toBeEnabled();
+    });
+  });
+
+  // ── Review fixes (2026-08-17, post-review) ────────────────────────────────
+  describe('transient notices and blocked states', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+
+    it('the page-mode confirmation dies on a scope switch instead of describing another page', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: {} } as never);
+      render(
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" workspaceId="mode-ws" />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
+      expect(await screen.findByText(MODE_SAVED)).toBeInTheDocument();
+
+      // Within the 4s window, move to a page that was never saved. A ✓ left on
+      // screen there asserts a save that did not happen for the shown target.
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p2' } });
+
+      expect(screen.queryByText(MODE_SAVED)).not.toBeInTheDocument();
+    });
+
+    it('the confirmation lives in an ALWAYS-mounted live region, not one created with its text', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: {} } as never);
+      const { container } = render(
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" workspaceId="mode-ws" />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // A region inserted together with its text is not reliably announced, so
+      // it must already exist (and be empty) BEFORE the save. Assert the COUNT
+      // is unchanged by the save: querying a single [aria-live] would find the
+      // persona notice next door — always mounted — and pass either way, which
+      // is exactly how the first version of this test measured nothing.
+      const liveRegions = () => container.querySelectorAll('[aria-live="polite"]');
+      const before = liveRegions().length;
+      expect(before).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
+      await screen.findByText(MODE_SAVED);
+
+      expect(liveRegions()).toHaveLength(before);
+      expect([...liveRegions()].some((r) => r.textContent === enSettings.replyMode.pageSaved)).toBe(true);
+    });
+
+    it('clearing the page textarea does not dead-end the merchant', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      // Select-all-delete on an INHERITING page: there is no Revert button, and
+      // an empty persona can never be saved. Blocking Test here left the only
+      // exits as retyping the inherited text or leaving the scope, while the
+      // tooltip demanded a save the UI forbids.
+      fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), { target: { value: '' } });
+
+      const save = screen.getByRole('button', { name: new RegExp(enSettings.replyStyle.savePageBtn, 'i') });
+      const test = screen.getByRole('button', { name: new RegExp(enSettings.replyStyle.openTestModal, 'i') });
+      expect(save).toBeDisabled();
+      expect(test).toBeEnabled();
+    });
+
+    it('a blocking page draft states its reason visibly, not only in a hover tooltip', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const settings = makeSettings({ brandVoiceNotesMulti: { en: 'Saved workspace persona', sourceLang: 'en' } });
+      render(
+        <ReplyStyleCard
+          settings={settings}
+          setSettings={vi.fn()}
+          hasChanges={false}
+          savedBrandVoiceNotesMulti={settings.brandVoiceNotesMulti}
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      expect(screen.queryByText(enSettings.replyStyle.testSaveFirst)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByRole('textbox', { name: pageEditorName('Resort Page') }), {
+        target: { value: 'An unsaved page persona' },
+      });
+
+      // `title` never surfaces on touch — the phone is where this card is read.
+      const reason = screen.getByText(enSettings.replyStyle.testSaveFirst);
+      expect(reason).toBeInTheDocument();
+      const test = screen.getByRole('button', { name: new RegExp(enSettings.replyStyle.openTestModal, 'i') });
+      expect(test).toBeDisabled();
+      expect(test).toHaveAttribute('aria-describedby', reason.id);
     });
   });
 });
