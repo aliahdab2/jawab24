@@ -12,6 +12,7 @@ import { isReplyModeVisible } from '@/lib/featureFlags';
 import { getLocaleDirection } from '@/utils/locale';
 import { usePersistedBoolean } from '@/hooks/usePersistedBoolean';
 import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
+import { useHintDisplay } from '@/hooks/useHintDisplay';
 import type { SettingsCardProps } from './types';
 
 // Lazy-load the modal — keeps it out of the settings-page bundle until the merchant
@@ -206,6 +207,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   const [pageNotice, setPageNotice] = useState<string | null>(null);
   const [confirmRevert, setConfirmRevert] = useState(false);
   const pageDraftChanged = pageDraft.trim() !== pageEffectiveText.trim();
+  // "Divergent" is not the same as "savable": an EMPTY textarea diverges from the
+  // inherited text but cannot be saved (a page persona is never blank — clearing
+  // one is the Revert flow, which an inheriting page does not even offer). Both
+  // the Save button and the Test gate must key off the savable predicate, or the
+  // merchant who select-all-deletes gets Save disabled AND Test disabled with a
+  // tooltip telling them to save.
+  const pageDraftSavable = !!pageDraft.trim() && pageDraftChanged;
 
   // Single seeding source: reseed whenever the scoped page OR the editing
   // language changes. Without the language leg, flipping the dashboard locale
@@ -239,6 +247,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
     setPageError(null);
     setPageNotice(null);
     setPageModeError(null);
+    // Every transient message here names the scope it was raised in. The
+    // mode notice renders in BOTH branches, so leaving it up through a switch
+    // makes «تم حفظ اختيار هذه الصفحة ✓» describe a page that was never saved —
+    // or the workspace radiogroup, which is not saved without the Save bar at
+    // all. Same defect this card exists to remove, one control over.
+    clearPageModeNotice();
   };
 
   const applyPagePatch = async (payload: Record<string, string> | null) => {
@@ -294,17 +308,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // Its OWN notice, not the persona's `pageNotice`: sharing that state renders
   // the confirmation twice — once here and once under the persona textarea,
   // where "saved for this page" would be describing the wrong control.
-  const [pageModeNotice, setPageModeNotice] = useState<string | null>(null);
-  // Auto-dismiss is scheduled by the ONE event that raises the notice, not by
-  // an effect watching the state: the timer belongs to the save, and a ref
-  // keeps a rapid second save from letting the first save's timer clear the
-  // second one's message.
-  const pageModeNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flashPageModeNotice = (text: string) => {
-    if (pageModeNoticeTimer.current) clearTimeout(pageModeNoticeTimer.current);
-    setPageModeNotice(text);
-    pageModeNoticeTimer.current = setTimeout(() => setPageModeNotice(null), 4000);
-  };
+  // The transient-message mechanism itself is the shared hook (Rule 10.5/10.8),
+  // which also owns the unmount cleanup a hand-rolled ref+timeout forgot.
+  const {
+    hint: pageModeNotice,
+    showHint: flashPageModeNotice,
+    clearHint: clearPageModeNotice,
+  } = useHintDisplay(4000);
   // Page pins are disabled while the DRAFT default differs from the PERSISTED
   // one: the inherit option's label names the saved default, and letting the
   // merchant customize against an unsaved draft pins pages to a default that
@@ -361,12 +371,20 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // a behavioural line that is inert in one mode and reversed in the other.
   // Workspace scope follows the DRAFT (the guidance must flip the moment the
   // merchant picks a mode); a page scope follows what that page will run.
-  // Non-pilot workspaces have no mode control and always run sales.
-  const copyMode: 'sales' | 'info' = !replyModeEnabled
-    ? 'sales'
-    : scopedPage
-      ? scopedPageEffectiveMode
-      : draftWorkspaceMode;
+  //
+  // ⚠️ Off the allowlist the copy follows the SAVED mode, never a hardcoded
+  // 'sales'. The allowlist gates the WRITE paths only — the reply pipeline
+  // "reads whatever is stored" (backend/docs/SETTINGS.md). So on the documented
+  // rollback path (REPLY_MODE_WORKSPACE_IDS emptied as the kill switch, or a
+  // workspace dropped after the pilot) a stored 'info' KEEPS running INFO-DESK
+  // while its control disappears. Forcing sales copy there would show the
+  // collect-instruction guidance to precisely the merchant whose replies still
+  // reverse it — reintroducing this card's defect on the one path where nobody
+  // is watching. There is no draft to follow without a control, hence the saved
+  // value; a workspace that never set info still resolves to 'sales'.
+  const copyMode: 'sales' | 'info' = scopedPage
+    ? scopedPageEffectiveMode
+    : (replyModeEnabled ? draftWorkspaceMode : savedReplyMode);
   const placeholderKey = copyMode === 'info'
     ? 'replyStyle.brandVoicePlaceholderInfo'
     : 'replyStyle.brandVoicePlaceholder';
@@ -380,10 +398,11 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // had no effect".
   // ⚠️ The `scopedPage` guard is load-bearing. Outside a page scope the seeding
   // effect returns early, so `pageDraft` stays '' (or holds the last page's text)
-  // while `pageEffectiveText` is the workspace persona — `pageDraftChanged` is
+  // while `pageEffectiveText` is the workspace persona — the draft predicate is
   // then true for every merchant with a persona, which would disable the button
   // for all of them.
-  const testBlocked = hasChanges === true || (!!scopedPage && pageDraftChanged);
+  const testBlockedByPageDraft = !!scopedPage && pageDraftSavable;
+  const testBlocked = hasChanges === true || testBlockedByPageDraft;
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -600,10 +619,23 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             )}
             {/* Success is announced HERE, next to the control that saved —
                 the persona editor's notice lives further down the card and a
-                merchant who never scrolls there sees nothing at all. */}
-            {pageModeNotice && !pageModeError && (
-              <p aria-live="polite" className="mt-1.5 text-xs text-brand-600 dark:text-brand-400" dir="auto">{pageModeNotice}</p>
-            )}
+                merchant who never scrolls there sees nothing at all.
+                The live region is ALWAYS mounted and merely sr-only when empty
+                (the pattern the persona notice below already uses): a region
+                inserted together with its text is not reliably announced, which
+                would leave screen-reader users with the very silent save this
+                notice exists to end. The error path uses role="alert", which IS
+                announced on insertion, so only success needed the change. */}
+            <p
+              aria-live="polite"
+              className={clsx(
+                'mt-1.5 text-xs text-brand-600 dark:text-brand-400',
+                (!pageModeNotice || pageModeError) && 'sr-only',
+              )}
+              dir="auto"
+            >
+              {pageModeError ? '' : pageModeNotice ?? ''}
+            </p>
             {pageModeError && (
               <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{pageModeError}</p>
             )}
@@ -659,7 +691,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               <button
                 type="button"
                 onClick={savePagePersona}
-                disabled={pageSaving || !pageDraft.trim() || !pageDraftChanged}
+                disabled={pageSaving || !pageDraftSavable}
                 aria-busy={pageSaving}
                 // Disabled = INERT (muted), not a faded primary: at rest there is
                 // nothing to save, and a half-opacity teal block was the loudest
@@ -792,8 +824,16 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             onClick={openTestModal}
             disabled={testBlocked}
             title={testBlocked ? t('replyStyle.testSaveFirst') : undefined}
+            // `title` is hover-only — it never surfaces on a phone, which is
+            // where this card is read. So the page-draft block (the one with no
+            // Save bar on screen to explain it) also states its reason in a
+            // visible line, wired here for assistive tech.
+            aria-describedby={testBlockedByPageDraft ? 'replyStyleTestBlocked' : undefined}
             className={clsx(
-              'ms-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
+              // min-h-[44px] for the same reason the tone row got it: this
+              // button sits IN that row now, and a ~30px target beside 44px
+              // ones is the mis-tap geometry the widening was meant to remove.
+              'ms-auto inline-flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
               testBlocked
                 ? 'bg-muted text-muted-foreground cursor-not-allowed'
                 : 'bg-brand-500 text-white hover:bg-brand-600',
@@ -842,6 +882,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             only there. */}
         {scopedPage && (
           <p className="text-[11px] text-muted-foreground" dir="auto">{t('replyStyle.tonePageNote')}</p>
+        )}
+        {/* Only for the page-draft block: a workspace-draft block already has
+            the Save bar and its own hint on screen, so a third mention there
+            would be noise. Costs no height at rest. */}
+        {testBlockedByPageDraft && (
+          <p id="replyStyleTestBlocked" className="text-[11px] text-muted-foreground" dir="auto">
+            {t('replyStyle.testSaveFirst')}
+          </p>
         )}
       </div>
       {/* No separate «التجربة على» row (owner call, 2026-08-16): the persona

@@ -448,7 +448,7 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
             body: JSON.stringify({ error: 'nope', code: opts.patchCode ?? 'REPLY_MODE_NOT_ENABLED' }),
           });
         }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], replyMode: 'info' }) });
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], ...(route.request().postDataJSON() as object) }) });
       }
       if (url.includes('/settings') && method === 'PUT') {
         opts.onPut?.(route.request().postDataJSON());
@@ -458,7 +458,12 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
             body: JSON.stringify({ error: 'nope', code: opts.putCode ?? 'REPLY_MODE_NOT_ENABLED' }),
           });
         }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...MOCK_SETTINGS, replyMode: 'info' }) });
+        // Echo what was actually saved. Answering 'info' to a request that
+        // only set replyStyle made savedReplyMode 'info' for the rest of the
+        // page, which renames the inherit radio to «Default (Information
+        // source)» and makes every unanchored /Information source/ selector
+        // resolve to two elements — a strict-mode failure far from its cause.
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...MOCK_SETTINGS, ...(route.request().postDataJSON() as object) }) });
       }
       if (url.includes('/pages') && method === 'GET') {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TWO_PAGES) });
@@ -494,9 +499,20 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await page.getByRole('button', { name: TWO_PAGES[0].name, exact: false }).click();
 
     // Then pin «Information source» — the page-scope radio PATCHes immediately.
-    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await page.getByRole('radio', { name: INFO_RADIO }).click();
     await expect.poll(() => patched, { timeout: 15000 }).toEqual({ replyMode: 'info' });
   });
+
+  // Mode radios carry a label AND a description, and in a page scope the
+  // inherit option embeds a mode name too — so match on the label's own start,
+  // escaped, instead of a bare substring that can hit two radios at once.
+  const modeRadio = (name: string) =>
+    new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const INFO_RADIO = modeRadio(t('settings.replyMode.infoDesk'));
+  // Rule 10.6: derive the inherit label, never hardcode «Default (».
+  const INHERIT_RADIO = modeRadio(
+    t('settings.replyMode.inherit').replace('{mode}', t('settings.replyMode.sales')),
+  );
 
   /** The Save bar is `fixed` and always mounted; it slides in on hasChanges. */
   const saveBar = (page: import('@playwright/test').Page) => page.locator('div.fixed.z-30').first();
@@ -516,9 +532,9 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
 
     await expect(saveBar(page)).toHaveCSS('opacity', '0');
-    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await page.getByRole('radio', { name: INFO_RADIO }).click();
 
-    await expect(page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('radio', { name: INFO_RADIO })).toHaveAttribute('aria-checked', 'true');
     await expect(saveBar(page)).toHaveCSS('opacity', '1');
     const saveBtn = saveBar(page).getByRole('button').first();
     await expect(saveBtn).toBeEnabled();
@@ -535,7 +551,7 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
 
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
-    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await page.getByRole('radio', { name: INFO_RADIO }).click();
     await saveBar(page).getByRole('button').first().click();
 
     await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
@@ -553,7 +569,7 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await openPageScope(page);
 
     await expect(page.getByText(t('settings.replyMode.pageSaved'))).toHaveCount(0);
-    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await page.getByRole('radio', { name: INFO_RADIO }).click();
 
     await expect(page.getByText(t('settings.replyMode.pageSaved'))).toBeVisible({ timeout: 15000 });
     // The page scope deliberately has NO Save bar — pinned so a later change
@@ -568,12 +584,12 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
     await openPageScope(page);
-    await page.getByRole('radio', { name: new RegExp(t('settings.replyMode.infoDesk')) }).click();
+    await page.getByRole('radio', { name: INFO_RADIO }).click();
 
     await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
     // Rolled back: the inherit option is selected again, so the UI never
     // claims a pin the server refused.
-    await expect(page.getByRole('radio', { name: /Default \(/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('radio', { name: INHERIT_RADIO })).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByText(t('settings.replyMode.pageSaved'))).toHaveCount(0);
   });
 
@@ -602,5 +618,49 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await page.goto('/en/settings');
     await expect(page.locator('h1').filter({ hasText: t('settings.title') }).first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(t('settings.replyMode.question'))).toHaveCount(0);
+  });
+
+  test('every control in the tone row clears the 44px touch floor', async ({ page }) => {
+    // Real layout, not a class-substring check: a `min-h-[44px]` literal survives
+    // an `h-8` appended later, and identical geometry hoisted to a parent would
+    // fail a class assertion. Only a measured box holds the floor.
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page);
+
+    await page.goto('/en/settings');
+    await expect(page.locator('h1').filter({ hasText: t('settings.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    const tones = page.getByRole('radiogroup', { name: t('settings.replyStyle.tone') }).getByRole('radio');
+    await expect(tones).toHaveCount(3);
+    for (let i = 0; i < 3; i++) {
+      const box = await tones.nth(i).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    // The Test button sits IN that row — a ~30px target beside 44px ones is the
+    // mis-tap geometry the widening exists to remove.
+    const testBox = await page.getByRole('button', { name: t('settings.replyStyle.openTestModal') }).boundingBox();
+    expect(testBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  });
+
+  test('PAGE scope: an unsaved persona blocks Test and says why on screen', async ({ page }) => {
+    // `title` never surfaces on touch, so the reason must be a visible node.
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page);
+
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+    await openPageScope(page);
+
+    const testBtn = page.getByRole('button', { name: t('settings.replyStyle.openTestModal') });
+    await expect(testBtn).toBeEnabled();
+    await expect(page.getByText(t('settings.replyStyle.testSaveFirst'))).toHaveCount(0);
+
+    await page
+      .getByRole('textbox', { name: t('settings.replyStyle.pageBrandVoice').replace('{page}', TWO_PAGES[0].name) })
+      .fill('An unsaved page persona');
+
+    await expect(testBtn).toBeDisabled();
+    await expect(page.getByText(t('settings.replyStyle.testSaveFirst'))).toBeVisible();
   });
 });
