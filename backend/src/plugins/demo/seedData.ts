@@ -242,6 +242,40 @@ export const DEMO_PAGES = [
         },
     },
     {
+        // D-085 reply-mode fixture (playground-eval Cat 77). A chalets page whose
+        // PAGE row pins reply_mode='info' with NO persona — the attribution twin
+        // of the resort fixture above: there the overriding force is the page
+        // PERSONA (Cat 78); here it must be the MODE alone, so the INFO-DESK
+        // block's counter-demonstrations are measured without any persona text
+        // in the prompt. Same KB discipline as the resort: NO booking-channel
+        // imperative — a KB «الحجز حصراً عبر الهاتف» routes bookings by itself
+        // and the cases would pass with the mode broken. ONE phone, deliberately
+        // different from the resort's 0119876543 AND from the INFO block's
+        // 0900000000 placeholder (INFO_DEMO_LEAK_TOKENS in @jawab24/shared): a
+        // reply carrying any number but 0114455667 is a leak, mechanically
+        // detectable (finding E-1). Named without متجر/منتجع/معهد… so no other
+        // eval alias pattern matches (the #774 shadowing class).
+        facebookPageId: 'demo_page_chalets',
+        name: 'شاليهات نبع السلام',
+        suggestedKnowledgeBase: `🏡 شاليهات نبع السلام
+
+📍 الموقع: طريق مصياف، ريف حماة
+📞 للحجز والاستفسار: 0114455667
+
+⏰ الاستقبال: يومياً من 10 صباحاً حتى 10 مساءً
+
+🏡 الشاليهات:
+- شاليه صغير (حتى 4 أشخاص): 120$ لليلة
+- شاليه عائلي (حتى 8 أشخاص): 200$ لليلة
+- فيلا الينبوع (حتى 12 شخصاً): 320$ لليلة
+
+🏊 مسبح خارجي مفتوح من 10 صباحاً حتى 8 مساءً
+🔥 موقد شواء في كل شاليه، والحطب متوفر في الاستقبال`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+        replyMode: 'info',
+    },
+    {
         // The real Damascus training institute — since the schedules slice (D-052)
         // the enumerable facts (course prices, cohort slots with self-expiring start
         // dates, the closed online list) live in fact_collections rows
@@ -2224,6 +2258,9 @@ export async function seedDemoData(
                     // probative when the override is actually on the row.
                     ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
                         && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
+                    // D-085: same rule for the page reply mode (Cat 77 fixture).
+                    ...('replyMode' in pageData && pageData.replyMode !== undefined
+                        && { replyMode: pageData.replyMode as string }),
                 })
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
@@ -2248,6 +2285,9 @@ export async function seedDemoData(
                 // resort fixture WITHOUT its persona on refresh logins (caught 2026-08-16).
                 ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
                     && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
+                // D-085: mirror the reply mode too (same missed-site class).
+                ...('replyMode' in pageData && pageData.replyMode !== undefined
+                    && { replyMode: pageData.replyMode as string }),
             });
             logger.debug('[DemoData] Inserted newly-added demo page on refresh', { name: pageData.name });
         }
@@ -2449,6 +2489,9 @@ export async function seedDemoData(
                 // D-084: per-page persona override (Cat 78 fixture).
                 ...('brandVoiceNotesMulti' in pageData && pageData.brandVoiceNotesMulti !== undefined
                     && { brandVoiceNotesMulti: pageData.brandVoiceNotesMulti as Record<string, string> }),
+                // D-085: per-page reply mode (Cat 77 fixture).
+                ...('replyMode' in pageData && pageData.replyMode !== undefined
+                    && { replyMode: pageData.replyMode as string }),
             })
             .returning({ id: pages.id, facebookPageId: pages.facebookPageId });
         createdPages.push(created);

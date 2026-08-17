@@ -38,6 +38,11 @@
  *     baseline, so compare temp-0 runs only against temp-0 runs.
  */
 
+// The INFO-DESK block's placeholder phone (E-1 guard): it must never surface
+// in any reply — a fixture page never uses it as its own number, so its
+// presence can only be a prompt-example leak.
+import { INFO_DEMO_LEAK_TOKENS } from '@jawab24/shared';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -174,6 +179,9 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     // here re-opens the #774 shadowing class (e.g. a Shahin-derived page
     // containing "Resort" hijacking the alias by fetch order).
     resort: /منتجع الواحة/i,
+    // D-085 reply-mode fixture (Cat 77) — pages.reply_mode='info', NO persona.
+    // Full unique name for the same anti-shadowing reason as `resort` above.
+    chalets: /شاليهات نبع السلام/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -215,11 +223,12 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 440 total, defined inline below (docs/playground-edge-cases.md is
+// Test cases — 469 total, defined inline below (docs/playground-edge-cases.md is
 // the historical origin of the early categories, not the source of truth).
 // Latest additions: Cat 72 (own-brand Check 6 exemption), Cat 73 (few-shot data
 // leak — إجدابيا + Jawab24-page prod replays; v67 strips all price/plan data
-// from the static prompt)
+// from the static prompt), Cat 77 (reply mode 'info', D-085 — multi-turn prod
+// replays on the persona-less chalets fixture), Cat 78 (per-page persona)
 // ---------------------------------------------------------------------------
 
 /**
@@ -5241,6 +5250,123 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['باقة الورد', 'باقة الفل', 'باقة الياسمين', '150 ريال', 'المبتدئ', 'الاحترافية'],
         },
         notes: 'PROD replay (2026-03-30, Jawab24 page): the plans question that produced the «باقة الورد – 150 ريال» sheet from old Example 1. The support fixture KB deliberately holds NO plan names or prices — only the pricing URL + free-trial line — so the reply must be built from THAT (URL or free-trial mention both count as grounded), and ANY plan enumeration on this fixture can only be prompt leakage. Routing to the URL specifically is pinned for direct website asks by #750; at temp 0 this question answers with the free-trial line and omits the URL — grounded, just terse.',
+    },
+
+    // -----------------------------------------------------------------------
+    // Category 77: Reply mode 'info' (D-085). The `chalets` fixture carries
+    // pages.reply_mode='info' and NO persona — the attribution twin of Cat 78:
+    // the ONLY force overriding the Ex-14 sales default here is the INFO-DESK
+    // MODE block (ai-worker promptBuilder), so these cases measure the MODE,
+    // not a persona text. All cases are MULTI-TURN prod-replay shapes (the
+    // contact-ask fires from turn 3+, never cold — same evidence as Cat 78),
+    // with phrasings deliberately NOT copied from the block's two example
+    // demonstrations (finding E-2). Every case guards INFO_DEMO_LEAK_TOKENS —
+    // the block's placeholder phone must never surface (E-1) — and carries a
+    // positive anchor (the page's own 0114455667) so an empty reply is a
+    // FAILURE, never a silent pass (E-3). Ids 772-778 reclaim the range the
+    // parked #769 branch left free.
+    // -----------------------------------------------------------------------
+    {
+        id: 772, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'خلص اتفقنا، احجزيلي العائلي ليومين',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'مساء الخير، شو أنواع الشاليهات عندكم؟' },
+            { role: 'assistant', content: 'مساء النور! عنا شاليه صغير بـ120$، شاليه عائلي بـ200$، وفيلا الينبوع بـ320$ لليلة.' },
+            { role: 'user', content: 'العائلي شو بيشمل؟' },
+            { role: 'assistant', content: 'الشاليه العائلي بيتسع حتى 8 أشخاص ومعو موقد شواء خاص.' },
+        ],
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'THE prod failure shape (agreement reached → «احجزلي») at thread depth 3+, on the MODE fixture: the INFO-DESK block alone must route to the chalets phone, never collect. Mirrors Cat 78/780 but with no persona on the page — if this fails while 780 passes, the mode block (not the persona) is broken.',
+    },
+    {
+        id: 773, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'ليش ما بتاخدي اسمي وخلص؟',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'بدي احجز فيلا الينبوع' },
+            { role: 'assistant', content: 'للحجز تواصل معنا على 0114455667 وبيتم التثبيت مباشرة.' },
+        ],
+        expected: {
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'The hardest trap, mode arm: the customer INVITES the collection. The mode must decline even when invited — the reply explains booking happens on the phone (anchor: the number), and never turns the invitation into an ask.',
+    },
+    {
+        id: 774, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'صرلي ٣ أيام ناطر وما حدا تواصل معي',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'حجزت عندكم من أسبوع وقالولي بيتأكد الحجز بنفس اليوم' },
+            { role: 'assistant', content: 'أهلاً فيك! تثبيت الحجوزات بيتم عبر هاتف الاستقبال على 0114455667.' },
+        ],
+        expected: {
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'Broken-promise complaint on the mode fixture: the strongest pull toward «رح نتواصل معك». The mode forbids both the promise AND the ask; the complete answer is routing the customer to the phone THEY must call.',
+    },
+    {
+        id: 775, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'رقمي 0933221100 دبريلي شاليه لآخر الأسبوع',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'شو سعر الشاليه الصغير؟' },
+            { role: 'assistant', content: 'الشاليه الصغير بـ120$ لليلة.' },
+        ],
+        expected: {
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'VOLUNTEERED number, mode arm: thanking the customer for THEIR number is fine; asking for MORE details or promising a call-back to the just-received number is not. Booking still routes to the chalets phone. (Passive capture keeps the lead row; only the push is muted — suppressPush.)',
+    },
+    {
+        id: 776, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'تغيرت ظروفي، بدي إلغي حجز الجمعة',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'حجزت الشاليه العائلي للجمعة الجاية' },
+            { role: 'assistant', content: 'بنتمنالك إقامة حلوة! لأي استفسار عن حجزك اتصل على 0114455667.' },
+        ],
+        expected: {
+            flags: ['cancellation_request'],
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'Cancellation on the mode fixture: the INFO-DESK block explicitly keeps flags unchanged — «cancellation_request» must survive the mode (the block says everything except ordering/follow-up behavior stays as specified). Wording deliberately differs from the block\'s Example B (E-2).',
+    },
+    {
+        id: 777, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'طيب كيف بثبت حجزي عندكم؟',
+        page: 'chalets',
+        conversationHistory: [
+            { role: 'user', content: 'المسبح شغال بالشتوية؟' },
+            { role: 'assistant', content: 'المسبح الخارجي مفتوح من 10 الصبح حتى 8 المسا حسب الطقس.' },
+        ],
+        expected: {
+            replyContainsAny: ['0114455667'],
+            replyNotContains: [...CONTACT_ASK_PHRASES, ...CALLBACK_PROMISE_PHRASES, ...INFO_DEMO_LEAK_TOKENS],
+        },
+        notes: 'POSITIVE ANCHOR (E-3): a direct booking-how-to whose only correct answer carries the page phone. An empty reply — the classifier-flip failure that once scored as a PASS — fails replyContainsAny here by construction.',
+    },
+    {
+        id: 778, category: 77, categoryName: 'Reply Mode: Info', channel: 'dm',
+        message: 'طيب جهزولي واحد منهم',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم لابتوبات للدراسة؟' },
+            { role: 'assistant', content: 'نعم! عنا لابتوبات تبدأ من 2500 ريال.' },
+        ],
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyContainsAny: ['اسمك', 'رقمك', 'بيانات'],
+        },
+        notes: 'ATTRIBUTION CONTROL (mirror of 784, different page): a sales-mode page at the same thread depth must still ask for order details — today\'s Ex-14 default. If this stops firing, the DEFAULT mode regressed and Cat 77\'s clean results can no longer be attributed to the info mode. Also the byte-identity witness: sales prompts must not carry the INFO-DESK block.',
     },
 
     // -----------------------------------------------------------------------
