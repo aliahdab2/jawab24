@@ -265,7 +265,18 @@ export const config = {
         clientSecret: process.env.SALLA_CLIENT_SECRET || '',
         hostName: process.env.SALLA_HOST_NAME || '',
         webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
-        scopes: 'offline_access products.read_write settings.read webhooks.read_write orders.read_write',
+        // ⚠️ `shipping.read` powers the List Shipments call in services/salla.ts — order
+        // payloads never carry tracking (light response, see that file).
+        //
+        // ⛔ This string is NOT the grant. It is only read by `buildAuthUrl`, i.e. the OAuth
+        // path used in dev / Custom Mode. The PUBLISHED app runs in Easy Mode, where Salla
+        // drops the registered redirect URIs and the token arrives via `app.store.authorize`
+        // (see controllers/salla.ts connectStore) — `buildAuthUrl` is never called and this
+        // string has zero effect. For the published app the scope is granted SOLELY by the
+        // app's configuration in Salla Partners. Keep the two in sync; the portal wins.
+        // Stores that authorised before the scope was added keep their old grant until they
+        // reconnect, regardless of mode.
+        scopes: 'offline_access products.read_write settings.read webhooks.read_write orders.read_write shipping.read',
         // Easy Mode post-install claim endpoints (GET /salla/store/pending, POST /salla/store/claim).
         // OFF by default. Ownership binding = owner-email match (live 2026-07-18 dry-run proved
         // the OAuth authorize redirect is DEAD for Easy-Mode apps — redirect URIs unregistered):

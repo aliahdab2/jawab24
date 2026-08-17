@@ -91,7 +91,24 @@ All e-commerce platforms share the same unified schema:
 1. Go to [Salla Partners](https://salla.partners/)
 2. Create a new app
 3. Set the Callback URL to `https://jawab24.com/salla/auth/callback`
-4. Required scopes (`config.salla.scopes`): `offline_access`, `products.read_write`, `settings.read`, `webhooks.read_write`, `orders.read_write`
+4. Required scopes (`config.salla.scopes`): `offline_access`, `products.read_write`, `settings.read`, `webhooks.read_write`, `orders.read_write`, `shipping.read`
+
+> ⚠️ `shipping.read` is required for the `track_shipment` tool. Salla serves order detail in
+> **light** format to every app created after 15 Aug 2024 (ours dates from 2026-02-25), and the
+> light payload omits `shipments`, `items`, pickup branch and customer groups. Tracking therefore
+> comes from a separate [List Shipments](https://docs.salla.dev/5394232e0) call
+> (`GET /admin/v2/shipments?order_id=…`), which that scope gates.
+>
+> ⛔ **`config.salla.scopes` is not the grant.** It is read only by `buildAuthUrl` — the OAuth
+> path used in dev / Custom Mode. The published app runs in **Easy Mode**, where the token
+> arrives via `app.store.authorize` and `buildAuthUrl` is never called, so for production the
+> scope is granted **solely** by the app's configuration in Salla Partners. Tick it there.
+> Any store that authorised before the scope was added keeps its old grant until it reconnects
+> (a 403 degrades tracking to status-only rather than failing the reply).
+>
+> The 1 Sep 2026 deprecation of `expanded=true` / the legacy expanded response does **not** affect
+> us: we never sent that parameter and were never eligible for the expanded shape. No migration is
+> owed — do not re-audit it.
 
 ### 2. Configure Webhooks
 

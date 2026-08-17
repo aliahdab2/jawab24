@@ -85,7 +85,11 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
 - [ ] **Production app portal config cross-check**:
       - Callback URL `https://jawab24.com/salla/auth/callback`; webhook URL `https://jawab24.com/salla/webhooks`.
       - Scopes match `config.salla.scopes` (`backend/src/config/index.ts`):
-        `offline_access products.read_write settings.read webhooks.read_write orders.read_write`.
+        `offline_access products.read_write settings.read webhooks.read_write orders.read_write shipping.read`.
+        ⚠️ **`shipping.read` must be ticked in the portal** — without it the `track_shipment`
+        tool answers with order status but no tracking number (order payloads never carry
+        tracking; see `docs/integrations/salla.md`). Any store connected before the scope was
+        added must **reconnect** to pick up the new grant.
       - Webhook secret in the portal == prod `SALLA_WEBHOOK_SECRET`.
       - Switch the production app to **Easy Mode** (mandatory for published apps).
 - [ ] **Prod env flips** (backend.env, then container recreate — NOT plain `docker restart`;

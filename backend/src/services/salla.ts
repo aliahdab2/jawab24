@@ -426,8 +426,14 @@ interface SallaOrderItem {
 interface SallaShipment {
     tracking_number: string | null;
     courier_name: string | null;
-    tracking_link: string | null;
-    shipped_at: string | null;
+    // The List Shipments schema documents the tracking URL under BOTH names; accept either
+    // rather than betting on one and silently handing the customer a shipment with no link.
+    tracking_link?: string | null;
+    tracking_url?: string | null;
+}
+
+interface SallaShipmentsResponse {
+    data: SallaShipment[];
 }
 
 // Salla's orders LIST endpoint (/orders, /orders?keyword=) and DETAIL endpoint
@@ -437,6 +443,15 @@ interface SallaShipment {
 //   • DETAIL item: has the full `amounts` breakdown but NO `items` inline.
 // The customer's `mobile` is a bare local NUMBER plus a separate `mobile_code`
 // (e.g. 555123456 + "+966") on BOTH shapes — compose them before use.
+//
+// ⚠️ That missing-`items` observation is the LIGHT response, recognised as such only on
+// 2026-08-17. Salla serves order DETAIL in "light" format to every app created after
+// 15 Aug 2024 (ours dates from 2026-02-25), and light OMITS `shipments`, `items`, pickup
+// branch and customer groups — permanently, not from some future date. The 1 Sep 2026
+// deprecation of `expanded=true` therefore changes NOTHING for us; we were never eligible
+// for the expanded response. Consequence: `order.shipments` is ALWAYS absent here, so
+// tracking must come from the separate List Shipments endpoint (see fetchOrderShipment).
+// Refs: docs.salla.dev/5394147e0 (Order Details), docs.salla.dev/5394232e0 (List Shipments).
 interface SallaOrder {
     id: number;
     reference_id: string;
@@ -448,7 +463,8 @@ interface SallaOrder {
     customer?: { first_name?: string; mobile?: string | number | null; mobile_code?: string | null };
     shipping?: { address: { city: string; district: string } | null } | null;
     items?: SallaOrderItem[];
-    shipments?: SallaShipment[];
+    // ⛔ No `shipments` field — deliberately absent so nothing can read it again. The light
+    // order payload never carries one (see the note above); use fetchOrderShipment instead.
     date?: { date: string };
     is_refunded?: boolean;
     refund_amount?: { amount: number; currency: string };
@@ -482,6 +498,37 @@ export async function lookupOrder(storeId: string, orderNumber: string): Promise
 }
 
 /**
+ * Fetch the order's shipment from the dedicated List Shipments endpoint.
+ *
+ * Tracking is NOT available on the order payload (see the light-response note above), so
+ * this is the only source. Requires the `shipping.read` scope: a store that authorised
+ * before that scope was added to the app answers 403 here. Tracking is therefore treated
+ * as best-effort — a failure degrades `track_shipment` to status-only rather than failing
+ * the whole tool, which would leave the customer with no answer at all.
+ *
+ * An order can carry several shipments (multi-package, or a cancelled one plus its
+ * replacement) and the endpoint documents no ordering guarantee, so prefer the first that
+ * actually has a tracking number — blindly taking [0] can answer "no tracking" while a
+ * later element in the same response holds the number the customer asked for.
+ */
+async function fetchOrderShipment(orderId: number, accessToken: string): Promise<SallaShipment | null> {
+    try {
+        const data = await sallaApiGet<SallaShipmentsResponse>(
+            `https://api.salla.dev/admin/v2/shipments?order_id=${orderId}`,
+            accessToken,
+        );
+        const shipments = data.data ?? [];
+        return shipments.find(s => s.tracking_number) ?? shipments[0] ?? null;
+    } catch (err) {
+        captureError(err, 'Salla shipments lookup failed', {
+            tags: { service: 'salla' },
+            extra: { orderId, hint: 'a 403 here means the store token predates the shipping.read scope' },
+        });
+        return null;
+    }
+}
+
+/**
  * Get shipment tracking info for an order via Salla REST API.
  * Returns normalized ShipmentInfo or null if not found.
  */
@@ -498,14 +545,17 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
     const orderSummary = searchData.data[0];
     if (!orderSummary) return null;
 
-    // Fetch full order details (includes shipments)
-    const detailData = await sallaApiGet<SallaOrderDetailResponse>(
-        `https://api.salla.dev/admin/v2/orders/${orderSummary.id}`,
-        accessToken,
-    );
+    // Order detail (customer, status, shipping city) and the shipment (tracking) are two
+    // independent lookups — issue them together, never in sequence (AI_INSTRUCTIONS §17.3).
+    const [detailData, shipment] = await Promise.all([
+        sallaApiGet<SallaOrderDetailResponse>(
+            `https://api.salla.dev/admin/v2/orders/${orderSummary.id}`,
+            accessToken,
+        ),
+        fetchOrderShipment(orderSummary.id, accessToken),
+    ]);
 
     const order = detailData.data;
-    const shipment = order.shipments?.[0];
 
     return {
         orderNumber: String(order.reference_id ?? ''),
@@ -514,7 +564,7 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
         status: mapSallaOrderStatus(order.status?.slug ?? ''),
         trackingNumber: shipment?.tracking_number || undefined,
         courierName: shipment?.courier_name || undefined,
-        trackingUrl: shipment?.tracking_link || undefined,
+        trackingUrl: shipment?.tracking_link || shipment?.tracking_url || undefined,
         estimatedDelivery: undefined, // Salla doesn't provide estimated delivery date
         shippingCity: order.shipping?.address?.city || undefined,
     };
