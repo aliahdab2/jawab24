@@ -1902,3 +1902,43 @@ prompt block is redundant once page personas exist. UI surface: the **settings s
 scope selector on the persona card; single-page merchants see no change. What stays deferred
 to pilot evidence is the page-card row (option A) and whether the switcher remains the
 long-term surface; the backend contract is identical under either.
+
+## D-085 · Reply modes revived as a structured per-page choice; partial reversal of D-084's parking (2026-08-17, owner-approved)
+
+**Decision.** Revive the core of PR #769 as TWO reply modes per page — «مساعد مبيعات»
+(`'sales'`, the default: today's behavior, fleet byte-identical) and «مصدر معلومات»
+(`'info'`: answers + routes to the business's own channels, never collects contact
+details, never promises callbacks) — stored as `settings.reply_mode` (workspace default,
+`'sales'`) with `pages.reply_mode` as a NULL-inherits per-page pin, resolved via
+`resolveEffectiveReplyMode` in shared. The behavior text is OURS: one curated INFO-DESK
+prompt block with counter-demonstrations (gated per call in the ai-worker promptBuilder;
+sales prompts stay byte-identical, NO `PROMPT_VERSION` bump). `suppressPush` mutes lead
+push alerts for info pages (row/bell/SSE unchanged). UI is a business question inside the
+D-084 scope switcher («ماذا يفعل المساعد عندما يرغب العميل في الشراء أو الحجز؟»), gated
+to the InMedia pilot workspace on both sides, fail-closed (an empty allowlist enables
+NOBODY; GA = deleting the gates in a reviewed PR).
+
+**Why D-084's parking fell.** Its premise — "the persona text suffices" — died on
+measurement (2026-08-17): merchant wording is FRAGILE. One word («تأخذي» for «تسجّلي»)
+flipped the intent classifier to SPAM_OR_IRRELEVANT and silenced a reply to a customer
+who had volunteered their number; a stricter phrasing brought the asks back. Meanwhile
+ONE generic curated block scored 0 asks · 0 promises · 0 silent on all 24 real prod
+threads — identical to the hand-tailored text — so a single canonical text we own serves
+any merchant. Fleet classification (33 live AR-on pages): ~14 sales / ~6 booking-institutional
+/ ~9 media / ~4 mixed — the collect default fits under half the fleet.
+
+**Rejected:** editing Ex-14/15 at the source (PROMPT_VERSION bump burns the fleet reply
+cache — Rule 17.1 — and re-rolls 14 working sales pages for zero measured gain); a paste-in
+persona template (tamperable, competes for the 800-char persona budget, doesn't touch lead
+alerts); leaving it (24 real asks on one page in 8 days the merchant does not want).
+
+**Acceptance measured (2026-08-17, temp 0, local playground):** mode arm (resort fixture,
+persona stripped, `reply_mode='info'`) on the 24 harvested threads = **0 asks · 0 promises
+· 0 silent · 0 leak-tokens · 24 scored**; sales control arm on the same threads brought
+back 6 asks + 1 promise + 1 silence. Eval Cat 77 (persona-less chalets fixture) 7/7;
+Cat 78 untouched (784's clarify-vs-collect bistability reproduced on main itself).
+
+**Rollout:** InMedia pilot (allowlist) ≈1 week → GA = gate-deletion PR. Leads-tab hiding
+stays OUT (unbuilt; revisit after pilot). Per-page tone deliberately NOT built (D-084
+wrinkle, documented in SETTINGS.md). PR #769 is superseded by this build and closes with a
+pointer.
