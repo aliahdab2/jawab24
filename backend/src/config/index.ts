@@ -210,6 +210,11 @@ export const config = {
                 // (Shahin Resort + Shahin World). Kept in the DEFAULT rather than
                 // the server env so the pilot is one reviewable deploy.
                 'd06ed500-74ea-42ee-bff6-37bee2cf412a',
+                // Founder workspace (aliahdab@gmail.com) — dogfooding during the
+                // pilot (owner order 2026-08-17). Must stay in step with the
+                // frontend default in featureFlags.ts (that one only hides the
+                // UI; this list is the enforcement).
+                'a0005407-92bf-473e-9368-013f14c57a7d',
             ].join(','))
         ).split(',').map(id => id.trim()).filter(Boolean),
     },

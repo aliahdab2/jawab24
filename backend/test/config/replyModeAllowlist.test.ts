@@ -28,8 +28,11 @@ describe('config.replyMode.workspaceIds — the pilot kill switch', () => {
         vi.resetModules();
     });
 
-    it('falls back to the built-in pilot workspace when the var is UNSET', async () => {
-        expect(await loadWorkspaceIds(undefined)).toEqual(['d06ed500-74ea-42ee-bff6-37bee2cf412a']);
+    it('falls back to the built-in pilot list when the var is UNSET (InMedia + founder dogfooding)', async () => {
+        expect(await loadWorkspaceIds(undefined)).toEqual([
+            'd06ed500-74ea-42ee-bff6-37bee2cf412a', // InMedia — the requesting merchant
+            'a0005407-92bf-473e-9368-013f14c57a7d', // founder workspace (owner order 2026-08-17)
+        ]);
     });
 
     it('an EXPLICITLY EMPTY var enables nobody — it must not resurrect the default', async () => {
