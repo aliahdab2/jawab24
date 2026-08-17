@@ -134,6 +134,11 @@ const REPLY_MODE_WORKSPACE_IDS: ReadonlySet<string> = new Set(
     ? process.env.NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS
     : [
       'd06ed500-74ea-42ee-bff6-37bee2cf412a', // InMedia agency (inmedia.sy@gmail.com) — requesting merchant
+      // Founder workspace (aliahdab@gmail.com) — dogfooding during the pilot
+      // (owner order 2026-08-17, verified against prod: the account's single
+      // workspace). Same both-lists rule as POST_SUGGESTIONS above: this only
+      // shows the UI, the backend default must carry the same id.
+      'a0005407-92bf-473e-9368-013f14c57a7d',
     ].join(','))
   ).split(',').map((id) => id.trim()).filter(Boolean),
 );
