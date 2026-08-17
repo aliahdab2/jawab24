@@ -112,6 +112,66 @@ describe('Pages Controller', () => {
         };
     });
 
+    // ---- getAll: the list-shape opt-in ----
+    //
+    // This is a DATA-LOSS guard, not a perf assertion. Mobile bundles already on
+    // merchants' phones cannot be redeployed, they read `businessProfile` off
+    // this list, and they PUT it back as a full replace — so serving them the
+    // trimmed shape would tombstone every merchant-confirmed fact on the next
+    // edit. The trim must therefore stay opt-in until those builds are gone.
+    describe('getAll — list shape is opt-in', () => {
+        // Must clear KB_FILLED_MIN_CHARS (80) for kbFilled to be true — the
+        // shared predicate treats anything shorter as not-yet-provided.
+        const KB_TEXT =
+            'We open every day from nine in the morning until nine at night, and we deliver across the city.';
+        const fatRow = {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: 'fb-page-1',
+            accessToken: 'tok',
+            knowledgeBase: KB_TEXT,
+            suggestedKnowledgeBase: null,
+            businessProfile: { merchant: { address: 'Damascus' } },
+            archivedAt: null,
+        };
+
+        it('serves the FULL row by default — old clients must keep their fields', async () => {
+            vi.mocked(pagesService.getPages).mockResolvedValue([fatRow] as any);
+
+            await pagesController.getAll(mockRequest as any, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent).toHaveLength(1);
+            expect(sent[0].knowledgeBase).toBe(KB_TEXT);
+            expect(sent[0].businessProfile).toEqual({ merchant: { address: 'Damascus' } });
+            // Credentials are stripped in BOTH shapes.
+            expect(sent[0]).not.toHaveProperty('accessToken');
+        });
+
+        it('serves the trimmed row only when ?view=list is asked for', async () => {
+            vi.mocked(pagesService.getPages).mockResolvedValue([fatRow] as any);
+            mockRequest.query = { view: 'list' };
+
+            await pagesController.getAll(mockRequest as any, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent[0]).not.toHaveProperty('knowledgeBase');
+            expect(sent[0]).not.toHaveProperty('suggestedKnowledgeBase');
+            expect(sent[0]).not.toHaveProperty('businessProfile');
+            expect(sent[0].kbFilled).toBe(true);
+        });
+
+        it('treats any other view value as the safe default', async () => {
+            vi.mocked(pagesService.getPages).mockResolvedValue([fatRow] as any);
+            mockRequest.query = { view: 'List' };
+
+            await pagesController.getAll(mockRequest as any, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent[0].knowledgeBase).toBe(KB_TEXT);
+        });
+    });
+
     // ---- create ----
     describe('create', () => {
         it('should create a page successfully', async () => {

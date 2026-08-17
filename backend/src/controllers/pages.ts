@@ -167,9 +167,25 @@ export class PagesController {
 
     /**
      * Get all pages
-     * GET /pages
+     * GET /pages           → full rows (legacy shape)
+     * GET /pages?view=list → trimmed rows (see serializeListPage)
+     *
+     * ⚠️ The trim is OPT-IN, and must stay opt-in until the last fat-shape
+     * client is gone. The mobile app bakes its own frontend bundle and CANNOT
+     * be redeployed (capacitor.config.ts `webDir: 'out'`), and there is no
+     * min-version gate anywhere — so builds already on merchants' phones keep
+     * calling this endpoint forever. The shipped build (android-v2.0.35) reads
+     * `businessProfile` straight off this list in business.tsx and then PUTs a
+     * FULL-REPLACE patch built from it. Serving it a row without that field
+     * would make the next hours/phone/address edit tombstone every other
+     * merchant-confirmed fact — silent, irreversible data loss on a screen the
+     * merchant uses normally.
+     *
+     * So: default stays fat, `?view=list` opts in. Flip the default (and delete
+     * this branch) only once the fat-shape builds are provably gone from the
+     * fleet — not merely superseded in the Play Store.
      */
-    async getAll(request: FastifyRequest, reply: FastifyReply) {
+    async getAll(request: FastifyRequest<{ Querystring: { view?: string } }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
@@ -177,11 +193,12 @@ export class PagesController {
 
         try {
             const pages = await pagesService.getPages(req.workspaceId);
+            const serialize = request.query?.view === 'list' ? serializeListPage : serializePage;
             // Archived pages are hidden HERE, not in pagesService.getPages: this is the
             // single endpoint every merchant surface reads (channels, dashboard, inbox,
             // pickers), while the Facebook sync needs the archived rows to stay visible
             // to its existing-page map and revoke list.
-            return reply.send(pages.filter(page => !page.archivedAt).map(serializeListPage));
+            return reply.send(pages.filter(page => !page.archivedAt).map(serialize));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch pages' });

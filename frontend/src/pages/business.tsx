@@ -145,13 +145,25 @@ function BusinessPageInner() {
   // were 66% of its bytes and no list screen reads them — see serializeListPage
   // in backend controllers/pages.ts). This screen is the editor for exactly that
   // text, so it reads the single page, which still carries the full row.
-  const { data: pageDetail } = useQuery<Page>({
+  const {
+    data: pageDetail,
+    isError: pageDetailError,
+    refetch: refetchPageDetail,
+  } = useQuery<Page>({
     queryKey: ['page', selectedPageId],
     queryFn: () => pagesApi.getById(selectedPageId).then((r) => r.data),
     enabled: isAuthenticated && !!selectedPageId,
   });
   // Prefer the detail row; fall back to the list entry so identity-only fields
   // (name, id, connection state) render immediately while the detail loads.
+  //
+  // ⛔ The fallback is for IDENTITY ONLY. Nothing that reads `businessProfile`
+  // or the KB text — and above all nothing that WRITES them — may run against
+  // the list row: `PUT /pages/:id { businessProfile }` is a FULL REPLACE
+  // (applyMerchantEdit tombstones every tracked field absent from the patch),
+  // so a save seeded from a row that merely lacks the field wipes every other
+  // merchant-confirmed fact. Gate those on `detailLoaded`, which is why the
+  // whole facts/catalog region below waits for it rather than just the editor.
   const selectedPage = pageDetail ?? listPage;
   // Whether the business-info TEXT is available yet. The editor must not render
   // an empty textarea over a page that has text but hasn't loaded it — on a slow
@@ -289,7 +301,16 @@ function BusinessPageInner() {
     confirmFields: ReadonlyArray<keyof BusinessProfile>,
   ) => {
     if (!selectedPage) return;
-    const { merchant = {} } = unwrapBusinessProfile(selectedPage.businessProfile);
+    // ⛔ HARD REFUSAL, not an optimisation. The body below is a FULL REPLACE of
+    // the merchant container, so it must be seeded from the row that actually
+    // carries `businessProfile` — the DETAIL read. Seeding it from the list row
+    // (which no longer ships that field) would send a container holding only
+    // the field just edited, and applyMerchantEdit would tombstone every other
+    // merchant-confirmed fact. The UI gates these editors on `detailLoaded`, so
+    // this should be unreachable; it stays as the last line of defence, because
+    // the failure it prevents is silent and irreversible.
+    if (!pageDetail) return;
+    const { merchant = {} } = unwrapBusinessProfile(pageDetail.businessProfile);
     const patch = mutate({ ...merchant });
 
     setSavingFact(true);
@@ -484,15 +505,34 @@ function BusinessPageInner() {
               first by DOM luck. */}
           {!canEdit && <ViewOnlyBanner className="order-first" />}
 
+          {/* The detail read carries `businessProfile`; the list row does not.
+              Everything below that reads or writes it therefore waits for the
+              detail — a facts screen rendered from the list row would report
+              every fact as missing and invite the merchant to "fix" rows whose
+              save is a full replace. Failing loudly here beats a screen that
+              quietly lies about what the merchant has already told us. */}
+          {pageDetailError && (
+            <div className="order-first rounded-2xl border border-theme-border bg-card p-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">{t('detail.loadFailed')}</p>
+              <Button variant="secondary" size="sm" onClick={() => void refetchPageDetail()}>
+                {tc('tryAgain')}
+              </Button>
+            </div>
+          )}
+
           {/* 1 — Readiness */}
           <div className="order-1">
-            <BusinessReadinessCard
-              page={selectedPage}
-              productsCount={productsCount}
-              factRowsCount={factRowsCount}
-              onTryReply={() => setTestReplyOpen(true)}
-              onFixChip={canEdit ? handleFixChip : undefined}
-            />
+            {detailLoaded ? (
+              <BusinessReadinessCard
+                page={selectedPage}
+                productsCount={productsCount}
+                factRowsCount={factRowsCount}
+                onTryReply={() => setTestReplyOpen(true)}
+                onFixChip={canEdit ? handleFixChip : undefined}
+              />
+            ) : (
+              <Skeleton className="h-32 rounded-2xl" />
+            )}
           </div>
 
           {/* 2 — Products & services (catalog) */}
@@ -526,7 +566,13 @@ function BusinessPageInner() {
             ) : (
               <CatalogManager
                 pageId={selectedPage.id}
-                page={selectedPage}
+                // `pageDetail`, not `selectedPage`: this prop exists only to
+                // offer the post-import Business-Info cleanup, which needs the
+                // KB text the list row does not carry. Passing the list row
+                // would make the offer silently never fire; passing undefined
+                // makes the dependency explicit and the catalog itself still
+                // renders (it keys off pageId).
+                page={pageDetail}
                 importRequested={importRequest?.pageId === selectedPage.id}
                 importInitialText={importRequest?.pageId === selectedPage.id ? importRequest.text : undefined}
                 readOnly={!canEdit}
@@ -535,14 +581,20 @@ function BusinessPageInner() {
           </section>
           )}
 
-          {/* 3 — Structured facts */}
+          {/* 3 — Structured facts. Gated on the detail read: these rows are the
+              entry point to `saveProfile`, which full-replaces the merchant
+              container, so they must never render from a row that lacks it. */}
           <div className="order-2 md:order-3">
-            <BusinessFactRows
-              page={selectedPage}
-              onEditFact={setEditingFact}
-              onEditHours={() => setEditingHours(true)}
-              readOnly={!canEdit}
-            />
+            {detailLoaded ? (
+              <BusinessFactRows
+                page={selectedPage}
+                onEditFact={setEditingFact}
+                onEditHours={() => setEditingHours(true)}
+                readOnly={!canEdit}
+              />
+            ) : (
+              <Skeleton className="h-64 rounded-2xl" />
+            )}
           </div>
 
           {/* 3b — Fact lists (G1b): pages with collections render them; a page

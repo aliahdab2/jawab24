@@ -131,6 +131,9 @@
   "noConnectedPageHint": "You have pages that lost their connection and need reconnecting. Reconnect them to manage their business info here.",
   "goToPages": "Manage pages",
   "loading": "Loading your business…",
+  "detail": {
+    "loadFailed": "Couldn't load your business info. Nothing has been lost — try again."
+  },
   "lists": {
     "title": "Business lists",
     "addRow": "Add row",

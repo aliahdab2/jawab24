@@ -112,6 +112,16 @@ function setupMockRoutes(
     if (url.includes('/workspaces')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ id: 'ws_1', name: 'Test', role: 'owner' }] }) });
     }
+    // ⚠️ The SINGLE-page read must be matched BEFORE the list, and must answer
+    // one object. This screen reads `businessProfile` / `knowledgeBase` from
+    // `GET /pages/:id` — the list (`?view=list`) no longer carries them. Without
+    // this branch the detail request fell through to the list matcher below and
+    // resolved to an ARRAY, so `selectedPage.id` was undefined, the lists
+    // section silently never rendered, and the suite was blind to the very
+    // list/detail split it now depends on.
+    if (/\/pages\/[^/?]+$/.test(url.split('?')[0])) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PAGES[0]) });
+    }
     if (url.includes('/pages')) {
       // GET /pages answers a BARE ARRAY — `pagesApi.getAll().then(r => r.data)`
       // hands the body straight to the query. Wrapping it in `{ data: … }` here
