@@ -420,6 +420,24 @@ describe('ReplyStyleCard', () => {
       expect(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i })).toHaveAttribute('aria-checked', 'true');
     });
 
+    it('keeps a DISCONNECTED page listed when its only override is a reply-mode pin', async () => {
+      // The pin lives on the row, not the token: if a revoked token dropped the
+      // page from the switcher, the merchant could neither see nor revert it,
+      // and a reconnect would silently revive info mode on live traffic. Same
+      // rule the persona filter already enforces (#797 review).
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [
+          TWO_PAGES[0],
+          { id: 'p9', name: 'Revoked Page', isConnected: false, brandVoiceNotesMulti: null, replyMode: 'info' },
+        ],
+      } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+
+      const options = Array.from(screen.getAllByRole('combobox')[0].querySelectorAll('option')).map((o) => o.textContent);
+      expect(options.join('|')).toMatch(/Revoked Page/);
+    });
+
     it('page scope: pins are disabled with a hint while the draft default is unsaved', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       // Draft says info, persisted default is still sales → block page pins.

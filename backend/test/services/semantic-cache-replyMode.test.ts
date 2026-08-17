@@ -67,6 +67,24 @@ describe('semantic cache — replyMode scope (strict both-ways, sales ≡ omitte
         expect(hit?.reply).toBe('cached reply');
     });
 
+    // The JS predicate above runs on rows ALREADY cut by `LIMIT 5`, so it alone
+    // cannot keep a flipped page's pre-flip sales rows from occupying all five
+    // slots and hiding the matching info row — a guaranteed cache miss, and a
+    // fresh 2-4s OpenAI call, for the whole 30-day TTL (Rule 17.1). Every test
+    // above feeds rows straight past the query, so they pass with or without
+    // the narrowing: this is the only test that can see it (#797 review).
+    it('narrows the candidate set in SQL, not just in JS, so the LIMIT cannot be filled by the wrong mode', async () => {
+        const sqlOf = () => JSON.stringify(vi.mocked(db.execute).mock.calls.at(-1)?.[0] ?? '');
+
+        mockRows([]);
+        await semanticCacheService.check('page-1', EMBEDDING, 'QUESTION', 3, { replyMode: 'info' });
+        expect(sqlOf()).toContain("metadata->>'replyMode' = 'info'");
+
+        mockRows([]);
+        await semanticCacheService.check('page-1', EMBEDDING, 'QUESTION', 3, { replyMode: 'sales' });
+        expect(sqlOf()).toContain("(metadata->>'replyMode') IS NULL");
+    });
+
     it('save() omits the field for sales and stores it for info (keeps new sales rows legacy-shaped)', async () => {
         vi.mocked(db.execute).mockResolvedValue([] as never);
 
