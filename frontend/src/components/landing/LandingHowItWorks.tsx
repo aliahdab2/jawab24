@@ -2,7 +2,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { Button } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — see LandingPageContent.
+import { Button } from '@/components/ui/Button';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
 import { isRTLLocale } from '@/utils/locale';

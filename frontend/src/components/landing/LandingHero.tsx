@@ -11,7 +11,9 @@ import { useTranslations } from 'next-intl';
 import { AnimatePresence, motion, type Variants } from 'framer-motion';
 import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
-import { Button, WhatsAppIcon } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel — see LandingPageContent.
+import { Button } from '@/components/ui/Button';
+import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 
 export function ShopifyIcon({ className }: { className?: string }) {
   return (

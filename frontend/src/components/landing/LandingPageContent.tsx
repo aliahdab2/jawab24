@@ -4,7 +4,16 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { Button, BrandLogo, ThemeToggleButton } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports). The
+// barrel reaches NotificationBell -> the '@/hooks' barrel -> the whole Post
+// Reply feature, and WhatsAppHelpButton/FeedSnippet/FlagTag/CtaButtonPill ->
+// '@jawab24/shared', which is CommonJS and therefore cannot be tree-shaken:
+// one named import pulls zod + libphonenumber-js. Measured 2026-08-18 on
+// prod at Slow 3G: 155.4 kB gzip of the landing's pre-paint bytes came in
+// this way, for four components. See frontend/scripts/perf/README.md.
+import { Button } from '@/components/ui/Button';
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { ThemeToggleButton } from '@/components/ui/ThemeToggleButton';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';

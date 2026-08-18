@@ -1,4 +1,5 @@
 import { parsePhoneNumber } from 'libphonenumber-js';
+import { PHONE_REGEX } from '@jawab24/shared';
 
 /**
  * Format an E.164 phone number for display as a grouped international number,
@@ -54,4 +55,19 @@ export function resolveCustomerLabel(
   if (name) return { label: name, isPhone: false };
   if (phone) return { label: phone, isPhone: true };
   return { label: fallback, isPhone: false };
+}
+
+/**
+ * Normalize a merchant-typed phone number to E.164 (`+<country><number>`), or
+ * null when it can't be a valid international number. Accepts the messy forms
+ * merchants actually paste — `+963 944 123 456`, `00963-944123456`,
+ * `963944123456` — but rejects local formats (leading 0 without a country
+ * code), because wa.me requires the country code. Validation itself is the
+ * shared E.164 rule (PHONE_REGEX) so frontend and backend can't drift.
+ */
+export function normalizeInternationalPhone(input: string): string | null {
+  let v = input.trim().replace(/[\s\-().]/g, '');
+  if (v.startsWith('00')) v = `+${v.slice(2)}`;
+  else if (/^[1-9]\d+$/.test(v)) v = `+${v}`;
+  return PHONE_REGEX.test(v) ? v : null;
 }

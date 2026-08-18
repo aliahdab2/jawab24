@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
+import { buildWhatsAppUrl, extractWhatsAppNumber } from '@/lib/whatsapp';
 
 describe('buildWhatsAppUrl', () => {
   it('strips non-digits and builds a wa.me link with a prefilled message', () => {
@@ -35,24 +35,5 @@ describe('extractWhatsAppNumber', () => {
     expect(extractWhatsAppNumber('https://wa.me/0944123456')).toBeNull();
     expect(extractWhatsAppNumber('http://wa.me/46700224720')).toBeNull();
     expect(extractWhatsAppNumber('not a url')).toBeNull();
-  });
-});
-
-describe('normalizeInternationalPhone', () => {
-  it('accepts the messy formats merchants paste and returns E.164', () => {
-    expect(normalizeInternationalPhone('+963 944 123 456')).toBe('+963944123456');
-    expect(normalizeInternationalPhone('00963-944123456')).toBe('+963944123456');
-    expect(normalizeInternationalPhone('963944123456')).toBe('+963944123456');
-    expect(normalizeInternationalPhone('+46 (700) 224-720')).toBe('+46700224720');
-  });
-
-  it('rejects local formats without a country code (leading zero)', () => {
-    expect(normalizeInternationalPhone('0944123456')).toBeNull();
-  });
-
-  it('rejects garbage and empty input', () => {
-    expect(normalizeInternationalPhone('')).toBeNull();
-    expect(normalizeInternationalPhone('call me')).toBeNull();
-    expect(normalizeInternationalPhone('+')).toBeNull();
   });
 });

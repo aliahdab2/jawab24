@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatInternationalPhone, resolveCustomerLabel } from '../phone';
+import { formatInternationalPhone, normalizeInternationalPhone, resolveCustomerLabel } from '../phone';
 
 describe('formatInternationalPhone', () => {
   it('formats an E.164 wa_id (no plus) into a grouped international number', () => {
@@ -45,5 +45,24 @@ describe('resolveCustomerLabel', () => {
       isPhone: false,
     });
     expect(resolveCustomerLabel('', '', 'Unknown')).toEqual({ label: 'Unknown', isPhone: false });
+  });
+});
+
+describe('normalizeInternationalPhone', () => {
+  it('accepts the messy formats merchants paste and returns E.164', () => {
+    expect(normalizeInternationalPhone('+963 944 123 456')).toBe('+963944123456');
+    expect(normalizeInternationalPhone('00963-944123456')).toBe('+963944123456');
+    expect(normalizeInternationalPhone('963944123456')).toBe('+963944123456');
+    expect(normalizeInternationalPhone('+46 (700) 224-720')).toBe('+46700224720');
+  });
+
+  it('rejects local formats without a country code (leading zero)', () => {
+    expect(normalizeInternationalPhone('0944123456')).toBeNull();
+  });
+
+  it('rejects garbage and empty input', () => {
+    expect(normalizeInternationalPhone('')).toBeNull();
+    expect(normalizeInternationalPhone('call me')).toBeNull();
+    expect(normalizeInternationalPhone('+')).toBeNull();
   });
 });

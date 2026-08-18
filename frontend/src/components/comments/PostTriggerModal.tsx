@@ -24,7 +24,8 @@ import { useSaveHandler } from '@/hooks/useSaveHandler';
 import { captureError } from '@/lib/sentryHelpers';
 import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from '@/hooks/useCommentReplyMode';
 import { fileToBase64 } from '@/utils/fileToBase64';
-import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
+import { buildWhatsAppUrl, extractWhatsAppNumber } from '@/lib/whatsapp';
+import { normalizeInternationalPhone } from '@/utils/phone';
 import { useLanguage } from '@/i18n/hooks';
 import { formatScheduledTime } from '@/utils/dateUtils';
 

@@ -151,4 +151,55 @@ for (const r of done.sort((a, b) => ((b.end - b.start) || 0) - ((a.end - a.start
   const dur = r.end && r.start ? Math.round((r.end - r.start) * 1000) : null;
   log(`  ${String(dur).padStart(6)} ms | ${kb(r.bytes || 0).padStart(8)} kB | ${bucket(r).padEnd(6)} | ${short(r.url)}`);
 }
+/* Waterfall — the ONLY view that explains FCP.
+   The two lists above report DURATION, not arrival order: a 9,078 ms download
+   that started at 15 s reads identically to one that started at 0 s. On a
+   starved link first paint is gated by when the render-blocking stylesheet
+   ARRIVES, so what matters is which bytes are queued ahead of it. Reading the
+   duration columns as an ordering once pointed a whole investigation at the
+   wrong asset. */
+const wfStart = Math.min(...done.map((r) => r.start));
+const at = (t) => Math.round((t - wfStart) * 1000);
+const byStart = [...done].sort((a, b) => a.start - b.start);
+log('\n--- waterfall (ms from first request) ---');
+log(`  ${'start'.padStart(7)} ${'end'.padStart(7)}  ${'bytes'.padStart(8)}  type   url`);
+const css = byStart.find((r) => bucket(r) === 'css');
+for (const r of byStart) {
+  const mark = r === css ? ' <-- RENDER-BLOCKING' : '';
+  log(`  ${String(at(r.start)).padStart(7)} ${String(at(r.end)).padStart(7)}  ${kb(r.bytes || 0).padStart(8)}  ${bucket(r).padEnd(6)} ${short(r.url)}${mark}`);
+}
+if (css) {
+  /* Contention, not arrival order, is what delays first paint.
+     A chunk that FINISHES after the stylesheet was still downloading
+     alongside it and stole bandwidth the whole time, so "requests that
+     finished first" undercounts the competition. Attribute each request's
+     bytes uniformly across its own start..end and integrate over the
+     stylesheet's window: that is the payload first paint actually waited on. */
+  const w0 = css.start, w1 = css.end;
+  const share = (r) => {
+    const span = r.end - r.start;
+    if (!(span > 0)) return r.end >= w0 && r.end <= w1 ? (r.bytes || 0) : 0;
+    const overlap = Math.max(0, Math.min(r.end, w1) - Math.max(r.start, w0));
+    return (r.bytes || 0) * (overlap / span);
+  };
+  const rows = done
+    .filter((r) => r !== css)
+    .map((r) => ({ r, b: share(r) }))
+    .filter((x) => x.b > 0)
+    .sort((a, b) => b.b - a.b);
+  const competing = rows.reduce((n, x) => n + x.b, 0);
+  const winMs = Math.round((w1 - w0) * 1000);
+  log(`\n--- competing for the pipe while the stylesheet downloads (${at(w0)}–${at(w1)} ms, ${winMs} ms) ---`);
+  for (const { r, b } of rows) {
+    log(`  ${kb(b).padStart(8)} kB of ${kb(r.bytes || 0).padStart(7)} kB  ${bucket(r).padEnd(6)} ${short(r.url)}`);
+  }
+  log(`  ${'-'.repeat(60)}`);
+  log(`  ${kb(competing).padStart(8)} kB competing + ${kb(css.bytes || 0)} kB stylesheet = ${kb(competing + (css.bytes || 0))} kB delivered before first paint`);
+  const byType = {};
+  for (const { r, b } of rows) { const g = bucket(r); byType[g] = (byType[g] || 0) + b; }
+  log('  by type:');
+  for (const [g, b] of Object.entries(byType).sort((a, b2) => b2[1] - a[1]))
+    log(`    ${g.padEnd(6)} ${kb(b).padStart(8)} kB  ${(100 * b / competing).toFixed(0).padStart(3)}%`);
+}
+
 await browser.close();
