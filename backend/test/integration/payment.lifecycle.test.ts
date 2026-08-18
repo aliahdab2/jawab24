@@ -834,6 +834,118 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 6b — A failed renewal must not buy a free month
+//
+// The Nourva defect (2026-08-13 → 08-18). Stripe keeps invoicing a subscription
+// whose renewal failed, so `customer.subscription.updated` arrives carrying the
+// NEXT period. Mirroring it moved `current_period_end` a month into the future;
+// since the entitlement gate reads that column as "paid through", the 3-day
+// grace landed a month late and the merchant kept full service for free.
+//
+// These assertions end at the READ PATH — `canAutoReply` is what the reply
+// pipeline actually calls (messageProcessor.ts:272 → enforceAutoReplyGate).
+// Asserting the stored row alone would only prove the write.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 6b — Failed renewal does not advance the paid-through period', () => {
+    const DAY_MS = 24 * 3600 * 1000;
+    /** Paid period: ended 5 days ago, i.e. already past the 3-day grace. */
+    const paidStart = new Date(Date.now() - 35 * DAY_MS);
+    const paidEnd = new Date(Date.now() - 5 * DAY_MS);
+    /** What Stripe sends after the renewal fails: the next, UNPAID period. */
+    const unpaidPeriod = {
+        current_period_start: Math.floor(paidEnd.getTime() / 1000),
+        current_period_end: Math.floor((paidEnd.getTime() + 30 * DAY_MS) / 1000),
+    };
+
+    let userId: string;
+    let sub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: `freemonth-${uid()}@example.com` });
+        userId = user.id;
+        const plan = await createPlan({ name: 'Pro', price: 7900, maxAiRepliesPerMonth: 10000 });
+        sub = await createSub(userId, plan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_freemonth_001',
+            currentPeriodStart: paidStart,
+            currentPeriodEnd: paidEnd,
+        });
+    });
+
+    it('keeps current_period_end at the last PAID boundary when the renewal fails', async () => {
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', { status: 'past_due', ...unpaidPeriod }) as never,
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('past_due');
+        expect(updated.currentPeriodEnd?.getTime()).toBe(paidEnd.getTime());
+    });
+
+    /**
+     * THE regression. Before the fix this read `allowed: true` for another
+     * month — the merchant kept every automation while owing us for the period.
+     */
+    it('blocks auto-replies at the real gate once the paid period + grace has lapsed', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', { status: 'past_due', ...unpaidPeriod }) as never,
+            mockReq(),
+        );
+
+        const gate = await subscriptionsService.canAutoReply(userId);
+        expect(gate.allowed).toBe(false);
+        expect(gate.code).toBe('subscription_inactive');
+    });
+
+    /**
+     * Stripe writes `unpaid` when Smart Retries are exhausted under the
+     * dashboard's "mark unpaid" setting. It is not one of our five statuses —
+     * written raw it fell through every branch of checkSubscriptionStatus and
+     * entitled the merchant permanently, with no CHECK constraint to stop it.
+     */
+    it('stores unpaid as past_due and still blocks — not as a raw value that entitles forever', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', { status: 'unpaid', ...unpaidPeriod }) as never,
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('past_due');
+        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: false });
+    });
+
+    /**
+     * The control. Without this, a fix that simply stopped writing the period
+     * for EVERY status would pass the tests above while silently breaking every
+     * paying customer's renewal.
+     */
+    it('DOES advance the period — and keeps the merchant entitled — on a paid renewal', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        const paidThrough = Math.floor((Date.now() + 25 * DAY_MS) / 1000);
+
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', {
+                status: 'active',
+                current_period_start: Math.floor(Date.now() / 1000),
+                current_period_end: paidThrough,
+            }) as never,
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('active');
+        expect(updated.currentPeriodEnd?.getTime()).toBe(paidThrough * 1000);
+        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: true });
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SCENARIO 7 — Race condition: payment_succeeded before checkout.session.completed
 //
 // Stripe can deliver webhooks out of order. Tests graceful handling and
