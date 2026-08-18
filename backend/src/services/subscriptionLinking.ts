@@ -73,6 +73,35 @@ export async function adoptStripeSubscription(
         return false;
     }
 
+    // `active` is not proof the current period was paid for. Stripe advances the
+    // period when it CREATES the renewal invoice and only degrades the status
+    // about an hour later if the charge fails — measured on the 2026-08-13
+    // incident, where the period-advancing event carried status=active with an
+    // open, amount_paid=0 invoice. This function writes both the period AND the
+    // quota window, so adopting inside that hour would hand out an unpaid month.
+    //
+    // The invoice is the discriminator, and it must be fetched: `latest_invoice`
+    // arrives as a bare id on webhook payloads and on the reconciliation sweep's
+    // list. Verified against the live API — on an expanded object the reliable
+    // field is `status === 'paid'`; `paid` itself reads null on an open invoice.
+    //
+    // `trialing` is exempt: a trial has no invoice to pay, and its entitlement is
+    // bounded by trial_end rather than by the period. An `active` subscription
+    // with no invoice at all (fully discounted) is also adopted — the rule is
+    // "refuse a contradicted period", not "demand proof of payment".
+    if (status === 'active') {
+        const withInvoice = await stripeService.getSubscriptionWithLatestInvoice(stripeSubscription.id);
+        const latest = withInvoice.latest_invoice;
+        const invoiceStatus = latest && typeof latest === 'object' ? latest.status : null;
+        if (latest && invoiceStatus !== 'paid') {
+            log.info(
+                { subscriptionId: stripeSubscription.id, status, invoiceStatus },
+                'Active Stripe subscription whose latest invoice is unpaid — not adopting yet'
+            );
+            return false;
+        }
+    }
+
     // Take over the user's existing row rather than inserting a second one:
     // signup already created a local trial row, and leaving it behind would let
     // the subscription resolver keep serving the stale trial.
