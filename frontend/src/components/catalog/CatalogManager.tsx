@@ -11,7 +11,7 @@ import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/l
 import {
   CATALOG_VERTICALS, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEMS_PER_PAGE,
   matchCatalogLinesInKb, hasFieldLinesToClean,
-  type CatalogItem, type CatalogVertical, type Page, type PostsScanBlocker,
+  type CatalogItem, type CatalogVertical, type PageDetail, type PostsScanBlocker,
 } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { CatalogItemRow } from './CatalogItemRow';
@@ -35,7 +35,7 @@ interface CatalogManagerProps {
   pageId: string;
   /** Full page object — enables the post-save "try it" moment (opens the Test
    *  Smart Reply modal). Optional: hosts without it just skip the nudge. */
-  page?: Page;
+  page?: PageDetail;
   /** Open the import sheet on mount (deep link from the Business Info warning). */
   importRequested?: boolean;
   /** Pre-fill for the import paste box when importRequested is set. */

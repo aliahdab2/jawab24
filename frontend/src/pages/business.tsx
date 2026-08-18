@@ -34,7 +34,7 @@ import { useWorkspaceRole } from '@/hooks';
 import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
-import type { Page, CatalogItem } from '@jawab24/shared';
+import type { PageDetail, PageListItem, CatalogItem } from '@jawab24/shared';
 
 const TestSmartReplyModal = dynamic(
   () => import('@/components/test-smart-reply/TestSmartReplyModal').then((m) => ({ default: m.TestSmartReplyModal })),
@@ -80,7 +80,7 @@ function BusinessPageInner() {
   // state on its own.
   const { canEdit } = useWorkspaceRole();
 
-  const { data: pagesData, isLoading } = useQuery<Page[]>({
+  const { data: pagesData, isLoading } = useQuery<PageListItem[]>({
     queryKey: ['pages'],
     queryFn: () => pagesApi.getAll().then((r) => r.data),
     enabled: isAuthenticated,
@@ -149,7 +149,7 @@ function BusinessPageInner() {
     data: pageDetail,
     isError: pageDetailError,
     refetch: refetchPageDetail,
-  } = useQuery<Page>({
+  } = useQuery<PageDetail>({
     queryKey: ['page', selectedPageId],
     queryFn: () => pagesApi.getById(selectedPageId).then((r) => r.data),
     enabled: isAuthenticated && !!selectedPageId,
@@ -162,13 +162,11 @@ function BusinessPageInner() {
   // the list row: `PUT /pages/:id { businessProfile }` is a FULL REPLACE
   // (applyMerchantEdit tombstones every tracked field absent from the patch),
   // so a save seeded from a row that merely lacks the field wipes every other
-  // merchant-confirmed fact. Gate those on `detailLoaded`, which is why the
-  // whole facts/catalog region below waits for it rather than just the editor.
+  // merchant-confirmed fact. Every such reader below therefore renders under
+  // `pageDetail ? …`, which also NARROWS the type: those components take
+  // `PageDetail`, which a `PageListItem` cannot satisfy, so the compiler — not
+  // a convention — is what keeps the list row out of them.
   const selectedPage = pageDetail ?? listPage;
-  // Whether the business-info TEXT is available yet. The editor must not render
-  // an empty textarea over a page that has text but hasn't loaded it — on a slow
-  // connection that reads as the merchant's info having vanished.
-  const detailLoaded = !!pageDetail;
 
   // A store page's products live in the store sync, not the manual catalog —
   // don't fetch a list that is empty by construction.
@@ -306,7 +304,7 @@ function BusinessPageInner() {
     // carries `businessProfile` — the DETAIL read. Seeding it from the list row
     // (which no longer ships that field) would send a container holding only
     // the field just edited, and applyMerchantEdit would tombstone every other
-    // merchant-confirmed fact. The UI gates these editors on `detailLoaded`, so
+    // merchant-confirmed fact. The UI gates these editors on `pageDetail`, so
     // this should be unreachable; it stays as the last line of defence, because
     // the failure it prevents is silent and irreversible.
     if (!pageDetail) return;
@@ -522,9 +520,9 @@ function BusinessPageInner() {
 
           {/* 1 — Readiness */}
           <div className="order-1">
-            {detailLoaded ? (
+            {pageDetail ? (
               <BusinessReadinessCard
-                page={selectedPage}
+                page={pageDetail}
                 productsCount={productsCount}
                 factRowsCount={factRowsCount}
                 onTryReply={() => setTestReplyOpen(true)}
@@ -585,9 +583,9 @@ function BusinessPageInner() {
               entry point to `saveProfile`, which full-replaces the merchant
               container, so they must never render from a row that lacks it. */}
           <div className="order-2 md:order-3">
-            {detailLoaded ? (
+            {pageDetail ? (
               <BusinessFactRows
-                page={selectedPage}
+                page={pageDetail}
                 onEditFact={setEditingFact}
                 onEditHours={() => setEditingHours(true)}
                 readOnly={!canEdit}
@@ -635,10 +633,10 @@ function BusinessPageInner() {
                     show, least of all on the slow connections we're optimising
                     for. In practice the section starts collapsed, so the detail
                     has normally resolved long before this renders. */}
-                {detailLoaded ? (
+                {pageDetail ? (
                   <KnowledgeBasePanel
-                    page={selectedPage}
-                    onSave={(text) => saveKnowledgeBase(selectedPage.id, text)}
+                    page={pageDetail}
+                    onSave={(text) => saveKnowledgeBase(pageDetail.id, text)}
                     saving={saving}
                     saved={saved}
                     bodyClassName="p-3 sm:p-5"

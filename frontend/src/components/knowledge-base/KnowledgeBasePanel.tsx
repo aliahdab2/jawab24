@@ -11,7 +11,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useWorkspaceRole } from '@/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { detectCatalogLikePatterns } from '@jawab24/shared';
-import type { Page } from '@jawab24/shared';
+import type { PageDetail } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId, KbGap, KbWarnings, SaveKbOutcome } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
 import { parseKnowledgeBase, serializeSections, getTotalCharCount } from './knowledgeBaseParser';
@@ -22,7 +22,7 @@ import { GapCard } from './GapCard';
 const MAX_LENGTH = 16000;
 
 interface KnowledgeBasePanelProps {
-  page: Page;
+  page: PageDetail;
   onSave: (knowledgeBase: string) => Promise<SaveKbOutcome | undefined | void>;
   saving: boolean;
   saved: boolean;

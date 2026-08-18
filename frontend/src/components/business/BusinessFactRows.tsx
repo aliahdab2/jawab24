@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Clock, MapPin, Truck, CreditCard, Phone, Globe, Mail } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui';
-import type { Page, BusinessPhoneEntry } from '@jawab24/shared';
+import type { PageDetail, BusinessPhoneEntry } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
 import type { EditableFactKey } from './BusinessFactSheet';
 import { computeFactCoverage, isScoredFactKey, isStorePolicyKey, type BusinessFactKey } from '@/utils/businessCoverage';
@@ -14,7 +14,7 @@ const describePhone = (p: BusinessPhoneEntry) =>
   p.description ? `${p.number} (${p.description})` : p.number;
 
 interface BusinessFactRowsProps {
-  page: Page;
+  page: PageDetail;
   /** Open the single-field sheet for an editable fact. */
   onEditFact: (key: EditableFactKey) => void;
   /** Open the structured day/range hours sheet. */

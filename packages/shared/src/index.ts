@@ -438,16 +438,8 @@ export interface Page {
    * this" and the customer then gets "I don't know".
    */
   storeAnswersPolicies?: boolean;
-  // KB fields
-  //
-  // ⚠️ `knowledgeBase` / `suggestedKnowledgeBase` / `businessProfile` are NOT
-  // returned by the LIST endpoint (`GET /pages`) — only by the single-page read
-  // (`GET /pages/:id`). The list ships `kbFilled` instead, because the text was
-  // 48% of that response's bytes while its list-side readers only asked "is it
-  // filled?". They stay optional here because the same `Page` type describes
-  // both shapes, so TypeScript will NOT catch a list consumer reading the text:
-  // it silently reads `undefined`. If you need the text, fetch the page by id
-  // (`pagesApi.getById`) — see serializeListPage in backend controllers/pages.ts.
+  // KB fields — present on the DETAIL shape (`GET /pages/:id`). The list shape
+  // omits them by construction; see `PageListItem` below.
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
   /**
@@ -523,6 +515,44 @@ export interface Page {
   catalogItemsCount?: number;
   createdAt: string | Date | null;
 }
+
+/**
+ * A row as returned by the LIST endpoint (`GET /pages?view=list`).
+ *
+ * Separate type, not `Partial<Page>`, deliberately: the three heavy fields are
+ * **absent by construction**, so reading them here must be a COMPILE error, not
+ * a silent `undefined`. That distinction is not academic — a save seeded from a
+ * row that merely lacked `businessProfile` is a full replace that tombstones
+ * every other merchant-confirmed fact. Typing both shapes as `Page` is what let
+ * that path exist unnoticed (self-review, 2026-08-18).
+ *
+ * Need the text or the profile? Fetch the page by id (`pagesApi.getById`),
+ * which returns the full `Page`.
+ */
+export type PageListItem = Omit<
+  Page,
+  'knowledgeBase' | 'suggestedKnowledgeBase' | 'businessProfile'
+> & {
+  /** Server-computed replacement for the text; always present on this shape. */
+  kbFilled: boolean;
+};
+
+/**
+ * A row as returned by the DETAIL read (`GET /pages/:id`) — the three heavy
+ * fields REQUIRED (nullable, but present).
+ *
+ * ⭐ This is the half that gives `PageListItem` its teeth. On `Page` those
+ * fields are optional, so a list row is still structurally assignable to
+ * `Page` — omitting an optional property satisfies it. Anything that actually
+ * needs the text or the profile must therefore ask for `PageDetail`, which a
+ * `PageListItem` CANNOT satisfy. Use it on every prop, parameter and helper
+ * that reads or writes business-info content; leave `Page` for the identity-
+ * shaped callers that neither read nor write it.
+ */
+export type PageDetail = Page &
+  Required<Pick<Page, 'knowledgeBase' | 'suggestedKnowledgeBase'>> & {
+    businessProfile: BusinessProfile;
+  };
 
 // --- Native catalog (merchant-authored offerings, store-less pages) ---
 /** Generic offering kind. Verticals extend this union — never add per-vertical tables/screens. */

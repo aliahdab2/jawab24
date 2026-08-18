@@ -112,7 +112,9 @@ export function serializeListPage<T extends Parameters<typeof serializePage>[0] 
     businessProfile?: unknown;
 }>(page: T) {
     const {
-        knowledgeBase, suggestedKnowledgeBase, businessProfile,
+        // `_businessProfile` is destructured ONLY to drop it from `rest`; the
+        // other two are read below to compute `kbFilled`.
+        knowledgeBase, suggestedKnowledgeBase, businessProfile: _businessProfile,
         ...rest
     } = serializePage(page);
     return {
