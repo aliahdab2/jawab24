@@ -28,7 +28,17 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('../../src/services/stripe', () => ({
-    stripeService: { listSubscriptions: vi.fn() },
+    stripeService: {
+        listSubscriptions: vi.fn(),
+        // Adoption verifies that an `active` subscription's latest invoice is
+        // actually paid before writing a period and a quota window — `active`
+        // alone is not proof (Stripe advances the period at invoice CREATION).
+        // The default here is the ordinary case: a settled invoice.
+        getSubscriptionWithLatestInvoice: vi.fn().mockImplementation(async (id: string) => ({
+            id,
+            latest_invoice: { id: `in_${id}`, status: 'paid' },
+        })),
+    },
     stripeRefId: (ref: string | { id: string } | null | undefined) =>
         (!ref ? null : typeof ref === 'string' ? ref : ref.id),
 }));
@@ -142,6 +152,53 @@ describe('adoptStripeSubscription', () => {
         await expect(adoptStripeSubscription(paidSub({ metadata: {} }), log)).resolves.toBe(false);
         expect(db.update).not.toHaveBeenCalled();
         expect(log.warn).toHaveBeenCalled();
+    });
+
+    /**
+     * `active` is not proof the current period was paid for. Stripe advances the
+     * period when it CREATES the renewal invoice and degrades the status about an
+     * hour later if the charge fails — measured on the 2026-08-13 incident, where
+     * the advancing event carried status=active alongside an open, amount_paid=0
+     * invoice. Adoption writes BOTH the period and the quota window, so adopting
+     * inside that window hands out an unpaid month.
+     */
+    it('refuses an active subscription whose latest invoice is still open', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscriptionWithLatestInvoice).mockResolvedValue({
+            id: 'sub_1',
+            latest_invoice: { id: 'in_1', status: 'open' },
+        } as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(false);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The rule is "refuse a CONTRADICTED period", not "demand proof of payment":
+     * a fully-discounted subscription has no invoice to check, and refusing it
+     * would strand a legitimate merchant forever.
+     */
+    it('still adopts an active subscription that has no invoice at all', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscriptionWithLatestInvoice).mockResolvedValue({
+            id: 'sub_1',
+            latest_invoice: null,
+        } as never);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(true);
+    });
+
+    /** A trial has no invoice to pay — the check must not reach for one. */
+    it('does not consult the invoice for a trialing subscription', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscriptionWithLatestInvoice).mockClear();
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+
+        await expect(adoptStripeSubscription(paidSub({ status: 'trialing' }), mkLog())).resolves.toBe(true);
+        expect(stripeService.getSubscriptionWithLatestInvoice).not.toHaveBeenCalled();
     });
 });
 
