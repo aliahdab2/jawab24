@@ -1205,6 +1205,13 @@
       "when": 1786949484755,
       "tag": "0172_curvy_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1787074549964,
+      "tag": "0173_harsh_roughhouse",
+      "breakpoints": true
     }
   ]
 }

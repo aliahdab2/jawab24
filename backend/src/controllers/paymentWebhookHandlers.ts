@@ -18,6 +18,7 @@ import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { stripeTsToDate } from '../utils/stripeTime';
+import { mapStripeSubscriptionStatus, isPaidStripeStatus } from '../config/stripeBilling';
 import { getInvoiceSubscriptionId, getSubscriptionPeriod } from '../utils/stripeCompat';
 import { resolveLocale } from '../utils/i18n';
 import { createRequestLogger } from '../types/logger';
@@ -159,16 +160,52 @@ export async function handleCheckoutComplete(
     // because Stripe deduplicates events upstream and we only reach this
     // branch when no row with this externalSubscriptionId exists yet).
     const period = getSubscriptionPeriod(stripeSubscription);
+
+    // Same translation as the update path (config/stripeBilling.ts): a raw
+    // Stripe status outside our union entitles forever. A first invoice that
+    // has not settled at checkout-completion time (`incomplete`, effectively
+    // unreachable for cards) has no non-entitling representation in our
+    // five-value union other than `canceled` — `past_due` with a month-away
+    // period is a full free month, and with a NULL period it skips the grace
+    // check entirely and reads as allowed. `canceled` blocks unconditionally.
+    //
+    // Healing comes from handleSubscriptionUpdated, NOT adoptStripeSubscription:
+    // this insert sets externalSubscriptionId, and all three adoption entry
+    // points fire only when NO row matches that id. The update handler matches
+    // it, maps the now-paid status to `active` and mirrors the period.
+    // The status and the period are decided TOGETHER, and that coupling is
+    // load-bearing: `past_due` with a NULL period reads as ALLOWED, forever —
+    // checkSubscriptionStatus only applies its 3-day grace when there is a
+    // period to apply it to, and falls through otherwise (pinned by
+    // subscriptions.test.ts 'should allow past_due with no period end').
+    // Deciding them separately is how an earlier revision of this block turned
+    // an unpaid checkout into unbounded free service.
+    //
+    // So: paid → the mapped status and Stripe's period. Not paid → `canceled`,
+    // which blocks unconditionally and needs no period, whatever the map says.
+    // `canceled` is not a claim that the merchant cancelled; it is the only
+    // value in our five that denies without depending on a date.
+    const paidAtCheckout = isPaidStripeStatus(stripeSubscription.status);
+    const insertMapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+    const insertStatus = paidAtCheckout && insertMapping.write ? insertMapping.status : 'canceled';
+    if (!paidAtCheckout) {
+        captureError(null, 'Checkout completed on an unpaid Stripe subscription', {
+            level: 'warning',
+            tags: { service: 'payments', flow: 'checkout_complete' },
+            extra: { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status, insertStatus },
+        });
+    }
+
     const [insertedSub] = await db.insert(subscriptions).values({
         userId,
         planId,
-        status: stripeSubscription.status,
+        status: insertStatus,
         externalSubscriptionId: stripeSubscription.id,
         paymentMethod: 'stripe',
         stripeCustomerId: stripeSubscription.customer as string,
         stripeCheckoutSessionId: session.id,
-        currentPeriodStart: stripeTsToDate(period.start),
-        currentPeriodEnd: stripeTsToDate(period.end),
+        currentPeriodStart: paidAtCheckout ? stripeTsToDate(period.start) : null,
+        currentPeriodEnd: paidAtCheckout ? stripeTsToDate(period.end) : null,
         trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
     }).returning({ id: subscriptions.id });
 
@@ -341,15 +378,59 @@ export async function handleSubscriptionUpdated(
     }
 
     const updateValues: Partial<typeof subscriptions.$inferInsert> = {
-        status: stripeSubscription.status,
         cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+        // `trial_end` IS mirrored, unlike the billing period. It is not a
+        // paid-through claim — it is Stripe's statement of when the trial
+        // stops, and checkSubscriptionStatus blocks a `trialing` row the
+        // moment trial_ends_at passes. Without this, extending a trial in the
+        // Stripe dashboard changed nothing here and the merchant was cut off
+        // on the ORIGINAL date, which is the failure direction that costs a
+        // customer rather than a month's revenue.
+        trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
         updatedAt: new Date(),
     };
-    const period = getSubscriptionPeriod(stripeSubscription);
-    const periodStart = stripeTsToDate(period.start);
-    const periodEnd = stripeTsToDate(period.end);
-    if (periodStart) updateValues.currentPeriodStart = periodStart;
-    if (periodEnd) updateValues.currentPeriodEnd = periodEnd;
+
+    // Stripe's status is translated, never mirrored raw: three of its eight
+    // values are outside our union and fall through the entitlement gate to
+    // allowed-forever. See config/stripeBilling.ts for the full ruling.
+    const mapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+    if (mapping.write) {
+        updateValues.status = mapping.status;
+    } else {
+        // Leave the existing status in place — see StripeStatusMapping. An
+        // `unknown` status additionally means Stripe's enum has outgrown our
+        // map, which must be visible rather than silently mis-entitling.
+        request.log.warn(
+            { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status, reason: mapping.reason },
+            'Stripe status not mapped — leaving local status unchanged'
+        );
+        if (mapping.reason === 'unknown') {
+            captureError(null, 'Unmapped Stripe subscription status', {
+                level: 'warning',
+                tags: { service: 'payments', flow: 'subscription_updated' },
+                extra: { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status },
+            });
+        }
+    }
+
+    // This handler does NOT write current_period_* at all. `invoice.payment_
+    // succeeded` is the only event that proves money landed, so it is the only
+    // writer of a column that means PAID THROUGH.
+    //
+    // Gating this handler on the subscription's status instead does not work,
+    // and the live event log for the incident says why. Stripe advances the
+    // period when it CREATES the renewal invoice, while the subscription is
+    // still `active`, and only degrades the status about an hour later when
+    // the charge has failed:
+    //
+    //   19:41:52  status=active    period 07-13→08-13 becomes 08-13→09-13
+    //   20:42:59  status=past_due  period unchanged, already 09-13
+    //
+    // A status gate permits the first event — the one that moves the boundary —
+    // and refuses the second, which never would have moved it. `status` answers
+    // "is Stripe still collecting", not "has this period been paid for"; on that
+    // first event the subscription is active while its latest invoice is open,
+    // attempted, and amount_paid=0.
     if (resolvedPlanId) {
         updateValues.planId = resolvedPlanId;
     }
@@ -424,6 +505,52 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     const period = getSubscriptionPeriod(stripeSubscription);
     const periodStart = stripeTsToDate(period.start);
     const periodEnd = stripeTsToDate(period.end);
+
+    // A paid invoice is NOT proof the subscription is paid up. An `unpaid`
+    // subscription keeps generating invoices and holds several open at once
+    // (Stripe docs), so settling ONE of them fires this event while the
+    // subscription is still delinquent — and `stripeSubscription` here is the
+    // freshly re-read object, so Stripe's own verdict is already in hand.
+    //
+    // Forcing `active` on that signal would grant the merchant the status, the
+    // period Stripe currently reports (potentially months out) AND a fresh
+    // quota window via initializeUsagePeriod — the free-month defect this file
+    // guards against in handleSubscriptionUpdated, through a wider door,
+    // because the quota reset makes it immediate rather than merely entitling.
+    if (!isPaidStripeStatus(stripeSubscription.status)) {
+        request.log.warn(
+            { subscriptionId: stripeSubscriptionId, stripeStatus: stripeSubscription.status, invoiceId: invoice.id },
+            'Invoice paid but subscription is not in a paid state — not activating'
+        );
+        // Money landed against a subscription Stripe still considers unpaid.
+        // A real state (one of several open invoices settled), not an error —
+        // but nobody should have to find it in a log line: the merchant has
+        // paid something and is still blocked.
+        captureError(null, 'Invoice paid while subscription remains unpaid', {
+            level: 'warning',
+            tags: { service: 'payments', flow: 'payment_succeeded' },
+            extra: { subscriptionId: stripeSubscriptionId, stripeStatus: stripeSubscription.status, invoiceId: invoice.id },
+        });
+        // Returning here DOES skip two things, and both are intended:
+        //
+        //  - initializeUsagePeriod: opening a quota window would hand out the
+        //    allowance of a period nobody has paid for. If the merchant later
+        //    recovers, this handler runs to completion and opens it; and even
+        //    with no window at all, incrementAiReplies creates one lazily, so
+        //    an absent window never blocks anybody.
+        //  - handlePaymentRecovery: it resets the dunning stamps and mails
+        //    "payment recovered". The episode is NOT over — service is still
+        //    stopped — so resetting would silence the next notice and the mail
+        //    would be false.
+        //
+        // Residual, stated rather than papered over: if `invoice.payment_
+        // succeeded` were handled BEFORE Stripe flips the subscription to
+        // active, this returns early on a genuine recovery and the stamps stay
+        // set until the next successful payment. We re-read the subscription
+        // from the API at handling time rather than trusting the webhook
+        // payload, which is what makes that ordering unlikely — not impossible.
+        return;
+    }
 
     // Update subscription status with retry logic for race conditions
     let retries = 3;

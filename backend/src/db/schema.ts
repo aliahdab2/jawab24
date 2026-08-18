@@ -1003,6 +1003,20 @@ export const subscriptions = pgTable('subscriptions', {
             'subscriptions_shopify_domain_required',
             sql`${table.paymentMethod} IS DISTINCT FROM 'shopify' OR ${table.shopifyShopDomain} IS NOT NULL`
         ),
+        // `status` is read by checkSubscriptionStatus, which blocks only the
+        // values it recognises and grants entitlement to everything else. A
+        // value outside this list is therefore free service, forever, and it
+        // used to be reachable: the Stripe webhook mirrored that provider's
+        // status verbatim, and three of its eight (`unpaid`, `incomplete`,
+        // `incomplete_expired`) are not ours. config/stripeBilling.ts now maps
+        // them, but a mapping is a promise in application code — this makes the
+        // invariant impossible to violate rather than merely unlikely, from any
+        // writer on any rail (Rule 14: prevention over detection).
+        // Verified against production before adding: 85 rows, zero violations.
+        statusInUnionCheck: check(
+            'subscriptions_status_in_union',
+            sql`${table.status} IS NULL OR ${table.status} IN ('trialing', 'active', 'past_due', 'canceled', 'paused')`
+        ),
         // The Zid rail's twin of the two constraints above — same reasoning,
         // same canceled-row exclusion (a store that uninstalled from workspace A
         // must stay adoptable by workspace B). Unlike 0147's era, the current

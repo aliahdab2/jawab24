@@ -991,6 +991,11 @@ describe('Payment Controller', () => {
             vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
             vi.mocked(stripeService.getSubscription).mockResolvedValue({
                 id: 'sub_renewal',
+                // A real Stripe.Subscription always carries a status, and since
+                // 2026-08-18 handlePaymentSucceeded reads it: a paid invoice on
+                // a still-unpaid subscription must not activate or reset quota.
+                // This is a successful RENEWAL, so the subscription is active.
+                status: 'active',
                 current_period_start: periodStartUnix,
                 current_period_end: periodEndUnix,
             } as any);
