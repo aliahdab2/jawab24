@@ -149,6 +149,58 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
   });
 
   /**
+   * Google Ads audience/conversion signals. gtag.js posts to /ccm/collect on
+   * www.google.com and /ccm/s/collect on ad.doubleclick.net; both were missing
+   * from connect-src, so every ping was refused and no remarketing audience was
+   * ever built from site traffic. Measured 2026-08-18 with
+   * `npx lighthouse https://jawab24.com/ --output=json` — the violations appear
+   * in the `errors-in-console` and `inspector-issues` audits, which is the only
+   * way to see them: nginx adds this header, so unit and E2E tests never go
+   * through it.
+   *
+   * www.google.com is needed in BOTH directives, for one URL: gtag sends a
+   * fetch (connect-src) and falls back to an <img> beacon (img-src). Listing it
+   * in only one is the same defect the backblazeb2 case shipped.
+   */
+  it('CSP allows the Google Ads signal endpoints in both directives', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+    const connectSrc = (csp.match(/connect-src\s+([^;]+)/) as RegExpMatchArray)[1];
+    const imgSrc = (csp.match(/img-src\s+([^;]+)/) as RegExpMatchArray)[1];
+
+    // fetch POST to https://ad.doubleclick.net/ccm/s/collect
+    expect(connectSrc).toContain('https://ad.doubleclick.net');
+    // fetch POST to https://www.google.com/ccm/collect
+    expect(connectSrc).toContain('https://www.google.com');
+    // the <img> beacon fallback for the same endpoint
+    expect(imgSrc).toContain('https://www.google.com');
+    // The tag also beacons an image to the host that serves gtag.js. Allowed in
+    // script-src since 2026-02-09 but never in img-src; Lighthouse never showed
+    // it, the Ads tag-diagnostics panel named it directly.
+    expect(imgSrc).toContain('https://www.googletagmanager.com');
+  });
+
+  /**
+   * The CSP is one long header string, so a careless edit can widen a directive
+   * far past what was intended — `https://www.google.com` mistyped as
+   * `https://*.google.com` would admit every Google subdomain, and a bare
+   * `*` or `https:` would admit the internet. Nothing else in the suite would
+   * notice: every other CSP test asserts that something IS present.
+   */
+  it('CSP grants no blanket wildcard in any fetch-directive', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+
+    for (const directive of ['script-src', 'connect-src', 'img-src', 'frame-src', 'default-src']) {
+      const value = (csp.match(new RegExp(`${directive}\\s+([^;]+)`)) as RegExpMatchArray)[1];
+      const sources = value.trim().split(/\s+/);
+      expect(sources, `${directive} must not allow all origins`).not.toContain('*');
+      expect(sources, `${directive} must not allow all https origins`).not.toContain('https:');
+      expect(sources, `${directive} must not allow every Google subdomain`).not.toContain('https://*.google.com');
+    }
+  });
+
+  /**
    * WhatsApp Embedded Signup (`frontend/src/lib/whatsappSignup.ts`) injects the
    * Facebook JS SDK at runtime. The SDK was missing from script-src, so the
    * <script> was blocked, script.onerror fired, and every merchant clicking
