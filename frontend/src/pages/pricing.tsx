@@ -149,12 +149,12 @@ function PlanCard({
       )}
 
       <div className={clsx('text-center mb-1 md:mb-3 px-3', isCurrentPlan ? 'pt-10' : 'pt-2 md:pt-4')}>
-        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'icon-bg-slate' :
+        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' || plan.slug === 'basic' ? 'icon-bg-slate' :
           plan.slug === 'starter' ? 'icon-bg-blue' :
             plan.slug === 'business' ? 'icon-bg-brand' :
               'icon-bg-amber'
           }`} style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
-          {plan.slug === 'free' || plan.slug === 'starter' ? (
+          {plan.slug === 'free' || plan.slug === 'basic' || plan.slug === 'starter' ? (
             <Zap className="w-5 h-5 md:w-6 md:h-6" />
           ) : plan.slug === 'pro' ? (
             <Crown className="w-5 h-5 md:w-6 md:h-6" />

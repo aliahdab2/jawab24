@@ -33,6 +33,46 @@ export interface PlanSeed {
 
 export const PLANS: PlanSeed[] = [
     {
+        // Entry rung below Starter. Post Reply is the product here — it is
+        // unlimited on every plan and costs us nothing per send — and the 200
+        // Smart Replies are a taster that drives the upgrade to Starter rather
+        // than a usable AI allowance. Priced against the regional keyword-bot
+        // incumbents, which sell a comparable AI-less base and charge for AI
+        // separately as credits.
+        //
+        // No yearly price yet: `yearlyPrice: null` keeps the card monthly-only
+        // and makes the backend refuse a yearly checkout, so the page can never
+        // advertise an annual total that no Stripe price can charge.
+        //
+        // ⚠️ SHIPS INACTIVE ON PURPOSE. `stripe_price_id` is env-specific and set
+        // by hand (see the file header) — the seed never writes it. An active,
+        // public plan with no Stripe price renders a Subscribe button that
+        // `resolveStripePriceForInterval` refuses with 400, on the public pricing
+        // page. Order is therefore: deploy (row appears) → create the $8 monthly
+        // price in Stripe and set `plans.stripe_price_id` → flip this to true in
+        // a one-line commit. Flipping it in the DB alone will NOT hold: the seed
+        // reconciles `isActive` from this file on every deploy.
+        slug: 'basic',
+        name: 'Basic',
+        description: 'For post replies',
+        price: 800,
+        yearlyPrice: null,
+        currency: 'USD',
+        interval: 'month',
+        maxPages: 1,
+        maxAiRepliesPerMonth: 200,
+        facebookEnabled: true,
+        instagramEnabled: true,
+        whatsappEnabled: false,
+        ecommerceEnabled: false,
+        prioritySupport: false,
+        trialDays: 0,
+        isActive: false,
+        isPublic: true,
+        isDefault: false,
+        sortOrder: 0,
+    },
+    {
         slug: 'starter',
         name: 'Starter',
         description: 'For small projects',

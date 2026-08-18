@@ -8,10 +8,35 @@ import type { Plan } from '@jawab24/shared';
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
  *
- * Last updated: 2026-07-09
+ * Last updated: 2026-08-18
  * Source: backend/src/config/plans.ts (seeded to DB by seed-plans.ts)
  */
 export const FALLBACK_PLANS: Plan[] = [
+    {
+        id: 'fallback-basic',
+        name: 'Basic',
+        slug: 'basic',
+        description: 'For post replies',
+        price: 800,
+        yearlyPrice: null,
+        yearlyAvailable: false,
+        currency: 'USD',
+        interval: 'month',
+        maxPages: 1,
+        maxAiRepliesPerMonth: 200,
+        maxProducts: null,
+        facebookEnabled: true,
+        instagramEnabled: true,
+        whatsappEnabled: false,
+        ecommerceEnabled: false,
+        prioritySupport: false,
+        trialDays: 0,
+        regionalPricing: {},
+        isActive: true,
+        isPublic: true,
+        isDefault: false,
+        sortOrder: 0,
+    },
     {
         id: 'fallback-starter',
         name: 'Starter',
