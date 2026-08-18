@@ -156,6 +156,144 @@ describe('handleSubscriptionUpdated', () => {
         expect(subscriptionsService.invalidateStatusCache).not.toHaveBeenCalled();
         expect(req.log.warn).toHaveBeenCalled();
     });
+
+    /**
+     * The Nourva defect (2026-08-13 → 08-18). Stripe keeps invoicing a
+     * subscription whose renewal failed, so `customer.subscription.updated`
+     * arrives carrying the NEXT period — which the merchant has not paid for.
+     * Mirroring it moved `current_period_end` a month into the future, and
+     * since the entitlement gate reads that column as "paid through", the 3-day
+     * grace landed a month late. `getCurrentUsage` matches a usage row only
+     * while `periodStart <= now <= periodEnd`, so the advanced period ALSO
+     * opened a fresh window with the counter at zero — a free 10,000 replies on
+     * top of a free month, for a merchant who caps his plan every month.
+     *
+     * `set` is asserted on the payload rather than the row: the assertion that
+     * matters is which KEYS are absent, which a returned-row check cannot see.
+     */
+    const unpaidPeriod = (status: string) => ({
+        ...sub,
+        status,
+        current_period_start: 1755115304, // 2026-08-13 — the failed renewal
+        current_period_end: 1757793704,   // 2026-09-13 — a month never paid for
+    }) as unknown as Stripe.Subscription;
+
+    it.each(['past_due', 'unpaid'])(
+        'does NOT advance the paid-through period on %s — the merchant has not paid for it',
+        async (status) => {
+            const chain = q([{ id: 's1', userId: 'u1' }]);
+            vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+            vi.mocked(db.update).mockReturnValue(chain as never);
+
+            await handleSubscriptionUpdated(unpaidPeriod(status), mkReq());
+
+            const payload = chain.set.mock.calls[0][0];
+            expect(payload).not.toHaveProperty('currentPeriodStart');
+            expect(payload).not.toHaveProperty('currentPeriodEnd');
+        },
+    );
+
+    /**
+     * The other half of the same bug: Stripe's `unpaid` (Smart Retries
+     * exhausted under the dashboard's "mark unpaid" setting) is not one of our
+     * five statuses. Written raw it fell through every branch of
+     * checkSubscriptionStatus to allowed-forever — and there is no CHECK
+     * constraint on the column to stop it landing.
+     */
+    it('translates unpaid into past_due rather than writing Stripe\'s value raw', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await handleSubscriptionUpdated(unpaidPeriod('unpaid'), mkReq());
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'past_due' }));
+    });
+
+    /** The paid path must be untouched — this is the renewal every customer hits. */
+    it('DOES advance the period on active — a paid renewal still moves the boundary', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await handleSubscriptionUpdated(sub, mkReq());
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'active',
+            currentPeriodStart: new Date(1700000000 * 1000),
+            currentPeriodEnd: new Date(1702000000 * 1000),
+        }));
+    });
+
+    it('advances the period on trialing — a Stripe-managed trial is a paid-for period', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await handleSubscriptionUpdated({ ...sub, status: 'trialing' } as unknown as Stripe.Subscription, mkReq());
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'trialing',
+            currentPeriodEnd: new Date(1702000000 * 1000),
+        }));
+    });
+
+    /**
+     * `incomplete` applies only to a subscription that never activated, so an
+     * existing row reaching it is a downgrade we cannot explain. Preserve the
+     * current status rather than guessing — and say so in the log.
+     */
+    it('leaves the local status untouched on incomplete, and warns', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+        const req = mkReq();
+
+        await handleSubscriptionUpdated({ ...sub, status: 'incomplete' } as unknown as Stripe.Subscription, req);
+
+        expect(chain.set.mock.calls[0][0]).not.toHaveProperty('status');
+        expect(req.log.warn).toHaveBeenCalled();
+        expect(captureError).not.toHaveBeenCalled(); // a known state, not a gap
+    });
+
+    /**
+     * A status Stripe adds after this map was written must be visible, not
+     * silently mis-entitling whoever hits it first.
+     */
+    it('writes no status and reports an unknown one to Sentry', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await handleSubscriptionUpdated({ ...sub, status: 'future_status' } as unknown as Stripe.Subscription, mkReq());
+
+        expect(chain.set.mock.calls[0][0]).not.toHaveProperty('status');
+        expect(captureError).toHaveBeenCalledWith(
+            null,
+            'Unmapped Stripe subscription status',
+            expect.objectContaining({ extra: expect.objectContaining({ stripeStatus: 'future_status' }) }),
+        );
+    });
+
+    /**
+     * Withholding the period must not withhold everything else: a merchant can
+     * still set cancel-at-period-end, or change plan, while past_due.
+     */
+    it('still mirrors cancelAtPeriodEnd and the resolved plan while unpaid', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await handleSubscriptionUpdated(
+            { ...unpaidPeriod('past_due'), cancel_at_period_end: true } as unknown as Stripe.Subscription,
+            mkReq(),
+        );
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            cancelAtPeriodEnd: true,
+            planId: 'plan_pro',
+        }));
+    });
 });
 
 describe('handleTopupPaymentSucceeded (credits money)', () => {

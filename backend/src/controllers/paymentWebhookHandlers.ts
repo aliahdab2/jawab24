@@ -18,6 +18,7 @@ import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { stripeTsToDate } from '../utils/stripeTime';
+import { mapStripeSubscriptionStatus, isPaidStripeStatus } from '../config/stripeBilling';
 import { getInvoiceSubscriptionId, getSubscriptionPeriod } from '../utils/stripeCompat';
 import { resolveLocale } from '../utils/i18n';
 import { createRequestLogger } from '../types/logger';
@@ -159,10 +160,30 @@ export async function handleCheckoutComplete(
     // because Stripe deduplicates events upstream and we only reach this
     // branch when no row with this externalSubscriptionId exists yet).
     const period = getSubscriptionPeriod(stripeSubscription);
+
+    // Same translation as the update path (config/stripeBilling.ts): a raw
+    // Stripe status outside our union entitles forever. A first invoice that
+    // has not settled at checkout-completion time (`incomplete`, effectively
+    // unreachable for cards) has no non-entitling representation in our
+    // five-value union other than `canceled` — `past_due` with a month-away
+    // period is a full free month, and with a NULL period it skips the grace
+    // check entirely and reads as allowed. `canceled` blocks unconditionally
+    // and is healed by adoptStripeSubscription, which takes over this very row
+    // the moment the subscription reports active/trialing.
+    const insertMapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+    const insertStatus = insertMapping.write ? insertMapping.status : 'canceled';
+    if (!isPaidStripeStatus(stripeSubscription.status)) {
+        captureError(null, 'Checkout completed on an unpaid Stripe subscription', {
+            level: 'warning',
+            tags: { service: 'payments', flow: 'checkout_complete' },
+            extra: { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status, insertStatus },
+        });
+    }
+
     const [insertedSub] = await db.insert(subscriptions).values({
         userId,
         planId,
-        status: stripeSubscription.status,
+        status: insertStatus,
         externalSubscriptionId: stripeSubscription.id,
         paymentMethod: 'stripe',
         stripeCustomerId: stripeSubscription.customer as string,
@@ -341,15 +362,51 @@ export async function handleSubscriptionUpdated(
     }
 
     const updateValues: Partial<typeof subscriptions.$inferInsert> = {
-        status: stripeSubscription.status,
         cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
         updatedAt: new Date(),
     };
+
+    // Stripe's status is translated, never mirrored raw: three of its eight
+    // values are outside our union and fall through the entitlement gate to
+    // allowed-forever. See config/stripeBilling.ts for the full ruling.
+    const mapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+    if (mapping.write) {
+        updateValues.status = mapping.status;
+    } else {
+        // Leave the existing status in place — see StripeStatusMapping. An
+        // `unknown` status additionally means Stripe's enum has outgrown our
+        // map, which must be visible rather than silently mis-entitling.
+        request.log.warn(
+            { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status, reason: mapping.reason },
+            'Stripe status not mapped — leaving local status unchanged'
+        );
+        if (mapping.reason === 'unknown') {
+            captureError(null, 'Unmapped Stripe subscription status', {
+                level: 'warning',
+                tags: { service: 'payments', flow: 'subscription_updated' },
+                extra: { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status },
+            });
+        }
+    }
+
+    // The period is mirrored ONLY when Stripe says it is paid for. A `past_due`
+    // or `unpaid` subscription keeps generating invoices, so Stripe advances
+    // current_period_* into a month the merchant has not paid — mirroring that
+    // grants both a free month of entitlement and a fresh monthly quota.
+    // Our column means PAID THROUGH; that is how the gate, the 3-day grace and
+    // the dunning emails all read it.
     const period = getSubscriptionPeriod(stripeSubscription);
     const periodStart = stripeTsToDate(period.start);
     const periodEnd = stripeTsToDate(period.end);
-    if (periodStart) updateValues.currentPeriodStart = periodStart;
-    if (periodEnd) updateValues.currentPeriodEnd = periodEnd;
+    if (isPaidStripeStatus(stripeSubscription.status)) {
+        if (periodStart) updateValues.currentPeriodStart = periodStart;
+        if (periodEnd) updateValues.currentPeriodEnd = periodEnd;
+    } else {
+        request.log.info(
+            { subscriptionId: stripeSubscription.id, stripeStatus: stripeSubscription.status },
+            'Unpaid status — keeping the last paid-through period'
+        );
+    }
     if (resolvedPlanId) {
         updateValues.planId = resolvedPlanId;
     }
