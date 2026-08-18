@@ -44,14 +44,16 @@ export const PLANS: PlanSeed[] = [
         // and makes the backend refuse a yearly checkout, so the page can never
         // advertise an annual total that no Stripe price can charge.
         //
-        // ⚠️ SHIPS INACTIVE ON PURPOSE. `stripe_price_id` is env-specific and set
-        // by hand (see the file header) — the seed never writes it. An active,
-        // public plan with no Stripe price renders a Subscribe button that
+        // Activated 2026-08-18, once the live Stripe price existed. It shipped
+        // `isActive: false` first on purpose, and the next new plan should do the
+        // same: `stripe_price_id` is env-specific and set by hand (see the file
+        // header), so the seed never writes it — and an active, public plan with
+        // no Stripe price renders a Subscribe button that
         // `resolveStripePriceForInterval` refuses with 400, on the public pricing
-        // page. Order is therefore: deploy (row appears) → create the $8 monthly
-        // price in Stripe and set `plans.stripe_price_id` → flip this to true in
-        // a one-line commit. Flipping it in the DB alone will NOT hold: the seed
-        // reconciles `isActive` from this file on every deploy.
+        // page. Order: deploy (row appears, inactive) → run
+        // `scripts/create-monthly-prices.ts --apply` → flip this to true.
+        // Flipping it in the DB alone will NOT hold — the seed reconciles
+        // `isActive` from this file on every deploy.
         slug: 'basic',
         name: 'Basic',
         description: 'For post replies',
@@ -67,7 +69,7 @@ export const PLANS: PlanSeed[] = [
         ecommerceEnabled: false,
         prioritySupport: false,
         trialDays: 0,
-        isActive: false,
+        isActive: true,
         isPublic: true,
         isDefault: false,
         sortOrder: 0,
