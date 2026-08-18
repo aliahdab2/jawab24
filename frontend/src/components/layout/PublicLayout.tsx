@@ -7,7 +7,9 @@ import { useAuthStore } from '@/lib/store';
 import { BrandLogo, Button, VersionBadge } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { getNextLocale } from '@/utils/locale';
-import { useIsEmbedded } from '@/hooks';
+// Direct import, not the '@/hooks' barrel — PublicLayout ships to every public
+// visitor and the 53-re-export barrel drags app-only hooks into that chunk.
+import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isIOSNative } from '@/lib/capacitor';
 
 /**

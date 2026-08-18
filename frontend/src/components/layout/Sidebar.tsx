@@ -21,7 +21,9 @@ import {
   Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useNavBadgeCounts, resolveNavHref, type NavBadge } from '@/hooks';
+// Direct imports, not the '@/hooks' barrel (see DashboardLayout.tsx).
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
+import { useNavBadgeCounts, resolveNavHref, type NavBadge } from '@/hooks/useNavBadgeCounts';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';

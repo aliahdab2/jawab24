@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useCountdown } from '@/hooks';
+// Direct import, not the '@/hooks' barrel — public page (see DashboardLayout.tsx).
+import { useCountdown } from '@/hooks/useCountdown';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
