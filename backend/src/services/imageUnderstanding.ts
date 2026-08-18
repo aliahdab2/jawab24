@@ -107,9 +107,19 @@ const MODEL_VISION = 'gpt-4.1-mini';
  * vector (there is deliberately no settings toggle; see the gate below). Small
  * on entry tiers as an upsell lever, generous higher up. Unknown slugs fall to
  * DEFAULT. Reuses the shared daily-cap helper (same mechanism as KB vision).
+ *
+ * Exported so `planImageCapCoverage.test.ts` can assert every seeded plan slug
+ * has an entry here: the `?? DEFAULT_IMAGE_LIMIT` fallback below means a plan
+ * added without one silently ships a cap nobody chose, and silently is exactly
+ * how it would be discovered — the merchant just stops getting images read.
  */
-const IMAGE_DAILY_LIMITS: Record<string, number> = {
+export const IMAGE_DAILY_LIMITS: Record<string, number> = {
     free: 3,
+    // Basic sells Post Reply; its 200 Smart Replies/month (~6.7/day) are the
+    // real ceiling, so 8 images/day cannot be the binding constraint. Stated
+    // explicitly rather than left to DEFAULT_IMAGE_LIMIT — an unlisted slug
+    // silently reads as 5, which is a limit nobody chose.
+    basic: 8,
     // Raised 5 → 15 (2026-07-26). A real Starter store blows through 5 before
     // lunchtime: the first merchant to use this feature heavily hit the cap on
     // BOTH of his first two busy days (8 images each), and every image past the
