@@ -1,5 +1,7 @@
 import { Sun, Moon } from 'lucide-react';
-import { useTheme } from '@/hooks';
+// Direct import, NOT the '@/hooks' barrel: this button renders on the public
+// landing/pricing pages, and the barrel drags api-consuming hooks with it.
+import { useTheme } from '@/hooks/useTheme';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 

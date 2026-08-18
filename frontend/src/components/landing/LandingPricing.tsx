@@ -2,7 +2,8 @@ import { useRef } from 'react';
 import Link from 'next/link';
 import { Zap, Sparkles, Crown, Check, ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — see LandingPageContent.
+import { Button } from '@/components/ui/Button';
 import { motion, useInView } from 'framer-motion';
 
 const containerVariants = {

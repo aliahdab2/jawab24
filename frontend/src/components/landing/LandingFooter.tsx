@@ -2,7 +2,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { MessageCircle, Facebook, Mail, Zap, Clock, Phone } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { BrandLogo } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — see LandingPageContent.
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';

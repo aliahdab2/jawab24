@@ -5,9 +5,16 @@
  * top-up modal, the payments-unavailable notice, the floating help button,
  * and the landing footer — keep it in one place so any future change
  * (link format, query params, number format) is a single edit.
+ *
+ * DEPENDENCY-FREE ON PURPOSE. Ten of this module's eleven consumers are
+ * public pages (landing footer, 404/500, pricing, sanctioned-country notice)
+ * that need nothing but a wa.me string. It previously imported PHONE_REGEX
+ * from '@jawab24/shared' for one E.164 check — and because that package is
+ * CommonJS, webpack cannot tree-shake it, so a single regex dragged zod +
+ * libphonenumber-js (66.1 kB gzip) onto every one of those pages. The
+ * normaliser that needed it now lives in '@/utils/phone', beside the other
+ * libphonenumber-backed helpers. Keep this file free of package imports.
  */
-
-import { PHONE_REGEX } from '@jawab24/shared';
 
 /** Public default support number (Sweden +46). Hardcoded historically; envable later. */
 export const DEFAULT_SUPPORT_WHATSAPP_NUMBER = '46700224720';
@@ -46,19 +53,4 @@ export function extractWhatsAppNumber(url: string): string | null {
     } catch {
         return null;
     }
-}
-
-/**
- * Normalize a merchant-typed phone number to E.164 (`+<country><number>`), or
- * null when it can't be a valid international number. Accepts the messy forms
- * merchants actually paste — `+963 944 123 456`, `00963-944123456`,
- * `963944123456` — but rejects local formats (leading 0 without a country
- * code), because wa.me requires the country code. Validation itself is the
- * shared E.164 rule (PHONE_REGEX) so frontend and backend can't drift.
- */
-export function normalizeInternationalPhone(input: string): string | null {
-    let v = input.trim().replace(/[\s\-().]/g, '');
-    if (v.startsWith('00')) v = `+${v.slice(2)}`;
-    else if (/^[1-9]\d+$/.test(v)) v = `+${v}`;
-    return PHONE_REGEX.test(v) ? v : null;
 }
