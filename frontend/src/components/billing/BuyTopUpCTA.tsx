@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { PlusCircle } from 'lucide-react';
-import { Button } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — this CTA renders on the
+// public /pricing/scale page. See components/layout/PublicLayout.tsx.
+import { Button } from '@/components/ui/Button';
 import { isIOSNative } from '@/lib/capacitor';
 import { TopUpRequestModal } from './TopUpRequestModal';
 

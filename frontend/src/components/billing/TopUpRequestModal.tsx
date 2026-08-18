@@ -3,7 +3,10 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { Check, MessageCircle, CreditCard, AlertCircle, ChevronRight } from 'lucide-react';
-import { Modal, Button } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel — reached from a public
+// page. See components/layout/PublicLayout.tsx.
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 import { subscriptionApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';

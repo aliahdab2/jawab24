@@ -48,6 +48,17 @@ const ENTRIES = [
   // Imported by the landing footer, 404, 500, /pricing/scale and the
   // sanctioned-country notice — all public. Kept dependency-free on purpose.
   '@/lib/whatsapp',
+  // The two layouts every public page renders through. Guarding them is what
+  // makes this test cheap to keep true: a barrel added to either one lands on
+  // /pricing, /blog, /404, /500, /integrations, /contact, /privacy and /terms
+  // at once, which is exactly how it happened the first time.
+  '@/components/layout/PublicLayout',
+  // Public despite the name — /pricing and /integrations use it with isPublic.
+  '@/components/layout/DashboardLayout',
+  // Reached from /pricing/scale and /integrations respectively, each through a
+  // component that looked like dashboard-only code.
+  '@/components/billing/BuyTopUpCTA',
+  '@/components/settings/OrderNotificationsCard',
 ];
 
 function resolveModule(spec: string, fromFile: string): string | null {

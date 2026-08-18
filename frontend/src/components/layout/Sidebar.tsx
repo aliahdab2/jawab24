@@ -27,7 +27,12 @@ import { useNavBadgeCounts, resolveNavHref, type NavBadge } from '@/hooks/useNav
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel — the sidebar is rendered by
+// DashboardLayout, which also serves the public pricing page. See that file.
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { NotificationBell } from '@/components/ui/NotificationBell';
+import { ThemeToggleButton } from '@/components/ui/ThemeToggleButton';
+import { NavCountBadge } from '@/components/ui/NavCountBadge';
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';

@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
-import { Card, Toggle, Button } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel — reached from a public
+// page. See components/layout/PublicLayout.tsx.
+import { Card } from '@/components/ui/Card';
+import { Toggle } from '@/components/ui/Toggle';
+import { Button } from '@/components/ui/Button';
 import {
   Bell,
   ShoppingCart,
@@ -18,7 +22,8 @@ import { toast } from 'sonner';
 import { orderNotificationsApi } from '@/lib/api';
 import type { OrderNotificationType, NotificationTemplate, NotificationStats } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { useWorkspaceRole } from '@/hooks';
+// Direct import, NOT the '@/hooks' barrel — reached from public /integrations.
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */

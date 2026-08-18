@@ -21,7 +21,13 @@ import {
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { Button, BrandLogo, FacebookIcon, ThemeToggleButton } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports) — public
+// page. The barrel reaches '@jawab24/shared', which is CommonJS and cannot
+// be tree-shaken, so one named import pulls zod + libphonenumber-js.
+import { Button } from '@/components/ui/Button';
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { FacebookIcon } from '@/components/ui/BrandIcons';
+import { ThemeToggleButton } from '@/components/ui/ThemeToggleButton';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';

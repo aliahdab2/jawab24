@@ -29,7 +29,10 @@ const authState = { isAuthenticated: true };
 vi.mock('@/lib/store', () => ({ useAuthStore: () => ({ isAuthenticated: authState.isAuthenticated }) }));
 
 const gateState = { blocked: false };
-vi.mock('@/hooks', () => ({ useOwnerGate: () => gateState.blocked }));
+// Mock the module, not the '@/hooks' barrel: useSelectPlan imports
+// '@/hooks/useOwnerGate' directly so the public pricing page does not pull the
+// barrel's 53 re-exports. A barrel-targeted mock silently stops intercepting.
+vi.mock('@/hooks/useOwnerGate', () => ({ useOwnerGate: () => gateState.blocked }));
 
 const mockApiPost = vi.fn();
 vi.mock('@/lib/api', () => ({
