@@ -26,18 +26,22 @@
  *
  * Defaults to DRY-RUN (no Stripe writes, no DB writes). Pass --apply to act.
  *
- * Run from inside the backend container so it has the env's Stripe key + DB:
+ * Run from inside the backend container so it has the env's Stripe key + DB.
+ * Blue/green alternates — confirm which side is live first, do not assume:
+ *
+ *   curl -s https://jawab24.com/api/version   # -> "environment":"blue"|"green"
  *
  *   # Dry-run (safe, read-only):
- *   docker exec jawab24-backend-green npx tsx src/scripts/create-monthly-prices.ts
+ *   docker exec jawab24-backend-<blue|green> npx tsx src/scripts/create-monthly-prices.ts
  *
  *   # Apply for real:
- *   docker exec jawab24-backend-green npx tsx src/scripts/create-monthly-prices.ts --apply
+ *   docker exec jawab24-backend-<blue|green> npx tsx src/scripts/create-monthly-prices.ts --apply
  */
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { plans } from '../db/schema';
 import { stripe } from '../services/stripe';
+import { revalidatePlanPages } from '../services/revalidation';
 import { findAdoptablePrice } from '../utils/stripePrice';
 
 async function main() {
@@ -66,6 +70,8 @@ async function main() {
         console.log('[create-monthly-prices] Nothing to do — every paid plan already has a monthly Stripe price id.');
         return;
     }
+
+    let written = 0;
 
     for (const plan of candidates) {
         const amount = plan.price;
@@ -147,10 +153,21 @@ async function main() {
                 .update(plans)
                 .set({ stripePriceId: monthlyPriceId, updatedAt: new Date() })
                 .where(eq(plans.id, plan.id));
+            written += 1;
             console.log(`    ↳ plans.stripe_price_id set for ${plan.slug}`);
         } else {
             console.log(`    ↳ would set plans.stripe_price_id = ${monthlyPriceId} for ${plan.slug}`);
         }
+    }
+
+    // `plans` changed ⇒ the statically generated pricing pages are stale. Every
+    // other writer of this table does this (routes/plans.ts create/update/delete,
+    // seed-plans.ts); without it the merchant keeps seeing the old page for a
+    // full ISR window (revalidate: 3600) with no way to push the update.
+    // revalidatePlanPages() never throws — a misconfigured frontend must not
+    // fail a run whose Stripe and DB writes already succeeded.
+    if (written > 0) {
+        await revalidatePlanPages();
     }
 
     console.log('[create-monthly-prices] done.');
