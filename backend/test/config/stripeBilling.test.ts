@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type Stripe from 'stripe';
-import { mapStripeSubscriptionStatus, isPaidStripeStatus } from '../../src/config/stripeBilling';
+import { mapStripeSubscriptionStatus, isPaidStripeStatus, PAID_STRIPE_STATUSES } from '../../src/config/stripeBilling';
 
 /**
  * The translation layer between Stripe's status enum and ours. Both functions
@@ -113,13 +113,45 @@ describe('mapStripeSubscriptionStatus', () => {
 
     /**
      * The invariant the whole module exists for. Anything outside our union
-     * reaching `subscriptions.status` is entitlement granted by accident —
-     * there is no CHECK constraint on that column to catch it.
+     * reaching `subscriptions.status` is entitlement granted by accident.
+     * Migration 0173 now enforces the same rule at the database level; this
+     * keeps the application from relying on that backstop to notice.
      */
     it('never yields a status outside our five-value union', () => {
         for (const stripeStatus of [...ALL_STRIPE_STATUSES, 'not_a_real_status']) {
             const mapping = mapStripeSubscriptionStatus(stripeStatus);
             if (mapping.write) expect(OUR_STATUSES).toContain(mapping.status);
+        }
+    });
+});
+
+/**
+ * The two exports are independent — one decides whether the period may move,
+ * the other what the status becomes — and nothing structural keeps them in
+ * step. Drift is silent and specifically dangerous in one direction: a status
+ * counted as paid but mapped to something inactive would write `active` (or
+ * `trialing`) alongside a period that never advances, which then lazy-expires
+ * in getUserSubscription and fires LAZY_EXPIRY_CANARIES at a perfectly healthy
+ * Stripe integration — an alert that reads as "the external authority failed".
+ */
+describe('PAID_STRIPE_STATUSES agrees with the status map', () => {
+    it('maps every paid status to an entitling local status', () => {
+        for (const status of PAID_STRIPE_STATUSES) {
+            const mapping = mapStripeSubscriptionStatus(status);
+            expect(mapping.write).toBe(true);
+            // A paid Stripe status must never land on a status the gate blocks.
+            expect(['active', 'trialing']).toContain(mapping.write ? mapping.status : null);
+        }
+    });
+
+    it('treats every status the map sends to a blocked state as unpaid', () => {
+        const blocked = ALL_STRIPE_STATUSES.filter((s) => {
+            const m = mapStripeSubscriptionStatus(s);
+            return m.write && (m.status === 'canceled' || m.status === 'paused' || m.status === 'past_due');
+        });
+        expect(blocked.length).toBeGreaterThan(0); // the filter must actually select something
+        for (const status of blocked) {
+            expect(isPaidStripeStatus(status)).toBe(false);
         }
     });
 });

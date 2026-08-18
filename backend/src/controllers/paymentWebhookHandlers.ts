@@ -167,12 +167,22 @@ export async function handleCheckoutComplete(
     // unreachable for cards) has no non-entitling representation in our
     // five-value union other than `canceled` — `past_due` with a month-away
     // period is a full free month, and with a NULL period it skips the grace
-    // check entirely and reads as allowed. `canceled` blocks unconditionally
-    // and is healed by adoptStripeSubscription, which takes over this very row
-    // the moment the subscription reports active/trialing.
+    // check entirely and reads as allowed. `canceled` blocks unconditionally.
+    //
+    // Healing comes from handleSubscriptionUpdated, NOT adoptStripeSubscription:
+    // this insert sets externalSubscriptionId, and all three adoption entry
+    // points fire only when NO row matches that id. The update handler matches
+    // it, maps the now-paid status to `active` and mirrors the period.
     const insertMapping = mapStripeSubscriptionStatus(stripeSubscription.status);
     const insertStatus = insertMapping.write ? insertMapping.status : 'canceled';
-    if (!isPaidStripeStatus(stripeSubscription.status)) {
+
+    // The period obeys the same paid-through rule as every other writer of
+    // these columns (config/stripeBilling.ts). An unpaid first invoice must not
+    // seed a boundary the merchant has not bought: the status blocks either
+    // way, but a wrong value here is a lie the dunning emails and the admin
+    // billing screen both read back.
+    const paidAtCheckout = isPaidStripeStatus(stripeSubscription.status);
+    if (!paidAtCheckout) {
         captureError(null, 'Checkout completed on an unpaid Stripe subscription', {
             level: 'warning',
             tags: { service: 'payments', flow: 'checkout_complete' },
@@ -188,8 +198,8 @@ export async function handleCheckoutComplete(
         paymentMethod: 'stripe',
         stripeCustomerId: stripeSubscription.customer as string,
         stripeCheckoutSessionId: session.id,
-        currentPeriodStart: stripeTsToDate(period.start),
-        currentPeriodEnd: stripeTsToDate(period.end),
+        currentPeriodStart: paidAtCheckout ? stripeTsToDate(period.start) : null,
+        currentPeriodEnd: paidAtCheckout ? stripeTsToDate(period.end) : null,
         trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
     }).returning({ id: subscriptions.id });
 
@@ -481,6 +491,37 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     const period = getSubscriptionPeriod(stripeSubscription);
     const periodStart = stripeTsToDate(period.start);
     const periodEnd = stripeTsToDate(period.end);
+
+    // A paid invoice is NOT proof the subscription is paid up. An `unpaid`
+    // subscription keeps generating invoices and holds several open at once
+    // (Stripe docs), so settling ONE of them fires this event while the
+    // subscription is still delinquent — and `stripeSubscription` here is the
+    // freshly re-read object, so Stripe's own verdict is already in hand.
+    //
+    // Forcing `active` on that signal would grant the merchant the status, the
+    // period Stripe currently reports (potentially months out) AND a fresh
+    // quota window via initializeUsagePeriod — the free-month defect this file
+    // guards against in handleSubscriptionUpdated, through a wider door,
+    // because the quota reset makes it immediate rather than merely entitling.
+    if (!isPaidStripeStatus(stripeSubscription.status)) {
+        request.log.warn(
+            { subscriptionId: stripeSubscriptionId, stripeStatus: stripeSubscription.status, invoiceId: invoice.id },
+            'Invoice paid but subscription is not in a paid state — not activating'
+        );
+        // Money landed against a subscription Stripe still considers unpaid.
+        // A real state (one of several open invoices settled), not an error —
+        // but nobody should have to find it in a log line: the merchant has
+        // paid something and is still blocked.
+        captureError(null, 'Invoice paid while subscription remains unpaid', {
+            level: 'warning',
+            tags: { service: 'payments', flow: 'payment_succeeded' },
+            extra: { subscriptionId: stripeSubscriptionId, stripeStatus: stripeSubscription.status, invoiceId: invoice.id },
+        });
+        // Stripe emits `customer.subscription.updated` the moment it does
+        // consider the subscription paid; that handler activates and mirrors
+        // the period. Nothing is stranded by returning here.
+        return;
+    }
 
     // Update subscription status with retry logic for race conditions
     let retries = 3;

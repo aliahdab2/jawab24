@@ -430,8 +430,12 @@ describe('reverseTopupForCharge (claws back credits)', () => {
 });
 
 describe('handlePaymentSucceeded (renewal activation)', () => {
+    // `status` was absent from this fixture until 2026-08-18. A real
+    // Stripe.Subscription always carries one, and the handler now reads it —
+    // an incomplete fixture would have made the paid path untestable.
     beforeEach(() => {
         vi.mocked(stripeService.getSubscription).mockResolvedValue({
+            status: 'active',
             current_period_start: 1700000000,
             current_period_end: 1702000000,
         } as never);
@@ -450,6 +454,54 @@ describe('handlePaymentSucceeded (renewal activation)', () => {
         await handlePaymentSucceeded({ id: 'in_2', subscription: null } as unknown as Stripe.Invoice, mkReq());
         expect(stripeService.getSubscription).not.toHaveBeenCalled();
         expect(db.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A paid invoice is not a paid subscription. An `unpaid` subscription holds
+     * several open invoices at once (Stripe docs), so settling an old one fires
+     * this event while Stripe still considers the subscription delinquent.
+     *
+     * Before the guard, this granted `active` + whatever period Stripe reported
+     * — potentially months out — + a fresh quota window from
+     * initializeUsagePeriod. That is the free-month defect through a wider door
+     * than the one handleSubscriptionUpdated closes, because the quota reset
+     * makes it immediate rather than merely entitling.
+     */
+    it.each(['unpaid', 'past_due', 'incomplete'])(
+        'does not activate, mirror the period, or reset quota when Stripe reports %s',
+        async (status) => {
+            vi.mocked(stripeService.getSubscription).mockResolvedValue({
+                status,
+                current_period_start: 1700000000,
+                current_period_end: 1702000000,
+            } as never);
+            vi.mocked(db.update).mockReturnValue(q([{ id: 's1', userId: 'u1' }]) as never);
+
+            await handlePaymentSucceeded({ id: 'in_x', subscription: 'sub_1' } as unknown as Stripe.Invoice, mkReq());
+
+            expect(db.update).not.toHaveBeenCalled();
+            expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+        },
+    );
+
+    /**
+     * Money landed while the merchant stays blocked. That is a legitimate state,
+     * not an error — but it must not be discoverable only from a log line.
+     */
+    it('reports to Sentry when an invoice is paid on a still-unpaid subscription', async () => {
+        vi.mocked(stripeService.getSubscription).mockResolvedValue({
+            status: 'unpaid',
+            current_period_start: 1700000000,
+            current_period_end: 1702000000,
+        } as never);
+
+        await handlePaymentSucceeded({ id: 'in_y', subscription: 'sub_1' } as unknown as Stripe.Invoice, mkReq());
+
+        expect(captureError).toHaveBeenCalledWith(
+            null,
+            'Invoice paid while subscription remains unpaid',
+            expect.objectContaining({ extra: expect.objectContaining({ stripeStatus: 'unpaid' }) }),
+        );
     });
 });
 

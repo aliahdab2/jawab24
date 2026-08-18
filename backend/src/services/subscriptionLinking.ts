@@ -2,6 +2,7 @@ import { db } from '../db';
 import { subscriptions } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
+import { PAID_STRIPE_STATUSES, isPaidStripeStatus } from '../config/stripeBilling';
 import { stripeService, stripeRefId } from './stripe';
 import { subscriptionsService } from './subscriptions';
 import { stripeTsToDate } from '../utils/stripeTime';
@@ -56,7 +57,7 @@ export async function adoptStripeSubscription(
     const { userId, planId } = stripeSubscription.metadata ?? {};
     const status = stripeSubscription.status;
 
-    if (status !== 'active' && status !== 'trialing') {
+    if (!isPaidStripeStatus(status)) {
         log.info(
             { subscriptionId: stripeSubscription.id, status },
             'Unlinked Stripe subscription is not paid yet — not adopting'
@@ -193,7 +194,9 @@ export async function reconcileStripeSubscriptions(options?: {
 
     // Both paid states. A trialing Stripe subscription is a real commitment
     // (card on file) and must be reflected locally just like an active one.
-    for (const status of ['active', 'trialing'] as const) {
+    // Sourced from config/stripeBilling so the sweep and the adoption guard
+    // above can never disagree about which statuses count as paid.
+    for (const status of PAID_STRIPE_STATUSES) {
         const paid = await stripeService.listSubscriptions({ status, limit });
 
         // Never let a bounded sweep look like a complete one. If the cap is hit,

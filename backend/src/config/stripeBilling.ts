@@ -62,14 +62,22 @@ import type { SubscriptionStatus } from '@jawab24/shared';
  * answers "has this period been paid for" — where `past_due` is exactly the
  * case that has not.
  */
-const PAID_STRIPE_STATUSES = ['active', 'trialing'] as const;
+export const PAID_STRIPE_STATUSES = ['active', 'trialing'] as const;
+
+/** A Stripe status under which the current period is paid for. */
+export type PaidStripeStatus = (typeof PAID_STRIPE_STATUSES)[number];
 
 /**
  * May a payload carrying this Stripe status advance our billing period?
  * Anything not explicitly paid is refused — an unrecognised future status is
  * treated as unpaid, which withholds entitlement rather than granting it.
+ *
+ * Declared as a type predicate so callers that need the narrowed literal (e.g.
+ * `subscriptionLinking.adoptStripeSubscription`, which writes the status
+ * straight into our column) get it from this one guard instead of re-listing
+ * the pair inline — which is what they used to do.
  */
-export function isPaidStripeStatus(status: string): boolean {
+export function isPaidStripeStatus(status: string): status is PaidStripeStatus {
     return (PAID_STRIPE_STATUSES as readonly string[]).includes(status);
 }
 

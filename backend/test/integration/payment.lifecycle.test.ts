@@ -946,6 +946,99 @@ describe('SCENARIO 6b — Failed renewal does not advance the paid-through perio
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 6c — The other two writers of current_period_end
+//
+// Three code paths write that column from a Stripe payload. SCENARIO 6b covers
+// handleSubscriptionUpdated; these cover the checkout insert and the
+// payment-succeeded path, so the paid-through invariant holds at every writer
+// rather than at the one where the defect was first found.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 6c — checkout insert and payment_succeeded honour paid-through', () => {
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: `writers-${uid()}@example.com` });
+        userId = user.id;
+        plan = await createPlan({ name: 'Pro', price: 7900, maxAiRepliesPerMonth: 10000 });
+    });
+
+    /**
+     * A checkout that completes while the first invoice has not settled must
+     * not seed a period the merchant has not bought, and must not entitle.
+     */
+    it('checkout on an unpaid subscription inserts a blocked row with no period', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_unpaid_checkout', { status: 'incomplete' }) as never,
+        );
+
+        await handleCheckoutComplete(stripeSession(userId, plan.id, 'sub_unpaid_checkout'), mockReq());
+
+        const [sub] = await userSubs(userId);
+        expect(sub.status).toBe('canceled');
+        expect(sub.currentPeriodEnd).toBeNull();
+        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: false });
+    });
+
+    /** The paid checkout — unchanged, and the reason the control matters. */
+    it('checkout on a paid subscription inserts an entitled row with the period', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_paid_checkout', { status: 'active' }) as never,
+        );
+
+        await handleCheckoutComplete(stripeSession(userId, plan.id, 'sub_paid_checkout'), mockReq());
+
+        const [sub] = await userSubs(userId);
+        expect(sub.status).toBe('active');
+        expect(sub.currentPeriodEnd).not.toBeNull();
+        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: true });
+    });
+
+    /**
+     * An `unpaid` subscription holds several open invoices. Settling one fires
+     * invoice.payment_succeeded while Stripe still considers the subscription
+     * delinquent — and the handler used to answer that by forcing `active`,
+     * mirroring the reported period and opening a fresh quota window.
+     */
+    it('a paid invoice on a still-unpaid subscription neither activates nor moves the period', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        const lapsed = new Date(Date.now() - 20 * 24 * 3600 * 1000);
+        const sub = await createSub(userId, plan.id, {
+            status: 'past_due',
+            externalSubscriptionId: 'sub_partial_pay',
+            currentPeriodStart: new Date(lapsed.getTime() - 30 * 24 * 3600 * 1000),
+            currentPeriodEnd: lapsed,
+        });
+
+        // Stripe reports the subscription STILL unpaid, with a period months out.
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_partial_pay', {
+                status: 'unpaid',
+                current_period_start: Math.floor(Date.now() / 1000),
+                current_period_end: Math.floor(Date.now() / 1000) + 3 * ONE_MONTH_SECS,
+            }) as never,
+        );
+
+        await handlePaymentSucceeded(
+            { id: 'in_partial', subscription: 'sub_partial_pay' } as never,
+            mockReq(),
+        );
+
+        const after = await getSub(sub.id);
+        expect(after.status).toBe('past_due');
+        expect(after.currentPeriodEnd?.getTime()).toBe(lapsed.getTime());
+        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: false });
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SCENARIO 7 — Race condition: payment_succeeded before checkout.session.completed
 //
 // Stripe can deliver webhooks out of order. Tests graceful handling and
