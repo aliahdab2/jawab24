@@ -174,6 +174,10 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     expect(connectSrc).toContain('https://www.google.com');
     // the <img> beacon fallback for the same endpoint
     expect(imgSrc).toContain('https://www.google.com');
+    // The tag also beacons an image to the host that serves gtag.js. Allowed in
+    // script-src since 2026-02-09 but never in img-src; Lighthouse never showed
+    // it, the Ads tag-diagnostics panel named it directly.
+    expect(imgSrc).toContain('https://www.googletagmanager.com');
   });
 
   /**
