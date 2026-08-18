@@ -887,6 +887,63 @@ Voice-to-text for KB content via microphone:
 
 ---
 
+## Analytics & Ad Attribution
+
+### Google Analytics 4 — Measurement Protocol (server-side conversions)
+- **Purpose**: report the conversions Google Ads bids on. The browser tag
+  (`gtag('config', …)` in `frontend/src/pages/_app.tsx`) fires **page views
+  only** — no events. Ads cannot bid on a page view, which is why every
+  conversion action in the Ads account read tracking status **Inactive**.
+- **What is mirrored**:
+  | GA4 event | Source | Notes |
+  |-----------|--------|-------|
+  | `sign_up` | `recordActivationEvent('signup')` | GA4 *recommended* name — the only milestone renamed |
+  | `page_connected` | `recordActivationEvent` | the real activation moment |
+  | `kb_filled` | `recordActivationEvent` | |
+  | `autoreply_enabled` | `recordActivationEvent` | |
+  | `first_autoreply_sent` | `recordActivationEvent` | strongest "became a customer" signal |
+  | `no_fb_pages`, `ig_direct_interest` | `recordActivationEvent` | demand signals, not funnel steps |
+  | `purchase` (+ `value`, `currency`) | Stripe `checkout.session.completed` | the money event |
+- **Idempotency**: the activation mirror fires only when
+  `INSERT … ON CONFLICT DO NOTHING RETURNING id` returns a row, so GA4 receives
+  each milestone exactly once per user — `first_autoreply_sent` re-emits on
+  every reply and must not re-convert. `purchase` dedups inside GA4 on
+  `transaction_id` (the Stripe checkout session id), which absorbs webhook retries.
+- **Attribution**: MP requires a `client_id` — the `_ga` cookie's
+  `<random>.<timestamp>` tail — to tie a server event back to the browser session
+  that carried the `gclid`. Without it an event still lands in GA4 but Ads cannot
+  credit a keyword: it **counts but does not optimise**. Stored on
+  `users.ga_client_id`, **first-touch** (written only while NULL, so a later login
+  from another browser cannot repoint the conversion).
+- **Capture path**: `POST /auth/analytics-client-id` (authenticated), called once
+  per session by `useGaClientIdSync` from `DashboardLayout`. A separate call
+  rather than a login field because the tag is `strategy="lazyOnload"` (a
+  first-paint decision), so the cookie often does not exist yet at login.
+- **⛔ The trap**: `/mp/collect` returns **204 for a malformed event** exactly as
+  for a good one. A 2xx proves transport, never recording. The only validator is
+  `/debug/mp/collect` — run `npm run verify:ga4 -- <ga_client_id>` from
+  `backend/`.
+- **Failure posture**: fire-and-forget everywhere. Missing credentials or a
+  missing client id no-op without a network call; transport failures are Sentry
+  **warnings**, never errors. An analytics beacon must never fail a signup, a
+  page connect, a reply, or a Stripe webhook.
+- **Configuration**:
+  - `GA4_MEASUREMENT_ID` — the same `G-XXXXXXXX` the browser uses (`NEXT_PUBLIC_GA_ID`)
+  - `GA4_API_SECRET` — GA4 Admin → Data Streams → Measurement Protocol API secrets
+    (write-only: sends events, cannot read reports)
+  - Both empty ⇒ integration disabled (the correct local-dev setting)
+- **Implementation Location**:
+  - `/backend/src/services/ga4.ts` (MP client, purchase conversion, first-touch write)
+  - `/backend/src/services/activation.ts` (the milestone mirror)
+  - `/backend/src/controllers/paymentWebhookHandlers.ts` (`purchase`)
+  - `/backend/scripts/verify-ga4.ts` (`npm run verify:ga4`)
+  - `/frontend/src/utils/analytics.ts`, `/frontend/src/hooks/useGaClientIdSync.ts`
+- **Still owed after deploy**: mark the events as **key events** in GA4, then
+  import them into Google Ads as conversions. Do not switch bidding away from
+  Maximize clicks until ~30 conversions/month accumulate.
+
+---
+
 ## Integration Map
 
 | Service | Purpose | Config Location | Status |
@@ -903,6 +960,7 @@ Voice-to-text for KB content via microphone:
 | PostgreSQL | Primary database | `DATABASE_URL` | ✅ Production |
 | Redis | Cache + job queue | `REDIS_*` env vars | ✅ Production |
 | Sentry | Error tracking | `SENTRY_DSN` | ✅ Production |
+| GA4 Measurement Protocol | Server-side conversions for Google Ads | `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` | ⚠️ Code ready, credentials not yet set in prod |
 | Geoip-lite | User geolocation (fallback when CDN header missing) | (npm package) | ✅ Production (Tier 2 fallback after Cloudflare) |
 
 ---

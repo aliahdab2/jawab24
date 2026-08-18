@@ -42,6 +42,19 @@ export const users = pgTable('users', {
     // Meaningful only while partner_id is set; kept on unassign so re-assigning
     // doesn't lose context.
     partnerNote: text('partner_note'),
+    // GA4 client id (the `_ga` cookie's `GA1.1.<client>.<ts>` tail), captured from
+    // the browser after login. Server-side conversions (GA4 Measurement Protocol,
+    // services/ga4.ts) need it to attribute a milestone back to the ad click that
+    // started the session — without it the event still LANDS in GA4 but Google Ads
+    // cannot tie it to a keyword, so it counts without optimising.
+    //
+    // FIRST-TOUCH: written only while NULL (see authController.setAnalyticsClientId).
+    // The cookie is per-browser and 2-year stable, so the first value we see is the
+    // one most likely to carry the ad click; a later login from a second device must
+    // not overwrite it. NULL for every user who signed up before this shipped, and
+    // for anyone with analytics blocked — both degrade to "no MP event", never to
+    // a broken signup.
+    gaClientId: varchar('ga_client_id', { length: 64 }),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one identity anchor must be non-null —

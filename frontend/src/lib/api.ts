@@ -153,6 +153,12 @@ export const authApi = {
 
   refreshToken: () =>
     api.post('/auth/refresh'),
+
+  // Records the GA4 client id for server-side conversion attribution. Returns
+  // 204 whether or not the value was stored (the backend enforces first-touch),
+  // so callers have nothing to branch on. See hooks/useGaClientIdSync.
+  setAnalyticsClientId: (clientId: string) =>
+    api.post('/auth/analytics-client-id', { clientId }),
 };
 
 // Phone OTP API (unauthenticated — used on the login page)

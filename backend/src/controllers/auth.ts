@@ -12,6 +12,8 @@ import { db } from '../db';
 import { users, ecommerceStores } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { config } from '../config';
+import { captureError } from '../utils/sentryHelpers';
+import { storeGaClientIdFirstTouch } from '../services/ga4';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
@@ -662,6 +664,67 @@ export class AuthController {
                 : err.message?.includes('timeout') ? 'TIMEOUT'
                 : 'DELETE_FAILED';
             return reply.status(500).send({ error: 'Failed to delete account', code });
+        }
+    }
+
+    /**
+     * Store the caller's GA4 client id for server-side conversion attribution.
+     * POST /auth/analytics-client-id
+     *
+     * The `_ga` cookie lives in the browser; the conversions that matter
+     * (`page_connected`, `first_autoreply_sent`, `purchase`) happen on the
+     * server, sometimes days later. This is the one hop that connects them —
+     * see services/ga4.ts for why an event without it counts but cannot bid.
+     *
+     * Why a dedicated endpoint rather than a field on the login payload: the
+     * browser tag is loaded with `strategy="lazyOnload"` (a deliberate first-
+     * paint decision — see _app.tsx), so at the moment a fast merchant submits
+     * the login form the `_ga` cookie may not exist yet. A separate call the
+     * client makes once it actually HAS a cookie captures the users a
+     * login-time field would silently miss. It is also why this must stay
+     * tolerant of never being called at all.
+     *
+     * FIRST-TOUCH, enforced server-side: the write is `WHERE ga_client_id IS
+     * NULL`, so the earliest id we ever see wins and a later login from another
+     * browser cannot overwrite the one that carried the ad click. Clients are
+     * not trusted to decide this.
+     */
+    async setAnalyticsClientId(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { clientId } = request.body as { clientId?: string };
+
+        // Shape gate. A GA4 client id is `<random>.<timestamp>`, both digits —
+        // the schema bounds the length, this rejects anything that is not
+        // actually a client id (a whole cookie string, a UUID, injected text).
+        // Storing junk would not be dangerous, but it WOULD produce events that
+        // attribute to nothing while looking successfully sent, which is the
+        // single hardest failure mode to notice in this integration.
+        if (!clientId || !/^\d+\.\d+$/.test(clientId)) {
+            return reply.status(400).send({ error: 'Invalid GA4 client id' });
+        }
+
+        try {
+            await storeGaClientIdFirstTouch(userId, clientId);
+
+            // Always 204, whether we wrote or the first-touch guard held. The
+            // client has nothing to do differently either way, and telling it
+            // which happened would leak nothing useful while inviting a retry
+            // loop. Analytics plumbing must never surface as a user-visible error.
+            return reply.status(204).send();
+        } catch (error: unknown) {
+            // Contained on purpose: a failure to record an analytics id must not
+            // turn into a failed request on the caller's post-login path.
+            captureError(error, 'Failed to store GA4 client id', {
+                level: 'warning',
+                tags: { context: 'ga4' },
+                extra: { userId },
+                fingerprint: ['ga4-client-id-store'],
+            });
+            return reply.status(204).send();
         }
     }
 

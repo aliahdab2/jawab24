@@ -10,6 +10,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import { useWorkspacesRefresh } from '@/hooks/useWorkspacesRefresh';
 import { useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge } from '@/hooks/useNavBadgeCounts';
+import { useGaClientIdSync } from '@/hooks/useGaClientIdSync';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 // Direct imports, NOT the '@/components/ui' barrel (43 re-exports). This
@@ -93,6 +94,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // which workspace-membership gates read — would stay frozen at its
   // login-time snapshot without this background refresh.
   useWorkspacesRefresh();
+  // Hands the GA4 client id to the backend once per session, so a conversion
+  // recorded server-side days later still attributes to the ad click. Gated on
+  // a real session: this layout also renders the PUBLIC /pricing page.
+  useGaClientIdSync(isAuthenticated && _hasHydrated);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   // Counts keyed by href — the same map the sidebar and the More overlay read,

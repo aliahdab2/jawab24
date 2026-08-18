@@ -9,6 +9,7 @@ import {
 import { db } from '../db';
 import { activationEvents, pages } from '../db/schema';
 import { captureError } from '../utils/sentryHelpers';
+import { sendGa4EventForUser } from './ga4';
 import { workspaceSettingsService } from './workspaceSettings';
 
 /**
@@ -57,14 +58,67 @@ export async function recordActivationEvent(
     // query builder — e.g. a mocked `db` in unit tests — is contained and never
     // escapes into the caller's request path.
     try {
-        await db
+        // RETURNING is what makes the GA4 mirror below idempotent for free: with
+        // ON CONFLICT DO NOTHING, Postgres returns a row ONLY when the insert
+        // actually happened. A re-emit (the hot `first_autoreply_sent` path fires
+        // on every send) conflicts, returns zero rows, and sends nothing — so GA4
+        // sees each milestone exactly once per user without a second dedup layer.
+        const inserted = await db
             .insert(activationEvents)
             .values({ userId, event, metadata })
-            .onConflictDoNothing();
+            .onConflictDoNothing()
+            .returning({ id: activationEvents.id });
+
+        if (inserted.length > 0) void mirrorActivationEventToGa4(userId, event);
     } catch (err) {
         captureError(err, 'Failed to record activation event', {
             tags: { context: 'activation' },
             extra: { userId, event },
+        });
+    }
+}
+
+/**
+ * GA4 event names for the activation milestones.
+ *
+ * Only `signup` is renamed: `sign_up` is a GA4 RECOMMENDED event, so using it
+ * unlocks GA4's built-in reporting instead of landing as an unrecognised custom
+ * event. The rest are legitimate custom names (snake_case, under 40 chars, not
+ * in GA4's reserved list) and are sent verbatim so the Ads/GA4 UI shows the same
+ * vocabulary the codebase and the funnel panel use.
+ */
+const GA4_EVENT_NAMES: Record<ActivationEvent, string> = {
+    signup: 'sign_up',
+    page_connected: 'page_connected',
+    kb_filled: 'kb_filled',
+    autoreply_enabled: 'autoreply_enabled',
+    first_autoreply_sent: 'first_autoreply_sent',
+    no_fb_pages: 'no_fb_pages',
+    ig_direct_interest: 'ig_direct_interest',
+};
+
+/**
+ * Mirror a just-recorded milestone to GA4 so Google Ads can import it as a
+ * conversion. Called ONLY on a genuine first insert (see above), so GA4 receives
+ * each milestone exactly once per user.
+ *
+ * `sendGa4EventForUser` owns the credential guard and the attribution-id lookup,
+ * and contains its own failures — but this function is invoked with `void`, so a
+ * rejection escaping it would surface as an UNHANDLED REJECTION rather than as a
+ * caught error. Containment is therefore repeated here on purpose: the caller's
+ * request path (a signup, a page connect, a reply send) must not be able to fail
+ * because an analytics beacon did, and "the callee promises not to throw" is not
+ * something a fire-and-forget call site may rely on.
+ */
+async function mirrorActivationEventToGa4(userId: string, event: ActivationEvent): Promise<void> {
+    try {
+        await sendGa4EventForUser(userId, GA4_EVENT_NAMES[event]);
+    } catch (err) {
+        captureError(err, 'Failed to mirror activation event to GA4', {
+            level: 'warning',
+            tags: { context: 'activation' },
+            extra: { userId, event },
+            fingerprint: ['ga4-activation-mirror'],
         });
     }
 }

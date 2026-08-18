@@ -26,6 +26,7 @@
     "admin:add": "ts-node scripts/manage-admin.ts add",
     "admin:remove": "ts-node scripts/manage-admin.ts remove",
     "admin:list": "ts-node scripts/manage-admin.ts list",
+    "verify:ga4": "npx tsx scripts/verify-ga4.ts",
     "test": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:local": "DATABASE_URL=${TEST_DATABASE_URL:-$(../scripts/test-db-url.sh)} vitest run --config vitest.integration.config.ts",
