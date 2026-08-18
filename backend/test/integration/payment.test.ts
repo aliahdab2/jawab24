@@ -622,6 +622,88 @@ describe('Payment — changePlan sanctions guard', () => {
         expect(stripeService.updateSubscriptionPrice).toHaveBeenCalledWith('sub_allow_me', 'price_target_999');
     });
 
+    /**
+     * changePlan writes the local mirror directly, so it is a writer of
+     * `current_period_end` in its own right — and until 2026-08-18 an ungated
+     * one. Its comment justified the mirror by saying the subscription.updated
+     * webhook would re-write the fields; that write was removed when
+     * payment_succeeded became the only writer of paid-through, leaving this
+     * the authoritative one.
+     *
+     * Stripe reports the proration period as soon as the invoice is CREATED —
+     * before it is paid, and while the subscription still reads `active` — so
+     * this endpoint cannot tell a paid boundary from an unpaid one either.
+     */
+    it('does not move the paid-through boundary on a plan change', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const app = await buildAppWithGeo({ country: 'US', region: null, source: 'geoip-lite' });
+        const currentPlan = await createTestPlan({ slug: `cur-period-${Date.now()}` });
+        const paidThrough = new Date(Date.now() + 5 * 24 * 3600 * 1000);
+        const sub = await createTestSubscription(userId, currentPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_period_guard',
+            currentPeriodEnd: paidThrough,
+        });
+        const targetPlan = await createTestPlan({ slug: `tgt-period-${Date.now()}`, stripePriceId: 'price_period_guard' });
+
+        // Stripe answers with a period three months out, unpaid.
+        vi.mocked(stripeService.updateSubscriptionPrice).mockResolvedValue({
+            id: 'sub_period_guard',
+            status: 'active',
+            current_period_start: Math.floor(Date.now() / 1000),
+            current_period_end: Math.floor(Date.now() / 1000) + 90 * 24 * 3600,
+            cancel_at_period_end: false,
+        } as never);
+
+        const res = await app.inject({ method: 'POST', url: '/change-plan', payload: { planId: targetPlan.id } });
+        await app.close();
+
+        expect(res.statusCode).toBe(200);
+        const [after] = await testDb
+            .select()
+            .from(schema.subscriptions)
+            .where(eq(schema.subscriptions.id, sub.id));
+        expect(after.currentPeriodEnd?.toISOString()).toBe(paidThrough.toISOString());
+        expect(after.planId).toBe(targetPlan.id); // the plan DOES change
+    });
+
+    /**
+     * The status was mirrored raw here. `incomplete` is reachable when the
+     * proration invoice needs SCA, and it is not one of our five values: raw,
+     * it used to entitle silently, and since the CHECK constraint in 0173 it
+     * would fail the write and 500 this endpoint instead.
+     */
+    it('does not write a raw Stripe status a plan change cannot represent', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const app = await buildAppWithGeo({ country: 'US', region: null, source: 'geoip-lite' });
+        const currentPlan = await createTestPlan({ slug: `cur-sca-${Date.now()}` });
+        const sub = await createTestSubscription(userId, currentPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_sca_guard',
+        });
+        const targetPlan = await createTestPlan({ slug: `tgt-sca-${Date.now()}`, stripePriceId: 'price_sca_guard' });
+
+        vi.mocked(stripeService.updateSubscriptionPrice).mockResolvedValue({
+            id: 'sub_sca_guard',
+            status: 'incomplete',
+            current_period_start: Math.floor(Date.now() / 1000),
+            current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
+            cancel_at_period_end: false,
+        } as never);
+
+        const res = await app.inject({ method: 'POST', url: '/change-plan', payload: { planId: targetPlan.id } });
+        await app.close();
+
+        // No 500 from the CHECK constraint, and no unrepresentable status stored.
+        expect(res.statusCode).toBe(200);
+        const [after] = await testDb
+            .select()
+            .from(schema.subscriptions)
+            .where(eq(schema.subscriptions.id, sub.id));
+        expect(['trialing', 'active', 'past_due', 'canceled', 'paused']).toContain(after.status);
+        expect(after.status).toBe('active'); // preserved, not downgraded on a status we cannot map
+    });
+
     it('moves the subscription onto the YEARLY price when the target plan has one', async () => {
         const { stripeService } = await import('../../src/services/stripe');
         vi.mocked(stripeService.updateSubscriptionPrice).mockClear();
