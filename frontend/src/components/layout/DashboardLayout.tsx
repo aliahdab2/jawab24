@@ -169,6 +169,13 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
       <Head>
         {!skipTitle && <title>{pageTitle} | Jawab24</title>}
         {!isPublic && <meta name="robots" content="noindex, nofollow" />}
+        {/* Every connected page renders an avatar as a 302 on graph.facebook.com
+            followed by a fetch from a second fbcdn host — two cold handshakes.
+            Gated to authed screens: no public page (this layout also wraps
+            /pricing) loads a Facebook asset, and a speculative handshake on a
+            slow link would compete with the render-blocking CSS. */}
+        {!isPublic && <link rel="preconnect" href="https://graph.facebook.com" />}
+        {!isPublic && <link rel="dns-prefetch" href="https://scontent.xx.fbcdn.net" />}
       </Head>
 
       <div className="dashboard-scroll-root flex-1 overflow-y-auto overflow-x-hidden bg-surface-50 bg-gradient-mesh">

@@ -71,15 +71,19 @@ export default function MyDocument({ locale }: DocProps) {
 
         {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
-        {/* Warm the cross-origin connections the app hits right after boot.
-            graph.facebook.com 302s every page avatar to an fbcdn host, and the
-            Android APK (served from app.jawab24.com) calls the API on
-            jawab24.com — each is a cold DNS+TCP+TLS handshake on first use.
-            Reasoned, not lab-measured: CDP throttling delays responses, not
-            handshakes, so only real devices show the win. Harmless otherwise. */}
-        <link rel="preconnect" href="https://jawab24.com" />
-        <link rel="preconnect" href="https://graph.facebook.com" />
-        <link rel="dns-prefetch" href="https://scontent.xx.fbcdn.net" />
+        {/* API-origin warm-up, MOBILE BUILD ONLY. In the APK the app is served
+            from app.jawab24.com while the API is jawab24.com, so the first call
+            pays a cold DNS+TCP+TLS handshake; here it is in the HTML shell from
+            the start. On the website the two are the SAME origin, where a
+            preconnect is at best ignored — and a speculative handshake on a
+            starved link competes with the render-blocking stylesheet, which is
+            exactly what this file was cleaned up to stop.
+            Facebook-origin hints live in DashboardLayout (authed screens only) —
+            no public page loads a Facebook asset. Measured: the landing's only
+            hosts are jawab24.com, googletagmanager and google-analytics. */}
+        {process.env.IS_MOBILE_BUILD === 'true' && (
+          <link rel="preconnect" href="https://jawab24.com" />
+        )}
 
         {/* Global Verification Tags */}
         <meta name="google-site-verification" content="tshkD5ag97rX0t8u87eKuEKTO3ezhPneMj3auK18Jjw" />
