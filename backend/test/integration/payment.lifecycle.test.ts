@@ -873,6 +873,42 @@ describe('SCENARIO 6b — Failed renewal does not advance the paid-through perio
         });
     });
 
+    /**
+     * THE regression, replayed from the live Stripe event log rather than from
+     * a guess about it. The first version of this test asserted a `past_due`
+     * event carrying an advanced period — a payload Stripe never sends — so it
+     * passed against a defect that was still fully live.
+     *
+     * What actually arrives is a PAIR, and the period moves on the one whose
+     * status is `active`:
+     *
+     *   19:41:52  status=active    period 07-13→08-13 becomes 08-13→09-13
+     *   20:42:59  status=past_due  period unchanged, already 09-13
+     *
+     * Stripe advances the period when it CREATES the renewal invoice and only
+     * degrades the status about an hour later, once the charge has failed.
+     */
+    it('ignores the period on BOTH events of a real failed renewal, including the active one', async () => {
+        // 19:41:52 — Stripe creates the renewal invoice. Still active.
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', { status: 'active', ...unpaidPeriod }) as never,
+            mockReq(),
+        );
+
+        const afterAdvance = await getSub(sub.id);
+        expect(afterAdvance.currentPeriodEnd?.getTime()).toBe(paidEnd.getTime());
+
+        // 20:42:59 — the charge failed; only now does the status degrade.
+        await handleSubscriptionUpdated(
+            stripeSubObj('sub_freemonth_001', { status: 'past_due', ...unpaidPeriod }) as never,
+            mockReq(),
+        );
+
+        const final = await getSub(sub.id);
+        expect(final.status).toBe('past_due');
+        expect(final.currentPeriodEnd?.getTime()).toBe(paidEnd.getTime());
+    });
+
     it('keeps current_period_end at the last PAID boundary when the renewal fails', async () => {
         await handleSubscriptionUpdated(
             stripeSubObj('sub_freemonth_001', { status: 'past_due', ...unpaidPeriod }) as never,
@@ -921,20 +957,31 @@ describe('SCENARIO 6b — Failed renewal does not advance the paid-through perio
     });
 
     /**
-     * The control. Without this, a fix that simply stopped writing the period
-     * for EVERY status would pass the tests above while silently breaking every
-     * paying customer's renewal.
+     * The control, and it must exercise the path that ACTUALLY renews: money
+     * landing, i.e. `invoice.payment_succeeded`. Without it, a fix that simply
+     * stopped writing the period everywhere would pass every test above while
+     * silently freezing every paying customer at their last boundary.
+     *
+     * The earlier version of this control asserted that handleSubscriptionUpdated
+     * advances the period on `active` — which is exactly the assumption that let
+     * the defect survive the first fix, since the event that advances the period
+     * during a FAILED renewal is also `active`.
      */
-    it('DOES advance the period — and keeps the merchant entitled — on a paid renewal', async () => {
+    it('a paid renewal advances the period and restores entitlement — via payment_succeeded', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
         const { subscriptionsService } = await import('../../src/services/subscriptions');
         const paidThrough = Math.floor((Date.now() + 25 * DAY_MS) / 1000);
 
-        await handleSubscriptionUpdated(
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
             stripeSubObj('sub_freemonth_001', {
                 status: 'active',
                 current_period_start: Math.floor(Date.now() / 1000),
                 current_period_end: paidThrough,
             }) as never,
+        );
+
+        await handlePaymentSucceeded(
+            { id: 'in_renewed', subscription: 'sub_freemonth_001' } as never,
             mockReq(),
         );
 
@@ -968,20 +1015,36 @@ describe('SCENARIO 6c — checkout insert and payment_succeeded honour paid-thro
      * A checkout that completes while the first invoice has not settled must
      * not seed a period the merchant has not bought, and must not entitle.
      */
-    it('checkout on an unpaid subscription inserts a blocked row with no period', async () => {
-        const { stripeService } = await import('../../src/services/stripe');
-        const { subscriptionsService } = await import('../../src/services/subscriptions');
-        vi.mocked(stripeService.getSubscription).mockResolvedValue(
-            stripeSubObj('sub_unpaid_checkout', { status: 'incomplete' }) as never,
-        );
+    /**
+     * Every unpaid status, not just `incomplete`. Testing one of them is what
+     * let an earlier revision ship an unbounded hole: the status was mapped
+     * independently of the period, so `past_due` and `unpaid` produced
+     * `past_due` + NULL period — and checkSubscriptionStatus applies its grace
+     * only when there IS a period, falling through to allowed otherwise. That
+     * fallback is itself pinned by subscriptions.test.ts, so the combination
+     * was unbounded free service, worse than the defect being fixed.
+     */
+    it.each(['incomplete', 'past_due', 'unpaid', 'incomplete_expired'])(
+        'checkout on a %s subscription inserts a row that blocks without depending on a date',
+        async (stripeStatus) => {
+            const { stripeService } = await import('../../src/services/stripe');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(stripeService.getSubscription).mockResolvedValue(
+                stripeSubObj(`sub_unpaid_${stripeStatus}`, { status: stripeStatus }) as never,
+            );
 
-        await handleCheckoutComplete(stripeSession(userId, plan.id, 'sub_unpaid_checkout'), mockReq());
+            await handleCheckoutComplete(
+                stripeSession(userId, plan.id, `sub_unpaid_${stripeStatus}`),
+                mockReq(),
+            );
 
-        const [sub] = await userSubs(userId);
-        expect(sub.status).toBe('canceled');
-        expect(sub.currentPeriodEnd).toBeNull();
-        expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: false });
-    });
+            const [sub] = await userSubs(userId);
+            expect(sub.currentPeriodEnd).toBeNull();
+            // The status must deny on its own — never one whose denial needs a period.
+            expect(sub.status).toBe('canceled');
+            expect(await subscriptionsService.canAutoReply(userId)).toMatchObject({ allowed: false });
+        },
+    );
 
     /** The paid checkout — unchanged, and the reason the control matters. */
     it('checkout on a paid subscription inserts an entitled row with the period', async () => {

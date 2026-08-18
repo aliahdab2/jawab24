@@ -210,32 +210,47 @@ describe('handleSubscriptionUpdated', () => {
         expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'past_due' }));
     });
 
-    /** The paid path must be untouched — this is the renewal every customer hits. */
-    it('DOES advance the period on active — a paid renewal still moves the boundary', async () => {
+    /**
+     * This handler writes NO period, for ANY status — including `active`.
+     *
+     * Gating it on the status was the first attempt and it did not close the
+     * defect: during a failed renewal Stripe advances the period on an event
+     * whose status is still `active` (it creates the invoice first and degrades
+     * the status about an hour later), so a paid-status gate permits exactly
+     * the event that moves the boundary. `invoice.payment_succeeded` is the
+     * only proof that money landed, so it is the only writer of a column that
+     * means paid-through.
+     *
+     * `trialing` is included deliberately: it is a paid-status too, so an
+     * exception for it would reopen the same door.
+     */
+    it.each(['active', 'trialing', 'past_due', 'unpaid', 'canceled'])(
+        'never writes the period on %s — payment_succeeded owns that column',
+        async (status) => {
+            const chain = q([{ id: 's1', userId: 'u1' }]);
+            vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+            vi.mocked(db.update).mockReturnValue(chain as never);
+
+            await handleSubscriptionUpdated(
+                { ...sub, status } as unknown as Stripe.Subscription,
+                mkReq(),
+            );
+
+            const payload = chain.set.mock.calls[0][0];
+            expect(payload).not.toHaveProperty('currentPeriodStart');
+            expect(payload).not.toHaveProperty('currentPeriodEnd');
+        },
+    );
+
+    /** The status IS still mirrored — only the period moved out of this handler. */
+    it('still writes the mapped status on a paid renewal event', async () => {
         const chain = q([{ id: 's1', userId: 'u1' }]);
         vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
         vi.mocked(db.update).mockReturnValue(chain as never);
 
         await handleSubscriptionUpdated(sub, mkReq());
 
-        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
-            status: 'active',
-            currentPeriodStart: new Date(1700000000 * 1000),
-            currentPeriodEnd: new Date(1702000000 * 1000),
-        }));
-    });
-
-    it('advances the period on trialing — a Stripe-managed trial is a paid-for period', async () => {
-        const chain = q([{ id: 's1', userId: 'u1' }]);
-        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
-        vi.mocked(db.update).mockReturnValue(chain as never);
-
-        await handleSubscriptionUpdated({ ...sub, status: 'trialing' } as unknown as Stripe.Subscription, mkReq());
-
-        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
-            status: 'trialing',
-            currentPeriodEnd: new Date(1702000000 * 1000),
-        }));
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
     });
 
     /**
