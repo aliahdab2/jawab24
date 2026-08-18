@@ -11,9 +11,8 @@ import { captureError } from '../utils/sentryHelpers';
 import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
-import { stripeTsToDate } from '../utils/stripeTime';
 import { resolveStripePriceForInterval } from '../utils/stripePrice';
-import { getSubscriptionPeriod } from '../utils/stripeCompat';
+import { mapStripeSubscriptionStatus } from '../config/stripeBilling';
 import { dispatchStripeEvent } from './paymentWebhookHandlers';
 
 // Type for authenticated requests
@@ -632,19 +631,33 @@ export class PaymentController {
                 newPriceId
             );
 
-            // Best-effort local mirror — the subscription.updated webhook is
-            // authoritative and will re-write these fields, but updating now
-            // means the UI reflects the change without waiting for the event.
-            const updatedPeriod = getSubscriptionPeriod(updated);
-            const updatedPeriodStart = stripeTsToDate(updatedPeriod.start);
-            const updatedPeriodEnd = stripeTsToDate(updatedPeriod.end);
+            // Local mirror so the UI reflects the change without waiting for a
+            // webhook. It writes NO period: `current_period_end` means paid
+            // through, and only `invoice.payment_succeeded` proves that. A plan
+            // change creates a proration invoice, and Stripe reports the new
+            // period as soon as it is CREATED — before it is paid, and while
+            // the subscription still reads `active` (measured on the 08-13
+            // renewal: the advancing event carried status=active with an open,
+            // amount_paid=0 invoice). The proration's payment_succeeded sets the
+            // period.
+            //
+            // This comment previously said the mirror was safe because
+            // "the subscription.updated webhook is authoritative and will
+            // re-write these fields". That stopped being true in this same
+            // branch, which removed that write — leaving this the authoritative
+            // and ungated one.
+            //
+            // The status is mapped, not mirrored raw: Stripe's enum is wider
+            // than ours, and `incomplete` is reachable here when the proration
+            // invoice needs SCA. Raw, it used to entitle silently; since the
+            // CHECK constraint in 0173 it would fail the write and 500 this
+            // endpoint instead.
+            const changeMapping = mapStripeSubscriptionStatus(updated.status);
             await db
                 .update(subscriptions)
                 .set({
                     planId,
-                    status: updated.status,
-                    ...(updatedPeriodStart && { currentPeriodStart: updatedPeriodStart }),
-                    ...(updatedPeriodEnd && { currentPeriodEnd: updatedPeriodEnd }),
+                    ...(changeMapping.write && { status: changeMapping.status }),
                     cancelAtPeriodEnd: updated.cancel_at_period_end,
                     updatedAt: new Date(),
                 })

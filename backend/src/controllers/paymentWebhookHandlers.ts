@@ -379,6 +379,14 @@ export async function handleSubscriptionUpdated(
 
     const updateValues: Partial<typeof subscriptions.$inferInsert> = {
         cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+        // `trial_end` IS mirrored, unlike the billing period. It is not a
+        // paid-through claim — it is Stripe's statement of when the trial
+        // stops, and checkSubscriptionStatus blocks a `trialing` row the
+        // moment trial_ends_at passes. Without this, extending a trial in the
+        // Stripe dashboard changed nothing here and the merchant was cut off
+        // on the ORIGINAL date, which is the failure direction that costs a
+        // customer rather than a month's revenue.
+        trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
         updatedAt: new Date(),
     };
 

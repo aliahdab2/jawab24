@@ -242,6 +242,29 @@ describe('handleSubscriptionUpdated', () => {
         },
     );
 
+    /**
+     * `trial_end` is mirrored even though the period is not — it is not a
+     * paid-through claim, and the gate hard-stops a `trialing` row at
+     * trial_ends_at. Before this, extending a trial in the Stripe dashboard
+     * changed nothing locally and the merchant was cut off on the original
+     * date: the failure direction that costs a customer, not revenue.
+     */
+    it('mirrors an extended trial_end so the merchant is not cut off on the old date', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+        const extended = 1704067200;
+
+        await handleSubscriptionUpdated(
+            { ...sub, status: 'trialing', trial_end: extended } as unknown as Stripe.Subscription,
+            mkReq(),
+        );
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            trialEndsAt: new Date(extended * 1000),
+        }));
+    });
+
     /** The status IS still mirrored — only the period moved out of this handler. */
     it('still writes the mapped status on a paid renewal event', async () => {
         const chain = q([{ id: 's1', userId: 'u1' }]);

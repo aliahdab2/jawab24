@@ -688,7 +688,7 @@ describe('Payment — webhook DB mutations', () => {
         planId = plan.id;
     });
 
-    it('handleSubscriptionUpdated — updates status and period dates in DB', async () => {
+    it('handleSubscriptionUpdated — updates status, and leaves the period to payment_succeeded', async () => {
         const sub = await createTestSubscription(userId, planId, {
             status: 'trialing',
             externalSubscriptionId: 'sub_upd_test',
@@ -717,8 +717,16 @@ describe('Payment — webhook DB mutations', () => {
             .where(eq(schema.subscriptions.id, sub.id));
 
         expect(updated.status).toBe('active');
-        expect(updated.currentPeriodStart?.toISOString().slice(0, 10)).toBe('2026-03-01');
-        expect(updated.currentPeriodEnd?.toISOString().slice(0, 10)).toBe('2026-04-01');
+        // The period is deliberately NOT mirrored here, not even on `active`.
+        // During a failed renewal Stripe advances the period on an event whose
+        // status is still `active` (it creates the invoice first and degrades
+        // the status ~an hour later), so this handler cannot tell a paid
+        // advance from an unpaid one. `invoice.payment_succeeded` owns the
+        // column; the seeded values must survive untouched.
+        expect(updated.currentPeriodStart?.toISOString().slice(0, 10))
+            .toBe(sub.currentPeriodStart?.toISOString().slice(0, 10));
+        expect(updated.currentPeriodEnd?.toISOString().slice(0, 10))
+            .toBe(sub.currentPeriodEnd?.toISOString().slice(0, 10));
         expect(updated.cancelAtPeriodEnd).toBe(false);
     });
 
