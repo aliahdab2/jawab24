@@ -123,6 +123,29 @@ const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
     en: t('defaultAway', 'en'),
 };
 
+/**
+ * Default greeting, used as a SEND-TIME fallback when the merchant switched the
+ * greeting ON but left the text field empty. Toggle ON must always produce a
+ * welcome on the "Get Started" tap — the merchant's own text when they wrote
+ * one, this default when they did not.
+ *
+ * These are the same strings `workspace.ts:buildDefaultGreetingMulti` seeds at
+ * workspace creation AND the same ones the settings UI shows as its placeholder,
+ * so an empty field sends exactly what the merchant was shown in the box.
+ *
+ * Why a send-time fallback is needed at all: that seed only runs in
+ * `workspace.ts:createWorkspace`, but real signups go through
+ * `auth.ts:createDefaultWorkspace`, which writes NEW_SIGNUP_SETTINGS_SEED and no
+ * greeting. Measured 2026-08-18: 56 of 83 workspaces carry an empty `{}` —
+ * every one created since 2026-05-14, including that day's. Five had the toggle
+ * ON and were sending nothing at all. Mirrors getAwayMessage, which has always
+ * had this fallback.
+ */
+const DEFAULT_GREETING_MESSAGE: Record<string, string> = {
+    ar: t('defaultGreeting', 'ar'),
+    en: t('defaultGreeting', 'en'),
+};
+
 export class WorkspaceSettingsService {
     /**
      * Get workspace settings from the JSONB column, with defaults applied.
@@ -352,7 +375,14 @@ export class WorkspaceSettingsService {
         const settings = await this.getSettings(workspaceId);
         const preferred = this.resolveLanguage(settings, detectedLanguage);
 
-        return this.pickMultilingualText(settings.greetingMessageMulti, preferred);
+        const authored = this.pickMultilingualText(settings.greetingMessageMulti, preferred);
+        if (authored) return authored;
+
+        // Toggle ON + nothing authored → send the shipped default (the text the
+        // settings UI shows as its placeholder). Callers gate on
+        // `greetingMessageEnabled` before calling, so this never fires for a
+        // merchant who left the greeting off.
+        return DEFAULT_GREETING_MESSAGE[preferred] || DEFAULT_GREETING_MESSAGE['en'];
     }
 
     /**

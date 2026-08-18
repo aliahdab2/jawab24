@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkspaceSettings } from '@jawab24/shared';
 import { WorkspaceSettingsService } from '../../src/services/workspaceSettings';
+// Rule 10.6 in spirit: derive expected copy from the shipped source, never hardcode it.
+import { t } from '../../src/utils/i18n';
 
 /** Cast a partial stub to WorkspaceSettings — avoids broad `as any` at each call site. */
 function partial(s: Partial<WorkspaceSettings>): WorkspaceSettings {
@@ -455,24 +457,58 @@ describe('WorkspaceSettingsService', () => {
             expect(await service.getGreetingMessage(WS_ID, 'en')).toBe('Welcome!');
         });
 
-        it('returns null when no greeting configured', async () => {
+        // Toggle ON + empty field must still produce a welcome: the merchant was
+        // shown a placeholder in the settings box and reasonably expects THAT to be
+        // what new customers receive. Returning null sent nothing at all — measured
+        // 2026-08-18: 56 of 83 workspaces carry an empty `{}` (every one created
+        // since 2026-05-14, because auth.createDefaultWorkspace seeds no greeting),
+        // and five of those had the toggle ON and were silently sending nothing.
+        it('falls back to the shipped default when the merchant authored nothing', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                greetingMessageMulti: {},
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            const msg = await service.getGreetingMessage(WS_ID, 'en');
+            expect(msg).toBe(t('defaultGreeting', 'en'));
+        });
+
+        it('falls back to the Arabic default for an Arabic customer', async () => {
             vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
                 greetingMessageMulti: {},
                 autoDetectLanguage: true,
                 defaultReplyLanguage: 'ar',
             }));
 
-            expect(await service.getGreetingMessage(WS_ID, 'en')).toBeNull();
+            const msg = await service.getGreetingMessage(WS_ID, 'ar');
+            expect(msg).toBe(t('defaultGreeting', 'ar'));
+            expect(msg).not.toBe(t('defaultGreeting', 'en'));
+        });
+
+        it('prefers the merchant text over the default when both could apply', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                greetingMessageMulti: { en: 'Our own welcome' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            expect(await service.getGreetingMessage(WS_ID, 'en')).toBe('Our own welcome');
         });
 
         it('never leaks the sourceLang bookkeeping key as the greeting text', async () => {
+            // All languages cleared but the bookkeeping key present. The value must
+            // never be sent to a customer as if it were the greeting; with every
+            // language empty this is the same "authored nothing" case as above.
             vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
                 greetingMessageMulti: { ar: '', en: '', sourceLang: 'default' },
                 autoDetectLanguage: true,
                 defaultReplyLanguage: 'en',
             }));
 
-            expect(await service.getGreetingMessage(WS_ID, 'en')).toBeNull();
+            const msg = await service.getGreetingMessage(WS_ID, 'en');
+            expect(msg).toBe(t('defaultGreeting', 'en'));
+            expect(msg).not.toBe('default');
         });
     });
 
