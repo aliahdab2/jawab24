@@ -21,6 +21,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
+import { SETTINGS_QUERY_KEY } from '@/hooks/useSettingsQuery';
 import { useIsDemoUser } from '@/features/demo';
 import type { NextPageWithLayout } from './_app';
 import {
@@ -340,13 +341,16 @@ const SettingsPage: NextPageWithLayout = () => {
         setInitialSettings(updatedSettings);
       }
 
-      // The comment-reply mode / dual-nudge here feed the shared ['comment-reply-config']
-      // query that the Post Reply modal reads (useCommentReplyMode). Invalidate it so a
-      // mode change is reflected immediately instead of after the 5-min staleTime.
-      queryClient.invalidateQueries({ queryKey: ['comment-reply-config'] });
-      // Same for the lead-alerts toggle feeding useSSE's toast gate (useLeadAlertsEnabled)
-      // — muting «تنبيهات العملاء المحتملين الجدد» must silence toasts immediately.
-      queryClient.invalidateQueries({ queryKey: ['lead-alerts-enabled'] });
+      // Everything saved here is read back through the ONE shared /settings query
+      // (useSettingsQuery), so a single invalidation refreshes every consumer:
+      // the comment-reply mode / dual-nudge the Post Reply modal reads
+      // (useCommentReplyMode), the lead-alerts toggle gating useSSE's toasts
+      // (useLeadAlertsEnabled) — muting «تنبيهات العملاء المحتملين الجدد» must
+      // silence them immediately — plus the timezone, handoff pause, and the
+      // dashboard's auto-reply flags. Previously these were five separate keys and
+      // only two were invalidated here, so the other three kept serving pre-save
+      // values for up to 5 minutes.
+      queryClient.invalidateQueries({ queryKey: SETTINGS_QUERY_KEY });
 
       setSaved(true);
       setSavedSections(changedSections);

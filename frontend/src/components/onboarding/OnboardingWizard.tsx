@@ -71,6 +71,28 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
   // Fetch pages — if empty and we have a FB token, trigger a sync first (defense-in-depth
   // against the race condition where the login-time auto-sync hasn't completed yet)
+  /**
+   * Prefill the info editor with a page's business-info text.
+   *
+   * The LIST endpoint (`pagesApi.getAll`) no longer ships `knowledgeBase` /
+   * `suggestedKnowledgeBase` — they were 48% of that response's bytes and no list
+   * screen reads them (see `serializeListPage`, backend controllers/pages.ts). So
+   * the text has to come from the single-page read.
+   *
+   * Falls back to an empty editor on failure: a merchant can type into an empty
+   * box, but a thrown wizard blocks onboarding entirely.
+   */
+  const prefillKnowledgeBase = useCallback(async (pageId: string) => {
+    try {
+      const { data } = await pagesApi.getById(pageId);
+      const page = (data?.data ?? data) as Page | undefined;
+      setKnowledgeBase(page?.knowledgeBase || page?.suggestedKnowledgeBase || '');
+    } catch (error) {
+      captureError(error, 'Onboarding: failed to load business info text', { tags: { component: 'onboarding' } });
+      setKnowledgeBase('');
+    }
+  }, []);
+
   const fetchPages = useCallback(async () => {
     try {
       setLoading(true);
@@ -101,8 +123,9 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       const selected = enabledPage || firstPage;
       if (selected) {
         setSelectedPageId(selected.id);
-        // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
-        setKnowledgeBase(selected.knowledgeBase || selected.suggestedKnowledgeBase || '');
+        // Existing text, else the Facebook auto-sync suggestion — both live on the
+        // single-page read now, not the list row.
+        await prefillKnowledgeBase(selected.id);
       }
     } catch (error) {
       captureError(error, 'Onboarding: failed to fetch pages', { tags: { component: 'onboarding' } });
@@ -110,7 +133,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     } finally {
       setLoading(false);
     }
-  }, [fbToken]);
+  }, [fbToken, prefillKnowledgeBase]);
 
   // Fetch pages and page limit on mount
   useEffect(() => {
@@ -141,10 +164,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
     // If enabling, select this page for info review
     if (enabled) {
-      const page = pages.find(p => p.id === pageId);
       setSelectedPageId(pageId);
-      // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
-      setKnowledgeBase(page?.knowledgeBase || page?.suggestedKnowledgeBase || '');
+      // Existing text, else the Facebook auto-sync suggestion — both live on the
+      // single-page read now, not the list row.
+      void prefillKnowledgeBase(pageId);
     }
 
     try {
@@ -174,7 +197,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         p.id === pageId ? { ...p, autoReplyEnabled: !enabled } : p
       ));
     }
-  }, [pages, pageLimit, queryClient, t]);
+  }, [pages, pageLimit, queryClient, t, prefillKnowledgeBase]);
 
   const handleChipToggle = useCallback((chipId: ChipId) => {
     setActiveChip(prev => prev === chipId ? null : chipId);

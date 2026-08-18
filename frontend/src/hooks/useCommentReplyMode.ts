@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
-import { settingsApi } from '@/lib/api';
+import { useSettingsQuery } from './useSettingsQuery';
 
 export type CommentReplyMode = 'public' | 'private' | 'dual';
 
@@ -31,24 +30,20 @@ interface CommentReplyConfig {
 }
 
 /**
- * Shared query for the workspace comment-reply configuration. Both public hooks
- * below read from this single query, so the /settings round-trip happens once
- * (react-query dedupes by key). Cached across the session.
+ * Comment-reply configuration, derived from the shared `/settings` query.
+ *
+ * Both public hooks below read this, and it costs no request of its own — the
+ * whole app now shares ONE `/settings` round-trip via useSettingsQuery. (This
+ * hook already deduped its own two consumers; the shared query extends the same
+ * idea across the five keys that used to fetch the identical response.)
  */
-function useCommentReplyConfig() {
-  return useQuery({
-    queryKey: ['comment-reply-config'],
-    queryFn: async (): Promise<CommentReplyConfig> => {
-      const res = await settingsApi.get();
-      const data = res.data;
-      const raw = data?.commentReplyMode;
-      const mode = raw === 'public' || raw === 'private' || raw === 'dual' ? raw : null;
-      const multi = data?.dualReplyNudgeMulti;
-      const dualNudgeByLang = multi && typeof multi === 'object' ? (multi as Record<string, string>) : {};
-      return { mode, dualNudgeByLang, imagesEnabled: data?.triggerImagesEnabled === true };
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+function useCommentReplyConfig(): { data: CommentReplyConfig } {
+  const { data } = useSettingsQuery();
+  const raw = data?.commentReplyMode;
+  const mode = raw === 'public' || raw === 'private' || raw === 'dual' ? raw : null;
+  const multi = data?.dualReplyNudgeMulti;
+  const dualNudgeByLang = multi && typeof multi === 'object' ? (multi as Record<string, string>) : {};
+  return { data: { mode, dualNudgeByLang, imagesEnabled: data?.triggerImagesEnabled === true } };
 }
 
 /** The workspace comment reply mode, or null until it resolves (never guessed). */

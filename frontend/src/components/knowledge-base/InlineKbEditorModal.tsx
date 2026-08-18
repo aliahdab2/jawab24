@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Page } from '@jawab24/shared';
+import type { PageDetail } from '@jawab24/shared';
 import { pagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
@@ -36,7 +36,7 @@ interface InlineKbEditorModalProps {
  */
 export function InlineKbEditorModal({ pageId, open, onClose }: InlineKbEditorModalProps) {
   const t = useTranslations('pages');
-  const [page, setPage] = useState<Page | null>(null);
+  const [page, setPage] = useState<PageDetail | null>(null);
   const [loading, setLoading] = useState(false);
   // No onSuccess: deliberately do NOT mutate `page` after save. KnowledgeBaseModal
   // re-initializes its editor state whenever its `page` prop changes, so updating
@@ -55,7 +55,7 @@ export function InlineKbEditorModal({ pageId, open, onClose }: InlineKbEditorMod
     setLoading(true);
     setPage(null);
     pagesApi.getById(pageId)
-      .then((res) => { if (!cancelled) setPage(res.data as Page); })
+      .then((res) => { if (!cancelled) setPage(res.data as PageDetail); })
       .catch((error) => {
         if (cancelled) return;
         captureError(error, 'Failed to load page for inline KB editor', {

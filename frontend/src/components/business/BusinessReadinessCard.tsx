@@ -7,10 +7,10 @@ import {
   READINESS_AREAS,
   type ReadinessAreaKey,
 } from '@/utils/businessCoverage';
-import type { Page } from '@jawab24/shared';
+import type { PageDetail } from '@jawab24/shared';
 
 interface BusinessReadinessCardProps {
-  page: Page;
+  page: PageDetail;
   /** Catalog item count; undefined while loading. */
   productsCount: number | undefined;
   /** LIVE fact-collection rows on this page (undefined while loading) — the

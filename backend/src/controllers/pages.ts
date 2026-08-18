@@ -74,6 +74,61 @@ export function serializePage<T extends {
     };
 }
 
+/**
+ * LIST serializer for `GET /pages` — `serializePage` plus the payload trim.
+ *
+ * Drops the three fat columns no list consumer reads and replaces the
+ * business-info text with the one boolean they actually use.
+ *
+ * ⚠️ Why a separate serializer and not a change to `serializePage` or to
+ * `pagesService.getPages`:
+ *  - `serializePage` has 18 call sites, including the SINGLE-page reads
+ *    (`GET /pages/:id`) that the Business Info editor, CatalogManager and the
+ *    onboarding wizard rely on for the full text. Trimming there would blank the
+ *    editor.
+ *  - `getPages` is not only an HTTP source: `syncFromFacebook` calls it and reads
+ *    `existingPage.businessProfile` to preserve the merchant-authored half of the
+ *    container across a sync. Trimming in the service would silently pass
+ *    `undefined` there and wipe business profiles on every Facebook sync.
+ * So the trim belongs at the wire boundary of this ONE endpoint.
+ *
+ * Measured across 132 production pages: `knowledge_base` +
+ * `suggested_knowledge_base` = **48%** of response bytes, `business_profile` a
+ * further **18%**. The only list-side readers of that text asked "is it filled?"
+ * (`isKbFilled` → `dashboard.tsx`, `setupChecklist.ts`, `TestSmartReplyModal`),
+ * so up to 16 kB per page crossed the wire to compute one boolean.
+ *
+ * ⚠️ A DENY-list, deliberately. An allow-list of the ~42 keep-columns would make
+ * a newly added column silently ABSENT until someone remembered it — and the
+ * settings screen reads `replyMode` and `brandVoiceNotesMulti` per page for its
+ * override markers, so a forgotten column blanks those with no error. Removing
+ * only fields whose absence is verified is the safer failure mode. A new fat
+ * column belongs here; `test/controllers/pagesListPayload.test.ts` pins the key
+ * set and fails when one joins the response, which is the prompt to decide.
+ */
+export function serializeListPage<T extends Parameters<typeof serializePage>[0] & {
+    knowledgeBase?: string | null;
+    suggestedKnowledgeBase?: string | null;
+    businessProfile?: unknown;
+}>(page: T) {
+    const {
+        // `_businessProfile` is destructured ONLY to drop it from `rest`; the
+        // other two are read below to compute `kbFilled`.
+        knowledgeBase, suggestedKnowledgeBase, businessProfile: _businessProfile,
+        ...rest
+    } = serializePage(page);
+    return {
+        ...rest,
+        // The same shared predicate the frontend's isKbFilled uses
+        // (frontend/src/utils/kb.ts → packages/shared activation.ts), so the
+        // boolean cannot drift from what the checklist computed locally.
+        // Deliberately NOT services/businessReadiness.ts — that answers a
+        // stricter, different question (see its warning) and would change which
+        // pages count as filled.
+        kbFilled: isBusinessInfoProvided(knowledgeBase, suggestedKnowledgeBase),
+    };
+}
+
 /** Upper bound on KB lines a single cleanup request may name (defensive). */
 const MAX_CLEANUP_LINES = 1000;
 
@@ -114,9 +169,25 @@ export class PagesController {
 
     /**
      * Get all pages
-     * GET /pages
+     * GET /pages           → full rows (legacy shape)
+     * GET /pages?view=list → trimmed rows (see serializeListPage)
+     *
+     * ⚠️ The trim is OPT-IN, and must stay opt-in until the last fat-shape
+     * client is gone. The mobile app bakes its own frontend bundle and CANNOT
+     * be redeployed (capacitor.config.ts `webDir: 'out'`), and there is no
+     * min-version gate anywhere — so builds already on merchants' phones keep
+     * calling this endpoint forever. The shipped build (android-v2.0.35) reads
+     * `businessProfile` straight off this list in business.tsx and then PUTs a
+     * FULL-REPLACE patch built from it. Serving it a row without that field
+     * would make the next hours/phone/address edit tombstone every other
+     * merchant-confirmed fact — silent, irreversible data loss on a screen the
+     * merchant uses normally.
+     *
+     * So: default stays fat, `?view=list` opts in. Flip the default (and delete
+     * this branch) only once the fat-shape builds are provably gone from the
+     * fleet — not merely superseded in the Play Store.
      */
-    async getAll(request: FastifyRequest, reply: FastifyReply) {
+    async getAll(request: FastifyRequest<{ Querystring: { view?: string } }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
@@ -124,11 +195,12 @@ export class PagesController {
 
         try {
             const pages = await pagesService.getPages(req.workspaceId);
+            const serialize = request.query?.view === 'list' ? serializeListPage : serializePage;
             // Archived pages are hidden HERE, not in pagesService.getPages: this is the
             // single endpoint every merchant surface reads (channels, dashboard, inbox,
             // pickers), while the Facebook sync needs the archived rows to stay visible
             // to its existing-page map and revoke list.
-            return reply.send(pages.filter(page => !page.archivedAt).map(serializePage));
+            return reply.send(pages.filter(page => !page.archivedAt).map(serialize));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch pages' });

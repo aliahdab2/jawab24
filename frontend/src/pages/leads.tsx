@@ -11,7 +11,7 @@ import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
-import type { Page } from '@jawab24/shared';
+import type { Page, PageListItem } from '@jawab24/shared';
 import { resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import {
   Users,
@@ -533,11 +533,11 @@ const LeadsPage: NextPageWithLayout = () => {
     setCustomizeNudgeDismissed(true);
   };
 
-  const { data: pagesData, isLoading: pagesLoading } = useQuery<Page[]>({
+  const { data: pagesData, isLoading: pagesLoading } = useQuery<PageListItem[]>({
     queryKey: ['pages'],
     queryFn: async () => {
       const { data } = await pagesApi.getAll();
-      return data as Page[];
+      return data as PageListItem[];
     },
     staleTime: 60_000,
   });

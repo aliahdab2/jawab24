@@ -9,6 +9,7 @@ vi.mock('@/lib/api', () => ({
 
 import { useCommentReplyMode } from '@/hooks/useCommentReplyMode';
 import { settingsApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 
 const getMock = vi.mocked(settingsApi.get);
 
@@ -22,6 +23,13 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useCommentReplyMode', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // These hooks now read the shared `/settings` query (useSettingsQuery),
+        // which is gated on `isAuthenticated` — `/settings` 401s without a
+        // session, so an ungated fetch would burn a request plus retries. The
+        // only consumer (PostTriggerModal, opened from the comments page) always
+        // renders behind the dashboard auth guard, so authenticated is the state
+        // production is actually in.
+        useAuthStore.setState({ isAuthenticated: true });
     });
 
     it('returns the configured mode once settings load', async () => {

@@ -13,6 +13,7 @@ import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { BusinessFactSheet, type EditableFactKey, type FactSavePayload } from '@/components/business/BusinessFactSheet';
 import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
+import { useCallback } from 'react';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, factCollectionsApi, type CatalogVerticalInfo, type FactCollectionWithRows } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -33,7 +34,7 @@ import { useWorkspaceRole } from '@/hooks';
 import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
-import type { Page, CatalogItem } from '@jawab24/shared';
+import type { PageDetail, PageListItem, CatalogItem } from '@jawab24/shared';
 
 const TestSmartReplyModal = dynamic(
   () => import('@/components/test-smart-reply/TestSmartReplyModal').then((m) => ({ default: m.TestSmartReplyModal })),
@@ -79,7 +80,7 @@ function BusinessPageInner() {
   // state on its own.
   const { canEdit } = useWorkspaceRole();
 
-  const { data: pagesData, isLoading } = useQuery<Page[]>({
+  const { data: pagesData, isLoading } = useQuery<PageListItem[]>({
     queryKey: ['pages'],
     queryFn: () => pagesApi.getAll().then((r) => r.data),
     enabled: isAuthenticated,
@@ -138,7 +139,34 @@ function BusinessPageInner() {
   }, [router.isReady, router.query.page, validPages, pageId, updatePageId]);
 
   const selectedPageId = pageId && validPages.some((p) => p.id === pageId) ? pageId : '';
-  const selectedPage = validPages.find((p) => p.id === selectedPageId);
+  const listPage = validPages.find((p) => p.id === selectedPageId);
+
+  // The LIST endpoint no longer ships `knowledgeBase` / `businessProfile` (they
+  // were 66% of its bytes and no list screen reads them — see serializeListPage
+  // in backend controllers/pages.ts). This screen is the editor for exactly that
+  // text, so it reads the single page, which still carries the full row.
+  const {
+    data: pageDetail,
+    isError: pageDetailError,
+    refetch: refetchPageDetail,
+  } = useQuery<PageDetail>({
+    queryKey: ['page', selectedPageId],
+    queryFn: () => pagesApi.getById(selectedPageId).then((r) => r.data),
+    enabled: isAuthenticated && !!selectedPageId,
+  });
+  // Prefer the detail row; fall back to the list entry so identity-only fields
+  // (name, id, connection state) render immediately while the detail loads.
+  //
+  // ⛔ The fallback is for IDENTITY ONLY. Nothing that reads `businessProfile`
+  // or the KB text — and above all nothing that WRITES them — may run against
+  // the list row: `PUT /pages/:id { businessProfile }` is a FULL REPLACE
+  // (applyMerchantEdit tombstones every tracked field absent from the patch),
+  // so a save seeded from a row that merely lacks the field wipes every other
+  // merchant-confirmed fact. Every such reader below therefore renders under
+  // `pageDetail ? …`, which also NARROWS the type: those components take
+  // `PageDetail`, which a `PageListItem` cannot satisfy, so the compiler — not
+  // a convention — is what keeps the list row out of them.
+  const selectedPage = pageDetail ?? listPage;
 
   // A store page's products live in the store sync, not the manual catalog —
   // don't fetch a list that is empty by construction.
@@ -180,10 +208,27 @@ function BusinessPageInner() {
     factRowsCount,
   });
 
-  // KB editor state (inline panel) — same shared save hook as /pages; the
-  // pages query is invalidated so readiness chips/fact rows refresh on save.
+  /**
+   * Refresh BOTH page queries after an edit on this screen.
+   *
+   * An edit here changes the list row (readiness chips, `kbFilled`) AND the
+   * detail row (`knowledgeBase` / `businessProfile`, which only the single-page
+   * read carries since the list stopped shipping them). Invalidating just
+   * ['pages'] leaves the editor showing the pre-save text.
+   */
+  const invalidatePageQueries = useCallback(
+    () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['pages'] }),
+      queryClient.invalidateQueries({ queryKey: ['page', selectedPageId] }),
+    ]),
+    [queryClient, selectedPageId],
+  );
+
+  // KB editor state (inline panel) — same shared save hook as /pages; both page
+  // queries are invalidated so readiness chips/fact rows AND the editor text
+  // refresh on save.
   const { saveKnowledgeBase, saving, saved } = useSaveKnowledgeBase(
-    () => { void queryClient.invalidateQueries({ queryKey: ['pages'] }); },
+    () => { void invalidatePageQueries(); },
   );
 
   // «معلومات إضافية» always starts collapsed: every fact now has its own
@@ -254,7 +299,16 @@ function BusinessPageInner() {
     confirmFields: ReadonlyArray<keyof BusinessProfile>,
   ) => {
     if (!selectedPage) return;
-    const { merchant = {} } = unwrapBusinessProfile(selectedPage.businessProfile);
+    // ⛔ HARD REFUSAL, not an optimisation. The body below is a FULL REPLACE of
+    // the merchant container, so it must be seeded from the row that actually
+    // carries `businessProfile` — the DETAIL read. Seeding it from the list row
+    // (which no longer ships that field) would send a container holding only
+    // the field just edited, and applyMerchantEdit would tombstone every other
+    // merchant-confirmed fact. The UI gates these editors on `pageDetail`, so
+    // this should be unreachable; it stays as the last line of defence, because
+    // the failure it prevents is silent and irreversible.
+    if (!pageDetail) return;
+    const { merchant = {} } = unwrapBusinessProfile(pageDetail.businessProfile);
     const patch = mutate({ ...merchant });
 
     setSavingFact(true);
@@ -271,7 +325,7 @@ function BusinessPageInner() {
         businessProfileConfirmFields: confirmFields,
       });
       // Refetch so the readiness chips + rows reflect the new confirmed value.
-      await queryClient.invalidateQueries({ queryKey: ['pages'] });
+      await invalidatePageQueries();
       onDone();
       toast.success(tPages('savedStatus'));
 
@@ -449,15 +503,34 @@ function BusinessPageInner() {
               first by DOM luck. */}
           {!canEdit && <ViewOnlyBanner className="order-first" />}
 
+          {/* The detail read carries `businessProfile`; the list row does not.
+              Everything below that reads or writes it therefore waits for the
+              detail — a facts screen rendered from the list row would report
+              every fact as missing and invite the merchant to "fix" rows whose
+              save is a full replace. Failing loudly here beats a screen that
+              quietly lies about what the merchant has already told us. */}
+          {pageDetailError && (
+            <div className="order-first rounded-2xl border border-theme-border bg-card p-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">{t('detail.loadFailed')}</p>
+              <Button variant="secondary" size="sm" onClick={() => void refetchPageDetail()}>
+                {tc('tryAgain')}
+              </Button>
+            </div>
+          )}
+
           {/* 1 — Readiness */}
           <div className="order-1">
-            <BusinessReadinessCard
-              page={selectedPage}
-              productsCount={productsCount}
-              factRowsCount={factRowsCount}
-              onTryReply={() => setTestReplyOpen(true)}
-              onFixChip={canEdit ? handleFixChip : undefined}
-            />
+            {pageDetail ? (
+              <BusinessReadinessCard
+                page={pageDetail}
+                productsCount={productsCount}
+                factRowsCount={factRowsCount}
+                onTryReply={() => setTestReplyOpen(true)}
+                onFixChip={canEdit ? handleFixChip : undefined}
+              />
+            ) : (
+              <Skeleton className="h-32 rounded-2xl" />
+            )}
           </div>
 
           {/* 2 — Products & services (catalog) */}
@@ -491,7 +564,13 @@ function BusinessPageInner() {
             ) : (
               <CatalogManager
                 pageId={selectedPage.id}
-                page={selectedPage}
+                // `pageDetail`, not `selectedPage`: this prop exists only to
+                // offer the post-import Business-Info cleanup, which needs the
+                // KB text the list row does not carry. Passing the list row
+                // would make the offer silently never fire; passing undefined
+                // makes the dependency explicit and the catalog itself still
+                // renders (it keys off pageId).
+                page={pageDetail}
                 importRequested={importRequest?.pageId === selectedPage.id}
                 importInitialText={importRequest?.pageId === selectedPage.id ? importRequest.text : undefined}
                 readOnly={!canEdit}
@@ -500,14 +579,20 @@ function BusinessPageInner() {
           </section>
           )}
 
-          {/* 3 — Structured facts */}
+          {/* 3 — Structured facts. Gated on the detail read: these rows are the
+              entry point to `saveProfile`, which full-replaces the merchant
+              container, so they must never render from a row that lacks it. */}
           <div className="order-2 md:order-3">
-            <BusinessFactRows
-              page={selectedPage}
-              onEditFact={setEditingFact}
-              onEditHours={() => setEditingHours(true)}
-              readOnly={!canEdit}
-            />
+            {pageDetail ? (
+              <BusinessFactRows
+                page={pageDetail}
+                onEditFact={setEditingFact}
+                onEditHours={() => setEditingHours(true)}
+                readOnly={!canEdit}
+              />
+            ) : (
+              <Skeleton className="h-64 rounded-2xl" />
+            )}
           </div>
 
           {/* 3b — Fact lists (G1b): pages with collections render them; a page
@@ -541,14 +626,27 @@ function BusinessPageInner() {
             </button>
             {infoOpen && (
               <div className="flex flex-col border-t border-theme-border">
-                <KnowledgeBasePanel
-                  page={selectedPage}
-                  onSave={(text) => saveKnowledgeBase(selectedPage.id, text)}
-                  saving={saving}
-                  saved={saved}
-                  bodyClassName="p-3 sm:p-5"
-                  footerClassName="flex items-center justify-between gap-3 px-4 py-3 lg:px-5 border-t border-theme-border bg-card"
-                />
+                {/* The business-info TEXT comes from the single-page read, not the
+                    list. Never render the editor before it arrives: an empty
+                    textarea over a page that HAS text reads as the merchant's
+                    info having vanished — the exact failure this screen must not
+                    show, least of all on the slow connections we're optimising
+                    for. In practice the section starts collapsed, so the detail
+                    has normally resolved long before this renders. */}
+                {pageDetail ? (
+                  <KnowledgeBasePanel
+                    page={pageDetail}
+                    onSave={(text) => saveKnowledgeBase(pageDetail.id, text)}
+                    saving={saving}
+                    saved={saved}
+                    bodyClassName="p-3 sm:p-5"
+                    footerClassName="flex items-center justify-between gap-3 px-4 py-3 lg:px-5 border-t border-theme-border bg-card"
+                  />
+                ) : (
+                  <div className="p-3 sm:p-5" aria-busy="true">
+                    <Skeleton className="h-40 rounded-xl" />
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -607,7 +705,9 @@ function BusinessPageInner() {
             setFieldCleanup(null);
             // The KB text changed on the server — refetch so the Business Info
             // editor below does not keep showing the line that was just removed.
-            void queryClient.invalidateQueries({ queryKey: ['pages'] });
+            // Must include the DETAIL query: the text lives there now, not on the
+            // list row.
+            void invalidatePageQueries();
             if (removed > 0) toast.success(tCatalog('cleanup.toastDone', { count: removed }));
           }}
         />

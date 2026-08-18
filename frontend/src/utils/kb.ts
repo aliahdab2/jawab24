@@ -34,7 +34,13 @@ export const KB_DEEP_LINK_ACTIVE = '/pages?openKbActive=true';
  * checklist, the dashboard KB nudge, the /pages "Add info" chip, and the backend
  * `kb_filled` activation milestone can never disagree on what "filled" means.
  */
-export function isKbFilled(page: Pick<Page, 'knowledgeBase' | 'suggestedKnowledgeBase'>): boolean {
+export function isKbFilled(page: Pick<Page, 'knowledgeBase' | 'suggestedKnowledgeBase' | 'kbFilled'>): boolean {
+  // LIST pages (`GET /pages`) carry the server-computed boolean and NOT the text
+  // — the text was 48% of that response's bytes and every list-side caller of
+  // this helper only wanted the boolean. Single-page reads carry the text, so
+  // fall back to computing it locally with the same shared predicate. Both paths
+  // therefore agree by construction, and this helper works on either shape.
+  if (typeof page.kbFilled === 'boolean') return page.kbFilled;
   return isBusinessInfoProvided(page.knowledgeBase, page.suggestedKnowledgeBase);
 }
 

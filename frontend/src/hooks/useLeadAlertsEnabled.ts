@@ -1,6 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { settingsApi } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
+import { useSettingsQuery } from './useSettingsQuery';
 
 /**
  * The user's `newLeadAlertsEnabled` preference («تنبيهات العملاء المحتملين الجدد»).
@@ -9,22 +7,14 @@ import { useAuthStore } from '@/lib/store';
  * fired from SSE events were ungated — so a merchant who turned the toggle OFF
  * kept getting instant notifications (prod report 2026-07-19). useSSE reads
  * this to gate the `lead:captured` / `lead:re_engaged` toasts; the settings
- * page invalidates `['lead-alerts-enabled']` on save so a toggle takes effect
+ * page invalidates `SETTINGS_QUERY_KEY` on save so a toggle takes effect
  * immediately, not after the stale window.
  *
  * Defaults to true (alerts on) while loading or unauthenticated — matches the
- * DB column default and the backend gate's `?? true`.
+ * DB column default and the backend gate's `?? true`. `undefined !== false` is
+ * true, so the loading state gives that default without a separate branch.
  */
 export function useLeadAlertsEnabled(): boolean {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { data } = useQuery({
-    queryKey: ['lead-alerts-enabled'],
-    queryFn: async (): Promise<boolean> => {
-      const res = await settingsApi.get();
-      return res.data?.newLeadAlertsEnabled !== false;
-    },
-    staleTime: 5 * 60 * 1000,
-    enabled: isAuthenticated,
-  });
-  return data ?? true;
+  const { data } = useSettingsQuery();
+  return data?.newLeadAlertsEnabled !== false;
 }

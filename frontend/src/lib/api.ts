@@ -170,7 +170,13 @@ export const otpApi = {
 
 // Pages API
 export const pagesApi = {
-  getAll: () => api.get('/pages'),
+  // `?view=list` opts into the trimmed list shape (no knowledgeBase /
+  // suggestedKnowledgeBase / businessProfile, plus a computed `kbFilled`) —
+  // 80% smaller on the wire, and this app reads none of those fields off the
+  // list. The server default stays fat for mobile bundles already shipped,
+  // which cannot be redeployed and DO read them; see getAll in
+  // backend/src/controllers/pages.ts. Need the text? `getById`.
+  getAll: () => api.get('/pages?view=list'),
   getById: (id: string) => api.get(`/pages/${id}`),
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/pages/${id}/auto-reply`, { enabled }),
