@@ -18,7 +18,7 @@ export const FALLBACK_PLANS: Plan[] = [
         slug: 'basic',
         description: 'For post replies',
         price: 800,
-        yearlyPrice: null,
+        yearlyPrice: 8000,
         yearlyAvailable: false,
         currency: 'USD',
         interval: 'month',

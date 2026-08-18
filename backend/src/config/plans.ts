@@ -40,9 +40,14 @@ export const PLANS: PlanSeed[] = [
         // incumbents, which sell a comparable AI-less base and charge for AI
         // separately as credits.
         //
-        // No yearly price yet: `yearlyPrice: null` keeps the card monthly-only
-        // and makes the backend refuse a yearly checkout, so the page can never
-        // advertise an annual total that no Stripe price can charge.
+        // Yearly = 10x monthly ($80/yr), the same "two months free" ratio the
+        // rest of the ladder uses (starter 15/150, business 39/390, pro 79/790).
+        // Setting the amount does NOT by itself make yearly purchasable: the card
+        // and the backend both gate on `stripe_yearly_price_id`, so until
+        // `scripts/create-yearly-prices.ts --apply` has run, the card stays
+        // monthly-only and a yearly checkout is refused (YEARLY_NOT_AVAILABLE)
+        // rather than silently billed at the monthly price. That guard is why the
+        // amount can land a deploy ahead of the Stripe price.
         //
         // Activated 2026-08-18, once the live Stripe price existed. It shipped
         // `isActive: false` first on purpose, and the next new plan should do the
@@ -58,7 +63,7 @@ export const PLANS: PlanSeed[] = [
         name: 'Basic',
         description: 'For post replies',
         price: 800,
-        yearlyPrice: null,
+        yearlyPrice: 8000,
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
