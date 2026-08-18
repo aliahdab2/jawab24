@@ -3,7 +3,10 @@ import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
-import { useOwnerGate } from '@/hooks';
+// Direct import, NOT the '@/hooks' barrel (53 re-exports): this hook is used
+// by the public pricing page, and the barrel drags usePostReplySetup -> the
+// whole Post Reply feature -> '@jawab24/shared' onto it.
+import { useOwnerGate } from '@/hooks/useOwnerGate';
 import { api, subscriptionApi } from '@/lib/api';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { isNativePlatform } from '@/lib/capacitor';

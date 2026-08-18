@@ -12,10 +12,23 @@ import { useWorkspacesRefresh } from '@/hooks/useWorkspacesRefresh';
 import { useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge } from '@/hooks/useNavBadgeCounts';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports). This
+// layout is also the PUBLIC pricing page's layout (isPublic), so the barrel
+// put FeedSnippet/FlagTag/CtaButtonPill -> '@jawab24/shared' (CommonJS, not
+// tree-shakeable => zod + libphonenumber-js) on a page bought clicks land on.
+// OfflineBanner below and useEscapeKey already follow this pattern.
+import { VersionBadge } from '@/components/ui/VersionBadge';
+import { WhatsAppHelpButton } from '@/components/ui/WhatsAppHelpButton';
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { NotificationBell } from '@/components/ui/NotificationBell';
+import { ThemeToggleButton } from '@/components/ui/ThemeToggleButton';
+import { NavCountBadge } from '@/components/ui/NavCountBadge';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { syncSessionState } from '@/lib/sessionSync';
-import { DemoBanner } from '@/features/demo';
+// Direct import: the '@/features/demo' barrel also exports DemoLoginButton,
+// which reaches the '@/components/ui' barrel -> '@jawab24/shared'. The layout
+// only needs the banner.
+import { DemoBanner } from '@/features/demo/DemoBanner';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useEscapeKey } from '@/hooks/useEscapeKey';

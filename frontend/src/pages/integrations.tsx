@@ -1,11 +1,26 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import { ZidIcon, ShopifyIcon, SallaIcon } from '@/components/landing';
-import { OrderNotificationsCard } from '@/components/settings';
-import { StoreAnalyticsSummary } from '@/components/analytics';
+// Direct import, NOT the '@/components/settings' barrel: this page is public,
+// and the barrel re-exports every settings card — BusinessHoursCard,
+// ReplyStyleCard, GreetingMessageCard, buildUpdatePayload — each reaching
+// '@jawab24/shared' (CommonJS, not tree-shakeable => zod + libphonenumber-js).
+import { OrderNotificationsCard } from '@/components/settings/OrderNotificationsCard';
+// Direct import, NOT the '@/components/analytics' barrel: it re-exports the
+// whole analytics dashboard, and KpiCard reaches the '@/components/ui'
+// barrel -> '@jawab24/shared'. This page is public.
+import { StoreAnalyticsSummary } from '@/components/analytics/StoreAnalyticsSummary';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal, Badge } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports) — public
+// page. The barrel reaches '@jawab24/shared', which is CommonJS and cannot
+// be tree-shaken, so one named import pulls zod + libphonenumber-js.
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageSkeleton } from '@/components/ui/Skeleton';
+import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
+import { Badge } from '@/components/ui/Badge';
 import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
@@ -25,7 +40,8 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { useIsDemoUser } from '@/features/demo';
 import type { Page, EcommerceStore } from '@jawab24/shared';
-import { useWorkspaceRole } from '@/hooks';
+// Direct import, NOT the '@/hooks' barrel — public page.
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import type { NextPageWithLayout } from './_app';
 
 /* ------------------------------------------------------------------ */

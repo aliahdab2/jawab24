@@ -2,7 +2,11 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
-import { BrandLogo, Button } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports) — public
+// page. The barrel reaches '@jawab24/shared', which is CommonJS and cannot
+// be tree-shaken, so one named import pulls zod + libphonenumber-js.
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { Button } from '@/components/ui/Button';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from 'lucide-react';
 import { isRTLLocale } from '@/utils/locale';

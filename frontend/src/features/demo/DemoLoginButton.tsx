@@ -7,7 +7,9 @@
 
 import clsx from 'clsx';
 import { Play } from 'lucide-react';
-import { Button } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — this renders on the
+// public login page. See components/layout/DashboardLayout.tsx.
+import { Button } from '@/components/ui/Button';
 import { useTranslations } from 'next-intl';
 import { useDemoMode } from './useDemoMode';
 

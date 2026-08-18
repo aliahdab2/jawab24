@@ -7,7 +7,11 @@ import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
-import { useBodyScrollLock, useNotificationPoller } from '@/hooks';
+// Direct imports, NOT the '@/hooks' barrel (53 re-exports): the bell is
+// mounted by DashboardLayout, which also serves the public pricing page, and
+// the barrel pulls usePostReplySetup -> the whole Post Reply feature with it.
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useNotificationPoller } from '@/hooks/useNotificationPoller';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 import { NotificationFilterPills } from '../notifications/NotificationFilterPills';

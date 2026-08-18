@@ -3,7 +3,11 @@ import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports) — public
+// page. The barrel reaches '@jawab24/shared', which is CommonJS and cannot
+// be tree-shaken, so one named import pulls zod + libphonenumber-js.
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';

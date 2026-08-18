@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import clsx from 'clsx';
-import { Card } from '@/components/ui';
+// Direct import, NOT the '@/components/ui' barrel — reached from public
+// /integrations. See components/layout/PublicLayout.tsx.
+import { Card } from '@/components/ui/Card';
 
 /**
  * Compact KPI tile for analytics dashboards.

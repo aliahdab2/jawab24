@@ -3,7 +3,15 @@ import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, ConfirmationModal, UpgradeCTA } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports). This is
+// the paid-ads landing page, so its bundle is the first thing a bought click
+// waits on. The barrel reaches FeedSnippet/FlagTag/CtaButtonPill ->
+// '@jawab24/shared', which is CommonJS and cannot be tree-shaken: one named
+// import pulls zod + libphonenumber-js. Same fix as the landing (#810).
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
+import { UpgradeCTA } from '@/components/ui/UpgradeCTA';
 import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';

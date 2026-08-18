@@ -4,7 +4,13 @@ import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
-import { BrandLogo, Button, VersionBadge } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports). This is the
+// layout for every public content page (blog, contact, privacy, terms, …), so
+// the barrel put FeedSnippet/FlagTag/CtaButtonPill -> '@jawab24/shared'
+// (CommonJS, not tree-shakeable => zod + libphonenumber-js) on all of them.
+import { BrandLogo } from '@/components/ui/BrandLogo';
+import { Button } from '@/components/ui/Button';
+import { VersionBadge } from '@/components/ui/VersionBadge';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { getNextLocale } from '@/utils/locale';
 // Direct import, not the '@/hooks' barrel — PublicLayout ships to every public

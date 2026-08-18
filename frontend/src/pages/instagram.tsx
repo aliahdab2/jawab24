@@ -3,7 +3,10 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { InstagramIcon } from '@/components/ui';
+// Direct imports, NOT the '@/components/ui' barrel (43 re-exports) — public
+// page. The barrel reaches '@jawab24/shared', which is CommonJS and cannot
+// be tree-shaken, so one named import pulls zod + libphonenumber-js.
+import { InstagramIcon } from '@/components/ui/BrandIcons';
 import { isRTLLocale } from '@/utils/locale';
 
 /**
