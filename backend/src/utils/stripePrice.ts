@@ -42,24 +42,39 @@ export function resolveStripePriceForInterval(
     return { ok: true, billingInterval, stripePriceId: plan.stripePriceId };
 }
 
+/** Shape of a Stripe price, narrowed to what adoption matching needs. */
+interface AdoptablePrice {
+    id: string;
+    unit_amount: number | null;
+    currency: string;
+    recurring?: { interval: string } | null;
+}
+
 /**
- * The idempotency core of scripts/create-yearly-prices.ts: among a product's
- * existing prices, the one that can serve as the plan's yearly price — same
- * yearly interval, exact advertised amount, same currency. Adopting a match
- * instead of creating lets the script re-run safely after a partial failure
+ * The idempotency core of the price-creation scripts: among a product's
+ * existing prices, the one that can serve as the plan's price for a given
+ * interval — same interval, exact advertised amount, same currency. Adopting a
+ * match instead of creating lets a script re-run safely after a partial failure
  * (price created, DB write missed) and coexist with hand-made Dashboard prices.
  */
-export function findAdoptableYearlyPrice<
-    T extends {
-        id: string;
-        unit_amount: number | null;
-        currency: string;
-        recurring?: { interval: string } | null;
-    },
->(prices: T[], yearlyAmount: number, currency: string): T | undefined {
+export function findAdoptablePrice<T extends AdoptablePrice>(
+    prices: T[],
+    amount: number,
+    currency: string,
+    interval: BillingInterval,
+): T | undefined {
     return prices.find(
-        p => p.recurring?.interval === 'year'
-            && p.unit_amount === yearlyAmount
+        p => p.recurring?.interval === interval
+            && p.unit_amount === amount
             && p.currency === currency,
     );
+}
+
+/** Yearly specialisation — the original name, kept for existing callers. */
+export function findAdoptableYearlyPrice<T extends AdoptablePrice>(
+    prices: T[],
+    yearlyAmount: number,
+    currency: string,
+): T | undefined {
+    return findAdoptablePrice(prices, yearlyAmount, currency, 'year');
 }
