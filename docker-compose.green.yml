@@ -20,6 +20,14 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme_in_production}
       - AI_SERVICE_URL=http://ai-worker-green:3002
+      # Internal, colour-scoped like AI_SERVICE_URL above. It MUST live here
+      # rather than in env/backend.env: that file is shared by both overlays,
+      # so a colour baked into it is right on one deploy and silently wrong on
+      # the next — revalidation would POST at the idle container and every
+      # plan write would look successful while the pricing page stayed stale.
+      # Not routed through nginx: nginx sends /api/* to the BACKEND, so the
+      # public https://jawab24.com/api/revalidate never reaches Next.js.
+      - FRONTEND_REVALIDATE_URL=http://frontend-green:3001/api/revalidate
     depends_on:
       postgres:
         condition: service_healthy
