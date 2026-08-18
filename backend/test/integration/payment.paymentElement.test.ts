@@ -25,6 +25,7 @@
  * PE-4 — invoice.payment_succeeded adopts an unlinked row (production sequence)
  * PE-5 — Replay is idempotent
  * PE-6 — Missed webhook entirely: the reconciliation sweep heals it
+ * PE-7 — `active` with an unpaid latest invoice must not be adopted
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -50,6 +51,17 @@ vi.mock('../../src/services/stripe', () => ({
         findOrCreateCustomer: vi.fn().mockResolvedValue('cus_pe_test'),
         createSubscriptionIntent: vi.fn(),
         getSubscription: vi.fn(),
+        // Adoption refuses to write a period until it has seen the latest
+        // invoice PAID (#818) — Stripe advances the period an hour before it
+        // degrades the status, so `active` alone would buy an unpaid month.
+        // These scenarios are all "the merchant actually paid"; PE-7 overrides
+        // this with an open invoice.
+        getSubscriptionWithLatestInvoice: vi.fn().mockImplementation(async (id: string) => ({
+            id,
+            object: 'subscription',
+            status: 'active',
+            latest_invoice: { id: `in_${id}`, status: 'paid' },
+        })),
         listSubscriptions: vi.fn().mockResolvedValue([]),
         createCheckoutSession: vi.fn(),
         cancelSubscriptionImmediately: vi.fn().mockResolvedValue({}),
@@ -354,5 +366,32 @@ describe('PE-6 — Webhook never arrives at all', () => {
         expect(second.healed).toBe(0);
         expect(second.alreadyLinked).toBe(1);
         expect(await userSubs(user.id)).toHaveLength(1);
+    });
+});
+
+describe('PE-7 — Active is not proof of payment', () => {
+    // The 2026-08-13 incident, from the merchant's side: Stripe advanced the
+    // period when it CREATED the renewal invoice and only degraded the status
+    // ~1h later when the charge failed. Adopting inside that hour writes both
+    // the period AND the quota window, i.e. hands out a month nobody paid for.
+    it('refuses to adopt an active subscription whose latest invoice is open', async () => {
+        const user = await createTestUser({ email: 'pe.unpaid@example.com' });
+        const plan = await createPlan();
+        await createSignupTrialRow(user.id, plan.id);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscriptionWithLatestInvoice).mockResolvedValueOnce({
+            id: 'sub_pe_unpaid',
+            object: 'subscription',
+            status: 'active',
+            latest_invoice: { id: 'in_pe_unpaid', status: 'open', amount_paid: 0 },
+        } as any);
+
+        await handleSubscriptionUpdated(peSub('sub_pe_unpaid', user.id, plan.id), mockReq());
+
+        const subs = await userSubs(user.id);
+        expect(subs).toHaveLength(1);
+        expect(subs[0].externalSubscriptionId).toBeNull();
+        expect(subs[0].status).toBe('trialing');
     });
 });

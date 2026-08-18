@@ -16,17 +16,25 @@
  * This file removes the mock. A genuinely signed `customer.subscription.updated`
  * goes in at the HTTP entry point; the assertion is on the merchant's row.
  *
- * No Stripe network access is needed — signing uses the local webhook secret.
+ * No Stripe network access is needed: signing uses the local webhook secret,
+ * and the one outbound call adoption makes is stubbed (see below).
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { createTestUser, testDb } from './setup';
 import * as schema from '../../src/db/schema';
 
-// NOTHING is mocked here — this is the whole path.
+// NOTHING on the path is mocked — this is the whole path.
 import { paymentController } from '../../src/controllers/payment';
+// The one exception, and it is OFF the path: adoption fetches the expanded
+// latest invoice from Stripe before it will write a period (#818). There is no
+// Stripe to call here — STRIPE_SECRET_KEY is a dummy — so the real method would
+// issue a live request to api.stripe.com and fail on auth. It is stubbed per
+// test, exactly as the dunning integration suite does. Transport, dispatch,
+// handler and DB all stay real.
+import { stripeService } from '../../src/services/stripe';
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET as string;
 const stripe = new Stripe('sk_test_dummy', { apiVersion: '2023-10-16' });
@@ -116,7 +124,7 @@ async function userSubs(userId: string) {
         .where(eq(schema.subscriptions.userId, userId));
 }
 
-describe('Stripe webhook → dispatcher → handler → DB (nothing mocked)', () => {
+describe('Stripe webhook → dispatcher → handler → DB (no mock on the path)', () => {
     let userId: string;
     let planId: string;
 
@@ -125,6 +133,19 @@ describe('Stripe webhook → dispatcher → handler → DB (nothing mocked)', ()
         userId = user.id;
         planId = (await createPlan()).id;
         await testDb.delete(schema.stripeWebhookEvents);
+
+        vi.spyOn(stripeService, 'getSubscriptionWithLatestInvoice').mockImplementation(
+            async (id: string) => ({
+                id,
+                object: 'subscription',
+                status: 'active',
+                latest_invoice: { id: `in_${id}`, status: 'paid' },
+            } as unknown as Stripe.Response<Stripe.Subscription>),
+        );
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     // THE regression, from the outside in. A merchant pays; Stripe POSTs this.
