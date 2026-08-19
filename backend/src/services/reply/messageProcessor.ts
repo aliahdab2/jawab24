@@ -805,7 +805,7 @@ export class MessageProcessor {
                     { senderName: senderName || senderId, reason: 'held_low_confidence' },
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
-                // Same reasoning as the 12c hold above: withholding OUR reply must not
+                // Same reasoning as the 12c-bis hold above: withholding OUR reply must not
                 // discard THEIR lead. The shared capture lives downstream of this return,
                 // so a held message's volunteered phone/name would otherwise be lost —
                 // measured in prod 2026-08-19, 3 held messages carried a number and none
