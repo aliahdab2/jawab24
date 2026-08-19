@@ -49,6 +49,7 @@ import enSubscription  from './en/subscription.json';
 import enPostSuggestions from './en/postSuggestions.json';
 import enTeam          from './en/team.json';
 import enTerms         from './en/terms.json';
+import enTrust         from './en/trust.json';
 import enTestSmartReply from './en/testSmartReply.json';
 import enTime          from './en/time.json';
 import enZid           from './en/zid.json';
@@ -105,6 +106,7 @@ import arSubscription  from './ar/subscription.json';
 import arPostSuggestions from './ar/postSuggestions.json';
 import arTeam          from './ar/team.json';
 import arTerms         from './ar/terms.json';
+import arTrust         from './ar/trust.json';
 import arTestSmartReply from './ar/testSmartReply.json';
 import arTime          from './ar/time.json';
 import arZid           from './ar/zid.json';
@@ -165,6 +167,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/postSuggestions': enPostSuggestions, 'ar/postSuggestions': arPostSuggestions,
   'en/team': enTeam,             'ar/team': arTeam,
   'en/terms': enTerms,           'ar/terms': arTerms,
+  'en/trust': enTrust,           'ar/trust': arTrust,
   'en/testSmartReply': enTestSmartReply, 'ar/testSmartReply': arTestSmartReply,
   'en/time': enTime,             'ar/time': arTime,
   'en/zid': enZid,               'ar/zid': arZid,

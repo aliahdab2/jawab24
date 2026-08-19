@@ -87,6 +87,10 @@ const CONSISTENT_CLAIMS = new Map([
   ['AI model', /gpt-[\w.-]+/gi],
   ['free-trial length', /(\d+)-day free trial/gi],
   ['dialect family count', /(\d+) (?:Arabic )?dialect families/gi],
+  // No capture group: the whole match is compared, so the percentage AND the
+  // window must agree. A refreshed measurement has to be applied to both files
+  // in the same edit, which is the drift this check exists to prevent.
+  ['uptime figure', /[\d.]+% uptime measured over \d+ days/gi],
 ]);
 
 /** Normalise a claim for comparison: case-insensitive, whitespace-collapsed. */
