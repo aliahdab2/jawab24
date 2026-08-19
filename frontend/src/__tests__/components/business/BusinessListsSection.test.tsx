@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
@@ -34,6 +34,9 @@ const PAGE = 'page-1';
  *  splits by comparison with today, exactly like the fixture's relative slots. */
 const future = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
 const past = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+/** Retired, but more recently than `past` — so a set holding both reports the
+ *  later one as its last announced date. */
+const recentPast = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
 
 /** Two collections shaped like the real pilot page: an un-keyed price list and
  *  a keyed schedule list that both talk about the same courses. */
@@ -1021,6 +1024,128 @@ describe('BusinessListsSection', () => {
     });
   });
 
+  describe('an item whose own dates ran out is reported — the list-level notice cannot see it', () => {
+    /** The measured production shape (page 39aeab89, 2026-08-20): the schedule
+     *  list still holds live dates, so it reports NOTHING, while most of the
+     *  courses inside it have gone dark one by one. 18 of 23 there. */
+    const partlyDarkSlots = () => slotCollection({
+      rowCount: 4,
+      rows: [
+        // ICDL: two cohorts, both passed → dark.
+        {
+          id: 'icdl-1', name: 'دورة ICDL', price: null, currency: null,
+          attributes: [{ label: 'الدورة', value: 'ICDL' }],
+          startsAt: past, endsAt: past, isAvailable: true,
+        },
+        {
+          id: 'icdl-2', name: 'دورة ICDL', price: null, currency: null,
+          attributes: [{ label: 'الدورة', value: 'ICDL' }],
+          startsAt: recentPast, endsAt: recentPast, isAvailable: true,
+        },
+        // Makeup: still has an upcoming cohort → the LIST is not "ended".
+        {
+          id: 'makeup-live', name: 'دورة المكياج', price: null, currency: null,
+          attributes: [{ label: 'الدورة', value: 'مكياج' }],
+          startsAt: future, endsAt: future, isAvailable: true,
+        },
+      ],
+    });
+
+    const pricesForBoth = () => priceCollection({
+      rowCount: 2,
+      rows: [
+        {
+          id: 'price-icdl', name: 'دورة ICDL', price: '35000.00', currency: 'ل.س قديمة',
+          attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+        },
+        {
+          id: 'price-makeup', name: 'دورة المكياج', price: '35000.00', currency: 'ل.س قديمة',
+          attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+        },
+      ],
+    });
+
+    it('names the item, the list and the last date — while the list itself stays silent', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [pricesForBoth(), partlyDarkSlots()] },
+      } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      // The list-level sentences must NOT fire: the schedule still has a live date.
+      expect(notice.textContent).not.toContain(en.lists.datesEnded.split('«')[0].trim());
+      // The item-level one must, naming the course that went dark.
+      expect(notice.textContent).toContain('دورة ICDL');
+      expect(notice.textContent).toContain('مواعيد الدورات المعلنة');
+      expect(notice.textContent).toContain(en.lists.itemDatesEndedAction);
+      // …and only the dark one. The course with an upcoming cohort is not news.
+      expect(notice.textContent).not.toContain('دورة المكياج');
+    });
+
+    it('says nothing about an item whose dates ran out long ago — this reports a CHANGE', async () => {
+      const longAgo = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
+      const stale = slotCollection({
+        rowCount: 2,
+        rows: [
+          {
+            id: 'icdl-old', name: 'دورة ICDL', price: null, currency: null,
+            attributes: [{ label: 'الدورة', value: 'ICDL' }],
+            startsAt: longAgo, endsAt: longAgo, isAvailable: true,
+          },
+          {
+            id: 'makeup-live', name: 'دورة المكياج', price: null, currency: null,
+            attributes: [{ label: 'الدورة', value: 'مكياج' }],
+            startsAt: future, endsAt: future, isAvailable: true,
+          },
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [pricesForBoth(), stale] },
+      } as any);
+      renderSection();
+
+      await screen.findByText('أسعار الدورات');
+      // A permanent «this has no upcoming date» line is the badge that was
+      // deleted in August, in paragraph form. Outside the window, silence.
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('the open card no longer claims «nothing added yet» about dates that expired', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [pricesForBoth(), partlyDarkSlots()] },
+      } as any);
+      renderSection();
+      await openCard('دورة ICDL');
+
+      expect(await screen.findByText(
+        en.lists.tierDatesEnded.replace('{list}', 'مواعيد الدورات المعلنة'),
+      )).toBeInTheDocument();
+      expect(screen.queryByText(
+        en.lists.tierGap.replace('{list}', 'مواعيد الدورات المعلنة'),
+      )).toBeNull();
+    });
+
+    it('keeps «nothing added yet» for an item that genuinely never had a date', async () => {
+      const onlyMakeupScheduled = slotCollection({
+        rowCount: 1,
+        rows: [{
+          id: 'makeup-live', name: 'دورة المكياج', price: null, currency: null,
+          attributes: [{ label: 'الدورة', value: 'مكياج' }],
+          startsAt: future, endsAt: future, isAvailable: true,
+        }],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [pricesForBoth(), onlyMakeupScheduled] },
+      } as any);
+      renderSection();
+      await openCard('دورة ICDL');
+
+      expect(await screen.findByText(
+        en.lists.tierGap.replace('{list}', 'مواعيد الدورات المعلنة'),
+      )).toBeInTheDocument();
+    });
+  });
+
   describe('the freshness notice only says what the data supports', () => {
     /** THE PRODUCTION SHAPE, page 39aeab89 on 2026-08-19: the price list held
      *  50 rows of which exactly ONE carried a date, and it had passed — while
@@ -1052,13 +1177,13 @@ describe('BusinessListsSection', () => {
       // The whole sentence, so the false one cannot merely be absent while the
       // true one is subtly wrong: the singular ICU branch, filled from the real
       // copy, is the only thing this notice may say.
-      expect(notice.textContent?.trim()).toBe(
+      expect(within(notice).getByText(
         en.lists.datesRowsRetired
           .replace(/^.*?one \{/, '')
           .replace(/\} other \{.*$/, '')
           .replace('{names}', 'دورة المكياج او التجميل (الميك أب)')
           .replace('{list}', 'أسعار الدورات'),
-      );
+      )).toBeInTheDocument();
     });
 
     it('bounds a long tail of retired strays without under-reporting the count', async () => {
@@ -1088,9 +1213,9 @@ describe('BusinessListsSection', () => {
       // substring assertion would have noticed.
       const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', en.lists.namesMore]
         .join(en.lists.namesSeparator);
-      expect(notice.textContent?.trim()).toBe(
+      expect(within(notice).getByText(
         `7 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
-      );
+      )).toBeInTheDocument();
     });
 
     it('prints the sixth name rather than folding one row into a plural «others»', async () => {
@@ -1115,9 +1240,9 @@ describe('BusinessListsSection', () => {
       const notice = await screen.findByRole('status');
       const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', 'عرض 5']
         .join(en.lists.namesSeparator);
-      expect(notice.textContent?.trim()).toBe(
+      expect(within(notice).getByText(
         `6 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
-      );
+      )).toBeInTheDocument();
     });
 
     it('still warns when a real SCHEDULE has run out — the majority rule is all that changed', async () => {
@@ -1130,9 +1255,9 @@ describe('BusinessListsSection', () => {
       renderSection();
 
       const notice = await screen.findByRole('status');
-      expect(notice.textContent?.trim()).toBe(
+      expect(within(notice).getByText(
         en.lists.datesEnded.replace('{list}', 'مواعيد الدورات المعلنة'),
-      );
+      )).toBeInTheDocument();
     });
   });
 });

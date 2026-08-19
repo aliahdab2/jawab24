@@ -14,6 +14,7 @@ import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
   sessionValueKind, sectionKeyGroups, sectionPartitionLabel, sectionNameGroups, datedListFreshness,
+  datedRowsState, retiredRecently,
   type FactListSection, type FactEntityUnit, type DatedListFreshness,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
@@ -26,6 +27,12 @@ import { ListLabelSheet } from './ListLabelSheet';
  *  falls back to «وغيرها». The plural still carries the exact total, so the
  *  cap shortens the sentence without ever under-reporting the count. */
 const MAX_NAMED_RETIRED_ROWS = 5;
+
+/** How many items that recently went dark the page names before it falls back
+ *  to a count. Three, because these lines sit above the content a merchant came
+ *  to read — the signal has to be visible without becoming the page. The
+ *  overflow line carries the exact remainder, so nothing is hidden silently. */
+const MAX_DARK_ITEM_LINES = 3;
 
 interface BusinessListsSectionProps {
   pageId: string;
@@ -159,6 +166,49 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
         ),
     [collections, today],
   );
+  /**
+   * Items whose announced dates have ALL passed, recently enough to still be
+   * news — the per-ITEM counterpart to `staleLists`, and the gap that made this
+   * whole area worth revisiting: a list can hold live dates (so it reports
+   * nothing) while most of the items inside it have gone dark individually. On
+   * the pilot page that was 18 of 23 courses, with nothing anywhere saying so.
+   *
+   * Reported as a TRANSITION, not a state. «this item has no upcoming date» is
+   * permanent, can never clear, and decays into furniture — which is exactly
+   * why the «لا تواريخ» badge was deleted from 28 of 39 cards on 2026-08-11.
+   * «the last announced date was 12 August» names something that CHANGED, and
+   * ages out of the window on its own.
+   *
+   * Scoped per (item, dated collection) so the sentence can name the list the
+   * merchant has to go and edit. A list already reporting `ended`/`ending` is
+   * skipped — the list-level notice above says it better, once, for all of them.
+   */
+  const darkItems = useMemo(() => {
+    const spokenFor = new Set(staleLists.map((e) => e.collection.id));
+    const out: { key: string; item: string; list: string; lastDate: string }[] = [];
+    for (const group of groups) {
+      const byCollection = new Map<string, { collection: FactCollectionWithRows; rows: FactRowDto[] }>();
+      for (const r of group.rows) {
+        if (!isDatedCollection(r.collection) || spokenFor.has(r.collection.id)) continue;
+        const bucket = byCollection.get(r.collection.id);
+        if (bucket) bucket.rows.push(r.row);
+        else byCollection.set(r.collection.id, { collection: r.collection, rows: [r.row] });
+      }
+      for (const { collection, rows } of byCollection.values()) {
+        const state = datedRowsState(rows, today);
+        if (state.state !== 'retired' || !retiredRecently(state.lastDate, today)) continue;
+        out.push({
+          key: `${group.key}:${collection.id}`,
+          item: group.title,
+          list: collection.label,
+          lastDate: state.lastDate,
+        });
+      }
+    }
+    // Most recently dark first — the ones a merchant can still act on in time.
+    return out.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [groups, staleLists, today]);
+
   /**
    * ONE sentence, the only one a merchant needs before the content: these
    * lists are quoted verbatim to customers.
@@ -821,7 +871,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
           both layouts, because a list has no card of its own in the
           entity-card one — and this must not depend on which layout the
           page's data happened to select. */}
-      {staleLists.length > 0 && (
+      {(staleLists.length > 0 || darkItems.length > 0) && (
         <div className="mt-3 space-y-1.5" role="status">
           {staleLists.map(({ collection, freshness }) => (
             <p
@@ -861,6 +911,29 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               })}
             </p>
           ))}
+          {/* Per-ITEM lines, after the per-list ones: a list that has run out
+              says so once, above, and its items must not repeat it. Facts
+              first, then ONE instruction — N repetitions of the same remedy is
+              how a signal turns into wallpaper. */}
+          {darkItems.slice(0, MAX_DARK_ITEM_LINES).map((d) => (
+            <p key={d.key} className="rounded-xl border px-3 py-2 text-xs alert-warning" dir="auto">
+              {t('lists.itemDatesEnded', {
+                item: d.item,
+                list: d.list,
+                date: formatPlainDate(d.lastDate, intlLocale) ?? d.lastDate,
+              })}
+            </p>
+          ))}
+          {darkItems.length > MAX_DARK_ITEM_LINES && (
+            <p className="px-3 text-xs text-muted-foreground" dir="auto">
+              {t('lists.itemDatesEndedMore', { count: darkItems.length - MAX_DARK_ITEM_LINES })}
+            </p>
+          )}
+          {darkItems.length > 0 && (
+            <p className="px-3 text-xs text-muted-foreground" dir="auto">
+              {t('lists.itemDatesEndedAction')}
+            </p>
+          )}
         </div>
       )}
 
@@ -1449,7 +1522,16 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                       const baseSection = block.base ? sectionOf(block.base.collection.id) : null;
                       const liveSessions = block.sessions.filter((r) => !isExpired(r.row));
                       const showSessions = liveSessions.length > 0 || (expanded && block.sessions.length > 0);
-                      const showGapHint = !gapHintShown && block.base && datedCollection && liveSessions.length === 0;
+                      // THE SAME predicate the page-level lines use. The old
+                      // test was `liveSessions.length === 0`, which is true both
+                      // for a block that never had a session and for one whose
+                      // sessions have all retired — so every dark course was
+                      // told «لا شيء مضاف بعد» about a list the merchant had
+                      // filled with dated rows. Absence and expiry are different
+                      // facts and get different sentences.
+                      const sessionState = datedRowsState(block.sessions.map((r) => r.row), today);
+                      const showGapHint = !gapHintShown && !!block.base && !!datedCollection
+                        && sessionState.state !== 'live';
                       if (showGapHint) gapHintShown = true;
                       return (
                         <div key={block.base?.row.id ?? `tier-${bi}`} className={bi > 0 ? 'border-t border-theme-border' : ''}>
@@ -1480,7 +1562,14 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
                           {showGapHint && (
                             <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2">
                               <span className="text-xs text-muted-foreground" dir="auto">
-                                {t('lists.tierGap', { list: datedCollection?.label ?? '' })}
+                                {sessionState.state === 'retired'
+                                  ? t('lists.tierDatesEnded', {
+                                      // The block's OWN collection, not the page's first
+                                      // dated one — with two dated lists the hint would
+                                      // otherwise name the wrong one.
+                                      list: block.sessions[0]?.collection.label ?? datedCollection?.label ?? '',
+                                    })
+                                  : t('lists.tierGap', { list: datedCollection?.label ?? '' })}
                               </span>
                             </div>
                           )}

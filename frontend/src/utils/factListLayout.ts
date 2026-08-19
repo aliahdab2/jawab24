@@ -394,6 +394,76 @@ export function datedListFreshness(
     : null;
 }
 
+/**
+ * How long after an item's dates run out the page still says so. Thirty days,
+ * and the number is a judgement call worth stating: this signal reports a
+ * TRANSITION, so it has to stay visible long enough for the merchant to see it
+ * at all. The pilot page's whole schedule was authored in ONE sitting and then
+ * retires over about five weeks — a fortnight's window can therefore open and
+ * close entirely between two visits, which is precisely the silence this
+ * exists to break. The cap on rendered lines keeps density constant whatever
+ * the window is, so a longer window costs a number in one overflow sentence,
+ * not a longer page.
+ */
+export const DATED_ENTITY_RECENT_DAYS = 30;
+
+/** What a set of rows says about its own dates.
+ *
+ *  `noRows` — the scope is empty, so there is nothing here to have dates.
+ *  `live` — at least one row is still being quoted to customers. `retired` —
+ *  rows carried dates, every one has passed, and `lastDate` is the day the last
+ *  of them did.
+ *
+ *  There is deliberately no fourth "has rows but none dated" case: `isRowLive`
+ *  keeps an undated row forever, so any non-empty scope holding one is `live`.
+ *  A first draft of this type called the empty case `neverDated` and its own
+ *  test disproved it — worth keeping in the name, because the distinction the
+ *  callers make is «this block never had a session» vs «its sessions expired»,
+ *  and the first of those IS the empty scope.
+ *
+ *  THE POINT OF THIS TYPE is that `neverDated` and `retired` are different
+ *  facts, and the codebase kept losing the difference. Three surfaces on
+ *  /business decided an item's status by filtering rows to the live ones and
+ *  asking whether the result was empty — the list banner (fixed in D-086), the
+ *  entity-card date badge, and the card's gap hint — and an empty result cannot
+ *  distinguish "never announced" from "announced and expired". So the badge
+ *  rendered nothing for a course whose five cohorts had all passed, and the
+ *  gap hint told the merchant «لا شيء مضاف بعد» about a list they had filled
+ *  with 46 dated rows. Once the retired rows are dropped at the top of a render
+ *  site, writing the wrong sentence there is the natural thing to do — three
+ *  separate times, it was. Derive the state ONCE, as a value; let each surface
+ *  choose its own words. */
+export type DatedRowsState =
+  | { state: 'noRows' }
+  | { state: 'live' }
+  | { state: 'retired'; lastDate: string };
+
+/**
+ * The one predicate. `rows` is whatever scope the caller cares about — one
+ * block's sessions, one entity's rows inside one collection, a whole list —
+ * and the answer means the same thing at every scope.
+ *
+ * An undated row counts as LIVE, not as "never dated": `isRowLive` keeps it
+ * forever, so it is still being quoted, and an item holding «تبدأ عند اكتمال
+ * العدد» has not gone dark just because its cohorts have.
+ */
+export function datedRowsState(rows: FactRowDto[], todayIso: string): DatedRowsState {
+  if (rows.some((r) => isRowLive(r, todayIso))) return { state: 'live' };
+  let lastDate: string | null = null;
+  for (const r of rows) {
+    const anchor = retiringAnchor(r);
+    if (anchor !== null && (lastDate === null || anchor > lastDate)) lastDate = anchor;
+  }
+  return lastDate === null ? { state: 'noRows' } : { state: 'retired', lastDate };
+}
+
+/** Whether a retired item is recent enough to still be worth a page-level line.
+ *  Same window for every caller, so the page and the card cannot disagree about
+ *  what "recently" means. */
+export function retiredRecently(lastDate: string, todayIso: string): boolean {
+  return lastDate >= isoPlusDays(todayIso, -DATED_ENTITY_RECENT_DAYS);
+}
+
 /** `YYYY-MM-DD` + n days, in UTC so a DST boundary can never shift the result
  *  by a day. Both columns are plain calendar dates, never instants. */
 function isoPlusDays(iso: string, days: number): string {
