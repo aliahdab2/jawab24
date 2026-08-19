@@ -1081,18 +1081,42 @@ describe('BusinessListsSection', () => {
       renderSection();
 
       const notice = await screen.findByRole('status');
-      // Assert the WHOLE rendered sentence, built from the real copy. An
-      // earlier version checked `toHaveTextContent('7')`, which the fixture's
-      // own «17 rows» satisfies — so the count could have been wired to
-      // `collection.rows.length` and the test would not have noticed.
+      // The WHOLE sentence, built from the real copy, compared with `toBe`.
+      // `toHaveTextContent` is a SUBSTRING matcher, so an expected «7 rows …»
+      // passes against a rendered «17 rows …» — and this fixture has 17 rows,
+      // so the count could have been wired to `collection.rows.length` and no
+      // substring assertion would have noticed.
       const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', en.lists.namesMore]
         .join(en.lists.namesSeparator);
-      // textContent compared WHOLE, not toHaveTextContent — that matcher is a
-      // substring test, so an expected «7 rows …» passes against a rendered
-      // «17 rows …» and the fixture has 17 rows. The count could be wired to
-      // `collection.rows.length` and a substring assertion would not notice.
       expect(notice.textContent?.trim()).toBe(
         `7 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
+      );
+    });
+
+    it('prints the sixth name rather than folding one row into a plural «others»', async () => {
+      // Truncating at exactly one hidden row would say «and others» of a single
+      // row. The sixth name is cheaper than the lie.
+      const six = priceCollection({
+        rowCount: 16,
+        rows: [
+          ...Array.from({ length: 10 }, (_, i) => ({
+            id: `p${i}`, name: `دورة ${i}`, price: '35000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+          })),
+          ...Array.from({ length: 6 }, (_, i) => ({
+            id: `promo${i}`, name: `عرض ${i}`, price: '20000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: past, endsAt: null, isAvailable: true,
+          })),
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [six] } } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', 'عرض 5']
+        .join(en.lists.namesSeparator);
+      expect(notice.textContent?.trim()).toBe(
+        `6 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
       );
     });
 

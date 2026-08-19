@@ -63,8 +63,15 @@ const argsFor = (raw: string, n: number): Record<string, unknown> => {
     return args;
 };
 
-/** 0 and 1 catch the explicit-`=0` and `one` branches; the rest exercise `other`. */
-const COUNTS = [0, 1, 2, 3, 11, 100];
+/**
+ * 0 and 1 catch the explicit-`=0` and `one` branches; the rest exercise
+ * `other`. 4500 and 10000 are not padding: `pricing.featureAiReplies` renders
+ * at exactly those values (`LandingPricing.tsx`, `pricing.tsx`), production
+ * formats `#` with the locale's number format — «4,500 Smart Replies» — and a
+ * corpus that stopped at 100 certified agreement over precisely the range
+ * where no separator is needed.
+ */
+const COUNTS = [0, 1, 2, 3, 11, 100, 4500, 10000];
 
 describe('the vitest next-intl mock renders what production renders', () => {
     it('has a corpus to check — an empty glob would make every assertion below vacuous', () => {
@@ -113,7 +120,28 @@ describe('resolveICUPlural — the shapes the corpus does not currently contain'
     });
 
     it('does not treat a category word inside a branch body as a branch', () => {
+        // At count 1 the `one` branch matches first and short-circuits, so the
+        // bug cannot fire — this asserts at count 5, where selection actually
+        // has to look past a body containing the literal text `other {`.
         const raw = '{count, plural, one {the other {thing}} other {many}}';
+        expect(resolveICUPlural(raw, { count: 5 })).toBe('many');
         expect(resolveICUPlural(raw, { count: 1 })).toBe('the other {thing}');
+    });
+
+    it('binds # to the NEAREST plural, not the outer one', () => {
+        // Production: «2 pages of 4». Replacing the outer count across the whole
+        // selected body before resolving the nested plural gives «4 pages of 4».
+        const raw = '{count, plural, other {{limit, plural, one {# page} other {# pages}} of #}}';
+        expect(resolveICUPlural(raw, { count: 4, limit: 2 })).toBe('2 pages of 4');
+    });
+
+    it('formats # with the locale number format', () => {
+        const raw = '{count, plural, one {# Smart Reply} other {# Smart Replies}}';
+        expect(resolveICUPlural(raw, { count: 4500 })).toBe('4,500 Smart Replies');
+    });
+
+    it('resolves EVERY plural block in a message, not just the first', () => {
+        const raw = '{a, plural, other {# in}} and {b, plural, other {# out}}';
+        expect(resolveICUPlural(raw, { a: 2, b: 3 })).toBe('2 in and 3 out');
     });
 });

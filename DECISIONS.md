@@ -1971,11 +1971,14 @@ the any-row rule. Two predicates answering "is this a schedule?" differently is 
 single row make a claim about 50.
 
 **What is deliberately NOT changed.** A genuine schedule that runs out still says so
-list-wide (`ended` / `ending`, 3-day window, D-057 unchanged). There is no `ending`
-counterpart for stray rows — one row about to retire is not a list running out. Retired
-strays are named in full, never truncated to a head: this state only reaches a MINORITY of
-a non-schedule list, and a cap would either lie about the count or hide the row the
-merchant must go fix.
+list-wide (`ended`, 3-day `ending` window, D-057 unchanged).
+
+Retired strays are named up to a cap of five, then «وغيرها» — and the ICU plural still
+carries the EXACT total, so the sentence shortens without ever under-reporting what went
+dark. (An earlier draft of this ruling claimed they are "named in full, never truncated",
+which the same commit contradicted by shipping the cap; the cap is right and the sentence
+was wrong. The truncation only engages when it hides at least two names — folding exactly
+one row into a plural «others» would be false English.)
 
 **Two things a first draft got wrong, both caught in adversarial self-review before
 merge.** (1) It ALSO widened `isDatedCollection` — the LAYOUT predicate — to the retiring

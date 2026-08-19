@@ -4,7 +4,7 @@
  * Its own module, not a private corner of `setup.ts`, for one reason: it can be
  * tested. `setup.ts` runs `vi.mock` at module scope, so importing it from a
  * test would re-arm every mock in the suite — which is exactly why this code
- * went unverified long enough to ship four silently-wrong messages.
+ * went unverified long enough to ship several silently-wrong messages.
  * `icuPlural.test.ts` now checks it against the real `intl-messageformat`, the
  * formatter production actually uses, over every plural-bearing EN message in
  * the repo.
@@ -13,35 +13,46 @@
 /**
  * Resolve ICU plural format: "{count, plural, one {# item} other {# items}}".
  *
- * Brace-BALANCED, not a single-level regex. Branch bodies routinely carry
- * their own placeholders — «{count, plural, one {«{list}» and its # row…}}» —
- * and a `[^{}]`-based pattern silently fails to match those, leaving the raw
- * ICU string in the DOM. It renders as plausible-looking text, so an assertion
- * on it passes or fails for the wrong reason instead of erroring; four shipped
- * messages were already in that state when this was found (2026-08-19).
- * Production next-intl handles the nesting, so the mock must too.
+ * Four things this has to get right, every one of which was wrong at some point
+ * and every one of which fails as PLAUSIBLE TEXT rather than as an error — so a
+ * test asserting on the output passes or fails for reasons unrelated to the
+ * code under test. That is the whole hazard of this file.
+ *
+ *  1. BRACE-BALANCED, not a single-level regex. Branch bodies routinely carry
+ *     their own placeholders — «one {«{list}» and its # row}» — and a `[^{}]`
+ *     pattern cannot match those, leaving raw ICU in the DOM (four shipped
+ *     messages were in that state).
+ *  2. An EXPLICIT `=N` branch wins over the locale category. Seven messages use
+ *     `=0 {No products yet}`, and `Intl.PluralRules('en').select(0)` is
+ *     'other', so category-only selection rendered «0 products».
+ *  3. Branches are read SEQUENTIALLY at the top level of the case list, never
+ *     by searching the whole string for `<form> {`. A body containing the word
+ *     "other" followed by a brace would otherwise be mistaken for the `other`
+ *     branch.
+ *  4. `#` binds to the NEAREST enclosing plural and is formatted with the
+ *     locale's number format. Production renders «4,500 Smart Replies», not
+ *     «4500», and «2 pages of 4», not «4 pages of 4».
  */
 export function resolveICUPlural(str: string, params: Record<string, unknown>): string {
-  const opener = /\{(\w+),\s*plural\s*,/;
-  // Each pass consumes exactly one plural block, so a body that itself holds a
-  // nested plural is resolved by the next pass and the loop still terminates.
-  for (let m = opener.exec(str); m; m = opener.exec(str)) {
-    const end = matchingBrace(str, m.index);
-    if (end === -1) break;
-    const cases = str.slice(m.index + m[0].length, end);
-    const count = Number(params[m[1]] ?? 0);
-    // ICU matches an EXPLICIT `=N` branch BEFORE consulting the locale's plural
-    // rules, and seven shipped messages use `=0 {No products yet}` for their
-    // empty state. Selecting by category alone rendered «0 products» in tests
-    // while production rendered «No products yet» — measured against
-    // intl-messageformat over every plural-bearing EN message (2026-08-20).
-    const body = pluralBranch(cases, `=${count}`)
-      ?? pluralBranch(cases, new Intl.PluralRules('en').select(count))
-      ?? pluralBranch(cases, 'other')
-      ?? String(count);
-    str = str.slice(0, m.index) + body.replace(/#/g, String(count)) + str.slice(end + 1);
-  }
-  return str;
+  const m = /\{(\w+),\s*plural\s*,/.exec(str);
+  if (!m) return str;
+  const end = matchingBrace(str, m.index);
+  if (end === -1) return str; // malformed — leave it alone rather than hang
+
+  const count = Number(params[m[1]] ?? 0);
+  const branches = pluralBranches(str.slice(m.index + m[0].length, end));
+  const body =
+    branches.get(`=${count}`)
+    ?? branches.get(new Intl.PluralRules('en').select(count))
+    ?? branches.get('other')
+    ?? String(count);
+
+  // Nested plurals first, so their own `#` is already bound to their own count
+  // before this level claims whatever `#` remains.
+  const resolved = resolveICUPlural(body, params)
+    .replace(/#/g, new Intl.NumberFormat('en').format(count));
+
+  return str.slice(0, m.index) + resolved + resolveICUPlural(str.slice(end + 1), params);
 }
 
 /** Index of the `}` closing the `{` at `open`, or -1 when unbalanced. */
@@ -54,14 +65,26 @@ function matchingBrace(str: string, open: number): number {
   return -1;
 }
 
-/** The body of one `<form> {…}` branch, brace-balanced so a body containing
- *  «{list}» is returned whole rather than truncated at its first `}`. `form` is
- *  escaped because it can be an explicit selector (`=0`, and `=1.5` carries a
- *  regex metacharacter). */
-function pluralBranch(cases: string, form: string): string | undefined {
-  const at = new RegExp(`(?:^|[\\s}])${form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{`).exec(cases);
-  if (!at) return undefined;
-  const open = at.index + at[0].length - 1;
-  const end = matchingBrace(cases, open);
-  return end === -1 ? undefined : cases.slice(open + 1, end).trim();
+/**
+ * The `selector -> body` pairs of one plural's case list, read left to right at
+ * the TOP level only. A body is taken by brace matching, so a body that itself
+ * contains `other {…}` is consumed whole instead of being mistaken for the next
+ * branch.
+ */
+function pluralBranches(cases: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let i = 0;
+  while (i < cases.length) {
+    while (i < cases.length && /\s/.test(cases[i])) i++;
+    const start = i;
+    while (i < cases.length && !/[\s{]/.test(cases[i])) i++;
+    const selector = cases.slice(start, i);
+    while (i < cases.length && /\s/.test(cases[i])) i++;
+    if (cases[i] !== '{') break;
+    const close = matchingBrace(cases, i);
+    if (close === -1) break;
+    if (selector && !out.has(selector)) out.set(selector, cases.slice(i + 1, close));
+    i = close + 1;
+  }
+  return out;
 }

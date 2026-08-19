@@ -851,10 +851,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
               {freshness.state === 'rowsRetired' && t('lists.datesRowsRetired', {
                 list: collection.label,
                 count: freshness.names.length,
-                names: [
-                  ...freshness.names.slice(0, MAX_NAMED_RETIRED_ROWS),
-                  ...(freshness.names.length > MAX_NAMED_RETIRED_ROWS ? [t('lists.namesMore')] : []),
-                ].join(t('lists.namesSeparator')),
+                names: (freshness.names.length > MAX_NAMED_RETIRED_ROWS + 1
+                  // Truncate only when it hides at least TWO names — folding a
+                  // single row into a plural «وغيرها» is false English, and
+                  // printing the sixth name costs less than the lie.
+                  ? [...freshness.names.slice(0, MAX_NAMED_RETIRED_ROWS), t('lists.namesMore')]
+                  : freshness.names
+                ).join(t('lists.namesSeparator')),
               })}
             </p>
           ))}
