@@ -66,6 +66,83 @@ describe('serializeListPage — GET /pages payload', () => {
     });
 
     /**
+     * The profile is dropped, so the list must answer the ONE question its
+     * consumer has about it: can info mode route a customer anywhere? Gated by
+     * `isFieldAuthoritative` exactly as `formatBusinessInfoPrompt` gates the
+     * Phones line — an unconfirmed Facebook number is NOT a channel, because the
+     * prompt will not publish it. Measured on prod 2026-08-20: that distinction
+     * is the difference between 17 pages and 7.
+     */
+    it('replaces the profile with a hasContactChannel boolean', () => {
+        // No phones, no WhatsApp → nothing to route to.
+        expect((serializeListPage(makeRow()) as Record<string, unknown>).hasContactChannel).toBe(false);
+
+        // A merchant-typed phone → routable.
+        const typed = serializeListPage(makeRow({
+            businessProfile: { merchant: { phones: [{ number: '0111222333' }] } },
+        })) as Record<string, unknown>;
+        expect(typed.hasContactChannel).toBe(true);
+
+        // The same number, but synced from Facebook and never confirmed. The
+        // prompt omits it, so the card must not promise it either — this is the
+        // case that made 10 of 17 prod pages fail the predicate.
+        const fbSynced = serializeListPage(makeRow({
+            businessProfile: {
+                merchant: { phones: [{ number: '0111222333' }] },
+                merchantProvenance: { phones: { source: 'fb_sync' } },
+            },
+        })) as Record<string, unknown>;
+        expect(fbSynced.hasContactChannel).toBe(false);
+
+        // WhatsApp alone is a channel too.
+        const wa = serializeListPage(makeRow({
+            businessProfile: { merchant: { channels: { whatsapp: ['0999888777'] } } },
+        })) as Record<string, unknown>;
+        expect(wa.hasContactChannel).toBe(true);
+
+        // A row with no profile at all must not throw.
+        expect((serializeListPage(makeRow({ businessProfile: null })) as Record<string, unknown>)
+            .hasContactChannel).toBe(false);
+
+        // Email is a channel INFO-DESK routes to (the prompt publishes it beside
+        // WhatsApp), so a page whose only contact is an email must not be told it
+        // has none.
+        const emailOnly = serializeListPage(makeRow({
+            businessProfile: { merchant: { email: 'hi@shop.com' } },
+        })) as Record<string, unknown>;
+        expect(emailOnly.hasContactChannel).toBe(true);
+    });
+
+    /**
+     * ⚠️ SHARED-INFRA GUARD. `business_profile` is schemaless jsonb with four
+     * writers, and since D-087 this serializer looks INSIDE it on every
+     * pages-list request. A value that makes the predicate throw does not cost
+     * one page its warning — it 500s `GET /pages` for the whole workspace, which
+     * is the dashboard, settings, the inbox pickers and the leads picker at once.
+     * Prod on 2026-08-20 held 0 such rows across all 134; "unreached" is not
+     * "impossible".
+     */
+    it('survives every malformed profile shape the column can hold', () => {
+        const shapes: unknown[] = [
+            { merchant: { phones: '0911000210' } },   // a bare STRING — used to throw on .map
+            { merchant: { phones: 42 } },
+            { merchant: { phones: { number: '09' } } },
+            { merchant: { phone: 42 } },
+            { merchant: { channels: 'whatsapp' } },
+            { merchant: 'text' },
+            { merchantProvenance: 'text' },
+            'text',
+            42,
+            [],
+        ];
+        for (const businessProfile of shapes) {
+            expect(() => serializeListPage(makeRow({ businessProfile }))).not.toThrow();
+            expect((serializeListPage(makeRow({ businessProfile })) as Record<string, unknown>)
+                .hasContactChannel).toBe(false);
+        }
+    });
+
+    /**
      * ⚠️ The highest-risk regression in this change. `ReplyStyleCard` reads
      * `p.replyMode` and `p.brandVoiceNotesMulti` off EVERY page in the list to
      * render its per-page override markers. Dropping either one blanks those
@@ -106,6 +183,7 @@ describe('serializeListPage — GET /pages payload', () => {
             'brandVoiceNotesMulti',
             'ecommerceStoreId',
             'facebookPageId',
+            'hasContactChannel',
             'id',
             'instagramDirect',
             'instagramDirectConnected',

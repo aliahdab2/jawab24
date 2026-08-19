@@ -6,7 +6,8 @@ import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/w
 import { ROLE_HIERARCHY } from '../utils/roles';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import type { WorkspaceRole } from '@jawab24/shared';
-import { isWorkspaceSettingsKey } from '@jawab24/shared';
+import { isWorkspaceSettingsKey, UpdateSettingsSchema } from '@jawab24/shared';
+import { validateSchema } from '../utils/validation';
 import { captureError } from '../utils/sentryHelpers';
 // Lead-config sanitizers are shared with the per-page override path
 // (PATCH /pages/:id/lead-config) so validation stays identical on both.
@@ -305,6 +306,49 @@ async function updateSettings(request: WorkspaceRequest, reply: FastifyReply) {
                 return reply.status(400).send({ error: true, message: 'Invalid leadFields config' });
             }
             updates.leadFields = sanitized;
+        }
+        // VALUES, not just key names. This route writes the JSONB the reply
+        // pipeline actually reads (messageProcessor / commentProcessor load
+        // workspace settings, not the per-user `settings` row), and the filter
+        // above only checks that a key is spellable — so an enum could arrive as
+        // any string, a number as a string, a 10 000-character persona. Nothing
+        // downstream crashed (resolveEffectiveReplyMode degrades an unknown mode
+        // to 'sales', the prompt stringifies whatever it gets), which is the
+        // problem: the merchant sets something, no error comes back, and the
+        // pipeline quietly ignores it.
+        //
+        // Validated with the SAME schema `PUT /settings` uses, so the two write
+        // paths into one store cannot drift. Only the keys the schema declares
+        // are handed to it — `leadStages` / `leadFields` are absent from it and
+        // keep the dedicated sanitizers above (which do more than shape-check),
+        // and the schema is `.strict()`, so passing them would reject the save.
+        const schemaKeys = new Set(Object.keys(UpdateSettingsSchema.shape));
+        const schemaSubset = Object.fromEntries(
+            Object.entries(updates).filter(([key]) => schemaKeys.has(key)),
+        );
+        if (Object.keys(schemaSubset).length > 0) {
+            // Zod treats an explicit `undefined` as "absent" on an .optional()
+            // field, so it would pass — and then `{ ...current, replyMode:
+            // undefined }` CLEARS a stored value on the way into the JSONB
+            // (JSON.stringify drops undefined keys). No JSON body can express
+            // undefined, so a key carrying it is a client bug, not an intent to
+            // clear; say so rather than silently wiping the setting.
+            const undefinedKey = Object.keys(schemaSubset)
+                .find((key) => schemaSubset[key] === undefined);
+            if (undefinedKey) {
+                return reply.status(400).send({
+                    error: true,
+                    message: `${undefinedKey} was sent with no value — omit the key to leave it unchanged`,
+                });
+            }
+            const validation = validateSchema(UpdateSettingsSchema, schemaSubset);
+            if (!validation.success) {
+                return reply.status(400).send({
+                    error: true,
+                    message: 'Invalid settings value',
+                    details: validation.errors,
+                });
+            }
         }
         const settings = await workspaceSettingsService.updateSettings((request as ResolvedWorkspaceRequest).workspaceId, updates);
         return reply.send(settings);

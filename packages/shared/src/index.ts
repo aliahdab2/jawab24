@@ -455,6 +455,15 @@ export interface Page {
   // Business profile
   businessProfile?: BusinessProfile;
   businessProfileUpdatedAt?: string | Date | null;
+  /**
+   * "Will BUSINESS_INFO publish a phone or WhatsApp for this page?" — computed
+   * server-side with the shared `hasRoutableContactChannel` predicate and
+   * returned by the LIST endpoint, which drops the profile the caller would
+   * otherwise need to answer it. Absent on single-page reads, which carry
+   * `businessProfile` itself. Read by the reply-mode control: 'info' tells the
+   * assistant to route instead of asking, so a page with no channel dead-ends.
+   */
+  hasContactChannel?: boolean;
   // Per-page overrides of the workspace lead config. null/absent = inherit the
   // workspace's settings.leadStages / settings.leadFields. Set = full replacement
   // for this page (see resolveEffectiveLeadStages / resolveEffectiveLeadFields).
@@ -535,6 +544,8 @@ export type PageListItem = Omit<
 > & {
   /** Server-computed replacement for the text; always present on this shape. */
   kbFilled: boolean;
+  /** Server-computed replacement for the profile; always present on this shape. */
+  hasContactChannel: boolean;
 };
 
 /**
@@ -1930,6 +1941,22 @@ export type ReplyMode = 'sales' | 'info';
 
 export const REPLY_MODES: readonly ReplyMode[] = ['sales', 'info'] as const;
 
+/**
+ * Narrow an unknown/stored value to a ReplyMode. THE one place the enum's
+ * members are spelled for a membership test — nine hand-written variants of
+ * `x === 'sales' || x === 'info'` had accumulated across the card, the
+ * controllers and the settings mappers by GA (D-087), so adding a third mode
+ * would have meant finding all nine.
+ */
+export function isReplyMode(value: unknown): value is ReplyMode {
+  return value === 'sales' || value === 'info';
+}
+
+/** A stored value narrowed to a mode, or `'sales'` when it is absent/unknown. */
+export function toReplyMode(value: unknown): ReplyMode {
+  return isReplyMode(value) ? value : 'sales';
+}
+
 export function resolveEffectiveReplyMode(
   pageOverride: ReplyMode | string | null | undefined,
   workspaceDefault: ReplyMode | string | undefined,
@@ -2123,7 +2150,7 @@ export function isWorkspaceSettingsKey(key: string): key is keyof WorkspaceSetti
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
-export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative } from './businessInfoPrompt';
+export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative, hasRoutableContactChannel } from './businessInfoPrompt';
 // --- Merchant contact standard: number + optional free-text description ---
 export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
 export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';

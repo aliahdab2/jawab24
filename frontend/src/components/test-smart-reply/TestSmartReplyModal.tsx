@@ -34,9 +34,18 @@ interface TestSmartReplyModalProps {
    *  onboarding checklist, so trying a reply is one click). The modal remounts
    *  per open, so this seeds initial state cleanly. Omit for a blank box. */
   initialQuestion?: string;
+  /**
+   * Generate with this reply mode instead of the one stored for the page.
+   * Passed by the settings card when the merchant has picked a mode but not
+   * saved it yet: without it the test would answer with the SAVED mode while
+   * the new option sits selected on screen — the same "my choice had no effect"
+   * defect the unsaved-persona gate exists to prevent. Omit to let the server
+   * resolve page pin → workspace default, exactly as production does.
+   */
+  replyMode?: 'sales' | 'info';
 }
 
-export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmartReplyModalProps) {
+export function TestSmartReplyModal({ page, onClose, initialQuestion, replyMode }: TestSmartReplyModalProps) {
   const t = useTranslations('testSmartReply');
   const tCommon = useTranslations('common');
   const locale = useLocale();
@@ -116,6 +125,7 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmar
         channel,
         ...(channel === 'comment' && postContext.trim() ? { postMessage: postContext.trim() } : {}),
         ...(conversationHistory && conversationHistory.length > 0 ? { conversationHistory } : {}),
+        ...(replyMode ? { replyMode } : {}),
       });
 
       const result = data.data;

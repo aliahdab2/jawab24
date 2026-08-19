@@ -2025,3 +2025,75 @@ of the three test weaknesses found later were of the same kind: `toHaveTextConte
 SUBSTRING matcher, so an expected «7 rows …» passes against a rendered «17 rows …», and the
 first attempt at strengthening it repeated the mistake. Notice assertions now compare
 `textContent` whole.
+---
+
+## D-087 · Reply modes go GA; the control ships to everyone, the mode is turned on for nobody (2026-08-20, owner-approved)
+
+**Ruling.** The D-085 pilot allowlist is DELETED from code — `config.replyMode.workspaceIds`
+(backend) and `REPLY_MODE_WORKSPACE_IDS` / `isReplyModeVisible` (frontend). Every workspace
+now sees the assistant-type question. This ships the CONTROL, not the mode: every stored
+value is `'sales'` or NULL and `resolveEffectiveReplyMode` falls back to `'sales'`, so no
+merchant's replies change until they choose. GA is a code deletion, never an env flip —
+the reverse (emptying the var) was fail-closed by design and is now unreachable.
+
+**Evidence.** Pilot 2026-08-17 → 08-20 on two real pages (Shahin Resort, الفريق الدمشقي)
+plus three low-volume ones: **469 DM + 86 comment AI replies, 0 contact-asks, 0 callback
+promises, 0 demo-phone leaks**, against sales baselines of 15 asks + 7 promises / 1354
+replies and 50 asks + 2 promises / 1000 replies on the same predicate (the eval's own
+`CONTACT_ASK_PHRASES` / `CALLBACK_PROMISE_PHRASES`). Expected ~13 asks at the pooled
+baseline rate; observed 0 (Poisson P≈6e-7). Callback promises are NOT settled (λ=2.1,
+P=0.12) and the comment surface has a zero sales baseline, so neither is claimed.
+
+**The bound the pilot does NOT license.** Both measured pages belong to merchants who asked
+for the feature, and both publish a phone. That is not the fleet. INFO-DESK ends «If no
+channel is on file, be honest you don't have one and stop», so a page with no publishable
+phone or WhatsApp gets a mode that neither asks nor routes — a dead end for a buying
+customer. Measured on prod 2026-08-20: **7 of 36 live pages** pass
+`hasRoutableContactChannel`; 10 of the 17 that store phones fail because the number is
+`fb_sync` and unconfirmed, which `formatBusinessInfoPrompt` refuses to publish.
+
+**Therefore the control WARNS and does not BLOCK.** The card shows the count of governed
+pages with no channel, in the mode's own words, and lets the merchant proceed: a phone
+published only in KB free text is invisible to the predicate, and refusing a mode on a
+guess we know to be incomplete is worse than stating what we found. Rejected: blocking the
+flip (paternalistic, wrong on KB-only pages); silently allowing it (the dead end is the
+single most likely GA complaint); auto-promoting `fb_sync` phones to authoritative (that
+gate exists because unconfirmed Facebook values were overriding merchant-typed KB facts —
+D-010's contract, not this PR's to relax).
+
+**Also in this PR, all found by the GA audit rather than by the feature work.** (a) `PUT
+/workspaces/current/settings` wrote `replyMode` into the JSONB the reply pipeline actually
+reads with no enum validation — its allowlist checks key NAMES only. Now 400s. (b) The
+`PUT /settings` workspace-mismatch guard covered `'info'` only; widened to both modes,
+because after GA the likelier mistake is turning info OFF on the wrong workspace. (c) The
+Test button blocked on ANY unsaved change, so the only way to see what info mode does was
+to save it live on every page; the mode now travels to the playground as an explicit,
+never-persisted override, while every other unsaved field still blocks.
+
+**Not touched, deliberately:** `PROMPT_VERSION` stays `v67` (the INFO-DESK block is
+appended per-call inside an `if`, so sales prompts remain byte-identical and no
+semantic-cache entry is retired — Rule 17.1), the `rm:` cache segment, and the INFO-DESK
+prompt text itself. Leads-tab hiding stays unbuilt.
+
+**⚠️ "Generally available" is WEB-ONLY until the next app release.** `capacitor.config.ts`
+sets `webDir: 'out'` and only points `server.url` at a host when `CAP_SERVER_URL` is set
+(dev), so a production mobile build serves a BAKED static export — the deleted
+`isReplyModeVisible` allowlist is compiled into every installed Android/iOS build and keeps
+hiding the control there. Nothing breaks (the backend accepts the write from any workspace,
+and no merchant's replies change either way); the control is simply absent on phones until a
+new app build ships. Same class as the `NEXT_PUBLIC` build-arg gap: a server env var cannot
+reach a baked bundle. GA on mobile = the next release, not this deploy.
+
+**Known, and deliberately NOT fixed here — the settings sync target.**
+`syncPipelineFieldsToWorkspace` resolves its destination via `resolveWorkspaceId`, which
+takes the user's FIRST membership (`.limit(1)`, unordered), not the workspace the request
+resolved. So for a multi-membership user, tone / persona / away / greeting already sync to a
+possibly-wrong workspace with no guard at all; this PR's guard covers `replyMode` only.
+Widening the guard would 403 their ordinary saves, and the real fix — threading the request's
+workspace into `settingsService.updateSettings` — crosses the path every merchant's every
+settings save takes, so it needs its own PR under the shared-infrastructure rule. Measured
+2026-08-20: **3 of 85 users have more than one membership, maximum 2 each.**
+
+**Post-GA measurement owed:** re-run the eval-phrase ask/promise query weekly across every
+effective-`info` page — the pilot measured pages WE chose; the point of GA is that
+merchants choose next.

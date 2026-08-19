@@ -10,8 +10,6 @@ import { validateSchema } from '../utils/validation';
 import { translateText, generateNudgeVariations } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 import { auditLog } from '../services/auditLog';
-import { config } from '../config';
-
 import { t } from '../utils/i18n';
 
 /** Default messages restored when the source language is cleared (matches frontend i18n) */
@@ -100,28 +98,23 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Reply-mode allowlist pilot: 'info' is gated at the WRITE path only.
-            // The gate must hold on the workspace the write actually LANDS on:
-            // syncPipelineFieldsToWorkspace resolves its target from the user's
-            // membership (resolveWorkspaceId), which for a multi-membership user
-            // can differ from the request's resolved workspace — so resolve with
-            // the SAME resolver and refuse on disagreement (finding H3).
-            // Fail-closed: no empty-list GA escape — GA is deleting this gate in
-            // code, never emptying an env var (finding H4).
-            if (updates.replyMode === 'info') {
+            // Reply mode must be written to the workspace the merchant is
+            // LOOKING at. syncPipelineFieldsToWorkspace resolves its target from
+            // the user's membership (resolveWorkspaceId), which for a
+            // multi-membership user can differ from the request's resolved
+            // workspace — so resolve with the SAME resolver and refuse on
+            // disagreement (finding H3). Kept and WIDENED past the D-085
+            // allowlist pilot: turning info OFF on the wrong workspace is the
+            // same defect as turning it on, and at GA it is the likelier one —
+            // an agency flipping a mode back would otherwise silently restore
+            // lead-capture asks on another merchant's pages.
+            if (updates.replyMode === 'info' || updates.replyMode === 'sales') {
                 const wsId = (request as WorkspaceRequest).workspaceId;
                 const writeTargetId = await settingsService.resolveWriteTargetWorkspaceId(userId);
                 if (!wsId || !writeTargetId || writeTargetId !== wsId) {
                     return reply.status(403).send({
-                        error: 'Reply mode \'info\' cannot be enabled from this session: the settings write would land on a different workspace than this request resolved',
+                        error: 'Reply mode cannot be changed from this session: the settings write would land on a different workspace than this request resolved',
                         code: 'REPLY_MODE_WORKSPACE_MISMATCH',
-                    });
-                }
-                const allowlist = config.replyMode.workspaceIds;
-                if (!allowlist.includes(writeTargetId)) {
-                    return reply.status(403).send({
-                        error: 'Reply mode \'info\' is not enabled for this workspace',
-                        code: 'REPLY_MODE_NOT_ENABLED',
                     });
                 }
             }

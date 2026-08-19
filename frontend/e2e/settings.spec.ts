@@ -442,8 +442,10 @@ test.describe('Settings Page', () => {
  * the section is invisible for any other workspace — a spec that forgets the
  * seed passes by asserting on nothing.
  */
-test.describe('Settings — reply mode (pilot workspace)', () => {
-  const ALLOWED_WS = 'd06ed500-74ea-42ee-bff6-37bee2cf412a'; // frontend flag default (InMedia)
+test.describe('Settings — reply mode', () => {
+  // Any workspace id will do since D-087 removed the allowlist — this one is
+  // kept only so the seeded session looks like a real one.
+  const ALLOWED_WS = 'd06ed500-74ea-42ee-bff6-37bee2cf412a';
   const TWO_PAGES = [
     { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
     { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
@@ -483,7 +485,7 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
         if (opts.patchStatus && opts.patchStatus >= 400) {
           return route.fulfill({
             status: opts.patchStatus, contentType: 'application/json',
-            body: JSON.stringify({ error: 'nope', code: opts.patchCode ?? 'REPLY_MODE_NOT_ENABLED' }),
+            body: JSON.stringify({ error: 'nope', code: opts.patchCode ?? 'REPLY_MODE_WORKSPACE_MISMATCH' }),
           });
         }
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], ...(route.request().postDataJSON() as object) }) });
@@ -493,7 +495,7 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
         if (opts.putStatus && opts.putStatus >= 400) {
           return route.fulfill({
             status: opts.putStatus, contentType: 'application/json',
-            body: JSON.stringify({ error: 'nope', code: opts.putCode ?? 'REPLY_MODE_NOT_ENABLED' }),
+            body: JSON.stringify({ error: 'nope', code: opts.putCode ?? 'REPLY_MODE_WORKSPACE_MISMATCH' }),
           });
         }
         // Echo what was actually saved. Answering 'info' to a request that
@@ -585,14 +587,17 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
 
   test('WORKSPACE scope: a 403 names the reason instead of a generic error', async ({ page }) => {
     await page.addInitScript(seed, { wsId: ALLOWED_WS });
-    await routeMocks(page, undefined, { putStatus: 403, putCode: 'REPLY_MODE_NOT_ENABLED' });
+    // The allowlist 403 is gone with the gate (D-087). The guard that survives
+    // is the workspace MISMATCH — a multi-membership session whose settings
+    // write would land on a different workspace than the request resolved.
+    await routeMocks(page, undefined, { putStatus: 403, putCode: 'REPLY_MODE_WORKSPACE_MISMATCH' });
 
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
     await page.getByRole('radio', { name: INFO_RADIO }).click();
     await saveBar(page).getByRole('button').first().click();
 
-    await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('settings.replyMode.workspaceMismatch'))).toBeVisible({ timeout: 15000 });
   });
 
   test('PAGE scope: the instant save CONFIRMS itself and shows no Save bar', async ({ page }) => {
@@ -617,14 +622,14 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
 
   test('PAGE scope: a failed PATCH rolls the choice back and explains why', async ({ page }) => {
     await page.addInitScript(seed, { wsId: ALLOWED_WS });
-    await routeMocks(page, undefined, { patchStatus: 403, patchCode: 'REPLY_MODE_NOT_ENABLED' });
+    await routeMocks(page, undefined, { patchStatus: 500 });
 
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
     await openPageScope(page);
     await page.getByRole('radio', { name: INFO_RADIO }).click();
 
-    await expect(page.getByText(t('settings.replyMode.notEnabled'))).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('settings.replyMode.pageUpdateError'))).toBeVisible({ timeout: 15000 });
     // Rolled back: the inherit option is selected again, so the UI never
     // claims a pin the server refused.
     await expect(page.getByRole('radio', { name: INHERIT_RADIO })).toHaveAttribute('aria-checked', 'true');
@@ -649,13 +654,15 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await expect.poll(() => put, { timeout: 15000 }).toMatchObject({ replyStyle: 'casual' });
   });
 
-  test('a workspace outside the allowlist never sees the section', async ({ page }) => {
+  // Inverted at GA (D-087). This is the exact workspace that saw NOTHING under
+  // the pilot allowlist; restore the gate and this test fails.
+  test('a workspace that was never in the pilot sees the section too', async ({ page }) => {
     await page.addInitScript(seed, { wsId: 'some-other-ws' });
     await routeMocks(page);
 
     await page.goto('/en/settings');
     await expect(page.locator('h1').filter({ hasText: t('settings.title') }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(t('settings.replyMode.question'))).toHaveCount(0);
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('every control in the tone row clears the 44px touch floor', async ({ page }) => {

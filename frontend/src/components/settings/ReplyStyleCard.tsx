@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import clsx from 'clsx';
-import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
-import type { Page } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, isReplyMode, toReplyMode } from '@jawab24/shared';
+import type { Page, ReplyMode } from '@jawab24/shared';
 import { Card, InputFieldWrapper, CharCounter, Select, ConfirmationModal } from '@/components/ui';
 import { captureError } from '@/lib/sentryHelpers';
 import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
-import { isReplyModeVisible } from '@/lib/featureFlags';
 import { getLocaleDirection } from '@/utils/locale';
+import { pageContactChannel } from '@/utils/contactChannel';
 import { usePersistedBoolean } from '@/hooks/usePersistedBoolean';
+import { useWorkspaceRole } from '@/hooks';
 import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import { useHintDisplay } from '@/hooks/useHintDisplay';
 import type { SettingsCardProps } from './types';
@@ -60,12 +61,25 @@ interface ReplyStyleCardProps extends SettingsCardProps {
    * that doesn't exist yet.
    */
   savedReplyMode?: 'sales' | 'info';
-  /** Active workspace id — gates the reply-mode section (D-085 pilot). */
-  workspaceId?: string | null;
+  /**
+   * `hasChanges` MINUS the reply mode — i.e. "is anything other than the mode
+   * unsaved?". The Test button blocks on this rather than on `hasChanges`,
+   * because an unsaved MODE is testable: the card sends it to the playground
+   * explicitly (`replyModeOverride`), so the reply the merchant sees is
+   * generated with the option they can see selected. Unsaved persona TEXT is
+   * not testable that way and still blocks. Absent = assume clean.
+   */
+  hasOtherChanges?: boolean;
 }
 
-export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti, savedReplyMode = 'sales', workspaceId }: ReplyStyleCardProps) {
+export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti, savedReplyMode = 'sales' }: ReplyStyleCardProps) {
   const t = useTranslations('settings');
+  // A `member` reaches this card read-only: the page-bottom Save bar is hidden
+  // for them, but the page-scope mode radios have NO save button — they PATCH on
+  // click, so without this a member clicks, the row optimistically flips, the
+  // admin+ route 403s and it flips back under a generic error. Pre-GA only the
+  // two pilot workspaces could hit that; now every workspace can.
+  const { canEdit } = useWorkspaceRole();
   const field = useMultilingualSettingsField(settings.brandVoiceNotesMulti);
   const { currentLang, value, sourceLang } = field;
   // Unlike the message cards, the persona shows a machine translation in place
@@ -180,7 +194,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // — the reply-mode pin (D-085) counts exactly like the persona does: it lives
   // on the row, not the token, so a revoked token must not make the pin
   // invisible and unrevertable while a reconnect silently revives it.
-  const hasRowOverride = (p: Page) => hasOverrideContent(p.brandVoiceNotesMulti) || p.replyMode === 'sales' || p.replyMode === 'info';
+  const hasRowOverride = (p: Page) => hasOverrideContent(p.brandVoiceNotesMulti) || isReplyMode(p.replyMode);
   const switcherPages = pages.filter((p) => p.isConnected !== false || hasRowOverride(p));
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
   const scopedPage = personaScope === 'workspace' ? null : switcherPages.find((p) => p.id === personaScope) ?? null;
@@ -296,11 +310,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // the save.
   const revertPagePersona = () => setConfirmRevert(true);
 
-  // ── Reply mode (D-085) — pilot workspaces only ───────────────────────────
+  // ── Reply mode (D-085, GA per D-087) ─────────────────────────────────────
   // Workspace scope binds settings.replyMode through the page-bottom save
   // (a PIPELINE_FIELDS member — no new save path). A page scope PATCHes
   // immediately (optimistic, rolled back on error), like the lead config.
-  const replyModeEnabled = isReplyModeVisible(workspaceId);
   const modeLabel = (mode: 'sales' | 'info') =>
     t(mode === 'info' ? 'replyMode.infoDesk' : 'replyMode.sales');
   const [pageModeSaving, setPageModeSaving] = useState(false);
@@ -321,10 +334,10 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // doesn't exist yet.
   // The draft workspace mode, narrowed once — two readers (the unsaved-draft
   // guard below and the persona copy further down) must not each re-derive it.
-  const draftWorkspaceMode: 'sales' | 'info' = settings.replyMode === 'info' ? 'info' : 'sales';
+  const draftWorkspaceMode: ReplyMode = toReplyMode(settings.replyMode);
   const workspaceModeDraftUnsaved = draftWorkspaceMode !== savedReplyMode;
-  const scopedPageMode: 'sales' | 'info' | null =
-    scopedPage?.replyMode === 'info' ? 'info' : scopedPage?.replyMode === 'sales' ? 'sales' : null;
+  const scopedPageMode: ReplyMode | null =
+    isReplyMode(scopedPage?.replyMode) ? scopedPage.replyMode : null;
 
   const setWorkspaceMode = (mode: 'sales' | 'info') => {
     if (settings.replyMode !== mode) setSettings({ ...settings, replyMode: mode });
@@ -347,8 +360,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       flashPageModeNotice(t('replyMode.pageSaved'));   // «تم حفظ اختيار هذه الصفحة ✓»
     } catch (err) {
       setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, replyMode: previous } : p)));
-      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
-      setPageModeError(code === 'REPLY_MODE_NOT_ENABLED' ? t('replyMode.notEnabled') : t('replyMode.pageUpdateError'));
+      setPageModeError(t('replyMode.pageUpdateError'));
       captureError(err, 'Failed to save page reply mode', {
         tags: { component: 'ReplyStyleCard' },
         extra: { pageId },
@@ -362,6 +374,32 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // workspace default) — decides whether the quiet-leads note applies.
   const scopedPageEffectiveMode = scopedPageMode ?? savedReplyMode;
 
+  // ── "Info mode has nowhere to send them" warning (D-087) ─────────────────
+  // INFO-DESK forbids asking for the customer's details and routes to a channel
+  // from BUSINESS_INFO instead — «If no channel is on file, be honest you don't
+  // have one and stop». On a page with neither a phone nor a WhatsApp that is a
+  // DEAD END for a customer who wants to buy: no ask, no route. Measured on
+  // prod 2026-08-20, this is the MAJORITY of the fleet — 29 of 36 live pages,
+  // 10 of them because their only number came from Facebook and was never
+  // confirmed, which the BUSINESS_INFO gate discards. So the card must say so
+  // before the merchant picks it, and keep saying it while it is selected.
+  //
+  // Read through `pageContactChannel`, never off the row: it takes EITHER wire
+  // shape (the list's server-computed boolean, or a detail row's profile through
+  // the same shared predicate) and returns `undefined` for "unknown" — a legacy
+  // fat-shape row or a shipped mobile build that predates the field. Unknown must
+  // NOT raise an alarm on a page that may well be fine, hence `=== false`.
+  const lacksChannel = (p: Page | null | undefined) => pageContactChannel(p) === false;
+  // Pages the workspace default actually governs: connected, and not pinned to
+  // their own mode. A pinned page is unaffected by the radio above it.
+  const inheritingPages = pages.filter(
+    (p) => p.isConnected !== false && !isReplyMode(p.replyMode),
+  );
+  const inheritingPagesWithoutChannel = inheritingPages.filter(lacksChannel).length;
+  const showNoChannelWarning = scopedPage
+    ? scopedPageEffectiveMode === 'info' && lacksChannel(scopedPage)
+    : draftWorkspaceMode === 'info' && inheritingPagesWithoutChannel > 0;
+
   // Which mode the PERSONA COPY below should describe. The placeholder used to
   // tell every merchant to write «اطلب اسم العميل ورقمه» — an instruction the
   // ai-worker's INFO-DESK block explicitly overrides ("override any instruction
@@ -372,19 +410,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // Workspace scope follows the DRAFT (the guidance must flip the moment the
   // merchant picks a mode); a page scope follows what that page will run.
   //
-  // ⚠️ Off the allowlist the copy follows the SAVED mode, never a hardcoded
-  // 'sales'. The allowlist gates the WRITE paths only — the reply pipeline
-  // "reads whatever is stored" (backend/docs/SETTINGS.md). So on the documented
-  // rollback path (REPLY_MODE_WORKSPACE_IDS emptied as the kill switch, or a
-  // workspace dropped after the pilot) a stored 'info' KEEPS running INFO-DESK
-  // while its control disappears. Forcing sales copy there would show the
-  // collect-instruction guidance to precisely the merchant whose replies still
-  // reverse it — reintroducing this card's defect on the one path where nobody
-  // is watching. There is no draft to follow without a control, hence the saved
-  // value; a workspace that never set info still resolves to 'sales'.
-  const copyMode: 'sales' | 'info' = scopedPage
-    ? scopedPageEffectiveMode
-    : (replyModeEnabled ? draftWorkspaceMode : savedReplyMode);
+  const copyMode: 'sales' | 'info' = scopedPage ? scopedPageEffectiveMode : draftWorkspaceMode;
   const placeholderKey = copyMode === 'info'
     ? 'replyStyle.brandVoicePlaceholderInfo'
     : 'replyStyle.brandVoicePlaceholder';
@@ -402,7 +428,23 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   // then true for every merchant with a persona, which would disable the button
   // for all of them.
   const testBlockedByPageDraft = !!scopedPage && pageDraftSavable;
-  const testBlocked = hasChanges === true || testBlockedByPageDraft;
+  // ⚠️ `hasOtherChanges`, not `hasChanges`: an unsaved MODE used to disable this
+  // button, so the only way to see what «مصدر معلومات» does to your replies was
+  // to save it live on every page first. The mode is testable without saving —
+  // it travels to the playground as an explicit override below — so it must not
+  // block. Every other unsaved field still does. Falls back to `hasChanges` for
+  // call sites that don't pass the narrower flag (tests, legacy).
+  const testBlocked = (hasOtherChanges ?? hasChanges) === true || testBlockedByPageDraft;
+
+  // The mode to generate the test reply with, when it is NOT what the server
+  // would resolve on its own. Only the workspace draft can diverge (page pins
+  // save immediately), and only for a page that INHERITS it — forcing the draft
+  // onto a pinned page would show the merchant a reply that page will never
+  // produce.
+  const testTarget = scopedPage ?? selectedPage;
+  const testTargetPinned = isReplyMode(testTarget?.replyMode);
+  const testReplyModeOverride: 'sales' | 'info' | undefined =
+    !scopedPage && workspaceModeDraftUnsaved && !testTargetPinned ? draftWorkspaceMode : undefined;
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -489,9 +531,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                       ? t('replyStyle.overriddenOptionDisconnected', { page: p.name ?? '' })
                       : t('replyStyle.overriddenOption', { page: p.name ?? '' }))
                     : p.name ?? '';
-                  const pinnedMode = replyModeEnabled && (p.replyMode === 'sales' || p.replyMode === 'info')
-                    ? (p.replyMode as 'sales' | 'info')
-                    : null;
+                  const pinnedMode = isReplyMode(p.replyMode) ? p.replyMode : null;
                   return {
                     value: p.id,
                     label: pinnedMode ? t('replyMode.pinnedOption', { label: base, mode: modeLabel(pinnedMode) }) : base,
@@ -529,30 +569,31 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             )}
           </div>
         )}
-        {/* Reply-mode question (D-085) — pilot workspaces only. Business
+        {/* Reply-mode question (D-085, generally available per D-087). Business
             question, not a technical term: the merchant picks what the
             assistant DOES with a buying customer. Workspace scope binds
             settings.replyMode (saved by the page-bottom button); a page scope
             PATCHes immediately with an inherit option naming the SAVED
             default. */}
-        {replyModeEnabled && (
-          <div className="mb-3 p-3 rounded-xl border border-theme-border bg-muted/30">
+        <div className="mb-3 p-3 rounded-xl border border-theme-border bg-muted/30">
             <p id="reply-mode-question" className="text-sm font-bold text-foreground mb-2" dir="auto">
               {t('replyMode.question')}
             </p>
             {!scopedPage ? (
               <div role="radiogroup" aria-labelledby="reply-mode-question" className="flex flex-col gap-2">
                 {(['sales', 'info'] as const).map((mode) => {
-                  const selected = (settings.replyMode === 'info' ? 'info' : 'sales') === mode;
+                  const selected = toReplyMode(settings.replyMode) === mode;
                   return (
                     <button
                       key={mode}
                       type="button"
                       role="radio"
                       aria-checked={selected}
+                      disabled={!canEdit}
                       onClick={() => setWorkspaceMode(mode)}
                       className={clsx(
                         'min-h-[44px] w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border text-start transition-colors',
+                        !canEdit && 'opacity-60 cursor-not-allowed',
                         selected
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
                           : 'border-theme-border hover:border-brand-300 dark:hover:border-brand-700',
@@ -584,14 +625,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      disabled={pageModeSaving || workspaceModeDraftUnsaved}
+                      disabled={pageModeSaving || workspaceModeDraftUnsaved || !canEdit}
                       onClick={() => void setPageMode(mode)}
                       className={clsx(
                         'min-h-[44px] w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border text-start transition-colors',
                         selected
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
                           : 'border-theme-border hover:border-brand-300 dark:hover:border-brand-700',
-                        (pageModeSaving || workspaceModeDraftUnsaved) && 'opacity-60 cursor-not-allowed',
+                        (pageModeSaving || workspaceModeDraftUnsaved || !canEdit) && 'opacity-60 cursor-not-allowed',
                       )}
                     >
                       <span className="text-sm font-bold text-foreground">{label}</span>
@@ -617,6 +658,24 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             {((scopedPage && scopedPageEffectiveMode === 'info') || (!scopedPage && settings.replyMode === 'info')) && (
               <p className="mt-1.5 text-[11px] text-muted-foreground" dir="auto">{t('replyMode.infoLeadsNote')}</p>
             )}
+            {/* The dead-end warning. role="status" (not "alert"): it is a
+                consequence of a choice the merchant just made, announced
+                politely — an assertive interrupt on every render of a saved
+                setting would be noise. It never BLOCKS the choice: a merchant
+                may well publish their number in the KB text instead, which this
+                predicate cannot see, and refusing a mode on a guess we know is
+                incomplete is worse than telling them what we found. */}
+            {showNoChannelWarning && (
+              <p
+                role="status"
+                className="mt-1.5 px-2 py-1.5 rounded-lg border alert-warning text-[11px]"
+                dir="auto"
+              >
+                {scopedPage
+                  ? t('replyMode.noChannelPage')
+                  : t('replyMode.noChannelWorkspace', { count: inheritingPagesWithoutChannel })}
+              </p>
+            )}
             {/* Success is announced HERE, next to the control that saved —
                 the persona editor's notice lives further down the card and a
                 merchant who never scrolls there sees nothing at all.
@@ -639,8 +698,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             {pageModeError && (
               <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{pageModeError}</p>
             )}
-          </div>
-        )}
+        </div>
 
         <div className="flex items-center justify-between mb-1.5">
           {/* The htmlFor follows the scope — in page scope the workspace
@@ -908,6 +966,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       {testPage && (
         <TestSmartReplyModal
           page={testPage}
+          replyMode={testReplyModeOverride}
           onClose={() => setTestPage(null)}
         />
       )}

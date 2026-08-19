@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings, workspaceMembers } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, toReplyMode } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
@@ -426,7 +426,7 @@ export class SettingsService {
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
             handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
             replyStyle: (record.replyStyle as 'professional' | 'casual' | 'enthusiastic') || 'professional',
-            replyMode: record.replyMode === 'info' ? 'info' : 'sales',
+            replyMode: toReplyMode(record.replyMode),
             brandVoiceNotes: record.brandVoiceNotes || '',
             brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
             holdLowConfidence: record.holdLowConfidence ?? false,

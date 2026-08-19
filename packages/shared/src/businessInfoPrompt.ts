@@ -118,9 +118,19 @@ function joinAddress(
  *  so the merchant's own line becomes a lead whose call button dials them
  *  (`getBusinessPhones`, the June 2026 incident class). */
 export function businessPhoneEntries(p: BusinessProfile): BusinessPhoneEntry[] {
-    const entries = (p.phones && p.phones.length > 0)
-        ? p.phones
-        : (p.phone && p.phone.trim() !== '' ? [p.phone] : []);
+    // ⚠️ TOTAL over the column, not just over the type. `business_profile` is
+    // schemaless jsonb with four writers (editor, fb_sync, kb_extract, pre-split
+    // legacy), so `phones` can hold something that is not an array. The old
+    // `p.phones && p.phones.length > 0` admitted a bare STRING — length passes,
+    // `.map` then throws — and since D-087 this reader also runs inside
+    // `serializeListPage`, where one bad row would 500 `GET /pages` for the whole
+    // workspace: dashboard, settings, inbox pickers, everything. Behaviour is
+    // unchanged for every well-formed profile; only malformed input, which used
+    // to throw, now falls through to the legacy single `phone`.
+    const list = Array.isArray(p.phones) ? p.phones : [];
+    const entries = list.length > 0
+        ? list
+        : (typeof p.phone === 'string' && p.phone.trim() !== '' ? [p.phone] : []);
 
     return entries
         .map((e) => {
@@ -148,6 +158,44 @@ export function businessPhoneEntries(p: BusinessProfile): BusinessPhoneEntry[] {
  *  working without knowing descriptions exist. */
 export function businessPhoneList(p: BusinessProfile): string[] {
     return businessPhoneEntries(p).map((e) => e.number);
+}
+
+/**
+ * "Can the assistant hand this customer a way to reach the business?" — true
+ * when BUSINESS_INFO will publish a phone or a WhatsApp number for this page.
+ *
+ * ⭐ This is the INFO-DESK precondition. That block (ai-worker promptBuilder,
+ * D-085) forbids asking the customer for their details and instead says «point
+ * them to ONE contact channel from BUSINESS_INFO … If no channel is on file, be
+ * honest you don't have one and stop». On a page with no publishable channel
+ * those two rules leave the assistant with nothing to say to a customer who
+ * wants to buy — it neither asks nor routes. Measured on prod 2026-08-20: of 36
+ * live pages only 7 pass this predicate; 10 of the 17 that store phones fail it
+ * because the number came from `fb_sync` and was never confirmed.
+ *
+ * ⚠️ Gated by the SAME `isFieldAuthoritative` calls `formatBusinessInfoPrompt`
+ * applies to each field (phones at its Phones line, WhatsApp where
+ * `whatsappValue` is derived). Deliberately not a re-derivation: a warning that
+ * disagreed with the prompt would send merchants to fix a page that is already
+ * fine, or clear a page that is not. Change the gate there, change it here.
+ *
+ * Deliberately narrower than `findGroundingSource` (services/businessReadiness):
+ * that answers "can this page answer anything at all", which an address or a KB
+ * satisfies. A customer cannot phone an address.
+ */
+export function hasRoutableContactChannel(
+    p: BusinessProfile | null | undefined,
+    provenance?: MerchantProvenanceMap,
+): boolean {
+    if (!p || typeof p !== 'object') return false;
+    const hasPhone = isFieldAuthoritative(provenance, 'phones') && businessPhoneEntries(p).length > 0;
+    const hasWhatsapp = isFieldAuthoritative(provenance, 'channels') && whatsappNumbers(p).length > 0;
+    // Email counts, and the block says why: `formatBusinessInfoPrompt` publishes
+    // it under the same authority gate, right beside WhatsApp, as one of "the two
+    // contact channels". A page whose only channel is an email would otherwise be
+    // told it has none — while INFO-DESK happily routes the customer to it.
+    const hasEmail = isFieldAuthoritative(provenance, 'email') && !!p.email?.trim();
+    return hasPhone || hasWhatsapp || hasEmail;
 }
 
 /**

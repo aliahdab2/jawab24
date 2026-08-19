@@ -44,14 +44,16 @@
     "infoDesk": "Information source",
     "salesDesc": "Takes their name and phone number so your team can complete the order.",
     "infoDeskDesc": "Answers their questions and points them to your own contact channels — never asks for their details and never promises a callback.",
-    "infoLeadsNote": "When a customer volunteers their number, it is saved to Leads automatically without sending alerts.",
+    "infoLeadsNote": "When a customer volunteers their number, it is saved to Leads automatically — without a push notification. It still appears in Leads and in your notifications.",
     "inherit": "Default ({mode})",
     "pinnedOption": "{label} — {mode}",
     "pageAutoSaves": "This page's choice is saved immediately.",
     "pageSaved": "Saved for this page ✓",
     "saveDefaultFirst": "Save the default first with “Save Settings”, then customize pages.",
     "pageUpdateError": "Couldn't save the choice for this page — please try again.",
-    "notEnabled": "This feature isn't enabled for your account yet."
+    "workspaceMismatch": "Couldn't save the assistant type for this workspace. Reload the page and try again.",
+    "noChannelPage": "This page has no phone or WhatsApp number saved in Business Info, so there is nothing to point a customer to: a customer who wants to buy is neither asked for their details nor given a way to reach you. Add or confirm a number in Business Info.",
+    "noChannelWorkspace": "{count, plural, one {One of your pages has no phone or WhatsApp number in Business Info} other {# of your pages have no phone or WhatsApp number in Business Info}}, so there is nothing to point a customer to. Add or confirm a number in Business Info."
   },
   "replyStyle": {
     "title": "Your assistant",

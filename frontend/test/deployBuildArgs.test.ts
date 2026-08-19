@@ -182,10 +182,6 @@ describe('every NEXT_PUBLIC_* read by the app is a real build input', () => {
     // Documented in featureFlags.ts as a LOCAL-DEV override of the hardcoded
     // pilot list; production is meant to use the built-in list.
     NEXT_PUBLIC_POST_SUGGESTIONS_WORKSPACE_IDS: 'local-dev override by design',
-    // Same pattern (D-085): the InMedia pilot workspace is the built-in
-    // default; the env var exists only to point local dev at another
-    // workspace. GA deletes the gate in code — never flips this var.
-    NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS: 'local-dev override by design',
   };
 
   /** `NEXT_PUBLIC_*` names the Dockerfile puts into the build environment. */
