@@ -166,7 +166,7 @@ Available on Android via Google Play. Features:
 - Webhook signature verification (HMAC) for all integrations
 - Token encryption (AES-256-GCM) for stored credentials
 - Sentry error tracking for reliability monitoring
-- Availability: 99.99% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — public status page: https://stats.uptimerobot.com/ijNBtFf9SC
+- Availability: 99.97% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — the lower-scoring of two monitored endpoints, not their average: 3 incidents totalling 27 minutes — public status page: https://stats.uptimerobot.com/ijNBtFf9SC
 
 ## Pricing
 

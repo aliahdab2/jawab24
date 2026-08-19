@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen } from '../test-utils';
 import TrustPage from '@/pages/trust';
-import { UPTIME_STATS, CHECK_INTERVAL_MINUTES } from '@/data/uptime';
+import { UPTIME_STATS, CHECK_INTERVAL_MINUTES, DOWNTIME_MINUTES } from '@/data/uptime';
 import { loadNamespaces } from '@/i18n/getMessages';
 
 const PUBLIC_DIR = resolve(__dirname, '../../public');
@@ -80,5 +80,35 @@ describe('uptime figure agrees with what we tell AI assistants', () => {
 
     it('derives the check interval from the recorded seconds', () => {
         expect(CHECK_INTERVAL_MINUTES).toBe(UPTIME_STATS.checkIntervalSeconds / 60);
+    });
+});
+
+describe('the published percentage is arithmetically honest', () => {
+    // The consistency tests above would happily agree on a WRONG number. This
+    // one recomputes it from the recorded downtime, so a typo or a mis-read
+    // stats call fails here instead of going live as a trust claim.
+    const windowSeconds = UPTIME_STATS.windowDays * 24 * 60 * 60;
+    const actual = (1 - UPTIME_STATS.downtimeSeconds / windowSeconds) * 100;
+
+    it('matches downtimeSeconds over the window', () => {
+        expect(actual).toBeCloseTo(99.979, 3);
+    });
+
+    it('is rounded DOWN, never up — we may under-claim, never over-claim', () => {
+        const published = Number(UPTIME_STATS.percent);
+        expect(published).toBeLessThanOrEqual(actual);
+        // ...but not so far down that we throw the achievement away.
+        expect(published).toBeGreaterThan(actual - 0.01);
+    });
+
+    it('publishes the worst monitor, so no reader can compute a lower one', () => {
+        // All recorded downtime sits on one monitor; the other had none. The
+        // published figure must therefore equal that worst monitor's uptime,
+        // NOT the account-wide average UptimeRobot reports (99.99%).
+        expect(Number(UPTIME_STATS.percent)).toBeLessThan(99.99);
+    });
+
+    it('states downtime in minutes consistent with the seconds', () => {
+        expect(DOWNTIME_MINUTES).toBe(27);
     });
 });

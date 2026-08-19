@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight, ExternalLink, ShieldCheck, Activity } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
-import { UPTIME_STATS, CHECK_INTERVAL_MINUTES } from '@/data/uptime';
+import { UPTIME_STATS, CHECK_INTERVAL_MINUTES, DOWNTIME_MINUTES } from '@/data/uptime';
 
 /** Used only as the `url` inside the JSON-LD block — the <link rel="canonical">
  *  tag itself is _app.tsx's job. */
@@ -68,8 +68,9 @@ export default function Trust() {
                 name: 'Jawab24 service availability',
                 description:
                   `${UPTIME_STATS.percent}% uptime measured over ${UPTIME_STATS.windowDays} days ` +
-                  `(${UPTIME_STATS.windowStart} to ${UPTIME_STATS.windowEnd}) across ` +
-                  `${UPTIME_STATS.monitors} endpoints, with ${UPTIME_STATS.incidents} recorded incidents. ` +
+                  `(${UPTIME_STATS.windowStart} to ${UPTIME_STATS.windowEnd}), from the lower-scoring ` +
+                  `of ${UPTIME_STATS.monitors} monitored endpoints rather than their average: ` +
+                  `${UPTIME_STATS.incidents} incidents totalling ${DOWNTIME_MINUTES} minutes. ` +
                   `Measured independently by ${UPTIME_STATS.provider}, polling every ` +
                   `${CHECK_INTERVAL_MINUTES} minutes.`,
                 creator: { '@type': 'Organization', name: UPTIME_STATS.provider },
@@ -134,12 +135,19 @@ export default function Trust() {
                   <div>
                     <dt className="sr-only">{t('uptimeHeading')}</dt>
                     <dd className="text-foreground/80">
-                      {t('uptimeMonitors', { count: UPTIME_STATS.monitors })}
+                      {t('uptimeDowntime', { count: DOWNTIME_MINUTES })}
                     </dd>
                   </div>
                 </dl>
 
-                <p className="mt-6 text-sm text-muted-foreground leading-relaxed">
+                {/* Without this, the figure reads as an average across both
+                    monitors — and the reader can compute otherwise from the
+                    status page we ourselves link to. */}
+                <p className="mt-6 text-sm text-foreground/70 leading-relaxed">
+                  {t('uptimeWorstCase')}
+                </p>
+
+                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
                   {t('uptimeProvider', { provider: UPTIME_STATS.provider })}
                 </p>
 
