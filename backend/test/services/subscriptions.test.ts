@@ -1364,6 +1364,35 @@ describe('isSubscriptionActive', () => {
             expect(countSpy).toHaveBeenCalledWith('ws-1');
         });
 
+        /**
+         * The workspace-scoped twin of canUseAiReplies. It exists so an HTTP
+         * surface calls ONE service method instead of composing the resolution
+         * itself — the composition living in the route is what let /limits/ai
+         * and /usage answer for different subjects.
+         */
+        it('canUseAiRepliesForWorkspace answers for the workspace owner, not the caller', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
+            const quotaSpy = vi.spyOn(subscriptionsService, 'canUseAiReplies')
+                .mockResolvedValue({ allowed: true } as never);
+            await mockWorkspaceOwner('owner-1');
+
+            await subscriptionsService.canUseAiRepliesForWorkspace('member-1', 'ws-1');
+
+            expect(quotaSpy).toHaveBeenCalledWith('owner-1');
+            expect(quotaSpy).not.toHaveBeenCalledWith('member-1');
+        });
+
+        it('canUseAiRepliesForWorkspace falls back to the caller when the workspace is unknown', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+            const quotaSpy = vi.spyOn(subscriptionsService, 'canUseAiReplies')
+                .mockResolvedValue({ allowed: false } as never);
+            await mockWorkspaceOwner(null);
+
+            await subscriptionsService.canUseAiRepliesForWorkspace('member-1', 'ws-1');
+
+            expect(quotaSpy).toHaveBeenCalledWith('member-1');
+        });
+
         it('fetches AI usage from owner, not member', async () => {
             vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
             const getUsageSpy = vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);

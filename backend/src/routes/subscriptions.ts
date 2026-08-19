@@ -138,16 +138,13 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             }
 
             try {
-                // Quota belongs to the WORKSPACE, so it is answered for the
-                // workspace's billing subject — not for whoever is logged in. A
-                // team member carrying a leftover trial row from their own
-                // signup would otherwise be told their AI is blocked while the
-                // workspace they are working in is perfectly healthy (and the
-                // reverse, once the workspace lapses).
-                const resolved = req.workspaceId
-                    ? await subscriptionsService.resolveWorkspaceSubscription(userId, req.workspaceId)
-                    : null;
-                const result = await subscriptionsService.canUseAiReplies(resolved?.ownerId ?? userId);
+                // Workspace-scoped: quota belongs to the workspace, not to
+                // whoever is logged in. The resolution lives in the service so
+                // this and /usage cannot drift apart (see
+                // canUseAiRepliesForWorkspace).
+                const result = req.workspaceId
+                    ? await subscriptionsService.canUseAiRepliesForWorkspace(userId, req.workspaceId)
+                    : await subscriptionsService.canUseAiReplies(userId);
 
                 return reply.send({
                     success: true,

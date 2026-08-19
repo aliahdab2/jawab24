@@ -541,6 +541,26 @@ export const subscriptionsService = {
     },
 
     /**
+     * Can this WORKSPACE still use AI replies? The workspace-scoped twin of
+     * `canUseAiReplies`, and the one every HTTP surface should call.
+     *
+     * Quota belongs to the workspace, so it must be answered for the
+     * workspace's billing subject rather than for whoever happens to be logged
+     * in. A team member carrying a leftover trial row from their own signup
+     * would otherwise be told their AI is blocked while the workspace they are
+     * working in is perfectly healthy — and, once that workspace lapses, be
+     * told the opposite.
+     *
+     * Same shape as `getUsageSummary(userId, workspaceId)` so the two
+     * workspace-scoped reads resolve their subject identically and cannot
+     * disagree; the route composing them by hand is what let them drift.
+     */
+    async canUseAiRepliesForWorkspace(userId: string, workspaceId: string): Promise<LimitCheckResult> {
+        const resolved = await this.resolveWorkspaceSubscription(userId, workspaceId);
+        return this.canUseAiReplies(resolved?.ownerId ?? userId);
+    },
+
+    /**
      * Get full usage summary with limits and subscription info
      */
     async getUsageSummary(userId: string, workspaceId: string): Promise<UsageSummary | null> {
