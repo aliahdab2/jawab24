@@ -378,6 +378,8 @@ export async function healStripeSubscriptionPeriod(
         return 'unmapped_status';
     }
 
+    const trialEndsAt = stripeTsToDate(stripeSubscription.trial_end);
+
     // ORDER MATTERS, and it is the reverse of handlePaymentSucceeded's.
     //
     // The paid-through write is what makes this row look repaired, and it is
@@ -420,7 +422,7 @@ export async function healStripeSubscriptionPeriod(
             // `trial_period_days`, so Stripe-managed trialing subscriptions are
             // created today (0 such rows in prod as of 2026-08-19; the next
             // starter checkout through Stripe makes one).
-            trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
+            trialEndsAt,
             updatedAt: new Date(),
         })
         .where(eq(subscriptions.id, local.id));
@@ -436,7 +438,7 @@ export async function healStripeSubscriptionPeriod(
             status: mapping.status,
             previousPeriodEnd: localEnd,
             currentPeriodEnd: periodEnd,
-            trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
+            trialEndsAt,
         },
         'Advanced paid-through period on a linked Stripe subscription — its renewal webhook was missed'
     );

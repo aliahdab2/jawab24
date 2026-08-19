@@ -81,15 +81,31 @@ carrying an advanced period) and passed while the defect was fully live.
 
 | # | Scenario | Covered |
 |---|---|---|
-| RN-1 | Renewal paid, event never arrived → paid-through advanced, quota window reopened | ✅ |
-| RN-2 | Period Stripe advanced but never paid (`active` + OPEN invoice) → refused | ✅ |
+| RN-1 | Renewal paid, event never arrived → paid-through advanced, quota window reopened | ✅ unit + **integration** |
+| RN-2 | Period Stripe advanced but never paid (`active` + OPEN invoice) → refused | ✅ unit + **integration** |
 | RN-3 | `latest_invoice` unexpanded (bare id) → fails closed, refused | ✅ |
 | RN-4 | Stripe's period ends earlier than ours → never retracted | ✅ |
-| RN-5 | Stripe agrees with the row → nothing written, no `updated_at` churn | ✅ |
+| RN-5 | Stripe agrees with the row → nothing written, no `updated_at` churn | ✅ unit + **integration** |
 | RN-6 | Row with a NULL paid-through (`past_due`, entitled forever) → healed | ✅ |
 | RN-7 | Status and period restored on ONE write, never decoupled | ✅ |
-| RN-8 | Dunning episode closed, so future failures are not silenced | ✅ |
+| RN-8 | Dunning episode closed, so future failures are not silenced | ✅ unit + **integration** |
 | RN-9 | `trialing` healed without consulting an invoice | ✅ |
+| RN-10 | `trial_ends_at` mirrored — the field that actually gates a trialing row | ✅ unit + **integration** |
+| RN-11 | Row billed by another rail → refused and reported | ✅ unit + **integration** |
+| RN-12 | Unhealable paying row raises an aggregated Sentry alert | ✅ |
+| RN-13 | Quota window opened BEFORE the boundary write, so a partial failure retries | ✅ |
+
+The integration half matters on its own: the unit suite's drizzle mock resolves
+every query to the same rows and asserts no `WHERE` clause, so a healer that
+targeted the wrong column — or wrote one the schema rejects — would pass all of
+it. `payment.paymentElement.test.ts` runs the same scenarios against real
+Postgres and asserts the row, its dunning stamps and its usage window.
+
+⚠️ RN-10 is the one that was a live defect in review: healing the period while
+leaving a stale `trial_ends_at` made the sweep report success (and reopen quota,
+close the episode, mail "payment recovered") for a merchant `checkSubscription
+Status` still blocks. Plan `starter` is active with `trial_days = 30`, so
+Stripe-managed trialing subscriptions are reachable.
 
 ### Guards before any Stripe call
 | Scenario | Covered |
