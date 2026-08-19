@@ -156,15 +156,5 @@
   "pageLimitSkippedWarning": "{count, plural, one {{pageNames} was not connected} other {{count} pages were not connected ({pageNames})}} because your plan includes {limit, plural, one {one page} other {# pages}}. Upgrade to connect more pages.",
   "trialUsedSkippedWarning": "{count, plural, one {{pageNames} was not connected} other {{count} pages were not connected ({pageNames})}} because this account's free trial has already been used. Subscribe to connect and enable auto-reply.",
   "loadFailed": "Failed to load your pages. Please try again.",
-  "autoPausedSendRejected": "Facebook kept rejecting our replies on this page, so auto-reply was paused to protect your quota. Check the page on Facebook — it may be restricted, unpublished, or missing a permission — then turn auto-reply back on.",
-  "statusNeedsReconnect": "Needs reconnect",
-  "statusPaused": "Paused",
-  "statusGreetingOnly": "Greeting only",
-  "statusAnswering": "Answering customers",
-  "addChannelPrompt": "Add Instagram or WhatsApp",
-  "addChannelPromptInstagram": "Add Instagram",
-  "addChannelPromptWhatsApp": "Add WhatsApp",
-  "addChannelCta": "Connect",
-  "testReplyShort": "Test",
-  "lastActivityAt": "Last activity {time}"
+  "autoPausedSendRejected": "Facebook kept rejecting our replies on this page, so auto-reply was paused to protect your quota. Check the page on Facebook — it may be restricted, unpublished, or missing a permission — then turn auto-reply back on."
 }

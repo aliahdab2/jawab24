@@ -485,13 +485,9 @@ describe('PagesPage - WhatsApp', () => {
         });
 
         expect(mockedApi.delete).toHaveBeenCalledWith('/pages/page_wa/whatsapp');
-        // The row goes away entirely — a dashed «WhatsApp not connected» row cost
-        // a full row on every card to state an absence. Connecting again is
-        // offered by the single add-a-channel row instead.
         await waitFor(() => {
-            expect(screen.getByText('Add Instagram or WhatsApp')).toBeInTheDocument();
+            expect(screen.getByText('WhatsApp not connected')).toBeInTheDocument();
         });
-        expect(screen.queryByText('WhatsApp not connected')).not.toBeInTheDocument();
         expect(screen.queryByText('+966 55 000 0000')).not.toBeInTheDocument();
     });
 
@@ -1865,16 +1861,22 @@ describe('PagesPage - Business Info CTA reads the list payload', () => {
         vi.clearAllMocks();
     });
 
-    it('gives the filled page the EDIT state and the empty one the ADD state, from kbFilled alone', async () => {
+    it('shows the EDIT state for a page whose info is filled, with no text field in the payload', async () => {
         renderPage(<PagesPage />);
 
-        // One card each: the fixture carries a filled page and an empty one, in
-        // the LIST shape (kbFilled, no knowledgeBase text). Before the fix both
-        // read the absent text field and both said "add".
         await waitFor(() => {
-            expect(screen.getAllByRole('button', { name: enPages.businessInfoActive })).toHaveLength(1);
+            expect(screen.getByText(enPages.businessInfoActive)).toBeInTheDocument();
         });
-        expect(screen.getAllByRole('button', { name: enPages.addBusinessInfo })).toHaveLength(1);
+        expect(screen.getByText(enPages.clickToEdit)).toBeInTheDocument();
+    });
+
+    it('still shows the ADD state for a page whose info is empty', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.addBusinessInfo)).toBeInTheDocument();
+        });
+        expect(screen.getByText(enPages.improveAIQuality)).toBeInTheDocument();
     });
 
     // The nudge banner (correct predicate all along) is the card's single alert.

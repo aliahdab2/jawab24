@@ -9,7 +9,6 @@ import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, Confirmatio
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
 import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
 import { needsBusinessInfo, isKbFilled } from '@/utils/kb';
-import { resolvePageStatus, PAGE_STATUS_LABEL, PAGE_STATUS_TONE } from '@/utils/pageStatus';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
@@ -20,6 +19,8 @@ import {
   RefreshCw,
   BookOpen,
   Instagram,
+  ChevronRight,
+  Clock,
   ShoppingBag,
   ExternalLink,
   AlertTriangle,
@@ -1040,7 +1041,7 @@ const PagesPage: NextPageWithLayout = () => {
                 <div key={label}>
                   {hasMultipleGroups && (
                     <div className="flex items-center gap-3 mb-4">
-                      <span className="text-xs font-bold text-muted-foreground">{label}</span>
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{label}</span>
                       <span className="text-xs font-bold text-subtle bg-muted px-2 py-0.5 rounded-full">{sectionPages.length}</span>
                       <div className="flex-1 h-px bg-theme-border" />
                     </div>
@@ -1053,9 +1054,6 @@ const PagesPage: NextPageWithLayout = () => {
                       // server-computed `kbFilled` boolean and no longer carries
                       // the text itself (#806, 2026-08-18).
                       const kbFilled = isKbFilled(page);
-                      // What a customer's message meets on this page. Drives the
-                      // header pill; see resolvePageStatus for the claim rules.
-                      const pageStatus = resolvePageStatus(page);
                       // Pageless cards: a pages row with no Facebook page behind it.
                       // WHICH direct channel owns the card decides its identity —
                       // an Instagram-direct card rendered as a WhatsApp one hid the
@@ -1068,12 +1066,6 @@ const PagesPage: NextPageWithLayout = () => {
                       // state it exists for (PR #772 re-review, High).
                       const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
                       const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
-                      // Channels this card could still gain. Instagram is offered
-                      // only where an Instagram row could exist at all (never on a
-                      // WhatsApp-only card), WhatsApp likewise — and only while the
-                      // master flag is on, so a dark deploy still shows no WhatsApp.
-                      const showAddInstagram = !isWhatsAppOnly && !page.instagramUsername;
-                      const showAddWhatsApp = !isInstagramOnly && whatsappVisible && !page.whatsappConnected;
                       return (
                         <Card
                           key={page.id}
@@ -1109,31 +1101,14 @@ const PagesPage: NextPageWithLayout = () => {
                   )}
                 </div>
 
-                {/* Page info. The status lives HERE, not in a footer: the card is
-                    opened to answer "is this page answering my customers?", and
-                    that answer used to sit last, in 12 px uppercase, below the
-                    fold. The name keeps its own line — identity outranks status —
-                    and the pill drops to the meta line beside the timestamp,
-                    which is what carries recency (the pill never claims "now";
-                    see resolvePageStatus for why it must not). */}
+                {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
                   <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
-                  <div className="flex items-center gap-2 flex-wrap mt-1.5">
-                    <span className={clsx(
-                      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold',
-                      PAGE_STATUS_TONE[pageStatus].pill,
-                    )}>
-                      <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', PAGE_STATUS_TONE[pageStatus].dot)} aria-hidden="true" />
-                      {t(PAGE_STATUS_LABEL[pageStatus])}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {t('lastActivityAt', {
-                        time: page.lastActivity
-                          ? formatTime(page.lastActivity)
-                          : formatDate(page.createdAt as unknown as string),
-                      })}
-                    </span>
-                  </div>
+                  {/* No "Add info" chip here. A page missing its Business Info
+                      already says so twice below — the amber nudge banner (with
+                      the reason and an "Add now" button) and the Business Info
+                      CTA — and all three opened the same editor. One alert plus
+                      one persistent entry point; the chip was the third. */}
                 </div>
 
                 {/* External link to Facebook page — only for Facebook-connected pages */}
@@ -1287,12 +1262,7 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                   )}
 
-                  {/* Instagram row — only for a CONNECTED account. A dashed
-                      «إنستغرام غير متصل» row cost a full row on every card to
-                      say what the merchant does not have; the collapsed
-                      add-a-channel row below carries that, with the same
-                      tooltip explaining why Instagram appears on its own. */}
-                  {page.instagramUsername && (
+                  {/* Instagram row */}
                   <div
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
@@ -1366,13 +1336,12 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                     )}
                   </div>
-                  )}
                   </div>)}
 
                   {/* WhatsApp row — master-switch gated so a dark deploy shows
                       no WhatsApp surface; the whatsappConnected OR never hides
                       an already-connected number. */}
-                  {!isInstagramOnly && page.whatsappConnected && (
+                  {!isInstagramOnly && (whatsappVisible || page.whatsappConnected) && (
                   <div
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
@@ -1482,79 +1451,23 @@ const PagesPage: NextPageWithLayout = () => {
                     ))}
                   </div>
                   )}
-
-                  {/* Everything the page does NOT have, on one row.
-                      Two dashed «غير متصل» rows cost ~112 px on every card,
-                      permanently, to tell a Facebook-only merchant what they are
-                      missing — and most merchants are Facebook-only. This keeps
-                      both entry points: the Instagram tooltip (its connect path
-                      runs through Facebook, so the row never had a button) and
-                      the WhatsApp connect/upgrade button with its exact gating. */}
-                  {(showAddInstagram || showAddWhatsApp) && (
-                    <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl border border-dashed border-theme-border bg-background">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {showAddInstagram && (
-                          <span className="w-7 h-7 rounded-lg bg-surface-100 text-icon-muted flex items-center justify-center flex-shrink-0">
-                            <Instagram className="w-3.5 h-3.5" aria-hidden="true" />
-                          </span>
-                        )}
-                        {showAddWhatsApp && (
-                          <span className="w-7 h-7 rounded-lg bg-surface-100 text-icon-muted flex items-center justify-center flex-shrink-0">
-                            <WhatsAppIcon className="w-3.5 h-3.5" aria-hidden="true" />
-                          </span>
-                        )}
-                        <p className="text-xs font-medium text-muted-foreground truncate">
-                          {showAddInstagram && showAddWhatsApp
-                            ? t('addChannelPrompt')
-                            : showAddInstagram
-                              ? t('addChannelPromptInstagram')
-                              : t('addChannelPromptWhatsApp')}
-                        </p>
-                        {showAddInstagram && (
-                          <InfoPopover label={t('instagramTooltip')}>
-                            <span className="block">{t('instagramTooltip')}</span>
-                          </InfoPopover>
-                        )}
-                      </div>
-                      {showAddWhatsApp && isOwner && (
-                        whatsappEntitled === true ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => requestConnectWhatsApp(page.id)}
-                            disabled={connectingWhatsApp === page.id}
-                          >
-                            {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('addChannelCta')}
-                          </Button>
-                        ) : whatsappEntitled === false ? (
-                          // Plan without WhatsApp: route to pricing instead of the
-                          // Meta signup. UpgradeCTA renders nothing on iOS native.
-                          <UpgradeCTA className="flex-shrink-0">
-                            <Button size="sm" variant="secondary">
-                              {t('whatsappUpgradeButton')}
-                            </Button>
-                          </UpgradeCTA>
-                        ) : null // entitlement still loading
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-background border border-theme-border">
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground mb-1.5">{t('totalIncoming')}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('totalIncoming')}</p>
                     <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center border-x border-theme-border">
                     <div className="flex items-center justify-center gap-1 mb-1.5">
-                      <p className="text-xs font-bold text-muted-foreground">{t('repliesSent')}</p>
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('repliesSent')}</p>
                       <RepliesBreakdownTooltip page={page} />
                     </div>
                     <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground mb-1.5">{tDash('replyRate')}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('replyRate')}</p>
                     <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
                   </div>
                 </div>
@@ -1568,53 +1481,98 @@ const PagesPage: NextPageWithLayout = () => {
                   <span className="text-white text-[12px] font-semibold">{t('shopifyConnectedBadge')}</span>
                 </div>
 
-                {/* Actions — ONE row, not two stacked boxes.
-                    Business Info is the primary and the card's persistent entry
-                    point; it is also the only place the FILLED state shows
-                    ("Edit Business Info"), which is why the alert banner above
-                    carries no button of its own — two primaries 150 px apart is
-                    the redundancy this card already had.
-
+                {/* Business Info CTA — the card's persistent entry point, and the
+                    only place the FILLED state is shown ("Edit Business Info").
                     Reads isKbFilled, NOT page.knowledgeBase: the list endpoint
                     (GET /pages?view=list) stopped shipping the text on 2026-08-18
                     (#806) and sends a server-computed `kbFilled` instead, so the
                     raw read was falsy for EVERY page and this CTA was stuck in its
                     empty state even for merchants whose info was complete. */}
-                <div className="flex items-stretch gap-2">
-                  <button
-                    onClick={() => openKbEditorFor(page)}
-                    className={clsx(
-                      'flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all',
-                      kbFilled
-                        ? 'border border-brand-500 text-brand-700 dark:text-brand-300 bg-brand-50/40 dark:bg-brand-950/20 hover:bg-brand-50'
-                        : 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm',
-                    )}
-                  >
-                    <BookOpen className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-                    {/* A member opens the same editor read-only, so the label must
-                        not promise a write: «أضف معلومات» is an instruction they
-                        cannot follow. */}
-                    <span className="truncate">
-                      {!canEdit
-                        ? t('viewBusinessInfo')
-                        : kbFilled
-                          ? t('businessInfoActive')
-                          : t('addBusinessInfo')
-                      }
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => { setTestReplyPrefillSample(false); setTestSmartReplyPage(page); }}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl border border-theme-border text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all flex-shrink-0"
-                    title={tTest('title')}
-                  >
-                    <FlaskConical className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-                    {t('testReplyShort')}
-                  </button>
-                </div>
+                <button
+                  onClick={() => openKbEditorFor(page)}
+                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${kbFilled
+                    ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
+                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
+                    }`}
+                >
+                  <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${kbFilled ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div className="text-start">
+                        {/* A member opens the same editor read-only, so the CTA
+                            must not promise a write: «أضف معلومات» and «اضغط
+                            للتعديل» are both instructions they cannot follow. */}
+                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
+                          {!canEdit
+                            ? t('viewBusinessInfo')
+                            : kbFilled
+                              ? t('businessInfoActive')
+                              : t('addBusinessInfo')
+                          }
+                        </p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
+                          {!canEdit
+                            ? tc('viewOnlyHint')
+                            : kbFilled
+                              ? t('clickToEdit')
+                              : t('improveAIQuality')
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className={`w-5 h-5 transition-transform ${kbFilled ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
+                  </div>
+                </button>
               </div>
 
+              {/* Test Smart Reply */}
+              <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
+                <button
+                  onClick={() => { setTestReplyPrefillSample(false); setTestSmartReplyPage(page); }}
+                  className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
+                        <FlaskConical className="w-5 h-5" />
+                      </div>
+                      <div className="text-start">
+                        <p className="text-sm font-bold text-foreground/70">{tTest('title')}</p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{tTest('description')}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Status Footer */}
+              <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={clsx(
+                    'w-2 h-2 rounded-full',
+                    page.isConnected === false
+                      ? 'bg-amber-500'
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
+                  )}></div>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    {page.isConnected === false
+                      ? t('disconnected')
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled) ? tc('active') : tc('inactive')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span
+                    className="text-xs font-bold uppercase tracking-tighter"
+                    title={page.lastActivity ? t('lastActivity') : ''}
+                  >
+                    {page.lastActivity ? formatTime(page.lastActivity) : formatDate(page.createdAt as unknown as string)}
+                  </span>
+                </div>
+              </div>
             </Card>
                       );
                     })}

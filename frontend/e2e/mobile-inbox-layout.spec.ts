@@ -2,19 +2,19 @@ import { test, expect, type Page } from '@playwright/test';
 import { t, tAr } from './i18n';
 
 /**
- * Mobile layout guarantees for the inbox filter row and the page card.
+ * Mobile layout guarantees for the inbox filter row.
  *
- * Both defects this pins were invisible to unit tests, because both are about
- * LAYOUT at a real width: jsdom has no layout engine, so a row that overflows
- * its container and a card that pushes its status below the fold both "pass"
- * there. These run in a real browser at 360 px — the tightest common phone —
- * and in Arabic, where the labels are widest.
+ * The defect this pins was invisible to unit tests, because it is about LAYOUT
+ * at a real width: jsdom has no layout engine, so a row that overflows its
+ * container "passes" there. This runs in a real browser at 360 px — the
+ * tightest common phone — and in Arabic, where the labels are widest.
  *
- * 1. The filter chips used to sit on one horizontally-scrolling line with
- *    `scrollbar-hide`, no fade and no peeking chip, so «تمت المعالجة» was
- *    unreachable unless the merchant guessed to swipe (reported 2026-08-19).
- * 2. The page card answered "is this page answering my customers?" last, in a
- *    footer below ~640 px of content.
+ * The filter chips used to sit on one horizontally-scrolling line with
+ * `scrollbar-hide`, no fade and no peeking chip, so «تمت المعالجة» was
+ * unreachable unless the merchant guessed to swipe (reported 2026-08-19).
+ *
+ * Scope: the filter row. The page-card assertions that lived here went out with
+ * the card redesign (reverted 2026-08-19) — restore them with it, not before.
  */
 
 const NARROW = { width: 360, height: 740 };
@@ -168,49 +168,6 @@ test.describe('mobile layout @360', () => {
     expect(sideways, 'the body must never scroll horizontally on a phone').toBe(false);
   });
 
-  // The card's job is to answer "is this page answering my customers?". That
-  // answer must be readable without scrolling — it used to live in a footer
-  // below ~640 px of channel rows, stats and action boxes.
-  test('the page card states its status above the fold', async ({ page }) => {
-    await authenticate(page, 'ar');
-    await mockApi(page);
-    await page.goto('/pages');
 
-    const pill = page.getByText(tAr('pages.statusAnswering')).first();
-    await expect(pill).toBeVisible({ timeout: 15000 });
 
-    const box = (await pill.boundingBox())!;
-    expect(box.y, 'the status must sit within the first screen').toBeLessThan(NARROW.height);
-  });
-
-  // Both actions on ONE row: two stacked full-width boxes cost ~142 px on a
-  // screen the merchant scrolls through once per page.
-  test('the card offers Business Info and Test on a single row', async ({ page }) => {
-    await authenticate(page, 'en');
-    await mockApi(page);
-    await page.goto('/en/pages');
-
-    const businessInfo = page.getByRole('button', { name: t('pages.businessInfoActive') }).first();
-    const testReply = page.getByRole('button', { name: t('pages.testReplyShort') }).first();
-    await expect(businessInfo).toBeVisible({ timeout: 15000 });
-    await expect(testReply).toBeVisible();
-
-    const [a, b] = [(await businessInfo.boundingBox())!, (await testReply.boundingBox())!];
-    // Same row: their vertical centres line up.
-    expect(Math.abs((a.y + a.height / 2) - (b.y + b.height / 2))).toBeLessThan(4);
-    // And both keep a thumb-sized target.
-    expect(a.height).toBeGreaterThanOrEqual(44);
-    expect(b.height).toBeGreaterThanOrEqual(44);
-  });
-
-  // A Facebook-only page should not spend two rows saying what it does not have.
-  test('unconnected channels collapse into one add-a-channel row', async ({ page }) => {
-    await authenticate(page, 'ar');
-    await mockApi(page);
-    await page.goto('/pages');
-
-    await expect(page.getByText(tAr('pages.statusAnswering')).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(tAr('pages.instagramNotConnected'))).toHaveCount(0);
-    await expect(page.getByText(tAr('pages.whatsappNotConnected'))).toHaveCount(0);
-  });
 });

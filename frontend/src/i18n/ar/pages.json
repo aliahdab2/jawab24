@@ -156,15 +156,5 @@
   "pageLimitSkippedWarning": "{count, plural, zero {لم يتم تخطي أي صفحة} one {لم يتم ربط {pageNames}} two {لم يتم ربط الصفحتين ({pageNames})} few {لم يتم ربط # صفحات ({pageNames})} many {لم يتم ربط # صفحة ({pageNames})} other {لم يتم ربط # صفحة ({pageNames})}} لأن خطتك تشمل {limit, plural, zero {لا صفحات} one {صفحة واحدة} two {صفحتين} few {# صفحات} many {# صفحة} other {# صفحة}}. قم بترقية خطتك لربط المزيد من الصفحات.",
   "trialUsedSkippedWarning": "{count, plural, zero {لم يتم تخطي أي صفحة} one {لم يتم ربط {pageNames}} two {لم يتم ربط الصفحتين ({pageNames})} few {لم يتم ربط # صفحات ({pageNames})} many {لم يتم ربط # صفحة ({pageNames})} other {لم يتم ربط # صفحة ({pageNames})}} لأن الفترة التجريبية المجانية استُخدمت على هذا الحساب من قبل. اشترك لربط صفحتك وتفعيل الرد التلقائي.",
   "loadFailed": "فشل تحميل الصفحات. يرجى المحاولة مرة أخرى.",
-  "autoPausedSendRejected": "كان فيسبوك يرفض ردودنا على هذه الصفحة، فأوقفنا الرد التلقائي مؤقتاً لحفظ رصيدك. تحقق من حالة الصفحة على فيسبوك — قد تكون مقيّدة أو غير منشورة أو ينقصها صلاحية — ثم أعد تفعيل الرد التلقائي.",
-  "statusNeedsReconnect": "يحتاج إعادة ربط",
-  "statusPaused": "متوقف",
-  "statusGreetingOnly": "يرحّب فقط",
-  "statusAnswering": "يجيب عملاءك",
-  "addChannelPrompt": "أضف إنستغرام أو واتساب",
-  "addChannelPromptInstagram": "أضف إنستغرام",
-  "addChannelPromptWhatsApp": "أضف واتساب",
-  "addChannelCta": "ربط",
-  "testReplyShort": "اختبار",
-  "lastActivityAt": "آخر نشاط {time}"
+  "autoPausedSendRejected": "كان فيسبوك يرفض ردودنا على هذه الصفحة، فأوقفنا الرد التلقائي مؤقتاً لحفظ رصيدك. تحقق من حالة الصفحة على فيسبوك — قد تكون مقيّدة أو غير منشورة أو ينقصها صلاحية — ثم أعد تفعيل الرد التلقائي."
 }
