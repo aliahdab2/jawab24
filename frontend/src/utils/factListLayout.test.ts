@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks, datedListFreshness, sectionNameGroups } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules, isDatedCollection, buildTierBlocks, datedListFreshness, sectionNameGroups, datedRowsState, retiredRecently, DATED_ENTITY_RECENT_DAYS } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -644,5 +644,63 @@ describe('datedListFreshness', () => {
     ]);
     expect(isDatedCollection(slots)).toBe(true);
     expect(datedListFreshness(slots, TODAY)).toEqual({ state: 'ended' });
+  });
+});
+
+describe('datedRowsState — absence and expiry are different facts', () => {
+  const TODAY = '2026-08-20';
+
+  it('separates the two cases a live-only filter cannot', () => {
+    // The whole reason this predicate exists. Both of these leave zero live
+    // dated rows, and three surfaces on /business used to treat them alike:
+    // a scope that never held a session, and one whose sessions have expired.
+    expect(datedRowsState([], TODAY)).toEqual({ state: 'noRows' });
+    expect(datedRowsState([
+      row('دورة', { startsAt: '2026-07-25' }),
+      row('دورة', { startsAt: '2026-08-10' }),
+    ], TODAY)).toEqual({ state: 'retired', lastDate: '2026-08-10' });
+  });
+
+  it('reports the LATEST retired date, not the first or the last in row order', () => {
+    const rows = [
+      row('أ', { startsAt: '2026-08-10' }),
+      row('ب', { startsAt: '2026-08-18' }),
+      row('ج', { startsAt: '2026-07-25' }),
+    ];
+    expect(datedRowsState(rows, TODAY)).toEqual({ state: 'retired', lastDate: '2026-08-18' });
+  });
+
+  it('one live row makes the whole set live, however many have retired', () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => row(`منتهٍ ${i}`, { startsAt: '2026-07-25' })),
+      row('قادم', { startsAt: '2026-08-31' }),
+    ];
+    expect(datedRowsState(rows, TODAY)).toEqual({ state: 'live' });
+  });
+
+  it('an UNDATED row keeps the set live — it is still quoted, so nothing went dark', () => {
+    // «تبدأ عند اكتمال العدد»: isRowLive keeps it forever. An item holding one
+    // has not gone dark just because its cohorts have.
+    const rows = [row('دفعة', { startsAt: '2026-07-25' }), row('عند اكتمال العدد')];
+    expect(datedRowsState(rows, TODAY)).toEqual({ state: 'live' });
+  });
+
+  it('keys off endsAt when a row has no start date, exactly like isRowLive', () => {
+    expect(datedRowsState([row('عرض', { endsAt: '2026-08-01' })], TODAY))
+      .toEqual({ state: 'retired', lastDate: '2026-08-01' });
+    expect(datedRowsState([row('عرض', { endsAt: '2026-09-01' })], TODAY)).toEqual({ state: 'live' });
+  });
+
+  it('rows that carry no dates at all are LIVE, not «never dated» — isRowLive keeps them', () => {
+    expect(datedRowsState([row('دورة'), row('دورة ب')], TODAY)).toEqual({ state: 'live' });
+  });
+
+  it('retiredRecently spans the window inclusively and excludes the day before it', () => {
+    const TODAY_ISO = '2026-08-20';
+    const inside = '2026-07-21';  // 30 days back
+    const outside = '2026-07-20'; // 31
+    expect(DATED_ENTITY_RECENT_DAYS).toBe(30);
+    expect(retiredRecently(inside, TODAY_ISO)).toBe(true);
+    expect(retiredRecently(outside, TODAY_ISO)).toBe(false);
   });
 });
