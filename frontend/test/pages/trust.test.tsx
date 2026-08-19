@@ -113,6 +113,26 @@ describe('the published percentage is arithmetically honest', () => {
     });
 });
 
+describe('SERP metadata fits', () => {
+    // Google truncates around 60 chars of <title> and 160 of description. The
+    // first cut of the EN description rendered at 164 and lost its second half
+    // — the part about data handling. Lengths must be measured AFTER
+    // interpolation, since the figures are substituted in.
+    const render = (s: string) =>
+        s.replace('{percent}', UPTIME_STATS.percent).replace('{days}', String(UPTIME_STATS.windowDays));
+
+    it.each(['en', 'ar'])('%s title and description are within SERP limits', (locale) => {
+        const messages = loadNamespaces(locale, ['trust']) as Record<string, Record<string, string>>;
+        const title = render(messages.trust.seoTitle);
+        const description = render(messages.trust.seoDescription);
+
+        expect(title.length).toBeGreaterThan(30);
+        expect(title.length).toBeLessThanOrEqual(60);
+        expect(description.length).toBeGreaterThan(70);
+        expect(description.length).toBeLessThanOrEqual(160);
+    });
+});
+
 describe('the published claim has not gone stale', () => {
     // A measured figure with no expiry is a claim that will eventually be false
     // while every other gate stays green. Nothing else in the repo knows this
