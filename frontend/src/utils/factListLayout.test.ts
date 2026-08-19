@@ -411,12 +411,26 @@ describe('isDatedCollection — majority rule (the 08-06 «cannot edit» regress
     expect(isDatedCollection(coll('مواعيد', 'الدورة', [row('أ', { startsAt: '2026-08-10' }), row('ب')]))).toBe(true);
   });
 
-  it('counts a row dated by endsAt alone — it self-expires exactly like a session', () => {
-    // Same anchor as isRowLive and datedListFreshness. Counting startsAt alone
-    // let the two disagree about the same rows: an offers list would classify
-    // as a schedule for the freshness notice and as a price list here.
-    const offers = coll('عروض', null, [row('عرض أول', { endsAt: '2026-08-20' }), row('عرض ثانٍ', { endsAt: '2026-08-25' })]);
-    expect(isDatedCollection(offers)).toBe(true);
+  it('an END-dated promo row does NOT reclassify a price list as a schedule', () => {
+    // The LAYOUT predicate keys on startsAt alone. ListRowSheet will happily
+    // save endsAt with no startsAt, so one «ساري حتى» promo row in a four-row
+    // price list reaches the tie under a retiringAnchor rule — and a price
+    // list classified as a schedule yields no bases, so no card renders a tier
+    // row and the entity sheet loses its only door (the 2026-08-06 regression).
+    const prices = coll('أسعار الاشتراكات', null, [
+      row('شهري', { price: '100.00' }),
+      row('سنوي', { price: '1000.00' }),
+      row('عرض الافتتاح', { price: '800.00', endsAt: '2026-08-01' }),
+      row('عرض الطلاب', { price: '700.00', endsAt: '2026-08-02' }),
+    ]);
+    expect(isDatedCollection(prices)).toBe(false);
+    // …while the freshness notice DOES read those rows as dated, because it
+    // asks a different question with a different anchor. The two disagreeing
+    // here is the design, not a drift.
+    expect(datedListFreshness(prices, '2026-08-10')).toEqual({
+      state: 'rowsRetired',
+      names: ['عرض الافتتاح', 'عرض الطلاب'],
+    });
   });
 });
 
@@ -569,14 +583,43 @@ describe('datedListFreshness', () => {
     });
   });
 
-  it('says nothing about a price list whose stray date is still live', () => {
-    // Nothing has gone dark, so there is nothing to report — and the list is
-    // not a schedule, so it never gets the runway warning either.
+  it('still reports the last announced date of a NON-schedule list — that sentence is true of any list', () => {
+    // «آخر تاريخ معلن في «{list}» هو {date}» reports a date; it does not
+    // characterise the list, so the majority rule does not apply to it. Gating
+    // it too would silently drop the early warning for a cohort block
+    // announced inside a mostly-undated list.
     const prices = coll('أسعار الدورات', null, [
       ...Array.from({ length: 5 }, (_, i) => row(`دورة ${i}`, { price: '35000.00' })),
       row('مكياج متقدم', { price: '50000.00', startsAt: '2026-08-12' }),
     ]);
-    expect(datedListFreshness(prices, TODAY)).toBeNull();
+    expect(datedListFreshness(prices, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-12' });
+  });
+
+  it('keeps the early warning for a cohort block inside a mostly-undated list', () => {
+    // Nine dated rows among twenty: a minority, so no list-wide claim — but
+    // all nine retire inside the window and the merchant must hear about it.
+    const mixed = coll('قائمة الدورات', null, [
+      ...Array.from({ length: 11 }, (_, i) => row(`بند ${i}`)),
+      ...Array.from({ length: 9 }, (_, i) => row(`دفعة ${i}`, { startsAt: '2026-08-12' })),
+    ]);
+    expect(datedListFreshness(mixed, TODAY)).toEqual({ state: 'ending', lastDate: '2026-08-12' });
+  });
+
+  it('a TIE of stray dates is NOT enough to speak for the list', () => {
+    // Layout leans schedule at the tie (a list mid-authoring still edits as
+    // one); a SENTENCE does not get that benefit, or two passed promo dates on
+    // a four-row price list would print «انتهت التواريخ المعلنة في «الأسعار»».
+    const prices = coll('أسعار الاشتراكات', null, [
+      row('شهري', { price: '100.00' }),
+      row('سنوي', { price: '1000.00' }),
+      row('عرض الافتتاح', { price: '800.00', startsAt: '2026-08-01' }),
+      row('عرض الطلاب', { price: '700.00', startsAt: '2026-08-02' }),
+    ]);
+    expect(isDatedCollection(prices)).toBe(true);
+    expect(datedListFreshness(prices, TODAY)).toEqual({
+      state: 'rowsRetired',
+      names: ['عرض الافتتاح', 'عرض الطلاب'],
+    });
   });
 
   it('names every retired stray, so none is hidden from the merchant who must fix it', () => {

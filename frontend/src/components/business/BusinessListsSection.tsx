@@ -827,7 +827,13 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             <p
               key={collection.id}
               className={`rounded-xl border px-3 py-2 text-xs ${
-                freshness.state === 'ended' ? 'alert-warning' : 'bg-muted/40 border-theme-border text-muted-foreground'
+                // `ending` is the ONLY advisory here — something will happen
+                // later. Everything else is already true and already costing
+                // the merchant answers, so the default is the visible style
+                // and a state added later inherits it rather than the quiet one.
+                freshness.state === 'ending'
+                  ? 'bg-muted/40 border-theme-border text-muted-foreground'
+                  : 'alert-warning'
               }`}
               dir="auto"
             >

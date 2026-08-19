@@ -1945,13 +1945,11 @@ pointer.
 
 ## D-086 · A freshness warning may speak for a whole list only when that list IS a schedule (2026-08-19, owner-reported)
 
-**Decision.** `datedListFreshness` now gates its list-level sentences on
-`isDatedCollection` — the SAME majority rule the rest of the fact-list engine uses to
-decide "is this a schedule?". A list whose dated rows are a MINORITY gets a new
-`rowsRetired` state that names the individual rows whose dates have passed, and never
-speaks about the list. `isDatedCollection` also counts `startsAt ?? endsAt` now, so the
-two functions cannot classify the same rows differently. This REVERSES the explicit
-choice pinned by the old test «a price list with one dated promo still warns about it».
+**Decision.** `datedListFreshness` now gates its list-CHARACTERISING sentence (`ended`)
+on `isScheduleShaped` — a strict majority of rows carrying a retiring date. A list whose
+dated rows are a minority gets a new `rowsRetired` state naming the individual rows whose
+dates have passed, and never speaks about the list. This REVERSES the explicit choice
+pinned by the old test «a price list with one dated promo still warns about it».
 
 **What it shipped.** On page `39aeab89` the list «أسعار الدورات» held 50 price rows of
 which exactly ONE carried a date — «دورة المكياج او التجميل (الميك أب)», `starts_at
@@ -1979,13 +1977,48 @@ strays are named in full, never truncated to a head: this state only reaches a M
 a non-schedule list, and a cap would either lie about the count or hide the row the
 merchant must go fix.
 
+**Two things a first draft got wrong, both caught in adversarial self-review before
+merge.** (1) It ALSO widened `isDatedCollection` — the LAYOUT predicate — to the retiring
+anchor, justified as "inert: zero rows fleet-wide carry `endsAt` without `startsAt`". That
+measurement bounds today's rows, not tomorrow's: `ListRowSheet` saves an end date with no
+start date and nothing forbids it, so one «ساري حتى» promo row in a four-row price list
+reaches the tie, reclassifies the price list as a schedule, empties `bases`, and removes
+the tier row that is the entity sheet's only door — the 2026-08-06 «cannot edit»
+regression, re-armed. The layout predicate is now left on `startsAt` alone and the two
+predicates are documented as answering different questions. **A measurement that a change
+is inert TODAY is not a safety argument; it only bounds the blast radius of shipping it.**
+(2) It gated `ending` as well as `ended`, which silently dropped the early warning for a
+cohort block announced inside a mostly-undated list. «آخر تاريخ معلن في «{list}» هو {date}»
+reports a date rather than characterising the list, so it is true of any list holding dated
+rows and is not gated. Only the sentence that CHARACTERISES the list needs the majority.
+
+`isScheduleShaped` takes a STRICT majority where the layout rule takes a tie, because at
+the tie the false wording is still reachable — two passed promo dates on a four-row price
+list would print «انتهت التواريخ المعلنة في «الأسعار»», the very claim this rule exists to
+prevent. Layout needs the tie (a two-row list mid-authoring must still edit as a schedule);
+a sentence does not.
+
 **Scope, measured before the change (prod, 2026-08-19).** Three collections fleet-wide
 carry any dated rows at all; exactly ONE produced the false banner — the one on the
-owner's screen. Zero rows fleet-wide carry `endsAt` without `startsAt`, so the anchor
-alignment is inert on today's data and is a consistency fix, not a behaviour change.
+owner's screen.
 
-**Found in passing:** the vitest `next-intl` mock's ICU plural resolver was a single-level
-regex, so any message with a placeholder inside a plural branch rendered as RAW ICU in
-tests — four shipped messages were already in that state. It renders as plausible text
-rather than erroring, so assertions on it pass or fail for the wrong reason. Replaced with
-a brace-balanced resolver; full frontend suite green (2817 tests).
+**Found in passing — the vitest `next-intl` mock was verified by nothing.** Measured against
+`intl-messageformat` (the formatter next-intl itself uses) over all 107 plural-bearing EN
+messages at six counts, the resolver on `main` disagreed with production on **37 of 642
+renders**, from two defects: a single-level regex could not match a plural whose branch body
+carried its own placeholder (four shipped messages rendered as RAW ICU in tests), and an
+explicit `=0 {No products yet}` branch lost to the locale category (seven more rendered
+«0 products»). Both fail as plausible text rather than throwing, so assertions on them pass
+or fail for reasons unrelated to the code under test. Both fixed — 0 of 642 now disagree,
+with no case where the old resolver was right and the new one wrong. The resolver moved to
+its own module (importing `setup.ts` from a test re-arms every `vi.mock`, which is why it
+went unchecked) and `frontend/test/icuPlural.test.ts` now pins parity against the real
+formatter over the real corpus.
+
+**A note on the self-review itself.** Rule 10.11's question (a) — who READS what I changed —
+was answered too shallowly the first time: the readers of `isDatedCollection` were
+enumerated, then dismissed with a fleet measurement instead of a behavioural argument. Two
+of the three test weaknesses found later were of the same kind: `toHaveTextContent` is a
+SUBSTRING matcher, so an expected «7 rows …» passes against a rendered «17 rows …», and the
+first attempt at strengthening it repeated the mistake. Notice assertions now compare
+`textContent` whole.

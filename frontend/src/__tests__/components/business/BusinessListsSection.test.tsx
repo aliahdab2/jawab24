@@ -1049,12 +1049,16 @@ describe('BusinessListsSection', () => {
       // Read the notice itself: the row's name also appears on its card, so a
       // page-wide text query would pass on the card alone and prove nothing.
       const notice = await screen.findByRole('status');
-      // The false sentence must be gone...
-      expect(notice).not.toHaveTextContent(en.lists.datesEnded.split('«')[0].trim());
-      // ...and the true one names the row that actually went dark, so the
-      // signal D-057 exists for is not lost with it.
-      expect(notice).toHaveTextContent('دورة المكياج او التجميل (الميك أب)');
-      expect(notice).toHaveTextContent('أسعار الدورات');
+      // The whole sentence, so the false one cannot merely be absent while the
+      // true one is subtly wrong: the singular ICU branch, filled from the real
+      // copy, is the only thing this notice may say.
+      expect(notice.textContent?.trim()).toBe(
+        en.lists.datesRowsRetired
+          .replace(/^.*?one \{/, '')
+          .replace(/\} other \{.*$/, '')
+          .replace('{names}', 'دورة المكياج او التجميل (الميك أب)')
+          .replace('{list}', 'أسعار الدورات'),
+      );
     });
 
     it('bounds a long tail of retired strays without under-reporting the count', async () => {
@@ -1077,14 +1081,19 @@ describe('BusinessListsSection', () => {
       renderSection();
 
       const notice = await screen.findByRole('status');
-      // The exact total is stated — the cap shortens, it never under-reports.
-      expect(notice).toHaveTextContent('7');
-      expect(notice).toHaveTextContent(en.lists.namesMore);
-      expect(notice).toHaveTextContent('عرض 0');
-      expect(notice).toHaveTextContent('عرض 4');
-      // The sixth name onward is folded into «and others», not printed.
-      expect(notice).not.toHaveTextContent('عرض 5');
-      expect(notice).not.toHaveTextContent('عرض 6');
+      // Assert the WHOLE rendered sentence, built from the real copy. An
+      // earlier version checked `toHaveTextContent('7')`, which the fixture's
+      // own «17 rows» satisfies — so the count could have been wired to
+      // `collection.rows.length` and the test would not have noticed.
+      const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', en.lists.namesMore]
+        .join(en.lists.namesSeparator);
+      // textContent compared WHOLE, not toHaveTextContent — that matcher is a
+      // substring test, so an expected «7 rows …» passes against a rendered
+      // «17 rows …» and the fixture has 17 rows. The count could be wired to
+      // `collection.rows.length` and a substring assertion would not notice.
+      expect(notice.textContent?.trim()).toBe(
+        `7 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
+      );
     });
 
     it('still warns when a real SCHEDULE has run out — the majority rule is all that changed', async () => {
@@ -1097,8 +1106,9 @@ describe('BusinessListsSection', () => {
       renderSection();
 
       const notice = await screen.findByRole('status');
-      expect(notice).toHaveTextContent(en.lists.datesEnded.split('«')[0].trim());
-      expect(notice).toHaveTextContent('مواعيد الدورات المعلنة');
+      expect(notice.textContent?.trim()).toBe(
+        en.lists.datesEnded.replace('{list}', 'مواعيد الدورات المعلنة'),
+      );
     });
   });
 });
