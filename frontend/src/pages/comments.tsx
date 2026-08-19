@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
+import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState, FilterChipBar } from '@/components/ui';
 import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
 import dynamic from 'next/dynamic';
 import { SwipeableCommentCard } from '@/components/comments';
@@ -510,34 +510,17 @@ const CommentsPage: NextPageWithLayout = () => {
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
-        <div className="w-full sm:flex-1 sm:min-w-0 flex overflow-x-auto sm:flex-wrap items-center gap-1.5 sm:gap-2 scrollbar-hide pb-0.5 sm:pb-0">
-          {([
+        <FilterChipBar
+          ariaLabel={t('title')}
+          activeKey={filter}
+          onSelect={updateFilter}
+          chips={[
             { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.actionRequired },
             { key: 'all' as FilterType, label: t('allComments'), count: stats.total },
             { key: 'auto_replied' as FilterType, label: t('autoReplied'), count: stats.autoReplied },
             { key: 'handled' as FilterType, label: t('handled'), count: stats.handled },
-          ]).map(chip => (
-            <button
-              key={chip.key}
-              onClick={() => updateFilter(chip.key)}
-              aria-pressed={filter === chip.key}
-              className={clsx(
-                "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200",
-                filter === chip.key
-                  ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
-              )}
-            >
-              {chip.label}
-              <span className={clsx(
-                "text-xs tabular-nums",
-                filter === chip.key ? "text-white/70" : "text-subtle"
-              )}>
-                {chip.count.toLocaleString()}
-              </span>
-            </button>
-          ))}
-        </div>
+          ]}
+        />
 
         <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[280px] sm:flex-none">
           <Search

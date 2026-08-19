@@ -273,41 +273,29 @@ describe('PagesPage', () => {
     });
   });
 
-  describe('Empty KB Indicator', () => {
-    it('should show "Add info" chip when page has no KB and no e-commerce', async () => {
-      mockPagesApiGetAll.mockResolvedValue({
-        data: [
-          {
-            id: 'page-1',
-            name: 'Test Page',
-            facebookPageId: '123',
-            autoReplyEnabled: true,
-            knowledgeBase: null,
-            ecommerceStoreId: null,
-          },
-        ],
-      });
-
-      renderPage(<PagesPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Add info')).toBeInTheDocument();
-      });
+  // The amber «أضف معلومات» chip that used to sit under the page name is gone.
+  // It was the THIRD call to action for one job on the same card — the nudge
+  // banner (with the reason and an "Add now" button) and the Business Info CTA
+  // cover it — and it read `page.knowledgeBase`, which the #806 payload trim
+  // removed from `GET /pages?view=list` on 2026-08-18. That made it fire on
+  // EVERY non-ecommerce page, including merchants whose info was complete.
+  // The list-shaped assertions live in src/__tests__/pages/pages.test.tsx.
+  describe('Business Info entry points', () => {
+    const listPage = (kbFilled: boolean) => ({
+      data: [
+        {
+          id: 'page-1',
+          name: 'Test Page',
+          facebookPageId: '123',
+          autoReplyEnabled: true,
+          ecommerceStoreId: null,
+          kbFilled,
+        },
+      ],
     });
 
-    it('should NOT show "Add info" chip when page has KB content', async () => {
-      mockPagesApiGetAll.mockResolvedValue({
-        data: [
-          {
-            id: 'page-1',
-            name: 'Test Page',
-            facebookPageId: '123',
-            autoReplyEnabled: true,
-            knowledgeBase: 'We sell electronics and accessories.',
-            ecommerceStoreId: null,
-          },
-        ],
-      });
+    it('offers no separate "Add info" chip on a page with no business info', async () => {
+      mockPagesApiGetAll.mockResolvedValue(listPage(false));
 
       renderPage(<PagesPage />);
 
@@ -316,56 +304,20 @@ describe('PagesPage', () => {
       });
 
       expect(screen.queryByText('Add info')).not.toBeInTheDocument();
+      // The CTA is the entry point, and it is in its "add" state.
+      expect(screen.getByText('Add Your Business Info')).toBeInTheDocument();
     });
 
-    it('should NOT show "Add info" chip when page has e-commerce connected', async () => {
-      mockPagesApiGetAll.mockResolvedValue({
-        data: [
-          {
-            id: 'page-1',
-            name: 'Test Page',
-            facebookPageId: '123',
-            autoReplyEnabled: true,
-            knowledgeBase: null,
-            ecommerceStoreId: 'store-1',
-          },
-        ],
-      });
+    it('flips the CTA to the edit state once the info is there', async () => {
+      mockPagesApiGetAll.mockResolvedValue(listPage(true));
 
       renderPage(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
+        expect(screen.getByText('Edit Business Info')).toBeInTheDocument();
       });
 
-      expect(screen.queryByText('Add info')).not.toBeInTheDocument();
-    });
-
-    it('routes to /business when "Add info" chip is clicked', async () => {
-      mockPagesApiGetAll.mockResolvedValue({
-        data: [
-          {
-            id: 'page-1',
-            name: 'Test Page',
-            facebookPageId: '123',
-            autoReplyEnabled: true,
-            knowledgeBase: null,
-            ecommerceStoreId: null,
-          },
-        ],
-      });
-
-      renderPage(<PagesPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Add info')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('Add info'));
-
-      await waitFor(() => {
-        expect(mockRouterPush).toHaveBeenCalledWith('/business?page=page-1');
-      });
+      expect(screen.queryByText('Add Your Business Info')).not.toBeInTheDocument();
     });
   });
 });

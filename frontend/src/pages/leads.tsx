@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import * as Popover from '@radix-ui/react-popover';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, Input, WhatsAppIcon } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Input, WhatsAppIcon, FilterChipBar } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
@@ -1031,62 +1031,22 @@ const LeadsPage: NextPageWithLayout = () => {
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        {/* Filter chips — one horizontal-scroll row on mobile (wraps on desktop), like
-            the comments page. "Returning" (عاد للتواصل) is the LAST chip: a minor,
-            occasional signal, so it sits off-screen by default and the user scrolls
-            horizontally to reveal it rather than it taking permanent space. */}
-        <div className="w-full sm:flex-1 sm:min-w-0 flex overflow-x-auto sm:flex-wrap items-center gap-1.5 sm:gap-2 scrollbar-hide pb-0.5 sm:pb-0">
-          {statusTabs.map((tab) => {
-            const active = statusFilter === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => applyStatusFilter(tab.key)}
-                aria-pressed={active}
-                className={clsx(
-                  'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
-                  active
-                    ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
-                )}
-              >
-                {tab.label}
-                {tab.count !== undefined && (
-                  <span className={clsx(
-                    'text-xs tabular-nums',
-                    active ? 'text-white/70' : 'text-subtle',
-                  )}>
-                    {tab.count.toLocaleString()}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Cross-status "Returning" flag — last chip; orange when active to echo the
-              card badge. Tapping it again clears it. */}
-          <button
-            type="button"
-            onClick={() => applyStatusFilter(returningActive ? 'all' : 'returning')}
-            aria-pressed={returningActive}
-            className={clsx(
-              'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
-              returningActive
-                ? 'bg-accent-500 text-white shadow-sm shadow-accent-500/25'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
-            )}
-          >
-            {t('filterReturning')}
-            {statusCounts?.returning !== undefined && (
-              <span className={clsx(
-                'text-xs tabular-nums',
-                returningActive ? 'text-white/70' : 'text-subtle',
-              )}>
-                {statusCounts.returning.toLocaleString()}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Filter chips. «عاد للتواصل» used to be parked off-screen on a
+            scrolling row, deliberately, so a minor occasional signal cost no
+            permanent vertical space — five inline chips need 447 CSS px against
+            328 on a 360 px phone. Stacking the count under the label drops the
+            row to 309 px (324 px in English), so all five now sit on the SAME
+            single line: the reason for the parking is gone, and nothing is
+            hidden behind a swipe the row never advertised. */}
+        <FilterChipBar
+          ariaLabel={t('title')}
+          activeKey={returningActive ? 'returning' : statusFilter}
+          onSelect={(key) => applyStatusFilter(key === 'returning' && returningActive ? 'all' : key)}
+          chips={[
+            ...statusTabs.map((tab) => ({ key: tab.key, label: tab.label, count: tab.count })),
+            { key: 'returning' as StatusFilter, label: t('filterReturning'), count: statusCounts?.returning, tone: 'accent' as const },
+          ]}
+        />
 
         {/* Search — client-side filter over the loaded leads (name / phone / summary).
             The page selector now lives beside the title (PageHeader `beside`). */}
