@@ -4,11 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // subscriptions + dailyCap also stops the transitive `lib/redis` import (which
 // reads real config at load) from running under the stubbed config.
 const {
-    mockCreate, mockResolveSub, mockGetTopupBalance, mockCheckCap, mockIncrementCap,
+    mockCreate, mockResolveSub, mockCheckStatus, mockGetTopupBalance, mockCheckCap, mockIncrementCap,
     mockClaimOnce, mockSendTemplateNotification, mockObserve,
 } = vi.hoisted(() => ({
     mockCreate: vi.fn(),
     mockResolveSub: vi.fn(),
+    mockCheckStatus: vi.fn(),
     mockGetTopupBalance: vi.fn(),
     mockCheckCap: vi.fn(),
     mockIncrementCap: vi.fn(),
@@ -43,7 +44,11 @@ vi.mock('../config', () => ({ config: { openai: { apiKey: 'test-key' }, imageUnd
 vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 vi.mock('../services/subscriptions', () => ({
-    subscriptionsService: { resolveWorkspaceSubscription: mockResolveSub, getTopupBalance: mockGetTopupBalance },
+    subscriptionsService: {
+        resolveWorkspaceSubscription: mockResolveSub,
+        checkSubscriptionStatus: mockCheckStatus,
+        getTopupBalance: mockGetTopupBalance,
+    },
 }));
 
 vi.mock('../lib/dailyCap', () => ({
@@ -99,6 +104,7 @@ beforeEach(() => {
     (config as unknown as { imageUnderstanding: { enabled: boolean } }).imageUnderstanding.enabled = true;
     (globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi.fn();
     mockGetTopupBalance.mockResolvedValue(0); // no PAYG bonus by default
+    mockCheckStatus.mockReturnValue({ allowed: true }); // entitled by default
 });
 
 describe('imageUnderstandingService.describeFromUrl', () => {
@@ -346,6 +352,65 @@ describe('checkImageUnderstandingGate', () => {
         mockCheckCap.mockResolvedValue({ allowed: true, used: 0, limit: 15 });
         await checkImageUnderstandingGate('u1', 'w1');
         expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 15);
+    });
+
+    /**
+     * A subscription ROW existing is not entitlement. This gate used to ask only
+     * "is there a plan?" and "is the cap spent?", so a canceled / paused /
+     * past-due-beyond-grace / expired-trial merchant kept having their customers'
+     * photos read and billed to us.
+     *
+     * Measured in production 2026-08-19: 288 of 1,527 image_understanding calls
+     * (19%, $0.32, 13 merchants) came from merchants this predicate denies, the
+     * most recent that same day. Pure waste, not a service leak — the gate runs
+     * at ingestion, ahead of messageProcessor's reply gate, so we paid for the
+     * vision call and then refused to send the reply it was for.
+     *
+     * Mutation check: delete the statusCheck block in checkImageUnderstandingGate
+     * and this fails while every other case here stays green.
+     */
+    it('denies with subscription_inactive when the plan no longer entitles anything', async () => {
+        mockResolveSub.mockResolvedValue(sub('pro'));
+        mockCheckStatus.mockReturnValue({
+            allowed: false, reason: 'Subscription is canceled', code: 'subscription_inactive',
+        });
+
+        const result = await checkImageUnderstandingGate('u1', 'w1');
+
+        expect(result).toEqual({ allowed: false, reason: 'subscription_inactive' });
+        // Denied BEFORE the cap machinery: a blocked merchant costs us neither
+        // the Redis round-trip nor the top-up lookup.
+        expect(mockCheckCap).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The predicate must be the SAME one `canAutoReply` uses, or this gate ends
+     * up more permissive than the reply it feeds. Top-up is the specific trap:
+     * `canAutoReply` never consults it (#749 documents that deliberately), so a
+     * blocked merchant holding credits must NOT get image reads back. Top-up
+     * still doubles the CAP — a limit on an entitlement, never a grant of one.
+     */
+    it('does not let a top-up balance revive a blocked merchant', async () => {
+        mockResolveSub.mockResolvedValue(sub('pro'));
+        mockGetTopupBalance.mockResolvedValue(5000);
+        mockCheckStatus.mockReturnValue({ allowed: false, code: 'subscription_inactive' });
+
+        const result = await checkImageUnderstandingGate('u1', 'w1');
+
+        expect(result).toEqual({ allowed: false, reason: 'subscription_inactive' });
+        expect(mockCheckCap).not.toHaveBeenCalled();
+    });
+
+    /** The entitled path must still reach the cap — the guard denies, never gates everything. */
+    it('still applies the daily cap for an entitled merchant', async () => {
+        mockResolveSub.mockResolvedValue(sub('business'));
+        mockCheckStatus.mockReturnValue({ allowed: true });
+        mockCheckCap.mockResolvedValue({ allowed: true, used: 1, limit: 40 });
+
+        const result = await checkImageUnderstandingGate('u1', 'w1');
+
+        expect(result).toEqual({ allowed: true, ownerId: 'owner-1' });
+        expect(mockCheckStatus).toHaveBeenCalledWith(expect.objectContaining({ plan: { slug: 'business' } }));
     });
 
     it('fails closed (cap_check_failed) + captures when the cap check throws', async () => {

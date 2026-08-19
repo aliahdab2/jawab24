@@ -5,7 +5,7 @@ import { instagramService } from '../instagram';
 import { instagramCredentialOf, resolveInstagramCredential, type InstagramCredential } from '../instagramCredential';
 import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
-import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached } from '../imageUnderstanding';
+import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached, type ImageGateResult } from '../imageUnderstanding';
 import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { publishSSEEvent } from '../../lib/eventBus';
@@ -129,8 +129,30 @@ async function finalizeAttachmentDone(
  */
 type ImageDenialAction = 'nudge' | 'silent' | 'silent_notify_cap';
 
-function actionForGateDenial(reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' | 'cap_reached'): ImageDenialAction {
+/**
+ * Derived from `ImageGateResult` rather than re-listed by hand: this switch must
+ * answer for EVERY denial the gate can produce, and a hand-copied union lets a
+ * new reason ship with no decision about what the customer hears. Deriving makes
+ * that a compile error in this file instead.
+ */
+type ImageGateDenialReason = Extract<ImageGateResult, { allowed: false }>['reason'];
+
+function actionForGateDenial(reason: ImageGateDenialReason): ImageDenialAction {
     switch (reason) {
+        // The merchant's subscription no longer entitles anything (canceled,
+        // paused, past-due beyond grace, expired trial). SILENT, and the reason
+        // is not the enum's usual "is the capability available" line — it is that
+        // THIS handler runs at ingestion, before messageProcessor's
+        // `enforceAutoReplyGate`, and consults no subscription of its own. So a
+        // nudge here would be a NEW outbound message to the customer of a
+        // merchant who is not paying, telling them to retype their question as
+        // text — after which the reply gate blocks the answer and they hear
+        // nothing anyway. That is the one case where the nudge's own
+        // justification ("the fastest route to an answer") is false: no answer is
+        // coming by any route. Staying silent is also what a suspended merchant
+        // would want — see the quota story below.
+        case 'subscription_inactive':
+            return 'silent';
         // The merchant's daily quota is spent: silence for the customer, and the
         // merchant — never their customer — is told.
         case 'cap_reached':
