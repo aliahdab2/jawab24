@@ -761,6 +761,22 @@ export class CommentProcessor {
                     { senderName: fromName || 'Unknown', reason: 'held_low_confidence' },
                     { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                // Same rule as 8c-bis above: withholding OUR reply must not discard
+                // THEIR lead. The shared capture lives in sendAndFinalize, downstream
+                // of this return, so a commenter who volunteers a phone here would
+                // otherwise be lost outright.
+                leadExtractorService.maybeCaptureLead({
+                    pageId: page.id,
+                    userId,
+                    workspaceId,
+                    sourceId: comment.id,
+                    sourceType: 'comment',
+                    senderId: fromId ?? '',
+                    senderName: fromName,
+                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    messageText: commentMessage,
+                    postMessage: content.message || undefined,
+                }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, commentId: comment.id };
             }
