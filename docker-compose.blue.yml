@@ -15,7 +15,15 @@ services:
     environment:
       - NODE_ENV=production
       - DEPLOY_ENV=blue
-      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+      # GIT_COMMIT is deliberately NOT set here. The Dockerfile bakes it
+      # (ARG + ENV) from the build arg above, and a compose `environment:`
+      # entry OVERRIDES the image's ENV — so listing it here means any
+      # `docker compose up` run without GIT_COMMIT exported in that shell
+      # replaces the real commit with the literal "unknown". A manual
+      # `--force-recreate` (the documented way to reload env) does exactly
+      # that, and then GET /api/version — the only way we confirm what
+      # shipped — answers "unknown" for a correctly built image.
+      # Pinned by backend/test/deployVersionStamp.test.ts.
       - REDIS_HOST=redis
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme_in_production}
