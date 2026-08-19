@@ -84,6 +84,69 @@ describe('matchCatalogLinesInKb', () => {
     expect(matchCatalogLinesInKb('', ITEMS)).toEqual([]);
     expect(matchCatalogLinesInKb(MOTO_KB, [])).toEqual([]);
   });
+
+  /**
+   * Reported 2026-08-19 with a screenshot: the cleanup sheet offered two FAQ
+   * lines — neither carrying a price — PRE-CHECKED for deletion from Business
+   * Info. Both are reproduced verbatim here; a single item named «جواب24» is
+   * what makes them match.
+   *
+   * Mutation check: revert the per-item digit gate and the first test fails;
+   * revert the MAX_ROW_TAIL_TOKENS cap and the second reports 'exact'.
+   */
+  describe('a digit inside the item NAME is not a price', () => {
+    const BRAND = [{ id: 'brand', name: 'جواب24' }];
+    const FAQ_QUESTION = 'كيف يعمل الذكاء الاصطناعي في جواب24؟';
+    const FAQ_ANSWER =
+      'الطريقة بسيطة من خلال تحميل تطبيق جواب٢٤ على اندرويد او من خلال صفحة جواب ٢٤';
+
+    it('never proposes a prose line whose only digits come from the name', () => {
+      // The «24» in «جواب24» is the brand, not an amount — this line prices
+      // nothing, so the cleanup scope does not include it.
+      expect(matchCatalogLinesInKb(FAQ_QUESTION, BRAND)).toEqual([]);
+    });
+
+    it('offers a sentence UNCHECKED even when it does carry a real number', () => {
+      // «صفحة جواب ٢٤» leaves a standalone 24 once the name is removed, so the
+      // price gate cannot reject it. The prose cap is what stops it being one
+      // tap from deletion.
+      const matches = matchCatalogLinesInKb(FAQ_ANSWER, BRAND);
+      expect(matches).toHaveLength(1);
+      expect(matches[0].confidence).toBe('tokens');
+    });
+
+    it('still pre-checks a genuine price row for the same digit-bearing name', () => {
+      // The fix must not make digit-bearing names unmatchable — only unpriced
+      // prose about them.
+      const matches = matchCatalogLinesInKb('جواب24 — 15$ شهرياً', BRAND);
+      expect(matches).toHaveLength(1);
+      expect(matches[0].confidence).toBe('exact');
+    });
+  });
+
+  it('measures the prose tail per LINE, so a multi-product row stays exact', () => {
+    // Three names + three prices is a long line, but every word on it is
+    // catalog content. Measuring the tail per item would have read the OTHER
+    // two products as prose and demoted all three to 'tokens'.
+    const matches = matchCatalogLinesInKb('زيت موتول ١٨ ألف، فلتر هواء ٢٥ ألف، بوجيه ٣٠ ألف', [
+      { id: 'oil', name: 'زيت موتول' },
+      { id: 'filter', name: 'فلتر هواء' },
+      { id: 'plug', name: 'بوجيه' },
+    ]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].itemIds).toEqual(['oil', 'filter', 'plug']);
+    expect(matches[0].confidence).toBe('exact');
+  });
+
+  it('keeps a wordy but real price row at exact confidence', () => {
+    // The prose cap must clear the wordiest rows merchants actually write, or
+    // it silently stops pre-checking legitimate cleanups.
+    const matches = matchCatalogLinesInKb('باقة الاحتراف: ٢٥ دولار شهرياً للمتجر الواحد', [
+      { id: 'pro', name: 'باقة الاحتراف' },
+    ]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].confidence).toBe('exact');
+  });
 });
 
 describe('matchStructuredFieldLinesInKb (the #720 fix)', () => {

@@ -10,10 +10,25 @@
  * Rules:
  * - A line is proposed only when EVERY name token of some item appears
  *   standalone in the line (ال prefix tolerated) AND the line carries a
- *   number — price-shaped lines are the cleanup scope; prose mentions stay.
- * - 'exact' confidence = the whole normalized item name appears contiguously
- *   AND the name is distinctive (≥2 tokens or ≥4 chars). The review sheet
- *   pre-checks these. 'tokens' = scattered/short matches, offered UNCHECKED.
+ *   number THAT IS NOT PART OF THE ITEM'S OWN NAME — price-shaped lines are the
+ *   cleanup scope; prose mentions stay.
+ * - 'exact' confidence = the whole normalized item name appears contiguously,
+ *   the name is distinctive (≥2 tokens or ≥4 chars), AND the line reads like a
+ *   catalog row rather than a sentence. The review sheet pre-checks these.
+ *   'tokens' = scattered/short/prose matches, offered UNCHECKED.
+ *
+ * Two holes closed 2026-08-19, after a merchant was offered two FAQ lines —
+ * neither carrying a price — pre-checked for deletion from Business Info:
+ *
+ *  1. The digit gate counted digits INSIDE the matched name. A brand-shaped item
+ *     («جواب24») made every prose line that merely mentions it look price-shaped,
+ *     because the "price" it found was the 24 in its own name. The gate now runs
+ *     on the line with that item's name removed, which is what it always meant.
+ *  2. Nothing distinguished a price row from a sentence. «الطريقة بسيطة من خلال
+ *     تحميل تطبيق جواب٢٤ … صفحة جواب ٢٤» has a genuine standalone number, so (1)
+ *     alone still lets it through — and it was PRE-CHECKED, one tap from deleting
+ *     the merchant's own copy. A row is short by nature; a sentence is not, so a
+ *     long tail beyond the name caps confidence at 'tokens'.
  */
 
 import { normalizeArabic } from './utils/arabic-normalize';
@@ -53,6 +68,47 @@ function containsStandalone(paddedLine: string, token: string): boolean {
 }
 
 /**
+ * The line with every standalone occurrence of `tokens` removed — the same
+ * ال-tolerance `containsStandalone` applies, so what the matcher counted as
+ * present is exactly what is taken away. Stays padded, so callers can keep
+ * using `containsStandalone` on the result.
+ */
+function withoutTokens(paddedLine: string, tokens: string[]): string {
+  let rest = paddedLine;
+  for (const token of tokens) {
+    for (const form of [` ${token} `, ` ال${token} `]) {
+      // Loop: removing ` a ` from ` a a ` consumes the shared separator, so a
+      // single pass would leave the second occurrence behind.
+      while (rest.includes(form)) rest = rest.replace(form, ' ');
+    }
+  }
+  return rest;
+}
+
+/**
+ * How many words a line still has once every catalog name it mentions is taken
+ * out. A catalog row is mostly its names plus prices («زيت موتول ١٨ ألف» → 2),
+ * while a sentence that happens to mention the item carries a long tail
+ * («… تحميل تطبيق جواب٢٤ على اندرويد او من خلال صفحة جواب ٢٤» → 11).
+ *
+ * Measured per LINE, against ALL the items it matches, not per item: "is this a
+ * catalog row?" is a property of the line, and a row listing three products
+ * would otherwise read as prose to each of them in turn.
+ *
+ * 6 clears the wordiest REAL rows seen in merchant price lists — name + amount
+ * + currency + a two-or-three-word qualifier («شهرياً للمتجر الواحد») — with
+ * room to spare, while a prose sentence is far above it. It is a cowardice
+ * threshold, not a classifier: crossing it does not reject the line, it only
+ * stops it being PRE-CHECKED, so the merchant opts in by hand.
+ */
+const MAX_ROW_TAIL_TOKENS = 6;
+
+function countTokens(padded: string): number {
+  const trimmed = padded.trim();
+  return trimmed ? trimmed.split(' ').length : 0;
+}
+
+/**
  * Pure. Returns the KB lines safe to PROPOSE for removal, in their original
  * KB order (each carries its own `confidence`; callers pre-check 'exact' and
  * leave 'tokens' unchecked). Never touches the text itself.
@@ -82,17 +138,32 @@ export function matchCatalogLinesInKb(
   lines.forEach((line, lineIndex) => {
     const paddedLine = comparable(line);
     if (!paddedLine) return;
-    // Cleanup scope is price-shaped lines only (digits already normalized
-    // from Arabic-Indic by comparable()). Prose mentions are never proposed.
+    // Cheap early-out only (digits already normalized from Arabic-Indic by
+    // comparable()). The REAL price gate is per item, below: a digit that comes
+    // from the item's own name is not a price.
     if (!/\d/.test(paddedLine)) return;
+
+    // Cleanup scope is price-shaped lines only. «كيف يعمل الذكاء الاصطناعي في
+    // جواب24؟» carries a digit, but take «جواب24» out and nothing numeric is
+    // left — the line states no price, so it is prose and stays.
+    const priced = prepared.filter(
+      (item) =>
+        item.tokens.every((t) => containsStandalone(paddedLine, t)) &&
+        /\d/.test(withoutTokens(paddedLine, item.tokens)),
+    );
+    if (!priced.length) return;
+
+    // One line-level measurement, shared by every item on the line.
+    const looksLikeRow =
+      countTokens(withoutTokens(paddedLine, priced.flatMap((i) => i.tokens))) <=
+      MAX_ROW_TAIL_TOKENS;
 
     const itemIds: string[] = [];
     let confidence: KbLineMatchConfidence | null = null;
 
-    for (const item of prepared) {
-      if (!item.tokens.every((t) => containsStandalone(paddedLine, t))) continue;
+    for (const item of priced) {
       itemIds.push(item.id);
-      const isExact = item.distinctive && paddedLine.includes(` ${item.padded} `);
+      const isExact = item.distinctive && paddedLine.includes(` ${item.padded} `) && looksLikeRow;
       if (isExact) confidence = 'exact';
       else confidence = confidence ?? 'tokens';
     }

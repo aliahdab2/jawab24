@@ -116,4 +116,44 @@ describe('KbCleanupSheet', () => {
     expect(onClose).toHaveBeenCalled();
     expect(cleanupKb).not.toHaveBeenCalled();
   });
+
+  /**
+   * The sheet must honour the matcher's `confidence`, which it ignored until
+   * 2026-08-19: every product match was pre-checked, so a low-confidence line
+   * was ONE TAP from deleting the merchant's own Business Info text. Reported
+   * with a screenshot of exactly this — a page's FAQ prose, pre-checked, above
+   * a primary «Remove 2 lines» button.
+   *
+   * Real shapes, not synthetic: a brand-style item name and the merchant's own
+   * sentence about it, which `catalogKbMatch` grades 'tokens'.
+   *
+   * Mutation check: pre-check on `kind !== 'field'` again and both assertions
+   * fail (checked box, and the confirm button enabled).
+   */
+  it('leaves a low-confidence product match UNCHECKED, and says why', () => {
+    const PROSE_LINE =
+      'الطريقة بسيطة من خلال تحميل تطبيق جواب٢٤ على اندرويد او من خلال صفحة جواب ٢٤';
+
+    renderSheet({
+      kbText: PROSE_LINE,
+      items: [item({ id: 'brand', name: 'جواب24' })],
+      profile: undefined, // isolate the product path — no field matches
+    });
+
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0].checked).toBe(false);
+
+    // An unchecked box with no reason is a worse UI than no box at all.
+    expect(
+      screen.getByText(/doesn't look like a price line/i),
+    ).toBeInTheDocument();
+
+    // Nothing pre-selected ⇒ the destructive action is unavailable until the
+    // merchant deliberately opts in.
+    const removeBtn = screen
+      .getAllByRole('button')
+      .find((b) => /Remove/i.test(b.textContent || '')) as HTMLButtonElement;
+    expect(removeBtn.disabled).toBe(true);
+  });
 });
