@@ -13,7 +13,7 @@ vi.mock('../lib/aiMetrics', () => ({
 }));
 
 import {
-    shouldVerifyGrounding, buildGroundingSource, GROUNDING_FLAG, GROUNDING_SHADOW_META_KEY,
+    shouldVerifyGrounding, buildGroundingSource, buildVerifierUserMessage, GROUNDING_FLAG, GROUNDING_SHADOW_META_KEY,
 } from '../services/groundingVerifier';
 
 const KB = 'k'.repeat(400);
@@ -179,6 +179,23 @@ describe('buildGroundingSource', () => {
         expect(shouldVerifyGrounding(base({ kb: listsOnly }))).toBe(true);
     });
 
+
+    // The floor MIN_KB_CHARS exists to skip pages "running on persona alone" —
+    // its own words. Folding the persona into this function would let it satisfy
+    // the very floor written to exclude it: measured 2026-08-19, 6 of 38 live
+    // pages sit under the floor on Business Info yet clear it once the persona is
+    // counted, so every claim on exactly the starved pages the floor protects
+    // would flag. The persona grounds from its own section instead.
+    it('leaves the persona out, so it cannot satisfy the MIN_KB_CHARS floor', () => {
+        const thinBusinessInfo = 'صالة عرض.';
+        const fatPersona = 'الاسم: معك رنيم من شركة ام اي اس. '.repeat(20);
+        expect(fatPersona.length).toBeGreaterThan(200);
+
+        const out = buildGroundingSource({ knowledgeBase: thinBusinessInfo });
+        expect(out).not.toContain('رنيم');
+        expect(shouldVerifyGrounding(base({ kb: out }))).toBe(false);
+    });
+
     it('drops absent and whitespace-only blocks instead of padding the source', () => {
         expect(buildGroundingSource({ knowledgeBase: 'KB', storePolicies: '   ', productCatalog: null }))
             .toBe('KB');
@@ -189,6 +206,79 @@ describe('buildGroundingSource', () => {
     // every claim in the reply would flag as unsupported.
     it('produces a source that the gate rejects when nothing is available', () => {
         expect(shouldVerifyGrounding(base({ kb: buildGroundingSource({}) }))).toBe(false);
+    });
+});
+
+describe('buildVerifierUserMessage', () => {
+    const msg = (persona?: string) => buildVerifierUserMessage({
+        kb: 'BUSINESS INFO',
+        persona,
+        question: 'Q',
+        reply: 'R',
+    });
+
+    // The regression this test exists for (prod, 2026-08-19): ام. اي. اس wrote
+    // «الاسم: معك رنيم من شركة ام اي اس» in the persona. The reply obeyed and
+    // opened with «معك رنيم» — and the verifier, which received five blocks and
+    // not that sentence, reported the merchant's own assistant name as an
+    // invented employee. Verified against prod that «رنيم» appears in NONE of
+    // kb_chunks / knowledge_base / business_profile for that page, so the
+    // persona is the only place it can be grounded.
+    it('includes the persona, so a reply using the merchant-chosen assistant name is grounded', () => {
+        const knowledgeBase = 'شاشات وبرادات وغسالات بأسعار منافسة. '.repeat(20);
+        expect(knowledgeBase).not.toContain('رنيم');
+
+        const out = buildVerifierUserMessage({
+            kb: knowledgeBase,
+            persona: 'الاسم: معك رنيم من شركة ام اي اس\nالنبرة واللهجة: ودود، لهجة سورية',
+            question: 'انت شو اسمك',
+            reply: 'معك رنيم من ام. اي. اس، كيف فيني ساعدك؟',
+        });
+        expect(out).toContain('رنيم');
+        expect(out).toContain('<merchant_instructions>');
+    });
+
+    // Why the WHOLE block goes in rather than just the persona's name: merchants
+    // put policy in this field. Both strings below are live prod values from
+    // منتجع شاهين. Passing identity alone would leave every policy answer —
+    // "no booking over social", "no Sham Cash" — ungrounded, which is the same
+    // false-flag class one field further along.
+    it('grounds a policy the merchant wrote in the persona field, not just the name', () => {
+        const knowledgeBase = 'منتجع سياحي على البحر مع أجنحة وشقق فندقية. '.repeat(20);
+        const brandVoiceNotes = [
+            'سارة , لهجة سورية ودودة , لاتقوم باعطاء أجوبة خارج نطاق المنتجع',
+            'لايوجد لدينا تثبيت حجز عن طريق وسائل التواصل الاجتماعي',
+            'حاليا لايوجد دفع عن طريق شام كاش',
+        ].join('\n');
+        expect(knowledgeBase).not.toContain('شام كاش');
+
+        const out = buildVerifierUserMessage({ kb: knowledgeBase, persona: brandVoiceNotes, question: 'بتقبلوا شام كاش؟', reply: 'حالياً ما في دفع عن طريق شام كاش.' });
+        expect(out).toContain('شام كاش');
+        expect(out).toContain('تثبيت حجز عن طريق وسائل التواصل');
+    });
+
+
+    // An absent persona must not leave an empty tag behind — a bare
+    // <merchant_instructions></merchant_instructions> reads to the auditor as
+    // "the merchant wrote nothing", which is a claim the payload should not make.
+    it('omits the section entirely when there is no persona', () => {
+        expect(msg()).not.toContain('merchant_instructions');
+        expect(msg('   ')).not.toContain('merchant_instructions');
+        expect(msg('الاسم: سارة')).toContain('<merchant_instructions>');
+    });
+
+    // Ordering is a cost property, not cosmetics: <business_info> and the
+    // page-stable persona are the two largest spans and both are byte-identical
+    // across a page's replies, so they must precede the per-reply text for
+    // OpenAI's prompt cache to hit.
+    it('keeps business_info first and the persona directly behind it', () => {
+        const out = buildVerifierUserMessage({
+            kb: 'BUSINESS INFO', persona: 'الاسم: سارة',
+            conversation: 'customer: hi', question: 'Q', reply: 'R',
+        });
+        expect(out.indexOf('<business_info>')).toBeLessThan(out.indexOf('<merchant_instructions>'));
+        expect(out.indexOf('<merchant_instructions>')).toBeLessThan(out.indexOf('<conversation>'));
+        expect(out.indexOf('<conversation>')).toBeLessThan(out.indexOf('<customer_message>'));
     });
 });
 

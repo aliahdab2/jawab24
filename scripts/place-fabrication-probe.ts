@@ -250,7 +250,12 @@ async function ask(pageId: string, probe: Probe): Promise<PlaygroundResponse | n
 
 async function main(): Promise<void> {
     const pageId = await resolveDistributorPageId();
-    // Exactly what buildGroundingSource assembles for this page in production.
+    // The grounding SOURCE for this fixture page: prose KB + the rendered
+    // <business_lists> block. NOT a mirror of buildGroundingSource — that
+    // function also carries businessInfoBlock and (since 2026-08-19) the
+    // persona. This page has neither, so the two agree HERE and only here;
+    // re-pointing this probe at a page with a persona or confirmed fields
+    // would judge correct replies as fabrications.
     const kb = [
         DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_distributor')!.suggestedKnowledgeBase,
         renderDemoDistributorLists(new Date().toISOString().slice(0, 10)),
