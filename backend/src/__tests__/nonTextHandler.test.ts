@@ -497,6 +497,35 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
     });
 
+    /**
+     * A suspended merchant's customer must hear NOTHING — not even the nudge.
+     *
+     * This handler runs at ingestion and consults no subscription of its own;
+     * the entitlement gate lives downstream in messageProcessor. So a nudge here
+     * would be a NEW outbound message to the customer of a merchant who is not
+     * paying, telling them to retype their question as text — after which the
+     * reply gate blocks the answer and they hear nothing anyway. It is the one
+     * denial where the nudge's own justification ("the fastest route to an
+     * answer") is false: no answer is coming by any route.
+     *
+     * Mutation check: return 'nudge' for subscription_inactive in
+     * actionForGateDenial and this fails on sendPrivateMessage.
+     */
+    it('stays SILENT to the customer when the merchant is no longer subscribed', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'subscription_inactive' });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(mockDescribeUrl).not.toHaveBeenCalled();
+        expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        expect(enqueueMessage).not.toHaveBeenCalled();
+        // Not a cap denial — the merchant must not get a "daily limit" notice
+        // for what is actually an unpaid subscription.
+        expect(mockNotifyCap).not.toHaveBeenCalled();
+        // Still finalized so a parked text job is never left waiting on it.
+        expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
+    });
+
     it('tells the MERCHANT (not the customer) which limit was hit', async () => {
         mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached', ownerId: 'page-owner-1', limit: 15 });
 

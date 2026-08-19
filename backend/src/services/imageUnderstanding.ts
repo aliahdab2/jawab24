@@ -449,13 +449,15 @@ export type ImageGateResult =
     // owner and the limit they hit, so the caller can tell THEM (never their
     // customer). Every other denial is a technical failure with no owner story.
     | { allowed: false; reason: 'cap_reached'; ownerId: string; limit: number }
-    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' };
+    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' | 'subscription_inactive' };
 
 /**
  * Decide whether a customer image may be understood for this page's workspace:
  * global env kill switch → resolve the owning subscription (team-member pages
- * share the workspace owner's plan) → per-plan daily cap, DOUBLED for merchants
- * with an active top-up balance (they've already paid for extra reply capacity).
+ * share the workspace owner's plan) → THAT SUBSCRIPTION STILL ENTITLES ANYTHING
+ * (`checkSubscriptionStatus`, the same predicate `canAutoReply` uses) → per-plan
+ * daily cap, DOUBLED for merchants with an active top-up balance (they've
+ * already paid for extra reply capacity).
  * Every denial stores the placeholder; what the CUSTOMER hears differs by reason
  * and is decided in one place — `actionForGateDenial` in nonTextHandler. `env_disabled`
  * and `no_subscription` nudge (both are true statements about a standing
@@ -482,6 +484,35 @@ export async function checkImageUnderstandingGate(
         if (!resolved) return { allowed: false, reason: 'no_subscription' };
 
         const { subscription, ownerId } = resolved;
+
+        // A subscription ROW existing is not entitlement. Without this the gate
+        // asked only "is there a plan?" and "is the daily cap spent?", so a
+        // canceled, paused, or past-due-beyond-grace merchant kept having their
+        // customers' photos read and billed to us. Measured in production
+        // 2026-08-19: 288 of 1,527 image_understanding calls (19%, $0.32, 13
+        // merchants, still accruing that day) came from merchants this predicate
+        // denies.
+        //
+        // It is pure waste, not a service leak: this gate runs at INGESTION via
+        // nonTextHandler, ahead of messageProcessor's `enforceAutoReplyGate`, so
+        // we paid for the vision call and then refused to send the reply it was
+        // for.
+        //
+        // `checkSubscriptionStatus` is the SAME predicate `canAutoReply` uses —
+        // deliberately, so this gate can never be more permissive than the reply
+        // it feeds. In particular top-up balance must NOT lift it: `canAutoReply`
+        // never consults top-up (#749 documents that), and a merchant whose
+        // replies are blocked gaining image reads by holding credits is exactly
+        // the inconsistency this fixes. Top-up still doubles the CAP below, which
+        // is a limit on an entitlement, not a grant of one.
+        //
+        // Costs nothing: `resolveWorkspaceSubscription` already returned the row
+        // with its plan, and this is a pure function over it — no extra query.
+        const statusCheck = subscriptionsService.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) {
+            return { allowed: false, reason: 'subscription_inactive' };
+        }
+
         const baseLimit = IMAGE_DAILY_LIMITS[subscription.plan.slug] ?? DEFAULT_IMAGE_LIMIT;
         const topupBalance = await subscriptionsService.getTopupBalance(ownerId);
         const limit = topupBalance > 0 ? baseLimit * PAYG_LIMIT_MULTIPLIER : baseLimit;
