@@ -78,6 +78,30 @@ export default async function authRoutes(fastify: FastifyInstance) {
         preHandler: [authenticate],
     }, authController.getMe);
 
+    // Records the caller's GA4 client id so server-side conversions can be
+    // attributed to the ad click that started the session (services/ga4.ts).
+    // Rate-limited like the other authenticated write endpoints — a client is
+    // expected to call this at most once per session.
+    fastify.post('/auth/analytics-client-id', {
+        schema: {
+            tags: ['Auth'],
+            summary: 'Record the GA4 client id for server-side conversion attribution',
+            security: auth,
+            body: {
+                type: 'object',
+                required: ['clientId'],
+                properties: {
+                    // GA4 client id: `<random>.<timestamp>`. The controller
+                    // enforces the exact shape; this bounds the input first.
+                    clientId: { type: 'string', minLength: 3, maxLength: 64 },
+                },
+                additionalProperties: false,
+            },
+        },
+        preHandler: [authenticate],
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, authController.setAnalyticsClientId);
+
     // App→browser session bridge: mints a single-use 60 s code the native app
     // opens /auth/sync with, so browser-side flows (WhatsApp connect, payments)
     // start already signed in instead of on a login wall.

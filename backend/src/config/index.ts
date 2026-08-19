@@ -405,6 +405,22 @@ export const config = {
     // (e.g. the Post Reply image view link, which sits in Messenger threads forever).
     publicApiBaseUrl: process.env.PUBLIC_API_BASE_URL || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/api`,
 
+    // GA4 Measurement Protocol — server-side conversion reporting (services/ga4.ts).
+    //
+    // Deliberately NOT validated by validateEnv: with either value empty the whole
+    // integration no-ops, which is the correct posture for local dev and for any
+    // deploy that has not been given credentials. Analytics must never be able to
+    // fail a boot or a signup.
+    //
+    // measurementId is the SAME G-XXXXXXXX id the browser tag uses
+    // (NEXT_PUBLIC_GA_ID); apiSecret is minted per data stream in
+    // GA4 Admin → Data Streams → Measurement Protocol API secrets. It is a
+    // write-only credential — it can send events, it cannot read reports.
+    ga4: {
+        measurementId: process.env.GA4_MEASUREMENT_ID || '',
+        apiSecret: process.env.GA4_API_SECRET || '',
+    },
+
     // Cookie secret (validated by validateEnv — no insecure fallback)
     cookieSecret: process.env.COOKIE_SECRET || '',
 

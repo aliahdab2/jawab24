@@ -13,6 +13,7 @@ import {
     handlePaymentRecovery,
 } from '../services/dunningNotices';
 import { topupService } from '../services/topup';
+import { sendPurchaseConversion } from '../services/ga4';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
@@ -222,6 +223,23 @@ export async function handleCheckoutComplete(
     if (insertedSub) {
         await sendSubscriptionWelcomeEmail(userId, planId, stripeSubscription, request);
     }
+
+    // GA4 `purchase` — the money event Google Ads bids on. Server-side
+    // deliberately: the amount is Stripe's own, no ad blocker or CSP rule can
+    // drop it, and it cannot double-fire on a refresh of the success page (which
+    // in any case carries only `session_id` — no plan, no amount).
+    //
+    // The zero-amount guard, the dedup key, and the minor→major unit conversion
+    // all live in sendPurchaseConversion; see it for why each one matters.
+    // Fire-and-forget, like every other analytics emit: it must never be able to
+    // fail a webhook Stripe would then retry.
+    void sendPurchaseConversion({
+        userId,
+        transactionId: session.id,
+        amountMinorUnits: session.amount_total,
+        currency: session.currency,
+        planId,
+    });
 }
 
 /**
