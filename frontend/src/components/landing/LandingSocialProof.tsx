@@ -9,9 +9,14 @@ export function LandingSocialProof() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-60px' });
 
+  // Fleet-wide figures, NOT the quoted author's. They sit under their own scope
+  // caption for that reason — presenting an aggregate directly beneath a named
+  // testimonial reads as that one customer's result, which is the very thing the
+  // aggregate exists to replace.
   const stats = [
     { value: t('testimonials.stat1Value'), label: t('testimonials.stat1Label') },
     { value: t('testimonials.stat2Value'), label: t('testimonials.stat2Label') },
+    { value: t('testimonials.stat3Value'), label: t('testimonials.stat3Label') },
   ];
 
   return (
@@ -70,12 +75,14 @@ export function LandingSocialProof() {
               {t('testimonials.author1')}
             </span>
           </a>
-          <span className="text-white/60">·</span>
-          <span className="text-white/70">{t('testimonials.resultsLabel')}</span>
         </motion.div>
 
+        <p className="text-white/70 text-[10px] sm:text-xs mb-2">
+          {t('testimonials.statsScope')}
+        </p>
+
         <motion.div
-          className="grid grid-cols-2 gap-2 sm:gap-3 max-w-md mx-auto"
+          className="grid grid-cols-3 gap-2 sm:gap-3 max-w-lg mx-auto"
           initial={{ opacity: 1, y: 10 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 10 }}
           transition={{ duration: 0.5, delay: 0.6 }}
