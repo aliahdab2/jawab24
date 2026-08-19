@@ -44,6 +44,16 @@ interface FilterChipBarProps<K extends string> {
  *
  * `flex-wrap` is the safety net for ~320 px devices, where even the stacked row
  * spills: a visible second row beats a hidden filter.
+ *
+ * **The chips SHARE the row's full width** (`flex-1` below `sm`). Content-sized
+ * chips left the short ones tiny and the row unfinished: measured on leads at
+ * 360 px, 57 px of it went unused while «الكل» sat in a pill about a third the
+ * width of «تحوّل» (reported 2026-08-19) — the most-tapped filter had the
+ * smallest target. Growing is safe with big numbers precisely because `flex-1`
+ * keeps the default `min-width: auto`: a chip never shrinks below its own
+ * widest line, so a 72,325 count still sets its floor and only the surplus is
+ * shared. When the floors add up to more than the line, nothing is squashed —
+ * the row wraps, exactly as before.
  */
 export function FilterChipBar<K extends string>({
   chips,
@@ -69,6 +79,10 @@ export function FilterChipBar<K extends string>({
               // Stacked below sm (count under label), inline pill from sm up.
               // The stack is what makes one row fit — see the `layout` note.
               'flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-0 sm:gap-1.5',
+              // Fill the phone's width, keep the natural pill from sm up — there
+              // the row shares its line with the search box, so growing would
+              // steal that space.
+              'flex-1 sm:flex-none',
               'px-2.5 sm:px-4 py-1 sm:py-2 min-h-[46px] sm:min-h-0 rounded-2xl sm:rounded-full',
               'text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
               active
