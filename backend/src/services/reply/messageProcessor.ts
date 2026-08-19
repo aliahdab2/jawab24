@@ -805,6 +805,22 @@ export class MessageProcessor {
                     { senderName: senderName || senderId, reason: 'held_low_confidence' },
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                // Same reasoning as the 12c hold above: withholding OUR reply must not
+                // discard THEIR lead. The shared capture lives downstream of this return,
+                // so a held message's volunteered phone/name would otherwise be lost —
+                // measured in prod 2026-08-19, 3 held messages carried a number and none
+                // became a lead (one was a pharmacy wholesale enquiry).
+                leadExtractorService.maybeCaptureLead({
+                    pageId: page.id,
+                    userId,
+                    workspaceId,
+                    sourceId: storedMessage.id,
+                    sourceType: 'message',
+                    senderId,
+                    senderName,
+                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    messageText: consolidatedText,
+                }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, messageId: platformMessageId };
             }

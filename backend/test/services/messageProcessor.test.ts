@@ -2396,6 +2396,51 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendTypingOff).toHaveBeenCalledTimes(1);
     });
 
+    it('still captures the customer lead when the reply is held for low-confidence review', async () => {
+        // Same rule as the self-identification hold below: withholding OUR reply
+        // must not discard THEIR data. The shared maybeCaptureLead sits downstream
+        // of the 12d return, so without an explicit capture here a held message's
+        // volunteered phone is lost outright. Measured in prod 2026-08-19: 3 held
+        // messages carried a number, none became a lead — one a pharmacy's
+        // wholesale enquiry on a pharma distributor's page.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+            holdLowConfidence: true,
+        } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'ما عندي السعر، تواصل معنا',
+            replyMethod: 'ai',
+            needsAttention: false,
+            confidence: 'low',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendReply });
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'صيدلية الساحل البريقة 0913823491', 'msg-1',
+        );
+
+        // The hold itself is unchanged: nothing is sent, the row is marked held.
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(messagesService.markAsReplied).toHaveBeenCalledWith(
+            'msg-uuid', '', 'ai', true, 'held_low_confidence',
+            expect.anything(), expect.anything(), expect.anything(),
+        );
+        // ...but the customer's own details survive it.
+        expect(leadExtractorService.maybeCaptureLead).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceId: 'msg-uuid',
+                sourceType: 'message',
+                messageText: 'صيدلية الساحل البريقة 0913823491',
+            }),
+        );
+    });
+
     it('withholds an exhausted self-identification strip — nothing sent, no retry, typing cleared', async () => {
         // Check 6 strip-to-empty: the ai-worker returns an EMPTY reply with the
         // exhausted flag instead of a canned SELF_ID_FALLBACKS identity line

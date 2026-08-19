@@ -15,6 +15,8 @@ import { PostNotOwnedError } from '../../src/services/postErrors';
 import { captureError } from '../../src/utils/sentryHelpers';
 import { withPageTokenRetryResult, handlePageTokenFailure } from '../../src/services/pageTokenRecovery';
 
+import { leadExtractorService } from '../../src/services/leadExtractor';
+
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
@@ -121,6 +123,9 @@ vi.mock('../../src/utils/settingsHelpers', async (importOriginal) => {
 
 // In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
 const pipelineCounters = vi.hoisted<Record<string, number>>(() => ({}));
+vi.mock('../../src/services/leadExtractor', () => ({
+    leadExtractorService: { maybeCaptureLead: vi.fn().mockResolvedValue(undefined) },
+}));
 vi.mock('../../src/lib/pipelineMetrics', () => ({
     pipelineMetrics: {
         record: vi.fn((pipeline: string, outcome: string) => {
@@ -307,6 +312,49 @@ describe('CommentProcessor', () => {
             );
             expect(adapter.markAsReplied).not.toHaveBeenCalled();
         });
+    });
+
+    it('still captures the commenter lead when the reply is held for low-confidence review', async () => {
+        // Mirror of the DM pipeline's 12d capture: withholding OUR reply must not
+        // discard THEIR lead. The shared capture lives in sendAndFinalize, downstream
+        // of the 8d return, so without an explicit call here a commenter's volunteered
+        // phone is lost. Same defect the message path carried until 2026-08-19.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentsAutoReply: true,
+            replyDelay: 0,
+            holdLowConfidence: true,
+        } as never);
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'ما عندي السعر، تواصل معنا',
+            replyMethod: 'ai',
+            needsAttention: false,
+            confidence: 'low',
+            aiIntent: 'QUESTION',
+        } as never);
+
+        const adapter = createMockAdapter();
+        await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1',
+            'صيدلية الساحل البريقة 0913823491', 'user-1', 'Ali',
+        );
+
+        // The hold is unchanged: nothing sent, stored as held for review.
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(adapter.markAsReplied).toHaveBeenCalledWith(
+            'comment-uuid', '', 'ai', expect.anything(),
+            true, 'held_low_confidence', 'QUESTION', expect.anything(),
+        );
+        // ...but the commenter's own details survive it.
+        expect(leadExtractorService.maybeCaptureLead).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceId: 'comment-uuid',
+                sourceType: 'comment',
+                messageText: 'صيدلية الساحل البريقة 0913823491',
+            }),
+        );
     });
 
     it('should return error when page not found', async () => {
