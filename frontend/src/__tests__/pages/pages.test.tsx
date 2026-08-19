@@ -1821,3 +1821,73 @@ describe('PagesPage - Instagram-only demand signal', () => {
         }
     });
 });
+
+// Regression for the #806 payload trim (2026-08-18): `GET /pages?view=list` stopped
+// shipping `knowledgeBase` and started sending a server-computed `kbFilled`
+// boolean, but the card still read the raw text. `!page.knowledgeBase` was
+// therefore true for EVERY page, so the Business Info CTA was frozen in its
+// "add" state — and an amber «أضف معلومات» chip fired — even for merchants whose
+// info was complete. These fixtures use the LIST shape on purpose: kbFilled, no
+// knowledgeBase. A card that reads the text again fails here.
+describe('PagesPage - Business Info CTA reads the list payload', () => {
+    const LIST_SHAPE_PAGES = [
+        {
+            id: 'page_filled',
+            facebookPageId: 'fb_filled',
+            name: 'Filled Page',
+            autoReplyEnabled: true,
+            instagramAutoReplyEnabled: false,
+            commentsCount: 10,
+            kbFilled: true,
+        },
+        {
+            id: 'page_empty',
+            facebookPageId: 'fb_empty',
+            name: 'Empty Page',
+            autoReplyEnabled: true,
+            instagramAutoReplyEnabled: false,
+            commentsCount: 0,
+            kbFilled: false,
+        },
+    ];
+
+    beforeEach(() => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: LIST_SHAPE_PAGES },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('shows the EDIT state for a page whose info is filled, with no text field in the payload', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.businessInfoActive)).toBeInTheDocument();
+        });
+        expect(screen.getByText(enPages.clickToEdit)).toBeInTheDocument();
+    });
+
+    it('still shows the ADD state for a page whose info is empty', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.addBusinessInfo)).toBeInTheDocument();
+        });
+        expect(screen.getByText(enPages.improveAIQuality)).toBeInTheDocument();
+    });
+
+    // The nudge banner (correct predicate all along) is the card's single alert.
+    // The amber chip that used to sit under the page name was a third ask for the
+    // same action, and the one firing on filled pages.
+    it('shows one alert on the page that needs info, and nothing on the one that does not', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.businessInfoNudgeTextStrong)).toBeInTheDocument();
+        });
+        expect(screen.getAllByText(enPages.businessInfoNudgeTextStrong)).toHaveLength(1);
+    });
+});

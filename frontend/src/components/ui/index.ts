@@ -41,3 +41,4 @@ export { Sparkline } from './Sparkline';
 export { FeedSnippet } from './FeedSnippet';
 export { ArrowLink } from './ArrowLink';
 export { ViewOnlyBanner } from './ViewOnlyBanner';
+export { FilterChipBar, type FilterChip } from './FilterChipBar';

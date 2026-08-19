@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
 import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
-import { needsBusinessInfo } from '@/utils/kb';
+import { needsBusinessInfo, isKbFilled } from '@/utils/kb';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
@@ -1049,6 +1049,11 @@ const PagesPage: NextPageWithLayout = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {sectionPages.map((page) => {
                       const i = globalIndex++;
+                      // Whether this page has merchant-provided Business Info.
+                      // MUST go through isKbFilled: the list payload carries the
+                      // server-computed `kbFilled` boolean and no longer carries
+                      // the text itself (#806, 2026-08-18).
+                      const kbFilled = isKbFilled(page);
                       // Pageless cards: a pages row with no Facebook page behind it.
                       // WHICH direct channel owns the card decides its identity —
                       // an Instagram-direct card rendered as a WhatsApp one hid the
@@ -1099,17 +1104,11 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
                   <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
-                  {/* Empty KB indicator — clickable chip for pages without business info and no e-commerce */}
-                  {!page.knowledgeBase && !page.ecommerceStoreId && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); openKbEditorFor(page); }}
-                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" aria-hidden="true" />
-                      {t('addInfo')}
-                    </button>
-                  )}
+                  {/* No "Add info" chip here. A page missing its Business Info
+                      already says so twice below — the amber nudge banner (with
+                      the reason and an "Add now" button) and the Business Info
+                      CTA — and all three opened the same editor. One alert plus
+                      one persistent entry point; the chip was the third. */}
                 </div>
 
                 {/* External link to Facebook page — only for Facebook-connected pages */}
@@ -1482,27 +1481,33 @@ const PagesPage: NextPageWithLayout = () => {
                   <span className="text-white text-[12px] font-semibold">{t('shopifyConnectedBadge')}</span>
                 </div>
 
-                {/* Knowledge Base CTA - More prominent */}
+                {/* Business Info CTA — the card's persistent entry point, and the
+                    only place the FILLED state is shown ("Edit Business Info").
+                    Reads isKbFilled, NOT page.knowledgeBase: the list endpoint
+                    (GET /pages?view=list) stopped shipping the text on 2026-08-18
+                    (#806) and sends a server-computed `kbFilled` instead, so the
+                    raw read was falsy for EVERY page and this CTA was stuck in its
+                    empty state even for merchants whose info was complete. */}
                 <button
                   onClick={() => openKbEditorFor(page)}
-                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${page.knowledgeBase
+                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${kbFilled
                     ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
                     : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
                     }`}
                 >
                   <div className="relative z-10 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${page.knowledgeBase ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${kbFilled ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <div className="text-start">
                         {/* A member opens the same editor read-only, so the CTA
                             must not promise a write: «أضف معلومات» and «اضغط
                             للتعديل» are both instructions they cannot follow. */}
-                        <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
+                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
                           {!canEdit
                             ? t('viewBusinessInfo')
-                            : page.knowledgeBase
+                            : kbFilled
                               ? t('businessInfoActive')
                               : t('addBusinessInfo')
                           }
@@ -1510,14 +1515,14 @@ const PagesPage: NextPageWithLayout = () => {
                         <p className="text-xs font-medium text-muted-foreground mt-0.5">
                           {!canEdit
                             ? tc('viewOnlyHint')
-                            : page.knowledgeBase
+                            : kbFilled
                               ? t('clickToEdit')
                               : t('improveAIQuality')
                           }
                         </p>
                       </div>
                     </div>
-                    <ChevronRight className={`w-5 h-5 transition-transform ${page.knowledgeBase ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
+                    <ChevronRight className={`w-5 h-5 transition-transform ${kbFilled ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
                   </div>
                 </button>
               </div>
