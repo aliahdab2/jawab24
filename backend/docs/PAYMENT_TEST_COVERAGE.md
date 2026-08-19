@@ -66,7 +66,30 @@ in **zero** test files.
 | PE-3 | Signup trial row taken over, never duplicated | ✅ |
 | PE-4 | `invoice.payment_succeeded` adopts an unlinked row | ✅ |
 | PE-5 | Replay is idempotent | ✅ |
-| PE-6 | Webhook never arrives → reconciliation sweep heals | ✅ |
+| PE-6 | Webhook never arrives → reconciliation sweep heals the unlinked row | ✅ |
+
+### Renewal — a missed `invoice.payment_succeeded`
+
+Since #817 that event is the ONLY writer of `current_period_*` (it is the only
+one that proves money landed), which makes a dropped delivery freeze a PAYING
+merchant's paid-through until the 3-day grace expires and the gate blocks them.
+The sweep's period healer is what repairs it (`healStripeSubscriptionPeriod`).
+
+Fixtures are shapes read off the LIVE API on 2026-08-19, not hypothesised — the
+first #817 regression test asserted a payload Stripe never sends (`past_due`
+carrying an advanced period) and passed while the defect was fully live.
+
+| # | Scenario | Covered |
+|---|---|---|
+| RN-1 | Renewal paid, event never arrived → paid-through advanced, quota window reopened | ✅ |
+| RN-2 | Period Stripe advanced but never paid (`active` + OPEN invoice) → refused | ✅ |
+| RN-3 | `latest_invoice` unexpanded (bare id) → fails closed, refused | ✅ |
+| RN-4 | Stripe's period ends earlier than ours → never retracted | ✅ |
+| RN-5 | Stripe agrees with the row → nothing written, no `updated_at` churn | ✅ |
+| RN-6 | Row with a NULL paid-through (`past_due`, entitled forever) → healed | ✅ |
+| RN-7 | Status and period restored on ONE write, never decoupled | ✅ |
+| RN-8 | Dunning episode closed, so future failures are not silenced | ✅ |
+| RN-9 | `trialing` healed without consulting an invoice | ✅ |
 
 ### Guards before any Stripe call
 | Scenario | Covered |

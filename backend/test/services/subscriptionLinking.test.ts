@@ -119,6 +119,7 @@ const localRow = (over: Record<string, unknown> = {}) => ({
     id: 'row_1',
     userId: 'u1',
     status: 'active',
+    paymentMethod: 'stripe',
     currentPeriodEnd: new Date(AUG_13 * 1000),
     ...over,
 });
@@ -595,6 +596,48 @@ describe('healStripeSubscriptionPeriod', () => {
         await expect(healStripeSubscriptionPeriod(
             wireSub({ status: 'trialing', invoice: null }), localRow(), mkLog(),
         )).resolves.toBe('advanced');
+    });
+
+    /**
+     * Row targeting: this function is reached by matching a STRIPE subscription
+     * id, so the row must be stripe-billed. A manual/bank row that kept an old
+     * Stripe id would otherwise have its period advanced — and its plan
+     * possibly contradicted — by a subscription that no longer governs it.
+     */
+    it('refuses a row billed by another rail and reports it', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub(), localRow({ paymentMethod: 'manual' }), mkLog(),
+        );
+
+        expect(outcome).toBe('foreign_rail');
+        expect(db.update).not.toHaveBeenCalled();
+        expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.stringContaining('another rail'),
+            expect.objectContaining({ fingerprint: ['stripe-period-heal-foreign-rail'] }),
+        );
+    });
+
+    /**
+     * The paid-through write is this function's own idempotence key — once the
+     * boundary advances, the next sweep reads `no_drift` and does nothing more.
+     * So the quota window must be opened BEFORE it, or a throw in between leaves
+     * a row that looks repaired and never gets its window. The sweep is the last
+     * resort; it cannot afford a half-repair that looks complete.
+     */
+    it('opens the quota window before the boundary write, so a partial failure retries', async () => {
+        const order: string[] = [];
+        vi.mocked(subscriptionsService.initializeUsagePeriod)
+            .mockImplementation(async () => { order.push('usage'); });
+        vi.mocked(db.update).mockImplementation((() => {
+            order.push('period');
+            return q([]) as never;
+        }) as never);
+
+        await healStripeSubscriptionPeriod(wireSub(), localRow(), mkLog());
+
+        expect(order).toEqual(['usage', 'period']);
     });
 
     it('leaves the boundary alone when Stripe returns no period at all', async () => {

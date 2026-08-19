@@ -14,6 +14,7 @@ import { handlePaymentRecovery } from './dunningNotices';
 import { stripeTsToDate } from '../utils/stripeTime';
 import { getSubscriptionPeriod, getExpandedLatestInvoice } from '../utils/stripeCompat';
 import { captureError } from '../utils/sentryHelpers';
+import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import type Stripe from 'stripe';
 
 /**
@@ -34,16 +35,6 @@ import type Stripe from 'stripe';
  * Lives in a service (not the webhook controller) because the reconciliation
  * sweep below needs it too, and a cron must not import from a controller.
  */
-
-/** The subset of pino we need — satisfied by `request.log` and the server log. */
-export interface LinkLogger {
-    info: (obj: Record<string, unknown>, msg: string) => void;
-    warn: (obj: Record<string, unknown>, msg: string) => void;
-}
-
-/** Silent default for cron callers that pass no logger. NOT the `noopLogger`
- * in types/logger.ts — that interface has the opposite (msg, data) order. */
-export const noopLinkLogger: LinkLogger = { info: () => {}, warn: () => {} };
 
 /**
  * Sentinel status for a `latest_invoice` that IS present but arrived as a bare
@@ -219,6 +210,7 @@ export interface LinkedSubscriptionRow {
     id: string;
     userId: string;
     status: string | null;
+    paymentMethod: string | null;
     currentPeriodEnd: Date | null;
 }
 
@@ -231,7 +223,9 @@ export type PeriodHealOutcome =
     /** Stripe agrees with the row (or would move it backwards) — nothing written */
     | 'no_drift'
     /** Stripe returned no usable period boundaries */
-    | 'no_period';
+    | 'no_period'
+    /** the matched row is billed by another rail — refused, and reported */
+    | 'foreign_rail';
 
 /**
  * Re-assert Stripe's PAID-FOR period onto an already-linked local row — the
@@ -297,6 +291,33 @@ export async function healStripeSubscriptionPeriod(
     local: LinkedSubscriptionRow,
     log: LinkLogger,
 ): Promise<PeriodHealOutcome> {
+    // Row targeting, the same invariant `updateLiveMirrorsForShop` holds on the
+    // Shopify side: this function is reached by matching a STRIPE subscription id,
+    // so the row it found must be stripe-billed. A manual/bank row that kept an
+    // old Stripe id (payment_method flipped, external_subscription_id not
+    // cleared) would otherwise have its period advanced — and possibly its plan
+    // contradicted — by a Stripe subscription that no longer governs it. Zero
+    // such rows exist in production today (measured 2026-08-19: every non-stripe
+    // row has a NULL external id); refusing makes it impossible rather than
+    // merely unlikely, and an id collision we cannot explain must be seen.
+    if (local.paymentMethod !== 'stripe') {
+        captureError(
+            new Error(`Stripe subscription ${stripeSubscription.id} matched a ${local.paymentMethod ?? 'null'}-billed row`),
+            'Period healer refused a row billed by another rail',
+            {
+                level: 'warning',
+                tags: { service: 'subscriptions', flow: 'period_heal_refused' },
+                fingerprint: ['stripe-period-heal-foreign-rail'],
+                extra: {
+                    subscriptionId: stripeSubscription.id,
+                    localSubscriptionId: local.id,
+                    localPaymentMethod: local.paymentMethod,
+                },
+            },
+        );
+        return 'foreign_rail';
+    }
+
     const invoiceStatus = latestInvoiceStatusOf(stripeSubscription);
     if (!isCurrentPeriodPaidFor(stripeSubscription.status, invoiceStatus)) {
         return 'unpaid';
@@ -328,6 +349,24 @@ export async function healStripeSubscriptionPeriod(
     // used to land in a column that entitles anything it does not recognise.
     const mapping = mapStripeSubscriptionStatus(stripeSubscription.status);
 
+    // ORDER MATTERS, and it is the reverse of handlePaymentSucceeded's.
+    //
+    // The paid-through write is what makes this row look repaired, and it is
+    // also this function's own idempotence key: once the boundary has advanced,
+    // the next sweep reads `no_drift` and does nothing more. So anything that
+    // must accompany the repair has to happen BEFORE it — otherwise a throw in
+    // between leaves a row that is un-blocked but still counted against the
+    // previous period's usage, and NO later sweep will finish the job. This
+    // sweep is the last resort; it cannot afford a half-repair that looks
+    // complete.
+    //
+    // Opening the quota window first is safe in the other direction: the window
+    // does not entitle anything on its own (the gate reads status and period),
+    // incrementAiReplies creates one lazily anyway, and initializeUsagePeriod is
+    // idempotent on replay. A window opened for a period whose boundary then
+    // failed to land is inert, and the next sweep retries the whole repair.
+    await subscriptionsService.initializeUsagePeriod(local.userId, periodStart, periodEnd);
+
     await db
         .update(subscriptions)
         .set({
@@ -338,9 +377,6 @@ export async function healStripeSubscriptionPeriod(
         })
         .where(eq(subscriptions.id, local.id));
 
-    // The window for the period just proven paid for. Without it the merchant
-    // is un-blocked but still counting against the PREVIOUS period's usage row.
-    await subscriptionsService.initializeUsagePeriod(local.userId, periodStart, periodEnd);
     await subscriptionsService.invalidateStatusCache(local.userId);
 
     log.info(
@@ -356,7 +392,11 @@ export async function healStripeSubscriptionPeriod(
         'Advanced paid-through period on a linked Stripe subscription — its renewal webhook was missed'
     );
 
-    // Close the dunning episode (rule 6). Never throws.
+    // Close the dunning episode (rule 6) — LAST, and deliberately after the
+    // boundary write, unlike the two steps above. It is the only step with an
+    // outward-facing effect: closing an episode mails "payment recovered". Run
+    // before the write, a failed write would leave that mail sent to a merchant
+    // who is still blocked. It never throws, so it cannot break the chain.
     await handlePaymentRecovery(
         stripeSubscription.id,
         getExpandedLatestInvoice(stripeSubscription)?.id,
@@ -441,6 +481,7 @@ export async function reconcileStripeSubscriptions(options?: {
                         id: subscriptions.id,
                         userId: subscriptions.userId,
                         status: subscriptions.status,
+                        paymentMethod: subscriptions.paymentMethod,
                         currentPeriodEnd: subscriptions.currentPeriodEnd,
                     })
                     .from(subscriptions)

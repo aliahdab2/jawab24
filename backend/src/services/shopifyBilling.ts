@@ -7,7 +7,7 @@ import { shopifyGraphQL } from './shopify';
 import { decrypt } from './ecommerceCrypto';
 import { mapShopifyPlanToSlug, LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { captureError } from '../utils/sentryHelpers';
-import { noopLinkLogger, type LinkLogger } from './subscriptionLinking';
+import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
 import { resolveBillingSubjectUserId } from './ecommerce';
 
