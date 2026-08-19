@@ -142,7 +142,21 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
   return (
     <div
       ref={containerRef}
-      className="relative"
+      // `min-w-0` is load-bearing, not defensive. As a FLEX/GRID item this root's
+      // automatic minimum size is its min-content size, and in `compact` mode the
+      // trigger label carries `truncate` (`white-space: nowrap`) — so min-content is
+      // the ENTIRE label. Without `min-w-0` the item refuses to shrink, overflows its
+      // container, and the `truncate` never engages because the box is never
+      // constrained. Measured in Chrome with a long option label in a 412px row:
+      // 517px wide, 114px past the container's start edge, `ellipsised: false`; with
+      // `min-w-0` it is 394px, inside, and ellipsised. Shipped symptom: the persona
+      // scope picker in ReplyStyleCard running off the card edge for a long page name
+      // («الفريق الدمشقي للتدريب والتأهيل — شخصية خاصة»), reported 2026-08-19.
+      // `max-w-full` covers the grid case, where `min-width: auto` is not the lever.
+      // The caller cannot fix this from outside — `className` goes to the trigger
+      // BUTTON below, never to this root. Pinned by Select.test.tsx (source) and
+      // e2e/settings.spec.ts (the layout the browser actually resolves).
+      className="relative min-w-0 max-w-full"
       // Esc closes the DROPDOWN only: without stopPropagation it bubbles to a
       // parent sheet's window-level escape handler, which closes (or asks to
       // discard) the whole modal mid-pick.

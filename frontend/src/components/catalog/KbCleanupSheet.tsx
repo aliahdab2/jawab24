@@ -29,19 +29,37 @@ interface KbCleanupSheetProps {
   onClose: () => void;
 }
 
-/** A line proposed for removal, with why + whether it's pre-checked. */
+/** A line proposed for removal, and why. */
 interface Proposal {
   line: string;
-  /** 'product' = high confidence (pre-checked); 'field' = review carefully (unchecked). */
-  kind: 'product' | 'field';
+  /**
+   * 'product'           — an 'exact' catalog match on a price-shaped row.
+   * 'product-uncertain' — a 'tokens' catalog match: scattered, short, or prose.
+   * 'field'             — duplicates a confirmed structured field.
+   */
+  kind: 'product' | 'product-uncertain' | 'field';
 }
+
+/**
+ * Only a high-confidence product row is pre-checked. Derived from `kind` rather
+ * than stored alongside it, so "why it was proposed" and "is it pre-checked"
+ * cannot drift apart.
+ *
+ * This is the contract `catalogKbMatch` states and, until 2026-08-19, the sheet
+ * ignored: EVERY product match was pre-checked, `confidence` was never read.
+ * A low-confidence match was therefore one tap from deleting the merchant's own
+ * Business Info text.
+ */
+const isPreChecked = (p: Proposal): boolean => p.kind === 'product';
 
 /**
  * Phase C — the confirmed cleanup sheet. After products move to the catalog,
  * their old free-text lines (and lines duplicating a structured field) linger
  * and can contradict the authoritative data (bug #720). This offers their
- * removal — never silent, merchant confirms each, product lines pre-checked and
- * field lines left UNCHECKED (a field line is riskier to remove than a price).
+ * removal — never silent, merchant confirms each. Only a HIGH-CONFIDENCE product
+ * row is pre-checked; low-confidence product matches and field lines are left
+ * UNCHECKED with a reason (a field line is riskier to remove than a price, and a
+ * scattered match may not be about the product at all).
  *
  * The matchers run client-side (pure shared utils); the server only removes the
  * exact confirmed line texts, so a concurrent edit can't delete the wrong line.
@@ -64,14 +82,20 @@ export function KbCleanupSheet({ pageId, kbText, items, profile, onDone, onClose
     // collision, no shared-checkbox confusion). Product kind wins over field
     // (higher confidence, pre-checked) since products are inserted first.
     const byText = new Map<string, Proposal>();
-    for (const m of productLines) if (!byText.has(m.line)) byText.set(m.line, { line: m.line, kind: 'product' });
+    for (const m of productLines) {
+      // Honour the matcher's OWN verdict: 'tokens' means scattered/short/prose,
+      // which it documents as "offered UNCHECKED".
+      if (!byText.has(m.line)) {
+        byText.set(m.line, { line: m.line, kind: m.confidence === 'exact' ? 'product' : 'product-uncertain' });
+      }
+    }
     for (const f of fieldLines) if (!byText.has(f.line)) byText.set(f.line, { line: f.line, kind: 'field' });
     return [...byText.values()];
   }, [kbText, items, profile]);
 
-  // Selection: products start checked, field lines start unchecked.
+  // Selection: only high-confidence product rows start checked.
   const [checked, setChecked] = useState<Set<string>>(
-    () => new Set(proposals.filter((p) => p.kind === 'product').map((p) => p.line)),
+    () => new Set(proposals.filter(isPreChecked).map((p) => p.line)),
   );
 
   const toggle = (line: string) => {
@@ -144,9 +168,11 @@ export function KbCleanupSheet({ pageId, kbText, items, profile, onDone, onClose
                   />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm text-foreground break-words" dir="auto">{p.line}</span>
-                    {p.kind === 'field' && (
+                    {/* Every line that is NOT pre-checked says why, so an empty
+                        checkbox is never unexplained. */}
+                    {!isPreChecked(p) && (
                       <span className="mt-1 inline-block text-[11px] font-medium text-accent-600 dark:text-accent-400">
-                        {t('cleanup.fieldHint')}
+                        {t(p.kind === 'field' ? 'cleanup.fieldHint' : 'cleanup.uncertainHint')}
                       </span>
                     )}
                   </span>

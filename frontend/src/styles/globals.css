@@ -271,6 +271,32 @@
     font-feature-settings: "anum" 0;
   }
 
+  /* An EMPTY `dir="auto"` field must follow the UI direction, not fall back to LTR.
+     Per the HTML spec, `dir=auto` on a form control reads the element's VALUE — never
+     its placeholder. An empty value has no strong directional character, so the element
+     resolves to `ltr` no matter what `<html dir>` says. In the Arabic UI that puts the
+     caret and the placeholder at the LEFT edge of every empty box (shipped symptom:
+     the «اختبار الرد الذكي» composer, 2026-08-19), and because `dir=auto` also maps to
+     `unicode-bidi: plaintext` the placeholder line still renders RTL internally — so a
+     trailing «...» sits on the far left while the box is left-aligned. Reproduced and
+     fixed against a real Chrome, not inferred.
+
+     `direction: inherit` while the placeholder is showing takes the direction from the
+     ancestor chain (`<html dir>`, or a portal's own `dir`). `unicode-bidi: plaintext` is
+     deliberately left alone: the moment the merchant types, `:placeholder-shown` stops
+     matching and full `dir=auto` detection resumes — Latin input flips back to LTR.
+
+     This is the single point of prevention for the whole app (Rule 14): every current and
+     future `dir="auto"` input/textarea is covered, so no component needs its own
+     `dir={value ? 'auto' : …}` conditional. The ~27 call sites that already carry one are
+     now belt-and-braces, not the mechanism.
+
+     Pinned by frontend/src/__tests__/styles/autoDirEmptyInput.test.ts. */
+  input[dir="auto"]:placeholder-shown,
+  textarea[dir="auto"]:placeholder-shown {
+    direction: inherit;
+  }
+
   /* Keyboard focus indicators for accessibility (WCAG 2.1 AA) */
   a:focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-500 rounded-sm;

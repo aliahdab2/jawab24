@@ -144,7 +144,9 @@ Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elemen
 1. **Single DOM for responsive layouts** — never duplicate content with `md:hidden` / `hidden md:block`
 2. **Tailwind utilities over inline styles**
 3. **`clsx`** for long className strings with grouped comments
-4. **`dir="auto"`** on ALL user-editable inputs/textareas
+4. **`dir="auto"`** on ALL user-editable inputs/textareas.
+
+   > **`dir="auto"` alone is NOT enough while the field is EMPTY (fixed 2026-08-19).** `dir=auto` on a form control resolves from the element's **value**, never its placeholder — an empty value has no strong directional character, so the element computes `direction: ltr` no matter what `<html dir>` says. In the Arabic UI that puts the caret and the placeholder at the **left** edge of every empty box; and because `dir=auto` also maps to `unicode-bidi: plaintext`, the placeholder line still renders RTL internally, so a trailing «...» sits on the far left of a left-aligned box. Shipped symptom: the «اختبار الرد الذكي» composer. **You do not need to do anything about this per component** — `globals.css` carries one rule, `input[dir="auto"]:placeholder-shown, textarea[dir="auto"]:placeholder-shown { direction: inherit }`, which fixes every current and future field at one point; typing restores full auto-detection because `:placeholder-shown` stops matching. The ~27 components that carry their own `dir={value ? 'auto' : getLocaleDirection(locale)}` are belt-and-braces, not the mechanism — don't add a 28th. Pinned by `frontend/src/__tests__/styles/autoDirEmptyInput.test.ts` (source) and `frontend/e2e/complete-profile.spec.ts` (the cascade, which a unit test cannot prove).
 5. **Check `frontend/src/hooks/`** before writing inline hooks — reuse or create shared hooks
 6. **E2E tests import translation JSON** — never hardcode translated strings
 7. **`captureError()`** from `sentryHelpers.ts` for errors — never bare `console.error`

@@ -663,4 +663,84 @@ test.describe('Settings — reply mode (pilot workspace)', () => {
     await expect(testBtn).toBeDisabled();
     await expect(page.getByText(t('settings.replyStyle.testSaveFirst'))).toBeVisible();
   });
+
+  /**
+   * The persona scope picker must stay inside its card on a phone.
+   *
+   * `Select`'s root is a flex item whose automatic minimum size is its
+   * min-content size; in `compact` mode the trigger label is `truncate`
+   * (`white-space: nowrap`), so min-content is the WHOLE label. Without
+   * `min-w-0` on that root the item cannot shrink: it overflows the card and the
+   * `truncate` never engages, because a box that is never constrained never
+   * clips. Reported 2026-08-19 — a long page name ran off the card edge and out
+   * of the viewport.
+   *
+   * Why E2E: this is pure layout. jsdom has no box model, so the only thing a
+   * unit test can assert is that the class string still contains `min-w-0`
+   * (Select.overflow.test.tsx does exactly that, as the cheap guard). Whether
+   * the element actually fits is a browser question.
+   *
+   * Mutation check: drop `min-w-0` from Select's root and this fails on both
+   * assertions — overflow and no ellipsis.
+   */
+  test('persona scope picker fits the card and ellipsises a long page name', async ({ page }) => {
+    // Long name WITH an override, so the selected label also carries the
+    // «— has a custom persona» suffix — the exact string in the bug report.
+    const LONG_PAGE = 'Damascene Training and Professional Qualification Team';
+
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await routeMocks(page);
+
+    // Registered after routeMocks so it wins; everything else falls through to
+    // the shared harness rather than being restated here.
+    await page.route('**/api/**', async (route) => {
+      if (route.request().url().includes('/pages') && route.request().method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            { ...TWO_PAGES[0], name: LONG_PAGE, brandVoiceNotesMulti: { en: 'A custom persona.' } },
+            TWO_PAGES[1],
+          ]),
+        });
+      }
+      return route.fallback();
+    });
+
+    // Phone width — the reported surface. The row has room on a desktop.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/en/settings');
+    await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+
+    // The picker opens on «All pages», whose label is short. The overflow needs
+    // the long name SELECTED — which is the state the merchant reported from.
+    await openPageScope(page, LONG_PAGE);
+
+    const trigger = page.locator('button[aria-labelledby="persona-scope-label"]');
+    await expect(trigger).toContainText(LONG_PAGE.slice(0, 20));
+
+    const fit = await trigger.evaluate((btn) => {
+      const root = btn.parentElement as HTMLElement;       // Select's root div
+      const row = root.parentElement as HTMLElement;        // the scope row (flex, wrapping)
+      const label = btn.querySelector('span > span') as HTMLElement; // truncating span
+      const rowBox = row.getBoundingClientRect();
+      const btnBox = btn.getBoundingClientRect();
+      const style = getComputedStyle(row);
+      return {
+        // Allow a sub-pixel rounding slack; the real overflow was ~114px.
+        overflowsStart: btnBox.left < rowBox.left + parseFloat(style.paddingLeft) - 1,
+        overflowsEnd: btnBox.right > rowBox.right - parseFloat(style.paddingRight) + 1,
+        ellipsised: label.scrollWidth > label.clientWidth,
+        pageScrollsHorizontally:
+          document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+
+    expect(fit.overflowsStart).toBe(false);
+    expect(fit.overflowsEnd).toBe(false);
+    expect(fit.pageScrollsHorizontally).toBe(false);
+    // The label is longer than the row, so it MUST be clipped rather than shown
+    // in full — proving the constraint reached the truncating span.
+    expect(fit.ellipsised).toBe(true);
+  });
 });

@@ -35,6 +35,30 @@ describe('Select — label wrapping', () => {
     );
     expect(screen.getByText(LONG_LABEL).className).toContain('truncate');
   });
+
+  // `truncate` only clips a box something has CONSTRAINED. As a flex item the
+  // Select root's automatic minimum size is its min-content size, and with
+  // `white-space: nowrap` that is the whole label — so without `min-w-0` the
+  // root refuses to shrink, overflows its container, and the truncation above
+  // never engages. Reported 2026-08-19: the persona scope picker ran off the
+  // card edge for a long page name.
+  //
+  // jsdom has no box model, so this can only assert that the escape valve is
+  // still declared; e2e/settings.spec.ts measures the real geometry.
+  it('lets the root shrink below its content, so truncation can engage', () => {
+    const { container } = render(
+      <Select
+        compact
+        value="a"
+        onChange={() => {}}
+        aria-label="filter"
+        options={[{ value: 'a', label: LONG_LABEL }]}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain('min-w-0');
+    expect(root.className).toContain('max-w-full');
+  });
 });
 
 // Opt-in type-ahead (added for the ~400-entry IANA timezone list). The default

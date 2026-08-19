@@ -186,6 +186,7 @@
     "title": "Tidy up your Business Info",
     "intro": "{count, plural, one {We moved this line into your product list. Remove it from your Business Info so prices can't disagree?} other {We moved these lines into your product list. Remove them from your Business Info so prices can't disagree?}}",
     "fieldHint": "Already saved as a field — review before removing",
+    "uncertainHint": "Mentions a product but doesn't look like a price line — review before removing",
     "fieldFootnote": "Lines marked as a field are unchecked by default — check only the ones that duplicate what you already saved.",
     "keepAll": "Keep everything",
     "confirm": "{count, plural, one {Remove # line} other {Remove # lines}}",
