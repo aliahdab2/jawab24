@@ -368,9 +368,11 @@ async function ask(pageId: string, probe: Probe): Promise<PlaygroundResponse | n
 async function main(): Promise<void> {
     const pageId = await resolveDamascusPageId();
     const todayIso = new Date().toISOString().slice(0, 10);
-    // Exactly what buildGroundingSource assembles for this page in production —
-    // per ARM: the baseline seed created no collections, so its judging source
-    // is the prose KB alone.
+    // The grounding SOURCE for this fixture page, per ARM: the baseline seed
+    // created no collections, so its judging source is the prose KB alone.
+    // NOT a mirror of buildGroundingSource — that function also carries
+    // businessInfoBlock and (since 2026-08-19) the persona. This page has
+    // neither, so the two agree HERE and only here.
     const kb = [
         DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!.suggestedKnowledgeBase,
         ...(ARM === 'slice' ? [renderDemoDamascusLists(todayIso, { schedulesUnkeyed: UNKEYED })] : []),

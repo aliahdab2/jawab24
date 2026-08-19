@@ -112,13 +112,17 @@ interface VerifierResponse {
 export const GROUNDING_VERIFIER_PROMPT = `You are a strict grounding auditor for a business's customer-service assistant.
 
 You receive:
-- <business_info>: everything the merchant has told the assistant. This is the ONLY permitted source of truth.
+- <business_info>: the merchant's business facts — knowledge base, confirmed fields, catalogue, lists.
+- <merchant_instructions>: the persona the merchant wrote for the assistant. It may be absent. Merchants put more than tone here: a name for the assistant, and policies ("no booking over social media", "send the showroom numbers, not head office"). It is an EQUALLY permitted source — a reply using the assistant name or the policy stated here is supported, not invented.
+- Together, <business_info> and <merchant_instructions> are everything the merchant has told the assistant, and the ONLY permitted sources of truth.
 - <conversation>: earlier turns, if any.
 - The CUSTOMER is the authority on what they WANT — the quantity, size, city, or product they are asking about. They are never an authority on what the business offers or charges. So a reply may take "two packs" from the customer and price it from <business_info>; it may not take a PRICE from the customer.
 - <customer_message>: the message being answered.
 - <reply>: what the assistant sent.
 
-Your single question: does every factual assertion in <reply> follow from <business_info>?
+Your single question: does every factual assertion in <reply> follow from what the merchant told the assistant?
+
+Every rule below names <business_info>. Read each one as "<business_info> OR <merchant_instructions>" — a claim supported by either is supported.
 
 REPORT a claim as unsupported when the reply:
 - states a price, number, date, duration, or quantity that is not in <business_info>. Before reporting a TOTAL, compute it yourself: if it equals a listed price times the quantity the customer asked for, plus any listed fee, it IS supported — do not report it merely because the total is not written in <business_info>. Report a total only when no combination of listed prices produces it, or when the unit price it multiplies covers a different quantity than the reply assumed;
@@ -203,6 +207,16 @@ export function buildGroundingSource(parts: {
      *  the verifier does not is a false-flag factory, and it fires hardest on the
      *  pages that adopted the feature. */
     businessInfoBlock?: string | null;
+    /** ⛔ The PERSONA is deliberately NOT a part here — see
+     *  `buildVerifierUserMessage`, which carries it as its own section.
+     *
+     *  It is a grounding source (a reply obeying it is not inventing), but this
+     *  function's output is ALSO what `shouldVerifyGrounding` measures against
+     *  MIN_KB_CHARS, and that floor exists to skip pages "running on persona
+     *  alone". Folding the persona in here would let it satisfy the very floor
+     *  written to exclude it: measured 2026-08-19, 6 of 38 live pages sit under
+     *  the floor on Business Info yet clear it once their persona is counted, so
+     *  every claim on exactly the starved pages the floor protects would flag. */
 }): string {
     return [
         parts.knowledgeBase,
@@ -214,6 +228,52 @@ export function buildGroundingSource(parts: {
     ]
         .filter((p): p is string => !!p && p.trim().length > 0)
         .join('\n\n');
+}
+
+/**
+ * The verifier's user message. Pure and exported for the same reason
+ * `shouldVerifyGrounding` is: this is where a source can go missing, and the
+ * only cheap way to pin that it did not.
+ *
+ * `persona` is `settings.brandVoiceNotes(Multi)` (or the per-page override)
+ * resolved through `resolveBrandVoiceNotes`. It reaches the model on its own
+ * path (contextEnricher → generator → promptBuilder:443), never inside
+ * `knowledgeBase`, and until 2026-08-19 the verifier could not see it at all —
+ * the third instance of one class, after `postMessage` (07-30) and
+ * `businessInfoBlock` (08-04). Prod symptom: ام. اي. اس writes «الاسم: معك رنيم
+ * من شركة ام اي اس», the reply obeyed, and the verifier reported the merchant's
+ * own assistant name as an invented employee.
+ *
+ * It gets its OWN tag rather than being folded into <business_info> for two
+ * reasons: the floor above, and honesty — this text is bare imperative prose
+ * («الاسم: …»), not the factual, pre-rendered blocks the other tag holds.
+ *
+ * The WHOLE block goes in, not just the persona's name. Merchants keep policy
+ * in this field: «لا يوجد لدينا تثبيت حجز عن طريق وسائل التواصل الاجتماعي»
+ * (منتجع شاهين), «رقم الادارة لا يرسل إلا في حالة طلب» (ام. اي. اس). Identity
+ * alone would leave the same false-flag class alive for every policy answer.
+ * Bounded at 800 chars (MAX_BRAND_VOICE_LENGTH) on save.
+ *
+ * Ordering is load-bearing for cost: <business_info> stays FIRST and the
+ * page-stable persona sits directly behind it, so OpenAI's prompt cache still
+ * hits on the largest span. Per-reply text stays below both.
+ */
+export function buildVerifierUserMessage(parts: {
+    kb: string;
+    persona?: string | null;
+    conversation?: string | null;
+    question: string;
+    reply: string;
+}): string {
+    return [
+        `<business_info>\n${parts.kb}\n</business_info>`,
+        parts.persona && parts.persona.trim().length > 0
+            ? `<merchant_instructions>\n${parts.persona}\n</merchant_instructions>`
+            : '',
+        parts.conversation ? `<conversation>\n${parts.conversation}\n</conversation>` : '',
+        `<customer_message>\n${parts.question}\n</customer_message>`,
+        `<reply>\n${parts.reply}\n</reply>`,
+    ].filter(Boolean).join('\n\n');
 }
 
 export interface GroundingGateInput {
@@ -257,6 +317,10 @@ export interface MaybeVerifyGroundingParams {
     sourceType: 'message' | 'comment';
     /** Business Info exactly as the reply pipeline assembled it. */
     kb: string;
+    /** The merchant's persona, exactly as the generator received it. A separate
+     *  field, not folded into `kb`, so it can ground a claim without counting
+     *  toward MIN_KB_CHARS — see `buildVerifierUserMessage`. */
+    persona?: string | null;
     question: string;
     reply: string;
     intent: string | null | undefined;
@@ -327,12 +391,13 @@ class GroundingVerifierService {
         // so OpenAI's prompt cache hits on the largest block in the request —
         // 57% of input tokens were cached even in the scattered offline sweep.
         // Do not interleave per-reply text above it.
-        const user = [
-            `<business_info>\n${params.kb}\n</business_info>`,
-            conversation ? `<conversation>\n${conversation}\n</conversation>` : '',
-            `<customer_message>\n${params.question}\n</customer_message>`,
-            `<reply>\n${params.reply}\n</reply>`,
-        ].filter(Boolean).join('\n\n');
+        const user = buildVerifierUserMessage({
+            kb: params.kb,
+            persona: params.persona,
+            conversation,
+            question: params.question,
+            reply: params.reply,
+        });
 
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);

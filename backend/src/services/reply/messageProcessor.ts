@@ -1045,6 +1045,7 @@ export class MessageProcessor {
                             sourceId: storedMessage.id,
                             sourceType: 'message',
                             kb: groundingKb,
+                            persona: brandVoiceNotes,
                             question: consolidatedText,
                             reply: sentReply,
                             intent: aiIntent,

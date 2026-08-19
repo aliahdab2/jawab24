@@ -862,6 +862,7 @@ export class CommentProcessor {
                     factCollectionsBlock: generatorContext.factCollectionsBlock,
                     businessInfoBlock: generatorContext.businessInfoBlock,
                 }),
+                groundingPersona: generatorContext.brandVoiceNotes,
             });
             // Keep the debounce slot only if the reply actually went out.
             replyCommitted = finalizeResult.success;
@@ -1005,6 +1006,9 @@ export class CommentProcessor {
          *  grounding audit. Absent on the post_reply path (merchant-authored
          *  text — nothing to verify), which the gate rejects anyway. */
         groundingSource?: string;
+        /** Merchant persona — a separate field from groundingSource so it can
+         *  ground a claim without counting toward MIN_KB_CHARS. */
+        groundingPersona?: string;
         /** The originating post/media UUID. Persisted on the conversation so
          *  follow-up DMs can inherit post context (see messageProcessor). */
         contentId: string;
@@ -1262,6 +1266,7 @@ export class CommentProcessor {
             sourceId: comment.id,
             sourceType: 'comment',
             kb: opts.groundingSource ?? '',
+            persona: opts.groundingPersona,
             question: commentMessage,
             reply: replyText ?? '',
             intent: aiIntent,
