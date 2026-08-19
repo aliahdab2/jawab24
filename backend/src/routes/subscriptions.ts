@@ -124,7 +124,8 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/ai - Check AI reply limits
          */
         protectedRoutes.get('/limits/ai', { schema: { tags: ['Subscriptions'], summary: 'Check AI reply limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as WorkspaceRequest).user;
+            const req = request as WorkspaceRequest;
+            const user = req.user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -137,7 +138,16 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             }
 
             try {
-                const result = await subscriptionsService.canUseAiReplies(userId);
+                // Quota belongs to the WORKSPACE, so it is answered for the
+                // workspace's billing subject — not for whoever is logged in. A
+                // team member carrying a leftover trial row from their own
+                // signup would otherwise be told their AI is blocked while the
+                // workspace they are working in is perfectly healthy (and the
+                // reverse, once the workspace lapses).
+                const resolved = req.workspaceId
+                    ? await subscriptionsService.resolveWorkspaceSubscription(userId, req.workspaceId)
+                    : null;
+                const result = await subscriptionsService.canUseAiReplies(resolved?.ownerId ?? userId);
 
                 return reply.send({
                     success: true,

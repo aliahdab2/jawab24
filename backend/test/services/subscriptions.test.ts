@@ -1247,10 +1247,36 @@ describe('isSubscriptionActive', () => {
             });
         });
 
+        /**
+         * Billing belongs to the WORKSPACE. `getUsageSummary` answers for the
+         * workspace owner's subscription for everyone in it — the owner
+         * included, for whom it is the same row either way.
+         *
+         * It used to answer "mine, else the owner's". That fallback existed for
+         * team members and had never once run in production: every signup mints
+         * a trial row, and it lingers when that person is later added to someone
+         * else's workspace, so all 4 team members on the platform were answered
+         * from their own expired `starter`. This endpoint feeds the dashboard's
+         * plan banner, so when a workspace's subscription lapsed the people
+         * actually using the app saw a healthy ghost plan and had no way to
+         * learn why replies had stopped.
+         */
+        const mockWorkspaceOwner = async (ownerId: string | null) => {
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue(ownerId ? [{ ownerId }] : []),
+                    }),
+                }),
+            } as any);
+        };
+
         it('returns usage summary for workspace owner', async () => {
             vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
             vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
             vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(2);
+            await mockWorkspaceOwner('owner-1');
 
             const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
 
@@ -1260,79 +1286,78 @@ describe('isSubscriptionActive', () => {
             expect(result!.pages.used).toBe(2);
         });
 
-        it('returns null when no subscription and workspace not found', async () => {
-            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+        /**
+         * THE regression. A team member carrying a leftover trial row from their
+         * own signup must be shown the WORKSPACE's plan, never that row — this
+         * is the case that shipped, and the one a "mine, else the owner's"
+         * resolver answers wrongly for every member who has ever signed up.
+         */
+        it("answers with the workspace owner's plan even when the member has a subscription of their own", async () => {
+            const memberOwnStale = {
+                ...mockSubscription,
+                id: 'sub-member-ghost',
+                status: 'past_due',
+                plan: { ...mockSubscription.plan, slug: 'starter', maxAiRepliesPerMonth: 100 },
+            } as typeof mockSubscription;
 
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            } as any);
+            const getUserSubscription = vi.spyOn(subscriptionsService, 'getUserSubscription')
+                .mockImplementation(async (id: string) =>
+                    (id === 'owner-1' ? mockSubscription : memberOwnStale) as never);
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+            await mockWorkspaceOwner('owner-1');
+
+            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(result!.subscription.plan.slug).toBe(mockSubscription.plan.slug);
+            expect(result!.subscription.plan.slug).not.toBe('starter');
+            // The member's own row must not even be consulted.
+            expect(getUserSubscription).toHaveBeenCalledWith('owner-1');
+            expect(getUserSubscription).not.toHaveBeenCalledWith('member-1');
+        });
+
+        it("uses the workspace owner's subscription for a member who has none", async () => {
+            const getUserSubscription = vi.spyOn(subscriptionsService, 'getUserSubscription')
+                .mockResolvedValue(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+            await mockWorkspaceOwner('owner-1');
+
+            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(result).not.toBeNull();
+            expect(getUserSubscription).toHaveBeenCalledWith('owner-1');
+            expect(result!.aiReplies.used).toBe(300);
+        });
+
+        it('returns null when the workspace owner has no subscription', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+            await mockWorkspaceOwner('owner-1');
+
+            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(result).toBeNull();
+        });
+
+        /**
+         * A missing workspace row is not a reason to show someone else's
+         * billing — it falls back to the caller's own, which is what a personal
+         * workspace resolves to anyway.
+         */
+        it('returns null when the workspace is not found and the caller has no subscription', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+            await mockWorkspaceOwner(null);
 
             const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
 
             expect(result).toBeNull();
         });
 
-        it('falls back to workspace owner subscription for team members', async () => {
-            const getUserSubscription = vi.spyOn(subscriptionsService, 'getUserSubscription')
-                .mockResolvedValueOnce(null)              // member has no subscription
-                .mockResolvedValueOnce(mockSubscription); // owner's subscription
-            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
-            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
-
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
-
-            expect(result).not.toBeNull();
-            expect(getUserSubscription).toHaveBeenCalledWith('member-1');
-            expect(getUserSubscription).toHaveBeenCalledWith('owner-1');
-            expect(result!.aiReplies.used).toBe(300);
-        });
-
-        it('returns null when member has no subscription and owner also has none', async () => {
-            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
-
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
-
-            expect(result).toBeNull();
-        });
-
         it('counts page slots by workspaceId, not owner userId', async () => {
-            vi.spyOn(subscriptionsService, 'getUserSubscription')
-                .mockResolvedValueOnce(null)
-                .mockResolvedValueOnce(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
             vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
             const countSpy = vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(2);
-
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
-                    }),
-                }),
-            } as any);
+            await mockWorkspaceOwner('owner-1');
 
             await subscriptionsService.getUsageSummary('member-1', 'ws-1');
 
@@ -1340,20 +1365,10 @@ describe('isSubscriptionActive', () => {
         });
 
         it('fetches AI usage from owner, not member', async () => {
-            vi.spyOn(subscriptionsService, 'getUserSubscription')
-                .mockResolvedValueOnce(null)
-                .mockResolvedValueOnce(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
             const getUsageSpy = vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
             vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(0);
-
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
-                    }),
-                }),
-            } as any);
+            await mockWorkspaceOwner('owner-1');
 
             await subscriptionsService.getUsageSummary('member-1', 'ws-1');
 

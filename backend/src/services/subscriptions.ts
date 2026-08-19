@@ -509,21 +509,33 @@ export const subscriptionsService = {
         userId: string,
         workspaceId: string,
     ): Promise<{ subscription: Subscription & { plan: Plan }; ownerId: string } | null> {
-        let subscription = await this.getUserSubscription(userId);
-        let ownerId = userId;
+        // Billing belongs to the WORKSPACE, so the owner's subscription is the
+        // answer for everyone in it — including the owner, for whom it is the
+        // same row either way.
+        //
+        // This used to read "mine, else the owner's", on the assumption stated
+        // in the old comment: "Team members have no subscription row". That is
+        // false, and was false for 4 of 4 team members on the platform — every
+        // signup mints a trial row, and it lingers when that person is later
+        // added to someone else's workspace. So the fallback branch written FOR
+        // team members had never once run in production, and each of them saw
+        // their own expired `starter` instead of the workspace's real plan.
+        //
+        // The visible cost was not a cosmetic label. `/subscription/usage`
+        // feeds the dashboard's plan banner, so when a workspace's subscription
+        // lapsed, the people actually using the app were shown a healthy-looking
+        // ghost plan and had no way to learn why replies had stopped.
+        const [workspace] = await db
+            .select({ ownerId: workspaces.ownerId })
+            .from(workspaces)
+            .where(eq(workspaces.id, workspaceId))
+            .limit(1);
 
-        // Team members have no subscription row — fall back to the workspace owner's plan
-        if (!subscription) {
-            const [workspace] = await db
-                .select({ ownerId: workspaces.ownerId })
-                .from(workspaces)
-                .where(eq(workspaces.id, workspaceId))
-                .limit(1);
-            if (workspace?.ownerId && workspace.ownerId !== userId) {
-                subscription = await this.getUserSubscription(workspace.ownerId);
-                ownerId = workspace.ownerId;
-            }
-        }
+        // No workspace row (or no owner) is not a reason to show someone else's
+        // billing — fall back to the caller's own, which is what a personal
+        // workspace resolves to anyway.
+        const ownerId = workspace?.ownerId ?? userId;
+        const subscription = await this.getUserSubscription(ownerId);
 
         return subscription ? { subscription, ownerId } : null;
     },

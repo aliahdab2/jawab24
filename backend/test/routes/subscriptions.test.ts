@@ -8,6 +8,10 @@ vi.mock('../../src/services/subscriptions', () => ({
         getUserSubscription: vi.fn(),
         getUsageSummary: vi.fn(),
         canUseAiReplies: vi.fn(),
+        // /limits/ai answers for the WORKSPACE's billing subject, not the
+        // caller — a team member with a leftover trial row of their own would
+        // otherwise be told their AI is blocked while the workspace is healthy.
+        resolveWorkspaceSubscription: vi.fn().mockResolvedValue(null),
         canAddPage: vi.fn(),
         changePlan: vi.fn(),
         cancelSubscription: vi.fn(),
