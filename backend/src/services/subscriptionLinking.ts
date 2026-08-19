@@ -224,8 +224,25 @@ export type PeriodHealOutcome =
     | 'no_drift'
     /** Stripe returned no usable period boundaries */
     | 'no_period'
+    /** a paid status our map does not answer for — refused, never written half */
+    | 'unmapped_status'
     /** the matched row is billed by another rail — refused, and reported */
     | 'foreign_rail';
+
+/**
+ * Outcomes that mean "Stripe says this merchant is paying and we could NOT
+ * reflect it" — the sweep is the authority of last resort, so each of these is a
+ * merchant who may sit blocked with nobody looking. They are counted apart from
+ * agreement and reported to Sentry in aggregate, the same posture `orphaned`
+ * already has, because per-row `log.warn` does not reach Sentry.
+ *
+ * `unpaid` is deliberately NOT here: a linked row Stripe has not been paid for
+ * is the normal state of a merchant mid-dunning, and services/dunningNotices.ts
+ * owns telling them. Refusing it is the correct outcome, not a failure.
+ */
+const UNHEALABLE_OUTCOMES: ReadonlySet<PeriodHealOutcome> = new Set([
+    'no_period', 'unmapped_status', 'foreign_rail',
+]);
 
 /**
  * Re-assert Stripe's PAID-FOR period onto an already-linked local row — the
@@ -342,12 +359,24 @@ export async function healStripeSubscriptionPeriod(
         return 'no_drift';
     }
 
-    // Only `active`/`trialing` reach here (the sweep lists nothing else and the
-    // paid-for gate above refuses the rest), so this always writes — but read
-    // the status through the same map as every other writer rather than
+    // Read the status through the same map as every other writer rather than
     // mirroring Stripe's raw value, which is how three of its eight statuses
     // used to land in a column that entitles anything it does not recognise.
+    //
+    // Only `active`/`trialing` reach here (the sweep lists nothing else and the
+    // paid-for gate above refuses the rest), so in practice this always writes.
+    // If that ever stops being true, REFUSE rather than write half a repair:
+    // rule 4 above is that the status and the period move together, and a period
+    // advanced without its status is the decoupled shape that made an earlier
+    // revision of #817 strictly worse than the defect it replaced.
     const mapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+    if (!mapping.write) {
+        log.warn(
+            { subscriptionId: stripeSubscription.id, localSubscriptionId: local.id, stripeStatus: stripeSubscription.status },
+            'Paid Stripe status has no mapping — refusing to advance a period without its status'
+        );
+        return 'unmapped_status';
+    }
 
     // ORDER MATTERS, and it is the reverse of handlePaymentSucceeded's.
     //
@@ -358,7 +387,10 @@ export async function healStripeSubscriptionPeriod(
     // between leaves a row that is un-blocked but still counted against the
     // previous period's usage, and NO later sweep will finish the job. This
     // sweep is the last resort; it cannot afford a half-repair that looks
-    // complete.
+    // complete. `handlePaymentSucceeded` can afford the opposite order precisely
+    // because it is NOT the last resort: it throws, the webhook returns 5xx, and
+    // Stripe redelivers the whole handler. Do not "fix" the inconsistency by
+    // making this one match it — there is no redelivery here.
     //
     // Opening the quota window first is safe in the other direction: the window
     // does not entitle anything on its own (the gate reads status and period),
@@ -370,9 +402,25 @@ export async function healStripeSubscriptionPeriod(
     await db
         .update(subscriptions)
         .set({
-            ...(mapping.write ? { status: mapping.status } : {}),
+            status: mapping.status,
             currentPeriodStart: periodStart,
             currentPeriodEnd: periodEnd,
+            // `trial_ends_at` is mirrored for the same reason handleSubscription
+            // Updated mirrors it, and omitting it made this whole repair a
+            // half-repair for `trialing` rows. It is NOT a paid-through claim —
+            // it is Stripe's statement of when the trial stops — and it is what
+            // actually gates a trialing row: checkSubscriptionStatus blocks
+            // `status='trialing'` the moment `trial_ends_at` passes, whatever the
+            // period says. So healing the period while leaving a stale
+            // trial_ends_at behind reports success, counts a periodsHealed,
+            // reopens the quota window, closes the dunning episode and can mail
+            // "payment recovered" — to a merchant who is STILL BLOCKED at the
+            // read path. Live-reachable, not theoretical: plan `starter` is
+            // active with trial_days=30 and createSubscriptionIntent passes it as
+            // `trial_period_days`, so Stripe-managed trialing subscriptions are
+            // created today (0 such rows in prod as of 2026-08-19; the next
+            // starter checkout through Stripe makes one).
+            trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
             updatedAt: new Date(),
         })
         .where(eq(subscriptions.id, local.id));
@@ -385,9 +433,10 @@ export async function healStripeSubscriptionPeriod(
             localSubscriptionId: local.id,
             userId: local.userId,
             previousStatus: local.status,
-            status: mapping.write ? mapping.status : local.status,
+            status: mapping.status,
             previousPeriodEnd: localEnd,
             currentPeriodEnd: periodEnd,
+            trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
         },
         'Advanced paid-through period on a linked Stripe subscription — its renewal webhook was missed'
     );
@@ -397,6 +446,15 @@ export async function healStripeSubscriptionPeriod(
     // outward-facing effect: closing an episode mails "payment recovered". Run
     // before the write, a failed write would leave that mail sent to a merchant
     // who is still blocked. It never throws, so it cannot break the chain.
+    //
+    // The invoice id becomes the Resend `payment_recovered:<id>` idempotency key,
+    // shared with handlePaymentSucceeded so a late webhook cannot double-send.
+    // It is `undefined` only when the subscription has no invoice at all
+    // (trialing / fully discounted) — and in exactly that case no
+    // `invoice.payment_succeeded` exists to race with, so there is nothing for a
+    // key to guard. Two concurrent SWEEPS are still covered: the atomic
+    // reset-UPDATE inside handlePaymentRecovery is the once-only claim, so only
+    // one of them composes an email.
     await handlePaymentRecovery(
         stripeSubscription.id,
         getExpandedLatestInvoice(stripeSubscription)?.id,
@@ -417,8 +475,26 @@ export interface SubscriptionSweepResult {
      * arrived, and a merchant who would otherwise have been blocked.
      */
     periodsHealed: number;
-    /** already linked and in agreement with Stripe — the happy path */
+    /**
+     * already linked and in agreement with Stripe — the happy path, and ONLY
+     * that. Every refusal gets its own counter below: folding them in here made
+     * one number mean four different things, so an operator reading
+     * `alreadyLinked: 12` could not tell agreement from four kinds of failure.
+     */
     alreadyLinked: number;
+    /**
+     * linked rows whose current period Stripe has NOT been paid for. The normal
+     * state of a merchant mid-dunning (Nourva, 2026-08-13) — a correct refusal,
+     * not a failure, and services/dunningNotices.ts owns telling them.
+     */
+    periodUnpaid: number;
+    /**
+     * linked rows Stripe says are PAYING that we could not reflect — no period
+     * boundaries, an unmapped status, or a row billed by another rail. Each is a
+     * merchant who may sit blocked with nobody looking, so this count raises
+     * Sentry (see UNHEALABLE_OUTCOMES).
+     */
+    periodUnhealable: number;
     /** paid in Stripe but un-adoptable (no metadata) — needs a human */
     orphaned: number;
     /** per-subscription failures, isolated so one bad row can't stall the sweep */
@@ -452,7 +528,8 @@ export async function reconcileStripeSubscriptions(options?: {
     const log = options?.log ?? noopLinkLogger;
 
     const result: SubscriptionSweepResult = {
-        scanned: 0, healed: 0, periodsHealed: 0, alreadyLinked: 0, orphaned: 0, errors: 0,
+        scanned: 0, healed: 0, periodsHealed: 0, alreadyLinked: 0,
+        periodUnpaid: 0, periodUnhealable: 0, orphaned: 0, errors: 0,
     };
 
     // Both paid states. A trialing Stripe subscription is a real commitment
@@ -497,6 +574,8 @@ export async function reconcileStripeSubscriptions(options?: {
                 if (linked) {
                     const outcome = await healStripeSubscriptionPeriod(sub, linked, log);
                     if (outcome === 'advanced') result.periodsHealed++;
+                    else if (outcome === 'unpaid') result.periodUnpaid++;
+                    else if (UNHEALABLE_OUTCOMES.has(outcome)) result.periodUnhealable++;
                     else result.alreadyLinked++;
                     continue;
                 }
@@ -526,6 +605,27 @@ export async function reconcileStripeSubscriptions(options?: {
             new Error(`${result.orphaned} paid Stripe subscription(s) could not be linked to a user`),
             'Subscription reconciliation found orphaned paid subscriptions',
             { level: 'warning', tags: { cron: 'subscription_reconcile' }, extra: { ...result } },
+        );
+    }
+
+    // The linked twin of the orphan alert above, and it exists for the same
+    // reason: Stripe says these merchants are paying, we could not reflect it,
+    // and the per-row `log.warn` inside the healer does NOT reach Sentry. Left
+    // to the log alone, a paying merchant sits blocked until someone reads it —
+    // which is the silence this whole module exists to end. The cron scaffold
+    // only alerts on recovered WORK (healed + periodsHealed), so a sweep that
+    // healed nothing because it COULD heal nothing looks identical to a quiet,
+    // healthy one.
+    if (result.periodUnhealable > 0) {
+        captureError(
+            new Error(`${result.periodUnhealable} paying Stripe subscription(s) could not have their period reflected`),
+            'Subscription reconciliation could not heal a paid period',
+            {
+                level: 'warning',
+                tags: { cron: 'subscription_reconcile' },
+                fingerprint: ['stripe-period-unhealable'],
+                extra: { ...result },
+            },
         );
     }
 

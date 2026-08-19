@@ -82,7 +82,14 @@ vi.mock('../../src/services/notifications', () => ({
 }));
 
 vi.mock('../../src/services/email', () => ({
-    emailService: { send: vi.fn().mockResolvedValue({ success: true }) },
+    emailService: {
+        send: vi.fn().mockResolvedValue({ success: true }),
+        // handlePaymentRecovery (reached by the period healer, RN-1 below) sends
+        // through trySend, not send. Without it the call throws a TypeError that
+        // that function's own catch swallows — the repair would look fine while
+        // the confirmation silently never went out.
+        trySend: vi.fn().mockResolvedValue({ delivered: true }),
+    },
 }));
 
 let seq = 0;
@@ -105,6 +112,37 @@ async function createPlan(overrides: Partial<typeof schema.plans.$inferInsert> =
         })
         .returning();
     return plan;
+}
+
+/**
+ * A LINKED, stripe-billed row whose paid-through is stale — the state a missed
+ * `invoice.payment_succeeded` leaves behind. `periodEnd` in the past by default
+ * so the 3-day grace has expired and the merchant is genuinely blocked.
+ */
+async function createLinkedStaleRow(
+    userId: string,
+    planId: string,
+    externalSubscriptionId: string,
+    overrides: Partial<typeof schema.subscriptions.$inferInsert> = {},
+) {
+    const staleEnd = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    const [sub] = await testDb
+        .insert(schema.subscriptions)
+        .values({
+            userId,
+            planId,
+            status: 'past_due',
+            externalSubscriptionId,
+            stripeCustomerId: 'cus_pe_test',
+            paymentMethod: 'stripe',
+            currentPeriodStart: new Date(staleEnd.getTime() - ONE_MONTH_MS),
+            currentPeriodEnd: staleEnd,
+            renewalFailureNotifiedAt: new Date(),
+            suspensionNotifiedAt: new Date(),
+            ...overrides,
+        })
+        .returning();
+    return sub;
 }
 
 /** The row signup leaves behind: a local trial, never linked to Stripe. */
@@ -393,5 +431,168 @@ describe('PE-7 — Active is not proof of payment', () => {
         expect(subs).toHaveLength(1);
         expect(subs[0].externalSubscriptionId).toBeNull();
         expect(subs[0].status).toBe('trialing');
+    });
+});
+
+/**
+ * RN — a renewal whose `invoice.payment_succeeded` never arrived.
+ *
+ * Since #817 that event is the ONLY writer of `current_period_*`, so a dropped
+ * delivery freezes a PAYING merchant's paid-through, the 3-day grace expires,
+ * and the entitlement gate blocks them. The unit suite pins the healer's
+ * decisions, but its drizzle mock resolves every query to the same rows and
+ * asserts no WHERE clause — so a healer that targeted the wrong column, or wrote
+ * a column the schema rejects, would pass all of it. These run against real
+ * Postgres for exactly that reason.
+ */
+describe('RN — the period healer, against real Postgres', () => {
+    it('RN-1: advances a frozen paid-through, reopens the quota window, closes the episode', async () => {
+        const user = await createTestUser({ email: 'pe.frozen@example.com' });
+        const plan = await createPlan();
+        const stale = await createLinkedStaleRow(user.id, plan.id, 'sub_pe_frozen');
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([peSub('sub_pe_frozen', user.id, plan.id, {
+                latest_invoice: { id: 'in_pe_frozen', status: 'paid' },
+            })])
+            .mockResolvedValueOnce([]);
+
+        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+
+        expect(result.periodsHealed).toBe(1);
+        expect(result.alreadyLinked).toBe(0);
+
+        // The row itself — the write actually landed on THIS row's columns.
+        const [healed] = await userSubs(user.id);
+        expect(healed.id).toBe(stale.id);
+        expect(healed.status).toBe('active');
+        expect(healed.currentPeriodEnd!.getTime())
+            .toBe(new Date((NOW_SECS + ONE_MONTH_SECS) * 1000).getTime());
+        expect(healed.currentPeriodEnd!.getTime()).toBeGreaterThan(stale.currentPeriodEnd!.getTime());
+
+        // The dunning episode is closed, or every FUTURE failure for this
+        // merchant is silenced (both branches select on `… _notified_at IS NULL`).
+        expect(healed.renewalFailureNotifiedAt).toBeNull();
+        expect(healed.suspensionNotifiedAt).toBeNull();
+
+        // A quota window for the period just proven paid for — otherwise the
+        // merchant is un-blocked but still counted against the previous period.
+        const usageRows = await testDb
+            .select()
+            .from(schema.usage)
+            .where(eq(schema.usage.userId, user.id));
+        expect(usageRows).toHaveLength(1);
+        expect(usageRows[0].aiRepliesCount).toBe(0);
+    });
+
+    it('RN-2: refuses the period Stripe advanced but was never paid for', async () => {
+        const user = await createTestUser({ email: 'pe.unpaidperiod@example.com' });
+        const plan = await createPlan();
+        const stale = await createLinkedStaleRow(user.id, plan.id, 'sub_pe_dunning');
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([peSub('sub_pe_dunning', user.id, plan.id, {
+                latest_invoice: { id: 'in_pe_dunning', status: 'open', amount_paid: 0 },
+            })])
+            .mockResolvedValueOnce([]);
+
+        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+
+        expect(result.periodsHealed).toBe(0);
+        expect(result.periodUnpaid).toBe(1);
+
+        const [untouched] = await userSubs(user.id);
+        expect(untouched.status).toBe('past_due');
+        expect(untouched.currentPeriodEnd!.getTime()).toBe(stale.currentPeriodEnd!.getTime());
+        // The episode stays OPEN — service is still stopped, so the stamps must
+        // not be reset and no "recovered" mail may go out.
+        expect(untouched.suspensionNotifiedAt).not.toBeNull();
+    });
+
+    it('RN-3: mirrors trial_ends_at, the field that gates a trialing row', async () => {
+        const user = await createTestUser({ email: 'pe.trialheal@example.com' });
+        const plan = await createPlan({ trialDays: 30 });
+        // A Stripe-managed trial whose local trial_ends_at has gone stale: the
+        // gate blocks `trialing` the moment it passes, whatever the period says.
+        await createLinkedStaleRow(user.id, plan.id, 'sub_pe_trial', {
+            status: 'trialing',
+            trialEndsAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        });
+
+        const extendedTrial = NOW_SECS + ONE_MONTH_SECS;
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([peSub('sub_pe_trial', user.id, plan.id, {
+                status: 'trialing',
+                trial_end: extendedTrial,
+                latest_invoice: null,
+            })]);
+
+        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+
+        expect(result.periodsHealed).toBe(1);
+        const [healed] = await userSubs(user.id);
+        expect(healed.status).toBe('trialing');
+        expect(healed.trialEndsAt!.getTime()).toBe(new Date(extendedTrial * 1000).getTime());
+        // Without the mirror this row would read `trialing` with a PAST
+        // trial_ends_at — blocked at the gate while the sweep reported success.
+        expect(healed.trialEndsAt!.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('RN-4: leaves a row billed by another rail alone', async () => {
+        const user = await createTestUser({ email: 'pe.foreignrail@example.com' });
+        const plan = await createPlan();
+        const manual = await createLinkedStaleRow(user.id, plan.id, 'sub_pe_manual', {
+            paymentMethod: 'manual',
+            status: 'active',
+            currentPeriodEnd: new Date(Date.now() + ONE_MONTH_MS),
+        });
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([peSub('sub_pe_manual', user.id, plan.id, {
+                latest_invoice: { id: 'in_pe_manual', status: 'paid' },
+            })])
+            .mockResolvedValueOnce([]);
+
+        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+
+        expect(result.periodsHealed).toBe(0);
+        expect(result.periodUnhealable).toBe(1);
+
+        const [untouched] = await userSubs(user.id);
+        expect(untouched.paymentMethod).toBe('manual');
+        expect(untouched.currentPeriodEnd!.getTime()).toBe(manual.currentPeriodEnd!.getTime());
+    });
+
+    it('RN-5: writes nothing at all when Stripe already agrees with the row', async () => {
+        const user = await createTestUser({ email: 'pe.agrees@example.com' });
+        const plan = await createPlan();
+        const inSync = await createLinkedStaleRow(user.id, plan.id, 'sub_pe_sync', {
+            status: 'active',
+            currentPeriodEnd: new Date((NOW_SECS + ONE_MONTH_SECS) * 1000),
+            renewalFailureNotifiedAt: null,
+            suspensionNotifiedAt: null,
+        });
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([peSub('sub_pe_sync', user.id, plan.id, {
+                latest_invoice: { id: 'in_pe_sync', status: 'paid' },
+            })])
+            .mockResolvedValueOnce([]);
+
+        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+
+        expect(result.alreadyLinked).toBe(1);
+        expect(result.periodsHealed).toBe(0);
+
+        // updated_at untouched: this sweep runs every 15 min over every paying
+        // merchant, and it is the only proxy for when a row last really changed.
+        const [after] = await userSubs(user.id);
+        expect(after.updatedAt!.getTime()).toBe(inSync.updatedAt!.getTime());
     });
 });

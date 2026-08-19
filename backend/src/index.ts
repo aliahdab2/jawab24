@@ -657,6 +657,10 @@ const start = async () => {
       tag: 'subscription_reconcile',
       enabled: () => !!config.stripe.secretKey,
       run: () => reconcileStripeSubscriptions({ log: server.log }),
+      // Only RECOVERED WORK belongs here. A row the sweep could not heal raises
+      // its own fingerprinted alert inside the service (periodUnhealable), and a
+      // row Stripe has not been paid for is a correct refusal that the dunning
+      // notices own — neither is "work a webhook should have done".
       recovered: r => ({
         count: r.healed + r.periodsHealed,
         message: `Subscription reconciliation activated ${r.healed} merchant(s) who had paid but were never linked, and advanced the paid-through period of ${r.periodsHealed} whose renewal webhook never arrived`,

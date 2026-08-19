@@ -316,8 +316,46 @@ describe('reconcileStripeSubscriptions', () => {
 
         const r = await reconcileStripeSubscriptions({ log: mkLog() });
 
-        expect(r).toMatchObject({ periodsHealed: 0, alreadyLinked: 1 });
+        // Counted apart from agreement: a merchant mid-dunning is a CORRECT
+        // refusal, and `alreadyLinked` must keep meaning "in agreement" only.
+        expect(r).toMatchObject({ periodsHealed: 0, periodUnpaid: 1, alreadyLinked: 0 });
         expect(db.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Stripe says these merchants are PAYING and we could not reflect it — each
+     * is potentially a payer sitting blocked. The healer's per-row `log.warn`
+     * does not reach Sentry, and the cron scaffold only alerts on recovered
+     * WORK, so a sweep that healed nothing because it COULD heal nothing would
+     * look identical to a quiet, healthy one.
+     */
+    it('raises Sentry when a paying subscription could not have its period reflected', async () => {
+        const noPeriod = { ...wireSub(), items: { data: [{}] } } as unknown as Stripe.Subscription;
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([noPeriod])
+            .mockResolvedValueOnce([]);
+        vi.mocked(db.select).mockReturnValue(q([localRow()]) as never);
+
+        const r = await reconcileStripeSubscriptions({ log: mkLog() });
+
+        expect(r).toMatchObject({ periodsHealed: 0, periodUnhealable: 1, alreadyLinked: 0 });
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.stringContaining('could not heal a paid period'),
+            expect.objectContaining({ fingerprint: ['stripe-period-unhealable'] }),
+        );
+    });
+
+    it('stays silent on Sentry when every linked row simply agrees with Stripe', async () => {
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([wireSub({ start: JUL_13, end: AUG_13 })])
+            .mockResolvedValueOnce([]);
+        vi.mocked(db.select).mockReturnValue(q([localRow({ currentPeriodEnd: new Date(AUG_13 * 1000) })]) as never);
+
+        const r = await reconcileStripeSubscriptions({ log: mkLog() });
+
+        expect(r).toMatchObject({ alreadyLinked: 1, periodUnhealable: 0, periodUnpaid: 0 });
+        expect(mockCaptureError).not.toHaveBeenCalled();
     });
 
     it('counts a paid-but-un-adoptable subscription as orphaned rather than healing it', async () => {
@@ -596,6 +634,67 @@ describe('healStripeSubscriptionPeriod', () => {
         await expect(healStripeSubscriptionPeriod(
             wireSub({ status: 'trialing', invoice: null }), localRow(), mkLog(),
         )).resolves.toBe('advanced');
+    });
+
+    /**
+     * ⛔ The half-repair. `trial_ends_at`, NOT the period, is what gates a
+     * trialing row: checkSubscriptionStatus blocks `status='trialing'` the moment
+     * it passes, whatever the period says. Heal the period and leave a stale
+     * trial_ends_at behind and the sweep reports `advanced`, counts a
+     * periodsHealed, reopens the quota window, closes the dunning episode and can
+     * mail "payment recovered" — to a merchant who is STILL BLOCKED at the read
+     * path. handleSubscriptionUpdated mirrors this field for the same reason.
+     *
+     * Live-reachable: plan `starter` is active with trial_days=30 and
+     * createSubscriptionIntent passes it as `trial_period_days`.
+     *
+     * Mutation check: drop `trialEndsAt` from the healer's .set() and this fails
+     * while every other case stays green.
+     */
+    it('mirrors trial_ends_at, the field that actually gates a trialing row', async () => {
+        const chain = q([]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+        const extendedTrial = SEP_13;
+
+        await healStripeSubscriptionPeriod(
+            { ...wireSub({ status: 'trialing', invoice: null }), trial_end: extendedTrial } as never,
+            localRow({ status: 'trialing', currentPeriodEnd: new Date(AUG_13 * 1000) }),
+            mkLog(),
+        );
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'trialing',
+            trialEndsAt: new Date(extendedTrial * 1000),
+        }));
+    });
+
+    /** A post-trial `active` subscription carries no trial_end — mirror the NULL
+     * rather than preserving a stale date that would block the row. */
+    it('clears a stale trial_ends_at when Stripe reports no trial', async () => {
+        const chain = q([]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await healStripeSubscriptionPeriod(wireSub(), localRow({ status: 'past_due' }), mkLog());
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'active',
+            trialEndsAt: null,
+        }));
+    });
+
+    /**
+     * A status outside the paid pair never reaches the period logic at all. The
+     * `unmapped_status` guard behind it is defence-in-depth for a status Stripe
+     * has not invented yet — unreachable by construction (every paid status maps),
+     * so no test can drive it without mocking the map itself.
+     */
+    it('refuses a status that is not one of the paid pair', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub({ status: 'incomplete', invoice: null }), localRow(), mkLog(),
+        );
+
+        expect(outcome).toBe('unpaid');
+        expect(db.update).not.toHaveBeenCalled();
     });
 
     /**
