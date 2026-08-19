@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui';
 import { Globe } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { settingsApi } from '@/lib/api';
+import { persistDashboardLanguage } from '@/lib/dashboardLanguage';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { SettingsState } from './types';
@@ -28,12 +28,9 @@ export function LanguageSelector({
     if (lang === settings.dashboardLanguage) return;
 
     try {
-      // Patch ONLY the language. PUT /settings is a partial update, so we must
-      // not send the whole settings object: that would make a one-field language
-      // switch depend on the validity of EVERY other stored field — e.g. a
-      // brandVoiceNotes value that predates the 800-char cap blocks it
-      // (JAWAB24-FRONTEND-2J). A focused quick-action touches only its own field.
-      await settingsApi.update({ dashboardLanguage: lang });
+      // Shared with the nav-bar toggle in DashboardLayout — see the helper for
+      // why this patches only the language field.
+      await persistDashboardLanguage(lang);
       // Commit local state only after the persist succeeds, so a failed PUT
       // doesn't leave the UI showing a language the backend never saved.
       setSettings({ ...settings, dashboardLanguage: lang });

@@ -106,12 +106,14 @@
     "quote1": "The app is amazing — I can't keep up with calls from customers and interested people, and the page's reach has changed for the better.",
     "author1": "Damascene Team for Training",
     "authorUrl1": "https://www.facebook.com/The.Damascene.team/",
-    "resultsLabel": "Results — July 2026",
-    "stat1Value": "13,297",
-    "stat1Label": "Auto-replies in a single month",
-    "stat2Value": "99.5%",
-    "stat2Label": "Of replies with no human intervention",
-    "disclaimer": "Results vary based on page activity and content."
+    "stat1Value": "6 seconds",
+    "stat1Label": "Median time to reply to a customer",
+    "stat2Value": "193,694",
+    "stat2Label": "Replies sent automatically",
+    "disclaimer": "Per-page results vary based on page activity and content.",
+    "statsScope": "Measured across 53 business pages, March–August 2026",
+    "stat3Value": "99%",
+    "stat3Label": "Of Jawab24's replies were sent automatically"
   },
   "cta": {
     "title": "Ready to Transform Your Customer Service?",
