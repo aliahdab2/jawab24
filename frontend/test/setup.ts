@@ -77,6 +77,7 @@ for (const [path, mod] of Object.entries(enModules)) {
 }
 // flagReason translations live in @jawab24/shared (not a local JSON file)
 import { flagReasonEn } from '@jawab24/shared';
+import { resolveICUPlural } from './icuPlural';
 EN_MESSAGES['flagReason'] = flagReasonEn as Record<string, unknown>;
 
 function resolveNestedKey(obj: Record<string, unknown>, key: string): string | undefined {
@@ -87,53 +88,6 @@ function resolveNestedKey(obj: Record<string, unknown>, key: string): string | u
     val = (val as Record<string, unknown>)[part];
   }
   return typeof val === 'string' ? val : undefined;
-}
-
-/**
- * Resolve ICU plural format: "{count, plural, one {# item} other {# items}}".
- *
- * Brace-BALANCED, not a single-level regex. Branch bodies routinely carry
- * their own placeholders — «{count, plural, one {«{list}» and its # row…}}» —
- * and a `[^{}]`-based pattern silently fails to match those, leaving the raw
- * ICU string in the DOM. It renders as plausible-looking text, so an assertion
- * on it passes or fails for the wrong reason instead of erroring; four shipped
- * messages were already in that state when this was found (2026-08-19).
- * Production next-intl handles the nesting, so the mock must too.
- */
-function resolveICUPlural(str: string, params: Record<string, unknown>): string {
-  const opener = /\{(\w+),\s*plural\s*,/;
-  // Each pass consumes exactly one plural block, so a body that itself holds a
-  // nested plural is resolved by the next pass and the loop still terminates.
-  for (let m = opener.exec(str); m; m = opener.exec(str)) {
-    const end = matchingBrace(str, m.index);
-    if (end === -1) break;
-    const cases = str.slice(m.index + m[0].length, end);
-    const count = Number(params[m[1]] ?? 0);
-    const form = new Intl.PluralRules('en').select(count);
-    const body = pluralBranch(cases, form) ?? pluralBranch(cases, 'other') ?? String(count);
-    str = str.slice(0, m.index) + body.replace(/#/g, String(count)) + str.slice(end + 1);
-  }
-  return str;
-}
-
-/** Index of the `}` closing the `{` at `open`, or -1 when unbalanced. */
-function matchingBrace(str: string, open: number): number {
-  let depth = 0;
-  for (let i = open; i < str.length; i++) {
-    if (str[i] === '{') depth++;
-    else if (str[i] === '}' && --depth === 0) return i;
-  }
-  return -1;
-}
-
-/** The body of one `<form> {…}` branch, brace-balanced so a body containing
- *  «{list}» is returned whole rather than truncated at its first `}`. */
-function pluralBranch(cases: string, form: string): string | undefined {
-  const at = new RegExp(`(?:^|[\\s}])${form}\\s*\\{`).exec(cases);
-  if (!at) return undefined;
-  const open = at.index + at[0].length - 1;
-  const end = matchingBrace(cases, open);
-  return end === -1 ? undefined : cases.slice(open + 1, end).trim();
 }
 
 // Mock next-intl: returns real English translation values so tests verify actual UI text.
