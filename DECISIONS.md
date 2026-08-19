@@ -1942,3 +1942,50 @@ Cat 78 untouched (784's clarify-vs-collect bistability reproduced on main itself
 stays OUT (unbuilt; revisit after pilot). Per-page tone deliberately NOT built (D-084
 wrinkle, documented in SETTINGS.md). PR #769 is superseded by this build and closes with a
 pointer.
+
+## D-086 · A freshness warning may speak for a whole list only when that list IS a schedule (2026-08-19, owner-reported)
+
+**Decision.** `datedListFreshness` now gates its list-level sentences on
+`isDatedCollection` — the SAME majority rule the rest of the fact-list engine uses to
+decide "is this a schedule?". A list whose dated rows are a MINORITY gets a new
+`rowsRetired` state that names the individual rows whose dates have passed, and never
+speaks about the list. `isDatedCollection` also counts `startsAt ?? endsAt` now, so the
+two functions cannot classify the same rows differently. This REVERSES the explicit
+choice pinned by the old test «a price list with one dated promo still warns about it».
+
+**What it shipped.** On page `39aeab89` the list «أسعار الدورات» held 50 price rows of
+which exactly ONE carried a date — «دورة المكياج او التجميل (الميك أب)», `starts_at
+2026-08-13`, a stray the merchant typed onto a tier. When that one date passed, "every
+dated row has retired" became true and the page announced **«انتهت التواريخ المعلنة في
+«أسعار الدورات» — لم يعد جواب يذكرها. أضف التواريخ الجديدة.»** — while «مواعيد الدورات
+المعلنة» beside it carried **seven live dates through 2026-08-31** for those very
+courses (الإسعافات الأولية ×2, الحلاقة النسائية ×2, اللغة الألمانية, السكرتاريا, TOT).
+The sentence was false by every reading a merchant has, and its instruction — "add the
+new dates" — was wrong advice for a price list. The owner caught it on screen; the
+first diagnosis offered ("technically true, merely confusing") was itself wrong and was
+corrected against the rows.
+
+**Why the majority rule, again.** This is the identical shape D-057's own tooling had
+already been burned by: `isDatedCollection` carries a docblock about ONE dated promo tier
+in a 50-row price list reclassifying the whole list (الدمشقي, 2026-08-06). That lesson was
+written for the LAYOUT predicate and never carried into the WARNING predicate, which kept
+the any-row rule. Two predicates answering "is this a schedule?" differently is what let a
+single row make a claim about 50.
+
+**What is deliberately NOT changed.** A genuine schedule that runs out still says so
+list-wide (`ended` / `ending`, 3-day window, D-057 unchanged). There is no `ending`
+counterpart for stray rows — one row about to retire is not a list running out. Retired
+strays are named in full, never truncated to a head: this state only reaches a MINORITY of
+a non-schedule list, and a cap would either lie about the count or hide the row the
+merchant must go fix.
+
+**Scope, measured before the change (prod, 2026-08-19).** Three collections fleet-wide
+carry any dated rows at all; exactly ONE produced the false banner — the one on the
+owner's screen. Zero rows fleet-wide carry `endsAt` without `startsAt`, so the anchor
+alignment is inert on today's data and is a consistency fix, not a behaviour change.
+
+**Found in passing:** the vitest `next-intl` mock's ICU plural resolver was a single-level
+regex, so any message with a placeholder inside a plural branch rendered as RAW ICU in
+tests — four shipped messages were already in that state. It renders as plausible text
+rather than erroring, so assertions on it pass or fail for the wrong reason. Replaced with
+a brace-balanced resolver; full frontend suite green (2817 tests).

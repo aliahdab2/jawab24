@@ -246,6 +246,11 @@ export function collectionAttributeLabels(collection: FactCollectionWithRows): s
 const norm = (text: string): string =>
   normalizeArabic(text, { normalizeTaaMarbuta: true }).toLowerCase().trim();
 
+/** The day a row retires on: `startsAt` when it has one, `endsAt` otherwise.
+ *  The SAME anchor `isRowLive` keys off, so nothing derived from it can call a
+ *  row live that the renderer and the prompt builder have already dropped. */
+const retiringAnchor = (row: FactRowDto): string | null => row.startsAt ?? row.endsAt;
+
 /** A collection is "dated" when its rows are PREDOMINANTLY dated — that is
  *  what makes it a schedule-like list whose rows self-expire. Derived from the
  *  merchant's own data, never from vocabulary.
@@ -258,10 +263,17 @@ const norm = (text: string): string =>
  *  as one even while a few of its rows are still undated drafts — a TIE leans
  *  schedule (a two-row list with one date is a schedule mid-authoring, not a
  *  price list with a promo), and the base-less fallback door in the card
- *  layout guarantees an edit entry either way. */
+ *  layout guarantees an edit entry either way.
+ *
+ *  Dated means `retiringAnchor` — `startsAt` OR `endsAt`. Counting `startsAt`
+ *  alone contradicted this docblock's own sentence: an offer row carrying only
+ *  an end date self-expires exactly like a session does, so a list of them IS
+ *  a schedule. Left unaligned, `datedListFreshness` would classify such a list
+ *  one way and this the other from the same rows. Inert on today's data — zero
+ *  rows fleet-wide carry `endsAt` without `startsAt` (measured 2026-08-19). */
 export function isDatedCollection(collection: FactCollectionWithRows): boolean {
   let dated = 0;
-  for (const r of collection.rows) if (r.startsAt !== null) dated++;
+  for (const r of collection.rows) if (retiringAnchor(r) !== null) dated++;
   return dated > 0 && dated * 2 >= collection.rows.length;
 }
 
@@ -272,12 +284,16 @@ export function isDatedCollection(collection: FactCollectionWithRows): boolean {
  */
 const DATED_LIST_WARNING_DAYS = 3;
 
-/** `ended` = every dated row has retired, so the AI no longer mentions any of
- *  them. `ending` = the last one retires within the window, and `lastDate` is
- *  the day it does. `null` = nothing dated here, or plenty of runway. */
+/** `ended` = every dated row of a SCHEDULE has retired, so the AI no longer
+ *  mentions any of them. `ending` = the last one retires within the window,
+ *  and `lastDate` is the day it does. `rowsRetired` = this list is not a
+ *  schedule, and the named rows — dates a merchant dropped onto individual
+ *  rows — have retired on their own. `null` = nothing dated here, or plenty
+ *  of runway. */
 export type DatedListFreshness =
   | { state: 'ended' }
   | { state: 'ending'; lastDate: string }
+  | { state: 'rowsRetired'; names: string[] }
   | null;
 
 /**
@@ -290,24 +306,42 @@ export type DatedListFreshness =
  * so the customer-facing answer degrades honestly while the merchant hears
  * nothing at all. This is the signal that closes that loop.
  *
- * The retiring date is `startsAt` when there is one and `endsAt` otherwise —
- * the SAME anchor `isRowLive` keys off, so this cannot claim a row is live
- * that the renderer has already dropped.
+ * WHAT THE SENTENCE IS ALLOWED TO BE ABOUT is decided by `isDatedCollection`,
+ * not by `some row has a date` (owner catch, 2026-08-19). On the pilot page
+ * «أسعار الدورات» held 50 price rows of which exactly ONE carried a date, a
+ * stray the merchant had typed onto a tier; when that one date passed, the
+ * any-row rule made «every dated row has retired» true and the page announced
+ * that the LIST's announced dates had ended — while seven live dates for those
+ * very courses sat in «مواعيد الدورات المعلنة» beside it. A statement about a
+ * whole list may only be made about a list that IS a schedule; everywhere
+ * else a retired date is a fact about its own row, and is reported as one.
+ * This is the same majority rule, and the same 50-rows-one-date shape, that
+ * `isDatedCollection` was written for.
  */
 export function datedListFreshness(
   collection: FactCollectionWithRows,
   todayIso: string,
 ): DatedListFreshness {
-  const anchorOf = (row: FactRowDto) => row.startsAt ?? row.endsAt;
-  const dated = collection.rows.filter((r) => anchorOf(r) !== null);
+  const dated = collection.rows.filter((r) => retiringAnchor(r) !== null);
   // An outlet directory has no dates and must never be nagged about them.
   if (dated.length === 0) return null;
 
-  const live = dated.filter((r) => isRowLive(r, todayIso));
+  const live: FactRowDto[] = [];
+  const retired: FactRowDto[] = [];
+  for (const r of dated) (isRowLive(r, todayIso) ? live : retired).push(r);
+
+  // Not a schedule → the dates are strays on individual rows. Name the rows
+  // that went dark; never generalise them into a claim about the list. No
+  // `ending` counterpart: one row about to retire is not a list running out,
+  // and the row says so itself at its own date field.
+  if (!isDatedCollection(collection)) {
+    return retired.length > 0 ? { state: 'rowsRetired', names: retired.map((r) => r.name) } : null;
+  }
+
   if (live.length === 0) return { state: 'ended' };
 
   const lastDate = live.reduce((latest, r) => {
-    const anchor = anchorOf(r) as string;
+    const anchor = retiringAnchor(r) as string;
     return anchor > latest ? anchor : latest;
   }, '');
   return lastDate <= isoPlusDays(todayIso, DATED_LIST_WARNING_DAYS)

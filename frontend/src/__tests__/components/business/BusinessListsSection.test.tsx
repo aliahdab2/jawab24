@@ -81,6 +81,7 @@ const slotCollection = (over: Partial<FactCollectionWithRows> = {}): FactCollect
 
 const bothCollections = () => [priceCollection(), slotCollection()];
 
+
 function renderSection(props: { readOnly?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -1017,6 +1018,87 @@ describe('BusinessListsSection', () => {
       renderSection({ readOnly: true });
       await screen.findByText('أسعار الدورات');
       expect(screen.queryByRole('button', { name: renameDoor('أسعار الدورات') })).toBeNull();
+    });
+  });
+
+  describe('the freshness notice only says what the data supports', () => {
+    /** THE PRODUCTION SHAPE, page 39aeab89 on 2026-08-19: the price list held
+     *  50 rows of which exactly ONE carried a date, and it had passed — while
+     *  the schedule beside it still had seven live dates for those same
+     *  courses. The page announced «the announced dates in أسعار الدورات have
+     *  ended», which was false by every reading a merchant has. */
+    const strayDatedPrices = () => priceCollection({
+      rowCount: 3,
+      rows: [
+        ...priceCollection().rows,
+        {
+          id: 'price-makeup-advanced', name: 'دورة المكياج او التجميل (الميك أب)',
+          price: '50000.00', currency: 'ل.س قديمة', attributes: null,
+          startsAt: past, endsAt: null, isAvailable: true,
+        },
+      ],
+    });
+
+    it('never claims a PRICE list ran out of dates because one stray row retired', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [strayDatedPrices(), slotCollection()] },
+      } as any);
+      renderSection();
+      await screen.findByText('أسعار الدورات');
+
+      // Read the notice itself: the row's name also appears on its card, so a
+      // page-wide text query would pass on the card alone and prove nothing.
+      const notice = await screen.findByRole('status');
+      // The false sentence must be gone...
+      expect(notice).not.toHaveTextContent(en.lists.datesEnded.split('«')[0].trim());
+      // ...and the true one names the row that actually went dark, so the
+      // signal D-057 exists for is not lost with it.
+      expect(notice).toHaveTextContent('دورة المكياج او التجميل (الميك أب)');
+      expect(notice).toHaveTextContent('أسعار الدورات');
+    });
+
+    it('bounds a long tail of retired strays without under-reporting the count', async () => {
+      // 10 undated + 7 retired dated rows: still a MINORITY, so still a
+      // row-level notice — but the sentence must not become a wall of names.
+      const many = priceCollection({
+        rowCount: 17,
+        rows: [
+          ...Array.from({ length: 10 }, (_, i) => ({
+            id: `p${i}`, name: `دورة ${i}`, price: '35000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+          })),
+          ...Array.from({ length: 7 }, (_, i) => ({
+            id: `promo${i}`, name: `عرض ${i}`, price: '20000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: past, endsAt: null, isAvailable: true,
+          })),
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [many] } } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      // The exact total is stated — the cap shortens, it never under-reports.
+      expect(notice).toHaveTextContent('7');
+      expect(notice).toHaveTextContent(en.lists.namesMore);
+      expect(notice).toHaveTextContent('عرض 0');
+      expect(notice).toHaveTextContent('عرض 4');
+      // The sixth name onward is folded into «and others», not printed.
+      expect(notice).not.toHaveTextContent('عرض 5');
+      expect(notice).not.toHaveTextContent('عرض 6');
+    });
+
+    it('still warns when a real SCHEDULE has run out — the majority rule is all that changed', async () => {
+      const deadSlots = slotCollection({
+        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: past, endsAt: past })),
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [priceCollection(), deadSlots] },
+      } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      expect(notice).toHaveTextContent(en.lists.datesEnded.split('«')[0].trim());
+      expect(notice).toHaveTextContent('مواعيد الدورات المعلنة');
     });
   });
 });
