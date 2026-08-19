@@ -32,6 +32,18 @@ const headingVariants = {
   },
 };
 
+// Page and Smart-Reply counts, mirrored from the single source of truth in
+// `backend/src/config/plans.ts`. They are literals because the landing page is
+// statically rendered and must not pay for a plans fetch — but they are the REAL
+// caps, not adjectives: this grid previously advertised «عدة صفحات» for a 2-page
+// plan and «ردود غير محدودة» for a plan capped at 10,000, which /pricing itself
+// contradicted (it prints "Unlimited" only when the cap is null).
+const PLAN_PREVIEW = {
+  starter: { pages: 1 },
+  business: { pages: 2, aiReplies: 4500 },
+  pro: { pages: 5, aiReplies: 10000 },
+} as const;
+
 export function LandingPricing() {
   const tPricing = useTranslations('pricing');
   const t = useTranslations('landing');
@@ -79,7 +91,7 @@ export function LandingPricing() {
               {tPricing('starterDesc')}
             </p>
             <ul className="text-[10px] sm:text-sm text-muted-foreground space-y-0.5 sm:space-y-1">
-              <li><Check className="w-3 h-3 inline-block" /> {tPricing('starterFeature1')}</li>
+              <li><Check className="w-3 h-3 inline-block" /> {tPricing('featurePages', { count: PLAN_PREVIEW.starter.pages })}</li>
               <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('starterFeature2')}</li>
               <li><Check className="w-3 h-3 inline-block" /> {tPricing('starterFeature3')}</li>
             </ul>
@@ -98,9 +110,9 @@ export function LandingPricing() {
               {tPricing('businessDesc')}
             </p>
             <ul className="text-[10px] sm:text-sm text-muted-foreground space-y-0.5 sm:space-y-1">
-              <li><Check className="w-3 h-3 inline-block" /> {tPricing('businessFeature1')}</li>
+              <li><Check className="w-3 h-3 inline-block" /> {tPricing('featurePages', { count: PLAN_PREVIEW.business.pages })}</li>
               <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('businessFeature2')}</li>
-              <li><Check className="w-3 h-3 inline-block" /> {tPricing('businessFeature3')}</li>
+              <li><Check className="w-3 h-3 inline-block" /> {tPricing('featureAiReplies', { count: PLAN_PREVIEW.business.aiReplies })}</li>
             </ul>
           </motion.div>
 
@@ -114,8 +126,8 @@ export function LandingPricing() {
               {tPricing('proDesc')}
             </p>
             <ul className="text-[10px] sm:text-sm text-muted-foreground space-y-0.5 sm:space-y-1">
-              <li><Check className="w-3 h-3 inline-block" /> {tPricing('proFeature1')}</li>
-              <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('proFeature2')}</li>
+              <li><Check className="w-3 h-3 inline-block" /> {tPricing('featurePages', { count: PLAN_PREVIEW.pro.pages })}</li>
+              <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('featureAiReplies', { count: PLAN_PREVIEW.pro.aiReplies })}</li>
               <li><Check className="w-3 h-3 inline-block" /> {tPricing('proFeature3')}</li>
             </ul>
           </motion.div>

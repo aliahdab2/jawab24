@@ -41,7 +41,8 @@ vi.mock('@/lib/sentryHelpers', () => ({
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('./api', () => ({ api: {} }));
+const mockApiGet = vi.fn();
+vi.mock('./api', () => ({ api: { get: (...args: unknown[]) => mockApiGet(...args) } }));
 vi.mock('axios', () => ({ default: { post: vi.fn() } }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -301,5 +302,42 @@ describe('registerPushListeners — listener order (prevents FCM token loss)', (
         expect(mockRegister).toHaveBeenCalledTimes(1);
         const events = mockAddListener.mock.calls.map(args => args[0]);
         expect(events).toContain('registration');
+    });
+});
+
+describe('Notification locale resolution', () => {
+    beforeEach(async () => {
+        mockApiGet.mockReset();
+        mockApiGet.mockResolvedValue({ data: { notifications: [], unreadCount: 0 } });
+        const { useUIStore } = await import('./store');
+        useUIStore.setState({ language: 'ar' });
+        window.history.pushState({}, '', '/');
+    });
+
+    async function requestedLang(): Promise<string | undefined> {
+        const { getNotifications } = await import('./notifications');
+        await getNotifications();
+        const params = mockApiGet.mock.calls[0]?.[1] as { params?: { lang?: string } } | undefined;
+        return params?.params?.lang;
+    }
+
+    // The native app is a static export with `i18n: undefined`, so no locale
+    // prefix ever reaches the path — the store is the ONLY signal. Reading the
+    // URL alone served Arabic notifications inside an English app.
+    it('uses the store language when the path carries no locale prefix', async () => {
+        const { useUIStore } = await import('./store');
+        useUIStore.getState().setLanguage('en');
+        expect(await requestedLang()).toBe('en');
+    });
+
+    it('prefers the URL prefix over the store (web has i18n routing)', async () => {
+        const { useUIStore } = await import('./store');
+        useUIStore.getState().setLanguage('en');
+        window.history.pushState({}, '', '/ar/dashboard');
+        expect(await requestedLang()).toBe('ar');
+    });
+
+    it('falls back to Arabic when neither the path nor the store says English', async () => {
+        expect(await requestedLang()).toBe('ar');
     });
 });

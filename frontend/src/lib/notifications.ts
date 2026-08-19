@@ -7,6 +7,7 @@ import Router from 'next/router';
 import { api } from './api';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { resolveNotificationRoute } from '@/components/ui/notificationUtils';
+import { useUIStore } from './store';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -349,8 +350,18 @@ export async function removePushToken(authToken: string): Promise<void> {
 }
 
 /**
- * Get the current app locale from the URL path or Zustand store fallback.
- * Works outside React components (no hooks needed).
+ * Get the current app locale, outside React components (no hooks needed).
+ *
+ * Resolution order mirrors `effectiveLocale` in `_app.tsx`: the URL path first
+ * (web has i18n routing, so `/en/...` is authoritative), then the persisted UI
+ * store.
+ *
+ * The store step is NOT a cosmetic fallback — it is the ONLY signal in the
+ * native app. Mobile is a static export with `i18n: undefined`
+ * (`next.config.js`), and `useLanguage().setLanguage` on native updates the
+ * store + `<html lang>` without navigating, so a locale prefix never appears in
+ * the path. Reading the URL alone pinned every in-app notification and push
+ * toast to Arabic no matter what language the merchant had selected.
  */
 function getAppLocale(): 'ar' | 'en' {
     if (typeof window !== 'undefined') {
@@ -358,7 +369,7 @@ function getAppLocale(): 'ar' | 'en' {
         const pathLocale = window.location.pathname.split('/')[1];
         if (pathLocale === 'en' || pathLocale === 'ar') return pathLocale;
     }
-    return 'ar';
+    return useUIStore.getState().language === 'en' ? 'en' : 'ar';
 }
 
 /**

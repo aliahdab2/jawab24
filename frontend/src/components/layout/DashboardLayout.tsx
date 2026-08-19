@@ -37,6 +37,8 @@ import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isNativePlatform } from '@/lib/capacitor';
+import { persistDashboardLanguage } from '@/lib/dashboardLanguage';
+import { captureError } from '@/lib/sentryHelpers';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 
 // Admin tooling is intentionally absent from the mobile nav for admins in general
@@ -133,6 +135,16 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const toggleLanguage = () => {
     const newLang = getNextLocale(locale);
     setLanguage(newLang);
+    // Mirror the choice into `settings.dashboardLanguage`. This toggle is the
+    // only place an authenticated merchant switches language outside the
+    // settings screen, and the backend reads that column — not the store — when
+    // it picks the language of a push notification. Fire-and-forget: the UI
+    // language is client-owned and must never wait on the network.
+    void persistDashboardLanguage(newLang).catch((error) =>
+      captureError(error, 'Failed to persist dashboard language from nav toggle', {
+        tags: { component: 'DashboardLayout', action: 'toggle-language' },
+      }),
+    );
   };
 
   const pageTitle = title || tDashboard('title');
