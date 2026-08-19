@@ -84,19 +84,37 @@ since 2026-08-02.
 | **Greeting** | "Get Started" / «بدء الاستخدام» opener tap ONLY, `greetingMessageEnabled = true`. Typed messages never fire it — the first-message prepend was removed 2026-08-17 after ~30% of first contacts got a double welcome (the AI greets naturally on first contact) | `greetingMessageMulti` → shipped `defaultGreeting` when the merchant authored nothing (same strings the settings placeholder shows, so toggle-ON is never silent — added 2026-08-18; 56 of 83 workspaces carry an empty `{}` because `auth.createDefaultWorkspace` seeds no greeting) | Once per customer (no prior outgoing row — `hasOutgoingMessage`) |
 | **Away** | Gate 5 blocks | `awayMessageMulti` → shipped `defaultAway` **only on the business-hours branch** | Once per (page, sender) per **24h** — Redis `SET NX EX`, key `away_msg:*`. **Fail-open**: Redis error ⇒ send (a duplicate beats silence). |
 | **Quota fallback** | Monthly Smart Reply limit exhausted, `limitFallbackEnabled = true` | `limitFallbackMessageMulti` → i18n `messageFallback` / `commentFallback` | — |
-| **Non-text nudge** | Media the CUSTOMER can act on: video / file / unknown type, an oversized or malformed image, failed transcription, or a standing limit (`env_disabled` / `no_subscription`). **Never sent when the failure is ours** — see below | i18n `nonTextNudge` | — |
+| **Non-text nudge** | Media the CUSTOMER can act on: video / file / unknown type, an oversized or malformed image, failed transcription, or a standing limit (`env_disabled` / `no_subscription`). **Never sent when the failure is ours, nor when the merchant's subscription is inactive** — see below | i18n `nonTextNudge` | — |
 | **Dual-reply nudge** | Public comment answered + DM sent (`commentReplyMode = 'dual'`) | `dualReplyNudgeVariations` / `dualReplyNudgeMulti` → i18n `dualNudgeDefault` | — |
 
 ### When an attachment produces NO message at all
 
-Three cases send the customer nothing. This is deliberate, not a delivery bug — if
+Four cases send the customer nothing. This is deliberate, not a delivery bug — if
 you are investigating "why did this customer get no reply to their photo?", start here.
 
 | Case | Customer | Merchant |
 |---|---|---|
 | **Our failure** — vision/download deadline fired, network broke, dead CDN link, empty download, failed cap lookup, no API key | silence | photo lands in the inbox; SLA sweep flags it unanswered |
 | **Daily image cap reached** | silence | `image_limit_reached` notification (deduped per UTC day) |
+| **Subscription no longer entitles** — canceled / paused / past-due beyond grace / expired trial (`subscription_inactive`, added 2026-08-19) | silence | photo lands in the inbox; the standing `auto_reply_paused_billing` notice already covers the cause |
 | **No-intent attachment** — sticker, Instagram story mention (`story_mention`) | silence | row stored and marked **resolved**, so it never reaches Needs Attention |
+
+⚠️ `subscription_inactive` is silent for a reason that is NOT the usual "is the
+capability available" line. `nonTextHandler` runs at INGESTION and consults no
+subscription of its own — the entitlement gate is downstream in
+`messageProcessor`. A nudge here would therefore be a NEW outbound message to the
+customer of a merchant who is not paying, telling them to retype as text, after
+which the reply gate blocks the answer and they hear nothing anyway. It is the
+one denial where the nudge's own justification ("the fastest route to an answer")
+is false.
+
+Until 2026-08-19 this case did not exist: `checkImageUnderstandingGate` checked
+only that a subscription ROW existed plus the daily cap, so a blocked merchant's
+customers still had their photos read and billed to us — 288 of 1,527
+`image_understanding` calls (19%, $0.32, 13 merchants) measured on that date. The
+gate now shares `checkSubscriptionStatus` with `canAutoReply`, so it can never be
+more permissive than the reply it feeds. Top-up does NOT lift it (it never lifts
+`canAutoReply` either — #749); top-up still doubles the daily CAP.
 
 The rule: the nudge says «حالياً نستطيع الرد على الرسائل النصية والصوتية», which is a
 claim about our capability. Whenever the reason we failed is *ours*, that claim is

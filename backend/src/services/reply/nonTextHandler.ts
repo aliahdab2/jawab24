@@ -5,7 +5,7 @@ import { instagramService } from '../instagram';
 import { instagramCredentialOf, resolveInstagramCredential, type InstagramCredential } from '../instagramCredential';
 import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
-import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached } from '../imageUnderstanding';
+import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached, type ImageGateResult } from '../imageUnderstanding';
 import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { publishSSEEvent } from '../../lib/eventBus';
@@ -129,7 +129,15 @@ async function finalizeAttachmentDone(
  */
 type ImageDenialAction = 'nudge' | 'silent' | 'silent_notify_cap';
 
-function actionForGateDenial(reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' | 'cap_reached' | 'subscription_inactive'): ImageDenialAction {
+/**
+ * Derived from `ImageGateResult` rather than re-listed by hand: this switch must
+ * answer for EVERY denial the gate can produce, and a hand-copied union lets a
+ * new reason ship with no decision about what the customer hears. Deriving makes
+ * that a compile error in this file instead.
+ */
+type ImageGateDenialReason = Extract<ImageGateResult, { allowed: false }>['reason'];
+
+function actionForGateDenial(reason: ImageGateDenialReason): ImageDenialAction {
     switch (reason) {
         // The merchant's subscription no longer entitles anything (canceled,
         // paused, past-due beyond grace, expired trial). SILENT, and the reason
