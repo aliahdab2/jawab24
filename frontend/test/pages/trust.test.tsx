@@ -112,3 +112,39 @@ describe('the published percentage is arithmetically honest', () => {
         expect(DOWNTIME_MINUTES).toBe(27);
     });
 });
+
+describe('the published claim has not gone stale', () => {
+    // A measured figure with no expiry is a claim that will eventually be false
+    // while every other gate stays green. Nothing else in the repo knows this
+    // number needs re-reading, so the deadline lives here — the same reasoning
+    // that puts an `expires` on an @UnboundedFetch escape hatch.
+    const MAX_AGE_MONTHS = 6;
+
+    it(`was measured within the last ${MAX_AGE_MONTHS} months`, () => {
+        const measured = new Date(`${UPTIME_STATS.measuredAt}T00:00:00Z`);
+        expect(Number.isNaN(measured.getTime())).toBe(false);
+
+        const deadline = new Date(measured);
+        deadline.setUTCMonth(deadline.getUTCMonth() + MAX_AGE_MONTHS);
+
+        const stale = Date.now() > deadline.getTime();
+        expect(
+            stale,
+            `The uptime figure on /trust was measured ${UPTIME_STATS.measuredAt} and is now more ` +
+            `than ${MAX_AGE_MONTHS} months old — it is published as fact on a public page.\n` +
+            `Re-read the ${UPTIME_STATS.windowDays}-day stats AND the incident list in ` +
+            `${UPTIME_STATS.provider}, recompute from the WORST monitor, then update ` +
+            `src/data/uptime.ts (percent, window dates, incidents, downtimeSeconds, measuredAt) ` +
+            `and mirror the sentence into public/llms.txt and public/llms-full.txt.`,
+        ).toBe(false);
+    });
+
+    it('does not claim a window that ends in the future', () => {
+        // Compare CALENDAR DATES, not instants: a window ending today is valid,
+        // but its end-of-day UTC timestamp is still ahead of now for most of
+        // the day. Both sides are UTC ISO dates, so string order is date order.
+        const today = new Date().toISOString().slice(0, 10);
+        expect(UPTIME_STATS.windowEnd <= today).toBe(true);
+        expect(UPTIME_STATS.windowStart < UPTIME_STATS.windowEnd).toBe(true);
+    });
+});

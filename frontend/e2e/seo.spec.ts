@@ -107,13 +107,23 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     { path: '/pricing', expected: `${SITE_URL}/pricing` },
     { path: '/en/blog', expected: `${SITE_URL}/en/blog` },
     { path: '/blog', expected: `${SITE_URL}/blog` },
+    { path: '/en/trust', expected: `${SITE_URL}/en/trust` },
+    { path: '/trust', expected: `${SITE_URL}/trust` },
   ];
 
   for (const { path, expected } of CANONICAL_TEST_PAGES) {
     test(`canonical URL correct on ${path}`, async ({ page }) => {
       await page.goto(path);
       const canonical = page.locator('link[rel="canonical"]');
-      await expect(canonical.last()).toHaveAttribute('href', expected);
+
+      // EXACTLY one. A <link> without a `key` is not deduped by Next.js, so a
+      // page that sets its own canonical on top of the global one in _app.tsx
+      // renders two and leaves the crawler to pick. Asserting only .last()
+      // passed in that case — it tolerated the very defect it looks like it
+      // guards. Verified against production first: all pages listed here, and
+      // every other public page, serve exactly one.
+      await expect(canonical).toHaveCount(1);
+      await expect(canonical).toHaveAttribute('href', expected);
     });
   }
 

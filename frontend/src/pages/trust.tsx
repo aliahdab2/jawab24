@@ -3,12 +3,17 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight, ExternalLink, ShieldCheck, Activity } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import { BRAND_ASSETS } from '@/constants/brand';
 import { UPTIME_STATS, CHECK_INTERVAL_MINUTES, DOWNTIME_MINUTES } from '@/data/uptime';
 
+const PATH = '/trust';
+
 /** Used only as the `url` inside the JSON-LD block — the <link rel="canonical">
- *  tag itself is _app.tsx's job. */
-const CANONICAL_AR = 'https://jawab24.com/trust';
-const CANONICAL_EN = 'https://jawab24.com/en/trust';
+ *  tag itself is _app.tsx's job. Built through the same helper _app.tsx uses so
+ *  the two cannot disagree if the origin or the locale-prefix scheme changes. */
+function canonicalFor(locale: string) {
+  return BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en${PATH}` : PATH);
+}
 
 /** One measured figure with its label, rendered large. */
 function Figure({ value, label }: { value: string; label: string }) {
@@ -25,8 +30,9 @@ export default function Trust() {
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
-  const canonical = locale === 'en' ? CANONICAL_EN : CANONICAL_AR;
+  const canonical = canonicalFor(locale);
 
+  /** seoDescription interpolates these; seoTitle deliberately does not. */
   const seoValues = {
     percent: UPTIME_STATS.percent,
     days: UPTIME_STATS.windowDays,
@@ -38,13 +44,13 @@ export default function Trust() {
         {/* canonical, hreflang, og:url, og:image and robots are emitted globally
             by _app.tsx from the current path — setting them again here would
             render a SECOND canonical tag and let a crawler pick either one. */}
-        <title>{t('seoTitle', seoValues)}</title>
+        <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription', seoValues)} />
 
-        <meta key="og:title" property="og:title" content={t('seoTitle', seoValues)} />
+        <meta key="og:title" property="og:title" content={t('seoTitle')} />
         <meta key="og:description" property="og:description" content={t('seoDescription', seoValues)} />
 
-        <meta name="twitter:title" content={t('seoTitle', seoValues)} />
+        <meta name="twitter:title" content={t('seoTitle')} />
         <meta name="twitter:description" content={t('seoDescription', seoValues)} />
 
         {/* The measured figure restated as structured data, with the third-party
@@ -116,8 +122,11 @@ export default function Trust() {
                 />
 
                 <dl className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-center">
+                  {/* Each <dt> must NAME its own <dd>. Repeating one heading
+                      three times makes a screen reader announce three identical
+                      terms with different definitions. */}
                   <div>
-                    <dt className="sr-only">{t('uptimeHeading')}</dt>
+                    <dt className="sr-only">{t('termWindow')}</dt>
                     <dd className="text-foreground/80">
                       {t('uptimeWindow', {
                         start: UPTIME_STATS.windowStart,
@@ -127,13 +136,13 @@ export default function Trust() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="sr-only">{t('uptimeHeading')}</dt>
+                    <dt className="sr-only">{t('termIncidents')}</dt>
                     <dd className="text-foreground/80">
                       {t('uptimeIncidents', { count: UPTIME_STATS.incidents })}
                     </dd>
                   </div>
                   <div>
-                    <dt className="sr-only">{t('uptimeHeading')}</dt>
+                    <dt className="sr-only">{t('termDowntime')}</dt>
                     <dd className="text-foreground/80">
                       {t('uptimeDowntime', { count: DOWNTIME_MINUTES })}
                     </dd>
