@@ -180,6 +180,23 @@ function mockReq() {
     return { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 }
 
+/**
+ * A request logger that SURFACES what it is told. `reconcileStripeSubscriptions`
+ * isolates per-row failures into `result.errors` and a `log.warn`, so with a
+ * silent spy a throw inside the healer shows up only as `periodsHealed: 0` —
+ * an assertion failure with its cause invisible. Any sweep test that expects
+ * work to happen must use this and assert `errors` is 0.
+ */
+function loudReq() {
+    return {
+        log: {
+            info: vi.fn(),
+            warn: (obj: unknown, msg?: string) => { console.error('[sweep warn]', msg, obj); },
+            error: (obj: unknown, msg?: string) => { console.error('[sweep error]', msg, obj); },
+        },
+    } as any;
+}
+
 /** A PaymentElement subscription — carries the metadata the linking keys on. */
 function peSub(id: string, userId: string, planId: string, overrides: Record<string, unknown> = {}) {
     return {
@@ -458,8 +475,12 @@ describe('RN — the period healer, against real Postgres', () => {
             })])
             .mockResolvedValueOnce([]);
 
-        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+        const result = await reconcileStripeSubscriptions({ log: loudReq().log });
 
+        // `errors` FIRST: the sweep isolates a per-row throw into this counter,
+        // so asserting periodsHealed alone reports a swallowed crash as a bare
+        // "expected 0 to be 1" with no cause.
+        expect(result.errors).toBe(0);
         expect(result.periodsHealed).toBe(1);
         expect(result.alreadyLinked).toBe(0);
 
@@ -498,7 +519,7 @@ describe('RN — the period healer, against real Postgres', () => {
             })])
             .mockResolvedValueOnce([]);
 
-        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+        const result = await reconcileStripeSubscriptions({ log: loudReq().log });
 
         expect(result.periodsHealed).toBe(0);
         expect(result.periodUnpaid).toBe(1);
@@ -531,8 +552,9 @@ describe('RN — the period healer, against real Postgres', () => {
                 latest_invoice: null,
             })]);
 
-        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+        const result = await reconcileStripeSubscriptions({ log: loudReq().log });
 
+        expect(result.errors).toBe(0);
         expect(result.periodsHealed).toBe(1);
         const [healed] = await userSubs(user.id);
         expect(healed.status).toBe('trialing');
@@ -558,7 +580,7 @@ describe('RN — the period healer, against real Postgres', () => {
             })])
             .mockResolvedValueOnce([]);
 
-        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+        const result = await reconcileStripeSubscriptions({ log: loudReq().log });
 
         expect(result.periodsHealed).toBe(0);
         expect(result.periodUnhealable).toBe(1);
@@ -585,7 +607,7 @@ describe('RN — the period healer, against real Postgres', () => {
             })])
             .mockResolvedValueOnce([]);
 
-        const result = await reconcileStripeSubscriptions({ log: mockReq().log });
+        const result = await reconcileStripeSubscriptions({ log: loudReq().log });
 
         expect(result.alreadyLinked).toBe(1);
         expect(result.periodsHealed).toBe(0);
