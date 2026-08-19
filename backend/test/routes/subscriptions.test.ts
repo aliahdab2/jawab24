@@ -8,6 +8,11 @@ vi.mock('../../src/services/subscriptions', () => ({
         getUserSubscription: vi.fn(),
         getUsageSummary: vi.fn(),
         canUseAiReplies: vi.fn(),
+        // /limits/ai answers for the WORKSPACE's billing subject, not the
+        // caller — a team member with a leftover trial row of their own would
+        // otherwise be told their AI is blocked while the workspace is healthy.
+        canUseAiRepliesForWorkspace: vi.fn(),
+        resolveWorkspaceSubscription: vi.fn().mockResolvedValue(null),
         canAddPage: vi.fn(),
         changePlan: vi.fn(),
         cancelSubscription: vi.fn(),
@@ -183,7 +188,7 @@ describe('Subscriptions Routes', () => {
     describe('GET /api/subscription/limits/ai', () => {
         it('should return 200 with AI limit data on success', async () => {
             const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            vi.mocked(subscriptionsService.canUseAiRepliesForWorkspace).mockResolvedValue({
                 allowed: true,
                 limit: 1500,
                 used: 500,
@@ -231,7 +236,7 @@ describe('Subscriptions Routes', () => {
 
         it('should return 500 when service throws', async () => {
             const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canUseAiReplies).mockRejectedValue(new Error('limit check failed'));
+            vi.mocked(subscriptionsService.canUseAiRepliesForWorkspace).mockRejectedValue(new Error('limit check failed'));
 
             const response = await app.inject({
                 method: 'GET',

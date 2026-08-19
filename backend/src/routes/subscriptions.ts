@@ -124,7 +124,8 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/ai - Check AI reply limits
          */
         protectedRoutes.get('/limits/ai', { schema: { tags: ['Subscriptions'], summary: 'Check AI reply limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as WorkspaceRequest).user;
+            const req = request as WorkspaceRequest;
+            const user = req.user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -137,7 +138,13 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             }
 
             try {
-                const result = await subscriptionsService.canUseAiReplies(userId);
+                // Workspace-scoped: quota belongs to the workspace, not to
+                // whoever is logged in. The resolution lives in the service so
+                // this and /usage cannot drift apart (see
+                // canUseAiRepliesForWorkspace).
+                const result = req.workspaceId
+                    ? await subscriptionsService.canUseAiRepliesForWorkspace(userId, req.workspaceId)
+                    : await subscriptionsService.canUseAiReplies(userId);
 
                 return reply.send({
                     success: true,
