@@ -1,19 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
-
-const css = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf-8');
-
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Bodies of every rule whose selector list ends with `selector` before the `{`. */
-const bodiesOf = (selector: string): string[] =>
-  [...css.matchAll(new RegExp(`${escape(selector)}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]);
-
-const declaration = (body: string, prop: string): string | null => {
-  const m = body.match(new RegExp(`(?:^|;|\\s)${escape(prop)}\\s*:\\s*([^;]+)`));
-  return m ? m[1].trim() : null;
-};
+import { css, bodiesOf, declaration } from '../testUtils/cssSource';
 
 /**
  * The mobile bottom nav is lifted off the viewport bottom by

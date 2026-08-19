@@ -179,6 +179,8 @@ const Chevron = isRTLLocale(locale) ? ChevronLeft : ChevronRight;
 
 The `<html dir>` is set in `_document.tsx`. Child components inherit automatically. Only set `dir` on portals/modals/overlays. Use `dir="auto"` on user-editable inputs/textareas.
 
+> An **empty** `dir="auto"` field resolves to LTR — `dir=auto` reads the element's value, never its placeholder — which in the Arabic UI puts the caret and placeholder at the left edge. That is handled globally in `globals.css` by `input[dir="auto"]:placeholder-shown, textarea[dir="auto"]:placeholder-shown { direction: inherit }`, so `dir="auto"` on its own is the right thing to write in a component. See AI_INSTRUCTIONS.md §10.4.
+
 ## Validation
 
 Run before every commit:

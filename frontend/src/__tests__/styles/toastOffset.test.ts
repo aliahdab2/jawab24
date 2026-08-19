@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
-
-const css = readFileSync(
-  resolve(__dirname, '../../styles/globals.css'),
-  'utf-8',
-);
+import { css } from '../testUtils/cssSource';
 
 const appTsx = readFileSync(
   resolve(__dirname, '../../pages/_app.tsx'),
