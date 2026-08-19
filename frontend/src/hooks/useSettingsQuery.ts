@@ -49,6 +49,8 @@ export interface SettingsResponseData {
   messagesAutoReply?: boolean;
   /** Drives the dashboard's onboarding/setup panel. */
   onboardingCompletedAt?: string | null;
+  /** Stored account UI language, reconciled by useDashboardLanguageSync. */
+  dashboardLanguage?: string | null;
 }
 
 /**

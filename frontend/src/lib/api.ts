@@ -167,7 +167,10 @@ export const otpApi = {
     publicApi.post('/auth/phone/request', { phone, locale }),
 
   verifyOtp: (phone: string, code: string) =>
-    publicApi.post<{ user: { id: string; name: string | null; phone: string | null; picture?: string; isAdmin?: boolean }; token: string; workspaces: unknown[] }>('/auth/phone/verify', { phone, code }),
+    // `settings.dashboardLanguage` is the account's stored UI language. The
+    // server has always sent it here (controllers/auth.ts verifyOtp); declaring
+    // it is what lets the login page adopt it instead of the page locale.
+    publicApi.post<{ user: { id: string; name: string | null; phone: string | null; picture?: string; isAdmin?: boolean }; token: string; workspaces: unknown[]; settings?: { dashboardLanguage?: string | null } }>('/auth/phone/verify', { phone, code }),
 
   // Link phone to an already-authenticated user (used in phone-collect flow)
   linkPhone: (phone: string, code: string) =>

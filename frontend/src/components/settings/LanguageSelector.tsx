@@ -2,6 +2,7 @@ import { Card } from '@/components/ui';
 import { Globe } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { persistDashboardLanguage } from '@/lib/dashboardLanguage';
+import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { SettingsState } from './types';
@@ -23,9 +24,21 @@ export function LanguageSelector({
 }: LanguageSelectorProps) {
   const t = useTranslations('settings');
   const tc = useTranslations('common');
+  // The LIVE interface language, not the stored column. The two drift — the
+  // locale/store is device-local while `settings.dashboardLanguage` is a server
+  // column only an authenticated PUT writes — and this control is labelled
+  // "system interface language", so it must show what the merchant is actually
+  // reading. Highlighting the stored value produced an English screen with
+  // «العربية» selected (reported 2026-08-19). Same rule the other settings
+  // cards follow: __tests__/components/settings/languageCoherence.test.tsx.
+  const { language } = useLanguage();
 
   const handleLanguageChange = async (lang: 'ar' | 'en') => {
-    if (lang === settings.dashboardLanguage) return;
+    // Only a genuine no-op skips the work: the page locale AND the stored column
+    // must both already be `lang`. Guarding on the column alone made the button
+    // dead in exactly the drifted state — an Arabic page with a stored "en"
+    // ignored a click on «English», leaving the merchant no way back.
+    if (lang === language && lang === settings.dashboardLanguage) return;
 
     try {
       // Shared with the nav-bar toggle in DashboardLayout — see the helper for
@@ -57,10 +70,12 @@ export function LanguageSelector({
           </div>
         </div>
 
-        <div className="flex gap-1 p-1 bg-muted rounded-xl">
+        <div className="flex gap-1 p-1 bg-muted rounded-xl" role="radiogroup" aria-label={t('language')}>
           <button
             onClick={() => handleLanguageChange('ar')}
-            className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
+            role="radio"
+            aria-checked={language === 'ar'}
+            className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${language === 'ar'
               ? 'bg-card text-brand-600 shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -69,7 +84,9 @@ export function LanguageSelector({
           </button>
           <button
             onClick={() => handleLanguageChange('en')}
-            className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
+            role="radio"
+            aria-checked={language === 'en'}
+            className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${language === 'en'
               ? 'bg-card text-brand-600 shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
               }`}

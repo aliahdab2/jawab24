@@ -11,6 +11,7 @@ import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 import { useWorkspacesRefresh } from '@/hooks/useWorkspacesRefresh';
 import { useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge } from '@/hooks/useNavBadgeCounts';
 import { useGaClientIdSync } from '@/hooks/useGaClientIdSync';
+import { useDashboardLanguageSync } from '@/hooks/useDashboardLanguageSync';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 // Direct imports, NOT the '@/components/ui' barrel (43 re-exports). This
@@ -100,6 +101,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // recorded server-side days later still attributes to the ad click. Gated on
   // a real session: this layout also renders the PUBLIC /pricing page.
   useGaClientIdSync(isAuthenticated && _hasHydrated);
+  // Mirrors the language the merchant is actually reading into
+  // `settings.dashboard_language` whenever the two have drifted apart — the
+  // column server-side sends read for push/email language. Gated internally on
+  // the shared settings query, which only runs with a session.
+  useDashboardLanguageSync();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   // Counts keyed by href — the same map the sidebar and the More overlay read,

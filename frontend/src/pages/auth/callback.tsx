@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { useAuthStore, useUIStore, type Language } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { AppSkeleton } from '@/components/ui';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { getLocalePath } from '@/utils/locale';
+import { resolveLoginLanguage } from '@/lib/dashboardLanguage';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -178,10 +179,11 @@ export default function AuthCallback() {
         setWorkspacesRef.current(data.workspaces, { defaultWorkspaceId: data.defaultWorkspaceId ?? null });
       }
 
-      // Apply language setting if available
-      // Priority: 1. User Profile Settings, 2. Preferred Locale from State, 3. Default
-      const finalLocale = data.settings?.dashboardLanguage || preferredLocale || 'ar';
-      useUIStore.getState().setLanguage(finalLocale as Language);
+      // Apply language setting if available — account language first, then the
+      // locale the merchant signed in from. Shared with the phone-OTP login so
+      // the two sign-in paths cannot drift apart.
+      const finalLocale = resolveLoginLanguage(data.settings?.dashboardLanguage, preferredLocale);
+      useUIStore.getState().setLanguage(finalLocale);
 
       // Reconnect flow: sync pages with the fresh token then redirect back to pages
       if (isReconnect && data.fbAccessToken) {

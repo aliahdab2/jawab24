@@ -32,11 +32,12 @@ import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
-import { useAuthStore, useUIStore, type Language, type WorkspaceSummary } from '@/lib/store';
+import { useAuthStore, useUIStore, type WorkspaceSummary } from '@/lib/store';
 import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { handleOtpVerifyError } from '@/lib/otpErrors';
-import { getNextLocale, getLocalePath } from '@/utils/locale';
+import { getNextLocale, getLocalePath, getLocaleDirection } from '@/utils/locale';
+import { resolveLoginLanguage } from '@/lib/dashboardLanguage';
 import { DemoLoginButton } from '@/features/demo';
 import { PhoneInput } from '@/components/auth/PhoneInput';
 import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
@@ -119,12 +120,32 @@ export default function LoginPage() {
           { defaultWorkspaceId: (data as { defaultWorkspaceId?: string | null }).defaultWorkspaceId ?? null },
         );
       }
-      // Apply default language
-      useUIStore.getState().setLanguage(locale as Language);
+      // Adopt the language stored on the ACCOUNT, falling back to this page's
+      // locale — the same priority the Facebook callback already applies
+      // (auth/callback.tsx), from the same field of the same response shape.
+      // Taking the page locale unconditionally is what let a phone-signup
+      // merchant read an English dashboard while `settings.dashboard_language`
+      // still said `ar`: the Settings toggle showed «العربية» over an English
+      // screen, and — because that column is the ONLY language signal a
+      // server-side send has — every push and email arrived in Arabic.
+      const finalLocale = resolveLoginLanguage(data.settings?.dashboardLanguage, locale);
+      useUIStore.getState().setLanguage(finalLocale);
       // Redirect
       const returnUrl = urlParams?.get('redirect') || (router.query.redirect as string) || '/dashboard';
       const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
-      router.replace(safeUrl);
+      if (Capacitor.isNativePlatform()) {
+        // Static export: no locale routing, so the document attributes are the
+        // only carrier of direction — mirrors useLanguage().setLanguage.
+        document.documentElement.dir = getLocaleDirection(finalLocale);
+        document.documentElement.lang = finalLocale;
+        router.replace(safeUrl);
+      } else {
+        // Web: carry the adopted locale into the one redirect. Without it the
+        // URL keeps the login page's locale, `_app`'s sync effect only corrects
+        // the DEFAULT-locale URL, and the drift this fix removes reappears at
+        // the next screen.
+        router.replace(safeUrl, safeUrl, { locale: finalLocale });
+      }
     } catch (err: unknown) {
       handleOtpVerifyError(err, t, setOtpError, 'OTP verify failed', { page: 'login' });
     } finally {
