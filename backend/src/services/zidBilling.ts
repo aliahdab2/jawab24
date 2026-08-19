@@ -8,7 +8,7 @@ import { mapZidPlanToSlug } from '../config/zidBilling';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
-import { noopLinkLogger, type LinkLogger } from './subscriptionLinking';
+import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
 import { resolveBillingSubjectUserId } from './ecommerce';
 

@@ -44,6 +44,7 @@ import {
     paymentRecoveredEmailTemplate,
 } from '../utils/emailTemplates';
 import {
+    getExpandedLatestInvoice,
     getInvoiceAmountDue,
     getInvoiceBillingReason,
     getInvoiceHostedUrl,
@@ -427,11 +428,6 @@ interface RenewalFailedExtra {
     invoiceId: string | null;
 }
 
-/** The expanded latest invoice off a retrieved subscription, if present. */
-function latestInvoiceOf(stripeSub: Stripe.Subscription): Stripe.Invoice | null {
-    const inv = (stripeSub as unknown as { latest_invoice?: unknown }).latest_invoice;
-    return inv && typeof inv === 'object' ? (inv as Stripe.Invoice) : null;
-}
 
 /**
  * Run both dunning sweeps. Branch B (suspension) runs FIRST and its claim also
@@ -532,7 +528,7 @@ async function fetchStripeStateForRow(
         return null;
     }
     const stripeSub = await stripeService.getSubscriptionWithLatestInvoice(row.externalSubscriptionId);
-    return { stripeSub, invoice: latestInvoiceOf(stripeSub) };
+    return { stripeSub, invoice: getExpandedLatestInvoice(stripeSub) };
 }
 
 /**
