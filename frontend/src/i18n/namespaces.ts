@@ -24,6 +24,7 @@ export const PAGE_NAMESPACES = {
   blog:               ['blog', 'landing'],
   ecommerce:          ['ecommerce'],
   help:               ['help'],
+  trust:              ['trust'],
 
   unsubscribe:        ['unsubscribe'],
 

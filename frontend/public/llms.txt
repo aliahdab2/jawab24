@@ -15,6 +15,7 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 - Quality controls: confidence scoring with human review, two-tier price verification, and replies grounded in the merchant's own Business Info
 - Pricing: 30-day free trial (no credit card) → Starter $15/mo → Business $39/mo → Pro $79/mo
 - Mobile: Android app on Google Play with push notifications
+- Reliability: 99.99% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — public status page: https://stats.uptimerobot.com/ijNBtFf9SC
 
 ## What Makes Jawab24 Different
 

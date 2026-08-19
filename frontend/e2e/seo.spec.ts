@@ -24,6 +24,7 @@ const PUBLIC_PAGES = [
   { path: '/en/login', arPath: '/login' },
   { path: '/en/what-is-jawab24', arPath: '/what-is-jawab24' },
   { path: '/en/instagram', arPath: '/instagram' },
+  { path: '/en/trust', arPath: '/trust' },
   // TODO: add /en/contact and /en/blog when those pages are built
 ];
 
@@ -41,6 +42,7 @@ const PAGES_WITH_JSON_LD = [
   '/en/pricing',
   '/en/what-is-jawab24',
   '/en/instagram',
+  '/en/trust',
   // TODO: add /en/blog when the blog is built
 ];
 

@@ -93,6 +93,7 @@ export function LandingFooter() {
               <li><Link href="/compare/speedly" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.compareSpeedly')}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.contactUs')}</Link></li>
               <li><Link href="/help" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.helpCenter')}</Link></li>
+              <li><Link href="/trust" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.trust')}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.termsOfService')}</Link></li>
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.privacyPolicy')}</Link></li>
               <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{tDataDeletion('footerLink')}</Link></li>
