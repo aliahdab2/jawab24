@@ -191,7 +191,14 @@ function setupApiRoutes(page: import('@playwright/test').Page, opts: RouteOption
 /**
  * THE routing contract from #759: every Business Info entry point on /pages
  * must land on /business with the right page preselected — never open an
- * editor in place. Asserted through the real buttons, so a regression that
+ * editor in place.
+ *
+ * There are THREE entry points, not four: the amber «أضف معلومات» chip was
+ * removed in #838. It was a third call to action for one job on one card — the
+ * nudge banner below it already explains why and offers "Add now", and the CTA
+ * is the persistent entry — and it read `page.knowledgeBase`, which #806 had
+ * dropped from the list payload, so it fired on every non-ecommerce page
+ * including merchants whose info was complete. Asserted through the real buttons, so a regression that
  * resurrects a modal (or breaks the funnel) fails here even though every unit
  * test mocks the router. (The no-modal check after navigation is belt and
  * braces — a modal that never opens is primarily proven by the URL landing.)
@@ -219,12 +226,6 @@ test.describe('Business Info entry points on /pages', () => {
 
     await page.waitForURL(/\/business\?page=page_filled/);
     await expect(page.locator('.modal-overlay')).toHaveCount(0);
-  });
-
-  test('the "Add info" chip routes to /business', async ({ page }) => {
-    await page.getByRole('button', { name: t('pages.addInfo'), exact: true }).click();
-
-    await page.waitForURL(/\/business\?page=page_empty/);
   });
 
   test('the nudge banner CTA routes to /business', async ({ page }) => {
