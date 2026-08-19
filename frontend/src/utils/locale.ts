@@ -15,6 +15,21 @@ export const SUPPORTED_LOCALES = ['ar', 'en'] as const;
 /** A supported locale string. */
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
+/**
+ * Narrow an untrusted language string to a supported locale.
+ *
+ * `settings.dashboard_language` is a `varchar(10)` the server never validates on
+ * read, and it reaches the client through the login response and `GET /settings`.
+ * Casting it straight to a locale would let a stale or hand-edited row switch the
+ * UI to a language with no message bundle.
+ */
+export function toSupportedLocale(
+  value: string | null | undefined,
+  fallback: SupportedLocale = DEFAULT_LOCALE,
+): SupportedLocale {
+  return SUPPORTED_LOCALES.includes(value as SupportedLocale) ? (value as SupportedLocale) : fallback;
+}
+
 /** Returns true if this is the default locale (no URL prefix). */
 export function isDefaultLocale(locale: string): boolean {
   return locale === DEFAULT_LOCALE;

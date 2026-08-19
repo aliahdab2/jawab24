@@ -51,3 +51,4 @@ export { useAiPipelineLabel } from './useAiPipelineLabel';
 export { useCopyToClipboard } from './useCopyToClipboard';
 export { useSubscriptionUsage } from './useSubscriptionUsage';
 export { useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge, type NavBadgeMap, type NavBadgeColor } from './useNavBadgeCounts';
+export { useDashboardLanguageSync } from './useDashboardLanguageSync';

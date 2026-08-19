@@ -1,4 +1,5 @@
 import { settingsApi } from './api';
+import { toSupportedLocale } from '@/utils/locale';
 import type { Language } from '@/i18n/hooks';
 
 /**
@@ -20,4 +21,26 @@ import type { Language } from '@/i18n/hooks';
  */
 export async function persistDashboardLanguage(lang: Language): Promise<void> {
   await settingsApi.update({ dashboardLanguage: lang });
+}
+
+/**
+ * The UI language to apply after a successful sign-in.
+ *
+ * Priority: the language stored on the ACCOUNT, then the locale of the page the
+ * merchant signed in from, then the default. Shared by every sign-in path — the
+ * Facebook callback and the phone-OTP login both receive the same
+ * `settings.dashboardLanguage` field in their auth response, and a path that
+ * takes the page locale instead strands the merchant in a UI language the
+ * server column does not know about: a Settings toggle showing the other
+ * language, and pushes/emails composed from the column in the language they are
+ * not reading.
+ *
+ * Both inputs are untrusted strings (a `varchar(10)` column and a URL segment),
+ * so both are narrowed to a supported locale.
+ */
+export function resolveLoginLanguage(
+  storedDashboardLanguage: string | null | undefined,
+  pageLocale?: string | null,
+): Language {
+  return toSupportedLocale(storedDashboardLanguage, toSupportedLocale(pageLocale));
 }
