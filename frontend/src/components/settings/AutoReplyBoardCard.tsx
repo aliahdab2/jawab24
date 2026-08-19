@@ -179,18 +179,28 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
           {t('autoReplyBoard.modeScopeNote')}
         </p>
 
+        {/* One option per ROW on a phone, a segmented control from `sm` up.
+            As a single `inline-flex` line it could not fit and did not wrap:
+            the three labels plus the «Recommended» badge need ~625 px against
+            ~290 px inside the card at 360 px, so the control ran off the screen
+            and took the whole page's horizontal scroll with it (reported
+            2026-08-19, both languages — Arabic is no shorter). Stacking is the
+            same shape the reply-mode options on ReplyStyleCard already use. */}
         <div
           role="radiogroup"
           aria-labelledby="comment-reply-mode-label"
           aria-describedby="comment-reply-mode-scope"
-          className="inline-flex rounded-xl border border-theme-border overflow-hidden"
+          className="flex flex-col w-full sm:inline-flex sm:flex-row sm:w-auto rounded-xl border border-theme-border overflow-hidden"
         >
           {modeOptions.map((opt) => (
             <label
               key={opt.value}
               className={clsx(
                 'relative cursor-pointer select-none px-4 py-2.5 text-sm font-medium min-h-[44px] flex items-center gap-1.5',
-                'border-s border-theme-border first:border-s-0 transition-colors',
+                // The divider follows the axis: a rule ABOVE each stacked row,
+                // a rule BEFORE each segment once they sit side by side.
+                'border-t border-theme-border first:border-t-0 transition-colors',
+                'sm:border-t-0 sm:border-s sm:first:border-s-0',
                 // Keyboard focus must be visible (WCAG 2.4.7): the radio itself is
                 // sr-only, so surface its focus on the label.
                 'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500/40 has-[:focus-visible]:z-10',
@@ -210,7 +220,10 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
               />
               {opt.label}
               {opt.recommended && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full status-brand">
+                // `ms-auto` parks the badge at the row's far end while the row is
+                // full-width; from `sm` up the label is content-sized, so there
+                // is no free space and it simply trails the text as before.
+                <span className="ms-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full status-brand flex-shrink-0">
                   {t('recommended')}
                 </span>
               )}

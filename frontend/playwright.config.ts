@@ -47,9 +47,10 @@ export default defineConfig({
         'keyboard-modal-layout.spec.ts',
         'safe-area-cascade.spec.ts',
         // Layout guarantees that only a real layout engine can check: chips that
-        // fit one row without a hidden scroller, a card whose status sits above
-        // the fold. It pins its own 360px viewport (the tightest common phone).
-        'mobile-inbox-layout.spec.ts',
+        // fit one row without a hidden scroller and spend its full width, a
+        // settings control that stays inside the screen in both languages. It
+        // pins its own 360px viewport (the tightest common phone).
+        'mobile-layout.spec.ts',
       ],
     },
     {

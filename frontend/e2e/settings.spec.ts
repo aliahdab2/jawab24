@@ -395,6 +395,44 @@ test.describe('Settings Page', () => {
     await expect(page).toHaveTitle(/Settings.*Jawab24/i, { timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
+
+  /**
+   * Desktop half of the mobile stacking fix (mobile-layout.spec.ts owns the
+   * phone). The reply-destination control stacks one option per row below `sm`
+   * and must go back to a segmented control above it — the `sm:` classes govern
+   * this width too, and nothing else measures it: settings' visual snapshots
+   * are taken at 390 px. Nested so it inherits the auth + API mocks above.
+   */
+  test.describe('reply destination on a wide screen', () => {
+    test.use({ viewport: { width: 1280, height: 900 } });
+
+    test('the three options stay one segmented row, with dividers between them', async ({ page }) => {
+      await page.goto('/en/settings');
+
+      const group = page.getByRole('radiogroup', { name: t('settings.autoReplyBoard.modeQuestion') });
+      await expect(group).toBeVisible({ timeout: 15000 });
+      await expect(group.locator('label')).toHaveCount(3);
+
+      const geometry = await group.evaluate((el) => {
+        const labels = Array.from(el.querySelectorAll('label'));
+        return {
+          groupWidth: el.getBoundingClientRect().width,
+          centres: labels.map((l) => l.getBoundingClientRect().top + l.getBoundingClientRect().height / 2),
+          // The divider follows the axis: side-by-side segments are separated by
+          // a start rule, never by the top rule the stacked rows use.
+          startBorders: labels.map((l) => getComputedStyle(l).borderInlineStartWidth),
+          topBorders: labels.map((l) => getComputedStyle(l).borderTopWidth),
+        };
+      });
+
+      expect(Math.max(...geometry.centres) - Math.min(...geometry.centres),
+        'the options stacked instead of sitting side by side').toBeLessThan(2);
+      // A segmented control, not a full-width block.
+      expect(geometry.groupWidth, 'the control stretched to the full page width').toBeLessThan(900);
+      expect(geometry.startBorders).toEqual(['0px', '1px', '1px']);
+      expect(geometry.topBorders).toEqual(['0px', '0px', '0px']);
+    });
+  });
 });
 
 /**

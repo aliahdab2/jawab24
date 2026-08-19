@@ -132,6 +132,38 @@ test.describe('Messages Page', () => {
     // Dropdown should be visible
     await expect(page.getByText(t('common.allPages')).first()).toBeVisible({ timeout: 10000 });
   });
+
+  /**
+   * Desktop half of the mobile chip fix (mobile-layout.spec.ts owns the phone).
+   *
+   * The chips grow to fill the row below `sm` only. From `sm` up the row shares
+   * its line with the search box, so a chip that kept growing there would eat
+   * the search field — that is what `sm:flex-none` prevents, and this is the
+   * only test that would notice if the variant stopped applying.
+   */
+  test('the filter chips keep their natural width beside the search box', async ({ page }) => {
+    await page.goto('/en/messages');
+    await expect(page.locator('h1').filter({ hasText: t('messages.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    const row = page.getByRole('group', { name: t('messages.title') });
+    await expect(row).toBeVisible({ timeout: 10000 });
+
+    const spend = await row.evaluate((el) => {
+      const chips = Array.from(el.querySelectorAll('button'));
+      const rowWidth = el.getBoundingClientRect().width;
+      const used = chips.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+      return { rowWidth, used };
+    });
+
+    // Content-sized: the four chips leave the row with room to spare. If they
+    // stretched, `used` would meet `rowWidth` — the mobile behaviour leaking up.
+    expect(spend.used, 'the chips stretched on a wide screen').toBeLessThan(spend.rowWidth - 40);
+
+    // And the search box still has its own width beside them.
+    const search = page.getByRole('search');
+    const searchBox = (await search.first().boundingBox())!;
+    expect(searchBox.width, 'the search box was squeezed').toBeGreaterThan(200);
+  });
 });
 
 test.describe('Message Detail Modal', () => {
