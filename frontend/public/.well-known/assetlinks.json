@@ -4,7 +4,9 @@
     "namespace": "android_app",
     "package_name": "com.jawab24.android",
     "sha256_cert_fingerprints": [
-      "18:13:0B:ED:30:E0:E6:BF:CE:D0:D6:BF:40:70:CD:A0:9B:1A:22:BF:AA:07:E0:58:83:2A:13:61:C5:61:D7:CA"
+      "58:B3:C6:5E:A2:55:43:E9:03:1C:24:CB:D9:FE:16:CC:7B:59:69:F9:BE:38:6D:E4:1F:85:12:CB:12:B5:D1:EA",
+      "18:13:0B:ED:30:E0:E6:BF:CE:D0:D6:BF:40:70:CD:A0:9B:1A:22:BF:AA:07:E0:58:83:2A:13:61:C5:61:D7:CA",
+      "16:D3:A6:3F:FB:AD:A5:11:DE:95:85:8C:04:50:AA:CB:1B:11:B4:9E:15:A8:2F:FD:7A:23:5B:83:6C:53:EA:24"
     ]
   }
 }]
