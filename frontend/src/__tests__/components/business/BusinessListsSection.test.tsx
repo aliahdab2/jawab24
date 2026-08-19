@@ -81,6 +81,7 @@ const slotCollection = (over: Partial<FactCollectionWithRows> = {}): FactCollect
 
 const bothCollections = () => [priceCollection(), slotCollection()];
 
+
 function renderSection(props: { readOnly?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -1017,6 +1018,121 @@ describe('BusinessListsSection', () => {
       renderSection({ readOnly: true });
       await screen.findByText('أسعار الدورات');
       expect(screen.queryByRole('button', { name: renameDoor('أسعار الدورات') })).toBeNull();
+    });
+  });
+
+  describe('the freshness notice only says what the data supports', () => {
+    /** THE PRODUCTION SHAPE, page 39aeab89 on 2026-08-19: the price list held
+     *  50 rows of which exactly ONE carried a date, and it had passed — while
+     *  the schedule beside it still had seven live dates for those same
+     *  courses. The page announced «the announced dates in أسعار الدورات have
+     *  ended», which was false by every reading a merchant has. */
+    const strayDatedPrices = () => priceCollection({
+      rowCount: 3,
+      rows: [
+        ...priceCollection().rows,
+        {
+          id: 'price-makeup-advanced', name: 'دورة المكياج او التجميل (الميك أب)',
+          price: '50000.00', currency: 'ل.س قديمة', attributes: null,
+          startsAt: past, endsAt: null, isAvailable: true,
+        },
+      ],
+    });
+
+    it('never claims a PRICE list ran out of dates because one stray row retired', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [strayDatedPrices(), slotCollection()] },
+      } as any);
+      renderSection();
+      await screen.findByText('أسعار الدورات');
+
+      // Read the notice itself: the row's name also appears on its card, so a
+      // page-wide text query would pass on the card alone and prove nothing.
+      const notice = await screen.findByRole('status');
+      // The whole sentence, so the false one cannot merely be absent while the
+      // true one is subtly wrong: the singular ICU branch, filled from the real
+      // copy, is the only thing this notice may say.
+      expect(notice.textContent?.trim()).toBe(
+        en.lists.datesRowsRetired
+          .replace(/^.*?one \{/, '')
+          .replace(/\} other \{.*$/, '')
+          .replace('{names}', 'دورة المكياج او التجميل (الميك أب)')
+          .replace('{list}', 'أسعار الدورات'),
+      );
+    });
+
+    it('bounds a long tail of retired strays without under-reporting the count', async () => {
+      // 10 undated + 7 retired dated rows: still a MINORITY, so still a
+      // row-level notice — but the sentence must not become a wall of names.
+      const many = priceCollection({
+        rowCount: 17,
+        rows: [
+          ...Array.from({ length: 10 }, (_, i) => ({
+            id: `p${i}`, name: `دورة ${i}`, price: '35000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+          })),
+          ...Array.from({ length: 7 }, (_, i) => ({
+            id: `promo${i}`, name: `عرض ${i}`, price: '20000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: past, endsAt: null, isAvailable: true,
+          })),
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [many] } } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      // The WHOLE sentence, built from the real copy, compared with `toBe`.
+      // `toHaveTextContent` is a SUBSTRING matcher, so an expected «7 rows …»
+      // passes against a rendered «17 rows …» — and this fixture has 17 rows,
+      // so the count could have been wired to `collection.rows.length` and no
+      // substring assertion would have noticed.
+      const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', en.lists.namesMore]
+        .join(en.lists.namesSeparator);
+      expect(notice.textContent?.trim()).toBe(
+        `7 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
+      );
+    });
+
+    it('prints the sixth name rather than folding one row into a plural «others»', async () => {
+      // Truncating at exactly one hidden row would say «and others» of a single
+      // row. The sixth name is cheaper than the lie.
+      const six = priceCollection({
+        rowCount: 16,
+        rows: [
+          ...Array.from({ length: 10 }, (_, i) => ({
+            id: `p${i}`, name: `دورة ${i}`, price: '35000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+          })),
+          ...Array.from({ length: 6 }, (_, i) => ({
+            id: `promo${i}`, name: `عرض ${i}`, price: '20000.00', currency: 'ل.س قديمة',
+            attributes: null, startsAt: past, endsAt: null, isAvailable: true,
+          })),
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [six] } } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      const names = ['عرض 0', 'عرض 1', 'عرض 2', 'عرض 3', 'عرض 4', 'عرض 5']
+        .join(en.lists.namesSeparator);
+      expect(notice.textContent?.trim()).toBe(
+        `6 rows in «أسعار الدورات» are past their dates: ${names} — Jawab no longer mentions them. Update their dates or delete them.`,
+      );
+    });
+
+    it('still warns when a real SCHEDULE has run out — the majority rule is all that changed', async () => {
+      const deadSlots = slotCollection({
+        rows: slotCollection().rows.map((r) => ({ ...r, startsAt: past, endsAt: past })),
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({
+        data: { data: [priceCollection(), deadSlots] },
+      } as any);
+      renderSection();
+
+      const notice = await screen.findByRole('status');
+      expect(notice.textContent?.trim()).toBe(
+        en.lists.datesEnded.replace('{list}', 'مواعيد الدورات المعلنة'),
+      );
     });
   });
 });

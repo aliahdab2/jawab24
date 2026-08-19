@@ -246,6 +246,11 @@ export function collectionAttributeLabels(collection: FactCollectionWithRows): s
 const norm = (text: string): string =>
   normalizeArabic(text, { normalizeTaaMarbuta: true }).toLowerCase().trim();
 
+/** The day a row retires on: `startsAt` when it has one, `endsAt` otherwise.
+ *  The SAME anchor `isRowLive` keys off, so nothing derived from it can call a
+ *  row live that the renderer and the prompt builder have already dropped. */
+const retiringAnchor = (row: FactRowDto): string | null => row.startsAt ?? row.endsAt;
+
 /** A collection is "dated" when its rows are PREDOMINANTLY dated — that is
  *  what makes it a schedule-like list whose rows self-expire. Derived from the
  *  merchant's own data, never from vocabulary.
@@ -258,11 +263,52 @@ const norm = (text: string): string =>
  *  as one even while a few of its rows are still undated drafts — a TIE leans
  *  schedule (a two-row list with one date is a schedule mid-authoring, not a
  *  price list with a promo), and the base-less fallback door in the card
- *  layout guarantees an edit entry either way. */
+ *  layout guarantees an edit entry either way.
+ *
+ *  Keyed on `startsAt` ALONE, deliberately — this is the LAYOUT predicate, and
+ *  a session slot is a thing that STARTS. An offer row carrying only an end
+ *  date («ساري حتى…») self-expires, but it is not a slot, and `ListRowSheet`
+ *  writes exactly that shape with no guard requiring a start date. Widening
+ *  this to `retiringAnchor` to match `datedListFreshness` was tried and
+ *  reverted in review: one end-dated promo row in a four-row price list is
+ *  enough to reach the tie, and reclassifying a price list as a schedule
+ *  empties `bases`, so no card renders a tier row — the entity sheet's only
+ *  door. That is the 2026-08-06 «cannot edit» regression, re-armed. The two
+ *  predicates answer DIFFERENT questions and are allowed to differ; see
+ *  `isScheduleShaped`. */
 export function isDatedCollection(collection: FactCollectionWithRows): boolean {
-  let dated = 0;
-  for (const r of collection.rows) if (r.startsAt !== null) dated++;
+  const dated = datedShare(collection, (r) => r.startsAt);
   return dated > 0 && dated * 2 >= collection.rows.length;
+}
+
+/** How many of a collection's rows carry a date under `anchorOf`. One counter
+ *  for both predicates so they can differ in their ANCHOR and their THRESHOLD
+ *  without differing in how they count. */
+function datedShare(
+  collection: FactCollectionWithRows,
+  anchorOf: (row: FactRowDto) => string | null,
+): number {
+  let dated = 0;
+  for (const r of collection.rows) if (anchorOf(r) !== null) dated++;
+  return dated;
+}
+
+/** Whether a list is enough of a SCHEDULE for a sentence to be made about the
+ *  list as a whole — the question `datedListFreshness` asks, which is not the
+ *  question `isDatedCollection` asks.
+ *
+ *  Two deliberate differences from the layout predicate:
+ *  - the anchor is `retiringAnchor`, because a row that retires by `endsAt`
+ *    takes its content with it exactly as a session does, so a list of them
+ *    genuinely does run out;
+ *  - the majority is STRICT. Layout needs `>=` so a two-row list mid-authoring
+ *    still edits as a schedule; a SENTENCE has no such need, and at the tie the
+ *    old false wording is still reachable — two promo dates typed onto a
+ *    four-row price list would print «انتهت التواريخ المعلنة في «الأسعار»»
+ *    once they passed, which is the very claim this rule exists to prevent. */
+function isScheduleShaped(collection: FactCollectionWithRows): boolean {
+  const dated = datedShare(collection, retiringAnchor);
+  return dated > 0 && dated * 2 > collection.rows.length;
 }
 
 /**
@@ -272,12 +318,16 @@ export function isDatedCollection(collection: FactCollectionWithRows): boolean {
  */
 const DATED_LIST_WARNING_DAYS = 3;
 
-/** `ended` = every dated row has retired, so the AI no longer mentions any of
- *  them. `ending` = the last one retires within the window, and `lastDate` is
- *  the day it does. `null` = nothing dated here, or plenty of runway. */
+/** `ended` = every dated row of a SCHEDULE has retired, so the AI no longer
+ *  mentions any of them. `ending` = the last one retires within the window,
+ *  and `lastDate` is the day it does. `rowsRetired` = this list is not a
+ *  schedule, and the named rows — dates a merchant dropped onto individual
+ *  rows — have retired on their own. `null` = nothing dated here, or plenty
+ *  of runway. */
 export type DatedListFreshness =
   | { state: 'ended' }
   | { state: 'ending'; lastDate: string }
+  | { state: 'rowsRetired'; names: string[] }
   | null;
 
 /**
@@ -290,24 +340,53 @@ export type DatedListFreshness =
  * so the customer-facing answer degrades honestly while the merchant hears
  * nothing at all. This is the signal that closes that loop.
  *
- * The retiring date is `startsAt` when there is one and `endsAt` otherwise —
- * the SAME anchor `isRowLive` keys off, so this cannot claim a row is live
- * that the renderer has already dropped.
+ * WHAT THE SENTENCE IS ALLOWED TO BE ABOUT is decided by `isScheduleShaped`,
+ * not by `some row has a date` (owner catch, 2026-08-19). On the pilot page
+ * «أسعار الدورات» held 50 price rows of which exactly ONE carried a date, a
+ * stray the merchant had typed onto a tier; when that one date passed, the
+ * any-row rule made «every dated row has retired» true and the page announced
+ * that the LIST's announced dates had ended — while seven live dates for those
+ * very courses sat in «مواعيد الدورات المعلنة» beside it. A statement about a
+ * whole list may only be made about a list that IS a schedule; everywhere
+ * else a retired date is a fact about its own row, and is reported as one.
+ * This is the same majority rule, and the same 50-rows-one-date shape, that
+ * `isDatedCollection` was written for.
+ *
+ * `ending` is NOT gated this way, and that asymmetry is the point. «آخر تاريخ
+ * معلن في «{list}» هو {date}» is TRUE of any list holding dated rows, however
+ * few — it reports a date, it does not characterise the list — whereas `ended`
+ * asserts the list's dates are done and tells the merchant to add new ones.
+ * Gating both was tried and reverted in review: it silently dropped the early
+ * warning for a nine-cohort block announced inside a mostly-undated list.
  */
 export function datedListFreshness(
   collection: FactCollectionWithRows,
   todayIso: string,
 ): DatedListFreshness {
-  const anchorOf = (row: FactRowDto) => row.startsAt ?? row.endsAt;
-  const dated = collection.rows.filter((r) => anchorOf(r) !== null);
+  const dated = collection.rows.filter((r) => retiringAnchor(r) !== null);
   // An outlet directory has no dates and must never be nagged about them.
   if (dated.length === 0) return null;
 
-  const live = dated.filter((r) => isRowLive(r, todayIso));
-  if (live.length === 0) return { state: 'ended' };
+  const live: FactRowDto[] = [];
+  const retired: FactRowDto[] = [];
+  for (const r of dated) (isRowLive(r, todayIso) ? live : retired).push(r);
+
+  // Not a schedule → the dates are strays on individual rows. Name the rows
+  // that went dark; never generalise them into a claim about the list.
+  // Already-dark outranks about-to-go-dark: the merchant can still act on
+  // both, but only one of them has already cost them answers.
+  const schedule = isScheduleShaped(collection);
+  if (live.length === 0) {
+    return schedule
+      ? { state: 'ended' }
+      : { state: 'rowsRetired', names: retired.map((r) => r.name) };
+  }
+  if (!schedule && retired.length > 0) {
+    return { state: 'rowsRetired', names: retired.map((r) => r.name) };
+  }
 
   const lastDate = live.reduce((latest, r) => {
-    const anchor = anchorOf(r) as string;
+    const anchor = retiringAnchor(r) as string;
     return anchor > latest ? anchor : latest;
   }, '');
   return lastDate <= isoPlusDays(todayIso, DATED_LIST_WARNING_DAYS)

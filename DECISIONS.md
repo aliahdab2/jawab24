@@ -1942,3 +1942,86 @@ Cat 78 untouched (784's clarify-vs-collect bistability reproduced on main itself
 stays OUT (unbuilt; revisit after pilot). Per-page tone deliberately NOT built (D-084
 wrinkle, documented in SETTINGS.md). PR #769 is superseded by this build and closes with a
 pointer.
+
+## D-086 · A freshness warning may speak for a whole list only when that list IS a schedule (2026-08-19, owner-reported)
+
+**Decision.** `datedListFreshness` now gates its list-CHARACTERISING sentence (`ended`)
+on `isScheduleShaped` — a strict majority of rows carrying a retiring date. A list whose
+dated rows are a minority gets a new `rowsRetired` state naming the individual rows whose
+dates have passed, and never speaks about the list. This REVERSES the explicit choice
+pinned by the old test «a price list with one dated promo still warns about it».
+
+**What it shipped.** On page `39aeab89` the list «أسعار الدورات» held 50 price rows of
+which exactly ONE carried a date — «دورة المكياج او التجميل (الميك أب)», `starts_at
+2026-08-13`, a stray the merchant typed onto a tier. When that one date passed, "every
+dated row has retired" became true and the page announced **«انتهت التواريخ المعلنة في
+«أسعار الدورات» — لم يعد جواب يذكرها. أضف التواريخ الجديدة.»** — while «مواعيد الدورات
+المعلنة» beside it carried **seven live dates through 2026-08-31** for those very
+courses (الإسعافات الأولية ×2, الحلاقة النسائية ×2, اللغة الألمانية, السكرتاريا, TOT).
+The sentence was false by every reading a merchant has, and its instruction — "add the
+new dates" — was wrong advice for a price list. The owner caught it on screen; the
+first diagnosis offered ("technically true, merely confusing") was itself wrong and was
+corrected against the rows.
+
+**Why the majority rule, again.** This is the identical shape D-057's own tooling had
+already been burned by: `isDatedCollection` carries a docblock about ONE dated promo tier
+in a 50-row price list reclassifying the whole list (الدمشقي, 2026-08-06). That lesson was
+written for the LAYOUT predicate and never carried into the WARNING predicate, which kept
+the any-row rule. Two predicates answering "is this a schedule?" differently is what let a
+single row make a claim about 50.
+
+**What is deliberately NOT changed.** A genuine schedule that runs out still says so
+list-wide (`ended`, 3-day `ending` window, D-057 unchanged).
+
+Retired strays are named up to a cap of five, then «وغيرها» — and the ICU plural still
+carries the EXACT total, so the sentence shortens without ever under-reporting what went
+dark. (An earlier draft of this ruling claimed they are "named in full, never truncated",
+which the same commit contradicted by shipping the cap; the cap is right and the sentence
+was wrong. The truncation only engages when it hides at least two names — folding exactly
+one row into a plural «others» would be false English.)
+
+**Two things a first draft got wrong, both caught in adversarial self-review before
+merge.** (1) It ALSO widened `isDatedCollection` — the LAYOUT predicate — to the retiring
+anchor, justified as "inert: zero rows fleet-wide carry `endsAt` without `startsAt`". That
+measurement bounds today's rows, not tomorrow's: `ListRowSheet` saves an end date with no
+start date and nothing forbids it, so one «ساري حتى» promo row in a four-row price list
+reaches the tie, reclassifies the price list as a schedule, empties `bases`, and removes
+the tier row that is the entity sheet's only door — the 2026-08-06 «cannot edit»
+regression, re-armed. The layout predicate is now left on `startsAt` alone and the two
+predicates are documented as answering different questions. **A measurement that a change
+is inert TODAY is not a safety argument; it only bounds the blast radius of shipping it.**
+(2) It gated `ending` as well as `ended`, which silently dropped the early warning for a
+cohort block announced inside a mostly-undated list. «آخر تاريخ معلن في «{list}» هو {date}»
+reports a date rather than characterising the list, so it is true of any list holding dated
+rows and is not gated. Only the sentence that CHARACTERISES the list needs the majority.
+
+`isScheduleShaped` takes a STRICT majority where the layout rule takes a tie, because at
+the tie the false wording is still reachable — two passed promo dates on a four-row price
+list would print «انتهت التواريخ المعلنة في «الأسعار»», the very claim this rule exists to
+prevent. Layout needs the tie (a two-row list mid-authoring must still edit as a schedule);
+a sentence does not.
+
+**Scope, measured before the change (prod, 2026-08-19).** Three collections fleet-wide
+carry any dated rows at all; exactly ONE produced the false banner — the one on the
+owner's screen.
+
+**Found in passing — the vitest `next-intl` mock was verified by nothing.** Measured against
+`intl-messageformat` (the formatter next-intl itself uses) over all 107 plural-bearing EN
+messages at six counts, the resolver on `main` disagreed with production on **37 of 642
+renders**, from two defects: a single-level regex could not match a plural whose branch body
+carried its own placeholder (four shipped messages rendered as RAW ICU in tests), and an
+explicit `=0 {No products yet}` branch lost to the locale category (seven more rendered
+«0 products»). Both fail as plausible text rather than throwing, so assertions on them pass
+or fail for reasons unrelated to the code under test. Both fixed — 0 of 642 now disagree,
+with no case where the old resolver was right and the new one wrong. The resolver moved to
+its own module (importing `setup.ts` from a test re-arms every `vi.mock`, which is why it
+went unchecked) and `frontend/test/icuPlural.test.ts` now pins parity against the real
+formatter over the real corpus.
+
+**A note on the self-review itself.** Rule 10.11's question (a) — who READS what I changed —
+was answered too shallowly the first time: the readers of `isDatedCollection` were
+enumerated, then dismissed with a fleet measurement instead of a behavioural argument. Two
+of the three test weaknesses found later were of the same kind: `toHaveTextContent` is a
+SUBSTRING matcher, so an expected «7 rows …» passes against a rendered «17 rows …», and the
+first attempt at strengthening it repeated the mistake. Notice assertions now compare
+`textContent` whole.

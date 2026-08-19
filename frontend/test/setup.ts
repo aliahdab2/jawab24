@@ -77,6 +77,7 @@ for (const [path, mod] of Object.entries(enModules)) {
 }
 // flagReason translations live in @jawab24/shared (not a local JSON file)
 import { flagReasonEn } from '@jawab24/shared';
+import { resolveICUPlural } from './icuPlural';
 EN_MESSAGES['flagReason'] = flagReasonEn as Record<string, unknown>;
 
 function resolveNestedKey(obj: Record<string, unknown>, key: string): string | undefined {
@@ -87,19 +88,6 @@ function resolveNestedKey(obj: Record<string, unknown>, key: string): string | u
     val = (val as Record<string, unknown>)[part];
   }
   return typeof val === 'string' ? val : undefined;
-}
-
-/** Resolve ICU plural format: "{count, plural, one {# item} other {# items}}" */
-function resolveICUPlural(str: string, params: Record<string, unknown>): string {
-  return str.replace(/\{(\w+),\s*plural\s*,([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, (_, varName, cases) => {
-    const count = Number(params[varName] ?? 0);
-    const form = new Intl.PluralRules('en').select(count);
-    // Try to match the exact form, then fall back to 'other'
-    const formMatch = cases.match(new RegExp(`${form}\\s*\\{([^}]*)\\}`));
-    const otherMatch = cases.match(/other\s*\{([^}]*)\}/);
-    const text = (formMatch?.[1] ?? otherMatch?.[1] ?? String(count)).trim();
-    return text.replace(/#/g, String(count));
-  });
 }
 
 // Mock next-intl: returns real English translation values so tests verify actual UI text.

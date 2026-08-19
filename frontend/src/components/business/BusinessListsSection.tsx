@@ -22,6 +22,11 @@ import { ListActionsMenu } from './ListActionsMenu';
 import { FactEntitySheet } from './FactEntitySheet';
 import { ListLabelSheet } from './ListLabelSheet';
 
+/** How many retired stray rows the freshness notice spells out before it
+ *  falls back to «وغيرها». The plural still carries the exact total, so the
+ *  cap shortens the sentence without ever under-reporting the count. */
+const MAX_NAMED_RETIRED_ROWS = 5;
+
 interface BusinessListsSectionProps {
   pageId: string;
   /**
@@ -822,16 +827,38 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
             <p
               key={collection.id}
               className={`rounded-xl border px-3 py-2 text-xs ${
-                freshness.state === 'ended' ? 'alert-warning' : 'bg-muted/40 border-theme-border text-muted-foreground'
+                // `ending` is the ONLY advisory here — something will happen
+                // later. Everything else is already true and already costing
+                // the merchant answers, so the default is the visible style
+                // and a state added later inherits it rather than the quiet one.
+                freshness.state === 'ending'
+                  ? 'bg-muted/40 border-theme-border text-muted-foreground'
+                  : 'alert-warning'
               }`}
               dir="auto"
             >
-              {freshness.state === 'ended'
-                ? t('lists.datesEnded', { list: collection.label })
-                : t('lists.datesEnding', {
-                    list: collection.label,
-                    date: formatPlainDate(freshness.lastDate, intlLocale) ?? freshness.lastDate,
-                  })}
+              {freshness.state === 'ended' && t('lists.datesEnded', { list: collection.label })}
+              {freshness.state === 'ending' && t('lists.datesEnding', {
+                list: collection.label,
+                date: formatPlainDate(freshness.lastDate, intlLocale) ?? freshness.lastDate,
+              })}
+              {/* The COUNT stays exact and the names are capped, so a long
+                  tail is bounded without the sentence ever under-reporting
+                  what went dark — no silent truncation. Reachable in theory
+                  only: this state needs dated rows to be a MINORITY of a
+                  non-schedule list, and the whole fleet carried exactly one
+                  such row the day it shipped. */}
+              {freshness.state === 'rowsRetired' && t('lists.datesRowsRetired', {
+                list: collection.label,
+                count: freshness.names.length,
+                names: (freshness.names.length > MAX_NAMED_RETIRED_ROWS + 1
+                  // Truncate only when it hides at least TWO names — folding a
+                  // single row into a plural «وغيرها» is false English, and
+                  // printing the sixth name costs less than the lie.
+                  ? [...freshness.names.slice(0, MAX_NAMED_RETIRED_ROWS), t('lists.namesMore')]
+                  : freshness.names
+                ).join(t('lists.namesSeparator')),
+              })}
             </p>
           ))}
         </div>
