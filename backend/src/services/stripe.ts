@@ -450,6 +450,13 @@ export class StripeService {
      * Used by the reconciliation sweep, which treats Stripe as the authority on
      * who is actually paying. `limit` caps the total pulled per call so a large
      * account can't turn one sweep into an unbounded crawl.
+     *
+     * `latest_invoice` is EXPANDED because the sweep's period healer needs each
+     * invoice's `status` to tell a paid renewal from one Stripe has merely
+     * invoiced (services/subscriptionLinking.ts). List-level expansion verified
+     * against the live API on 2026-08-19 — it returns the full invoice object,
+     * so the healer costs zero extra API calls no matter how many rows it
+     * examines. Without it every examined row would need its own retrieve.
      */
     async listSubscriptions(params: {
         status: Stripe.SubscriptionListParams.Status;
@@ -464,6 +471,7 @@ export class StripeService {
             const page = await s.subscriptions.list({
                 status: params.status,
                 limit: Math.min(100, max - out.length),
+                expand: ['data.latest_invoice'],
                 ...(startingAfter ? { starting_after: startingAfter } : {}),
             });
             out.push(...page.data);

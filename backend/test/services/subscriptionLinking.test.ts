@@ -19,6 +19,7 @@ vi.mock('../../src/db/schema', () => ({
     subscriptions: {
         id: 'id', userId: 'user_id', createdAt: 'created_at',
         externalSubscriptionId: 'external_subscription_id',
+        status: 'status', currentPeriodEnd: 'current_period_end',
     },
 }));
 
@@ -55,7 +56,16 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
-import { adoptStripeSubscription, reconcileStripeSubscriptions } from '../../src/services/subscriptionLinking';
+const mockHandlePaymentRecovery = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../src/services/dunningNotices', () => ({
+    handlePaymentRecovery: (...a: unknown[]) => mockHandlePaymentRecovery(...a),
+}));
+
+import {
+    adoptStripeSubscription,
+    healStripeSubscriptionPeriod,
+    reconcileStripeSubscriptions,
+} from '../../src/services/subscriptionLinking';
 import { db } from '../../src/db';
 import { stripeService } from '../../src/services/stripe';
 import { subscriptionsService } from '../../src/services/subscriptions';
@@ -68,6 +78,50 @@ const paidSub = (over: Record<string, unknown> = {}) => ({
     metadata: { userId: 'u1', planId: 'plan_business' },
     ...over,
 } as unknown as Stripe.Subscription);
+
+// ---------------------------------------------------------------------------
+// Wire fixtures for the period healer.
+//
+// Taken from the LIVE Stripe API on 2026-08-19, not invented: the earlier
+// #817 regression test asserted a payload shape Stripe never sends
+// (`past_due` carrying an advanced period) and passed while the defect was
+// fully live. Both shapes below were read with `stripe subscriptions list
+// --live` / `stripe invoices retrieve --live`.
+//
+// Note the period lives on the subscription ITEM, not the subscription: on the
+// endpoint's API version `current_period_start/end` are absent at the top level
+// (confirmed null on all three live subscriptions), which is exactly what
+// getSubscriptionPeriod's fallback exists for.
+// ---------------------------------------------------------------------------
+
+const JUL_13 = 1_783_971_704; // 2026-07-13T19:41:44Z
+const AUG_13 = 1_786_650_104; // 2026-08-13T19:41:44Z
+const SEP_13 = 1_789_328_504; // 2026-09-13T19:41:44Z
+
+/** A subscription whose ITEM carries the period, with an expanded invoice. */
+const wireSub = (over: {
+    status?: string;
+    start?: number;
+    end?: number;
+    invoice?: unknown;
+    id?: string;
+} = {}) => ({
+    id: over.id ?? 'sub_linked',
+    status: over.status ?? 'active',
+    customer: 'cus_1',
+    metadata: { userId: 'u1', planId: 'plan_business' },
+    items: { data: [{ current_period_start: over.start ?? AUG_13, current_period_end: over.end ?? SEP_13 }] },
+    ...('invoice' in over ? { latest_invoice: over.invoice } : { latest_invoice: { id: 'in_paid', status: 'paid' } }),
+} as unknown as Stripe.Subscription);
+
+/** The local row as the sweep selects it. */
+const localRow = (over: Record<string, unknown> = {}) => ({
+    id: 'row_1',
+    userId: 'u1',
+    status: 'active',
+    currentPeriodEnd: new Date(AUG_13 * 1000),
+    ...over,
+});
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -214,19 +268,54 @@ describe('reconcileStripeSubscriptions', () => {
 
         const r = await reconcileStripeSubscriptions({ log: mkLog() });
 
-        expect(r).toMatchObject({ scanned: 1, healed: 1, alreadyLinked: 0, orphaned: 0, errors: 0 });
+        expect(r).toMatchObject({ scanned: 1, healed: 1, periodsHealed: 0, alreadyLinked: 0, orphaned: 0, errors: 0 });
         expect(db.update).toHaveBeenCalled();
     });
 
-    it('leaves an already-linked subscription alone', async () => {
+    it('leaves an already-linked subscription alone when Stripe agrees with it', async () => {
         vi.mocked(stripeService.listSubscriptions)
-            .mockResolvedValueOnce([paidSub()])
+            .mockResolvedValueOnce([wireSub({ start: JUL_13, end: AUG_13 })])
             .mockResolvedValueOnce([]);
-        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+        vi.mocked(db.select).mockReturnValue(q([localRow({ currentPeriodEnd: new Date(AUG_13 * 1000) })]) as never);
 
         const r = await reconcileStripeSubscriptions({ log: mkLog() });
 
-        expect(r).toMatchObject({ scanned: 1, healed: 0, alreadyLinked: 1 });
+        expect(r).toMatchObject({ scanned: 1, healed: 0, periodsHealed: 0, alreadyLinked: 1 });
+        expect(db.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The gap this sweep used to have: `if (linked) continue` meant it repaired
+     * every merchant EXCEPT the correctly-linked, paying ones — the only
+     * population that a missed `invoice.payment_succeeded` can block.
+     *
+     * Mutation check: restore `if (linked) { alreadyLinked++; continue; }` and
+     * this case fails (periodsHealed 1 → 0) while every other sweep case passes.
+     */
+    it('advances a linked row whose renewal webhook never arrived', async () => {
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([wireSub()])
+            .mockResolvedValueOnce([]);
+        vi.mocked(db.select).mockReturnValue(q([localRow()]) as never);
+
+        const r = await reconcileStripeSubscriptions({ log: mkLog() });
+
+        expect(r).toMatchObject({ scanned: 1, healed: 0, periodsHealed: 1, alreadyLinked: 0, errors: 0 });
+    });
+
+    /**
+     * The sweep must not become the free-month leak #817 closed. Nourva's live
+     * shape: a linked row, an item period Stripe advanced, an invoice still open.
+     */
+    it('does not advance a linked row whose advanced period was never paid for', async () => {
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([wireSub({ invoice: { id: 'in_open', status: 'open' } })])
+            .mockResolvedValueOnce([]);
+        vi.mocked(db.select).mockReturnValue(q([localRow()]) as never);
+
+        const r = await reconcileStripeSubscriptions({ log: mkLog() });
+
+        expect(r).toMatchObject({ periodsHealed: 0, alreadyLinked: 1 });
         expect(db.update).not.toHaveBeenCalled();
     });
 
@@ -327,5 +416,193 @@ describe('adoptStripeSubscription — D-H twin (Shopify mirror protection)', () 
         await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(true);
 
         expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'stripe' }));
+    });
+
+    /**
+     * `latest_invoice` present but NOT expanded is "unknown", not "absent". Only
+     * absence is the fully-discounted exemption; conflating the two would adopt
+     * on an unread invoice, which is the unpaid-month defect via a side door.
+     */
+    it('refuses when latest_invoice arrives as a bare id it cannot read', async () => {
+        vi.mocked(stripeService.getSubscriptionWithLatestInvoice).mockResolvedValue({
+            id: 'sub_1',
+            latest_invoice: 'in_not_expanded',
+        } as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(false);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * The healer for a missed `invoice.payment_succeeded`.
+ *
+ * Since #817 that event is the ONLY writer of `current_period_*`, which closed a
+ * free-month leak and opened the opposite failure: a dropped delivery freezes a
+ * PAYING merchant's paid-through, the 3-day grace expires, and they are blocked
+ * while their customers' messages go unanswered. The sweep used to `continue`
+ * past every linked row, so the merchants it skipped were exactly the paying
+ * ones.
+ *
+ * Every fixture here is a shape read off the LIVE API on 2026-08-19 (see
+ * wireSub) — the #817 lesson was that a hypothesised payload passes while the
+ * defect ships.
+ */
+describe('healStripeSubscriptionPeriod', () => {
+    it('advances a frozen paid-through when Stripe has been paid for the newer period', async () => {
+        const chain = q([]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await expect(healStripeSubscriptionPeriod(wireSub(), localRow(), mkLog()))
+            .resolves.toBe('advanced');
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'active',
+            currentPeriodStart: new Date(AUG_13 * 1000),
+            currentPeriodEnd: new Date(SEP_13 * 1000),
+        }));
+    });
+
+    /**
+     * ⛔ THE test. Nourva's live shape at 2026-08-13 19:41:52: Stripe had already
+     * advanced the item period to 09-13 while the subscription still read
+     * `active`, with an OPEN, amount_paid=0 invoice — it only degraded to
+     * past_due an hour later. A healer gated on the STATUS would fire here and
+     * hand out the unpaid month #817 removed; the invoice is the discriminator.
+     *
+     * Mutation check: replace `isCurrentPeriodPaidFor(...)` in the healer with
+     * `isPaidStripeStatus(stripeSubscription.status)` and this case fails while
+     * the happy-path case above still passes.
+     */
+    it('refuses the period Stripe advanced but was never paid — the invoice is still open', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub({ invoice: { id: 'in_open', status: 'open' } }),
+            localRow({ currentPeriodEnd: new Date(AUG_13 * 1000) }),
+            mkLog(),
+        );
+
+        expect(outcome).toBe('unpaid');
+        expect(db.update).not.toHaveBeenCalled();
+        expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+        expect(mockHandlePaymentRecovery).not.toHaveBeenCalled();
+    });
+
+    /** Same reasoning one layer out: an unreadable invoice fails closed. */
+    it('refuses when the listed subscription carries an unexpanded invoice id', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub({ invoice: 'in_bare_id' }), localRow(), mkLog(),
+        );
+
+        expect(outcome).toBe('unpaid');
+        expect(db.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Forward only. A Stripe period ending EARLIER than ours cannot be a repair
+     * — and retracting it would block a merchant who paid, the exact harm this
+     * function exists to prevent.
+     */
+    it('never retracts a paid-through boundary', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub({ start: JUL_13, end: AUG_13 }),
+            localRow({ currentPeriodEnd: new Date(SEP_13 * 1000) }),
+            mkLog(),
+        );
+
+        expect(outcome).toBe('no_drift');
+        expect(db.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * This runs every 15 minutes over every paying merchant. Writing on a no-op
+     * would churn `updated_at` fleet-wide — the only proxy we have for when a
+     * row last genuinely changed.
+     */
+    it('writes nothing when Stripe already agrees with the row', async () => {
+        const outcome = await healStripeSubscriptionPeriod(
+            wireSub({ start: JUL_13, end: AUG_13 }),
+            localRow({ currentPeriodEnd: new Date(AUG_13 * 1000) }),
+            mkLog(),
+        );
+
+        expect(outcome).toBe('no_drift');
+        expect(db.update).not.toHaveBeenCalled();
+        expect(subscriptionsService.invalidateStatusCache).not.toHaveBeenCalled();
+    });
+
+    /**
+     * `past_due` with a NULL period reads as ALLOWED FOREVER — the grace check
+     * only applies when there is a period to apply it to. A missing boundary is
+     * therefore not "later than Stripe's"; healing it is the whole point.
+     */
+    it('heals a row that has no paid-through boundary at all', async () => {
+        const chain = q([]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await expect(healStripeSubscriptionPeriod(
+            wireSub(), localRow({ status: 'past_due', currentPeriodEnd: null }), mkLog(),
+        )).resolves.toBe('advanced');
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'active',
+            currentPeriodEnd: new Date(SEP_13 * 1000),
+        }));
+    });
+
+    /**
+     * Status and period move TOGETHER. A revision of #817 shipped them decoupled
+     * and was strictly worse than the defect it replaced.
+     */
+    it('restores the status on the same write that advances the period', async () => {
+        const chain = q([]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await healStripeSubscriptionPeriod(wireSub(), localRow({ status: 'past_due' }), mkLog());
+
+        const written = chain.set.mock.calls[0][0] as Record<string, unknown>;
+        expect(written.status).toBe('active');
+        expect(written.currentPeriodEnd).toEqual(new Date(SEP_13 * 1000));
+    });
+
+    /** Un-blocked but still counting against the PREVIOUS period is half a fix. */
+    it('reopens the quota window for the period just proven paid for', async () => {
+        await healStripeSubscriptionPeriod(wireSub(), localRow(), mkLog());
+
+        expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledWith(
+            'u1', new Date(AUG_13 * 1000), new Date(SEP_13 * 1000),
+        );
+        expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
+    });
+
+    /**
+     * Both dunning branches select on `isNull(…_notified_at)` and
+     * handlePaymentRecovery is the only resetter — reached only from the webhook
+     * that went missing. Leaving the stamps set would silence every FUTURE
+     * episode for this merchant, which is the silent-suspension failure the
+     * dunning system exists to end.
+     */
+    it('closes the dunning episode so future failures are not silenced', async () => {
+        await healStripeSubscriptionPeriod(wireSub(), localRow(), mkLog());
+
+        expect(mockHandlePaymentRecovery).toHaveBeenCalledWith(
+            'sub_linked', 'in_paid', new Date(SEP_13 * 1000),
+        );
+    });
+
+    /** A trial has no invoice to settle — the check must not demand one. */
+    it('heals a trialing subscription without consulting an invoice', async () => {
+        await expect(healStripeSubscriptionPeriod(
+            wireSub({ status: 'trialing', invoice: null }), localRow(), mkLog(),
+        )).resolves.toBe('advanced');
+    });
+
+    it('leaves the boundary alone when Stripe returns no period at all', async () => {
+        const log = mkLog();
+        const noPeriod = { ...wireSub(), items: { data: [{}] } } as unknown as Stripe.Subscription;
+
+        await expect(healStripeSubscriptionPeriod(noPeriod, localRow(), log)).resolves.toBe('no_period');
+        expect(db.update).not.toHaveBeenCalled();
+        expect(log.warn).toHaveBeenCalled();
     });
 });

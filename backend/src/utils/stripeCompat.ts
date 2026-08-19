@@ -71,6 +71,30 @@ export function getSubscriptionPeriod(subscription: Stripe.Subscription): {
     };
 }
 
+/**
+ * The subscription's `latest_invoice` when it arrives EXPANDED, else null.
+ *
+ * `latest_invoice` is a bare id string on webhook payloads and on any retrieve
+ * or list that did not ask for the expansion. A caller that needs the invoice's
+ * `status` must therefore tell "expanded object" apart from "bare id" — and a
+ * bare id must NEVER be read as "this subscription has no invoice", because
+ * absent-invoice is the fully-discounted exemption in `isCurrentPeriodPaidFor`
+ * and would wave an UNPAID period through. Callers that cannot tolerate a null
+ * re-fetch with `stripeService.getSubscriptionWithLatestInvoice`.
+ *
+ * ⛔ Whatever you do with the invoice, do NOT read its `period_start` /
+ * `period_end` as a paid-through boundary. Measured against the live API on
+ * 2026-08-19: a `subscription_create` invoice reads a ZERO-LENGTH period
+ * (`07-25T07:38 → 07-25T07:38`), and a `subscription_cycle` invoice reads the
+ * period it bills in arrears — `07-13 → 08-13` on a subscription whose item
+ * period had already advanced to `08-13 → 09-13`. The paid-through boundary
+ * comes from `getSubscriptionPeriod` above, gated on the invoice's `status`.
+ */
+export function getExpandedLatestInvoice(subscription: Stripe.Subscription): Stripe.Invoice | null {
+    const inv = (subscription as unknown as { latest_invoice?: unknown }).latest_invoice;
+    return inv && typeof inv === 'object' ? (inv as Stripe.Invoice) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Invoice field accessors for the dunning emails (services/dunningNotices.ts).
 //

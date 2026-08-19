@@ -2,11 +2,17 @@ import { db } from '../db';
 import { subscriptions } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
-import { PAID_STRIPE_STATUSES, isPaidStripeStatus } from '../config/stripeBilling';
+import {
+    PAID_STRIPE_STATUSES,
+    isPaidStripeStatus,
+    isCurrentPeriodPaidFor,
+    mapStripeSubscriptionStatus,
+} from '../config/stripeBilling';
 import { stripeService, stripeRefId } from './stripe';
 import { subscriptionsService } from './subscriptions';
+import { handlePaymentRecovery } from './dunningNotices';
 import { stripeTsToDate } from '../utils/stripeTime';
-import { getSubscriptionPeriod } from '../utils/stripeCompat';
+import { getSubscriptionPeriod, getExpandedLatestInvoice } from '../utils/stripeCompat';
 import { captureError } from '../utils/sentryHelpers';
 import type Stripe from 'stripe';
 
@@ -38,6 +44,27 @@ export interface LinkLogger {
 /** Silent default for cron callers that pass no logger. NOT the `noopLogger`
  * in types/logger.ts — that interface has the opposite (msg, data) order. */
 export const noopLinkLogger: LinkLogger = { info: () => {}, warn: () => {} };
+
+/**
+ * Sentinel status for a `latest_invoice` that IS present but arrived as a bare
+ * id rather than an expanded object. It must not read as `null`, because `null`
+ * means "this subscription has no invoice at all" — the fully-discounted
+ * exemption in `isCurrentPeriodPaidFor`, which would wave an UNPAID period
+ * through. Any non-`paid` string refuses, so an unreadable invoice fails
+ * closed: entitlement is withheld rather than granted on a guess.
+ */
+const INVOICE_UNEXPANDED = 'unexpanded';
+
+/**
+ * The latest invoice's status, as `isCurrentPeriodPaidFor` wants it, keeping the
+ * three cases distinct: no invoice (`null`), a readable status, or present but
+ * unexpanded (refuses — see INVOICE_UNEXPANDED).
+ */
+function latestInvoiceStatusOf(subscription: Stripe.Subscription): string | null {
+    const raw = (subscription as unknown as { latest_invoice?: unknown }).latest_invoice;
+    if (!raw) return null;
+    return getExpandedLatestInvoice(subscription)?.status ?? INVOICE_UNEXPANDED;
+}
 
 /**
  * Attach a Stripe subscription to the local row it belongs to, keyed on the
@@ -80,20 +107,21 @@ export async function adoptStripeSubscription(
     // open, amount_paid=0 invoice. This function writes both the period AND the
     // quota window, so adopting inside that hour would hand out an unpaid month.
     //
-    // The invoice is the discriminator, and it must be fetched: `latest_invoice`
-    // arrives as a bare id on webhook payloads and on the reconciliation sweep's
-    // list. Verified against the live API — on an expanded object the reliable
-    // field is `status === 'paid'`; `paid` itself reads null on an open invoice.
+    // The ruling itself lives in config/stripeBilling.isCurrentPeriodPaidFor,
+    // shared with the sweep's period healer below so the two writers of
+    // paid-through cannot drift on what "paid for" means. What differs here is
+    // only HOW the invoice is obtained, and deliberately so: this path ALWAYS
+    // re-reads it from the API, because its callers are webhook handlers whose
+    // payload is a snapshot that may predate the charge settling. Re-reading at
+    // handling time is what makes that ordering race unlikely (the same
+    // reasoning handlePaymentSucceeded states). The healer, by contrast, is fed
+    // a list response it fetched moments ago and trusts that expansion.
     //
-    // `trialing` is exempt: a trial has no invoice to pay, and its entitlement is
-    // bounded by trial_end rather than by the period. An `active` subscription
-    // with no invoice at all (fully discounted) is also adopted — the rule is
-    // "refuse a contradicted period", not "demand proof of payment".
+    // `trialing` never reaches for an invoice at all — it has none to pay.
     if (status === 'active') {
         const withInvoice = await stripeService.getSubscriptionWithLatestInvoice(stripeSubscription.id);
-        const latest = withInvoice.latest_invoice;
-        const invoiceStatus = latest && typeof latest === 'object' ? latest.status : null;
-        if (latest && invoiceStatus !== 'paid') {
+        const invoiceStatus = latestInvoiceStatusOf(withInvoice);
+        if (!isCurrentPeriodPaidFor(status, invoiceStatus)) {
             log.info(
                 { subscriptionId: stripeSubscription.id, status, invoiceStatus },
                 'Active Stripe subscription whose latest invoice is unpaid — not adopting yet'
@@ -186,12 +214,170 @@ export async function adoptStripeSubscription(
     return true;
 }
 
+/** The local columns the period healer reads and decides against. */
+export interface LinkedSubscriptionRow {
+    id: string;
+    userId: string;
+    status: string | null;
+    currentPeriodEnd: Date | null;
+}
+
+/** Why the healer did or did not move a linked row's paid-through boundary. */
+export type PeriodHealOutcome =
+    /** paid-through advanced to the period Stripe has been paid for */
+    | 'advanced'
+    /** Stripe's current period is not paid for — the boundary must not move */
+    | 'unpaid'
+    /** Stripe agrees with the row (or would move it backwards) — nothing written */
+    | 'no_drift'
+    /** Stripe returned no usable period boundaries */
+    | 'no_period';
+
+/**
+ * Re-assert Stripe's PAID-FOR period onto an already-linked local row — the
+ * healer for a missed `invoice.payment_succeeded`.
+ *
+ * ## Why this exists (the risk #817 introduced)
+ *
+ * `invoice.payment_succeeded` is the ONLY writer of `current_period_*`, because
+ * it is the only event that proves money landed. That is correct, and it closed
+ * a free-month leak — but it also made the webhook a single point of failure in
+ * the opposite direction. One dropped delivery, one 5xx that exhausts Stripe's
+ * retries, and a PAYING merchant's paid-through stays frozen; three days later
+ * `checkSubscriptionStatus`'s grace expires and they are blocked, with their
+ * customers' messages going unanswered. `LAZY_EXPIRY_CANARIES.stripe` reports
+ * that in Sentry; nothing repaired it. The sweep below examined only UNLINKED
+ * rows, so the merchants most exposed — the ones correctly linked and paying —
+ * were the ones it skipped.
+ *
+ * The failure direction inverted with #817: the old bug gave away service, this
+ * one withholds service from someone who paid. That is the worse of the two.
+ *
+ * ## What it may write, and what it must never write
+ *
+ * 1. **The discriminator is the invoice, never the status.** Shared with the
+ *    adoption path via `isCurrentPeriodPaidFor`. A status gate would permit the
+ *    very event that moves the boundary: Stripe advances the period when it
+ *    CREATES the renewal invoice, while the subscription still reads `active`
+ *    (2026-08-13, 19:41:52 → period 08-13 becomes 09-13; the status only
+ *    degraded at 20:42:59). Measured live on 2026-08-19, this predicate refuses
+ *    exactly the row it must: an unpaid `past_due` merchant whose Stripe item
+ *    period reads a month ahead of what he has paid for.
+ * 2. **Forward only.** The boundary may advance, never retract. A Stripe period
+ *    that ends EARLIER than ours cannot be a repair — it is a stale read, a
+ *    proration artifact or a bug — and retracting it would block a payer, the
+ *    exact harm this function exists to prevent.
+ * 3. **Silent when there is nothing to fix** (the `noDrift` posture
+ *    `syncShopifyBilling` already takes). This runs every 15 minutes over every
+ *    paying merchant; churning `updated_at` on all of them would destroy the
+ *    only proxy we have for when a row last genuinely changed.
+ * 4. **Status and period move TOGETHER, or not at all.** Never decoupled:
+ *    `past_due` with a NULL period reads as ALLOWED FOREVER, because the grace
+ *    check only applies when there is a period to apply it to. A revision of
+ *    #817 shipped the decoupled version and was strictly worse than the defect
+ *    it replaced.
+ * 5. **The quota window is reopened only on a genuine advance** — via the same
+ *    `initializeUsagePeriod` the webhook calls. Reopening it on a no-op would
+ *    hand out a monthly allowance nobody paid for, which is how the original
+ *    incident became immediate rather than merely theoretical.
+ * 6. **The dunning episode is closed through `handlePaymentRecovery`.** Both
+ *    dunning branches select on `isNull(…_notified_at)`, and that function is
+ *    the only resetter — reached only from the webhook that went missing. A
+ *    healed row with its stamps left set would be silenced for every FUTURE
+ *    episode, which is the silent-suspension failure the dunning system was
+ *    built to end. Its atomic reset-UPDATE IS the once-only claim, so racing a
+ *    late webhook costs nothing, and both callers pass the same
+ *    `payment_recovered:<invoiceId>` idempotency key. ⛔ This is NOT a licence
+ *    to call it from `handleSubscriptionUpdated`: that handler fires on the
+ *    period-ADVANCING event, before money lands, where the same call would
+ *    close an episode that is still open and mail a false confirmation.
+ */
+export async function healStripeSubscriptionPeriod(
+    stripeSubscription: Stripe.Subscription,
+    local: LinkedSubscriptionRow,
+    log: LinkLogger,
+): Promise<PeriodHealOutcome> {
+    const invoiceStatus = latestInvoiceStatusOf(stripeSubscription);
+    if (!isCurrentPeriodPaidFor(stripeSubscription.status, invoiceStatus)) {
+        return 'unpaid';
+    }
+
+    const period = getSubscriptionPeriod(stripeSubscription);
+    const periodStart = stripeTsToDate(period.start);
+    const periodEnd = stripeTsToDate(period.end);
+    if (!periodStart || !periodEnd) {
+        log.warn(
+            { subscriptionId: stripeSubscription.id, localSubscriptionId: local.id },
+            'Linked Stripe subscription reports no period boundaries — paid-through left as is'
+        );
+        return 'no_period';
+    }
+
+    // Forward only (rule 2). A NULL local boundary is not "later than Stripe" —
+    // it is no boundary at all, and healing it is the point: `past_due` with a
+    // NULL period is entitled forever.
+    const localEnd = local.currentPeriodEnd ? new Date(local.currentPeriodEnd) : null;
+    if (localEnd && periodEnd.getTime() <= localEnd.getTime()) {
+        return 'no_drift';
+    }
+
+    // Only `active`/`trialing` reach here (the sweep lists nothing else and the
+    // paid-for gate above refuses the rest), so this always writes — but read
+    // the status through the same map as every other writer rather than
+    // mirroring Stripe's raw value, which is how three of its eight statuses
+    // used to land in a column that entitles anything it does not recognise.
+    const mapping = mapStripeSubscriptionStatus(stripeSubscription.status);
+
+    await db
+        .update(subscriptions)
+        .set({
+            ...(mapping.write ? { status: mapping.status } : {}),
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, local.id));
+
+    // The window for the period just proven paid for. Without it the merchant
+    // is un-blocked but still counting against the PREVIOUS period's usage row.
+    await subscriptionsService.initializeUsagePeriod(local.userId, periodStart, periodEnd);
+    await subscriptionsService.invalidateStatusCache(local.userId);
+
+    log.info(
+        {
+            subscriptionId: stripeSubscription.id,
+            localSubscriptionId: local.id,
+            userId: local.userId,
+            previousStatus: local.status,
+            status: mapping.write ? mapping.status : local.status,
+            previousPeriodEnd: localEnd,
+            currentPeriodEnd: periodEnd,
+        },
+        'Advanced paid-through period on a linked Stripe subscription — its renewal webhook was missed'
+    );
+
+    // Close the dunning episode (rule 6). Never throws.
+    await handlePaymentRecovery(
+        stripeSubscription.id,
+        getExpandedLatestInvoice(stripeSubscription)?.id,
+        periodEnd,
+    );
+
+    return 'advanced';
+}
+
 export interface SubscriptionSweepResult {
     /** paid Stripe subscriptions examined this sweep */
     scanned: number;
     /** rows adopted because nothing local pointed at them */
     healed: number;
-    /** already linked — the happy path, nothing to do */
+    /**
+     * linked rows whose paid-through boundary was advanced to the period Stripe
+     * has been paid for — each one is a `invoice.payment_succeeded` that never
+     * arrived, and a merchant who would otherwise have been blocked.
+     */
+    periodsHealed: number;
+    /** already linked and in agreement with Stripe — the happy path */
     alreadyLinked: number;
     /** paid in Stripe but un-adoptable (no metadata) — needs a human */
     orphaned: number;
@@ -200,15 +386,23 @@ export interface SubscriptionSweepResult {
 }
 
 /**
- * Self-heal merchants who paid in Stripe but were never activated here.
+ * Self-heal merchants Stripe says are paying but whose local row disagrees.
  *
  * The webhook path is a single point of failure: one dropped delivery, one 500,
  * one Stripe outage and a merchant is charged for nothing — the exact failure
  * this module exists for, and one that was silent for weeks. Stripe is the
  * authority on who is paying, so ask it directly and reconcile.
  *
- * Idempotent and safe to run beside the live webhook: already-linked
- * subscriptions are skipped, and adoption rewrites the same values anyway.
+ * TWO repairs, because a missed webhook strands a merchant in two ways:
+ *   - **unlinked** → nothing local points at the Stripe subscription, so every
+ *     handler matches zero rows (`adoptStripeSubscription`).
+ *   - **linked but frozen** → the row exists and the renewal payment landed, but
+ *     the event that carries paid-through never arrived, so the grace expires
+ *     and a payer is blocked (`healStripeSubscriptionPeriod`).
+ *
+ * Idempotent and safe to run beside the live webhook: adoption rewrites the same
+ * values, and the healer writes nothing unless Stripe's PAID-FOR period is
+ * strictly ahead of the row's.
  */
 export async function reconcileStripeSubscriptions(options?: {
     limit?: number;
@@ -218,7 +412,7 @@ export async function reconcileStripeSubscriptions(options?: {
     const log = options?.log ?? noopLinkLogger;
 
     const result: SubscriptionSweepResult = {
-        scanned: 0, healed: 0, alreadyLinked: 0, orphaned: 0, errors: 0,
+        scanned: 0, healed: 0, periodsHealed: 0, alreadyLinked: 0, orphaned: 0, errors: 0,
     };
 
     // Both paid states. A trialing Stripe subscription is a real commitment
@@ -243,13 +437,26 @@ export async function reconcileStripeSubscriptions(options?: {
             result.scanned++;
             try {
                 const [linked] = await db
-                    .select({ id: subscriptions.id })
+                    .select({
+                        id: subscriptions.id,
+                        userId: subscriptions.userId,
+                        status: subscriptions.status,
+                        currentPeriodEnd: subscriptions.currentPeriodEnd,
+                    })
                     .from(subscriptions)
                     .where(eq(subscriptions.externalSubscriptionId, sub.id))
                     .limit(1);
 
+                // A linked row is NOT automatically a healthy one. Since #817
+                // only `invoice.payment_succeeded` writes paid-through, so a
+                // missed delivery freezes the boundary and the 3-day grace then
+                // blocks a merchant who paid. This used to `continue` here,
+                // which meant the sweep repaired everyone EXCEPT the paying,
+                // correctly-linked merchants. See healStripeSubscriptionPeriod.
                 if (linked) {
-                    result.alreadyLinked++;
+                    const outcome = await healStripeSubscriptionPeriod(sub, linked, log);
+                    if (outcome === 'advanced') result.periodsHealed++;
+                    else result.alreadyLinked++;
                     continue;
                 }
 

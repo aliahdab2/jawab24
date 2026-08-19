@@ -82,6 +82,44 @@ export function isPaidStripeStatus(status: string): status is PaidStripeStatus {
 }
 
 /**
+ * Does Stripe's own state agree that the subscription's CURRENT period has been
+ * paid for — i.e. may that period be written into our `current_period_*`?
+ *
+ * The status alone cannot answer this (see the ruling above): Stripe advances
+ * the period when it CREATES the renewal invoice, while the subscription still
+ * reads `active`, and only degrades the status about an hour later. The
+ * discriminator is the LATEST INVOICE, and the rule is "refuse a CONTRADICTED
+ * period", not "demand proof of payment":
+ *
+ *  - not a paid status        → refused. Nothing else is examined.
+ *  - `trialing`               → paid. A trial has no invoice to settle, and its
+ *                               entitlement is bounded by `trial_end` rather
+ *                               than by the period.
+ *  - `active`, no invoice     → paid. A fully-discounted subscription has no
+ *                               invoice to check; refusing it would strand a
+ *                               legitimate merchant forever.
+ *  - `active`, invoice `paid` → paid.
+ *  - `active`, anything else  → refused (draft / open / uncollectible / void).
+ *
+ * `latestInvoiceStatus` must be the invoice's `status`, NEVER its `paid`
+ * boolean: verified against the live API on 2026-08-19, `paid` reads `null` on
+ * an OPEN invoice and on a SETTLED one alike, so it discriminates nothing.
+ *
+ * Shared by every writer of the paid-through boundary — the adoption path and
+ * the reconciliation sweep's period healer — so the two can never disagree
+ * about what "paid for" means. They deliberately still differ in HOW they
+ * obtain the invoice; see services/subscriptionLinking.ts.
+ */
+export function isCurrentPeriodPaidFor(
+    status: string,
+    latestInvoiceStatus: string | null,
+): boolean {
+    if (!isPaidStripeStatus(status)) return false;
+    if (status === 'trialing') return true;
+    return latestInvoiceStatus === null || latestInvoiceStatus === 'paid';
+}
+
+/**
  * The outcome of translating a Stripe status. `write: false` is a deliberate
  * "leave the existing status alone" — not an error to swallow:
  *
