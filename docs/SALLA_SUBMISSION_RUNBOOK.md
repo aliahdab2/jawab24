@@ -50,11 +50,17 @@ review.** Conflating the two is what put "APPROVED" in this file. Three conseque
 1. ⭐ **Scope changes are free right now.** Nothing is under review, so the old open question
    "ask Salla whether a scope change on an approved app needs re-review" is **MOOT**. Tick
    `shipping.read` today.
-2. ⭐ **Drafting is safe.** The publish wizard has three distinct buttons — **Save Draft**, **Next**,
-   **Submit for Review**. The entire listing can be built and saved without submitting anything.
-   Only "Submit for Review" is irreversible (assume approval auto-publishes; no hold control was
-   visible in the 06-12 recon, and that assumption has never been confirmed by Salla — ask support
-   before submitting).
+2. ⭐ **Drafting is safe — but not incremental.** The publish wizard has three distinct buttons —
+   **Save Draft**, **Next**, **Submit for Review**. Only "Submit for Review" is irreversible (assume
+   approval auto-publishes; no hold control was visible in the 06-12 recon, and that assumption has
+   never been confirmed by Salla — ask support before submitting).
+   ⚠️ **Correction, measured 2026-08-20:** *"the entire listing can be built and saved without
+   submitting anything"* was too strong. **Save Draft validates the required fields** and refuses
+   with *"Please fix the errors before submitting"* while any is empty. So the draft is safe to
+   press, but it cannot hold half-finished work — plan one sitting with every asset in hand.
+   Required fields found the hard way: App Logo, App Themes, App Pricing, and Educational Video
+   (starred required, though enforcement is still under test). Details in
+   `docs/store-listing/salla/PORTAL_FIELD_MAP.md`.
 3. 🔴 **The wrong-app creds are the highest-severity item.** Prod is wired to a different app than
    the one being published, so the first real `app.store.authorize` push would arrive for an app
    whose secrets prod does not hold. Repoint Client ID **and** Client Secret **and** the webhook
@@ -207,7 +213,9 @@ submission happens on the production app.
 
 ## Phase 2 — Submit — ❌ NOT DONE (this section previously claimed otherwise)
 
-- [ ] Fill the 6 wizard sections and **Save Draft** — safe, reversible, submits nothing.
+- [ ] Fill the 6 wizard sections and **Save Draft** — safe, reversible, submits nothing. ⚠️ It
+      validates: every required field must be filled before the draft will save at all (see the
+      correction in STATUS above), so go in with all assets ready.
       Portal state 2026-08-20: Basic Info **partial** (App Name + EN short description only);
       App Configuration **full**; Features & Media **empty** (0 of 3 screenshots minimum);
       App Pricing **untouched defaults** (`One-Time`, price 0 — ⚠️ almost certainly the wrong

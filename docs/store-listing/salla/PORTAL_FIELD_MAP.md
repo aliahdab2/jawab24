@@ -14,14 +14,14 @@
 | Field | Source | State 2026-08-20 |
 |---|---|---|
 | App Name | `Jawab24` | ✅ filled |
-| Short Description | `SALLA_LISTING_BRIEF.md` §2 — **v2** (the one naming واتساب) | ⚠️ EN present; **confirm the Arabic field carries v2 too**. v1 was saved against the *dev* app `1565152053`, so this app may never have had the AR string at all |
-| App Description (long) | `SALLA_LISTING_BRIEF.md` §2 — Arabic ~250w, English ~230w | ❌ empty. ⚠️ still marked *awaiting marketing sign-off* — get that before pasting |
-| App Logo | `icon-512.png` (512×512, 58 KB) | ❌ empty |
-| Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; no video is produced | ❌ empty — optional, ship without it |
-| Categories | see **Sub-category correction** below | ❌ empty |
-| App Themes (1–3, required) | see **App Themes** below | ❌ empty — taxonomy not yet read |
-| Supported Countries | **decision owed** — see below | ❌ empty |
-| Search Terms (0/20) | **paste-ready list below** | ❌ empty |
+| Short Description | `SALLA_LISTING_BRIEF.md` §2 — **v2** (the one naming واتساب) | ✅ AR replaced with v2 in the fill session; EN present |
+| App Description (long) | `SALLA_LISTING_BRIEF.md` §2 — Arabic ~250w, English ~230w | ✅ AR + EN pasted, **minus the «العربات المتروكة (قريباً)» bullet** (unshipped claim — see §3) and with no «فريق سعودي» clause. Owner signed off in session |
+| App Logo | `icon-512.png` (512×512, 58 KB) | ⏳ required; upload is a human drag-and-drop — the extension cannot open a file picker. Staged at `~/Downloads/salla-listing/` |
+| Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; no video is produced | ❌ empty. ⚠️ **starred REQUIRED in the portal** (read 2026-08-20) — this map previously called it optional. Whether the validator actually enforces it is under test; see **Save Draft validates** below |
+| Categories | see **Sub-category correction** below | ✅ set to **Marketing** (the wrong `Cross-sell / Upsell` is gone) |
+| App Themes (1–3, required) | see **App Themes** below | ✅ taxonomy read 2026-08-20; three chosen |
+| Supported Countries | owner decision — **Saudi Arabia only** | ✅ set to Saudi Arabia |
+| Search Terms (20/20) | **paste-ready list below** | ✅ all 20 entered in order |
 
 ### Sub-category correction
 
@@ -31,25 +31,51 @@ the store will filter on. The brief (§2) leans **Marketing / Sales (التسو�
 Customer Service to match the sales-rep positioning. Pick from Salla's live taxonomy at fill time
 and record what was chosen here — the brief lists this as open question §9.1.
 
-### App Themes — a required field this map did not know about
+### App Themes — required, 1–3 of 14. RESOLVED 2026-08-20
 
-Discovered in the portal 2026-08-20: **"App Themes — choose 1 to 3 themes that reflect the merchant
-value your app delivers"**, and it is marked required. Salla's live option list has **not been read**
-— it is portal-only and Turnstile-blocked here, so ⛔ do not fill this from a guess. Have the
-founder paste the options, then record the chosen three in this section.
+Field text: *"Choose 1 to 3 themes that reflect the merchant value your app delivers."* Required —
+`Field must contain at least 1 element`. The full live taxonomy, read from the portal 2026-08-20:
 
-**The selection rule, in priority order** (pick only what is demonstrably true — a theme is a browse
-filter, so a wrong one delivers merchants who bounce, which is how the `Cross-sell / Upsell`
-sub-category error happened):
+> Attract new visitors · Convert visitors into buyers · Increase AOV · Recover abandoned carts ·
+> Turn buyers into loyal customers · Reach customers wherever they are · Ship faster and cheaper ·
+> Build trust after the sale · Sell in more places · Automate daily operations · Know your numbers ·
+> Control inventory & accounting · Design without a developer · Grow with AI
 
-1. **Customer communication / support / messaging** — the single most literal description of the app.
-2. **Sales growth / conversion** — matches the decided sales-rep positioning (brief §1, 2026-05-30).
-3. **Automation / time saving** — true and honest, but the weakest of the three; take it only if the
-   first two are available and a third slot is genuinely earned.
+**✅ The three to tick:**
 
-⛔ **Do not tick** themes about shipping, payments, storefront/theme design, inventory, analytics,
-or cross-sell/upsell widgets. The app does none of them. Fewer true themes beat three with a false
-one — the field allows 1.
+| Theme | Why it is true of this app |
+|---|---|
+| **Reach customers wherever they are** | The most literal fit: WhatsApp + Messenger + Instagram answered by one assistant. Note there is **no customer-service/communication theme** in the taxonomy — this is its stand-in |
+| **Convert visitors into buyers** | Matches the decided sales-rep positioning (brief §1, 2026-05-30) and the `Marketing` category |
+| **Grow with AI** | The honest differentiator — Arabic + dialect comprehension is an AI capability, not a template |
+
+**⛔ Never tick `Recover abandoned carts`.** It is precisely the claim deleted from the listing prose
+for being unshipped and unverified (the `abandoned.cart` event has never been confirmed by a real
+delivery). A merchant who filters on it arrives looking for the one thing we cannot do.
+
+**Two considered and rejected — record the reasoning so it is not re-litigated:**
+- `Automate daily operations` — true, but it shelves us beside inventory and accounting tools and
+  delivers a merchant shopping for back-office ops. Same failure mode as the `Cross-sell / Upsell`
+  sub-category error.
+- `Build trust after the sale` — we do answer "where is my order", but the shipment-tracking path
+  has **never been exercised against a live Salla API** (test plan Tier 3.8). Do not advertise a
+  capability whose only evidence is documentation.
+
+General rule that produced these picks: a theme is a browse filter, so a false one delivers
+merchants who bounce. Fewer true themes beat three with a wrong one — the field accepts 1.
+
+### ⚠️ Save Draft is NOT a free-form parking space — it validates
+
+Measured 2026-08-20: pressing **Save Draft** with required fields empty refuses with *"Please fix the
+errors before submitting"*. So the reassurance elsewhere in this map that "the entire listing can be
+built and saved without submitting anything" holds only once **every required field** is filled —
+drafting is safe, but it is not incremental. Required fields hit so far: App Logo, App Themes,
+App Pricing (the untouched `One-Time` default raises its own error badge), and **Educational Video is
+starred required** — which contradicts this map's earlier "optional, ship without it".
+
+⛔ If the video field genuinely blocks the save, do **not** paste an unrelated or placeholder URL to
+get past it. The honest path is producing the 60–90s screencast from the script in
+`SALLA_LISTING_BRIEF.md` §5. Confirm whether the validator enforces it before spending that effort.
 
 ### Supported Countries — decision owed
 
