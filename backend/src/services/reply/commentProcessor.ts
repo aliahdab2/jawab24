@@ -181,6 +181,11 @@ export class CommentProcessor {
             // 2. Load workspace settings (cached in Redis)
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             const isCommentsEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'comments');
+            // Resolved once — five call sites re-derived it, and the `reply_sent`
+            // line could not report it at all. See messageProcessor for why that
+            // matters: no reply record carried its mode, so D-087's owed weekly
+            // measurement had no substrate for the comment surface either.
+            const effectiveReplyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
 
             // 3. Find or create content entity (post/media)
             let content: Awaited<ReturnType<typeof adapter.findOrCreateContent>>;
@@ -496,7 +501,7 @@ export class CommentProcessor {
                             accessToken: page.accessToken, fromId, fromName,
                             instagramCredential: page.instagramCredential,
                             userSettings: userSettings as unknown as Record<string, unknown>,
-                            replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                            replyMode: effectiveReplyMode,
                             postMessage: content.message || undefined,
                             contentId: content.id,
                             triggerKeyword: match.keyword ?? undefined,
@@ -635,7 +640,7 @@ export class CommentProcessor {
             generatorContext.factCollectionsBlock = enriched.factCollectionsBlock;
             generatorContext.factCollectionsGated = enriched.factCollectionsGated;
             generatorContext.replyStyle = userSettings.replyStyle;
-            generatorContext.replyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
+            generatorContext.replyMode = effectiveReplyMode;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             generatorContext.timezone = userSettings.timezone;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
@@ -739,7 +744,7 @@ export class CommentProcessor {
                     sourceType: 'comment',
                     senderId: fromId ?? '',
                     senderName: fromName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
@@ -773,7 +778,7 @@ export class CommentProcessor {
                     sourceType: 'comment',
                     senderId: fromId ?? '',
                     senderName: fromName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
@@ -865,7 +870,7 @@ export class CommentProcessor {
                 instagramCredential: page.instagramCredential,
                 likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
-                replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                replyMode: effectiveReplyMode,
                 postMessage: content.message || undefined,
                 contentId: content.id,
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
@@ -1058,7 +1063,7 @@ export class CommentProcessor {
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, fromId, fromName, userSettings,
             contentId, needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
-            confidence, triggerKeyword, triggerType,
+            confidence, triggerKeyword, triggerType, replyMode,
         } = opts;
 
         // A revoked page credential is re-mintable in ONE Graph call, so the
@@ -1302,6 +1307,7 @@ export class CommentProcessor {
                 ? { triggerType: triggerType ?? 'keyword', ...(triggerKeyword ? { triggerKeyword } : {}) }
                 : { aiIntent, confidence, flagReason: flagReason || null, needsAttention }),
             replyLength: replyText.length,
+            replyMode: replyMode ?? null,
         });
 
         return { success: true, commentId: comment.id, replyText, replyMethod };

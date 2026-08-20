@@ -26,7 +26,7 @@ import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import { instagramCredentialOf } from '../instagramCredential';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
-import { resolveEffectiveReplyMode } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, unwrapBusinessProfile, hasRoutableContactChannel } from '@jawab24/shared';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { isPunctuationOnly } from '../../utils/commentText';
@@ -330,6 +330,27 @@ export class MessageProcessor {
             //    The newest message will consolidate all pending messages into one reply.
             //    When replyDelay > 0, skip this early check — the delay acts as a
             //    consolidation window, and we re-check after the delay (step 10b).
+            // Resolved ONCE, here, and reused by every downstream reader. Four
+            // call sites re-derived it; more importantly the `reply_sent` line
+            // could not report it, so no reply record carried the mode it was
+            // generated under — and 129 of 134 pages inherit a workspace default,
+            // which means a merchant who tries info for three days and flips back
+            // leaves a week of replies indistinguishable from sales. D-087 owes a
+            // weekly ask/promise measurement per effective-info page; this is its
+            // substrate, and replies written without it are unrecoverable.
+            const effectiveReplyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
+            // Deferred behind a thunk so the unwrap happens only on the
+            // post-send counter path, never before a reply is generated (Rule
+            // 17: nothing goes on the per-message path that the answer does not
+            // need). Same shared predicate `serializeListPage` uses, so the
+            // counter and the merchant's warning cannot disagree.
+            const pageCanRoute = () => {
+                const { merchant, merchantProvenance } = unwrapBusinessProfile(
+                    page.businessProfile as Parameters<typeof unwrapBusinessProfile>[0],
+                );
+                return hasRoutableContactChannel(merchant ?? {}, merchantProvenance);
+            };
+
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);
             const replyDelay = userSettings.replyDelay;
             if (replyDelay === 0) {
@@ -691,7 +712,7 @@ export class MessageProcessor {
                         senderId,
                         senderName,
                         replyStyle: userSettings.replyStyle,
-                        replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                        replyMode: effectiveReplyMode,
                         brandVoiceNotes,
                         businessInfoBlock,
                         factCollectionsBlock,
@@ -786,7 +807,7 @@ export class MessageProcessor {
                     sourceType: 'message',
                     senderId,
                     senderName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: consolidatedText,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_self_identification');
@@ -818,7 +839,7 @@ export class MessageProcessor {
                     sourceType: 'message',
                     senderId,
                     senderName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: consolidatedText,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
@@ -1025,7 +1046,7 @@ export class MessageProcessor {
                 sourceType: 'message',
                 senderId,
                 senderName,
-                replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                replyMode: effectiveReplyMode,
                 messageText: consolidatedText,
             }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
@@ -1092,8 +1113,18 @@ export class MessageProcessor {
                 needsAttention,
                 replyLength: replyText.length,
                 consolidatedCount: consolidatable.length,
+                // The two fields D-087's owed measurement needs, and the reason
+                // they belong HERE: `messages` has no column for either, so the
+                // structured line is the only per-reply record of the mode that
+                // produced it and of whether that mode had anywhere to route.
+                replyMode: effectiveReplyMode,
                 durationMs: Date.now() - t0,
             });
+
+            // Fire-and-forget, outside the reply's critical path (Rule 17): the
+            // counter survives log rotation and answers "is anyone on info, and
+            // do their pages have anywhere to route?" without a log query.
+            void pipelineMetrics.recordReplyMode(effectiveReplyMode, pageCanRoute());
 
             return { success: true, messageId: platformMessageId, replyText, replyMethod };
 

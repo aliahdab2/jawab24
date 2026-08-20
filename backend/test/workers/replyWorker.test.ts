@@ -109,6 +109,7 @@ vi.mock('../../src/lib/replyQueue', () => ({
 vi.mock('../../src/lib/pipelineMetrics', () => ({
     pipelineMetrics: {
         record: vi.fn(),
+        recordReplyMode: vi.fn(() => Promise.resolve()),
     },
 }));
 
