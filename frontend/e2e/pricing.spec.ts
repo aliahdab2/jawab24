@@ -193,6 +193,27 @@ test.describe('Pricing Page', () => {
     ).toBeVisible();
   });
 
+  /**
+   * REGRESSION (2026-08-20). The Google Ads «الأسئلة الشائعة» sitelink points at
+   * /pricing#faq. The FAQ section existed, but nothing on the page carried
+   * `id="faq"` — so the fragment resolved to nothing and a PAID click landed at
+   * the top of the plan grid instead of on the answers the sitelink promised.
+   * Verified missing on production before the fix.
+   *
+   * Asserting the id exists is not enough on its own: an id that is present but
+   * never scrolled to would drop the click in exactly the same wrong place, so
+   * this also asserts the section actually reaches the viewport.
+   */
+  test('the #faq fragment reaches the FAQ section (Google Ads sitelink target)', async ({ page }) => {
+    await page.goto('/en/pricing#faq');
+
+    const faqSection = page.locator('#faq');
+    await expect(faqSection).toHaveCount(1);
+    await expect(faqSection).toBeVisible({ timeout: 15000 });
+
+    await expect(page.getByText(t('pricing.faqTitle')).first()).toBeInViewport();
+  });
+
   test('should show Shopify badge on eligible plans when ecommerceEnabled', async ({ page }) => {
     await page.goto('/en/pricing');
 
