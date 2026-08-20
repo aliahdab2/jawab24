@@ -98,27 +98,6 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Reply mode must be written to the workspace the merchant is
-            // LOOKING at. syncPipelineFieldsToWorkspace resolves its target from
-            // the user's membership (resolveWorkspaceId), which for a
-            // multi-membership user can differ from the request's resolved
-            // workspace — so resolve with the SAME resolver and refuse on
-            // disagreement (finding H3). Kept and WIDENED past the D-085
-            // allowlist pilot: turning info OFF on the wrong workspace is the
-            // same defect as turning it on, and at GA it is the likelier one —
-            // an agency flipping a mode back would otherwise silently restore
-            // lead-capture asks on another merchant's pages.
-            if (updates.replyMode === 'info' || updates.replyMode === 'sales') {
-                const wsId = (request as WorkspaceRequest).workspaceId;
-                const writeTargetId = await settingsService.resolveWriteTargetWorkspaceId(userId);
-                if (!wsId || !writeTargetId || writeTargetId !== wsId) {
-                    return reply.status(403).send({
-                        error: 'Reply mode cannot be changed from this session: the settings write would land on a different workspace than this request resolved',
-                        code: 'REPLY_MODE_WORKSPACE_MISMATCH',
-                    });
-                }
-            }
-
             // Fetch current settings for comparison
             const currentSettings = await settingsService.getSettings(userId);
 
@@ -233,7 +212,15 @@ export class SettingsController {
             if (updates.brandVoiceNotesMulti !== undefined && updates.brandVoiceNotesMulti !== null) {
                 updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
             }
-            const settings = await settingsService.updateSettings(userId, updates);
+            // The workspace this request resolved, membership-verified by the
+            // middleware — pipeline fields sync THERE, not to whichever
+            // membership row comes back first. This replaces the D-085
+            // reply-mode-only guard: fixing the destination covers all 30
+            // PIPELINE_FIELDS and every save, where the guard covered one field
+            // and only when that field was in the payload.
+            const settings = await settingsService.updateSettings(
+                userId, updates, (request as WorkspaceRequest).workspaceId,
+            );
 
             // Activation funnel (D-026): a save that turns an auto-reply master ON
             // (comments or messages, false→true) is the real activation moment for

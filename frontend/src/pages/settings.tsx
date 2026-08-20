@@ -399,16 +399,7 @@ const SettingsPage: NextPageWithLayout = () => {
           validationMessage,
         },
       });
-      // The reply-mode workspace guard 403s with a specific code. A generic
-      // "something went wrong" leaves the merchant clicking Save forever with
-      // a dirty draft and no idea why — the page-scope PATCH already names
-      // this case, and the workspace save must too. (The allowlist code this
-      // also handled is gone with the D-087 gate deletion.)
-      if (validationCode === 'REPLY_MODE_WORKSPACE_MISMATCH') {
-        toast.error(t('replyMode.workspaceMismatch'));
-      } else {
-        toast.error(tc('error'));
-      }
+      toast.error(tc('error'));
     } finally {
       setSaving(false);
     }

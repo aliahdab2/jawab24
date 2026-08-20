@@ -156,6 +156,55 @@ describe('settingsService.updateSettings → workspace sync', () => {
         );
     });
 
+    /**
+     * D-087: the write goes where the CALLER says, not where an unordered
+     * `limit(1)` over `workspace_members` happens to point.
+     *
+     * Before this, a multi-membership user's tone, persona, away and greeting
+     * text synced to whichever membership row came back first — unrelated to the
+     * workspace they were looking at. D-085 guarded only `replyMode`, and only
+     * when the client's diff happened to include it. 3 of 85 prod users hold two
+     * memberships (2026-08-20), so this was live, silent, and cross-tenant.
+     */
+    it('syncs to the workspace the CALLER passed, not the membership lookup', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        // The resolver would pick 'ws1' — the caller says 'ws-explicit'.
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+        const updateChain = buildSettingsUpdateChain({ ...baseSettings, replyStyle: 'casual' as const });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
+
+        await settingsService.updateSettings('u1', { replyStyle: 'casual' }, 'ws-explicit');
+
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
+            'ws-explicit',
+            expect.objectContaining({ replyStyle: 'casual' }),
+        );
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).not.toHaveBeenCalledWith(
+            'ws1', expect.anything(),
+        );
+    });
+
+    // The fallback exists for callers with no request (scripts, tests). Removing
+    // it would break them; relying on it from a request is the defect above.
+    it('falls back to the membership lookup when no caller workspace is given', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+        const updateChain = buildSettingsUpdateChain({ ...baseSettings, replyStyle: 'casual' as const });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
+
+        await settingsService.updateSettings('u1', { replyStyle: 'casual' });
+
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
+            'ws1', expect.objectContaining({ replyStyle: 'casual' }),
+        );
+    });
+
     it('skips workspace sync when no pipeline fields are in the update', async () => {
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);

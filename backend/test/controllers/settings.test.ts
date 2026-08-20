@@ -102,7 +102,7 @@ describe('SettingsController', () => {
             (mockRequest as any).body = updates;
             await settingsController.update(mockRequest as any, mockReply as any);
 
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', updates);
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', updates, undefined);
             expect(mockReply.send).toHaveBeenCalledWith(updatedSettings);
         });
 
@@ -139,7 +139,7 @@ describe('SettingsController', () => {
                     en: "Hello", // Auto-translated!
                     sourceLang: "ar"
                 })
-            }));
+            }), undefined);
         });
 
         it('should return 400 when validation fails', async () => {

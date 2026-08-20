@@ -255,7 +255,7 @@ describe('Settings Routes', () => {
             expect(body.dashboardLanguage).toBe('en');
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user_123', {
                 dashboardLanguage: 'en',
-            });
+            }, 'test_workspace_id');
         });
 
         it('should update comment reply mode to public', async () => {

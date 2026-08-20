@@ -138,7 +138,22 @@ export class SettingsService {
      * pipeline (commentProcessor / messageProcessor) picks them up immediately,
      * regardless of whether this call comes from the HTTP controller or directly.
      */
-    async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
+    /**
+     * @param targetWorkspaceId The workspace this write belongs to — the one the
+     *   REQUEST resolved and the middleware verified membership on. Pipeline
+     *   fields sync there.
+     *
+     *   ⚠️ Pass it. Omitting it falls back to `resolveWorkspaceId`, which returns
+     *   the user's FIRST membership row with no ordering and no relation to what
+     *   the caller was looking at — so for a multi-membership user (3 of 85 on
+     *   prod, 2026-08-20) tone, persona, away and greeting text landed on
+     *   ANOTHER merchant's pages. D-085 guarded only `replyMode` against that,
+     *   on the write path, which left the other 29 PIPELINE_FIELDS exposed and
+     *   was skipped entirely by any save that did not touch the mode (the client
+     *   sends a diff). D-087 fixes the destination instead of guarding one field
+     *   of it. The fallback stays for legacy/test callers that have no request.
+     */
+    async updateSettings(userId: string, updates: UpdateSettingsDTO, targetWorkspaceId?: string | null): Promise<UserSettings> {
         // Ensure settings exist; the effective (overlaid) state also feeds the
         // aiEnabled clamp below.
         const current = await this.getSettings(userId);
@@ -187,7 +202,7 @@ export class SettingsService {
         }
 
         // Sync pipeline fields to workspaceSettings so the reply pipeline sees them
-        await this.syncPipelineFieldsToWorkspace(userId, updates);
+        await this.syncPipelineFieldsToWorkspace(userId, updates, targetWorkspaceId);
 
         // Read-after-write consistency: the sync above is awaited, so the
         // workspace store already reflects this update (D-026).
@@ -247,7 +262,7 @@ export class SettingsService {
      * the update payload into workspaceSettings.
      * Fire-and-forget: failures are logged but never surfaced to the caller.
      */
-    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO): Promise<void> {
+    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO, targetWorkspaceId?: string | null): Promise<void> {
         try {
             const pipelineUpdates = Object.fromEntries(
                 PIPELINE_FIELDS
@@ -256,7 +271,9 @@ export class SettingsService {
             );
             if (Object.keys(pipelineUpdates).length === 0) return;
 
-            const workspaceId = await this.resolveWorkspaceId(userId);
+            // The caller's verified workspace wins; the resolver is the
+            // no-request fallback (see updateSettings' docblock).
+            const workspaceId = targetWorkspaceId ?? await this.resolveWorkspaceId(userId);
             if (!workspaceId) return;
 
             await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);
