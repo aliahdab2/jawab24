@@ -75,3 +75,23 @@ export function buildChangedSettingsPayload(current: SettingsState, baseline: Se
 
   return UpdateSettingsSchema.safeParse(changed);
 }
+
+/**
+ * "Is there unsaved input a TEST REPLY would be wrong about?" — the persona text
+ * and the tone, which the prompt reads. Drives the persona card's Test button.
+ *
+ * ⚠️ Deliberately NOT "is anything unsaved". `hasChanges` on the settings page is
+ * TRUE from the first render for any account whose stored timezone is still the
+ * DB placeholder: the page resolves it to the device zone while the baseline
+ * keeps the RAW stored value, on purpose, so the seeded zone reads as a saveable
+ * pending change. That is 70 of 84 production accounts (2026-08-20) — gating the
+ * preview on it left the button dead for most of the fleet at exactly the moment
+ * GA introduced the control (D-087).
+ *
+ * The reply MODE is excluded on its own terms: the card sends it to the
+ * playground explicitly, so an unsaved mode still produces a truthful preview.
+ */
+export function hasUnsavedReplyInput(settings: SettingsState, baseline: SettingsState): boolean {
+    const FIELDS = ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'] as const;
+    return FIELDS.some((key) => JSON.stringify(settings[key]) !== JSON.stringify(baseline[key]));
+}

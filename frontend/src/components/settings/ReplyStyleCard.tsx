@@ -62,17 +62,18 @@ interface ReplyStyleCardProps extends SettingsCardProps {
    */
   savedReplyMode?: 'sales' | 'info';
   /**
-   * `hasChanges` MINUS the reply mode — i.e. "is anything other than the mode
-   * unsaved?". The Test button blocks on this rather than on `hasChanges`,
-   * because an unsaved MODE is testable: the card sends it to the playground
-   * explicitly (`replyModeOverride`), so the reply the merchant sees is
-   * generated with the option they can see selected. Unsaved persona TEXT is
-   * not testable that way and still blocks. Absent = assume clean.
+   * Is unsaved input pending that a test reply would be WRONG about — the
+   * persona text or the tone? The Test button blocks on this rather than on
+   * `hasChanges`, for two reasons. An unsaved MODE is testable (the card sends
+   * it to the playground explicitly, so the reply matches the selected option),
+   * and `hasChanges` is true from load for most accounts anyway — the settings
+   * page seeds a resolved timezone against a raw baseline on purpose, which
+   * would leave Test permanently dead. Absent = assume clean.
    */
-  hasOtherChanges?: boolean;
+  hasUnsavedReplyInput?: boolean;
 }
 
-export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChanges, onScrollToAdvanced, savedBrandVoiceNotesMulti, savedReplyMode = 'sales' }: ReplyStyleCardProps) {
+export function ReplyStyleCard({ settings, setSettings, hasChanges, hasUnsavedReplyInput, onScrollToAdvanced, savedBrandVoiceNotesMulti, savedReplyMode = 'sales' }: ReplyStyleCardProps) {
   const t = useTranslations('settings');
   // A `member` reaches this card read-only: the page-bottom Save bar is hidden
   // for them, but the page-scope mode radios have NO save button — they PATCH on
@@ -195,8 +196,19 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChan
   // on the row, not the token, so a revoked token must not make the pin
   // invisible and unrevertable while a reconnect silently revives it.
   const hasRowOverride = (p: Page) => hasOverrideContent(p.brandVoiceNotesMulti) || isReplyMode(p.replyMode);
-  const switcherPages = pages.filter((p) => p.isConnected !== false || hasRowOverride(p));
+  // ⚠️ `|| p.id === personaScope` is load-bearing. A disconnected page is listed
+  // ONLY because it carries an override — so reverting its mode pin removes the
+  // very reason it is listed, and the optimistic write does that BEFORE the
+  // PATCH resolves. Without this the page leaves the list mid-request while
+  // `personaScope` still names it: `scopedPage` becomes null, the switcher
+  // trigger renders blank, the card silently falls back to WORKSPACE scope, and
+  // «تم حفظ اختيار هذه الصفحة ✓» flashes under the workspace radios — describing
+  // a control that has no per-page save. The next click would then edit the
+  // workspace draft while the merchant believes they are still on the page.
   const [personaScope, setPersonaScope] = useState<'workspace' | string>('workspace');
+  const switcherPages = pages.filter(
+    (p) => p.isConnected !== false || hasRowOverride(p) || p.id === personaScope,
+  );
   const scopedPage = personaScope === 'workspace' ? null : switcherPages.find((p) => p.id === personaScope) ?? null;
 
   const overriddenCount = pages.filter((p) => hasOverrideContent(p.brandVoiceNotesMulti)).length;
@@ -428,13 +440,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChan
   // then true for every merchant with a persona, which would disable the button
   // for all of them.
   const testBlockedByPageDraft = !!scopedPage && pageDraftSavable;
-  // ⚠️ `hasOtherChanges`, not `hasChanges`: an unsaved MODE used to disable this
-  // button, so the only way to see what «مصدر معلومات» does to your replies was
-  // to save it live on every page first. The mode is testable without saving —
-  // it travels to the playground as an explicit override below — so it must not
-  // block. Every other unsaved field still does. Falls back to `hasChanges` for
-  // call sites that don't pass the narrower flag (tests, legacy).
-  const testBlocked = (hasOtherChanges ?? hasChanges) === true || testBlockedByPageDraft;
+  // ⚠️ `hasUnsavedReplyInput`, not `hasChanges`: an unsaved MODE used to disable
+  // this button, so the only way to see what «مصدر معلومات» does to your replies
+  // was to save it live on every page first. The mode is testable without saving
+  // — it travels to the playground as an explicit override below. Unsaved
+  // persona text or tone still blocks, because the reply WOULD be wrong about
+  // those. Falls back to `hasChanges` for call sites that don't pass the
+  // narrower flag (tests, legacy).
+  const testBlocked = (hasUnsavedReplyInput ?? hasChanges) === true || testBlockedByPageDraft;
 
   // The mode to generate the test reply with, when it is NOT what the server
   // would resolve on its own. Only the workspace draft can diverge (page pins
@@ -443,8 +456,14 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChan
   // produce.
   const testTarget = scopedPage ?? selectedPage;
   const testTargetPinned = isReplyMode(testTarget?.replyMode);
-  const testReplyModeOverride: 'sales' | 'info' | undefined =
+  const testReplyModeOverride: ReplyMode | undefined =
     !scopedPage && workspaceModeDraftUnsaved && !testTargetPinned ? draftWorkspaceMode : undefined;
+  // ...and when it IS pinned, the test runs under the page's own mode, not the
+  // radio the merchant just moved. Correct data, misleading silence: they draft
+  // 'sales' to try turning info OFF, test, and read an info-mode reply as proof
+  // the control does nothing. Live today on a 13-page workspace whose newest
+  // connected page — the one `selectedPage` resolves to — carries an 'info' pin.
+  const testRunsUnderPagePin = !scopedPage && workspaceModeDraftUnsaved && testTargetPinned;
 
   const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
   const previewText = value.trim().slice(0, 60);
@@ -665,17 +684,28 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChan
                 may well publish their number in the KB text instead, which this
                 predicate cannot see, and refusing a mode on a guess we know is
                 incomplete is worse than telling them what we found. */}
-            {showNoChannelWarning && (
-              <p
-                role="status"
-                className="mt-1.5 px-2 py-1.5 rounded-lg border alert-warning text-[11px]"
-                dir="auto"
-              >
-                {scopedPage
+            {/* ALWAYS mounted, merely empty when there is nothing to say — the
+                same pattern as the save notice below. A live region inserted
+                TOGETHER with its text is commonly not announced (screen readers
+                register on insertion and announce later mutations), so a
+                mounted-on-demand region would have left the one signal that this
+                mode dead-ends buying customers silent for exactly the users who
+                cannot see the amber box. Empty renders nothing: no box, no
+                padding, no border. */}
+            <p
+              role="status"
+              className={clsx(
+                'mt-1.5 text-[11px]',
+                showNoChannelWarning && 'px-2 py-1.5 rounded-lg border alert-warning',
+              )}
+              dir="auto"
+            >
+              {showNoChannelWarning
+                ? (scopedPage
                   ? t('replyMode.noChannelPage')
-                  : t('replyMode.noChannelWorkspace', { count: inheritingPagesWithoutChannel })}
-              </p>
-            )}
+                  : t('replyMode.noChannelWorkspace', { count: inheritingPagesWithoutChannel }))
+                : ''}
+            </p>
             {/* Success is announced HERE, next to the control that saved —
                 the persona editor's notice lives further down the card and a
                 merchant who never scrolls there sees nothing at all.
@@ -947,6 +977,18 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasOtherChan
         {testBlockedByPageDraft && (
           <p id="replyStyleTestBlocked" className="text-[11px] text-muted-foreground" dir="auto">
             {t('replyStyle.testSaveFirst')}
+          </p>
+        )}
+        {/* The test target carries its OWN pin, so the radio just moved does not
+            govern it and the reply comes back under the page's mode. Saying so
+            is the difference between "the control does nothing" and "this page
+            is pinned". */}
+        {testRunsUnderPagePin && !testBlocked && (
+          <p className="text-[11px] text-muted-foreground" dir="auto">
+            {t('replyMode.testUsesPagePin', {
+              page: testTarget?.name ?? '',
+              mode: modeLabel(toReplyMode(testTarget?.replyMode)),
+            })}
           </p>
         )}
       </div>

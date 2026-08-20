@@ -52,6 +52,7 @@
     "saveDefaultFirst": "Save the default first with “Save Settings”, then customize pages.",
     "pageUpdateError": "Couldn't save the choice for this page — please try again.",
     "workspaceMismatch": "Couldn't save the assistant type for this workspace. Reload the page and try again.",
+    "testUsesPagePin": "“{page}” has its own choice ({mode}), so the test runs with that — not the option selected above.",
     "noChannelPage": "This page has no phone or WhatsApp number saved in Business Info, so there is nothing to point a customer to: a customer who wants to buy is neither asked for their details nor given a way to reach you. Add or confirm a number in Business Info.",
     "noChannelWorkspace": "{count, plural, one {One of your pages has no phone or WhatsApp number in Business Info} other {# of your pages have no phone or WhatsApp number in Business Info}}, so there is nothing to point a customer to. Add or confirm a number in Business Info."
   },
