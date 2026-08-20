@@ -41,8 +41,9 @@ Every actionable row above was fixed the same day, and Tier 0 of `SALLA_TEST_PLA
 - ⏭ `SALLA_APP_STORE_URL` remains unset **by design** — post-publish step.
 
 **Remaining distance to submit:** the listing build (see `docs/store-listing/salla/PORTAL_FIELD_MAP.md`),
-its owner decisions (countries, sub-category, support inbox, marketing sign-off), the reviewer
-account + demo store (Service Trial section), then the Phase 3 rehearsal.
+its remaining owner decisions (sub-category, support inbox, marketing sign-off — **countries decided
+2026-08-20: SA · UAE · KW**), the reviewer account + demo store (Service Trial section), then the
+Phase 3 rehearsal.
 
 **What was actually approved on 2026-08-10 was the partner ID / payout verification, not an app
 review.** Conflating the two is what put "APPROVED" in this file. Three consequences:
