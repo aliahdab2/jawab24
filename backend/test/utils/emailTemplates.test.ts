@@ -2,13 +2,17 @@ import { describe, it, expect } from 'vitest';
 
 vi.mock('../../src/config', () => ({
     config: {
+        frontendUrl: 'https://jawab24.com',
         resend: {
             fromName: 'Jawab24 Test',
+            fromEmail: 'info@jawab24.com',
+            replyToEmail: '',
         },
     },
 }));
 
 import { waitlistEmailTemplate, inviteEmailTemplate } from '../../src/utils/emailTemplates';
+import { config } from '../../src/config';
 
 describe('waitlistEmailTemplate', () => {
     const baseParams = {
@@ -170,11 +174,22 @@ describe('waitlistEmailTemplate', () => {
             expect(html).toContain('cellspacing="0"');
         });
 
-        it('should include brand-colored header', () => {
+        it('should lead with the logo lockup rather than a coloured bar', () => {
             const html = waitlistEmailTemplate(baseParams);
 
-            // Teal brand color
-            expect(html).toContain('background-color:#0d9488');
+            // The header is the logo mark plus the wordmark on a white card. The
+            // old solid teal band is gone; teal survives only on the CTA and the
+            // callout edge, so asserting the colour alone would pass either way.
+            expect(html).toContain('/brand/logo-small.png');
+            expect(html).toContain('width="34" height="34"');
+            expect(html).not.toContain('background-color:#0d9488;padding:24px 32px');
+        });
+
+        it('should declare dark-mode support', () => {
+            const html = waitlistEmailTemplate(baseParams);
+
+            expect(html).toContain('name="color-scheme"');
+            expect(html).toContain('prefers-color-scheme: dark');
         });
 
         it('should set max-width 600px for email content', () => {
@@ -254,5 +269,44 @@ describe('inviteEmailTemplate', () => {
         expect(html).not.toContain('{workspace}');       // placeholder fully substituted
         expect(html).toContain('Acme $&amp; Co');        // body intro: & escaped, $& kept literal
         expect(subject).toContain('Acme $& Co');         // subject: raw name, $& kept literal
+    });
+});
+
+describe('shared footer', () => {
+    const params = { workspaceName: 'Acme', inviteUrl: 'https://jawab24.com/invites/accept?token=t' };
+
+    it('prints the Reply-To address when one is configured', () => {
+        config.resend.replyToEmail = 'support@jawab24.com';
+
+        try {
+            const { html } = inviteEmailTemplate(params);
+
+            // The printed address and the reply_to header come from the same
+            // value, so what a merchant reads is where their reply lands.
+            expect(html).toContain('mailto:support@jawab24.com');
+        } finally {
+            config.resend.replyToEmail = '';
+        }
+    });
+
+    it('falls back to the From address when no Reply-To is set', () => {
+        const { html } = inviteEmailTemplate(params);
+
+        expect(html).toContain('mailto:info@jawab24.com');
+    });
+
+    it('escapes the configured address into the mailto and the text node', () => {
+        // config is trusted, but it is an env file a human edits, and the value
+        // lands in an href attribute as well as a text node.
+        config.resend.replyToEmail = 'a"b@jawab24.com';
+
+        try {
+            const { html } = inviteEmailTemplate(params);
+
+            expect(html).toContain('mailto:a&quot;b@jawab24.com');
+            expect(html).not.toContain('mailto:a"b@');
+        } finally {
+            config.resend.replyToEmail = '';
+        }
     });
 });

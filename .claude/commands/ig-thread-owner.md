@@ -152,7 +152,7 @@ Always include the sentence that prevents a panicked call: **«أمّا قناة
 
 ### The removal steps — and the one thing to check first
 
-⚠️ **The Instagram menu path is NOT verified from official documentation.** `help.instagram.com` is JS-rendered and yields nothing to WebFetch; third-party sources converge on two variants and the UI differs by app version and locale. Since the email carries no "write back if you're stuck" fallback, **the path must be right the first time** — so verify it on a real device with Arabic Instagram if you can, and flag it as unverified in the founder notes if you cannot.
+⚠️ **The Instagram menu path is NOT verified from official documentation.** `help.instagram.com` is JS-rendered and yields nothing to WebFetch; third-party sources converge on two variants and the UI differs by app version and locale. The shared footer now does print a reply address, but a merchant stuck mid-menu will not stop to write — so **the path must still be right the first time** — so verify it on a real device with Arabic Instagram if you can, and flag it as unverified in the founder notes if you cannot.
 
 ```
 ١. تطبيق إنستغرام ← «الإعدادات والخصوصية».
@@ -168,7 +168,7 @@ Step 4 matters: without it a merchant may remove *us* and make it worse.
 
 ## Step 4 — Send (verified working 2026-08-12)
 
-⛔ **Never hand-roll the HTML** — use the branded template, which supplies the teal `#0d9488` header, the card, the footer and the Cairo/Tajawal RTL stack. The body you pass is **plain text**: it gets `escapeHtml`'d with `\n` → `<br>`, so markup would render as literal tags. Use «أولاً/ثانياً/ثالثاً» and «١.» / «•» for structure.
+⛔ **Never hand-roll the HTML** — use the branded template, which supplies the logo lockup, the card, the footer and the Cairo/Tajawal RTL stack. The body you pass is **plain text**: it gets `escapeHtml`'d with `\n` → `<br>`, so markup would render as literal tags. Use «أولاً/ثانياً/ثالثاً» and «١.» / «•» for structure.
 
 Use **`type: 'account_notice'`** — an existing `EmailType` in `backend/src/services/email.ts`. ⛔ Never invent a type value. Pass `userId` so the send is filterable per merchant.
 

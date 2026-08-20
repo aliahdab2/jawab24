@@ -74,7 +74,9 @@ describe('emailService.send — shared transport stays inert for existing caller
         await emailService.send(base);
 
         const body = lastRequestBody();
-        expect(Object.keys(body).sort()).toEqual(['from', 'html', 'subject', 'to']);
+        // `text` joins the baseline: the plain-text alternative is sent on every
+        // message, so it is part of the always-present set rather than an addition.
+        expect(Object.keys(body).sort()).toEqual(['from', 'html', 'subject', 'text', 'to']);
         expect('cc' in body).toBe(false);
         expect('bcc' in body).toBe(false);
         expect('attachments' in body).toBe(false);
@@ -84,7 +86,9 @@ describe('emailService.send — shared transport stays inert for existing caller
         await emailService.send({ ...base, cc: [], bcc: [], attachments: [] });
 
         const body = lastRequestBody();
-        expect(Object.keys(body).sort()).toEqual(['from', 'html', 'subject', 'to']);
+        // `text` joins the baseline: the plain-text alternative is sent on every
+        // message, so it is part of the always-present set rather than an addition.
+        expect(Object.keys(body).sort()).toEqual(['from', 'html', 'subject', 'text', 'to']);
     });
 
     it('sends cc, bcc and attachments through when present', async () => {

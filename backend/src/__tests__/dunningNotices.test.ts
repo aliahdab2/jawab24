@@ -105,7 +105,7 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: captureErrorMock }));
 vi.mock('../config', () => ({
     config: {
         frontendUrl: 'https://jawab24.com',
-        resend: { fromName: 'Jawab24' },
+        resend: { fromName: 'Jawab24', fromEmail: 'info@jawab24.com', replyToEmail: '' },
         redis: { host: '127.0.0.1', port: 6379, password: undefined },
     },
 }));

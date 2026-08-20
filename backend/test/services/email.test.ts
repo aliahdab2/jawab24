@@ -34,6 +34,7 @@ vi.mock('../../src/db/schema', () => ({
 }));
 
 import { EmailService } from '../../src/services/email';
+import { config } from '../../src/config';
 import type { Logger } from '../../src/types/logger';
 
 function mockLogger(): Logger {
@@ -97,6 +98,68 @@ describe('EmailService', () => {
     describe('production send', () => {
         beforeEach(() => {
             process.env.NODE_ENV = 'test';
+        });
+
+        function sentBody(fetchSpy: ReturnType<typeof vi.spyOn>): Record<string, unknown> {
+            const init = fetchSpy.mock.calls[0][1] as RequestInit;
+            return JSON.parse(init.body as string);
+        }
+
+        it('always sends a text/plain part derived from the html', async () => {
+            const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ id: 're_1' }));
+
+            await emailService.send({
+                to: 'user@example.com',
+                subject: 'Test',
+                html: '<p>Ready? <a href="https://jawab24.com/en/pricing">Choose a plan</a></p>',
+                type: 'transactional',
+            });
+
+            // HTML-only mail reads as bulk to every serious filter, so the text
+            // part is unconditional — and it must carry the destination, not just
+            // the label, or the recipient has no way to reach the link.
+            expect(sentBody(fetchSpy).text).toBe('Ready? Choose a plan <https://jawab24.com/en/pricing>');
+        });
+
+        it('prefers a caller-supplied text part over the derived one', async () => {
+            const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ id: 're_1' }));
+
+            await emailService.send({
+                to: 'user@example.com',
+                subject: 'Test',
+                html: '<p>Rendered</p>',
+                text: 'Hand written',
+                type: 'transactional',
+            });
+
+            expect(sentBody(fetchSpy).text).toBe('Hand written');
+        });
+
+        it('omits reply_to entirely when none is configured', async () => {
+            const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ id: 're_1' }));
+
+            await emailService.send({
+                to: 'user@example.com', subject: 'Test', html: '<p>Hi</p>', type: 'transactional',
+            });
+
+            // Absent, not null: the payload must stay byte-identical to what we
+            // sent before the key existed, so Resend keeps defaulting to From.
+            expect(sentBody(fetchSpy)).not.toHaveProperty('reply_to');
+        });
+
+        it('forwards a configured reply_to', async () => {
+            const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ id: 're_1' }));
+            config.resend.replyToEmail = 'support@jawab24.com';
+
+            try {
+                await emailService.send({
+                    to: 'user@example.com', subject: 'Test', html: '<p>Hi</p>', type: 'transactional',
+                });
+
+                expect(sentBody(fetchSpy).reply_to).toBe('support@jawab24.com');
+            } finally {
+                config.resend.replyToEmail = '';
+            }
         });
 
         it('calls Resend with the correct payload, persists a sent audit row, and returns both ids', async () => {

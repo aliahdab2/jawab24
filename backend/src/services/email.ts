@@ -1,5 +1,6 @@
 import { config } from '../config';
 import type { EmailAttachment } from '@jawab24/shared';
+import { htmlToPlainText } from '../utils/htmlUtils';
 import { captureError } from '../utils/sentryHelpers';
 import { db } from '../db';
 import { emailSends } from '../db/schema';
@@ -14,6 +15,13 @@ interface EmailPayload {
     to: string;
     subject: string;
     html: string;
+    /**
+     * The `text/plain` alternative part. Derived from `html` when a caller
+     * omits it, which is every caller today — the transport always sends one,
+     * because an HTML-only message reads as bulk mail to every serious filter.
+     * Supply this only when the HTML is a poor source for the text version.
+     */
+    text?: string;
     type: EmailType;
     // Optional owner of the email (recipient user). Stored on email_sends so
     // admins can filter "show me everything we sent to user X".
@@ -182,6 +190,14 @@ export class EmailService {
                 to: [payload.to],
                 subject: payload.subject,
                 html: payload.html,
+                // Never conditional: multipart is the point. A caller-supplied
+                // text part wins; otherwise it comes from the HTML we just sent,
+                // so the two halves can never drift.
+                text: payload.text ?? htmlToPlainText(payload.html),
+                // Where a merchant's reply lands. Absent config contributes no
+                // key at all, leaving Resend's own default (the From address) —
+                // byte-identical to what we sent before this existed.
+                ...(config.resend.replyToEmail ? { reply_to: config.resend.replyToEmail } : {}),
                 // Spread-if-present: an absent OR empty list contributes no key,
                 // so the serialized body is byte-identical to the pre-CC one for
                 // every existing caller.
