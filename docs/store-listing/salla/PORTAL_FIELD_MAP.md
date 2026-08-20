@@ -12,7 +12,8 @@
 ## Where the fill session stopped — 2026-08-20
 
 **Filled and verified:** short description AR (v2), long description AR + EN, Categories = `Marketing`,
-App Themes ×3, Supported Countries = Saudi Arabia only, Search Terms 20/20, all three contact emails,
+App Themes ×3, Supported Countries = Saudi Arabia only (⚠️ to be widened to SA · UAE · KW per D-094),
+Search Terms 20/20, all three contact emails,
 Privacy Policy URL. Nothing was submitted; `Save Draft` has **not** succeeded yet.
 
 **Three things stand between here and a saved draft**, in the order they should be cleared:
@@ -41,7 +42,7 @@ visually re-checked). Treat a visual read-back of Basic Info as part of finishin
 | Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; **no video is produced** | 🔴 empty and **BLOCKING** — starred required AND confirmed to fail Save Draft (`Educational Video URL: Invalid url`). This map previously called it "optional, ship without it"; that was wrong. Now a hard prerequisite |
 | Categories | see **Sub-category correction** below | ✅ set to **Marketing** (the wrong `Cross-sell / Upsell` is gone) |
 | App Themes (1–3, required) | see **App Themes** below | ✅ the three chosen are set in the portal |
-| Supported Countries | owner decision — **Saudi Arabia only** | ✅ set to Saudi Arabia |
+| Supported Countries | **decided 2026-08-20: SA · UAE · KW (D-094)** — see below | ⚠️ the fill session set **Saudi Arabia only**; add UAE + Kuwait at the next sitting |
 | Search Terms (20/20) | **paste-ready list below** | ✅ all 20 entered in order |
 
 ### Sub-category correction
@@ -113,16 +114,6 @@ paste an unrelated or placeholder URL to clear it. The honest path is producing 
 from the script in `SALLA_LISTING_BRIEF.md` §5. It is now a hard prerequisite for saving a draft at
 all, so it belongs on the critical path beside the pricing question.
 
-### Supported Countries — decision owed
-
-Not addressed anywhere in the brief. Two constraints that must shape it:
-
-- 🔴 **Syria is barred on WhatsApp** and the listing copy leads with WhatsApp. See
-  `project_whatsapp_syria_barred` in memory before ticking countries.
-- Salla merchants are overwhelmingly **KSA**; the free-tier strategy (§7) was written for that
-  audience. Narrow is safer than wide — a country we cannot serve is a support burden and a
-  review risk.
-
 ### Search Terms — paste these 20
 
 Arabic first (that is how Salla merchants search), English after for the EN-side surface. Order
@@ -160,18 +151,42 @@ actually converts once the listing has traffic.
   between the listing prose and the screen the merchant then opens is a defect. Settle the prose on
   one term (owner decision — it is a product-naming call, not a copy tweak) before submission.
 
-### Supported Countries — recommendation: **Saudi Arabia only** at launch
+### Supported Countries — **Saudi Arabia · UAE · Kuwait** (owner-decided 2026-08-20, **D-094**)
 
-Not addressed anywhere in the brief. Recommended narrow, for three reasons:
+⚠️ The 2026-08-20 fill session set **Saudi Arabia only** (before this ruling was recorded); UAE and
+Kuwait are still to be added. Salla's publishing-standards article lists this field as "UAE or
+Saudi Arabia" — the picker accepted more than two countries on 2026-08-20, so Kuwait is probably
+offered, but confirm it is actually there before recording it as ticked.
 
-- 🔴 **Syria is barred on WhatsApp**, and the listing copy leads with WhatsApp. Ticking it would
-  advertise a channel that cannot be delivered there (`project_whatsapp_syria_barred`).
-- Salla's merchant base is overwhelmingly **KSA**, and the free-tier strategy (brief §7) was priced
-  for that audience.
-- A country we cannot support well is a support burden and a review risk. Widening later is a
-  portal edit; retracting a country after merchants install is not.
+Tick the three countries where Salla **registers merchants**: 🇸🇦 Saudi Arabia, 🇦🇪 UAE, 🇰🇼 Kuwait.
 
-**Owner sign-off needed** — this is a market decision, not an engineering one.
+⛔ **Do not tick Qatar, Bahrain, or Oman on the strength of shipping support.** Salla supports
+selling and shipping *into* those markets, but that describes where a Saudi or Emirati merchant's
+**customers** live — not where the installing merchant's store is registered, which is what this
+field governs. ⚠️ The field's exact semantics are **unverified**: confirm the wizard's wording at
+fill time and correct this note if it turns out to mean market reach rather than merchant registration.
+
+⏳ **One open check before ticking UAE and Kuwait:** confirm WhatsApp Cloud API messaging is
+available for a sender registered in those countries. Our own records bar exactly one country
+(Syria, `project_whatsapp_syria_barred`) and no GCC country appears in them — but that is our
+record, not Meta's policy, so verify it against Meta's docs (AI_INSTRUCTIONS §10.12).
+
+Widening later is a portal edit; retracting a country after merchants install is not.
+
+#### ⛔ Superseded reasoning — do not restore
+
+An earlier revision recommended **Saudi-only** on two grounds that do not hold:
+
+- «Syria is barred on WhatsApp» is a real constraint on our own direct signups, but Salla does not
+  onboard Syrian merchants, so **Syria never appears in this picker**. Irrelevant to this field.
+- «Salla's base is overwhelmingly KSA» describes where the merchants are; it is not a reason to
+  exclude the ones who are not. Excluding UAE and Kuwait does not improve KSA service, and the
+  wizard prices per plan, not per country, so there is no per-country pricing exposure either
+  (the original draft said "the launch tier is free"; the 2026-08-23 wizard measurement found no
+  free pricing type for public apps, so only the weaker form of the point stands).
+
+Only the third ground survives — a country we cannot serve is a support burden and a review risk —
+and it is what the open check above discharges.
 
 ## 2. App Configuration
 

@@ -2448,3 +2448,49 @@ outcome AND one stock outcome, so the keys sum to twice the calls — `metrics:p
 refresh window (`ecom:stock:failed:{store}`); the counter carries the volume. Re-probe on the first real 50+ product catalog; the
 `not_found` share is the alarm. Deferred with their triggers: IDs in the inline block, a
 `title_normalized` column, a partial index on `type='product'`, Shopify `inventory_levels/update`.
+
+## D-094 · Salla listing launches in Saudi Arabia, UAE and Kuwait — not Saudi-only (2026-08-20, owner-decided; recorded 2026-08-23)
+
+**Ruling.** The Salla App Store listing's *Supported Countries* field is ticked for the three
+countries where Salla **registers merchants**: 🇸🇦 Saudi Arabia, 🇦🇪 UAE, 🇰🇼 Kuwait. Qatar, Bahrain
+and Oman are NOT ticked — Salla supports selling and shipping *into* those markets, but that
+describes where a Saudi or Emirati merchant's **customers** live, not where the installing
+merchant's store is registered.
+
+**Reverses the recommendation this file's companion carried until today.**
+`docs/store-listing/salla/PORTAL_FIELD_MAP.md` recommended **Saudi-only**, on three grounds. Two
+were wrong and are recorded there as superseded so they do not get restored:
+
+- «Syria is barred on WhatsApp and the copy leads with WhatsApp» is a real constraint on our own
+  direct signups, but Salla does not onboard Syrian merchants — **Syria never appears in this
+  picker**. The constraint is true and irrelevant, which is the easiest kind of reasoning to carry
+  forward unexamined.
+- «Salla's merchant base is overwhelmingly KSA» describes where the merchants are. It is not a
+  reason to exclude the ones who are not: excluding UAE and Kuwait does not improve KSA service,
+  and the wizard prices per plan, not per country, so there is no per-country pricing exposure
+  either (see the note below on the original "free tier" wording).
+
+The third ground survives — a country we cannot serve is a support burden and a review risk — and
+it is discharged by an explicit check rather than by narrowing the market.
+
+⏳ **Open check, owed before the countries are ticked in the portal:** confirm WhatsApp Cloud API
+messaging is available for a sender registered in the UAE and Kuwait, from Meta's own docs
+(AI_INSTRUCTIONS §10.12 — never assume third-party API behaviour). Our records bar exactly one
+country and no GCC country appears in them, but that is our record, not Meta's policy.
+
+⚠️ **The field's semantics are unverified.** This ruling assumes *Supported Countries* means the
+installing merchant's registration country. Confirm the wizard's wording at fill time; if it turns
+out to mean market reach, revisit — widening is a portal edit, but retracting a country after
+merchants install is not.
+
+⏳ **Second open check (added 2026-08-23):** Salla's own publishing-standards article lists this
+field's values as "UAE or Saudi Arabia" (salla.dev/blog/standards-salla-apps-publications). The
+2026-08-20 fill session saw the picker accept more than two countries, so Kuwait is probably
+offered — confirm it is actually in the picker before recording it as ticked. If it is not, the
+ruling degrades to SA · UAE without further debate.
+
+**Note (2026-08-23):** this entry was drafted on 2026-08-20 as D-088 and renumbered on rebase —
+D-088 had meanwhile been taken by the Business-Info presence ruling. The "free launch tier"
+argument it originally leaned on is superseded by the 2026-08-23 wizard measurement (no free
+pricing type exists for public apps); the pricing point stands only in its weaker form, that the
+wizard prices per plan, not per country.
