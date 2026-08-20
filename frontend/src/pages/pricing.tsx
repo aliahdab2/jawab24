@@ -695,8 +695,18 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </UpgradeCTA>
         </div>
 
-        {/* FAQ Section */}
-        <div className="max-w-3xl mx-auto px-4 pb-12 pt-10 sm:pt-12">
+        {/*
+          FAQ Section.
+
+          `id="faq"` is a LINK TARGET, not decoration: the Google Ads campaign's
+          «الأسئلة الشائعة» sitelink points at /pricing#faq, and without this the
+          anchor resolved to nothing and dropped a paid click at the top of the
+          plan grid instead of on the answers it promised. Verified missing on
+          production 2026-08-20 — the section existed, the anchor did not.
+          scroll-mt clears the sticky public header so the heading is not hidden
+          underneath it on arrival.
+        */}
+        <div id="faq" className="scroll-mt-24 max-w-3xl mx-auto px-4 pb-12 pt-10 sm:pt-12">
           <h2 className="text-xl font-bold text-foreground text-center mb-6">
             {t('pricing.faqTitle')}
           </h2>
