@@ -61,7 +61,6 @@ vi.mock('../../src/services/settings', () => ({
     settingsService: {
         getSettings: vi.fn(),
         updateSettings: vi.fn(),
-        resolveWriteTargetWorkspaceId: vi.fn(),
     },
 }));
 vi.mock('../../src/utils/validation', () => ({
@@ -238,61 +237,54 @@ describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
         return settingsController.update(mockRequest as never, mockReply as never);
     }
 
-    it('403 REPLY_MODE_WORKSPACE_MISMATCH when the write target differs from the request workspace', async () => {
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
+    // D-087 replaced the reply-mode-only guard with a correct DESTINATION: the
+    // controller passes the workspace the request resolved (membership-verified
+    // by the middleware) and the sync writes there. That covers all 30
+    // PIPELINE_FIELDS and every save, where the guard covered one field and only
+    // when the client's diff happened to include it.
+    it('writes to the workspace the REQUEST resolved, not to whichever membership resolves first', async () => {
         await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(mockReply.send).toHaveBeenCalledWith(
-            expect.objectContaining({ code: 'REPLY_MODE_WORKSPACE_MISMATCH' }),
+        expect(settingsService.updateSettings).toHaveBeenCalledWith(
+            'user-123', expect.objectContaining({ replyMode: 'info' }), ALLOWED_WS,
         );
-        expect(settingsService.updateSettings).not.toHaveBeenCalled();
     });
 
-    it('403 REPLY_MODE_WORKSPACE_MISMATCH when the resolver finds no workspace at all', async () => {
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(null);
-        await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(settingsService.updateSettings).not.toHaveBeenCalled();
-    });
-
-    it('proceeds when the write target matches the request workspace', async () => {
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(ALLOWED_WS);
+    it("no longer refuses a multi-membership session — the destination is explicit", async () => {
+        // The old guard 403'd exactly here, by comparing the request against an
+        // unordered `limit(1)` membership lookup. That lookup no longer decides
+        // anything (the function that exposed it is deleted), so the save
+        // proceeds — to the right workspace.
         await callUpdate();
         expect(mockReply.status).not.toHaveBeenCalledWith(403);
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({ replyMode: 'info' }));
+        expect(settingsService.updateSettings).toHaveBeenCalledWith(
+            'user-123', expect.anything(), ALLOWED_WS,
+        );
     });
 
     it("'info' is accepted for a workspace that was never in the pilot allowlist", async () => {
         mockRequest.workspaceId = OTHER_WS;
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
         await callUpdate();
         expect(mockReply.status).not.toHaveBeenCalledWith(403);
-        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({ replyMode: 'info' }));
-    });
-
-    // GA WIDENED the mismatch guard from 'info' to BOTH modes. Turning info OFF
-    // on the wrong workspace silently restores lead-capture asks on another
-    // merchant's pages — the same defect as turning it on, and after GA the
-    // likelier one. Before the widening this test failed: the resolver was
-    // never called for 'sales' and the write went through.
-    it("guards 'sales' too — a mismatched write target is refused", async () => {
-        (mockRequest as { body: unknown }).body = { replyMode: 'sales' };
-        vi.mocked(validateSchema).mockReturnValue({ success: true, data: { replyMode: 'sales' } } as never);
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
-        await callUpdate();
-        expect(settingsService.resolveWriteTargetWorkspaceId).toHaveBeenCalled();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(mockReply.send).toHaveBeenCalledWith(
-            expect.objectContaining({ code: 'REPLY_MODE_WORKSPACE_MISMATCH' }),
+        expect(settingsService.updateSettings).toHaveBeenCalledWith(
+            'user-123', expect.objectContaining({ replyMode: 'info' }), OTHER_WS,
         );
-        expect(settingsService.updateSettings).not.toHaveBeenCalled();
     });
 
-    it("leaves a settings write that does not touch replyMode alone", async () => {
+    // Every field, not just the mode — the point of moving from a guard to a
+    // destination. A tone or persona write used to sync to the resolver's pick.
+    it('passes the request workspace for a save that never mentions replyMode', async () => {
         (mockRequest as { body: unknown }).body = { replyStyle: 'casual' };
         vi.mocked(validateSchema).mockReturnValue({ success: true, data: { replyStyle: 'casual' } } as never);
         await callUpdate();
-        expect(settingsService.resolveWriteTargetWorkspaceId).not.toHaveBeenCalled();
-        expect(settingsService.updateSettings).toHaveBeenCalled();
+        expect(settingsService.updateSettings).toHaveBeenCalledWith(
+            'user-123', expect.objectContaining({ replyStyle: 'casual' }), ALLOWED_WS,
+        );
+    });
+
+    // The read is pinned to the same workspace as the write — see
+    // test/services/settingsSync.test.ts for the read/write symmetry itself.
+    it('reads the pre-write state from the workspace it is about to write', async () => {
+        await callUpdate();
+        expect(settingsService.getSettings).toHaveBeenCalledWith('user-123', ALLOWED_WS);
     });
 });

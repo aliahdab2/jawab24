@@ -11,7 +11,7 @@ import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, res
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
-import { sniffAttachmentMime, type EmailAttachment } from '@jawab24/shared';
+import { sniffAttachmentMime, resolveEffectiveReplyMode, type EmailAttachment } from '@jawab24/shared';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
 
@@ -349,6 +349,15 @@ class AdminUsersService {
                 archivedAt: pages.archivedAt,
                 // KB summary lives under `kb` in the payload; select the raw
                 // inputs here (length only — never ship the KB text itself).
+                // The per-page PIN. Support needs it because the effective mode
+                // is page-then-workspace: 3 of the 4 info-pinned prod pages sit
+                // under a 'sales' workspace default (2026-08-20), so a console
+                // showing only the workspace value tells support "sales" for a
+                // page running INFO-DESK — and the ticket that brings them here
+                // is «توقف عن أخذ أرقام الزبائن». Before D-087 the allowlist was
+                // the fallback answer ("only two workspaces can have it"); GA
+                // removed that, so this is now the only answer.
+                replyMode: pages.replyMode,
                 kbLength: sql<number>`length(coalesce(${pages.knowledgeBase}, ''))`,
                 kbActiveVersion: pages.kbActiveVersion,
                 kbUpdatedAt: pages.kbUpdatedAt,
@@ -630,6 +639,18 @@ class AdminUsersService {
             );
         }
 
+        // The mode each page will actually RUN with: its own pin, else the
+        // workspace default from the overlay above — resolved through the same
+        // `resolveEffectiveReplyMode` the reply pipeline calls, never a second
+        // expression of the rule. `replyMode` travels alongside it so support can
+        // tell a deliberate PIN from an inherited default: a page reading info
+        // because it inherited is fixed on the workspace, a pinned one is not.
+        const workspaceReplyMode = (effectiveSettings as { replyMode?: string } | null)?.replyMode;
+        const pagesWithReplyMode = pagesPayload.map(p => ({
+            ...p,
+            replyModeEffective: resolveEffectiveReplyMode(p.replyMode, workspaceReplyMode),
+        }));
+
         const health = computeHealthFlags({
             now,
             lastSeenAt: user.lastSeenAt,
@@ -637,12 +658,14 @@ class AdminUsersService {
             subscription: subscription
                 ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt }
                 : null,
-            pages: pagesPayload.map(p => ({
+            pages: pagesWithReplyMode.map(p => ({
                 id: p.id,
                 name: p.name,
                 disconnected: p.disconnected,
                 autoReplyEnabled: p.autoReplyEnabled,
                 autoReplyDisabledReason: p.autoReplyDisabledReason,
+                replyMode: p.replyMode,
+                replyModeEffective: p.replyModeEffective,
                 kb: p.kb,
             })),
             usage: {
@@ -669,7 +692,7 @@ class AdminUsersService {
                 }
                 : null,
             subscription: subscription || null,
-            pages: pagesPayload,
+            pages: pagesWithReplyMode,
             usage: currentUsage ? {
                 aiRepliesCount: currentUsage.aiRepliesCount || 0,
                 postRepliesCount,

@@ -117,6 +117,12 @@ export interface CustomerDetail {
         disconnected: boolean;
         /** Why the page disconnected, when known. */
         disconnectReason: string | null;
+        /** The page's OWN reply-mode pin, or null when it inherits (D-087). */
+        replyMode: string | null;
+        /** The mode this page actually RUNS with: its pin, else the workspace
+         *  default. Distinct from `replyMode` on purpose — an inherited 'info' is
+         *  fixed on the workspace, a pinned one is not. */
+        replyModeEffective: string | null;
         /** Business Info (KB) health summary for this page. */
         kb: PageKbSummary;
     }>;

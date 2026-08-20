@@ -485,7 +485,7 @@ test.describe('Settings — reply mode', () => {
         if (opts.patchStatus && opts.patchStatus >= 400) {
           return route.fulfill({
             status: opts.patchStatus, contentType: 'application/json',
-            body: JSON.stringify({ error: 'nope', code: opts.patchCode ?? 'REPLY_MODE_WORKSPACE_MISMATCH' }),
+            body: JSON.stringify({ error: 'nope', code: opts.patchCode }),
           });
         }
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...TWO_PAGES[0], ...(route.request().postDataJSON() as object) }) });
@@ -495,7 +495,7 @@ test.describe('Settings — reply mode', () => {
         if (opts.putStatus && opts.putStatus >= 400) {
           return route.fulfill({
             status: opts.putStatus, contentType: 'application/json',
-            body: JSON.stringify({ error: 'nope', code: opts.putCode ?? 'REPLY_MODE_WORKSPACE_MISMATCH' }),
+            body: JSON.stringify({ error: 'nope', code: opts.putCode }),
           });
         }
         // Echo what was actually saved. Answering 'info' to a request that
@@ -585,19 +585,23 @@ test.describe('Settings — reply mode', () => {
     await expect.poll(() => put, { timeout: 15000 }).toMatchObject({ replyMode: 'info' });
   });
 
-  test('WORKSPACE scope: a 403 names the reason instead of a generic error', async ({ page }) => {
+  // Both reply-mode 403s are gone: the allowlist with the gate, and the
+  // workspace-mismatch guard with D-087's destination fix (a settings write now
+  // goes to the workspace the request resolved, so there is nothing to refuse).
+  // What must survive is the weaker but real guarantee — a save that FAILS says
+  // so, rather than leaving the merchant clicking a dirty draft in silence.
+  test('WORKSPACE scope: a failed save is never silent', async ({ page }) => {
     await page.addInitScript(seed, { wsId: ALLOWED_WS });
-    // The allowlist 403 is gone with the gate (D-087). The guard that survives
-    // is the workspace MISMATCH — a multi-membership session whose settings
-    // write would land on a different workspace than the request resolved.
-    await routeMocks(page, undefined, { putStatus: 403, putCode: 'REPLY_MODE_WORKSPACE_MISMATCH' });
+    await routeMocks(page, undefined, { putStatus: 500 });
 
     await page.goto('/en/settings');
     await expect(page.getByText(t('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
     await page.getByRole('radio', { name: INFO_RADIO }).click();
     await saveBar(page).getByRole('button').first().click();
 
-    await expect(page.getByText(t('settings.replyMode.workspaceMismatch'))).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('common.error')).first()).toBeVisible({ timeout: 15000 });
+    // And the draft stays dirty, so the Save bar is still reachable for a retry.
+    await expect(saveBar(page)).not.toHaveCSS('opacity', '0');
   });
 
   test('PAGE scope: the instant save CONFIRMS itself and shows no Save bar', async ({ page }) => {

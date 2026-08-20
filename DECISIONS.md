@@ -2084,15 +2084,27 @@ and no merchant's replies change either way); the control is simply absent on ph
 new app build ships. Same class as the `NEXT_PUBLIC` build-arg gap: a server env var cannot
 reach a baked bundle. GA on mobile = the next release, not this deploy.
 
-**Known, and deliberately NOT fixed here — the settings sync target.**
-`syncPipelineFieldsToWorkspace` resolves its destination via `resolveWorkspaceId`, which
-takes the user's FIRST membership (`.limit(1)`, unordered), not the workspace the request
-resolved. So for a multi-membership user, tone / persona / away / greeting already sync to a
-possibly-wrong workspace with no guard at all; this PR's guard covers `replyMode` only.
-Widening the guard would 403 their ordinary saves, and the real fix — threading the request's
-workspace into `settingsService.updateSettings` — crosses the path every merchant's every
-settings save takes, so it needs its own PR under the shared-infrastructure rule. Measured
-2026-08-20: **3 of 85 users have more than one membership, maximum 2 each.**
+**The settings sync target — FIXED, and the reply-mode guard removed with it.**
+`syncPipelineFieldsToWorkspace` resolved its destination via `resolveWorkspaceId`, which
+returns the user's FIRST membership (`.limit(1)`, unordered) with no relation to the workspace
+the request resolved. So for a multi-membership user, tone / persona / away / greeting text
+already synced to a possibly-wrong workspace — and the D-085 guard covered `replyMode` only,
+on a client that sends a DIFF, so any save not touching the mode skipped it entirely.
+Guarding one field of a wrong destination is the wrong shape: `updateSettings` now takes the
+request's membership-verified workspace and syncs there, which covers all 30 `PIPELINE_FIELDS`
+and every save. ⚠️ **BOTH halves, and the second one shipped late.** Moving only the write left
+`overlayWorkspacePipelineFields` — and `updateSettings`' own read-after-write return — on the
+old resolver, so `GET /settings` served one workspace while `PUT /settings` saved into another:
+the edited field snapped back, the dirty baseline reset from the response, and the next Save
+computed an empty diff and sent nothing. A SHARPER failure than the consistent-but-wrong
+resolver it replaced, live for all 3 multi-membership users (9, 10 and 18 of 29 overlay fields
+divergent), and invisible to tests because each half was correct alone. `getSettings` now takes
+the same workspace and the read/write symmetry is pinned in `settingsSync.test.ts`. The lesson,
+recorded because it will recur: when a destination moves, move every READER of it in the same
+change, and assert the two agree — not each in isolation. The `REPLY_MODE_WORKSPACE_MISMATCH` guard is deleted — with the destination
+correct it would have refused writes that are now right. The resolver survives only as the
+fallback for callers with no request (scripts, tests). Measured 2026-08-20: **3 of 85 users
+have more than one membership, maximum 2 each** — small, live, and silent.
 
 **Post-GA measurement owed:** re-run the eval-phrase ask/promise query weekly across every
 effective-`info` page — the pilot measured pages WE chose; the point of GA is that

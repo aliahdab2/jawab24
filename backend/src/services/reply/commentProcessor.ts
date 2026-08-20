@@ -10,7 +10,7 @@ import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { resolveEffectiveReplyMode } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel } from '@jawab24/shared';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { isDemoPlatformId } from '../../utils/demo';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -181,6 +181,11 @@ export class CommentProcessor {
             // 2. Load workspace settings (cached in Redis)
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             const isCommentsEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'comments');
+            // Resolved once — five call sites re-derived it, and the `reply_sent`
+            // line could not report it at all. See messageProcessor for why that
+            // matters: no reply record carried its mode, so D-087's owed weekly
+            // measurement had no substrate for the comment surface either.
+            const effectiveReplyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
 
             // 3. Find or create content entity (post/media)
             let content: Awaited<ReturnType<typeof adapter.findOrCreateContent>>;
@@ -496,7 +501,8 @@ export class CommentProcessor {
                             accessToken: page.accessToken, fromId, fromName,
                             instagramCredential: page.instagramCredential,
                             userSettings: userSettings as unknown as Record<string, unknown>,
-                            replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                            replyMode: effectiveReplyMode,
+                            businessProfile: page.businessProfile,
                             postMessage: content.message || undefined,
                             contentId: content.id,
                             triggerKeyword: match.keyword ?? undefined,
@@ -635,7 +641,7 @@ export class CommentProcessor {
             generatorContext.factCollectionsBlock = enriched.factCollectionsBlock;
             generatorContext.factCollectionsGated = enriched.factCollectionsGated;
             generatorContext.replyStyle = userSettings.replyStyle;
-            generatorContext.replyMode = resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode);
+            generatorContext.replyMode = effectiveReplyMode;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             generatorContext.timezone = userSettings.timezone;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
@@ -739,7 +745,7 @@ export class CommentProcessor {
                     sourceType: 'comment',
                     senderId: fromId ?? '',
                     senderName: fromName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
@@ -773,7 +779,7 @@ export class CommentProcessor {
                     sourceType: 'comment',
                     senderId: fromId ?? '',
                     senderName: fromName,
-                    replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                    replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
@@ -865,7 +871,8 @@ export class CommentProcessor {
                 instagramCredential: page.instagramCredential,
                 likeComment,
                 userSettings: userSettings as unknown as Record<string, unknown>,
-                replyMode: resolveEffectiveReplyMode(page.replyMode, userSettings.replyMode),
+                replyMode: effectiveReplyMode,
+                businessProfile: page.businessProfile,
                 postMessage: content.message || undefined,
                 contentId: content.id,
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
@@ -1017,6 +1024,10 @@ export class CommentProcessor {
         /** Effective reply mode of the page — forwarded to lead capture so info
          *  pages store leads silently (push suppressed). */
         replyMode?: string;
+        /** The page's raw business profile, for the post-send reply-mode counter
+         *  ONLY. Passed rather than derived by the caller so the unwrap happens
+         *  after the reply is out, never before it (Rule 17). */
+        businessProfile?: unknown;
         postMessage?: string;
         /** Business Info exactly as the generator saw it, for the post-send
          *  grounding audit. Absent on the post_reply path (merchant-authored
@@ -1058,7 +1069,7 @@ export class CommentProcessor {
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, fromId, fromName, userSettings,
             contentId, needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
-            confidence, triggerKeyword, triggerType,
+            confidence, triggerKeyword, triggerType, replyMode, businessProfile,
         } = opts;
 
         // A revoked page credential is re-mintable in ONE Graph call, so the
@@ -1302,7 +1313,20 @@ export class CommentProcessor {
                 ? { triggerType: triggerType ?? 'keyword', ...(triggerKeyword ? { triggerKeyword } : {}) }
                 : { aiIntent, confidence, flagReason: flagReason || null, needsAttention }),
             replyLength: replyText.length,
+            replyMode: replyMode ?? null,
         });
+
+        // The comment half of the same counter. Emitting it from the DM
+        // processor only would have measured at most 53% of info-mode replies
+        // (469 DM vs 86 comment over the pilot), and D-087's owed weekly reading
+        // covers BOTH surfaces — a comment surface with no baseline is exactly
+        // the gap the pilot could not close.
+        void pipelineMetrics.recordReplyMode(toReplyMode(replyMode), (() => {
+            const { merchant, merchantProvenance } = unwrapBusinessProfile(
+                businessProfile as Parameters<typeof unwrapBusinessProfile>[0],
+            );
+            return hasRoutableContactChannel(merchant ?? {}, merchantProvenance);
+        })());
 
         return { success: true, commentId: comment.id, replyText, replyMethod };
     }

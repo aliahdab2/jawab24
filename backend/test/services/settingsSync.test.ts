@@ -56,6 +56,10 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: {
         updateSettings: vi.fn().mockResolvedValue({}),
+        // The READ half. Absent until D-087's read-path fix, which is part of why
+        // the read/write divergence was invisible here: nothing in this file
+        // could observe which workspace the overlay resolved.
+        getSettings: vi.fn().mockResolvedValue({}),
     },
 }));
 
@@ -153,6 +157,95 @@ describe('settingsService.updateSettings → workspace sync', () => {
         expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
             'ws1',
             expect.objectContaining({ commentReplyMode: 'dual' }),
+        );
+    });
+
+    /**
+     * D-087: the write goes where the CALLER says, not where an unordered
+     * `limit(1)` over `workspace_members` happens to point.
+     *
+     * Before this, a multi-membership user's tone, persona, away and greeting
+     * text synced to whichever membership row came back first — unrelated to the
+     * workspace they were looking at. D-085 guarded only `replyMode`, and only
+     * when the client's diff happened to include it. 3 of 85 prod users hold two
+     * memberships (2026-08-20), so this was live, silent, and cross-tenant.
+     */
+    it('syncs to the workspace the CALLER passed, not the membership lookup', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        // The resolver would pick 'ws1' — the caller says 'ws-explicit'.
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+        const updateChain = buildSettingsUpdateChain({ ...baseSettings, replyStyle: 'casual' as const });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
+
+        await settingsService.updateSettings('u1', { replyStyle: 'casual' }, 'ws-explicit');
+
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
+            'ws-explicit',
+            expect.objectContaining({ replyStyle: 'casual' }),
+        );
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).not.toHaveBeenCalledWith(
+            'ws1', expect.anything(),
+        );
+    });
+
+    /**
+     * READ and WRITE must resolve the SAME workspace.
+     *
+     * D-087 moved only the write. That left `overlayWorkspacePipelineFields` on
+     * the unordered `limit(1)` resolver, so for a multi-membership merchant
+     * `GET /settings` served workspace A while `PUT /settings` saved into
+     * workspace B — a sharper failure than the consistent-but-wrong resolver it
+     * replaced, and one no existing test could see because each half was correct
+     * on its own. Measured 2026-08-20: all 3 multi-membership users differ from
+     * the resolver, with 5, 10 and 18 of 29 overlay fields already divergent.
+     */
+    it('overlays the read from the SAME workspace the write targets', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        // The resolver would say 'ws1'; the caller says 'ws-explicit'.
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+
+        await settingsService.getSettings('u1', 'ws-explicit');
+
+        expect(vi.mocked(workspaceSettingsService.getSettings)).toHaveBeenCalledWith('ws-explicit');
+        expect(vi.mocked(workspaceSettingsService.getSettings)).not.toHaveBeenCalledWith('ws1');
+    });
+
+    it('reads the pre-write state from the write target, not from the resolver', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+        const updateChain = buildSettingsUpdateChain({ ...baseSettings, replyStyle: 'casual' as const });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
+
+        // `updateSettings` reads `current` to derive clamps and translation
+        // comparisons; that read must come from the store it is about to write.
+        await settingsService.updateSettings('u1', { replyStyle: 'casual' }, 'ws-explicit');
+
+        expect(vi.mocked(workspaceSettingsService.getSettings)).not.toHaveBeenCalledWith('ws1');
+    });
+
+    // The fallback exists for callers with no request (scripts, tests). Removing
+    // it would break them; relying on it from a request is the defect above.
+    it('falls back to the membership lookup when no caller workspace is given', async () => {
+        vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+        const membershipQuery = buildMembershipQuery('ws1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
+        const updateChain = buildSettingsUpdateChain({ ...baseSettings, replyStyle: 'casual' as const });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
+
+        await settingsService.updateSettings('u1', { replyStyle: 'casual' });
+
+        expect(vi.mocked(workspaceSettingsService.updateSettings)).toHaveBeenCalledWith(
+            'ws1', expect.objectContaining({ replyStyle: 'casual' }),
         );
     });
 

@@ -149,6 +149,8 @@
     "unnamedPage": "Unnamed page",
     "pageReplyOn": "Auto-reply on",
     "pageReplyOff": "Auto-reply off",
+    "pageModeInfo": "Information source",
+    "pageModeInfoInherited": "Information source (inherited)",
     "pageOffByMerchant": "Auto-reply off — by merchant",
     "pageOffPlanLimit": "Auto-reply off — plan limit",
     "pageOffTrialUsed": "Auto-reply off — trial already used",

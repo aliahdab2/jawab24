@@ -626,6 +626,37 @@ describe('ReplyStyleCard', () => {
     });
   });
 
+  // ── Reverting a pin on a DISCONNECTED page (D-087) ────────────────────────
+  // Such a page is listed only BECAUSE it carries an override, so the optimistic
+  // revert removes the reason it is listed — before the PATCH resolves. The card
+  // must not fall out of page scope underneath the merchant.
+  describe('reverting a disconnected page pin', () => {
+    const DEAD_PINNED = { id: 'p3', name: 'Dead Pinned', isConnected: false, brandVoiceNotesMulti: null, replyMode: 'info' };
+    const LIVE = { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null };
+
+    it('stays in the page scope, and confirms under the PAGE control', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: [LIVE, DEAD_PINNED] } as never);
+      let resolvePatch: (v: unknown) => void = () => {};
+      vi.mocked(pagesApi.updateReplyMode).mockReturnValue(
+        new Promise((res) => { resolvePatch = res; }) as never,
+      );
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p3' } });
+
+      // Three options = a page scope (inherit / sales / info). Revert to inherit.
+      fireEvent.click(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i }));
+
+      // Mid-request: the pin is gone locally but the scope must hold, so the
+      // page-scope radio set is still what is rendered.
+      expect(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i })).toBeInTheDocument();
+
+      resolvePatch({ data: {} });
+      await waitFor(() => expect(pagesApi.updateReplyMode).toHaveBeenCalledWith('p3', null));
+      expect(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i })).toBeInTheDocument();
+    });
+  });
+
   // ── Read-only members (D-087) ─────────────────────────────────────────────
   // The page-scope radios PATCH on click with no Save button, and that route is
   // admin+. Before GA only two workspaces could reach it; now every one can, so
@@ -822,7 +853,7 @@ describe('ReplyStyleCard', () => {
 
     // GA (D-087): an unsaved MODE is previewable, so it must not block Test —
     // it is sent to the playground as an explicit override. Everything else
-    // unsaved still blocks. `hasOtherChanges` is the seam; before it, the only
+    // unsaved still blocks. `hasUnsavedReplyInput` is the seam; before it, the only
     // way to see what info mode does was to save it live on every page.
     it('an unsaved MODE alone does not block the test, and travels as an override', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
@@ -831,7 +862,7 @@ describe('ReplyStyleCard', () => {
           settings={makeSettings({ replyMode: 'info' })}
           setSettings={vi.fn()}
           hasChanges
-          hasOtherChanges={false}
+          hasUnsavedReplyInput={false}
           savedReplyMode="sales"
         />,
       );
@@ -849,7 +880,7 @@ describe('ReplyStyleCard', () => {
           settings={makeSettings({ replyMode: 'info' })}
           setSettings={vi.fn()}
           hasChanges
-          hasOtherChanges
+          hasUnsavedReplyInput
           savedReplyMode="sales"
         />,
       );
@@ -870,7 +901,7 @@ describe('ReplyStyleCard', () => {
           settings={makeSettings({ replyMode: 'info' })}
           setSettings={vi.fn()}
           hasChanges
-          hasOtherChanges={false}
+          hasUnsavedReplyInput={false}
           savedReplyMode="sales"
         />,
       );
@@ -878,6 +909,43 @@ describe('ReplyStyleCard', () => {
 
       fireEvent.click(testBtn());
       expect(await screen.findByTestId('test-modal-reply-mode')).toHaveTextContent('none');
+    });
+
+    // The pinned target keeps its own mode, and the card must SAY so. Silence
+    // here reads as "the control does nothing": the merchant drafts sales to
+    // turn info off, tests, and gets an info reply back.
+    it('names the page pin when the test will not use the drafted mode', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [{ ...PAGES[0], replyMode: 'info' }, PAGES[1]],
+      } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'sales' })}
+          setSettings={vi.fn()}
+          hasChanges
+          hasUnsavedReplyInput={false}
+          savedReplyMode="info"
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+
+      expect(testBtn()).toBeEnabled();
+      expect(screen.getByText(/has its own choice/i)).toBeInTheDocument();
+    });
+
+    it('says nothing when the drafted mode IS what the test will use', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          hasChanges
+          hasUnsavedReplyInput={false}
+          savedReplyMode="sales"
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+      expect(screen.queryByText(/has its own choice/i)).not.toBeInTheDocument();
     });
 
     it('a saved workspace persona does NOT block the test outside a page scope', () => {

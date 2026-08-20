@@ -62,7 +62,7 @@ export class SettingsController {
             }
 
             const userId = request.user.userId;
-            const settings = await settingsService.getSettings(userId);
+            const settings = await settingsService.getSettings(userId, (request as WorkspaceRequest).workspaceId);
             // Server capability flag (not a stored setting): Post Reply image attachments
             // are available only when object storage is configured. The frontend gates
             // the image picker on this.
@@ -98,29 +98,8 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Reply mode must be written to the workspace the merchant is
-            // LOOKING at. syncPipelineFieldsToWorkspace resolves its target from
-            // the user's membership (resolveWorkspaceId), which for a
-            // multi-membership user can differ from the request's resolved
-            // workspace — so resolve with the SAME resolver and refuse on
-            // disagreement (finding H3). Kept and WIDENED past the D-085
-            // allowlist pilot: turning info OFF on the wrong workspace is the
-            // same defect as turning it on, and at GA it is the likelier one —
-            // an agency flipping a mode back would otherwise silently restore
-            // lead-capture asks on another merchant's pages.
-            if (updates.replyMode === 'info' || updates.replyMode === 'sales') {
-                const wsId = (request as WorkspaceRequest).workspaceId;
-                const writeTargetId = await settingsService.resolveWriteTargetWorkspaceId(userId);
-                if (!wsId || !writeTargetId || writeTargetId !== wsId) {
-                    return reply.status(403).send({
-                        error: 'Reply mode cannot be changed from this session: the settings write would land on a different workspace than this request resolved',
-                        code: 'REPLY_MODE_WORKSPACE_MISMATCH',
-                    });
-                }
-            }
-
             // Fetch current settings for comparison
-            const currentSettings = await settingsService.getSettings(userId);
+            const currentSettings = await settingsService.getSettings(userId, (request as WorkspaceRequest).workspaceId);
 
             // --- Smart Auto-Translation Logic (JSONB) ---
             const supportedLanguages = currentSettings.supportedLanguages || ['ar', 'en'];
@@ -233,7 +212,15 @@ export class SettingsController {
             if (updates.brandVoiceNotesMulti !== undefined && updates.brandVoiceNotesMulti !== null) {
                 updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
             }
-            const settings = await settingsService.updateSettings(userId, updates);
+            // The workspace this request resolved, membership-verified by the
+            // middleware — pipeline fields sync THERE, not to whichever
+            // membership row comes back first. This replaces the D-085
+            // reply-mode-only guard: fixing the destination covers all 30
+            // PIPELINE_FIELDS and every save, where the guard covered one field
+            // and only when that field was in the payload.
+            const settings = await settingsService.updateSettings(
+                userId, updates, (request as WorkspaceRequest).workspaceId,
+            );
 
             // Activation funnel (D-026): a save that turns an auto-reply master ON
             // (comments or messages, false→true) is the real activation moment for
@@ -251,9 +238,17 @@ export class SettingsController {
                 );
             }
 
-            // Audit trail (fire-and-forget)
+            // Audit trail (fire-and-forget). The WORKSPACE is part of the record
+            // now: this route writes a per-user row AND syncs pipeline fields to
+            // one workspace, so "which workspace did this save land on" is a real
+            // question — and for a multi-membership user it is the whole question.
+            // 392 `settings.updated` rows exist with `count(workspace_id) = 0`
+            // (prod, 2026-08-20), so the deleted reply-mode guard was the only
+            // thing that had ever made a wrong destination visible. Typed column,
+            // not metadata — that field is documented read-only/double-encoded.
             auditLog({
                 userId,
+                workspaceId: wsReq.workspaceId,
                 action: 'settings.updated',
                 entityType: 'settings',
                 metadata: { fields: Object.keys(updates) },

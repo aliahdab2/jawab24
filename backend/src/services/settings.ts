@@ -55,7 +55,19 @@ export class SettingsService {
      * identity function, because all legacy writers sync to the workspace
      * store and the drift-heal converges the rest.
      */
-    async getSettings(userId: string): Promise<UserSettings> {
+    /**
+     * @param targetWorkspaceId The workspace to overlay pipeline fields FROM —
+     *   the request's, when the caller has one. Symmetric with
+     *   `updateSettings`: the read and the write must resolve the same
+     *   workspace, or a multi-membership merchant reads one store and saves into
+     *   another. D-087 moved only the write, which made GET and PUT disagree for
+     *   the 3 of 85 users it set out to fix (all 3 differ from the resolver, with
+     *   5, 10 and 18 of 29 overlay fields already divergent) — a sharper failure
+     *   than the consistent-but-wrong resolver it replaced. Omitted = fall back
+     *   to the resolver, for callers with no request (scripts, the reply
+     *   pipeline's owner lookups, the demo plugin).
+     */
+    async getSettings(userId: string, targetWorkspaceId?: string | null): Promise<UserSettings> {
         const key = cacheKey(userId);
 
         // Try cache first — fail open so a Redis outage never blocks replies
@@ -65,6 +77,7 @@ export class SettingsService {
                 return this.overlayWorkspacePipelineFields(
                     userId,
                     normalizeMultiFields(JSON.parse(cached) as UserSettings),
+                    targetWorkspaceId,
                 );
             }
         } catch {
@@ -97,7 +110,7 @@ export class SettingsService {
             // Redis unavailable — continue without caching
         }
 
-        return this.overlayWorkspacePipelineFields(userId, result);
+        return this.overlayWorkspacePipelineFields(userId, result, targetWorkspaceId);
     }
 
     /**
@@ -105,9 +118,11 @@ export class SettingsService {
      * target) over the legacy row. Fails open to the legacy values — a
      * workspace-store hiccup must never break a settings read.
      */
-    private async overlayWorkspacePipelineFields(userId: string, result: UserSettings): Promise<UserSettings> {
+    private async overlayWorkspacePipelineFields(userId: string, result: UserSettings, targetWorkspaceId?: string | null): Promise<UserSettings> {
         try {
-            const workspaceId = await this.resolveWorkspaceId(userId);
+            // Same precedence as the write (see getSettings' docblock): the
+            // caller's verified workspace, else the resolver.
+            const workspaceId = targetWorkspaceId ?? await this.resolveWorkspaceId(userId);
             if (!workspaceId) return result;
 
             const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
@@ -138,10 +153,28 @@ export class SettingsService {
      * pipeline (commentProcessor / messageProcessor) picks them up immediately,
      * regardless of whether this call comes from the HTTP controller or directly.
      */
-    async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
+    /**
+     * @param targetWorkspaceId The workspace this write belongs to — the one the
+     *   REQUEST resolved and the middleware verified membership on. Pipeline
+     *   fields sync there.
+     *
+     *   ⚠️ Pass it. Omitting it falls back to `resolveWorkspaceId`, which returns
+     *   the user's FIRST membership row with no ordering and no relation to what
+     *   the caller was looking at — so for a multi-membership user (3 of 85 on
+     *   prod, 2026-08-20) tone, persona, away and greeting text landed on
+     *   ANOTHER merchant's pages. D-085 guarded only `replyMode` against that,
+     *   on the write path, which left the other 29 PIPELINE_FIELDS exposed and
+     *   was skipped entirely by any save that did not touch the mode (the client
+     *   sends a diff). D-087 fixes the destination instead of guarding one field
+     *   of it. The fallback stays for legacy/test callers that have no request.
+     */
+    async updateSettings(userId: string, updates: UpdateSettingsDTO, targetWorkspaceId?: string | null): Promise<UserSettings> {
         // Ensure settings exist; the effective (overlaid) state also feeds the
-        // aiEnabled clamp below.
-        const current = await this.getSettings(userId);
+        // aiEnabled clamp below. Read from the SAME workspace this write targets
+        // — the clamp and the auto-translate comparisons are computed from
+        // `current`, so reading another workspace's values here would derive the
+        // written result from a store the write never touches.
+        const current = await this.getSettings(userId, targetWorkspaceId);
 
         // D-029: aiEnabled is DERIVED (channels-OR) and the new UI has no
         // standalone master switch — but old clients (shipped mobile builds)
@@ -187,11 +220,15 @@ export class SettingsService {
         }
 
         // Sync pipeline fields to workspaceSettings so the reply pipeline sees them
-        await this.syncPipelineFieldsToWorkspace(userId, updates);
+        await this.syncPipelineFieldsToWorkspace(userId, updates, targetWorkspaceId);
 
         // Read-after-write consistency: the sync above is awaited, so the
-        // workspace store already reflects this update (D-026).
-        return this.overlayWorkspacePipelineFields(userId, result);
+        // workspace store already reflects this update (D-026) — but only in the
+        // workspace it was written to, so this overlay must read THAT one. With
+        // the resolver here instead, a multi-membership merchant's save returned
+        // the OTHER workspace's values as its own result: read-after-write that
+        // reads somewhere else.
+        return this.overlayWorkspacePipelineFields(userId, result, targetWorkspaceId);
     }
 
     /**
@@ -217,18 +254,6 @@ export class SettingsService {
         this.workspaceIdCache.clear();
     }
 
-    /**
-     * The workspace a settings write will sync pipeline fields to — the SAME
-     * resolver syncPipelineFieldsToWorkspace uses. Any gate that must hold on
-     * the write target (the reply-mode allowlist, finding H3) resolves through
-     * THIS, never through a parallel resolution path: for a multi-membership
-     * user the request's resolved workspace and this value can differ, and a
-     * gate checked on one while the write lands on the other is a bypass.
-     */
-    async resolveWriteTargetWorkspaceId(userId: string): Promise<string | null> {
-        return this.resolveWorkspaceId(userId);
-    }
-
     private async resolveWorkspaceId(userId: string): Promise<string | null> {
         const cached = this.workspaceIdCache.get(userId);
         if (cached) return cached;
@@ -247,7 +272,7 @@ export class SettingsService {
      * the update payload into workspaceSettings.
      * Fire-and-forget: failures are logged but never surfaced to the caller.
      */
-    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO): Promise<void> {
+    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO, targetWorkspaceId?: string | null): Promise<void> {
         try {
             const pipelineUpdates = Object.fromEntries(
                 PIPELINE_FIELDS
@@ -256,7 +281,9 @@ export class SettingsService {
             );
             if (Object.keys(pipelineUpdates).length === 0) return;
 
-            const workspaceId = await this.resolveWorkspaceId(userId);
+            // The caller's verified workspace wins; the resolver is the
+            // no-request fallback (see updateSettings' docblock).
+            const workspaceId = targetWorkspaceId ?? await this.resolveWorkspaceId(userId);
             if (!workspaceId) return;
 
             await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);

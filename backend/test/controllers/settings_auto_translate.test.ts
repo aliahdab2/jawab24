@@ -83,7 +83,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: 'مرحبا 2 [translated to en]',
                 sourceLang: 'ar'
             })
-        }));
+        }), undefined);
     });
 
     it('should NOT auto-translate EN when AR is updated if Source is MANUAL', async () => {
@@ -131,7 +131,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: 'Hello New',
                 sourceLang: 'manual'
             })
-        }));
+        }), undefined);
     });
 
     it('should set Source to MANUAL when ONLY EN is changed (preserves manually-written AR)', async () => {
@@ -154,7 +154,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: 'Hello Edited',
                 sourceLang: 'manual'
             })
-        }));
+        }), undefined);
     });
 
     it('should only clear the translated language when it is cleared (not the source)', async () => {
@@ -177,7 +177,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: '',
                 sourceLang: 'ar'
             })
-        }));
+        }), undefined);
     });
 
     it('should reset ALL languages to defaults when the SOURCE language is cleared', async () => {
@@ -200,7 +200,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: 'Welcome! How can I help you?',
                 sourceLang: 'default'
             })
-        }));
+        }), undefined);
     });
 
     it('should handle Away Message similarly', async () => {
@@ -219,7 +219,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 en: 'مغلق [translated to en]',
                 sourceLang: 'ar'
             })
-        }));
+        }), undefined);
     });
 
     // =========================================================
@@ -243,7 +243,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'اذكر التوصيل المجاني [translated to en]',
                     sourceLang: 'ar'
                 })
-            }));
+            }), undefined);
         });
 
         it('should auto-translate AR when EN brand voice notes are updated', async () => {
@@ -271,7 +271,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Always mention free delivery and Ramadan Kareem',
                     sourceLang: 'en'
                 })
-            }));
+            }), undefined);
         });
 
         it('should set sourceLang to manual when both languages changed', async () => {
@@ -290,7 +290,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'English note',
                     sourceLang: 'manual'
                 })
-            }));
+            }), undefined);
             expect(translationService.translateText).not.toHaveBeenCalled();
         });
     });
@@ -328,7 +328,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
                     sourceLang: 'default'
                 })
-            }));
+            }), undefined);
             // No translation API call needed
             expect(translationService.translateText).not.toHaveBeenCalled();
         });
@@ -362,7 +362,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: '',
                     sourceLang: 'ar'
                 })
-            }));
+            }), undefined);
             expect(translationService.translateText).not.toHaveBeenCalled();
         });
 
@@ -394,7 +394,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Details sent via private message 📩',
                     sourceLang: 'default'
                 })
-            }));
+            }), undefined);
         });
 
         it('should clear both when sourceLang is undefined (legacy data)', async () => {
@@ -427,7 +427,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Old message',
                     sourceLang: 'en'
                 })
-            }));
+            }), undefined);
         });
 
         it('should reset brandVoiceNotes to empty defaults when source is cleared', async () => {
@@ -457,7 +457,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: '',
                     sourceLang: 'default'
                 })
-            }));
+            }), undefined);
             expect(translationService.translateText).not.toHaveBeenCalled();
         });
 
@@ -521,7 +521,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Welcome to my shop',
                     sourceLang: 'manual',
                 }),
-            }));
+            }), undefined);
         });
 
         it('preserves manually-written EN when merchant later edits only AR (greeting)', async () => {
@@ -547,7 +547,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Welcome to my shop',     // preserved
                     sourceLang: 'manual',
                 }),
-            }));
+            }), undefined);
         });
 
         it('preserves both manual languages when sourceLang is already "manual"', async () => {
@@ -574,7 +574,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Welcome v2',
                     sourceLang: 'manual',
                 }),
-            }));
+            }), undefined);
         });
 
         it('preserves manual AR when editing EN — awayMessageMulti', async () => {
@@ -600,7 +600,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Closed for the holiday',
                     sourceLang: 'manual',
                 }),
-            }));
+            }), undefined);
         });
 
         it('preserves manual AR when editing EN — brandVoiceNotesMulti', async () => {
@@ -626,7 +626,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Be casual and friendly',
                     sourceLang: 'manual',
                 }),
-            }));
+            }), undefined);
         });
 
         it('still re-translates when sourceLang is "default" (seeded greeting, never manually edited)', async () => {
@@ -654,7 +654,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     ar: 'Welcome to my shop! [translated to ar]',
                     sourceLang: 'en',
                 }),
-            }));
+            }), undefined);
         });
 
         it('still re-translates for legacy data without sourceLang (back-compat)', async () => {
@@ -721,7 +721,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     // sourceLang must point at AR (the lang still with content), NOT at the just-cleared 'en'.
                     sourceLang: 'ar',
                 }),
-            }));
+            }), undefined);
         });
 
         it('reproduces the inverse: AR typed → EN typed → clear AR', async () => {
@@ -750,7 +750,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                     en: 'Welcome to our institute',
                     sourceLang: 'en',
                 }),
-            }));
+            }), undefined);
         });
 
         it('still resets to defaults when the SOURCE lang is cleared (existing behavior preserved)', async () => {
@@ -774,7 +774,7 @@ describe('SettingsController Auto-Translation Logic', () => {
                 greetingMessageMulti: expect.objectContaining({
                     sourceLang: 'default',
                 }),
-            }));
+            }), undefined);
         });
     });
 });

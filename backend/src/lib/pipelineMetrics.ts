@@ -64,6 +64,31 @@ const SINCE_KEY = `${PREFIX}_since`;
 
 export class PipelineMetrics {
     /**
+     * Count a SENT reply by the mode it was generated under, and by whether that
+     * mode had a channel to route to (D-087).
+     *
+     * Why a counter and not only the structured log: D-087 owes a weekly
+     * ask/promise reading per effective-info page, and the log is the only
+     * per-reply record of the mode — `messages`, `comments` and `ai_usage_log`
+     * have no column for it. A counter survives log rotation and answers the
+     * cheap half of the question ("is anyone on info, and are their pages
+     * routable?") without a log query at all.
+     *
+     * `no_channel` is the interesting cell: an info reply on a page publishing
+     * neither phone, WhatsApp nor email is the dead-end case the settings card
+     * warns about — this makes "warned and proceeded anyway" countable, and so
+     * makes the warn-don't-block ruling revisable on evidence.
+     */
+    async recordReplyMode(mode: string, hasContactChannel: boolean): Promise<void> {
+        const key = `${PREFIX}reply_mode.${mode}.${hasContactChannel ? 'channel' : 'no_channel'}`;
+        try {
+            await redis.incr(key);
+        } catch {
+            // Never block a reply for a metric.
+        }
+    }
+
+    /**
      * Increment counter for a pipeline outcome.
      * Fire-and-forget safe: errors are silently swallowed so metrics
      * never block or crash the processing pipeline.

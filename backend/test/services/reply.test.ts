@@ -62,6 +62,10 @@ vi.mock('../../src/lib/pipelineMetrics', () => ({
             pipelineCounters[key] = (pipelineCounters[key] || 0) + 1;
             return Promise.resolve();
         }),
+        // Present on the real module (D-087). A mock missing it makes the
+        // fire-and-forget counter throw AT the call site and fail the reply —
+        // which is how this gap surfaced.
+        recordReplyMode: vi.fn(() => Promise.resolve()),
         getMetrics: vi.fn(() => Promise.resolve({
             since: '2025-01-01T00:00:00.000Z',
             counters: { ...pipelineCounters },

@@ -159,3 +159,54 @@ describe('adminUsersService.getUserDetail — per-page connection state', () => 
         expect(page!.disconnected).toBe(true);
     });
 });
+
+/**
+ * The mode a page RUNS with must reach the support console (D-087).
+ *
+ * Support's ticket for this is «توقف عن أخذ أرقام الزبائن» — the assistant
+ * stopped taking customer numbers. The answer is the reply mode, and it resolves
+ * page-pin-then-workspace-default: measured on prod 2026-08-20, 3 of the 4
+ * info-pinned pages sat under a 'sales' workspace default, so a console showing
+ * only the workspace value reports "sales" for a page running INFO-DESK and
+ * sends support hunting the prompt instead. Until GA the allowlist was the
+ * fallback answer ("only two workspaces can even have it"); D-087 deleted it, so
+ * this payload is now the only answer.
+ */
+describe('adminUsersService.getUserDetail — per-page reply mode', () => {
+    it('reports a PINNED info page as info even under a sales workspace default', async () => {
+        const user = await createTestUser();
+        await testDb.insert(schema.pages).values({
+            userId: user.id,
+            name: 'Pinned Info',
+            facebookPageId: `fb-pin-${Date.now()}`,
+            accessToken: 'tok',
+            replyMode: 'info',
+        });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+        const page = detail!.pages.find(p => p.name === 'Pinned Info');
+
+        expect(page!.replyMode).toBe('info');            // the pin itself
+        expect(page!.replyModeEffective).toBe('info');    // what it runs with
+    });
+
+    it('reports an INHERITING page, and keeps the pin distinguishable from the default', async () => {
+        const user = await createTestUser();
+        await testDb.insert(schema.pages).values({
+            userId: user.id,
+            name: 'Inheriting',
+            facebookPageId: `fb-inherit-${Date.now()}`,
+            accessToken: 'tok',
+            replyMode: null,
+        });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+        const page = detail!.pages.find(p => p.name === 'Inheriting');
+
+        // NULL pin, so the effective mode came from the workspace default —
+        // support needs both halves: an inherited info is fixed on the workspace,
+        // a pinned one is not.
+        expect(page!.replyMode).toBeNull();
+        expect(page!.replyModeEffective).toBe('sales');
+    });
+});
