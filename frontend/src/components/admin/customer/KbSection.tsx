@@ -122,7 +122,12 @@ function LazyExpander({ icon, label, expanded, loading, loadingLabel, onToggle, 
 }
 
 /** One page's Business Info health, with lazy expanders for the full text + gaps. */
-function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: FormatDate }) {
+function KbPageCard({ page, formatDate, noOfferingsFlag }: {
+    page: CustomerPage;
+    formatDate: FormatDate;
+    /** True when the server raised `no_offering_chunks` for THIS page. */
+    noOfferingsFlag: boolean;
+}) {
     const t = useTranslations('admin');
     const { kb } = page;
 
@@ -251,11 +256,14 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
                 <p className="text-sm status-error border rounded-lg px-3 py-2">{t('customer.kbEmpty')}</p>
             )}
 
-            {/* Offerings: catalog items settle it — their prompt block outranks
-                the free text — so only ask the chunk index when there are none,
-                and never while that index is stale (it would report "cannot
-                answer pricing" for a page holding 40 offering chunks). */}
-            {kb.hasAnyContent && kb.catalogItems === 0 && kb.chunksTotal > 0 && !kb.chunksByType.offering && (
+            {/* Offerings: the BACKEND's verdict, not a second copy of it. The
+                rule has four clauses (content exists, no catalog items, the chunk
+                index is current, no offering chunk) and it used to be written out
+                here AND in health.ts — a one-line clone, so below the duplication
+                gate's three-line floor and invisible to it, while being exactly
+                the kind that drifts. Same pattern SettingsSection already uses for
+                persona_placeholder: the server decides, this renders. */}
+            {noOfferingsFlag && (
                 <p className="text-sm status-warning border rounded-lg px-3 py-2">{t('customer.kbNoOfferings')}</p>
             )}
 
@@ -393,10 +401,21 @@ export function KbSection({ customer, formatDate }: Props) {
         );
     }
 
+    // Page-scoped server verdicts this section renders. Matched on `pageId`
+    // rather than recomputed per card — see the note beside the banner.
+    const noOfferingPageIds = new Set(
+        (customer.health ?? []).filter(f => f.key === 'no_offering_chunks' && f.pageId).map(f => f.pageId),
+    );
+
     return (
         <div className="space-y-6">
             {customer.pages.map(page => (
-                <KbPageCard key={page.id} page={page} formatDate={formatDate} />
+                <KbPageCard
+                    key={page.id}
+                    page={page}
+                    formatDate={formatDate}
+                    noOfferingsFlag={noOfferingPageIds.has(page.id)}
+                />
             ))}
         </div>
     );

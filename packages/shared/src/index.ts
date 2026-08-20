@@ -2202,7 +2202,7 @@ export function isWorkspaceSettingsKey(key: string): key is keyof WorkspaceSetti
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
-export { formatBusinessInfoPrompt, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative, hasRoutableContactChannel } from './businessInfoPrompt';
+export { formatBusinessInfoPrompt, countBusinessInfoFacts, whatsappNumbers, businessPhoneEntries, businessPhoneList, isFieldAuthoritative, hasRoutableContactChannel } from './businessInfoPrompt';
 // --- Merchant contact standard: number + optional free-text description ---
 export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
 export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';

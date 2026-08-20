@@ -172,7 +172,38 @@ WHERE page_id = '<PID>'
 GROUP BY 1 ORDER BY chars DESC;"
 ```
 
-**Read the `type` breakdown first.** A KB with `contact` / `hours` / `location` but **no `offering` chunks** has zero product or price data — everything above it was auto-derived from the Facebook page. That merchant will fail every product and price question by construction, and no reply-quality work can fix it. This is the empty-KB churn pattern; it is the finding, so lead with it. For calibration: a well-authored KB looks like ~196 chunks with products, prices, delivery table and order flow; a starved one is ~5 chunks / under 500 characters.
+⛔ **The chunk breakdown above is ONE of four stores — never read it as the whole
+Business Info** (D-088). Also query the other three, or a fully-configured page
+reads as starved:
+
+```bash
+./scripts/prod-db-query.sh "
+SELECT
+  length(coalesce(p.knowledge_base,''))                            AS kb_chars,
+  jsonb_pretty(p.business_profile->'merchant')                     AS merchant_profile,
+  (SELECT count(*) FROM catalog_items ci WHERE ci.page_id = p.id)  AS catalog_items,
+  (SELECT count(*) FROM fact_rows fr JOIN fact_collections fc ON fc.id = fr.collection_id
+     WHERE fc.page_id = p.id)                                      AS fact_rows
+FROM pages p WHERE p.id = '<PID>';"
+```
+
+**Read the `type` breakdown, then check `catalog_items` before concluding
+anything.** A KB with `contact` / `hours` / `location` and **no `offering`
+chunks** has no product or price data *in the free text* — but
+`catalog_items` fills the `<product_catalog>` block, which carries authority
+OVER the free text, so a page with 40 catalog items and zero offering chunks
+answers buying questions fine. Only `offering = 0` **and** `catalog_items = 0`
+is the empty-KB churn pattern; when it holds, it is the finding, so lead with
+it.
+
+For calibration (re-measured 2026-08-20): well-authored ≈ 196 chunks with
+products, prices, delivery table and order flow. **"Under 500 characters" is not
+starved on this fleet** — the median live page holds **148** characters and 71 of
+92 are under 500, because content moved into the structured stores. Starved =
+short free text **and** empty profile facts, catalog and fact rows (36 of 92).
+⚠️ And a zero chunk count at `kb_active_version` usually means the RAG index was
+outrun by a structured write, not that anything is missing — 49 of 92 live pages
+were in that state. That is why every query here pins `MAX(kb_version)`.
 
 ## Step 6 — Verify prices against the Business Info (never trust your reading)
 

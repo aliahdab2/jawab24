@@ -12,7 +12,10 @@ import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, over
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
-import { sniffAttachmentMime, resolveEffectiveReplyMode, type EmailAttachment } from '@jawab24/shared';
+import {
+    sniffAttachmentMime, resolveEffectiveReplyMode, countBusinessInfoFacts,
+    unwrapBusinessProfile, type EmailAttachment, type StoredBusinessProfile,
+} from '@jawab24/shared';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
 
@@ -375,22 +378,21 @@ class AdminUsersService {
                 kbLength: sql<number>`length(coalesce(${pages.knowledgeBase}, ''))`,
                 kbActiveVersion: pages.kbActiveVersion,
                 kbUpdatedAt: pages.kbUpdatedAt,
-                // Structured Business Info, the three stores that joined
-                // knowledge_base as prompt sources and that a chunk count cannot
-                // see. business_profile is the {merchant, suggestions,
-                // merchantProvenance} container — only the MERCHANT half is
-                // Business Info (suggestions are unconfirmed FB-sync guesses), so
-                // count its non-empty keys rather than the container's.
-                businessProfileFields: sql<number>`(
-                    SELECT count(*)::int FROM jsonb_each(
-                        CASE WHEN jsonb_typeof(coalesce(${pages.businessProfile}, '{}'::jsonb) -> 'merchant') = 'object'
-                             THEN coalesce(${pages.businessProfile}, '{}'::jsonb) -> 'merchant'
-                             ELSE '{}'::jsonb END
-                    ) AS f(k, v)
-                    WHERE f.v IS NOT NULL
-                      AND jsonb_typeof(f.v) <> 'null'
-                      AND f.v::text NOT IN ('""', '{}', '[]')
-                )`,
+                // The structured profile, counted in TS rather than SQL so the
+                // console uses the PROMPT's own definition of "this profile holds
+                // facts" (countBusinessInfoFacts) instead of a second one.
+                //
+                // A raw key count — which this was, until the self-review — is
+                // that wrong second definition: the modal live page carries
+                // exactly `name`, `category`, `language_hint` and
+                // `website`/`about` (24 of 92 on prod, 2026-08-20), every one of
+                // them page metadata that answers no customer question and
+                // contributes no BUSINESS_INFO line. Counting them reports "4
+                // fields of Business Info" for a page holding none, which is the
+                // OVER-claiming direction of the very defect this PR fixes.
+                // Never read as content on the client — only the derived count
+                // ships (see the `kb` payload below).
+                businessProfile: pages.businessProfile,
             })
             .from(pages)
             .where(eq(pages.userId, userId)),
@@ -600,7 +602,7 @@ class AdminUsersService {
         // top-level page object.
         const pagesPayload = userPages.map(p => {
             const {
-                kbLength, kbActiveVersion, kbUpdatedAt, businessProfileFields,
+                kbLength, kbActiveVersion, kbUpdatedAt, businessProfile,
                 ecommerceStoreId, workspaceId: _workspaceId, ...rest
             } = p;
             const c = chunksByPage.get(p.id);
@@ -609,6 +611,11 @@ class AdminUsersService {
             const chunksTotal = c?.total ?? 0;
             const catalogItemCount = catalogByPage.get(p.id) ?? 0;
             const factRowCount = facts?.rows ?? 0;
+            // `unwrapBusinessProfile` handles the double-encoded-jsonb case this
+            // column family has precedent for, and splits the merchant half from
+            // the FB suggestions — only the merchant half is Business Info.
+            const profile = unwrapBusinessProfile(businessProfile as StoredBusinessProfile);
+            const businessProfileFacts = countBusinessInfoFacts(profile.merchant, profile.merchantProvenance);
             return {
                 ...rest,
                 kb: {
@@ -620,7 +627,7 @@ class AdminUsersService {
                     unresolvedGaps: gapsByPage.get(p.id) ?? 0,
                     // The structured stores, so "empty" can be decided from every
                     // source the prompt actually reads instead of from chunks alone.
-                    businessProfileFields: businessProfileFields ?? 0,
+                    businessProfileFields: businessProfileFacts,
                     catalogItems: catalogItemCount,
                     factCollections: facts?.collections ?? 0,
                     factRows: factRowCount,
@@ -645,7 +652,7 @@ class AdminUsersService {
                     // console's badge and its banner cannot contradict each other.
                     hasAnyContent: hasBusinessInfoContent({
                         kbLength: kbLength ?? 0,
-                        businessProfileFields: businessProfileFields ?? 0,
+                        businessProfileFields: businessProfileFacts,
                         catalogItems: catalogItemCount,
                         factRows: factRowCount,
                     }),

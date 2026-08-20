@@ -90,7 +90,26 @@ FROM settings WHERE user_id = '<USER_ID>';"
 
 ## Step 4 — Business Info + the persona (the real quality inputs)
 
+⛔ **Business Info is FOUR stores. Never judge it from `kb_chunks` alone** (D-088).
+`kb_chunks` is only the RAG index over the free text, it is read at reply time
+only on the retrieval path, and it drops to zero on its own whenever a
+structured write moves `kb_active_version` past the newest ingested set —
+**49 of 92 live pages on 2026-08-20**. Query all four, or you will tell a
+merchant to fill in what they already filled in:
+
 ```bash
+./scripts/prod-db-query.sh "
+SELECT
+  length(coalesce(p.knowledge_base,''))                                        AS kb_chars,
+  jsonb_pretty(p.business_profile->'merchant')                                 AS merchant_profile,
+  (SELECT count(*) FROM catalog_items  ci WHERE ci.page_id = p.id)             AS catalog_items,
+  (SELECT count(*) FROM fact_rows fr JOIN fact_collections fc ON fc.id = fr.collection_id
+     WHERE fc.page_id = p.id)                                                  AS fact_rows,
+  p.kb_active_version,
+  (SELECT max(kb_version) FROM kb_chunks c WHERE c.page_id = p.id)             AS newest_chunk_version
+FROM pages p WHERE p.id = '<PID>';"
+
+# The chunk TYPE breakdown — pin MAX(kb_version), never kb_active_version.
 ./scripts/prod-db-query.sh "
 SELECT type, COUNT(*) AS chunks, SUM(LENGTH(content_original)) AS chars
 FROM kb_chunks
@@ -99,9 +118,27 @@ WHERE page_id = '<PID>'
 GROUP BY 1 ORDER BY chars DESC;"
 ```
 
-**No `offering` chunks = no products and no prices**, and whatever exists was auto-derived from the Facebook page (`contact`, `hours`, `location`, a short `info` line). That merchant fails every buying question by construction — no settings change or prompt work can fix it. Lead with it; it is the strongest churn predictor you have.
+**No `offering` chunks does NOT mean no products and no prices.** Check
+`catalog_items` first: it fills the `<product_catalog>` block, which carries
+explicit authority OVER the free text, so a merchant whose whole price list
+lives there has offerings and no offering chunk. Only when `catalog_items = 0`
+**and** the chunk index is current (`newest_chunk_version = kb_active_version`)
+does a missing `offering` type mean the page cannot answer buying questions.
+That case is still the strongest churn predictor you have — lead with it — but
+verify it, do not infer it.
 
-Calibration from prod: well-authored ≈ 196 chunks with products, prices, a delivery table and an order flow; starved ≈ 5 chunks / under 500 characters.
+⚠️ **Read the `merchant_profile` keys, don't count them.** The modal live page
+carries exactly `name`, `category`, `language_hint` and `website`/`about` (24 of
+92 pages) — all page metadata that answers nothing. Only `address`, `phones`,
+`hours`, `policies`, `whatsapp` and `email` become BUSINESS_INFO lines; that is
+what `countBusinessInfoFacts` counts and it is the only count worth quoting.
+
+Calibration from prod (2026-08-20): well-authored ≈ 196 chunks with products,
+prices, a delivery table and an order flow. **"Under 500 characters" is NOT
+starved on this fleet** — the median live page holds **148** characters and 71 of
+92 are under 500, because content moved into the structured stores. Genuinely
+starved = short free text **and** nothing in profile facts, catalog or fact rows
+(36 of 92).
 
 ## Step 5 — Post Reply configuration
 

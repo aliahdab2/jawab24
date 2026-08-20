@@ -2134,11 +2134,16 @@ read the same signal: `kbLength === 0 || chunksTotal === 0` → RED `kb_empty`, 
 accounts were permanently red and the red was load-bearing — `anyThinOrEmptyKb` escalated
 `hold_low_confidence` to a string asserting "the Business Info is empty/thin" about a 10k
 KB. `chunksTotal < 5` fired `kb_thin` on the same rows. And `no_offering_chunks` asked the
-chunk index whether the page had offerings while ignoring `catalog_items` entirely — so a
-merchant whose whole Business Info is a catalog price list was told the AI cannot answer
-pricing, even though the `<product_catalog>` block outranks the free text in the prompt.
-Catalog items now settle that question; the chunk index is consulted only when there are
-none, and never while it is stale.
+chunk index whether the page had offerings while ignoring `catalog_items` entirely, even
+though the `<product_catalog>` block outranks the free text in the prompt. Catalog items now
+settle that question; the chunk index is consulted only when there are none, and never
+while it is stale. ⚠️ That last one is a LATENT defect, not an observed symptom: the
+carve-out changes the flag for **0 of 92** live pages (only two carry catalog items, and the
+stale-index guard excludes both anyway). It is fixed because the predicate is wrong, not
+because a merchant was hurt — and an earlier draft of this entry asserted the symptom
+("a merchant whose whole Business Info is a catalog price list was told the AI cannot
+answer pricing") without measuring it. Same error the code had: a claim the evidence did
+not cover.
 
 **Replies were never affected, and that was checked before anything was written.** D-050
 sends non-ecommerce pages the FULL KB text with no retrieval call at all, and on the
@@ -2172,9 +2177,52 @@ know" — which is what sends support back to the workspace value, the exact fai
 created the badge to prevent. Both badges also state pinned-vs-inherited, because support
 has to change a different setting depending on which it is.
 
+**Two things the FIRST fix got wrong, both caught in self-review after the commit and
+before the merge — and both were the over-claiming direction of the same defect.**
+
+1. **A key count is not a fact count.** `businessProfileFields` was
+   `count(jsonb_each(business_profile->'merchant'))` in SQL. But the modal live page carries
+   exactly `name`, `category`, `language_hint` and `website`/`about` — **24 of 92 pages sit
+   on that value** — every one of them page metadata that answers no customer question and
+   contributes no BUSINESS_INFO line. So the fix reported "4 fields of Business Info" for a
+   page holding none, and `hasAnyContent` would have suppressed `kb_empty` for a freshly
+   connected page whose profile is pure FB metadata: a FALSE non-empty, replacing a false
+   empty. Latent today (0 live pages depend on those fields alone) — and per D-086 that
+   bounds the blast radius rather than excusing it. Cured by deleting the count and calling
+   `countBusinessInfoFacts`, extracted from `formatBusinessInfoPrompt`'s own `anyValueAtAll`
+   so the console counts exactly the six fields the PROMPT counts (address, phones, hours,
+   policies, WhatsApp, email — the last two provenance-gated). Prompt output byte-identical;
+   65 existing tests unchanged.
+
+2. **`kb_thin` was never measured, and 500 characters is not "starved" on this fleet.** The
+   median live page holds **148** characters of free text and **71 of 92** sit under 500 —
+   because content moved into the structured stores. The old rule only looked sane because
+   the false `kb_empty` short-circuited it for 49 pages; removing the false empty exposed the
+   mis-calibration, and the first fix (`chars < 500 && structured < 5`) still flagged **71 of
+   92** — a yellow on 77% of the fleet is noise, not a signal. Now `chars < 500 && structured
+   === 0`: **36 pages**, the same order as the 33 the old rule produced, but for a reason that
+   survives inspection. The arbitrary `< 5` constant is gone; it had landed exactly on the
+   fleet's modal value.
+
+   The self-review lesson, which is Rule 10.11(b) verbatim: the fix was measured on the
+   predicate it was written for (`kb_empty`, all 92 pages) and NOT on the two other
+   predicates it silently governed. Changing a short-circuit changes every branch behind it.
+
+**One duplication the gate could not see.** The four-clause offerings rule was written out
+in `health.ts` AND in `KbSection.tsx` — a one-liner, so below `check:duplication`'s
+three-line floor and invisible to it. The panel now renders the server's
+`no_offering_chunks` flag matched on `pageId`, the pattern `SettingsSection` already used
+for `persona_placeholder`.
+
 **NOT fixed here, deliberately: the pointer bump itself.** Making `invalidatePageCaches`
 re-ingest would spend embeddings on every catalog and fact write for the 47 pages that
 never read a chunk. The honest options are to stop bumping `kb_active_version` for writes
 that do not invalidate the chunk set, or to re-ingest only on the retrieval path — a
 reply-path change needing its own measurement and its own ruling. Re-saving Business Info
 re-indexes a page today, and the console now says so.
+
+**Kept in sync, per the obligation in `health.ts`'s own docblock:** `/merchant-settings`
+and `/reply-quality` both carried the same defect — "no `offering` chunks = no products and
+no prices" and "starved ≈ under 500 characters" — which would have produced a merchant
+email asking someone to add a price list they had already entered in `catalog_items`. Both
+playbooks now query all four stores and carry the re-measured calibration.

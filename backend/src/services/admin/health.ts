@@ -203,13 +203,14 @@ export const SUPPORT_SETTINGS_KEYS = Object.keys(SETTINGS_DEFAULTS) as Array<key
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TRIAL_ENDING_SOON_DAYS = 3;
 const DORMANT_DAYS = 14;
+// ⚠️ 500 characters is NOT a "starved page" threshold on this fleet: measured
+// 2026-08-20, the MEDIAN live page holds 148 characters of free text and 71 of
+// 92 sit under 500. So this bound alone describes the typical page, and `kb_thin`
+// must not rest on it alone — see the flag below, which additionally requires
+// that NO structured store holds anything. (The old rule paired it with a chunk
+// count via OR, and only looked sane because the false `kb_empty` short-circuit
+// hid it from 49 of the 92 pages.)
 const KB_THIN_CHARS = 500;
-// Structured Business Info counts toward substance too, so a merchant who filled
-// the profile/catalog/fact tables instead of typing prose is not called thin.
-// Scale: the fleet median profile is ~9 filled fields, so 5 entries across the
-// three structured stores is a deliberately low floor — it only has to clear
-// "barely started".
-const KB_THIN_STRUCTURED_ENTRIES = 5;
 // A page with chunks but no `offering` is red (can't answer pricing) UNLESS the
 // KB is a substantial FAQ/info knowledge base — a legitimate service business
 // shouldn't sit permanently red. At/above this many FAQ chunks it downgrades to
@@ -551,13 +552,21 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
                 const substantialFaq = (chunksByType.faq ?? 0) >= NO_OFFERING_FAQ_DOWNGRADE;
                 add(substantialFaq ? 'yellow' : 'red', 'no_offering_chunks', scope);
             }
-            // Thin: measured on what the merchant actually authored across the
-            // stores. The chunk-count half of the old test is dropped rather than
-            // repaired — a stale index reports 0 chunks for a 10k-character KB,
-            // and on the non-retrieval path (most pages) the count describes
-            // nothing the customer ever receives.
+            // Thin: short free text AND nothing in ANY structured store.
+            //
+            // Both halves are load-bearing, and each was measured (2026-08-20,
+            // 92 live pages). The chunk-count half of the old rule is dropped
+            // rather than repaired — a stale index reports 0 chunks for a
+            // 10k-character KB, and off the retrieval path the count describes
+            // nothing a customer receives. The char bound cannot stand alone
+            // either: it matches 71 of 92 pages, so pairing it with "some
+            // structured entries" by an arbitrary cutoff just moved the noise
+            // (a `< 5` cutoff still flagged 71). Requiring EMPTY structured
+            // stores flags 36 — the same order as the 33 the old rule produced,
+            // but for a reason that survives inspection: little prose and no
+            // address, phones, hours, policies, catalog or fact list anywhere.
             const structuredEntries = businessProfileFields + catalogItems + factRows;
-            if (kbLength < KB_THIN_CHARS && structuredEntries < KB_THIN_STRUCTURED_ENTRIES) {
+            if (kbLength < KB_THIN_CHARS && structuredEntries === 0) {
                 add('yellow', 'kb_thin', scope);
                 anyThinOrEmptyKb = true;
             }

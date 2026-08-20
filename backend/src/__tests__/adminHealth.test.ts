@@ -252,21 +252,34 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(keys(flags)).not.toContain('kb_thin');
     });
 
-    it('kb_thin needs BOTH thin free text and few structured entries', () => {
+    it('kb_thin needs thin free text AND nothing in any structured store', () => {
         const thin = computeHealthFlags(healthyInput({
             pages: [healthyPage({
-                kb: healthyKb({ kbLength: 120, businessProfileFields: 1, catalogItems: 0, factRows: 0 }),
+                kb: healthyKb({ kbLength: 120, businessProfileFields: 0, catalogItems: 0, factRows: 0 }),
             })],
         }));
         expect(keys(thin)).toContain('kb_thin');
+    });
 
-        // Same 120 characters, but the merchant filled the structured stores.
-        const structured = computeHealthFlags(healthyInput({
-            pages: [healthyPage({
-                kb: healthyKb({ kbLength: 120, businessProfileFields: 9, catalogItems: 30 }),
-            })],
-        }));
-        expect(keys(structured)).not.toContain('kb_thin');
+    it('kb_thin does NOT fire on the typical short-prose page that has structured facts', () => {
+        // The calibration that matters: the fleet MEDIAN page holds 148
+        // characters (measured 2026-08-20), so the <500 bound alone matches 71 of
+        // 92 live pages. A single real fact — one phone, one catalog item — is
+        // enough to make "the AI has little to answer from" the wrong sentence.
+        for (const store of [
+            { businessProfileFields: 1 },
+            { catalogItems: 1 },
+            { factRows: 1, factCollections: 1 },
+        ]) {
+            const flags = computeHealthFlags(healthyInput({
+                pages: [healthyPage({
+                    kb: healthyKb({
+                        kbLength: 148, businessProfileFields: 0, catalogItems: 0, factRows: 0, ...store,
+                    }),
+                })],
+            }));
+            expect(keys(flags), JSON.stringify(store)).not.toContain('kb_thin');
+        }
     });
 
     it('no_offering_chunks is RED for a product KB with little FAQ', () => {
