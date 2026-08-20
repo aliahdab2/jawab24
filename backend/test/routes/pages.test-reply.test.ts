@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import pagesRoutes from '../../src/routes/pages';
 import { pagesService } from '../../src/services/pages';
+import { buildPlaygroundContext } from '../../src/services/reply/playgroundContext';
 
 // Mock services
 vi.mock('../../src/services/pages');
@@ -77,6 +78,50 @@ describe('POST /pages/:id/test-reply', () => {
         vi.clearAllMocks();
 
         vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+    });
+
+    /**
+     * The reply-mode override (D-087). It exists so the settings card can PREVIEW
+     * a mode the merchant picked but has not saved — otherwise the only way to
+     * see what info mode does is to save it live on every page, the very defect
+     * the preview removes. Two boundaries carry it and neither was asserted:
+     * drop `replyMode` from the controller's `buildPlaygroundContext` call and
+     * every other test in this file still passes with the feature inert.
+     */
+    describe('reply-mode override', () => {
+        const post = (payload: Record<string, unknown>) => app.inject({
+            method: 'POST', url: '/pages/page_1/test-reply', payload,
+        });
+
+        it('forwards an explicit mode to the playground', async () => {
+            const res = await post({ question: 'q', channel: 'comment', replyMode: 'info' });
+            expect(res.statusCode).toBe(200);
+            expect(vi.mocked(buildPlaygroundContext)).toHaveBeenCalledWith(
+                expect.objectContaining({ replyMode: 'info' }),
+            );
+        });
+
+        // The kill for a `?? 'sales'` mutation: absent must stay ABSENT. A
+        // default here would force sales over a page's own 'info' pin, so the
+        // merchant would preview a reply that page never produces.
+        it('passes undefined when the caller sends none — never a default', async () => {
+            const res = await post({ question: 'q', channel: 'comment' });
+            expect(res.statusCode).toBe(200);
+            const arg = vi.mocked(buildPlaygroundContext).mock.calls[0][0] as Record<string, unknown>;
+            expect(arg.replyMode).toBeUndefined();
+        });
+
+        it.each(['support', '', 'INFO', 'sales ', 42, null])('400s on %o and generates nothing', async (bad) => {
+            const res = await post({ question: 'q', channel: 'comment', replyMode: bad });
+            expect(res.statusCode).toBe(400);
+            expect(vi.mocked(buildPlaygroundContext)).not.toHaveBeenCalled();
+        });
+
+        // Scoped to ONE generation: a preview must never reach a write path.
+        it('never persists the mode it previews', async () => {
+            await post({ question: 'q', channel: 'comment', replyMode: 'info' });
+            expect(vi.mocked(pagesService.updateReplyMode)).not.toHaveBeenCalled();
+        });
     });
 
     it('should return a stripped reply for valid input', async () => {

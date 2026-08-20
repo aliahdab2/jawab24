@@ -194,7 +194,11 @@ export function hasRoutableContactChannel(
     // it under the same authority gate, right beside WhatsApp, as one of "the two
     // contact channels". A page whose only channel is an email would otherwise be
     // told it has none — while INFO-DESK happily routes the customer to it.
-    const hasEmail = isFieldAuthoritative(provenance, 'email') && !!p.email?.trim();
+    // `typeof`, not `?.trim()`: the column is schemaless, so `email` can hold a
+    // number — and this predicate runs inside `serializeListPage`, where a throw
+    // is a 500 on every merchant screen rather than one missing warning.
+    const hasEmail = isFieldAuthoritative(provenance, 'email')
+        && typeof p.email === 'string' && p.email.trim() !== '';
     return hasPhone || hasWhatsapp || hasEmail;
 }
 
