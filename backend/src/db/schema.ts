@@ -947,6 +947,19 @@ export const subscriptions = pgTable('subscriptions', {
     // try" conversion touch. NULL = not yet notified. Same retry semantics as
     // trial_ending_notified_at: written only after the in-app notification lands.
     trialEndedNotifiedAt: timestamp('trial_ended_notified_at'),
+    // Stamped the one time this subscription's `purchase` conversion is reported
+    // to GA4 (services/ga4.ts). It exists to make that report exactly-once
+    // ACROSS TWO webhook paths that both see money: `checkout.session.completed`
+    // (a plan with no trial, charged at checkout) and `invoice.payment_succeeded`
+    // (a trialed plan's first real charge, ~30 days later — and every renewal
+    // after it). Whichever arrives first claims the stamp; the others find it set
+    // and send nothing, so a renewal can never be reported as an acquisition.
+    // NULL = never reported. Claimed with `WHERE … IS NULL`, the same first-touch
+    // shape as users.ga_client_id, which is what makes the claim atomic under
+    // concurrent webhook delivery. ⛔ The amount guard must run BEFORE the claim:
+    // a trial checkout completes at $0 and must NOT consume the stamp, or the
+    // real payment 30 days later is suppressed forever.
+    ga4PurchaseReportedAt: timestamp('ga4_purchase_reported_at'),
 
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),

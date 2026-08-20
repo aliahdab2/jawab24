@@ -903,12 +903,51 @@ Voice-to-text for KB content via microphone:
   | `autoreply_enabled` | `recordActivationEvent` | |
   | `first_autoreply_sent` | `recordActivationEvent` | strongest "became a customer" signal |
   | `no_fb_pages`, `ig_direct_interest` | `recordActivationEvent` | demand signals, not funnel steps |
-  | `purchase` (+ `value`, `currency`) | Stripe `checkout.session.completed` | the money event |
+  | `purchase` (+ `value`, `currency`) | Stripe `checkout.session.completed` **or** `invoice.payment_succeeded` | the money event — see **Two paths to the money** below |
+- **⭐ Two paths to the money, and for most merchants it is the second one.**
+  Starter is the only plan carrying `trialDays: 30` and it is `isDefault: true`,
+  and `controllers/payment.ts` grants that trial to anyone with no prior
+  subscription — i.e. every new signup. So:
+  - **no trial** → Stripe charges at checkout → `checkout.session.completed`
+    reports the purchase.
+  - **trialed (the normal case)** → the checkout completes at **$0**, hits the
+    amount guard and reports nothing; the first real charge arrives ~30 days
+    later as `invoice.payment_succeeded`, which reports it. Every renewal after
+    that fires the same event and must NOT report.
+
+  ⛔ Hooking only the checkout — the state until 2026-08-20 — meant an
+  ad-acquired merchant could never produce a `purchase` conversion at all
+  (measured that day: 79 of 85 production subscriptions carried a
+  `trial_ends_at`). A `billing_reason` test would not have separated the first
+  post-trial charge from a renewal either: both are `subscription_cycle`.
 - **Idempotency**: the activation mirror fires only when
   `INSERT … ON CONFLICT DO NOTHING RETURNING id` returns a row, so GA4 receives
   each milestone exactly once per user — `first_autoreply_sent` re-emits on
-  every reply and must not re-convert. `purchase` dedups inside GA4 on
-  `transaction_id` (the Stripe checkout session id), which absorbs webhook retries.
+  every reply and must not re-convert.
+
+  `purchase` is made exactly-once by **`subscriptions.ga4_purchase_reported_at`**:
+  whichever of the two paths sees money first claims it with
+  `UPDATE … WHERE external_subscription_id = ? AND ga4_purchase_reported_at IS
+  NULL RETURNING user_id`, and every later caller resolves `already_reported`.
+  A renewal is not an acquisition and must never be reported as one.
+  `transaction_id` (the checkout session id, or the invoice id) remains GA4's own
+  dedup key but is now the SECOND line of defence: it absorbs a webhook retried
+  minutes later, and nothing documents GA4 de-duplicating against a transaction
+  it last saw a month ago.
+- **⛔ The ordering that is load-bearing**: the amount guard runs BEFORE the
+  claim. A $0 trial checkout must not consume the stamp, or the real payment 30
+  days later finds it taken and is suppressed forever — reintroducing the exact
+  bug the invoice hook removes. Pinned by
+  `test/integration/ga4PurchaseClaim.test.ts` (real Postgres, incl. the
+  concurrent-delivery election) and `payment.lifecycle.test.ts` STEP 5b/5c.
+- **⚠️ Claim-then-send, stated rather than papered over**: if the MP call fails
+  after the claim, that conversion is lost — the stamp is not released. Chosen
+  deliberately. A double-reported purchase corrupts bidding; a dropped beacon
+  costs one signal, and this module is fire-and-forget by contract.
+- **⚠️ Attribution window**: a 30-day trial puts the paid conversion ~30 days
+  after the click, at or beyond Google Ads' default click-through window. Report
+  it for revenue visibility, but expect `sign_up` — which fires immediately — to
+  be the event Smart Bidding can actually use.
 - **Attribution**: MP requires a `client_id` — the `_ga` cookie's
   `<random>.<timestamp>` tail — to tie a server event back to the browser session
   that carried the `gclid`. Without it an event still lands in GA4 but Ads cannot
@@ -937,6 +976,7 @@ Voice-to-text for KB content via microphone:
   - `/backend/src/services/activation.ts` (the milestone mirror)
   - `/backend/src/controllers/paymentWebhookHandlers.ts` (`purchase`)
   - `/backend/scripts/verify-ga4.ts` (`npm run verify:ga4`)
+  - `/backend/test/integration/ga4PurchaseClaim.test.ts` (the exactly-once claim, real Postgres)
   - `/frontend/src/utils/analytics.ts`, `/frontend/src/hooks/useGaClientIdSync.ts`
 - **Still owed after deploy**: mark the events as **key events** in GA4, then
   import them into Google Ads as conversions. Do not switch bidding away from

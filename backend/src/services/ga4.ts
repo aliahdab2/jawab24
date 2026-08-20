@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { config } from '../config';
 import { db } from '../db';
-import { users } from '../db/schema';
+import { subscriptions, users } from '../db/schema';
 import { captureError } from '../utils/sentryHelpers';
 
 /**
@@ -46,7 +46,7 @@ export interface Ga4SendResult {
     /** False when the send was skipped (no credentials, no client id) or failed. */
     sent: boolean;
     /** Why it was skipped/failed — for tests and the verification script. */
-    reason?: 'not_configured' | 'no_client_id' | 'zero_amount' | 'http_error' | 'exception';
+    reason?: 'not_configured' | 'no_client_id' | 'zero_amount' | 'already_reported' | 'http_error' | 'exception';
     /** Populated only for `{ debug: true }` — GA4's own validation verdict. */
     validationMessages?: unknown[];
 }
@@ -141,36 +141,116 @@ export function isGa4Configured(): boolean {
  * signup. `value` + `currency` is what makes bidding revenue-aware, so this must
  * never degrade to a valueless event.
  *
+ * ⭐ WHY THIS IS CALLED FROM TWO PLACES. Money reaches us by two different
+ * Stripe events, and for most of our merchants it is the SECOND one:
+ *
+ *   - `checkout.session.completed` — a plan with no trial, charged at checkout.
+ *   - `invoice.payment_succeeded` — a TRIALED plan's first real charge, ~30 days
+ *     after signup, and then every renewal after that.
+ *
+ * Starter is the only plan carrying `trialDays: 30` and it is `isDefault: true`,
+ * and `payment.ts` grants the trial to anyone with no prior subscription — i.e.
+ * every new signup. So the trial path is the normal path (measured 2026-08-20:
+ * 79 of 85 subscriptions carry a `trial_ends_at`). Hooking only the checkout
+ * meant the money event could never fire for an acquired merchant at all.
+ *
  * THE AMOUNT GUARD. A checkout that starts on a free trial completes with a
  * total of 0. That is a signup, not a purchase — the real charge arrives later
  * as `invoice.payment_succeeded`. Reporting it now would both inflate the
  * conversion COUNT and drag reported value-per-conversion toward zero, which is
  * precisely the input Smart Bidding optimises against.
  *
- * `transactionId` is GA4's purchase dedup key. Stripe retries a webhook whose
- * handler 5xx'd, so the same purchase can legitimately reach this function more
- * than once; the checkout session id makes the repeat a no-op inside GA4.
+ * ⛔ THE ORDERING IS LOAD-BEARING: the amount guard runs BEFORE the claim. A $0
+ * trial checkout must not consume the stamp, or the real payment 30 days later
+ * finds it already set and is suppressed forever — turning the fix into the very
+ * bug it removes.
+ *
+ * EXACTLY-ONCE, AND WHY NOT VIA GA4. `subscriptions.ga4_purchase_reported_at` is
+ * claimed with `WHERE … IS NULL RETURNING`, so the first caller to see money
+ * wins and every later one — the `subscription_create` invoice that follows a
+ * paid checkout, and all 12 renewals a year — sends nothing. A renewal is not an
+ * acquisition and must never be reported as one.
+ *
+ * `transaction_id` remains GA4's own dedup key, but it is now the SECOND line of
+ * defence, not the first. It was never enough on its own: it absorbs a webhook
+ * retried minutes later, and nothing documents GA4 de-duplicating against a
+ * transaction it last saw a month ago. The database claim is what makes the
+ * guarantee ours rather than a vendor's undocumented retention window.
+ *
+ * ⚠️ CLAIM-THEN-SEND, stated rather than papered over: if the MP call fails
+ * after the claim, that conversion is lost — the stamp is not released. Chosen
+ * deliberately. A double-reported purchase corrupts bidding (it teaches Google a
+ * merchant is worth twice what they are); a dropped analytics beacon costs one
+ * signal, and this whole module is fire-and-forget by contract. Releasing the
+ * stamp on failure would reopen the double-send window that Stripe's own retries
+ * make real.
  */
 export async function sendPurchaseConversion(params: {
-    userId: string;
-    /** Stripe checkout session id — GA4 dedups purchases on this. */
+    /** Stripe subscription id — identifies the row that carries the claim. */
+    stripeSubscriptionId: string;
+    /** GA4's purchase dedup key: the checkout session id, or the invoice id. */
     transactionId: string;
     /** Stripe reports MINOR units (cents); GA4 wants a major-unit decimal. */
     amountMinorUnits: number | null | undefined;
     currency: string | null | undefined;
-    planId: string;
+    planId: string | null | undefined;
 }): Promise<Ga4SendResult> {
-    const { userId, transactionId, amountMinorUnits, currency, planId } = params;
+    const { stripeSubscriptionId, transactionId, amountMinorUnits, currency, planId } = params;
 
+    // BEFORE the claim — see the ordering note above.
     if (!amountMinorUnits || amountMinorUnits <= 0) {
         return { sent: false, reason: 'zero_amount' };
     }
 
-    return sendGa4EventForUser(userId, 'purchase', {
+    // Cheap guard before writing anything: with no credentials the send could
+    // never happen, so stamping the row would silently burn the one claim this
+    // subscription gets and suppress the purchase forever once GA4 IS wired.
+    if (!isGa4Configured()) return { sent: false, reason: 'not_configured' };
+
+    let claimedUserId: string;
+    try {
+        // Atomic claim. The `IS NULL` predicate is the whole guarantee, so it
+        // lives here and nowhere else — a restated copy drifts the moment this
+        // one changes. Returning userId in the same statement also spares a
+        // second round trip to resolve the attribution id's owner.
+        // Deliberately NOT setting `updatedAt`, and deliberately NOT invalidating
+        // the subscription status cache — unlike every neighbouring mutation in
+        // paymentWebhookHandlers, which do both. This write touches no
+        // entitlement, no status and no period, so there is nothing for a reader
+        // to see stale; and `updatedAt` is the only proxy this table has for
+        // "when did the subscription last really change", which an analytics
+        // stamp must not overwrite on every merchant that pays.
+        const claimed = await db
+            .update(subscriptions)
+            .set({ ga4PurchaseReportedAt: new Date() })
+            .where(and(
+                eq(subscriptions.externalSubscriptionId, stripeSubscriptionId),
+                isNull(subscriptions.ga4PurchaseReportedAt),
+            ))
+            .returning({ userId: subscriptions.userId });
+
+        // No row: either already reported (the renewal case, by far the most
+        // common) or the subscription is not linked to Stripe yet. Neither is an
+        // error and neither should send.
+        if (claimed.length === 0) return { sent: false, reason: 'already_reported' };
+        claimedUserId = claimed[0].userId;
+    } catch (err) {
+        captureError(err, 'Failed to claim the GA4 purchase report', {
+            level: 'warning',
+            tags: { context: 'ga4' },
+            extra: { stripeSubscriptionId, transactionId },
+            fingerprint: ['ga4-purchase-claim'],
+        });
+        return { sent: false, reason: 'exception' };
+    }
+
+    return sendGa4EventForUser(claimedUserId, 'purchase', {
         transaction_id: transactionId,
         value: amountMinorUnits / 100,
         currency: (currency ?? 'usd').toUpperCase(),
-        items: [{ item_id: planId, item_name: planId, quantity: 1 }],
+        // planId is absent only if Stripe lost the subscription metadata; report
+        // the sale rather than dropping it, since value is what bidding needs.
+        items: [{ item_id: planId ?? 'unknown', item_name: planId ?? 'unknown', quantity: 1 }],
     });
 }
 

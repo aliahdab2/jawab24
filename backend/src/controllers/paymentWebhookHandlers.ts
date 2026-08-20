@@ -229,12 +229,15 @@ export async function handleCheckoutComplete(
     // drop it, and it cannot double-fire on a refresh of the success page (which
     // in any case carries only `session_id` — no plan, no amount).
     //
-    // The zero-amount guard, the dedup key, and the minor→major unit conversion
-    // all live in sendPurchaseConversion; see it for why each one matters.
+    // The zero-amount guard, the exactly-once claim, and the minor→major unit
+    // conversion all live in sendPurchaseConversion; see it for why each one
+    // matters — in particular why a $0 trial checkout must NOT consume the claim.
+    // This path reports only a plan with no trial, which is charged here; a
+    // trialed plan reports from handlePaymentSucceeded ~30 days later instead.
     // Fire-and-forget, like every other analytics emit: it must never be able to
     // fail a webhook Stripe would then retry.
     void sendPurchaseConversion({
-        userId,
+        stripeSubscriptionId: stripeSubscription.id,
         transactionId: session.id,
         amountMinorUnits: session.amount_total,
         currency: session.currency,
@@ -644,6 +647,34 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
         periodEnd,
         createRequestLogger(request.log),
     );
+
+    // GA4 `purchase` — for a TRIALED plan this is the only place the money event
+    // can fire. Starter carries `trialDays: 30` and is the default plan, so its
+    // checkout collects $0 and reports nothing; the first real charge arrives
+    // here, ~30 days later, and so does every renewal after it.
+    //
+    // Renewals are NOT acquisitions. sendPurchaseConversion claims
+    // `subscriptions.ga4_purchase_reported_at` with `WHERE … IS NULL`, so only
+    // the first paid invoice for this subscription reports and the rest resolve
+    // `already_reported`. That is why this can sit on the plain renewal path
+    // without a `billing_reason` test — which would not have separated them
+    // anyway: a post-trial first charge and a renewal are both
+    // `subscription_cycle`.
+    //
+    // `amount_paid`, not `amount_due` — the money actually collected. planId
+    // comes off the subscription's own metadata (set in services/stripe.ts), the
+    // same value the checkout path reports.
+    //
+    // Reached only after the early `return`s above, so an invoice paid against a
+    // still-unpaid subscription reports nothing. Fire-and-forget: an analytics
+    // beacon must never fail a webhook Stripe would then retry.
+    void sendPurchaseConversion({
+        stripeSubscriptionId,
+        transactionId: typeof invoice.id === 'string' ? invoice.id : stripeSubscriptionId,
+        amountMinorUnits: invoice.amount_paid,
+        currency: invoice.currency,
+        planId: stripeSubscription.metadata?.planId,
+    });
 }
 
 /**

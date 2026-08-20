@@ -1219,6 +1219,13 @@
       "when": 1787159000000,
       "tag": "0174_ga_client_id",
       "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1787223512031,
+      "tag": "0175_ga4_purchase_reported_at",
+      "breakpoints": true
     }
   ]
 }
