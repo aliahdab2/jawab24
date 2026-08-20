@@ -64,7 +64,7 @@ describe('SettingsController', () => {
 
             await settingsController.get(mockRequest as any, mockReply as any);
 
-            expect(settingsService.getSettings).toHaveBeenCalledWith('user-123');
+            expect(settingsService.getSettings).toHaveBeenCalledWith('user-123', undefined);
             // Response spreads settings + the server capability flag (object storage off in tests).
             expect(mockReply.send).toHaveBeenCalledWith({ ...settings, triggerImagesEnabled: false });
         });

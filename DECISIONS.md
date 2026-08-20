@@ -2092,7 +2092,16 @@ already synced to a possibly-wrong workspace — and the D-085 guard covered `re
 on a client that sends a DIFF, so any save not touching the mode skipped it entirely.
 Guarding one field of a wrong destination is the wrong shape: `updateSettings` now takes the
 request's membership-verified workspace and syncs there, which covers all 30 `PIPELINE_FIELDS`
-and every save. The `REPLY_MODE_WORKSPACE_MISMATCH` guard is deleted — with the destination
+and every save. ⚠️ **BOTH halves, and the second one shipped late.** Moving only the write left
+`overlayWorkspacePipelineFields` — and `updateSettings`' own read-after-write return — on the
+old resolver, so `GET /settings` served one workspace while `PUT /settings` saved into another:
+the edited field snapped back, the dirty baseline reset from the response, and the next Save
+computed an empty diff and sent nothing. A SHARPER failure than the consistent-but-wrong
+resolver it replaced, live for all 3 multi-membership users (9, 10 and 18 of 29 overlay fields
+divergent), and invisible to tests because each half was correct alone. `getSettings` now takes
+the same workspace and the read/write symmetry is pinned in `settingsSync.test.ts`. The lesson,
+recorded because it will recur: when a destination moves, move every READER of it in the same
+change, and assert the two agree — not each in isolation. The `REPLY_MODE_WORKSPACE_MISMATCH` guard is deleted — with the destination
 correct it would have refused writes that are now right. The resolver survives only as the
 fallback for callers with no request (scripts, tests). Measured 2026-08-20: **3 of 85 users
 have more than one membership, maximum 2 each** — small, live, and silent.

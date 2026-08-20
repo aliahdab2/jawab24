@@ -62,7 +62,7 @@ export class SettingsController {
             }
 
             const userId = request.user.userId;
-            const settings = await settingsService.getSettings(userId);
+            const settings = await settingsService.getSettings(userId, (request as WorkspaceRequest).workspaceId);
             // Server capability flag (not a stored setting): Post Reply image attachments
             // are available only when object storage is configured. The frontend gates
             // the image picker on this.
@@ -99,7 +99,7 @@ export class SettingsController {
             const updates = validation.data as UpdateSettingsDTO;
 
             // Fetch current settings for comparison
-            const currentSettings = await settingsService.getSettings(userId);
+            const currentSettings = await settingsService.getSettings(userId, (request as WorkspaceRequest).workspaceId);
 
             // --- Smart Auto-Translation Logic (JSONB) ---
             const supportedLanguages = currentSettings.supportedLanguages || ['ar', 'en'];
@@ -238,9 +238,17 @@ export class SettingsController {
                 );
             }
 
-            // Audit trail (fire-and-forget)
+            // Audit trail (fire-and-forget). The WORKSPACE is part of the record
+            // now: this route writes a per-user row AND syncs pipeline fields to
+            // one workspace, so "which workspace did this save land on" is a real
+            // question — and for a multi-membership user it is the whole question.
+            // 392 `settings.updated` rows exist with `count(workspace_id) = 0`
+            // (prod, 2026-08-20), so the deleted reply-mode guard was the only
+            // thing that had ever made a wrong destination visible. Typed column,
+            // not metadata — that field is documented read-only/double-encoded.
             auditLog({
                 userId,
+                workspaceId: wsReq.workspaceId,
                 action: 'settings.updated',
                 entityType: 'settings',
                 metadata: { fields: Object.keys(updates) },

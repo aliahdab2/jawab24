@@ -127,7 +127,11 @@ describe('Settings Routes', () => {
             expect(body.userId).toBe('user_123');
             expect(body.dashboardLanguage).toBe('ar');
             expect(body.commentReplyMode).toBe('public');
-            expect(settingsService.getSettings).toHaveBeenCalledWith('user_123');
+            // The READ resolves the same workspace the write targets (D-087).
+            // Pinned here because read and write landing on different workspaces
+            // is the defect the destination fix exists to remove — and each half
+            // looks perfectly correct on its own, which is how it shipped.
+            expect(settingsService.getSettings).toHaveBeenCalledWith('user_123', 'test_workspace_id');
         });
 
         it('should create default settings if none exist', async () => {
@@ -174,7 +178,7 @@ describe('Settings Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(settingsService.getSettings).toHaveBeenCalledWith('new_user');
+            expect(settingsService.getSettings).toHaveBeenCalledWith('new_user', 'test_workspace_id');
         });
 
         it('should return 401 without auth token', async () => {

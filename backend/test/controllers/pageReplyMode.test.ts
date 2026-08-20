@@ -61,7 +61,6 @@ vi.mock('../../src/services/settings', () => ({
     settingsService: {
         getSettings: vi.fn(),
         updateSettings: vi.fn(),
-        resolveWriteTargetWorkspaceId: vi.fn(),
     },
 }));
 vi.mock('../../src/utils/validation', () => ({
@@ -253,8 +252,8 @@ describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
     it("no longer refuses a multi-membership session — the destination is explicit", async () => {
         // The old guard 403'd exactly here, by comparing the request against an
         // unordered `limit(1)` membership lookup. That lookup no longer decides
-        // anything, so the save proceeds — to the right workspace.
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
+        // anything (the function that exposed it is deleted), so the save
+        // proceeds — to the right workspace.
         await callUpdate();
         expect(mockReply.status).not.toHaveBeenCalledWith(403);
         expect(settingsService.updateSettings).toHaveBeenCalledWith(
@@ -282,8 +281,10 @@ describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
         );
     });
 
-    it('never consults the membership resolver from the write path any more', async () => {
+    // The read is pinned to the same workspace as the write — see
+    // test/services/settingsSync.test.ts for the read/write symmetry itself.
+    it('reads the pre-write state from the workspace it is about to write', async () => {
         await callUpdate();
-        expect(settingsService.resolveWriteTargetWorkspaceId).not.toHaveBeenCalled();
+        expect(settingsService.getSettings).toHaveBeenCalledWith('user-123', ALLOWED_WS);
     });
 });

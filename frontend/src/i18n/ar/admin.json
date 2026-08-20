@@ -149,6 +149,8 @@
     "unnamedPage": "صفحة بدون اسم",
     "pageReplyOn": "الرد التلقائي مفعّل",
     "pageReplyOff": "الرد التلقائي متوقف",
+    "pageModeInfo": "مصدر معلومات",
+    "pageModeInfoInherited": "مصدر معلومات (موروث)",
     "pageOffByMerchant": "الرد التلقائي متوقف — أوقفه التاجر",
     "pageOffPlanLimit": "الرد التلقائي متوقف — حد الباقة",
     "pageOffTrialUsed": "الرد التلقائي متوقف — التجربة المجانية مستخدمة سابقًا",
