@@ -19,7 +19,7 @@
 | App Logo | `icon-512.png` (512×512, 58 KB) | ❌ empty |
 | Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; no video is produced | ❌ empty — optional, ship without it |
 | Categories | see **Sub-category correction** below | ❌ empty |
-| Supported Countries | **decision owed** — see below | ❌ empty |
+| Supported Countries | **decided 2026-08-20: SA · UAE · KW** — see below | ❌ empty |
 | Search Terms (0/20) | **paste-ready list below** | ❌ empty |
 
 ### Sub-category correction
@@ -29,16 +29,6 @@ That describes a merchandising widget, not a reply assistant, and it is what a m
 the store will filter on. The brief (§2) leans **Marketing / Sales (التسويق / المبيعات)** over
 Customer Service to match the sales-rep positioning. Pick from Salla's live taxonomy at fill time
 and record what was chosen here — the brief lists this as open question §9.1.
-
-### Supported Countries — decision owed
-
-Not addressed anywhere in the brief. Two constraints that must shape it:
-
-- 🔴 **Syria is barred on WhatsApp** and the listing copy leads with WhatsApp. See
-  `project_whatsapp_syria_barred` in memory before ticking countries.
-- Salla merchants are overwhelmingly **KSA**; the free-tier strategy (§7) was written for that
-  audience. Narrow is safer than wide — a country we cannot serve is a support burden and a
-  review risk.
 
 ### Search Terms — paste these 20
 
@@ -58,18 +48,35 @@ customer service, sales assistant
   product copy, where the terminology is «الردود الذكية» (AI_INSTRUCTIONS §6, and the founder rule
   against calling Jawab24 a bot).
 
-### Supported Countries — recommendation: **Saudi Arabia only** at launch
+### Supported Countries — **Saudi Arabia · UAE · Kuwait** (owner-decided 2026-08-20, **D-088**)
 
-Not addressed anywhere in the brief. Recommended narrow, for three reasons:
+Tick the three countries where Salla **registers merchants**: 🇸🇦 Saudi Arabia, 🇦🇪 UAE, 🇰🇼 Kuwait.
 
-- 🔴 **Syria is barred on WhatsApp**, and the listing copy leads with WhatsApp. Ticking it would
-  advertise a channel that cannot be delivered there (`project_whatsapp_syria_barred`).
-- Salla's merchant base is overwhelmingly **KSA**, and the free-tier strategy (brief §7) was priced
-  for that audience.
-- A country we cannot support well is a support burden and a review risk. Widening later is a
-  portal edit; retracting a country after merchants install is not.
+⛔ **Do not tick Qatar, Bahrain, or Oman on the strength of shipping support.** Salla supports
+selling and shipping *into* those markets, but that describes where a Saudi or Emirati merchant's
+**customers** live — not where the installing merchant's store is registered, which is what this
+field governs. ⚠️ The field's exact semantics are **unverified**: confirm the wizard's wording at
+fill time and correct this note if it turns out to mean market reach rather than merchant registration.
 
-**Owner sign-off needed** — this is a market decision, not an engineering one.
+⏳ **One open check before ticking UAE and Kuwait:** confirm WhatsApp Cloud API messaging is
+available for a sender registered in those countries. Our own records bar exactly one country
+(Syria, `project_whatsapp_syria_barred`) and no GCC country appears in them — but that is our
+record, not Meta's policy, so verify it against Meta's docs (AI_INSTRUCTIONS §10.12).
+
+Widening later is a portal edit; retracting a country after merchants install is not.
+
+#### ⛔ Superseded reasoning — do not restore
+
+An earlier revision recommended **Saudi-only** on two grounds that do not hold:
+
+- «Syria is barred on WhatsApp» is a real constraint on our own direct signups, but Salla does not
+  onboard Syrian merchants, so **Syria never appears in this picker**. Irrelevant to this field.
+- «Salla's base is overwhelmingly KSA» describes where the merchants are; it is not a reason to
+  exclude the ones who are not. Excluding UAE and Kuwait does not improve KSA service, and the
+  launch tier is **free**, so there is no per-country pricing exposure either.
+
+Only the third ground survives — a country we cannot serve is a support burden and a review risk —
+and it is what the open check above discharges.
 
 ## 2. App Configuration
 
