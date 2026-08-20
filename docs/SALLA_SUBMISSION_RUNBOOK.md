@@ -19,11 +19,30 @@ founder's Claude-in-Chrome extension) found:
 | App status | ❌ **`Status: Development`** — publish wizard is an **unsubmitted draft**; "Start publishing your App" still present, **no Withdraw option** |
 | OAuth Mode | ✅ **Easy Mode** confirmed selected (`callback-type=inhouse`; no callback-URL field is rendered in this mode) |
 | Listing content | ❌ ~85% empty — only App Name + EN short description. 0 of 3 required screenshots |
-| `shipping.read` in the portal | ❌ **not ticked** (Shipping card has neither Read nor Read/Write selected) |
-| Prod `SALLA_CLIENT_ID` | 🔴 **wrong app** — portal id fingerprints `c18dcc…8f4d`; prod's value contains neither fragment |
-| Prod commit | ✅ `abd77ac7` — includes the tracking fix `4c6469a1` (#798) |
+| `shipping.read` in the portal | ❌ not ticked at the morning read → **✅ ticked later 2026-08-20** (see update below) |
+| Prod `SALLA_CLIENT_ID` | 🔴 wrong app at the morning read → **✅ repointed later 2026-08-20** (see update below) |
+| Prod commit | ✅ `abd77ac7` — includes the tracking fix `4c6469a1` (#798); → `c740cc7f` later 2026-08-20 |
 | Article-5 Stripe guard (D-065 / #695) | ✅ live in the running image |
-| `SALLA_EASY_MODE_CLAIM_ENABLED` / `SALLA_SKIP_PULL_REFRESH_EASY_MODE` / `SALLA_APP_STORE_URL` | ❌ absent (last measured 08-17; unchanged since — they are a manual server edit) |
+| `SALLA_EASY_MODE_CLAIM_ENABLED` / `SALLA_SKIP_PULL_REFRESH_EASY_MODE` / `SALLA_APP_STORE_URL` | ❌ absent at the morning read → **✅ first two set later 2026-08-20**; `SALLA_APP_STORE_URL` post-publish by design |
+
+### ✅ Update — 2026-08-20, later the same day: Phase 2.5 CLOSED
+
+Every actionable row above was fixed the same day, and Tier 0 of `SALLA_TEST_PLAN.md` passed in full:
+
+- ✅ **Prod repointed at app `665811310`** — Client ID, Client Secret **and** webhook token replaced
+  together in `env/backend.env` (backup kept beside it), backend recreated, nginx reloaded.
+  Verified inside the container: `SALLA_CLIENT_ID` matches the `c18dcc…8f4d` fingerprint.
+- ✅ **`shipping.read` ticked in the portal** — saved scope set is exactly six entries (Basic RO
+  locked, Orders R+W, Products R+W, Webhooks R+W, Settings RO, Shipping RO), confirmed after reload.
+- ✅ **Both runtime flags set** — `SALLA_EASY_MODE_CLAIM_ENABLED=true`,
+  `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`; `GET /salla/store/pending` now answers 401 (auth)
+  instead of 404 (dormant), proving the flag at the read path.
+- ✅ Prod commit `c740cc7f` (= `origin/main` HEAD, carries #849's connect guard and `4c6469a1`).
+- ⏭ `SALLA_APP_STORE_URL` remains unset **by design** — post-publish step.
+
+**Remaining distance to submit:** the listing build (see `docs/store-listing/salla/PORTAL_FIELD_MAP.md`),
+its owner decisions (countries, sub-category, support inbox, marketing sign-off), the reviewer
+account + demo store (Service Trial section), then the Phase 3 rehearsal.
 
 **What was actually approved on 2026-08-10 was the partner ID / payout verification, not an app
 review.** Conflating the two is what put "APPROVED" in this file. Three consequences:
@@ -218,9 +237,10 @@ submission happens on the production app.
 Phase 1 was never applied. Close it before anything else — in this order, because each step
 depends on the previous.
 
-- [x] **Deploy `main` to production.** Done: prod runs `abd77ac7`, which contains the tracking
-      fix `4c6469a1` (#798). ⚠️ Do not run two pre-deploy passes concurrently — false red.
-- [ ] 🔴 **Repoint prod at app `665811310` — the highest-severity item.** Copy Client ID, Client
+- [x] **Deploy `main` to production.** Done: prod runs `c740cc7f` (2026-08-20), which contains the
+      tracking fix `4c6469a1` (#798) and the #849 connect guard. ⚠️ Do not run two pre-deploy
+      passes concurrently — false red.
+- [x] 🔴 **Repoint prod at app `665811310` — DONE 2026-08-20.** Copy Client ID, Client
       Secret **and** the webhook token from the portal into `/var/www/jawab24/env/backend.env`,
       then `docker compose up -d --force-recreate --no-deps <backend>` **and `nginx -s reload`**
       (recreate changes the container IP; nginx 502s until reloaded).
@@ -229,10 +249,13 @@ depends on the previous.
       `grep -c '^SALLA_CLIENT_ID=' <file>` and `grep -c 'c18dcc' <file>` (expect `1` and `1`).
       ⛔ Fixing the client id while leaving the webhook token behind reproduces the same failure
       on the first real install — the push authenticates on the token.
-- [ ] **Tick `shipping.read`** on `665811310`. Config alone does not grant it: Easy Mode never
+- [x] **Tick `shipping.read`** on `665811310` — DONE 2026-08-20 (saved set = six scopes, confirmed
+      after reload). Config alone does not grant it: Easy Mode never
       calls `buildAuthUrl`, so `config.salla.scopes` has zero effect and the portal is the whole
       grant. ⭐ No re-review question — the app is not under review (see STATUS).
-- [ ] **Set the two runtime flags** in `/var/www/jawab24/env/backend.env`, then recreate + reload:
+- [x] **Set the two runtime flags** — DONE 2026-08-20 (verified via `printenv` in the container;
+      `GET /salla/store/pending` answers 401, not 404) in `/var/www/jawab24/env/backend.env`,
+      then recreate + reload:
       - `SALLA_EASY_MODE_CLAIM_ENABLED=true`
       - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`
       Verify with `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
@@ -242,7 +265,10 @@ depends on the previous.
       `SALLA_CONNECT_UNAVAILABLE`, `GET /salla/auth` bounces back to `/integrations`, and the card
       shows no Connect or Reconnect button. ⭐ Setting this URL is the **whole** of go-live for the
       UI — the buttons return by configuration, with no code change to remember.
-- [ ] **Run Tier 0** of `docs/SALLA_TEST_PLAN.md` and confirm every row passes.
+- [x] **Run Tier 0** of `docs/SALLA_TEST_PLAN.md` — ALL ROWS PASS 2026-08-20 (0.1 `c740cc7f` =
+      `origin/main`; 0.2/0.3 verified in-container incl. `SALLA_HOST_NAME=jawab24.com`; 0.4 portal
+      read; 0.5 `sallaBilling.js` present; 0.6 all containers healthy after recreate + reload;
+      0.7 resolved).
 
 ## Phase 3 — Go-live verification (the rehearsal, before publishing)
 
