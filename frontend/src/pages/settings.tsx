@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, detectTimezone, resolveStoredTimezone } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, detectTimezone, resolveStoredTimezone, toReplyMode } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, PageSkeleton, ViewOnlyBanner } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -140,7 +140,6 @@ const SettingsPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const { language, setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
-  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const { canEdit } = useWorkspaceRole();
   const isDemoUser = useIsDemoUser();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
@@ -168,6 +167,14 @@ const SettingsPage: NextPageWithLayout = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(initialSettings);
+  // The same comparison with the reply mode neutralised — "is anything OTHER
+  // than the mode unsaved?". The persona card's Test button gates on this: an
+  // unsaved mode travels to the playground as an explicit override, so it is
+  // previewable without saving, while unsaved text is not. Spreading keeps the
+  // key ORDER of `settings` (overwriting an existing key does not move it), so
+  // the two JSON strings stay comparable.
+  const hasOtherChanges =
+    JSON.stringify({ ...settings, replyMode: initialSettings.replyMode }) !== JSON.stringify(initialSettings);
 
   // Update current time every minute for real-time status badge
   useEffect(() => {
@@ -214,7 +221,7 @@ const SettingsPage: NextPageWithLayout = () => {
         newLeadAlertsEnabled: data.newLeadAlertsEnabled ?? true,
         pushNotifications: data.pushNotifications ?? true,
         replyStyle: data.replyStyle || 'professional',
-        replyMode: data.replyMode === 'info' ? 'info' : 'sales',
+        replyMode: toReplyMode(data.replyMode),
         brandVoiceNotes: data.brandVoiceNotes || '',
         holdLowConfidence: data.holdLowConfidence ?? false,
         likeComments: data.likeComments ?? false,
@@ -385,12 +392,13 @@ const SettingsPage: NextPageWithLayout = () => {
           validationMessage,
         },
       });
-      // The reply-mode gates (D-085) 403 with a specific code. A generic
+      // The reply-mode workspace guard 403s with a specific code. A generic
       // "something went wrong" leaves the merchant clicking Save forever with
       // a dirty draft and no idea why — the page-scope PATCH already names
-      // this case, and the workspace save must too.
-      if (validationCode === 'REPLY_MODE_NOT_ENABLED' || validationCode === 'REPLY_MODE_WORKSPACE_MISMATCH') {
-        toast.error(t('replyMode.notEnabled'));
+      // this case, and the workspace save must too. (The allowlist code this
+      // also handled is gone with the D-087 gate deletion.)
+      if (validationCode === 'REPLY_MODE_WORKSPACE_MISMATCH') {
+        toast.error(t('replyMode.workspaceMismatch'));
       } else {
         toast.error(tc('error'));
       }
@@ -515,9 +523,9 @@ const SettingsPage: NextPageWithLayout = () => {
             settings={settings}
             setSettings={setSettings}
             hasChanges={hasChanges}
+            hasOtherChanges={hasOtherChanges}
             savedBrandVoiceNotesMulti={initialSettings.brandVoiceNotesMulti}
-            savedReplyMode={initialSettings.replyMode === 'info' ? 'info' : 'sales'}
-            workspaceId={activeWorkspaceId}
+            savedReplyMode={toReplyMode(initialSettings.replyMode)}
             onScrollToAdvanced={() => {
               setShowAdvanced(true);
               requestAnimationFrame(() => {

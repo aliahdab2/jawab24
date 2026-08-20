@@ -15,7 +15,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { merchantBusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek, removeKbLines, businessPhoneList, unwrapBusinessProfile, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
+import { canonicalizeHoursWeek, removeKbLines, businessPhoneList, unwrapBusinessProfile, hasRoutableContactChannel, isReplyMode, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { smartTranslateMultiLang } from '../services/multiLangTranslation';
 import { translateText } from '../services/translation';
 import { workspaceSettingsService } from '../services/workspaceSettings';
@@ -109,14 +109,23 @@ export function serializePage<T extends {
 export function serializeListPage<T extends Parameters<typeof serializePage>[0] & {
     knowledgeBase?: string | null;
     suggestedKnowledgeBase?: string | null;
-    businessProfile?: unknown;
+    // REQUIRED, unlike the two above: the booleans this serializer derives are
+    // false-by-default, so a caller that stopped selecting the column would
+    // publish `hasContactChannel: false` for every page and light the dead-end
+    // warning fleet-wide — with no error anywhere. Requiring the key turns that
+    // into a compile failure at the call site instead. (`unknown` still admits
+    // null/undefined VALUES, which is the legitimate no-profile case.)
+    businessProfile: unknown;
 }>(page: T) {
     const {
-        // `_businessProfile` is destructured ONLY to drop it from `rest`; the
-        // other two are read below to compute `kbFilled`.
-        knowledgeBase, suggestedKnowledgeBase, businessProfile: _businessProfile,
+        // All three are read below to compute the two booleans that replace
+        // them; none survives into `rest`.
+        knowledgeBase, suggestedKnowledgeBase, businessProfile,
         ...rest
     } = serializePage(page);
+    const { merchant, merchantProvenance } = unwrapBusinessProfile(
+        businessProfile as Parameters<typeof unwrapBusinessProfile>[0],
+    );
     return {
         ...rest,
         // The same shared predicate the frontend's isKbFilled uses
@@ -126,6 +135,11 @@ export function serializeListPage<T extends Parameters<typeof serializePage>[0] 
         // stricter, different question (see its warning) and would change which
         // pages count as filled.
         kbFilled: isBusinessInfoProvided(knowledgeBase, suggestedKnowledgeBase),
+        // Same shape of answer for the profile the trim drops: the reply-mode
+        // control must know whether 'info' has a channel to route to, and the
+        // predicate is the shared one the BUSINESS_INFO block itself applies, so
+        // the warning and the prompt cannot disagree (D-085 GA).
+        hasContactChannel: hasRoutableContactChannel(merchant ?? {}, merchantProvenance),
     };
 }
 
@@ -470,9 +484,8 @@ export class PagesController {
      * Set a page's reply-mode override.
      * PATCH /pages/:id/reply-mode  (admin+ only)
      * Body: { replyMode: 'sales' | 'info' | null } — null reverts to the
-     * workspace default. 'info' is allowlist-gated at this WRITE path
-     * (config.replyMode.workspaceIds) — the reply pipeline itself just reads
-     * whatever is stored. GA = deleting the gate in code, not emptying the env.
+     * workspace default. Generally available since D-087; the reply pipeline
+     * itself just reads whatever is stored.
      */
     async updateReplyMode(request: FastifyRequest<{ Params: { id: string }; Body: UpdateReplyModeDTO }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
@@ -481,14 +494,9 @@ export class PagesController {
         }
         const { id } = request.params;
         const body = request.body ?? ({} as UpdateReplyModeDTO);
-        if (!('replyMode' in body) || (body.replyMode !== null && body.replyMode !== 'sales' && body.replyMode !== 'info')) {
+        if (!('replyMode' in body) || (body.replyMode !== null && !isReplyMode(body.replyMode))) {
             return reply.status(400).send({ error: 'replyMode must be \'sales\', \'info\', or null' });
         }
-        const allowlist = config.replyMode.workspaceIds;
-        if (body.replyMode === 'info' && !allowlist.includes(req.workspaceId)) {
-            return reply.status(403).send({ error: 'Reply mode \'info\' is not enabled for this workspace', code: 'REPLY_MODE_NOT_ENABLED' });
-        }
-
         try {
             const existing = await pagesService.getPage(req.workspaceId, id);
             if (!existing) {
@@ -1003,14 +1011,14 @@ export class PagesController {
      * Test smart reply generation for a page
      * POST /pages/:id/test-reply
      */
-    async testReply(request: FastifyRequest<{ Params: { id: string }; Body: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>, reply: FastifyReply) {
+    async testReply(request: FastifyRequest<{ Params: { id: string }; Body: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyMode?: string } }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { workspaceOwnerId } = req;
         const { id } = request.params;
-        const { question, channel, postMessage, conversationHistory } = request.body;
+        const { question, channel, postMessage, conversationHistory, replyMode } = request.body;
         const startTime = Date.now();
 
         // 1. Validate input
@@ -1031,6 +1039,12 @@ export class PagesController {
         }
         if (conversationHistory && conversationHistory.length > 20) {
             return reply.status(400).send({ error: 'conversationHistory must be 20 messages or less' });
+        }
+        // Optional reply-mode override: lets the settings card preview a mode the
+        // merchant has picked but not saved. Scoped to THIS generation — it is
+        // never persisted, and the page keeps whatever is stored.
+        if (replyMode !== undefined && !isReplyMode(replyMode)) {
+            return reply.status(400).send({ error: 'replyMode must be \'sales\' or \'info\'' });
         }
 
         // 2. Check AI quota
@@ -1055,6 +1069,9 @@ export class PagesController {
             const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
                 page, question, channel, postMessage,
                 conversationHistory: channel === 'dm' ? conversationHistory : undefined,
+                // Omitted unless overridden — buildPlaygroundContext then resolves
+                // page pin → workspace default, exactly as production does.
+                replyMode,
             });
 
             // 7. Generate reply via the same pipeline as production

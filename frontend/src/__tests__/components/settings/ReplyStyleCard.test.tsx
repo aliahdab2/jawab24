@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { ReplyStyleCard } from '@/components/settings/ReplyStyleCard';
@@ -6,11 +6,16 @@ import type { SettingsState } from '@/components/settings/types';
 import enSettings from '@/i18n/en/settings.json';
 
 // Mock the lazy-loaded test modal as a probe exposing WHICH page it was opened
-// on — the default-target pins below assert the card's page selection without
-// rendering the real modal.
+// on, and WHICH reply mode was forced for that generation — the pins below
+// assert the card's page selection and its mode override without rendering the
+// real modal. 'none' (not '') so an override that vanishes is distinguishable
+// from an empty render.
 vi.mock('next/dynamic', () => ({
-  default: () => (props: { page?: { name?: string } }) => (
-    <div data-testid="test-modal">{props.page?.name}</div>
+  default: () => (props: { page?: { name?: string }; replyMode?: string }) => (
+    <div data-testid="test-modal">
+      {props.page?.name}
+      <span data-testid="test-modal-reply-mode">{props.replyMode ?? 'none'}</span>
+    </div>
   ),
 }));
 
@@ -22,18 +27,12 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-// The reply-mode section is workspace-gated (D-085 pilot). The flag fn itself
-// is the trivial allowlist pattern; the UI tests control it by workspace id.
-vi.mock('@/lib/featureFlags', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/featureFlags')>()),
-  isReplyModeVisible: (id: string | null | undefined) => id === 'mode-ws',
-}));
-
 vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
 // next-intl mock from setup.ts handles `useTranslations` automatically with real EN strings.
 
 import { pagesApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 import { makeSettings } from '../../testUtils/settingsFactory';
 import { intlState } from '../../testUtils/intlState';
 
@@ -368,17 +367,28 @@ describe('ReplyStyleCard', () => {
     ];
     const QUESTION = /What should the assistant do when a customer wants to buy or book/i;
 
-    it('renders nothing for a workspace outside the pilot allowlist', async () => {
+    // GA (D-087). This is the exact scenario that rendered NOTHING under the
+    // pilot allowlist: an ordinary workspace. Restore the gate and it fails.
+    it('renders for every workspace — no allowlist survives', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="other-ws" savedReplyMode="sales" />);
-      await waitFor(() => expect(pagesApi.getAll).toHaveBeenCalled());
-      expect(screen.queryByText(QUESTION)).not.toBeInTheDocument();
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
+      expect(await screen.findByText(QUESTION)).toBeInTheDocument();
+    });
+
+    // A workspace with NO pages at all still owns a default its future pages
+    // will inherit; rendering the question but hiding it behind a page list
+    // would leave that merchant unable to set one.
+    it('renders with zero connected pages, and warns about none of them', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: [] } as never);
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} savedReplyMode="info" />);
+      expect(await screen.findByText(QUESTION)).toBeInTheDocument();
+      expect(screen.queryByText(/no phone or WhatsApp number/i)).not.toBeInTheDocument();
     });
 
     it('workspace scope: picking «Information source» updates the settings draft (saved via the settings path)', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       const setSettings = vi.fn();
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={setSettings} workspaceId="mode-ws" savedReplyMode="sales" />);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={setSettings} savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
 
       fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
@@ -390,21 +400,21 @@ describe('ReplyStyleCard', () => {
     it('shows the quiet-leads note exactly when the selection means info', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       const { rerender } = render(
-        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />,
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />,
       );
       await screen.findByText(QUESTION);
-      expect(screen.queryByText(/saved to Leads automatically without sending alerts/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/saved to Leads automatically — without a push notification/i)).not.toBeInTheDocument();
 
       rerender(
-        <ReplyStyleCard key="info" settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="info" />,
+        <ReplyStyleCard key="info" settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} savedReplyMode="info" />,
       );
-      expect(screen.getByText(/saved to Leads automatically without sending alerts/i)).toBeInTheDocument();
+      expect(screen.getByText(/saved to Leads automatically — without a push notification/i)).toBeInTheDocument();
     });
 
     it('page scope: three options; picking one PATCHes immediately and pins the page', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: { ...TWO_PAGES[0], replyMode: 'info' } } as never);
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
@@ -431,7 +441,7 @@ describe('ReplyStyleCard', () => {
       // (owner report 2026-08-17).
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: { ...TWO_PAGES[0], replyMode: 'info' } } as never);
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
 
@@ -442,14 +452,16 @@ describe('ReplyStyleCard', () => {
 
     it('page scope: rolls the pin back and shows an error when the PATCH fails', async () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
-      vi.mocked(pagesApi.updateReplyMode).mockRejectedValue({ response: { data: { code: 'REPLY_MODE_NOT_ENABLED' } } });
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      vi.mocked(pagesApi.updateReplyMode).mockRejectedValue({ response: { status: 500 } });
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
       fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(/isn't enabled for your account/i);
+      // One message for every failure now: the allowlist 403 that used to earn
+      // its own copy cannot happen after GA (D-087).
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn't save the choice for this page/i);
       // Rolled back: inherit is selected again.
       expect(screen.getByRole('radio', { name: /Default \(Sales assistant\)/i })).toHaveAttribute('aria-checked', 'true');
     });
@@ -465,7 +477,7 @@ describe('ReplyStyleCard', () => {
           { id: 'p9', name: 'Revoked Page', isConnected: false, brandVoiceNotesMulti: null, replyMode: 'info' },
         ],
       } as never);
-      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
       await screen.findByText(QUESTION);
 
       const options = Array.from(screen.getAllByRole('combobox')[0].querySelectorAll('option')).map((o) => o.textContent);
@@ -476,7 +488,7 @@ describe('ReplyStyleCard', () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: TWO_PAGES } as never);
       // Draft says info, persisted default is still sales → block page pins.
       render(
-        <ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" savedReplyMode="sales" />,
+        <ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} savedReplyMode="sales" />,
       );
       await screen.findByText(QUESTION);
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
@@ -506,7 +518,7 @@ describe('ReplyStyleCard', () => {
     const infoNote = enSettings.replyStyle.infoModeNote;
 
     it('sales mode gets the sales placeholder and pays nothing for the info note', () => {
-      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'sales' })} setSettings={vi.fn()} workspaceId="mode-ws" />);
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'sales' })} setSettings={vi.fn()} />);
 
       expect(screen.getByPlaceholderText(salesPlaceholder)).toBeInTheDocument();
       // The extra line lands ONLY where an instruction would be reversed. A card
@@ -515,7 +527,7 @@ describe('ReplyStyleCard', () => {
     });
 
     it('info mode swaps the placeholder and states that a collect instruction will not run', () => {
-      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} workspaceId="mode-ws" />);
+      render(<ReplyStyleCard settings={makeSettings({ replyMode: 'info' })} setSettings={vi.fn()} />);
 
       expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
       expect(screen.getByText(infoNote)).toBeInTheDocument();
@@ -525,50 +537,37 @@ describe('ReplyStyleCard', () => {
       let current = makeSettings({ replyMode: 'sales' });
       const setSettings = vi.fn((next: SettingsState) => { current = next; });
       const { rerender } = render(
-        <ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />,
+        <ReplyStyleCard settings={current} setSettings={setSettings} />,
       );
 
       fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
-      rerender(<ReplyStyleCard settings={current} setSettings={setSettings} workspaceId="mode-ws" />);
+      rerender(<ReplyStyleCard settings={current} setSettings={setSettings} />);
 
       // Waiting for the save would leave the merchant writing against the old
       // guidance for the whole edit.
       expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
     });
 
-    it('outside the pilot an unreachable DRAFT does not move the copy', () => {
-      // With no control rendered there is no draft the merchant could have set;
-      // what runs is the SAVED mode, and here that is sales.
-      render(
-        <ReplyStyleCard
-          settings={makeSettings({ replyMode: 'info' })}
-          setSettings={vi.fn()}
-          savedReplyMode="sales"
-          workspaceId="other-ws"
-        />,
-      );
-
-      expect(screen.getByPlaceholderText(salesPlaceholder)).toBeInTheDocument();
-      expect(screen.queryByText(infoNote)).not.toBeInTheDocument();
-    });
-
-    it('a STORED info that outlives the allowlist still gets info copy', () => {
-      // The allowlist gates the WRITE paths only — backend/docs/SETTINGS.md:
-      // "the reply pipeline reads whatever is stored". So on the documented
-      // rollback path (kill switch emptied, or the workspace dropped after the
-      // pilot) replies keep running INFO-DESK with the control gone. Forcing
-      // sales copy there would invite a collect-instruction that the pipeline
-      // reverses — this card's original defect, on the unwatched path.
+    // Reframed at GA from "a stored info that outlives the allowlist": that
+    // state needed a gate to exist. The invariant it protected does NOT need
+    // one — the copy must describe the mode the page will actually RUN, and an
+    // INHERITING page runs the workspace default. Get this wrong and the
+    // merchant of an info page is invited to write «اطلب اسم العميل ورقمه»,
+    // an instruction INFO-DESK then reverses: this card's original defect.
+    it('a page that INHERITS an info default gets info copy without a pin of its own', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [{ ...PAGES[0], replyMode: null }, PAGES[1]],
+      } as never);
       render(
         <ReplyStyleCard
           settings={makeSettings({ replyMode: 'info' })}
           setSettings={vi.fn()}
           savedReplyMode="info"
-          workspaceId="other-ws"
         />,
       );
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
 
-      expect(screen.queryByText(enSettings.replyMode.question)).not.toBeInTheDocument();
       expect(screen.getByPlaceholderText(infoPlaceholder)).toBeInTheDocument();
       expect(screen.getByText(infoNote)).toBeInTheDocument();
     });
@@ -582,7 +581,7 @@ describe('ReplyStyleCard', () => {
           settings={makeSettings({ replyMode: 'sales' })}
           setSettings={vi.fn()}
           savedReplyMode="sales"
-          workspaceId="mode-ws"
+         
         />,
       );
       await screen.findByText(SCOPE_LABEL);
@@ -624,6 +623,146 @@ describe('ReplyStyleCard', () => {
 
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
       expect(screen.getByText(enSettings.replyStyle.tonePageNote)).toBeInTheDocument();
+    });
+  });
+
+  // ── Read-only members (D-087) ─────────────────────────────────────────────
+  // The page-scope radios PATCH on click with no Save button, and that route is
+  // admin+. Before GA only two workspaces could reach it; now every one can, so
+  // a `member` must not be handed a control that flips and then flips back.
+  describe('read-only member', () => {
+    const PAGES = [
+      { id: 'p1', name: 'Resort Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+      { id: 'p2', name: 'Fashion Page', isConnected: true, brandVoiceNotesMulti: null, replyMode: null },
+    ];
+    const QUESTION = new RegExp(enSettings.replyMode.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    const asMember = () => {
+      useAuthStore.setState({
+        workspaces: [{ id: 'ws-1', name: 'W', role: 'member' }],
+        activeWorkspaceId: 'ws-1',
+      } as never);
+    };
+
+    // The store is module state and `clearAllMocks` does not touch it — without
+    // this every LATER test in the file runs as a member and its controls are
+    // disabled, which is how this block first broke four unrelated cases.
+    afterEach(() => {
+      useAuthStore.setState({ workspaces: [], activeWorkspaceId: null } as never);
+    });
+
+    it('disables the workspace radios and never dirties the draft', async () => {
+      asMember();
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      const setSettings = vi.fn();
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={setSettings} savedReplyMode="sales" />);
+      await screen.findByText(QUESTION);
+
+      const info = screen.getByRole('radio', { name: INFO_DESK });
+      expect(info).toBeDisabled();
+      fireEvent.click(info);
+      expect(setSettings).not.toHaveBeenCalled();
+    });
+
+    it('disables the page radios, so no PATCH is ever attempted', async () => {
+      asMember();
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      render(<ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />);
+      await screen.findByText(SCOPE_LABEL);
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });
+
+      const info = screen.getByRole('radio', { name: INFO_DESK });
+      expect(info).toBeDisabled();
+      fireEvent.click(info);
+      expect(pagesApi.updateReplyMode).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Info mode with nowhere to route (D-087) ───────────────────────────────
+  // INFO-DESK forbids asking for the customer's details and routes to a channel
+  // from BUSINESS_INFO instead — «If no channel is on file, be honest you don't
+  // have one and stop». With neither a phone nor a WhatsApp that is a dead end
+  // for a buying customer: no ask, no route. Measured on prod 2026-08-20 this is
+  // 29 of 36 live pages, so the card must say so BEFORE the merchant picks it.
+  describe('no-channel warning', () => {
+    const WITH = { id: 'p1', name: 'Has Phone', isConnected: true, brandVoiceNotesMulti: null, replyMode: null, hasContactChannel: true };
+    const WITHOUT = { id: 'p2', name: 'No Phone', isConnected: true, brandVoiceNotesMulti: null, replyMode: null, hasContactChannel: false };
+    const warning = () => screen.queryByText(/no phone or WhatsApp number/i);
+    const QUESTION = new RegExp(enSettings.replyMode.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    const renderCard = (pages: unknown[], replyMode: 'sales' | 'info', saved: 'sales' | 'info' = 'sales') => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: pages } as never);
+      return render(
+        <ReplyStyleCard settings={makeSettings({ replyMode })} setSettings={vi.fn()} savedReplyMode={saved} />,
+      );
+    };
+
+    it('stays silent in sales mode, however many pages lack a channel', async () => {
+      renderCard([WITHOUT, WITHOUT], 'sales');
+      await screen.findByText(QUESTION);
+      expect(warning()).not.toBeInTheDocument();
+    });
+
+    it('warns in info mode, counting only the pages that lack a channel', async () => {
+      renderCard([WITH, WITHOUT], 'info', 'info');
+      await screen.findByText(QUESTION);
+      expect(warning()).toBeInTheDocument();
+      expect(warning()).toHaveTextContent(/^One of your pages/);
+    });
+
+    it('stays silent when every page can route', async () => {
+      renderCard([WITH, WITH], 'info', 'info');
+      await screen.findByText(QUESTION);
+      expect(warning()).not.toBeInTheDocument();
+    });
+
+    // The workspace default does not govern a page with its own pin, so a
+    // pinned page must not be counted — the merchant would be told to fix a
+    // page this choice cannot reach.
+    it('excludes pages pinned to their own mode from the count', async () => {
+      renderCard([{ ...WITHOUT, replyMode: 'sales' }, { ...WITHOUT, id: 'p3', replyMode: 'info' }], 'info', 'info');
+      await screen.findByText(QUESTION);
+      expect(warning()).not.toBeInTheDocument();
+    });
+
+    // Disconnected pages answer nobody, so warning about them is noise.
+    it('excludes disconnected pages from the count', async () => {
+      renderCard([{ ...WITHOUT, isConnected: false }], 'info', 'info');
+      await screen.findByText(QUESTION);
+      expect(warning()).not.toBeInTheDocument();
+    });
+
+    // `undefined` = a legacy fat-shape row or an old mobile build that predates
+    // the field. Unknown is NOT "missing": alarming on it would warn every such
+    // client about pages that may be perfectly fine.
+    it('treats an absent flag as unknown, not as missing', async () => {
+      renderCard([{ ...WITHOUT, hasContactChannel: undefined }], 'info', 'info');
+      await screen.findByText(QUESTION);
+      expect(warning()).not.toBeInTheDocument();
+    });
+
+    it('warns about the SCOPED page only, when a page scope is open', async () => {
+      // Pin the PATCH to success explicitly: `clearAllMocks` clears calls but
+      // keeps implementations, so the rollback test's `mockRejectedValue`
+      // survives into this one and would roll the pin (and the warning) back.
+      vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: {} } as never);
+      renderCard([WITHOUT, WITH], 'sales');
+      await screen.findByText(SCOPE_LABEL);
+
+      // p2 (no channel) inherits a 'sales' default → nothing to warn about yet.
+      fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p2' } });
+      expect(warning()).not.toBeInTheDocument();
+
+      // Pin that page to info and the dead end becomes real.
+      fireEvent.click(screen.getByRole('radio', { name: INFO_DESK }));
+      await waitFor(() => expect(warning()).toBeInTheDocument());
+      expect(warning()).toHaveTextContent(/^This page has no phone/);
+    });
+
+    it('never blocks the choice it warns about', async () => {
+      renderCard([WITHOUT], 'sales');
+      await screen.findByText(QUESTION);
+      expect(screen.getByRole('radio', { name: INFO_DESK })).toBeEnabled();
     });
   });
 
@@ -681,6 +820,66 @@ describe('ReplyStyleCard', () => {
       expect(testBtn()).toBeEnabled();
     });
 
+    // GA (D-087): an unsaved MODE is previewable, so it must not block Test —
+    // it is sent to the playground as an explicit override. Everything else
+    // unsaved still blocks. `hasOtherChanges` is the seam; before it, the only
+    // way to see what info mode does was to save it live on every page.
+    it('an unsaved MODE alone does not block the test, and travels as an override', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          hasChanges
+          hasOtherChanges={false}
+          savedReplyMode="sales"
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+
+      expect(testBtn()).toBeEnabled();
+      fireEvent.click(testBtn());
+      expect(await screen.findByTestId('test-modal-reply-mode')).toHaveTextContent('info');
+    });
+
+    it('any OTHER unsaved field still blocks the test', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          hasChanges
+          hasOtherChanges
+          savedReplyMode="sales"
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+
+      expect(testBtn()).toBeDisabled();
+    });
+
+    // The target page carries its OWN pin, so the workspace draft does not
+    // govern it. Forcing the draft onto it would show a reply that page will
+    // never produce.
+    it('does not force the draft mode onto a page that is pinned', async () => {
+      vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+        data: [{ ...PAGES[0], replyMode: 'sales' }, PAGES[1]],
+      } as never);
+      render(
+        <ReplyStyleCard
+          settings={makeSettings({ replyMode: 'info' })}
+          setSettings={vi.fn()}
+          hasChanges
+          hasOtherChanges={false}
+          savedReplyMode="sales"
+        />,
+      );
+      await screen.findByText(SCOPE_LABEL);
+
+      fireEvent.click(testBtn());
+      expect(await screen.findByTestId('test-modal-reply-mode')).toHaveTextContent('none');
+    });
+
     it('a saved workspace persona does NOT block the test outside a page scope', () => {
       // The trap in the fix: outside a page scope the seeding effect returns
       // early, so `pageDraft` is '' while `pageEffectiveText` is the workspace
@@ -711,7 +910,7 @@ describe('ReplyStyleCard', () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
       vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: {} } as never);
       render(
-        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" workspaceId="mode-ws" />,
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />,
       );
       await screen.findByText(SCOPE_LABEL);
 
@@ -730,7 +929,7 @@ describe('ReplyStyleCard', () => {
       vi.mocked(pagesApi.getAll).mockResolvedValueOnce({ data: PAGES } as never);
       vi.mocked(pagesApi.updateReplyMode).mockResolvedValue({ data: {} } as never);
       const { container } = render(
-        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" workspaceId="mode-ws" />,
+        <ReplyStyleCard settings={makeSettings()} setSettings={vi.fn()} savedReplyMode="sales" />,
       );
       await screen.findByText(SCOPE_LABEL);
       fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'p1' } });

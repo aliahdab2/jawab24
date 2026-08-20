@@ -211,7 +211,7 @@ export const pagesApi = {
   // workspace default; 'sales' | 'info' pins the mode for this page.
   updateReplyMode: (id: string, replyMode: 'sales' | 'info' | null) =>
     api.patch(`/pages/${id}/reply-mode`, { replyMode }),
-  testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
+  testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyMode?: 'sales' | 'info' }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };
 

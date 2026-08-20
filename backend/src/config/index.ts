@@ -189,36 +189,6 @@ export const config = {
         dailyCapPerPage: parseInt(process.env.POST_SUGGESTIONS_DAILY_CAP || '3', 10),
     },
 
-    // Reply-mode allowlist pilot (2026-08-15). Workspaces allowed to store
-    // replyMode='info' (information-desk mode). Enforced at the WRITE path only
-    // (settings + pages controllers) — the reply pipeline just reads whatever is
-    // stored, so there is no hot-path env check. FAIL-CLOSED: an empty list
-    // enables NOBODY (finding H4) — GA is deleting the gates in code, never
-    // emptying or flipping an env var. Must stay in step with
-    // NEXT_PUBLIC_REPLY_MODE_WORKSPACE_IDS in frontend/src/lib/featureFlags.ts
-    // (frontend only hides the card; this list is the enforcement).
-    replyMode: {
-        // Presence check, NOT `||`: with `||` an operator who sets
-        // REPLY_MODE_WORKSPACE_IDS='' to kill the pilot mid-incident gets the
-        // built-in default back (''  is falsy), so there would be no env-only
-        // kill switch and the "empty enables nobody" rule above would be
-        // unreachable. An explicitly empty var now means exactly that: nobody.
-        workspaceIds: ((process.env.REPLY_MODE_WORKSPACE_IDS !== undefined
-            ? process.env.REPLY_MODE_WORKSPACE_IDS
-            : [
-                // InMedia agency (inmedia.sy@gmail.com) — the requesting merchant
-                // (Shahin Resort + Shahin World). Kept in the DEFAULT rather than
-                // the server env so the pilot is one reviewable deploy.
-                'd06ed500-74ea-42ee-bff6-37bee2cf412a',
-                // Founder workspace (aliahdab@gmail.com) — dogfooding during the
-                // pilot (owner order 2026-08-17). Must stay in step with the
-                // frontend default in featureFlags.ts (that one only hides the
-                // UI; this list is the enforcement).
-                'a0005407-92bf-473e-9368-013f14c57a7d',
-            ].join(','))
-        ).split(',').map(id => id.trim()).filter(Boolean),
-    },
-
     // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds
     // for the admin AI Cost panel. The org credit wallet is drained by ALL keys, so
     // burn/runway are computed from the OpenAI Costs API org total, not ai_usage_log.

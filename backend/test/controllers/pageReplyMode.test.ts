@@ -68,9 +68,6 @@ vi.mock('../../src/utils/validation', () => ({
     validateSchema: vi.fn(),
 }));
 
-// The reply-mode allowlist is mutated per test (fail-closed semantics, H4):
-// tests splice/push entries instead of re-mocking the whole config module.
-import { config } from '../../src/config';
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { auditLog } from '../../src/services/auditLog';
@@ -81,23 +78,17 @@ import { validateSchema } from '../../src/utils/validation';
 const ALLOWED_WS = 'allowed-ws';
 const OTHER_WS = 'other-ws';
 
-function setAllowlist(ids: string[]) {
-    config.replyMode.workspaceIds.splice(0, config.replyMode.workspaceIds.length, ...ids);
-}
-
 /**
- * R-2 write-surface suite for the per-page reply mode (D-085):
- * PATCH /pages/:id/reply-mode — 400 / 401 / 403 (incl. the empty-allowlist
- * fail-closed branch, H4) / 404 / tenant isolation / the M1 audit row.
+ * R-2 write-surface suite for the per-page reply mode (D-085, GA per D-087):
+ * PATCH /pages/:id/reply-mode — 400 / 401 / 404 / tenant isolation / the M1
+ * audit row. The allowlist branches are gone with the gate; what remains is the
+ * enum validation and the tenant scoping, which GA did not relax.
  */
 describe('PagesController.updateReplyMode', () => {
     let mockRequest: Partial<WorkspaceRequest>;
     let mockReply: Partial<FastifyReply>;
-    const savedAllowlist = [...config.replyMode.workspaceIds];
-
     beforeEach(() => {
         vi.clearAllMocks();
-        setAllowlist([ALLOWED_WS]);
         mockReply = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
@@ -111,10 +102,6 @@ describe('PagesController.updateReplyMode', () => {
             log: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } as never,
         };
     });
-
-    // Restore the real allowlist after the suite so other files in the same
-    // worker see the config they imported.
-    afterAll(() => setAllowlist(savedAllowlist));
 
     function callUpdate() {
         return pagesController.updateReplyMode(
@@ -150,25 +137,18 @@ describe('PagesController.updateReplyMode', () => {
         expect(pagesService.updateReplyMode).not.toHaveBeenCalled();
     });
 
-    it("403 REPLY_MODE_NOT_ENABLED when 'info' is requested outside the allowlist", async () => {
+    // GA (D-087): 'info' is no longer refused for anyone. This is the case that
+    // 403'd for every workspace outside the pilot allowlist — it must now reach
+    // the service, or the gate is still in place somewhere.
+    it("'info' is accepted for ANY workspace — no allowlist survives", async () => {
         mockRequest.workspaceId = OTHER_WS;
+        armPage(null, OTHER_WS);
         await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(mockReply.send).toHaveBeenCalledWith(
-            expect.objectContaining({ code: 'REPLY_MODE_NOT_ENABLED' }),
-        );
-        expect(pagesService.updateReplyMode).not.toHaveBeenCalled();
+        expect(mockReply.status).not.toHaveBeenCalledWith(403);
+        expect(pagesService.updateReplyMode).toHaveBeenCalledWith(OTHER_WS, 'page-1', 'info');
     });
 
-    it("403 on an EMPTY allowlist — fail-closed, no GA-by-empty-env escape (H4)", async () => {
-        setAllowlist([]);
-        await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(pagesService.updateReplyMode).not.toHaveBeenCalled();
-    });
-
-    it("'sales' is never allowlist-gated", async () => {
-        setAllowlist([]);
+    it("'sales' pins the page against a workspace flip", async () => {
         mockRequest.body = { replyMode: 'sales' };
         armPage('info');
         await callUpdate();
@@ -176,8 +156,7 @@ describe('PagesController.updateReplyMode', () => {
         expect(pagesService.updateReplyMode).toHaveBeenCalledWith(ALLOWED_WS, 'page-1', 'sales');
     });
 
-    it('null (revert to workspace default) is never allowlist-gated', async () => {
-        setAllowlist([]);
+    it('null reverts the page to the workspace default', async () => {
         mockRequest.body = { replyMode: null };
         armPage('info');
         await callUpdate();
@@ -236,11 +215,8 @@ describe('PagesController.updateReplyMode', () => {
 describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
     let mockRequest: Record<string, unknown>;
     let mockReply: Partial<FastifyReply>;
-    const savedAllowlist = [...config.replyMode.workspaceIds];
-
     beforeEach(() => {
         vi.clearAllMocks();
-        setAllowlist([ALLOWED_WS]);
         mockReply = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
@@ -257,8 +233,6 @@ describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
         vi.mocked(settingsService.getSettings).mockResolvedValue({ supportedLanguages: ['ar', 'en'] } as never);
         vi.mocked(settingsService.updateSettings).mockResolvedValue({ replyMode: 'info' } as never);
     });
-
-    afterAll(() => setAllowlist(savedAllowlist));
 
     function callUpdate() {
         return settingsController.update(mockRequest as never, mockReply as never);
@@ -281,35 +255,42 @@ describe("SettingsController.update — replyMode 'info' gate (H3)", () => {
         expect(settingsService.updateSettings).not.toHaveBeenCalled();
     });
 
-    it('403 REPLY_MODE_NOT_ENABLED when the (matching) write target is outside the allowlist', async () => {
-        mockRequest.workspaceId = OTHER_WS;
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
-        await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(mockReply.send).toHaveBeenCalledWith(
-            expect.objectContaining({ code: 'REPLY_MODE_NOT_ENABLED' }),
-        );
-        expect(settingsService.updateSettings).not.toHaveBeenCalled();
-    });
-
-    it('403 on an EMPTY allowlist even when target and request agree (fail-closed, H4)', async () => {
-        setAllowlist([]);
-        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(ALLOWED_WS);
-        await callUpdate();
-        expect(mockReply.status).toHaveBeenCalledWith(403);
-        expect(settingsService.updateSettings).not.toHaveBeenCalled();
-    });
-
-    it('proceeds when the write target matches the request AND is allowlisted', async () => {
+    it('proceeds when the write target matches the request workspace', async () => {
         vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(ALLOWED_WS);
         await callUpdate();
         expect(mockReply.status).not.toHaveBeenCalledWith(403);
         expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({ replyMode: 'info' }));
     });
 
-    it("never invokes the resolver for 'sales' (no gate on the default mode)", async () => {
+    it("'info' is accepted for a workspace that was never in the pilot allowlist", async () => {
+        mockRequest.workspaceId = OTHER_WS;
+        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
+        await callUpdate();
+        expect(mockReply.status).not.toHaveBeenCalledWith(403);
+        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({ replyMode: 'info' }));
+    });
+
+    // GA WIDENED the mismatch guard from 'info' to BOTH modes. Turning info OFF
+    // on the wrong workspace silently restores lead-capture asks on another
+    // merchant's pages — the same defect as turning it on, and after GA the
+    // likelier one. Before the widening this test failed: the resolver was
+    // never called for 'sales' and the write went through.
+    it("guards 'sales' too — a mismatched write target is refused", async () => {
         (mockRequest as { body: unknown }).body = { replyMode: 'sales' };
         vi.mocked(validateSchema).mockReturnValue({ success: true, data: { replyMode: 'sales' } } as never);
+        vi.mocked(settingsService.resolveWriteTargetWorkspaceId).mockResolvedValue(OTHER_WS);
+        await callUpdate();
+        expect(settingsService.resolveWriteTargetWorkspaceId).toHaveBeenCalled();
+        expect(mockReply.status).toHaveBeenCalledWith(403);
+        expect(mockReply.send).toHaveBeenCalledWith(
+            expect.objectContaining({ code: 'REPLY_MODE_WORKSPACE_MISMATCH' }),
+        );
+        expect(settingsService.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it("leaves a settings write that does not touch replyMode alone", async () => {
+        (mockRequest as { body: unknown }).body = { replyStyle: 'casual' };
+        vi.mocked(validateSchema).mockReturnValue({ success: true, data: { replyStyle: 'casual' } } as never);
         await callUpdate();
         expect(settingsService.resolveWriteTargetWorkspaceId).not.toHaveBeenCalled();
         expect(settingsService.updateSettings).toHaveBeenCalled();
