@@ -448,6 +448,11 @@ export const config = {
         apiKey: process.env.RESEND_API_KEY || '',
         fromEmail: process.env.RESEND_FROM_EMAIL || 'info@jawab24.com',
         fromName: process.env.RESEND_FROM_NAME || 'Jawab24',
+        // Where merchant replies land. Deliberately NOT defaulted: an unset
+        // value leaves Resend falling back to the From address, which is the
+        // behaviour every email had before this key existed. Point it at a
+        // monitored mailbox to move replies off the sending address.
+        replyToEmail: process.env.RESEND_REPLY_TO || '',
     },
 
     // Object storage (S3-compatible) — merchant-uploaded images (Post Reply trigger

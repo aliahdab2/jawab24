@@ -93,7 +93,7 @@ vi.mock('../utils/sentryHelpers', () => ({
 vi.mock('../config', () => ({
     config: {
         frontendUrl: 'https://jawab24.com',
-        resend: { fromName: 'Jawab24' },
+        resend: { fromName: 'Jawab24', fromEmail: 'info@jawab24.com', replyToEmail: '' },
     },
 }));
 

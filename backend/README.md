@@ -123,6 +123,7 @@ Required in `env/backend.env`:
 | `STRIPE_SECRET_KEY` | Stripe API secret key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook endpoint secret |
 | `RESEND_API_KEY` | Resend email API key |
+| `RESEND_REPLY_TO` | Reply-To header and the address printed in every email footer. Unset → both fall back to `RESEND_FROM_EMAIL` |
 | `SHOPIFY_API_KEY` | Shopify app API key |
 | `SHOPIFY_API_SECRET` | Shopify app secret |
 | `SALLA_CLIENT_ID` | Salla OAuth client ID |

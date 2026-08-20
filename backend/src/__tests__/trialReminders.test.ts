@@ -91,7 +91,7 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../config', () => ({
     config: {
         frontendUrl: 'https://jawab24.com',
-        resend: { fromName: 'Jawab24' },
+        resend: { fromName: 'Jawab24', fromEmail: 'info@jawab24.com', replyToEmail: '' },
         // Importing the real notifications module (for NOTIFICATION_TEMPLATES)
         // pulls in lib/redis, which reads this at import time. `lazyConnect`
         // means no socket is ever opened.

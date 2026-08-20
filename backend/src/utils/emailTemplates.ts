@@ -53,7 +53,16 @@ function langPresentation(lang: 'ar' | 'en'): { rtl: boolean; dir: 'ltr' | 'rtl'
 
 /** The standard body-`<td>` attributes shared by the text-first templates. */
 function standardBodyCell(align: string, fontFamily: string): string {
-    return ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`;
+    return ` class="pad ink" dir="auto" style="padding:24px 34px 30px 34px;color:#3d5155;font-size:16px;line-height:1.7;text-align:${align};font-family:${fontFamily};"`;
+}
+
+/**
+ * The body's leading headline. Eight templates carried a byte-identical `<h1>`
+ * string before this existed — the kind of clone a grep for a function name
+ * never finds.
+ */
+function pageHeading(text: string, marginBottom: number = 14): string {
+    return `<h1 class="ink" style="margin:0 0 ${marginBottom}px 0;font-size:25px;line-height:1.25;font-weight:700;letter-spacing:-0.02em;color:#0b1f24;">${text}</h1>`;
 }
 
 /**
@@ -62,21 +71,71 @@ function standardBodyCell(align: string, fontFamily: string): string {
  * carries untrusted input).
  */
 function ctaButton(url: string, label: string, opts: { margin?: string; paddingX?: number } = {}): string {
-    const { margin = '0 0 24px 0', paddingX = 24 } = opts;
-    return `<p style="margin:${margin};text-align:center;">
-                <a href="${escapeHtml(url)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px ${paddingX}px;border-radius:8px;font-weight:600;font-size:15px;">${label}</a>
-              </p>`;
-}
-
-/** Teal highlight callout — the "good to know" box used by lifecycle emails. */
-function tealCallout(rtl: boolean, html: string, marginBottom: 16 | 24 = 24): string {
-    return `<p style="margin:0 0 ${marginBottom}px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${html}</p>`;
+    const { margin = '0 0 26px 0', paddingX = 28 } = opts;
+    // A shrink-to-fit table rather than a bare inline-block anchor: Word-engine
+    // Outlook drops `display:inline-block` and renders the padding as nothing,
+    // while a `<td>` with a background colour it honours. It also needs no
+    // alignment parameter — a shrink-to-fit table settles on the start edge, so
+    // it follows the document's `dir` in both locales on its own.
+    return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:${margin};">
+                <tr><td bgcolor="#0d9488" style="background-color:#0d9488;border-radius:8px;">
+                  <a href="${escapeHtml(url)}" style="display:inline-block;padding:13px ${paddingX}px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">${label}</a>
+                </td></tr>
+              </table>`;
 }
 
 /**
+ * The "good to know" panel used by the lifecycle emails.
+ *
+ * Neutral ground with the brand colour spent only on the leading edge. It was
+ * teal text on a teal ground inside a teal border, which put three values of
+ * one hue in a box that exists to be read.
+ */
+function calloutPanel(rtl: boolean, html: string, marginBottom: 16 | 26 = 26): string {
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 ${marginBottom}px 0;">
+                <tr><td class="panel" style="background-color:#f5f8f8;border-${rtl ? 'right' : 'left'}:3px solid #0d9488;border-radius:6px;padding:14px 16px;color:#33474b;font-size:14.5px;line-height:1.6;">${html}</td></tr>
+              </table>`;
+}
+
+/**
+ * Origin for images embedded in email.
+ *
+ * Deliberately NOT `config.frontendUrl`: that points at localhost in dev and at
+ * a staging host on staging, and an email outlives the environment that sent
+ * it. A message opened next month must still resolve its logo, so the asset
+ * host is fixed and the image is served from the marketing site.
+ */
+const EMAIL_ASSET_ORIGIN = process.env.EMAIL_ASSET_ORIGIN || 'https://jawab24.com';
+
+/**
+ * Dark-mode and small-screen rules for the shell.
+ *
+ * A `<style>` block is progressive enhancement here — Word-engine Outlook drops
+ * it entirely, which is why every colour also exists inline. The classes only
+ * ever OVERRIDE, so a client that ignores them still renders the light design
+ * as authored rather than an unstyled one.
+ */
+const SHELL_STYLE = `<style>
+  @media (prefers-color-scheme: dark) {
+    .ground { background-color:#0a1214 !important; }
+    .card { background-color:#111d1f !important; border-color:#223335 !important; }
+    .ink, .ink h1 { color:#e6efef !important; }
+    .soft { color:#9db2b1 !important; }
+    .panel { background-color:#16262a !important; color:#c3d4d4 !important; }
+    .rule { border-color:#223335 !important; }
+    .foot, .foot a { color:#8fa4a3 !important; }
+  }
+  @media only screen and (max-width:600px) {
+    .pad { padding:26px 22px !important; }
+    .padtop { padding:24px 22px 0 22px !important; }
+    .foot { padding:20px 22px 24px 22px !important; }
+  }
+</style>`;
+
+/**
  * Shared branded email shell — the markup every transactional email has in
- * common: the document scaffold, a teal brand header, the centered 600/720px
- * card, and a footer. The parts that genuinely differ per email are passed in:
+ * common: the document scaffold, the logo lockup, the centred 600/720px card,
+ * and the footer. The parts that genuinely differ per email are passed in:
  *
  * - `lang` / `dir` / `bodyFontFamily` — content-driven (RTL) for most emails,
  *   fixed for the bilingual invite.
@@ -84,8 +143,9 @@ function tealCallout(rtl: boolean, html: string, marginBottom: 16 | 24 = 24): st
  *   padding and whether they set dir/color/font on the cell vs. inner blocks).
  * - `headExtra` — extra `<head>` markup (the lead-digest responsive `<style>`).
  * - `maxWidth` — card width (600 default; the lead-digest table needs 720).
- * - `footerHtml` — footer inner content; defaults to the brand line. The
- *   waitlist email passes a custom footer carrying the unsubscribe link.
+ * - `footerHtml` — footer inner content; defaults to the support/identity
+ *   block. The waitlist email passes a custom footer carrying the unsubscribe
+ *   link.
  *
  * `title` and the brand name are HTML-escaped here; `preheader`, `bodyHtml`,
  * `headExtra`, and `footerHtml` are caller-controlled markup (callers escape
@@ -105,24 +165,33 @@ function emailShell(opts: {
 }): string {
     const brandName = getBrandName();
     const maxWidth = opts.maxWidth ?? 600;
-    const footerHtml = opts.footerHtml ?? `<p style="margin:0;">${escapeHtml(brandName)} &mdash; jawab24.com</p>`;
+    const isArabic = opts.lang.startsWith('ar');
+    const footerHtml = opts.footerHtml ?? defaultFooter(isArabic ? 'ar' : 'en');
 
     return `<!DOCTYPE html>
 <html lang="${opts.lang}" dir="${opts.dir}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(opts.title)}</title>${opts.headExtra ? `\n${opts.headExtra}` : ''}
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${escapeHtml(opts.title)}</title>
+  ${SHELL_STYLE}${opts.headExtra ? `\n${opts.headExtra}` : ''}
 </head>
-<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:${opts.bodyFontFamily};">
+<body style="margin:0;padding:0;background-color:#f1f4f4;font-family:${opts.bodyFontFamily};">
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${opts.preheader}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+  <table role="presentation" class="ground" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f4f4;padding:36px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="${maxWidth}" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;max-width:${maxWidth}px;width:100%;">
+        <table role="presentation" class="card" width="${maxWidth}" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border:1px solid #e3eaea;border-radius:10px;overflow:hidden;max-width:${maxWidth}px;width:100%;">
           <tr>
-            <td style="background-color:#0d9488;padding:24px 32px;text-align:center;">
-              <span style="color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">${escapeHtml(brandName)}</span>
+            <td class="padtop" style="padding:26px 34px 0 34px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="34" valign="middle" style="padding-inline-end:10px;"><img src="${EMAIL_ASSET_ORIGIN}/brand/logo-small.png" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0;border-radius:8px;"></td>
+                  <td valign="middle"><span class="ink" style="font-size:17px;font-weight:700;color:#0b1f24;letter-spacing:-0.01em;">${escapeHtml(brandName)}</span></td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
@@ -131,7 +200,10 @@ function emailShell(opts: {
             </td>
           </tr>
           <tr>
-            <td style="padding:24px 32px;border-top:1px solid #e4e4e7;text-align:center;color:#71717a;font-size:13px;">
+            <td class="rule" style="border-top:1px solid #e9eeee;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="foot" style="padding:20px 34px 24px 34px;text-align:${opts.dir === 'rtl' ? 'right' : 'left'};color:#728486;font-size:13px;line-height:1.65;">
               ${footerHtml}
             </td>
           </tr>
@@ -141,6 +213,29 @@ function emailShell(opts: {
   </table>
 </body>
 </html>`;
+}
+
+/**
+ * The footer every email gets unless it passes its own. Three lines, because
+ * one line reading "Jawab24 — jawab24.com" tells a merchant nothing it needs:
+ * where to ask a question, who is writing, and how to stop.
+ */
+function defaultFooter(lang: 'ar' | 'en'): string {
+    const brandName = escapeHtml(getBrandName());
+    const settingsUrl = `${config.frontendUrl}/${lang}/settings`;
+    // Whatever address is actually configured — the Reply-To if one is set,
+    // otherwise the From. Never a hardcoded `support@`: a footer that names a
+    // mailbox nobody created is a worse promise than the bare brand line it
+    // replaced.
+    const contact = config.resend.replyToEmail || config.resend.fromEmail;
+    // No address configured → no contact line. A footer must never advertise a
+    // mailbox that does not resolve, and one unrenderable line is not a reason
+    // to fail the whole email.
+    const contactLine = contact
+        ? `<p style="margin:0 0 6px 0;">${t('emailFooterSupport', lang)} <a href="mailto:${escapeHtml(contact)}" style="color:#0d7a86;text-decoration:underline;">${escapeHtml(contact)}</a></p>\n              `
+        : '';
+    return `${contactLine}<p style="margin:0 0 6px 0;">${brandName} &middot; ${t('emailFooterIdentity', lang)}</p>
+              <p style="margin:0;"><a href="${settingsUrl}" style="color:#728486;text-decoration:underline;">${t('emailFooterPreferences', lang)}</a></p>`;
 }
 
 /**
@@ -253,7 +348,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
     const signoff = t('subscriptionWelcomeSignoff', lang);
 
     const trialBlock = trialEndsAt
-        ? tealCallout(rtl, t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang))), 16)
+        ? calloutPanel(rtl, t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang))), 16)
         : '';
 
     const html = emailShell({
@@ -263,7 +358,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${trialBlock}
               <p style="margin:0 0 24px 0;">${nextSteps}</p>
@@ -313,9 +408,9 @@ export function trialEndingEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
-              ${tealCallout(rtl, whatHappens)}
+              ${calloutPanel(rtl, whatHappens)}
               ${ctaButton(pricingUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -357,9 +452,9 @@ export function trialEndedEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
-              ${tealCallout(rtl, whatRemains)}
+              ${calloutPanel(rtl, whatRemains)}
               ${ctaButton(pricingUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -412,9 +507,9 @@ export function paymentFailedEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
-              ${tealCallout(rtl, grace)}
+              ${calloutPanel(rtl, grace)}
               ${ctaButton(payUrl, ctaLabel)}
               <p style="margin:0 0 16px 0;color:#52525b;font-size:14px;">${updateCard}</p>
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
@@ -461,9 +556,9 @@ export function serviceSuspendedEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
-              ${tealCallout(rtl, whatRemains)}
+              ${calloutPanel(rtl, whatRemains)}
               ${ctaButton(ctaUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -503,7 +598,7 @@ export function paymentRecoveredEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${ctaButton(dashboardUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
@@ -549,10 +644,10 @@ export function autoPausedEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
               <p style="margin:0 0 16px 0;">${fixSteps}</p>
-              ${tealCallout(rtl, passwordNote)}
+              ${calloutPanel(rtl, passwordNote)}
               ${ctaButton(dashboardUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -609,10 +704,10 @@ export function pageReconnectEmailTemplate(params: {
         title: subject,
         preheader: intro,
         bodyCellAttrs: standardBodyCell(align, fontFamily),
-        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+        bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro} ${impact}</p>
               <p style="margin:0 0 16px 0;">${fixSteps}</p>
-              ${tealCallout(rtl, passwordNote)}
+              ${calloutPanel(rtl, passwordNote)}
               ${ctaButton(dashboardUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -651,7 +746,7 @@ export function inviteEmailTemplate(params: {
         const align = rtl ? 'right' : 'left';
         const font = rtl ? arFont : enFont;
         return `<div dir="${rtl ? 'rtl' : 'ltr'}" style="text-align:${align};font-family:${font};">
-                <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:700;color:#0f172a;">${t('inviteEmailHeading', lang)}</h1>
+                ${pageHeading(t('inviteEmailHeading', lang), 12)}
                 <p style="margin:0 0 8px 0;color:#18181b;font-size:16px;line-height:1.6;">${intro(lang)}</p>
                 <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5;">${t('inviteEmailExpiry', lang)}</p>
               </div>`;
@@ -771,7 +866,7 @@ export function leadDigestEmailTemplate(params: {
             headExtra,
             maxWidth: 720,
             bodyCellAttrs: ` style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
-            bodyHtml: `<h1 style="margin:0 0 8px 0;font-size:22px;color:#0d9488;">${escapeHtml(heading)}</h1>
+            bodyHtml: `${pageHeading(escapeHtml(heading), 8)}
               <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
               <table class="ld-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
                 <colgroup>

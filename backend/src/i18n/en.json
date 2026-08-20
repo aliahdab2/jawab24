@@ -113,5 +113,8 @@
     "waHandoffCta": "Continue to Facebook",
     "waReturnTitle": "Returning to Jawab24",
     "waReturnBody": "Finishing up — taking you back to the app.",
-    "waReturnCta": "Open Jawab24"
+    "waReturnCta": "Open Jawab24",
+    "emailFooterSupport": "Questions? Reply to this email or write to",
+    "emailFooterIdentity": "Automatic replies for Facebook, Instagram and WhatsApp",
+    "emailFooterPreferences": "Manage email preferences"
 }

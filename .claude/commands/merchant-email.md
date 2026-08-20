@@ -116,11 +116,16 @@ The consequence is structural, so design around it: **the email must be complete
 ### If a reply channel is ever reinstated
 
 Only relevant if the founder explicitly asks for one. **Before writing "reply to this email", confirm the From address actually accepts replies.**
-`backend/src/services/email.ts` sends via Resend with `from: <fromName> <fromEmail>` and sets **no `replyTo`** — so replies go to `fromEmail`, which is `config.resend.fromEmail` → `RESEND_FROM_EMAIL` or the `info@jawab24.com` default (unset in prod as of 2026-08-12, so the default applies). Verify it is still a real, monitored mailbox:
+`backend/src/services/email.ts` sends via Resend with `from: <fromName> <fromEmail>` and a
+`reply_to` taken from `RESEND_REPLY_TO` — **omitted entirely when that is unset**, in which case
+replies fall back to `fromEmail` (`RESEND_FROM_EMAIL`, or the `info@jawab24.com` default). The
+same resolved address is printed in the shared footer, so what a merchant reads and where a reply
+lands cannot diverge. Verify both are real, monitored mailboxes:
 
 ```bash
 ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196 \
-  'docker exec jawab24-backend-green printenv RESEND_FROM_EMAIL || echo "(unset → info@jawab24.com)"'
+  'docker exec jawab24-backend-green sh -c "printenv RESEND_REPLY_TO; printenv RESEND_FROM_EMAIL" \
+     || echo "(unset → info@jawab24.com)"'
 ```
 
 ⚠️ Container names flip **blue/green** on deploy — always `docker ps` first, never hardcode.

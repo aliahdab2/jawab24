@@ -113,5 +113,8 @@
     "waHandoffCta": "المتابعة إلى فيسبوك",
     "waReturnTitle": "العودة إلى جواب24",
     "waReturnBody": "جارٍ إنهاء العملية وإعادتك إلى التطبيق.",
-    "waReturnCta": "فتح جواب24"
+    "waReturnCta": "فتح جواب24",
+    "emailFooterSupport": "لديك سؤال؟ رد على هذه الرسالة أو راسلنا على",
+    "emailFooterIdentity": "ردود تلقائية على فيسبوك وإنستغرام وواتساب",
+    "emailFooterPreferences": "إدارة تفضيلات البريد"
 }
