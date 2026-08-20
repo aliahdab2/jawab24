@@ -60,14 +60,22 @@ Connect button live under the "coming soon" badge, so the button led to a Salla 
 **Nobody had walked through the open door.** Recording the number matters more than the fix: the
 same finding with a non-zero count would have been an incident with merchants to contact.
 
-**Guard shipped** (same PR as the runbook correction): `POST /salla/store/connect` answers **409
-`SALLA_CONNECT_UNAVAILABLE`** unless `SALLA_OAUTH_CONNECT_ENABLED=true` (Custom-Mode dev opt-in), and
-the card renders no Connect button (`connectEnabled: false` in `integrations.tsx`). Pinned by
-`backend/test/controllers/salla.test.ts` and `frontend/src/__tests__/pages/sallaConnectDisabled.test.ts`.
+⚠️ **Correction to an earlier draft of this section:** it said merchants clicking "Connect Salla"
+were landing on a Salla error page. They were not — `/integrations` is **admin-only** today
+(`isAuthenticated && !isAdmin → /dashboard`), so only we could reach the card. The dead end was real
+but ours, and it would have become merchant-facing the moment the page opened up.
 
-⛔ **Both are temporary.** When the listing is published: set `SALLA_APP_STORE_URL`, remove
-`connectEnabled: false`, delete the frontend spec. Leaving the guard in place after publishing would
-hide the connect action from the merchants the listing is meant to bring.
+**Guard shipped** (same PR as the runbook correction). One predicate,
+`controllers/salla.ts:isConnectAvailable`, answers for every entry point — `POST /store/connect`
+(**404**, matching the sibling flag-gated claim routes rather than a 409 that implies a state
+conflict), the PUBLIC `GET /salla/auth` redirect that the UI's *reconnect* action targets, and
+`GET /salla/capabilities`, which is what the page renders its buttons from. Pinned by
+`backend/test/controllers/salla.test.ts`, `backend/test/routes/ecommerceRoutes.test.ts` and
+`frontend/src/__tests__/pages/connectAvailability.test.ts`.
+
+⛔ **The guard lifts by CONFIGURATION, not by a code change.** Publish the listing, set
+`SALLA_APP_STORE_URL`, and the predicate answers true — endpoints open, buttons return. Nothing to
+revert, nothing to forget.
 
 > Colour suffix alternates per deploy (`-blue` / `-green`). Read it from `docker ps`, don't assume.
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useContext, createContext, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import { ZidIcon, ShopifyIcon, SallaIcon } from '@/components/landing';
 // Direct import, NOT the '@/components/settings' barrel: this page is public,
@@ -21,7 +21,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PageSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 import { Badge } from '@/components/ui/Badge';
-import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
+import { ecommerceApi, sallaApi, zidApi, pagesApi, getPlatformCapabilities } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   RefreshCw,
@@ -60,11 +60,6 @@ interface PlatformConfig {
    *  `connectEnabled` says the flow itself is dead). Defaults to 'live' when
    *  omitted. */
   status?: 'live' | 'coming_soon';
-  /** Whether the connect action can actually work today. Defaults to true.
-   *  false = render the card without a Connect button, because the flow behind it
-   *  is known to be dead — a disabled-looking button the merchant can still click
-   *  into an error page is worse than no button. */
-  connectEnabled?: boolean;
   /** Returns the backend path to initiate reconnect OAuth. */
   getReconnectPath: (storeDomain: string) => string;
   getStore: () => Promise<EcommerceStore>;
@@ -111,12 +106,6 @@ const PLATFORMS: PlatformConfig[] = [
     // verified and the listing form is reachable, but an approved partner
     // account is not a published app — the card said "live" for neither.
     status: 'coming_soon',
-    // The Salla app is in EASY MODE (portal read 2026-08-20), which drops the registered
-    // redirect URIs and 404s the OAuth authorize endpoint — so the connect flow cannot
-    // work, and there is no published listing to redirect to yet either. Offering the
-    // button would send merchants to a Salla error page. Re-enable together with
-    // SALLA_APP_STORE_URL once the listing is live.
-    connectEnabled: false,
     getReconnectPath: () => '/salla/auth',
     getStore: sallaApi.getStore,
     syncProducts: sallaApi.syncProducts,
@@ -172,6 +161,28 @@ function reconnectStore(platform: PlatformConfig, storeDomain: string) {
   window.location.href = apiBase + platform.getReconnectPath(storeDomain);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Connect availability — answered by the backend, never hardcoded    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Whether each platform's connect flow can actually start, per
+ * `GET /<platform>/capabilities`. Salla answers false while its app runs in Easy Mode
+ * with no published listing — offering the button would send the merchant to a Salla
+ * error page, and the API refuses the call anyway (404 SALLA_CONNECT_UNAVAILABLE).
+ *
+ * Read through a context rather than a prop so the three cards that expose a connect
+ * or reconnect action all consult the same answer without threading it through five
+ * call sites. Unknown platform (fetch failed, or a platform that predates the route)
+ * reads as available — failing open preserves today's behaviour, and the backend stays
+ * the authority that refuses.
+ */
+const ConnectAvailabilityContext = createContext<Partial<Record<PlatformId, boolean>>>({});
+
+function useConnectAvailable(platformId: PlatformId): boolean {
+  return useContext(ConnectAvailabilityContext)[platformId] !== false;
+}
+
 function ConnectedStoreCard({
   platform,
   store,
@@ -190,6 +201,7 @@ function ConnectedStoreCard({
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
   const { canEdit } = useWorkspaceRole();
+  const connectAvailable = useConnectAvailable(platform.id);
   const isDemoUser = useIsDemoUser();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
@@ -282,7 +294,9 @@ function ConnectedStoreCard({
             <div className="flex-1 text-sm">
               <p className="font-semibold">{tInt('needsReauth.title')}</p>
               <p className="text-muted-foreground mb-2">{tInt('needsReauth.body')}</p>
-              {canEdit && (
+              {/* Reconnect navigates to GET /<platform>/auth — the same OAuth redirect
+                  the connect action uses, so it is dead under the same conditions. */}
+              {canEdit && connectAvailable && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -412,6 +426,7 @@ function ConnectedStoreCard({
 /* ------------------------------------------------------------------ */
 
 function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
+  const connectAvailable = useConnectAvailable(platform.id);
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
   const handleReconnect = () => reconnectStore(platform, store.storeDomain);
@@ -430,10 +445,12 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 
       <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-theme-border">
         <p className="text-sm text-muted-foreground">{tInt('disconnectedState')}</p>
-        <Button variant="primary" size="sm" onClick={handleReconnect}>
-          <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
-          {tInt('reconnect')}
-        </Button>
+        {connectAvailable && (
+          <Button variant="primary" size="sm" onClick={handleReconnect}>
+            <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
+            {tInt('reconnect')}
+          </Button>
+        )}
       </div>
     </Card>
   );
@@ -444,6 +461,7 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 /* ------------------------------------------------------------------ */
 
 function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
+  const connectAvailable = useConnectAvailable(platform.id);
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
   const tCommon = useTranslations('common');
@@ -465,7 +483,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
   ];
 
   const handleConnect = async () => {
-    if (platform.connectEnabled === false) return;
+    if (!connectAvailable) return;
     if (platform.requiresDomain && !shopDomain.trim()) return;
     setConnecting(true);
     try {
@@ -546,9 +564,10 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             For a status==='coming_soon' platform the header shows a "coming soon"
             badge as a public signal, and the Connect flow stays open so early-access
             merchants and internal testing can still complete OAuth. That only holds
-            while the flow CAN succeed: connectEnabled === false means the platform's
-            connect path is known-dead (Salla in Easy Mode with no published listing),
-            so we say so in words instead of shipping a button to an error page.
+            while the flow CAN succeed: the backend answers connectAvailable=false when
+            the platform's connect path is known-dead (Salla in Easy Mode with no
+            published listing), so we say so in words instead of shipping a button to an
+            error page. The domain input goes with it — it feeds a flow that cannot run.
             When the platform graduates to status='live', the badge disappears. */}
         <div className="flex flex-col gap-2">
           {platform.requiresDomain && (
@@ -575,7 +594,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
               </p>
             </div>
           )}
-          {platform.connectEnabled === false ? (
+          {!connectAvailable ? (
             <p className="text-sm text-muted-foreground">
               {tInt('notConnected.connectNotOpen')}
             </p>
@@ -597,7 +616,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
               </span>
             </Button>
           )}
-          {platform.connectEnabled !== false && !platform.requiresDomain && (
+          {connectAvailable && !platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
               {tInt(`notConnected.${pid}ConnectHint`)}
             </p>
@@ -629,6 +648,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
   }, [_hasHydrated, isAuthenticated, isAdmin, router]);
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
+  const [connectAvailability, setConnectAvailability] = useState<Partial<Record<PlatformId, boolean>>>({});
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddAnother, setShowAddAnother] = useState(false);
@@ -651,6 +671,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
 
   const fetchData = useCallback(async () => {
     const storeResults: Record<string, EcommerceStore | null> = {};
+    const availability: Partial<Record<PlatformId, boolean>> = {};
 
     const fetchPromises = PLATFORMS.map(async (platform) => {
       try {
@@ -658,6 +679,18 @@ const IntegrationsPage: NextPageWithLayout = () => {
         storeResults[platform.id] = data;
       } catch {
         storeResults[platform.id] = null;
+      }
+    });
+
+    // Deployment capability, fetched alongside the stores rather than after them —
+    // it gates what the card renders, so a sequential hop would delay first paint.
+    // A failure leaves the platform absent from the map, which reads as available.
+    const capabilityPromises = PLATFORMS.map(async (platform) => {
+      try {
+        const { connectAvailable } = await getPlatformCapabilities(platform.id);
+        availability[platform.id] = connectAvailable;
+      } catch {
+        // fail open — the backend still refuses the call if it is genuinely unavailable
       }
     });
 
@@ -670,9 +703,10 @@ const IntegrationsPage: NextPageWithLayout = () => {
       // ignore
     }
 
-    await Promise.all(fetchPromises);
+    await Promise.all([...fetchPromises, ...capabilityPromises]);
 
     setStores(storeResults);
+    setConnectAvailability(availability);
     setPages(fetchedPages);
     setLoading(false);
   }, []);
@@ -696,7 +730,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <>
+    <ConnectAvailabilityContext.Provider value={connectAvailability}>
       <PageHeader
         title={tInt('title')}
         description={tInt('subtitle')}
@@ -825,7 +859,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
           );
         })()}
       </div>
-    </>
+    </ConnectAvailabilityContext.Provider>
   );
 };
 

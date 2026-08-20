@@ -1713,6 +1713,17 @@ export const sallaApi = {
   },
 };
 
+// Deployment capabilities for one e-commerce platform — what this build/config can
+// actually do, as opposed to what this workspace has connected. One shared function for
+// all three platforms: the route is the same shape under each platform prefix, so a
+// per-platform copy would be duplication with nothing to distinguish it.
+export const getPlatformCapabilities = async (
+  platform: 'shopify' | 'salla' | 'zid',
+): Promise<{ connectAvailable: boolean }> => {
+  const response = await api.get(`/${platform}/capabilities`);
+  return response.data;
+};
+
 // Zid E-commerce API
 export const zidApi = {
   getStore: async () => {

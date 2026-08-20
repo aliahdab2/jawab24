@@ -15,6 +15,12 @@ export interface EcommerceRouteController {
     syncStore: RouteHandlerMethod;
     linkPage: RouteHandlerMethod;
     unlinkPage: RouteHandlerMethod;
+    /** Whether this deployment can actually start a connect flow for the platform.
+     *  Omitted = always available (Shopify, Zid). Salla answers false while its app
+     *  runs in Easy Mode with no published listing — see controllers/salla.ts. The
+     *  frontend reads this instead of hardcoding availability, so the answer has one
+     *  source of truth and a config change alone flips the UI. */
+    isConnectAvailable?: () => boolean;
 }
 
 /**
@@ -34,6 +40,12 @@ export function createEcommerceRoutes(platform: EcommercePlatform, controller: E
         fastify.post('/webhooks', controller.webhookHandler);
 
         // --- Read: all workspace members ---
+        // Deployment capability, not workspace state: what this build/config can do for
+        // the platform. Read by the integrations page so the connect action is never
+        // offered when the backend would refuse it.
+        fastify.get('/capabilities', { preHandler: [authenticate] }, async (_request, reply) =>
+            reply.send({ connectAvailable: controller.isConnectAvailable?.() ?? true }),
+        );
         fastify.get('/store', { preHandler: [authenticate, resolveWorkspace] }, controller.getStore);
         fastify.get('/store/products', { preHandler: [authenticate, resolveWorkspace] }, controller.getStoreProducts);
 

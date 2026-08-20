@@ -41,21 +41,34 @@ review.** Conflating the two is what put "APPROVED" in this file. Three conseque
    whose secrets prod does not hold. Repoint Client ID **and** Client Secret **and** the webhook
    token together — fixing one and leaving another leaves the same failure.
 
-### The Connect dead end — confirmed live, now guarded
+### The Connect dead end — confirmed, now guarded
 
 Easy Mode is confirmed, so `connectStore` had no working destination: the OAuth authorize URL 404s
 for an Easy-Mode app (D-031) and `SALLA_APP_STORE_URL` cannot be set because **no listing exists to
 point at**. The `/integrations` Salla card kept its Connect button live under the "coming soon"
-badge, so any merchant clicking it was handed a dead URL.
+badge, and the card's *reconnect* action pointed at the same dead redirect.
 
-**Measured before acting: ZERO `/salla/store/connect` and `/salla/auth` requests in 7 days of nginx
-logs** (only `GET /api/salla/store` status polls from the page). A door left open that nobody walked
-through — so this was cleanup, not an incident.
+**Who could actually reach it — narrower than first reported.** `/integrations` is **admin-only**
+today (`isAuthenticated && !isAdmin → /dashboard`, "while we finish public roll-out"), so no
+merchant could see the card at all. An earlier draft of this section said merchants were hitting a
+Salla error page; that was wrong. The exposure was ours, and it would have become a merchant-facing
+dead end the moment the page opened up.
 
-Guarded in the same PR as this correction: `POST /salla/store/connect` answers **409
-`SALLA_CONNECT_UNAVAILABLE`** unless `SALLA_OAUTH_CONNECT_ENABLED=true` (Custom-Mode dev opt-in),
-and the card renders no Connect button (`connectEnabled: false`). **Both revert when the listing is
-published and `SALLA_APP_STORE_URL` is set.**
+**Blast radius, measured before acting: ZERO** `/salla/store/connect` and `/salla/auth` requests in
+7 days of nginx logs (only `GET /api/salla/store` status polls from the page).
+
+**Guarded** in the same PR as this correction. One predicate, `controllers/salla.ts:isConnectAvailable`,
+answers for every entry point:
+
+| Entry point | Behaviour while unavailable |
+|---|---|
+| `POST /salla/store/connect` | **404 `SALLA_CONNECT_UNAVAILABLE`** (404, not 409 — nothing conflicts with resource state, and it matches the sibling flag-gated claim routes) |
+| `GET /salla/auth` (PUBLIC; the UI's *reconnect* target) | redirected to `/integrations?salla_error=connect_unavailable` instead of Salla's error page |
+| `GET /salla/capabilities` | `{ connectAvailable: false }` — the integrations page renders its connect **and** reconnect actions from this, so the UI cannot offer what the API refuses |
+
+⛔ **All of it reverts by configuration, not by code:** set `SALLA_APP_STORE_URL` and the predicate
+answers true, the endpoints open, and the buttons come back. `SALLA_OAUTH_CONNECT_ENABLED=true` does
+the same for a Custom-Mode dev app.
 
 Work Phase 2.5 below, then Phase 3. Do not skip Tier 0 of the test plan.
 
@@ -221,9 +234,10 @@ depends on the previous.
       Verify with `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
 - [ ] **`SALLA_APP_STORE_URL` — CANNOT be set yet, and that is not an oversight.** The URL only
       exists once the listing is published, so this is a **post-publish** step, not a
-      pre-publish one. Until then `POST /salla/store/connect` answers 409
-      `SALLA_CONNECT_UNAVAILABLE` and the `/integrations` card shows no Connect button. Setting
-      the URL and reverting `connectEnabled: false` is the last step of go-live, not the first.
+      pre-publish one. Until then `POST /salla/store/connect` answers 404
+      `SALLA_CONNECT_UNAVAILABLE`, `GET /salla/auth` bounces back to `/integrations`, and the card
+      shows no Connect or Reconnect button. ⭐ Setting this URL is the **whole** of go-live for the
+      UI — the buttons return by configuration, with no code change to remember.
 - [ ] **Run Tier 0** of `docs/SALLA_TEST_PLAN.md` and confirm every row passes.
 
 ## Phase 3 — Go-live verification (the rehearsal, before publishing)
@@ -251,7 +265,7 @@ Summary of the gates:
   stage but can't bind; existing stores unaffected).
 - `SALLA_OAUTH_CONNECT_ENABLED` — leave unset in production. It exists only so a **Custom-Mode dev**
   app can still use the OAuth connect flow; setting it on prod re-opens the dead authorize URL the
-  409 guard was added to close.
+  availability guard was added to close.
 - Webhook ingestion can't be "turned off" per store from our side — deactivate a misbehaving
   store row via the admin tooling instead.
 - **Unpublishing a live app is NOT self-serve**: Salla requires a booked meeting
