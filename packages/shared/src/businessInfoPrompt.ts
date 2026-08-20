@@ -300,6 +300,44 @@ function formatPolicies(p: BusinessProfile): string | null {
  *   - genuinely absent everywhere  → emit `[NOT_PROVIDED]` (anti-hallucination).
  *   - present but FB-only (fb_sync)→ OMIT the line (flows via fallback).
  */
+/**
+ * How many of the profile's ANSWERABLE facts carry a value — the fields that
+ * become BUSINESS_INFO lines: address, phones, hours, policies, WhatsApp, email.
+ *
+ * Deliberately EXCLUDES `name`, `category`, `about`, `website` and
+ * `language_hint`. Those are page metadata: `language_hint` is system-derived,
+ * and the rest arrive from Facebook sync. None of them answers a customer
+ * question, and none contributes a BUSINESS_INFO line — which is exactly why
+ * `formatBusinessInfoPrompt` has never counted them when deciding whether to
+ * emit a block at all.
+ *
+ * Exported because the support console needs the same answer ("has this
+ * merchant filled in any structured facts?") and a raw `Object.keys` count is a
+ * WRONG second definition of it: measured on prod 2026-08-20, the modal live
+ * page carries exactly four merchant keys — `name`, `category`, `language_hint`
+ * and `website`/`about` — so a key count reports "4 fields of Business Info"
+ * for a page that contributes nothing to any prompt. 24 of 92 live pages sit on
+ * that value. WhatsApp and email are provenance-gated here for the same reason
+ * they are gated below: an unconfirmed suggestion contributes to no prompt and
+ * must count as absent everywhere.
+ */
+export function countBusinessInfoFacts(
+    profile: BusinessProfile | null | undefined,
+    provenance?: MerchantProvenanceMap,
+): number {
+    if (!profile) return 0;
+    const whatsappRaw = formatWhatsapp(profile);
+    const emailRaw = profile.email?.trim() || null;
+    return [
+        joinAddress(profile, provenance).hasAnyValue,
+        !!joinPhones(profile),
+        !!formatHours(profile),
+        !!formatPolicies(profile),
+        !!(whatsappRaw && isFieldAuthoritative(provenance, 'channels')),
+        !!(emailRaw && isFieldAuthoritative(provenance, 'email')),
+    ].filter(Boolean).length;
+}
+
 export function formatBusinessInfoPrompt(
     profile: BusinessProfile | null | undefined,
     provenance?: MerchantProvenanceMap,
@@ -334,10 +372,10 @@ export function formatBusinessInfoPrompt(
     // contract. NOTE: this is distinct from the all-FB-only case below — here
     // there is no value at all, so there's genuinely nothing to hallucinate
     // against.
-    const anyValueAtAll =
-        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue || !!whatsappValue
-        || !!emailValue;
-    if (!anyValueAtAll) return null;
+    // Same six fields, one definition — see countBusinessInfoFacts. Kept as a
+    // count rather than a boolean so the support console cannot answer "does
+    // this profile hold facts?" with a different expression than the prompt.
+    if (countBusinessInfoFacts(profile, provenance) === 0) return null;
 
     // The body lines (everything below the header + directive). A field
     // contributes a line only when it is authoritative-present or genuinely

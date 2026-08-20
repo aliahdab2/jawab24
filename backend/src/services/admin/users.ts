@@ -3,15 +3,19 @@ import {
     users, subscriptions, plans, pages, usage, posts, instagramMedia,
     leads, workspaces, workspaceMembers, settings, adminAuditLogs,
     comments, instagramComments, messages, kbChunks, kbGaps, partners,
+    catalogItems, factCollections, factRows,
 } from '../../db/schema';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
-import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
+import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
-import { sniffAttachmentMime, resolveEffectiveReplyMode, type EmailAttachment } from '@jawab24/shared';
+import {
+    sniffAttachmentMime, resolveEffectiveReplyMode, countBusinessInfoFacts,
+    unwrapBusinessProfile, type EmailAttachment, type StoredBusinessProfile,
+} from '@jawab24/shared';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
 
@@ -358,9 +362,37 @@ class AdminUsersService {
                 // the fallback answer ("only two workspaces can have it"); GA
                 // removed that, so this is now the only answer.
                 replyMode: pages.replyMode,
+                // The per-page PERSONA pin (D-084) — same inheritance trap as
+                // replyMode above, and worse in one way: a page pin suppresses
+                // the workspace persona ENTIRELY (resolveBrandVoiceNotes returns
+                // within the override, no workspace fallback), so the persona the
+                // Settings tab prints can be text no customer of this page ever
+                // sees. Shipped as the raw jsonb because the workspace persona is
+                // already shown in full there and «الردود بتحكي بلهجة غلط» is
+                // unanswerable without reading the text that actually applies.
+                brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
+                // Drives the RAG-vs-full-KB branch in resolveKnowledge (a store
+                // OR merchant catalog_items sends the page down the retrieval
+                // path), which is what makes a stale chunk set matter.
+                ecommerceStoreId: pages.ecommerceStoreId,
                 kbLength: sql<number>`length(coalesce(${pages.knowledgeBase}, ''))`,
                 kbActiveVersion: pages.kbActiveVersion,
                 kbUpdatedAt: pages.kbUpdatedAt,
+                // The structured profile, counted in TS rather than SQL so the
+                // console uses the PROMPT's own definition of "this profile holds
+                // facts" (countBusinessInfoFacts) instead of a second one.
+                //
+                // A raw key count — which this was, until the self-review — is
+                // that wrong second definition: the modal live page carries
+                // exactly `name`, `category`, `language_hint` and
+                // `website`/`about` (24 of 92 on prod, 2026-08-20), every one of
+                // them page metadata that answers no customer question and
+                // contributes no BUSINESS_INFO line. Counting them reports "4
+                // fields of Business Info" for a page holding none, which is the
+                // OVER-claiming direction of the very defect this PR fixes.
+                // Never read as content on the client — only the derived count
+                // ships (see the `kb` payload below).
+                businessProfile: pages.businessProfile,
             })
             .from(pages)
             .where(eq(pages.userId, userId)),
@@ -425,7 +457,24 @@ class AdminUsersService {
         // owned-pages lookup, and the per-page KB summaries all run concurrently.
         // Chunk counts pin to each page's ACTIVE kb version (a null active
         // version matches no rows → kb reads as empty, same as adminKbService).
-        const [countRows, ownedPageIdsRows, kbChunkRows, kbGapRows] = await Promise.all([
+        //
+        // ⚠️ A zero here does NOT mean "this page has no Business Info", and
+        // reading it that way is the defect this batch was widened to fix
+        // (2026-08-20). Since Business Info became STRUCTURED, three writers bump
+        // kbActiveVersion WITHOUT re-ingesting chunks — updatePage's
+        // business_profile branch, and invalidatePageCaches from
+        // services/catalog.ts + services/factCollections.ts. The active version
+        // then runs ahead of the newest chunk set and this join matches nothing,
+        // while knowledge_base still holds every character the merchant typed.
+        // Measured on prod the day this was fixed: 49 of 92 live pages, e.g.
+        // «Shahin Resort» at active v54 vs newest chunks v51, 10,494 KB chars and
+        // 10 filled business_profile fields — all reported as EMPTY.
+        // So chunks are now one signal among four, and `newestChunkVersion` below
+        // exists to tell "never ingested" apart from "ingested, then outrun".
+        const [
+            countRows, ownedPageIdsRows, kbChunkRows, kbGapRows,
+            kbNewestChunkRows, catalogCountRows, factCountRows,
+        ] = await Promise.all([
             workspaceIds.length > 0
                 ? db
                     .select({
@@ -469,6 +518,55 @@ class AdminUsersService {
                     .where(and(inArray(kbGaps.pageId, displayPageIds), eq(kbGaps.resolved, false)))
                     .groupBy(kbGaps.pageId)
                 : Promise.resolve([]),
+            // Newest chunk version REGARDLESS of the active pointer. Compared
+            // against kbActiveVersion this separates the two zero-chunk causes,
+            // which need opposite actions: no rows at all = never ingested (KB
+            // text was never saved, or ingestion failed), versus a version behind
+            // the pointer = ingested fine, then a structured-info write moved the
+            // pointer past it (the 49-page class; harmless for the full-KB path,
+            // a silent retrieval miss on the RAG path).
+            displayPageIds.length > 0
+                ? db
+                    .select({
+                        pageId: kbChunks.pageId,
+                        maxVersion: sql<number>`max(${kbChunks.kbVersion})::int`,
+                    })
+                    .from(kbChunks)
+                    .where(inArray(kbChunks.pageId, displayPageIds))
+                    .groupBy(kbChunks.pageId)
+                : Promise.resolve([]),
+            // Merchant-authored catalog items — the <product_catalog> block, which
+            // carries explicit AUTHORITY over <business_knowledge> in the prompt.
+            // A page whose whole Business Info is a price list lives here and
+            // nowhere else, so omitting it is how a fully-configured page reads
+            // as empty.
+            displayPageIds.length > 0
+                ? db
+                    .select({
+                        pageId: catalogItems.pageId,
+                        count: sql<number>`count(*)::int`,
+                    })
+                    .from(catalogItems)
+                    .where(inArray(catalogItems.pageId, displayPageIds))
+                    .groupBy(catalogItems.pageId)
+                : Promise.resolve([]),
+            // Fact collections + their rows (G1) — outlet directories, delivery
+            // zones, branch lists. Counted per page via the collection's page_id;
+            // rows are counted in the same pass so support sees an EMPTY
+            // collection (a shell that renders no facts) as distinct from a
+            // populated one.
+            displayPageIds.length > 0
+                ? db
+                    .select({
+                        pageId: factCollections.pageId,
+                        collections: sql<number>`count(DISTINCT ${factCollections.id})::int`,
+                        rows: sql<number>`count(${factRows.id})::int`,
+                    })
+                    .from(factCollections)
+                    .leftJoin(factRows, eq(factRows.collectionId, factCollections.id))
+                    .where(inArray(factCollections.pageId, displayPageIds))
+                    .groupBy(factCollections.pageId)
+                : Promise.resolve([]),
         ]);
         const memberCounts = new Map<string, number>();
         for (const r of countRows) {
@@ -487,21 +585,77 @@ class AdminUsersService {
         for (const r of kbGapRows) {
             gapsByPage.set(r.pageId, r.count);
         }
+        const newestChunkByPage = new Map<string, number>();
+        for (const r of kbNewestChunkRows) {
+            newestChunkByPage.set(r.pageId, r.maxVersion);
+        }
+        const catalogByPage = new Map<string, number>();
+        for (const r of catalogCountRows) {
+            catalogByPage.set(r.pageId, r.count);
+        }
+        const factsByPage = new Map<string, { collections: number; rows: number }>();
+        for (const r of factCountRows) {
+            factsByPage.set(r.pageId, { collections: r.collections, rows: r.rows });
+        }
 
         // Nest the KB summary under `kb`, keeping the length-only inputs off the
         // top-level page object.
         const pagesPayload = userPages.map(p => {
-            const { kbLength, kbActiveVersion, kbUpdatedAt, workspaceId: _workspaceId, ...rest } = p;
+            const {
+                kbLength, kbActiveVersion, kbUpdatedAt, businessProfile,
+                ecommerceStoreId, workspaceId: _workspaceId, ...rest
+            } = p;
             const c = chunksByPage.get(p.id);
+            const facts = factsByPage.get(p.id);
+            const newestChunkVersion = newestChunkByPage.get(p.id) ?? null;
+            const chunksTotal = c?.total ?? 0;
+            const catalogItemCount = catalogByPage.get(p.id) ?? 0;
+            const factRowCount = facts?.rows ?? 0;
+            // `unwrapBusinessProfile` handles the double-encoded-jsonb case this
+            // column family has precedent for, and splits the merchant half from
+            // the FB suggestions — only the merchant half is Business Info.
+            const profile = unwrapBusinessProfile(businessProfile as StoredBusinessProfile);
+            const businessProfileFacts = countBusinessInfoFacts(profile.merchant, profile.merchantProvenance);
             return {
                 ...rest,
                 kb: {
                     kbLength: kbLength ?? 0,
                     kbActiveVersion,
                     kbUpdatedAt,
-                    chunksTotal: c?.total ?? 0,
+                    chunksTotal,
                     chunksByType: c?.byType ?? {},
                     unresolvedGaps: gapsByPage.get(p.id) ?? 0,
+                    // The structured stores, so "empty" can be decided from every
+                    // source the prompt actually reads instead of from chunks alone.
+                    businessProfileFields: businessProfileFacts,
+                    catalogItems: catalogItemCount,
+                    factCollections: facts?.collections ?? 0,
+                    factRows: factRowCount,
+                    newestChunkVersion,
+                    // Ingested once, then outrun by a pointer bump. Deliberately
+                    // NOT "has no chunks": a page that never ingested has nothing
+                    // stale, it has nothing at all.
+                    chunksStale: chunksTotal === 0
+                        && newestChunkVersion !== null
+                        && kbActiveVersion !== null
+                        && newestChunkVersion < kbActiveVersion,
+                    // Whether a stale chunk set actually costs this page anything.
+                    // resolveKnowledge only retrieves for pages with a store OR
+                    // merchant catalog items; every other page is handed the full
+                    // KB text and never reads a chunk (D-050). On the retrieval
+                    // path an empty result still falls back to the full KB, so the
+                    // cost is a wasted embedding round-trip per reply, not silence.
+                    onRetrievalPath: !!ecommerceStoreId || catalogItemCount > 0,
+                    // The one honest answer to "does the AI have anything to
+                    // answer from?" — false only when EVERY store is empty.
+                    // Derived by the same function the health flags use, so the
+                    // console's badge and its banner cannot contradict each other.
+                    hasAnyContent: hasBusinessInfoContent({
+                        kbLength: kbLength ?? 0,
+                        businessProfileFields: businessProfileFacts,
+                        catalogItems: catalogItemCount,
+                        factRows: factRowCount,
+                    }),
                 },
             };
         });
@@ -666,6 +820,9 @@ class AdminUsersService {
                 autoReplyDisabledReason: p.autoReplyDisabledReason,
                 replyMode: p.replyMode,
                 replyModeEffective: p.replyModeEffective,
+                // A page pin makes the workspace persona unreachable for this
+                // page, so the persona flags must be scoped by it.
+                brandVoiceNotesMulti: p.brandVoiceNotesMulti,
                 kb: p.kb,
             })),
             usage: {

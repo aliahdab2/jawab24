@@ -2,12 +2,12 @@ import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
 import { factCollectionsService } from '../factCollections';
-import { coerceMultiLang } from '../multiLangTranslation';
 import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
 import {
     formatBusinessInfoPrompt,
+    resolvePagePersonaLanguages,
     unwrapBusinessProfile,
     type StoredBusinessProfile,
 } from '@jawab24/shared';
@@ -216,18 +216,17 @@ export function resolveBrandVoiceNotes(
     const pick = (multi: Record<string, string>) =>
         multi[lang] || supportedLangs.map(l => multi[l]).find(Boolean);
 
-    // coerceMultiLang: the workspace multi arrives normalized by
-    // services/settings.ts, but the page row's jsonb is handed here raw — and
-    // this column family has a double-encoded-JSON precedent (business_profile),
-    // so the override goes through the same normalizer. The trim-filter then
-    // drops whitespace-only variants BEFORE the pin decision AND the pick:
-    // without it { ar: 'نص', en: '  ' } pins the page and answers English
-    // customers with the truthy whitespace string as the whole persona — while
-    // the pin has already suppressed the workspace fallback.
-    const { sourceLang: _overrideSource, ...overrideRaw } = coerceMultiLang(pageOverride);
-    const overrideLangs = Object.fromEntries(
-        Object.entries(overrideRaw).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
-    );
+    // resolvePagePersonaLanguages (@jawab24/shared) normalizes and decides the
+    // pin: the workspace multi arrives normalized by services/settings.ts, but
+    // the page row's jsonb is handed here raw — and this column family has a
+    // double-encoded-JSON precedent (business_profile) — so it runs the same
+    // coercion, then drops whitespace-only variants BEFORE the pin decision AND
+    // the pick: without that filter { ar: 'نص', en: '  ' } pins the page and
+    // answers English customers with the truthy whitespace string as the whole
+    // persona, while the pin has already suppressed the workspace fallback.
+    // It is shared (not inlined) because the support console must decide "this
+    // page is pinned" by this exact rule — see hasPagePersonaPin.
+    const overrideLangs = resolvePagePersonaLanguages(pageOverride);
     if (Object.keys(overrideLangs).length > 0) {
         // Any-language tail: a page persona stored only in a language outside
         // supportedLanguages must still apply — the pin already suppressed the

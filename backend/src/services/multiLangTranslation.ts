@@ -17,25 +17,18 @@
 /**
  * Coerce a multilingual JSONB value to a plain object.
  *
- * Some rows store these columns double-encoded (a JSON *string* inside the
- * jsonb cell), so the driver hands back a string instead of an object.
- * Indexing a string by language (`multi['ar']`) silently yields `undefined`,
- * which breaks change-detection below (a re-sent, unchanged language reads as
- * "changed" → tips into the no-translate "manual" branch → the other language
- * never re-translates). Always normalize to an object on read. No-op when the
- * value is already an object.
+ * Re-exported from `@jawab24/shared` (one body, not two): the double-encoded-row
+ * problem it solves is not backend-specific — the reply pipeline, the support
+ * console and the eval all read these columns, and a second copy here is how the
+ * two halves drift. The reason it must exist at all: some rows store these
+ * columns double-encoded (a JSON *string* inside the jsonb cell), so the driver
+ * hands back a string instead of an object. Indexing a string by language
+ * (`multi['ar']`) silently yields `undefined`, which breaks the change-detection
+ * below — a re-sent, unchanged language reads as "changed" → tips into the
+ * no-translate "manual" branch → the other language never re-translates.
  */
-export function coerceMultiLang(value: unknown): Record<string, string> {
-    if (typeof value === 'string') {
-        try {
-            const parsed = JSON.parse(value);
-            if (parsed && typeof parsed === 'object') return parsed as Record<string, string>;
-        } catch { /* fall through to empty */ }
-        return {};
-    }
-    if (value && typeof value === 'object') return value as Record<string, string>;
-    return {};
-}
+import { coerceMultiLang } from '@jawab24/shared';
+export { coerceMultiLang };
 
 export interface SmartTranslateOptions {
     /** Languages this user supports, e.g. ['ar', 'en']. */

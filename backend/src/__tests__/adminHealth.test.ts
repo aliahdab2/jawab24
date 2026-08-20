@@ -64,8 +64,35 @@ function healthyKb(overrides: Partial<PageKbSummary> = {}): PageKbSummary {
         chunksTotal: 20,
         chunksByType: { offering: 12, faq: 5, info: 3 },
         unresolvedGaps: 0,
+        businessProfileFields: 8,
+        catalogItems: 0,
+        factCollections: 0,
+        factRows: 0,
+        newestChunkVersion: 3,
+        chunksStale: false,
+        onRetrievalPath: false,
+        hasAnyContent: true,
         ...overrides,
     };
+}
+
+/**
+ * A page whose Business Info lives ONLY in a structured store — no free text and
+ * no chunks. This is the shape that the pre-2026-08-20 flags called empty, and
+ * the reason `hasAnyContent` exists: `kbLength === 0 || chunksTotal === 0` was
+ * true here even though the merchant had filled everything in.
+ */
+function structuredOnlyKb(overrides: Partial<PageKbSummary> = {}): PageKbSummary {
+    return healthyKb({
+        kbLength: 0,
+        chunksTotal: 0,
+        chunksByType: {},
+        newestChunkVersion: null,
+        businessProfileFields: 9,
+        catalogItems: 12,
+        hasAnyContent: true,
+        ...overrides,
+    });
 }
 
 function healthyPage(overrides: Partial<HealthInputPage> = {}): HealthInputPage {
@@ -75,8 +102,14 @@ function healthyPage(overrides: Partial<HealthInputPage> = {}): HealthInputPage 
         disconnected: false,
         autoReplyEnabled: true,
         autoReplyDisabledReason: null,
-        kb: healthyKb(overrides.kb),
         ...overrides,
+        // AFTER the spread: `kb` must be the MERGED summary, so a case may pass a
+        // partial (`{ kb: { catalogItems: 0 } }`) and still get every other field
+        // at its healthy default. With `kb` before the spread the caller's raw
+        // object won and silently dropped the defaults — which now matters,
+        // because a kb missing `businessProfileFields` reads as no content and
+        // would fire kb_empty in a test that never mentioned emptiness.
+        kb: healthyKb(overrides.kb),
     };
 }
 
@@ -172,14 +205,81 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(keys(flags)).not.toContain('auto_reply_system_off');
     });
 
-    it('kb_empty when there are no chunks', () => {
+    it('kb_empty only when EVERY Business Info store is empty', () => {
         const flags = computeHealthFlags(healthyInput({
-            pages: [healthyPage({ kb: healthyKb({ kbLength: 0, chunksTotal: 0, chunksByType: {} }) })],
+            pages: [healthyPage({
+                kb: healthyKb({
+                    kbLength: 0, chunksTotal: 0, chunksByType: {},
+                    businessProfileFields: 0, catalogItems: 0, factCollections: 0, factRows: 0,
+                    newestChunkVersion: null,
+                }),
+            })],
         }));
         expect(keys(flags)).toContain('kb_empty');
         // Empty short-circuits the offering/thin checks.
         expect(keys(flags)).not.toContain('no_offering_chunks');
         expect(keys(flags)).not.toContain('kb_thin');
+    });
+
+    /**
+     * THE regression. A structured write bumps kbActiveVersion without
+     * re-ingesting, so the chunk index reads 0 while the merchant's text and
+     * profile are untouched. The old predicate (`kbLength === 0 || chunksTotal
+     * === 0`) called this empty and painted the account RED — 49 of 92 live prod
+     * pages on 2026-08-20, «Shahin Resort» among them with 10,494 KB characters.
+     */
+    it('a full KB whose chunk index was outrun by the active version is NOT empty', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                kb: healthyKb({
+                    kbLength: 10494, businessProfileFields: 10,
+                    kbActiveVersion: 54, newestChunkVersion: 51,
+                    chunksTotal: 0, chunksByType: {}, chunksStale: true,
+                }),
+            })],
+        }));
+        expect(keys(flags)).not.toContain('kb_empty');
+        expect(keys(flags)).not.toContain('kb_thin');
+        // Nor may a stale index be reported as a pricing failure.
+        expect(keys(flags)).not.toContain('no_offering_chunks');
+    });
+
+    it('a page whose Business Info is only structured (no free text, no chunks) is NOT empty', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ kb: structuredOnlyKb() })],
+        }));
+        expect(keys(flags)).not.toContain('kb_empty');
+        expect(keys(flags)).not.toContain('kb_thin');
+    });
+
+    it('kb_thin needs thin free text AND nothing in any structured store', () => {
+        const thin = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                kb: healthyKb({ kbLength: 120, businessProfileFields: 0, catalogItems: 0, factRows: 0 }),
+            })],
+        }));
+        expect(keys(thin)).toContain('kb_thin');
+    });
+
+    it('kb_thin does NOT fire on the typical short-prose page that has structured facts', () => {
+        // The calibration that matters: the fleet MEDIAN page holds 148
+        // characters (measured 2026-08-20), so the <500 bound alone matches 71 of
+        // 92 live pages. A single real fact — one phone, one catalog item — is
+        // enough to make "the AI has little to answer from" the wrong sentence.
+        for (const store of [
+            { businessProfileFields: 1 },
+            { catalogItems: 1 },
+            { factRows: 1, factCollections: 1 },
+        ]) {
+            const flags = computeHealthFlags(healthyInput({
+                pages: [healthyPage({
+                    kb: healthyKb({
+                        kbLength: 148, businessProfileFields: 0, catalogItems: 0, factRows: 0, ...store,
+                    }),
+                })],
+            }));
+            expect(keys(flags), JSON.stringify(store)).not.toContain('kb_thin');
+        }
     });
 
     it('no_offering_chunks is RED for a product KB with little FAQ', () => {
@@ -196,6 +296,35 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         }));
         const f = flags.find(x => x.key === 'no_offering_chunks');
         expect(f?.severity).toBe('yellow');
+    });
+
+    it('catalog items settle the offerings question — no chunk can contradict them', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                kb: healthyKb({ chunksByType: { info: 12, faq: 1 }, catalogItems: 40 }),
+            })],
+        }));
+        expect(keys(flags)).not.toContain('no_offering_chunks');
+    });
+
+    it('kb_chunks_stale fires only where replies actually read the index', () => {
+        const stale = healthyKb({
+            kbActiveVersion: 54, newestChunkVersion: 51,
+            chunksTotal: 0, chunksByType: {}, chunksStale: true,
+        });
+
+        const reading = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ kb: healthyKb({ ...stale, onRetrievalPath: true, catalogItems: 5 }) })],
+        }));
+        expect(keys(reading)).toContain('kb_chunks_stale');
+
+        // Off the retrieval path the page gets the full KB text and never reads a
+        // chunk, so the stale index is invisible bookkeeping — flagging it would
+        // colour 47 healthy prod accounts for a defect they do not have.
+        const notReading = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ kb: healthyKb({ ...stale, onRetrievalPath: false }) })],
+        }));
+        expect(keys(notReading)).not.toContain('kb_chunks_stale');
     });
 
     it('trial_expired when a trialing sub is past its end date', () => {
@@ -354,10 +483,73 @@ describe('computeHealthFlags — settings warnings', () => {
     it('hold_low_confidence flag, escalated when KB is weak', () => {
         const weak = computeHealthFlags(healthyInput({
             settings: healthySettings({ holdLowConfidence: true }),
-            pages: [healthyPage({ kb: healthyKb({ kbLength: 0, chunksTotal: 0, chunksByType: {} }) })],
+            pages: [healthyPage({
+                kb: healthyKb({
+                    kbLength: 0, chunksTotal: 0, chunksByType: {},
+                    businessProfileFields: 0, catalogItems: 0, factRows: 0,
+                }),
+            })],
         }));
         const f = weak.find(x => x.key === 'hold_low_confidence');
         expect(f?.meta?.withWeakKb).toBe(1);
+    });
+
+    it('hold_low_confidence is NOT escalated when only the chunk index is stale', () => {
+        const flags = computeHealthFlags(healthyInput({
+            settings: healthySettings({ holdLowConfidence: true }),
+            pages: [healthyPage({
+                kb: healthyKb({
+                    kbLength: 10494, businessProfileFields: 10,
+                    chunksTotal: 0, chunksByType: {}, chunksStale: true,
+                    kbActiveVersion: 54, newestChunkVersion: 51,
+                }),
+            })],
+        }));
+        const f = flags.find(x => x.key === 'hold_low_confidence');
+        // The escalated string claims "the Business Info is empty/thin", which
+        // for a 10k-character KB is simply false.
+        expect(f?.meta?.withWeakKb).toBeUndefined();
+    });
+
+    it('page_persona_override names the pages the workspace persona does not reach', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [
+                healthyPage({ id: 'p1', name: 'منتجع شاهين', brandVoiceNotesMulti: { ar: 'نتحدث بلهجة شامية' } }),
+                healthyPage({ id: 'p2', name: 'عالم شاهين' }),
+            ],
+        }));
+        const f = flags.find(x => x.key === 'page_persona_override');
+        expect(f?.meta?.count).toBe(1);
+        expect(String(f?.meta?.pages)).toContain('منتجع شاهين');
+    });
+
+    it('a sourceLang-only or whitespace-only page persona is NOT a pin', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ brandVoiceNotesMulti: { sourceLang: 'ar', ar: '   ' } })],
+        }));
+        expect(keys(flags)).not.toContain('page_persona_override');
+    });
+
+    it('persona_placeholder is suppressed when EVERY page pins its own persona', () => {
+        const placeholder = { brandVoiceNotes: '[Your Assistant Name]', brandVoiceNotesMulti: {} };
+
+        // One page still inherits → the placeholder reaches customers.
+        const reaching = computeHealthFlags(healthyInput({
+            settings: healthySettings(placeholder),
+            pages: [
+                healthyPage({ id: 'p1', brandVoiceNotesMulti: { ar: 'نص' } }),
+                healthyPage({ id: 'p2' }),
+            ],
+        }));
+        expect(keys(reaching)).toContain('persona_placeholder');
+
+        // Every page pinned → the placeholder is unreachable, so flagging it
+        // sends support to fix text no customer ever sees.
+        const unreachable = computeHealthFlags(healthyInput({
+            settings: healthySettings(placeholder),
+            pages: [healthyPage({ id: 'p1', brandVoiceNotesMulti: { ar: 'نص' } })],
+        }));
+        expect(keys(unreachable)).not.toContain('persona_placeholder');
     });
 
     it('business_hours_only carries hours + timezone and flags placeholder tz + missing away message', () => {

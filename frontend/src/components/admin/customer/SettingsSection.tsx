@@ -1,7 +1,8 @@
 import React from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Info, Sparkles, SlidersHorizontal } from 'lucide-react';
 import clsx from 'clsx';
+import { hasPagePersonaPin } from '@jawab24/shared';
 import { Card } from '@/components/ui';
 import type { CustomerDetail, CustomerSettings } from './types';
 
@@ -47,6 +48,11 @@ export function SettingsSection({ customer }: Props) {
     const { values, nonDefaultKeys } = settings;
     const nonDefault = new Set(nonDefaultKeys);
     const personaPlaceholder = customer.health.some(f => f.key === 'persona_placeholder');
+    // Pages whose own persona pin makes the workspace text below unreachable.
+    // `?? []` matches the guard OverviewSection already applies to this field:
+    // the type says required, but a team-member-only account has no pages and
+    // this card must render for them regardless.
+    const personaPinnedPages = (customer.pages ?? []).filter(p => hasPagePersonaPin(p.brandVoiceNotesMulti));
 
     const formatValue = (key: keyof SettingsValues): string => {
         const v = values[key];
@@ -102,6 +108,25 @@ export function SettingsSection({ customer }: Props) {
                     <div className="flex items-start gap-2 status-warning border rounded-lg px-3 py-2">
                         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
                         <span className="text-sm">{t('customer.personaPlaceholderWarn')}</span>
+                    </div>
+                )}
+
+                {/* This card shows the WORKSPACE persona. A page carrying its own
+                    pin (D-084) ignores it completely — resolveBrandVoiceNotes
+                    resolves inside the override with no workspace fallback — so
+                    without this line the text below reads as "what every page
+                    says", which for the pinned pages is the opposite of true.
+                    Same trap D-087 fixed for reply mode; the pinned pages are
+                    named because those are the ones support was called about. */}
+                {personaPinnedPages.length > 0 && (
+                    <div className="flex items-start gap-2 bg-muted border border-theme-border rounded-lg px-3 py-2">
+                        <Info className="w-4 h-4 mt-0.5 shrink-0 text-icon-muted" aria-hidden="true" />
+                        <span className="text-sm text-muted-foreground" dir="auto">
+                            {t('customer.personaPageOverrideNote', {
+                                count: personaPinnedPages.length,
+                                pages: personaPinnedPages.map(p => p.name || p.id).join('، '),
+                            })}
+                        </span>
                     </div>
                 )}
 

@@ -10,6 +10,7 @@ import {
     EMPTY_LEADS,
     PAGE_OFF_REASON_KEYS,
 } from './types';
+import { PageModeBadges } from './PageModeBadges';
 
 interface Props {
     customer: CustomerDetail;
@@ -145,25 +146,11 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                                                         || 'customer.pageReplyOff',
                                                     )}
                                         </span>
-                                        {/* The mode this page RUNS with. Only shown for
-                                            'info', because 'sales' is the default every page
-                                            has had forever and a badge on all of them is
-                                            noise. Support's ticket for this is «توقف عن أخذ
-                                            أرقام الزبائن» — the assistant stopped taking
-                                            customer numbers — and before D-087 the console
-                                            could not answer it: 3 of the 4 info-pinned prod
-                                            pages sit under a 'sales' workspace default, so
-                                            reading the workspace value reported "sales" for a
-                                            page running INFO-DESK. The (inherited) marker
-                                            matters as much as the mode: an inherited info is
-                                            fixed on the workspace, a pinned one is not. */}
-                                        {p.replyModeEffective === 'info' && (
-                                            <span className="text-xs px-2 py-0.5 rounded-full border whitespace-nowrap status-warning">
-                                                {p.replyMode === 'info'
-                                                    ? t('customer.pageModeInfo')
-                                                    : t('customer.pageModeInfoInherited')}
-                                            </span>
-                                        )}
+                                        {/* Mode + persona, on EVERY page. Shared with the
+                                            Business Info cards via PageModeBadges — see the
+                                            rationale there for why 'sales' is no longer
+                                            hidden and why the persona pin earns a badge. */}
+                                        <PageModeBadges page={p} />
                                         {fbHref && (
                                             <a
                                                 href={fbHref}

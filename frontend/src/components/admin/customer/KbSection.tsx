@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BookOpen, ChevronDown, ChevronUp, HelpCircle, ShieldAlert } from 'lucide-react';
+import clsx from 'clsx';
 import { Card } from '@/components/ui';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { BusinessAuditFinding, BusinessAuditFindingKind, BusinessAuditResult } from '@jawab24/shared';
 import type { CustomerDetail, FormatDate } from './types';
+import { PageModeBadges } from './PageModeBadges';
 
 interface Props {
     customer: CustomerDetail;
@@ -68,6 +70,22 @@ function AuditFindingRow({ finding }: { finding: BusinessAuditFinding }) {
 }
 
 /**
+ * One Business Info source and how much of it there is. A named pill per store
+ * (free text / profile / catalog / facts) so support reads WHERE the content
+ * lives — the question a single total cannot answer, and the one that matters
+ * when a merchant says "I filled everything in" about a store the reader
+ * wasn't looking at.
+ */
+function SourcePill({ label, value }: { label: string; value: string }) {
+    return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full border status-success">
+            {label}
+            <span className="opacity-75">{value}</span>
+        </span>
+    );
+}
+
+/**
  * The card's disclosure pattern, defined once: brand-coloured toggle with an
  * icon and a chevron, contents mounted only while open, and a loading line
  * while the first fetch runs. Three sections use it (full text, gaps,
@@ -104,7 +122,12 @@ function LazyExpander({ icon, label, expanded, loading, loadingLabel, onToggle, 
 }
 
 /** One page's Business Info health, with lazy expanders for the full text + gaps. */
-function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: FormatDate }) {
+function KbPageCard({ page, formatDate, noOfferingsFlag }: {
+    page: CustomerPage;
+    formatDate: FormatDate;
+    /** True when the server raised `no_offering_chunks` for THIS page. */
+    noOfferingsFlag: boolean;
+}) {
     const t = useTranslations('admin');
     const { kb } = page;
 
@@ -195,8 +218,74 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
                 </span>
             </div>
 
-            {/* Chunk-type counts. `offering` is the price/product signal — tinted red at 0. */}
-            {kb.chunksTotal > 0 ? (
+            {/* Mode and persona belong on THIS card too, not only in Overview:
+                what counts as adequate Business Info depends on the mode (an
+                info-desk page must not be told it "can't answer pricing"), and a
+                persona pin changes which voice these facts are delivered in. */}
+            <PageModeBadges page={page} />
+
+            {/* WHERE the Business Info actually is. Four stores, each of which
+                reaches the prompt on its own — and this card used to decide
+                "empty" from `chunksTotal` alone, which is the RAG index over the
+                free text and NOT one of them. Every structured write bumps
+                kbActiveVersion without re-ingesting, so the index reads 0 while
+                the merchant's text and profile are untouched: on 2026-08-20 that
+                printed a red "Business Info empty" over 49 of 92 live prod pages,
+                on the same cards that were simultaneously offering "view full
+                Business Info" for their 10k characters. Only `hasAnyContent`
+                (all four stores) may say empty. */}
+            {kb.hasAnyContent ? (
+                <div className="flex flex-wrap gap-2">
+                    {kb.kbLength > 0 && (
+                        <SourcePill label={t('customer.kbSourceText')} value={t('customer.kbCharCount', { count: kb.kbLength })} />
+                    )}
+                    {kb.businessProfileFields > 0 && (
+                        <SourcePill label={t('customer.kbSourceProfile')} value={String(kb.businessProfileFields)} />
+                    )}
+                    {kb.catalogItems > 0 && (
+                        <SourcePill label={t('customer.kbSourceCatalog')} value={String(kb.catalogItems)} />
+                    )}
+                    {kb.factCollections > 0 && (
+                        <SourcePill
+                            label={t('customer.kbSourceFacts')}
+                            value={t('customer.kbFactsValue', { collections: kb.factCollections, rows: kb.factRows })}
+                        />
+                    )}
+                </div>
+            ) : (
+                <p className="text-sm status-error border rounded-lg px-3 py-2">{t('customer.kbEmpty')}</p>
+            )}
+
+            {/* Offerings: the BACKEND's verdict, not a second copy of it. The
+                rule has four clauses (content exists, no catalog items, the chunk
+                index is current, no offering chunk) and it used to be written out
+                here AND in health.ts — a one-line clone, so below the duplication
+                gate's three-line floor and invisible to it, while being exactly
+                the kind that drifts. Same pattern SettingsSection already uses for
+                persona_placeholder: the server decides, this renders. */}
+            {noOfferingsFlag && (
+                <p className="text-sm status-warning border rounded-lg px-3 py-2">{t('customer.kbNoOfferings')}</p>
+            )}
+
+            {/* The RAG index, reported as itself rather than as "Business Info".
+                Stale only matters where replies read it: off the retrieval path
+                (most pages — non-ecommerce pages are handed the full KB text and
+                never touch a chunk) it is invisible bookkeeping, so it is stated
+                as a neutral note there and a warning only where it costs. */}
+            {kb.chunksStale && (
+                <p className={clsx(
+                    'text-sm border rounded-lg px-3 py-2',
+                    kb.onRetrievalPath ? 'status-warning' : 'bg-muted text-muted-foreground border-theme-border',
+                )}>
+                    {kb.onRetrievalPath
+                        ? t('customer.kbChunksStaleRetrieval', { indexed: kb.newestChunkVersion ?? 0, active: kb.kbActiveVersion ?? 0 })
+                        : t('customer.kbChunksStaleBenign', { indexed: kb.newestChunkVersion ?? 0, active: kb.kbActiveVersion ?? 0 })}
+                </p>
+            )}
+
+            {/* Chunk-type breakdown, only when the index is actually current —
+                a stale index's types describe a version no reply reads. */}
+            {kb.chunksTotal > 0 && (
                 <div className="flex flex-wrap gap-2">
                     {orderedTypes.map(ty => (
                         <span
@@ -208,16 +297,9 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
                         </span>
                     ))}
                 </div>
-            ) : (
-                <p className="text-sm status-error border rounded-lg px-3 py-2">{t('customer.kbEmpty')}</p>
-            )}
-
-            {kb.chunksTotal > 0 && !kb.chunksByType.offering && (
-                <p className="text-sm status-warning border rounded-lg px-3 py-2">{t('customer.kbNoOfferings')}</p>
             )}
 
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                <span>{t('customer.kbCharCount', { count: kb.kbLength })}</span>
                 <span>{t('customer.kbUpdated', { date: formatDate(kb.kbUpdatedAt) })}</span>
                 <span>{t('customer.kbGapsCount', { count: kb.unresolvedGaps })}</span>
             </div>
@@ -319,10 +401,21 @@ export function KbSection({ customer, formatDate }: Props) {
         );
     }
 
+    // Page-scoped server verdicts this section renders. Matched on `pageId`
+    // rather than recomputed per card — see the note beside the banner.
+    const noOfferingPageIds = new Set(
+        (customer.health ?? []).filter(f => f.key === 'no_offering_chunks' && f.pageId).map(f => f.pageId),
+    );
+
     return (
         <div className="space-y-6">
             {customer.pages.map(page => (
-                <KbPageCard key={page.id} page={page} formatDate={formatDate} />
+                <KbPageCard
+                    key={page.id}
+                    page={page}
+                    formatDate={formatDate}
+                    noOfferingsFlag={noOfferingPageIds.has(page.id)}
+                />
             ))}
         </div>
     );
