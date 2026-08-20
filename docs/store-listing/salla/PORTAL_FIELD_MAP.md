@@ -19,6 +19,7 @@
 | App Logo | `icon-512.png` (512×512, 58 KB) | ❌ empty |
 | Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; no video is produced | ❌ empty — optional, ship without it |
 | Categories | see **Sub-category correction** below | ❌ empty |
+| App Themes (1–3, required) | see **App Themes** below | ❌ empty — taxonomy not yet read |
 | Supported Countries | **decision owed** — see below | ❌ empty |
 | Search Terms (0/20) | **paste-ready list below** | ❌ empty |
 
@@ -29,6 +30,26 @@ That describes a merchandising widget, not a reply assistant, and it is what a m
 the store will filter on. The brief (§2) leans **Marketing / Sales (التسويق / المبيعات)** over
 Customer Service to match the sales-rep positioning. Pick from Salla's live taxonomy at fill time
 and record what was chosen here — the brief lists this as open question §9.1.
+
+### App Themes — a required field this map did not know about
+
+Discovered in the portal 2026-08-20: **"App Themes — choose 1 to 3 themes that reflect the merchant
+value your app delivers"**, and it is marked required. Salla's live option list has **not been read**
+— it is portal-only and Turnstile-blocked here, so ⛔ do not fill this from a guess. Have the
+founder paste the options, then record the chosen three in this section.
+
+**The selection rule, in priority order** (pick only what is demonstrably true — a theme is a browse
+filter, so a wrong one delivers merchants who bounce, which is how the `Cross-sell / Upsell`
+sub-category error happened):
+
+1. **Customer communication / support / messaging** — the single most literal description of the app.
+2. **Sales growth / conversion** — matches the decided sales-rep positioning (brief §1, 2026-05-30).
+3. **Automation / time saving** — true and honest, but the weakest of the three; take it only if the
+   first two are available and a third slot is genuinely earned.
+
+⛔ **Do not tick** themes about shipping, payments, storefront/theme design, inventory, analytics,
+or cross-sell/upsell widgets. The app does none of them. Fewer true themes beat three with a false
+one — the field allows 1.
 
 ### Supported Countries — decision owed
 
@@ -46,17 +67,36 @@ Arabic first (that is how Salla merchants search), English after for the EN-side
 matters only in that the first terms are the highest-intent ones.
 
 ```
-ردود تلقائية, رد آلي, خدمة العملاء, ذكاء اصطناعي, واتساب, انستغرام, فيسبوك, رسائل, تعليقات,
-مندوب مبيعات, ردود ذكية, دعم فني, أتمتة, chatbot, whatsapp, instagram, facebook, ai-agent,
-customer service, sales assistant
+ردود تلقائية, رد آلي, ردود ذكية, خدمة العملاء, ذكاء اصطناعي, واتساب, مسنجر, انستغرام, فيسبوك,
+تعليقات, مندوب مبيعات, وكيل مبيعات, مساعد مبيعات, مزود معلومات, مصدر معلومات,
+chatbot, whatsapp, instagram, facebook, ai-agent
 ```
 
-⚠️ Two constraints already ruled on, do not undo them:
+**Revised 2026-08-20 (owner request).** Four terms added — `مسنجر` (Messenger is the actual surface
+for FB DMs and was missing while `فيسبوك` was present), `وكيل مبيعات`, `مزود معلومات`, and
+`مصدر معلومات`. To stay inside the hard 20-term cap, four were dropped: `رسائل` (too generic),
+`دعم فني` (files us as a helpdesk — wrong positioning), `أتمتة` (a technical word merchants do not
+type), and `customer service` (duplicates `خدمة العملاء`; launch is KSA-only). `sales assistant`
+also came out to make room for the Arabic `… مبيعات` variants — **that is the swap to reverse first**
+if EN parity is wanted later.
+
+⚠️ **Salla's search-matching behaviour is unknown.** If it matches substrings, the three
+`… مبيعات` variants are partly redundant; if it matches whole phrases, all three earn their slot.
+Nothing here assumes an answer — the list is deliberately built for the wider case. Record what
+actually converts once the listing has traffic.
+
+⚠️ Three constraints already ruled on, do not undo them:
 - **`ai-agent` is an English-side SEO keyword only** (D-014). It appears in this list and **nowhere
   in the Arabic copy** — not in the name, description, or benefits.
 - «رد آلي» is acceptable **as a search term only** — merchants type it. It must never appear in the
   product copy, where the terminology is «الردود الذكية» (AI_INSTRUCTIONS §6, and the founder rule
   against calling Jawab24 a bot).
+- ⭐⭐ **Search terms may carry naming variants; COPY may not.** The reply modes ship in the app as
+  «**مساعد مبيعات**» and «**مصدر معلومات**» (`frontend/src/i18n/ar/settings.json` → `replyMode.sales`
+  / `replyMode.infoDesk`), while the listing draft's prose says «مندوب مبيعاتك الذكي» — a third
+  variant. Diverging words in the *search* field is the field working as intended; diverging words
+  between the listing prose and the screen the merchant then opens is a defect. Settle the prose on
+  one term (owner decision — it is a product-naming call, not a copy tweak) before submission.
 
 ### Supported Countries — recommendation: **Saudi Arabia only** at launch
 
