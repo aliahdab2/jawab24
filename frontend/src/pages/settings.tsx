@@ -40,6 +40,7 @@ import {
   DangerZone,
   CollapsibleSectionHeader,
   buildChangedSettingsPayload,
+  hasUnsavedReplyInput,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
 
@@ -167,14 +168,20 @@ const SettingsPage: NextPageWithLayout = () => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(initialSettings);
-  // The same comparison with the reply mode neutralised — "is anything OTHER
-  // than the mode unsaved?". The persona card's Test button gates on this: an
-  // unsaved mode travels to the playground as an explicit override, so it is
-  // previewable without saving, while unsaved text is not. Spreading keeps the
-  // key ORDER of `settings` (overwriting an existing key does not move it), so
-  // the two JSON strings stay comparable.
-  const hasOtherChanges =
-    JSON.stringify({ ...settings, replyMode: initialSettings.replyMode }) !== JSON.stringify(initialSettings);
+  // What the persona card's Test button must block on: unsaved input the
+  // generated reply would be WRONG about — the persona text and the tone, which
+  // the prompt reads. The MODE is excluded because the card sends it to the
+  // playground explicitly, so it is previewable without saving.
+  //
+  // ⚠️ Deliberately NOT `hasChanges` minus the mode. `hasChanges` is TRUE from
+  // the first render for any account whose stored timezone is still the
+  // placeholder: `fetchSettings` resolves it to the device zone while the
+  // baseline above keeps the raw stored value, on purpose, so the seeded zone
+  // reads as a saveable pending change. That is 70 of 84 prod accounts
+  // (2026-08-20) — gating Test on it left the preview dead for most of the fleet
+  // at the exact moment GA introduces the control. A timezone the merchant has
+  // not saved cannot make a test reply wrong; an unsaved persona can.
+  const unsavedReplyInput = hasUnsavedReplyInput(settings, initialSettings);
 
   // Update current time every minute for real-time status badge
   useEffect(() => {
@@ -523,7 +530,7 @@ const SettingsPage: NextPageWithLayout = () => {
             settings={settings}
             setSettings={setSettings}
             hasChanges={hasChanges}
-            hasOtherChanges={hasOtherChanges}
+            hasUnsavedReplyInput={unsavedReplyInput}
             savedBrandVoiceNotesMulti={initialSettings.brandVoiceNotesMulti}
             savedReplyMode={toReplyMode(initialSettings.replyMode)}
             onScrollToAdvanced={() => {

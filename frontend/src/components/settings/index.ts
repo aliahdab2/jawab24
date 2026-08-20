@@ -4,7 +4,7 @@ export type { DurationOption } from './DurationPresetPicker';
 export { TitleWithInfo } from './TitleWithInfo';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';
-export { buildSettingsUpdatePayload, buildChangedSettingsPayload } from './buildUpdatePayload';
+export { buildSettingsUpdatePayload, buildChangedSettingsPayload, hasUnsavedReplyInput } from './buildUpdatePayload';
 export { ThemeSelector } from './ThemeSelector';
 export { AutoReplyBoardCard } from './AutoReplyBoardCard';
 export { BusinessHoursCard } from './BusinessHoursCard';
