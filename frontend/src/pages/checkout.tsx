@@ -173,14 +173,29 @@ export function PaymentForm({
       ? stripe.confirmSetup
       : stripe.confirmPayment;
 
-    const { error } = await confirmFn({
-      elements,
-      confirmParams: { return_url: returnUrl },
-    });
+    // confirmPayment/confirmSetup RESOLVE with { error } for declines and
+    // validation problems, but they THROW for environment failures — the one
+    // that mattered being a CSP-refused fetch to api.stripe.com (2026-03-26 →
+    // 08-20: connect-src listed checkout.stripe.com instead). Destructuring the
+    // resolved shape alone swallowed that throw, so the merchant pressed pay,
+    // the spinner reset nothing, and neither Sentry nor Stripe ever heard about
+    // it — four months of dead checkouts with zero trace. Declines keep their
+    // specific message; a throw gets the generic banner and a Sentry event, and
+    // the hosted-checkout fallback right below stays available.
+    try {
+      const { error } = await confirmFn({
+        elements,
+        confirmParams: { return_url: returnUrl },
+      });
 
-    if (error) {
-      captureError(error, 'Payment confirmation error', { tags: { page: 'checkout', type } });
-      setErrorMessage(error.message || t('errorInitiateCheckout'));
+      if (error) {
+        captureError(error, 'Payment confirmation error', { tags: { page: 'checkout', type } });
+        setErrorMessage(error.message || t('errorInitiateCheckout'));
+        setSubmitting(false);
+      }
+    } catch (err) {
+      captureError(err, 'Payment confirmation threw', { tags: { page: 'checkout', type } });
+      setErrorMessage(t('errorInitiateCheckout'));
       setSubmitting(false);
     }
   };
@@ -836,14 +851,20 @@ function CheckoutPage() {
                           </Elements>
 
                           {/* Escape hatch to Stripe-HOSTED checkout. The embedded
-                              form above tokenises the card via a cross-origin
-                              iframe, which privacy browsers (Brave Shields etc.)
-                              can silently block: the form renders, pay does
-                              nothing, and NO error surfaces anywhere — we cannot
-                              detect it, so the merchant needs a way out we don't
-                              have to detect. On checkout.stripe.com Stripe is
-                              first-party and immune (live incident 2026-07-25:
-                              same card, dead here, paid instantly there).
+                              form can die in ways we can't always detect: privacy
+                              browsers (Brave Shields etc.) can silently block the
+                              cross-origin tokenisation, and for four months
+                              (2026-03-26 → 08-20) our OWN CSP refused the
+                              confirm call to api.stripe.com — the form rendered,
+                              pay did nothing, no error surfaced anywhere. The
+                              2026-07-25 incident that prompted this fallback was
+                              that CSP defect, misread as Brave at the time; the
+                              merchant paid instantly on checkout.stripe.com,
+                              where Stripe is first-party and immune to both
+                              failure classes. CSP is fixed (nginx.conf, pinned
+                              by backend/test/nginxCspStripe.test.ts) and the
+                              confirm throw is now caught above — the fallback
+                              stays for whatever the next undetectable one is.
                               Subscriptions only — top-ups use a PaymentIntent
                               with no hosted equivalent wired up. */}
                           {hostedFallbackLink}
