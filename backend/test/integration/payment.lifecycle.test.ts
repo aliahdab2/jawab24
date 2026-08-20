@@ -64,6 +64,18 @@ vi.mock('../../src/middleware/auth', () => ({
     requireAdmin: vi.fn().mockImplementation(async () => {}),
 }));
 
+// The GA4 conversion hooks are mocked so the WIRING is observable: which Stripe
+// event reports the money, and with what amount. The claim's semantics — one
+// report per subscription, and a $0 trial checkout not consuming it — are proven
+// against real Postgres in ga4PurchaseClaim.test.ts. Targets the module the
+// handlers import; a barrel-targeted mock would go silent if that path changed.
+vi.mock('../../src/services/ga4', () => ({
+    sendPurchaseConversion: vi.fn().mockResolvedValue({ sent: true }),
+    sendGa4EventForUser: vi.fn().mockResolvedValue({ sent: true }),
+    isGa4Configured: vi.fn().mockReturnValue(true),
+    storeGaClientIdFirstTouch: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
@@ -277,6 +289,38 @@ describe('SCENARIO 1 — New customer completes first purchase (with trial)', ()
         expect(subs[0].trialEndsAt).not.toBeNull();
     });
 
+    /**
+     * The checkout-path call site. Its identifying argument changed from `userId`
+     * to `stripeSubscriptionId` when the claim was introduced (the claim resolves
+     * the owner itself, from the row it stamps). Passing the wrong id here would
+     * silently claim nothing and report nothing, with no other test noticing —
+     * so the argument is pinned, not just the fact that a call happened.
+     *
+     * `amount_total` on a TRIALED checkout is 0, which is why this reports
+     * nothing in practice; the value is still asserted so a future change that
+     * starts charging at checkout is covered.
+     */
+    it('STEP 3b — checkout.session.completed reports the purchase against the Stripe subscription id', async () => {
+        const { sendPurchaseConversion } = await import('../../src/services/ga4');
+        vi.mocked(sendPurchaseConversion).mockClear();
+
+        const session = {
+            ...stripeSession(userId, plan.id, 'sub_new_001', 'cs_checkout_001'),
+            amount_total: 0, // Stripe collects nothing when a trial is attached
+            currency: 'usd',
+        };
+        await handleCheckoutComplete(session, mockReq());
+
+        expect(sendPurchaseConversion).toHaveBeenCalledTimes(1);
+        expect(sendPurchaseConversion).toHaveBeenCalledWith(
+            expect.objectContaining({
+                stripeSubscriptionId: 'sub_new_001',
+                transactionId: 'cs_checkout_001',
+                amountMinorUnits: 0,
+            }),
+        );
+    });
+
     it('STEP 4 — subscription status endpoint returns trialing with trialEndsAt set', async () => {
         await createSub(userId, plan.id, {
             status: 'trialing',
@@ -306,6 +350,76 @@ describe('SCENARIO 1 — New customer completes first purchase (with trial)', ()
 
         const updated = await getSub(sub.id);
         expect(updated.status).toBe('active');
+    });
+
+    /**
+     * REGRESSION (2026-08-20). This step is where the money event was missing
+     * outright. Because Starter carries a trial and is the default plan, the
+     * checkout in STEP 3 completes at $0 and reports nothing — so THIS invoice
+     * is the only chance to tell Google Ads a merchant was acquired. Before the
+     * fix, `handlePaymentSucceeded` made no GA4 call at all, and an ad-driven
+     * signup could never produce a `purchase` conversion.
+     *
+     * `amount_paid`, not `amount_due`: the money actually collected.
+     */
+    it('STEP 5b — invoice.payment_succeeded reports the purchase conversion with the paid amount', async () => {
+        await createSub(userId, plan.id, {
+            status: 'trialing',
+            externalSubscriptionId: 'sub_new_001',
+        });
+
+        const { sendPurchaseConversion } = await import('../../src/services/ga4');
+        vi.mocked(sendPurchaseConversion).mockClear();
+
+        await handlePaymentSucceeded(
+            {
+                id: 'in_first_001',
+                subscription: 'sub_new_001',
+                amount_paid: 2900,
+                amount_due: 9999, // must NOT be the number reported
+                currency: 'usd',
+            },
+            mockReq(),
+        );
+
+        expect(sendPurchaseConversion).toHaveBeenCalledTimes(1);
+        expect(sendPurchaseConversion).toHaveBeenCalledWith(
+            expect.objectContaining({
+                stripeSubscriptionId: 'sub_new_001',
+                // The invoice id is the dedup key on this path, not a session id.
+                transactionId: 'in_first_001',
+                amountMinorUnits: 2900,
+                currency: 'usd',
+            }),
+        );
+    });
+
+    /**
+     * The other half of the same guarantee: an invoice paid against a
+     * subscription Stripe still considers unpaid returns early, before the
+     * activation and before the conversion. Reporting an acquisition there would
+     * credit Google Ads for money that has not settled the subscription.
+     */
+    it('STEP 5c — reports nothing when the subscription is still unpaid', async () => {
+        await createSub(userId, plan.id, {
+            status: 'trialing',
+            externalSubscriptionId: 'sub_new_001',
+        });
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_new_001', { status: 'unpaid' }) as any,
+        );
+
+        const { sendPurchaseConversion } = await import('../../src/services/ga4');
+        vi.mocked(sendPurchaseConversion).mockClear();
+
+        await handlePaymentSucceeded(
+            { id: 'in_first_001', subscription: 'sub_new_001', amount_paid: 2900, currency: 'usd' },
+            mockReq(),
+        );
+
+        expect(sendPurchaseConversion).not.toHaveBeenCalled();
     });
 
     it('STEP 6 — status endpoint returns active after payment succeeds', async () => {

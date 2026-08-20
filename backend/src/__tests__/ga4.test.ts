@@ -16,10 +16,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { captureErrorMock, selectQueue, ga4Config } = vi.hoisted(() => ({
+const { captureErrorMock, selectQueue, claimQueue, updateSpy, ga4Config } = vi.hoisted(() => ({
     captureErrorMock: vi.fn(),
     /** One entry per SELECT issued; shifted in call order. */
     selectQueue: { value: [] as unknown[][] },
+    /**
+     * One entry per purchase-claim UPDATE issued, shifted in call order. A row
+     * means the claim was won; `[]` means it was already taken (the renewal
+     * case). An `Error` is thrown, standing in for a database failure.
+     */
+    claimQueue: { value: [] as (unknown[] | Error)[] },
+    /** Records every claim attempt, so a test can assert none was MADE. */
+    updateSpy: vi.fn(),
     ga4Config: { measurementId: 'G-TEST', apiSecret: 'secret-abc' },
 }));
 
@@ -32,10 +40,31 @@ vi.mock('../db', () => {
         chain.limit = vi.fn(() => Promise.resolve(rows));
         return chain;
     };
-    return { db: { select: vi.fn(() => makeSelect()) } };
+    const makeUpdate = () => {
+        const next = claimQueue.value.shift() ?? [];
+        const chain: Record<string, unknown> = {};
+        chain.set = vi.fn(() => chain);
+        chain.where = vi.fn(() => chain);
+        chain.returning = vi.fn(() =>
+            next instanceof Error ? Promise.reject(next) : Promise.resolve(next));
+        return chain;
+    };
+    return {
+        db: {
+            select: vi.fn(() => makeSelect()),
+            update: vi.fn((...args: unknown[]) => { updateSpy(...args); return makeUpdate(); }),
+        },
+    };
 });
 
-vi.mock('../db/schema', () => ({ users: { id: 'users.id', gaClientId: 'users.ga_client_id' } }));
+vi.mock('../db/schema', () => ({
+    users: { id: 'users.id', gaClientId: 'users.ga_client_id' },
+    subscriptions: {
+        userId: 'subscriptions.user_id',
+        externalSubscriptionId: 'subscriptions.external_subscription_id',
+        ga4PurchaseReportedAt: 'subscriptions.ga4_purchase_reported_at',
+    },
+}));
 vi.mock('../utils/sentryHelpers', () => ({ captureError: captureErrorMock }));
 vi.mock('../config', () => ({ config: { get ga4() { return ga4Config; } } }));
 
@@ -51,6 +80,7 @@ const fetchMock = vi.fn();
 beforeEach(() => {
     vi.clearAllMocks();
     selectQueue.value = [];
+    claimQueue.value = [];
     ga4Config.measurementId = 'G-TEST';
     ga4Config.apiSecret = 'secret-abc';
     fetchMock.mockReset();
@@ -160,15 +190,21 @@ describe('sendGa4EventForUser', () => {
 
 describe('sendPurchaseConversion', () => {
     const paid = {
-        userId: 'user-1',
+        stripeSubscriptionId: 'sub_test_123',
         transactionId: 'cs_test_123',
         amountMinorUnits: 800,
         currency: 'usd',
         planId: 'basic',
     };
 
-    it('sends value in MAJOR units with an upper-cased currency and the dedup key', async () => {
+    /** The claim is won and the user has an attribution id — the happy path. */
+    const claimWon = () => {
+        claimQueue.value = [[{ userId: 'user-1' }]];
         selectQueue.value = [[{ gaClientId: '999.888' }]];
+    };
+
+    it('sends value in MAJOR units with an upper-cased currency and the dedup key', async () => {
+        claimWon();
 
         const result = await sendPurchaseConversion(paid);
 
@@ -204,8 +240,115 @@ describe('sendPurchaseConversion', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    /**
+     * ⛔ THE ORDERING TEST. This is the one that matters most in the file.
+     *
+     * Starter carries a 30-day trial and is the default plan, so the FIRST thing
+     * that reaches this function for a typical merchant is their $0 checkout.
+     * If that zero-amount call claimed the stamp, the real charge 30 days later
+     * would find it taken, resolve `already_reported`, and the merchant's only
+     * purchase conversion would be lost forever — reintroducing the exact bug
+     * the invoice hook was added to fix, in a form no other test would see.
+     */
+    it('does NOT claim the stamp on a zero-amount checkout, so the real charge can still report', async () => {
+        // The trial checkout: $0. No claim may be attempted.
+        await sendPurchaseConversion({ ...paid, amountMinorUnits: 0 });
+        expect(updateSpy).not.toHaveBeenCalled();
+
+        // 30 days later, the first real invoice — the stamp is still unclaimed,
+        // so this one reports.
+        claimWon();
+        const result = await sendPurchaseConversion({
+            ...paid,
+            transactionId: 'in_test_first',
+            amountMinorUnits: 1500,
+        });
+
+        expect(result).toEqual({ sent: true });
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).events[0].params).toMatchObject({
+            transaction_id: 'in_test_first',
+            value: 15,
+        });
+    });
+
+    /**
+     * The renewal case, and the reason the stamp exists. `invoice.payment_
+     * succeeded` fires on every renewal for the life of the subscription; a
+     * renewal is not an acquisition and must never be reported as one.
+     */
+    it('sends nothing when the stamp is already claimed (a renewal)', async () => {
+        claimQueue.value = [[]]; // UPDATE ... WHERE ... IS NULL matched no row
+
+        const result = await sendPurchaseConversion({
+            ...paid,
+            transactionId: 'in_test_renewal',
+            amountMinorUnits: 1500,
+        });
+
+        expect(result).toEqual({ sent: false, reason: 'already_reported' });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    /**
+     * With no credentials the send could never happen, so claiming would burn
+     * the one stamp this subscription gets and suppress its purchase forever
+     * once GA4 IS wired — on a developer machine, or between the migration
+     * landing and the secret being set.
+     */
+    it('does not claim the stamp when GA4 is not configured', async () => {
+        ga4Config.apiSecret = '';
+
+        const result = await sendPurchaseConversion(paid);
+
+        expect(result).toEqual({ sent: false, reason: 'not_configured' });
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    /** A database failure is contained like every other failure in this module. */
+    it('contains a failed claim as a warning and sends nothing', async () => {
+        claimQueue.value = [new Error('deadlock detected')];
+
+        const result = await sendPurchaseConversion(paid);
+
+        expect(result).toEqual({ sent: false, reason: 'exception' });
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(captureErrorMock).toHaveBeenCalledWith(
+            expect.any(Error),
+            'Failed to claim the GA4 purchase report',
+            expect.objectContaining({ level: 'warning' }),
+        );
+    });
+
+    /**
+     * The claim returns the owner, so the caller never has to pass a userId that
+     * could disagree with the row it just stamped.
+     */
+    it('attributes to the user the claim returned, not one supplied by the caller', async () => {
+        claimQueue.value = [[{ userId: 'user-from-claim' }]];
+        selectQueue.value = [[{ gaClientId: 'claimed.client' }]];
+
+        await sendPurchaseConversion(paid);
+
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).client_id).toBe('claimed.client');
+    });
+
+    /** A won claim with no attribution id still consumes the stamp — documented,
+     *  not accidental: MP rejects a payload with no client_id, so there is
+     *  nothing to retry into. */
+    it('reports no_client_id when the claimed user has no attribution id', async () => {
+        claimQueue.value = [[{ userId: 'user-1' }]];
+        selectQueue.value = [[{ gaClientId: null }]];
+
+        const result = await sendPurchaseConversion(paid);
+
+        expect(result).toEqual({ sent: false, reason: 'no_client_id' });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('falls back to USD when Stripe reports no currency', async () => {
-        selectQueue.value = [[{ gaClientId: '999.888' }]];
+        claimWon();
 
         await sendPurchaseConversion({ ...paid, currency: null });
 
@@ -213,10 +356,23 @@ describe('sendPurchaseConversion', () => {
     });
 
     it('converts a non-round minor-unit amount without losing cents', async () => {
-        selectQueue.value = [[{ gaClientId: '999.888' }]];
+        claimWon();
 
         await sendPurchaseConversion({ ...paid, amountMinorUnits: 7999 });
 
         expect(JSON.parse(fetchMock.mock.calls[0][1].body).events[0].params.value).toBe(79.99);
+    });
+
+    /** Stripe can lose subscription metadata; the SALE still matters more than
+     *  the label, because value is what bidding consumes. */
+    it('still reports the value when the plan id is missing', async () => {
+        claimWon();
+
+        const result = await sendPurchaseConversion({ ...paid, planId: undefined });
+
+        expect(result).toEqual({ sent: true });
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).events[0].params.items).toEqual([
+            { item_id: 'unknown', item_name: 'unknown', quantity: 1 },
+        ]);
     });
 });

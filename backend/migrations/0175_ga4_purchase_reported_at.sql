@@ -1,0 +1,12 @@
+-- Exactly-once guard for the GA4 `purchase` conversion (Measurement Protocol).
+--
+-- Two Stripe events can carry a subscription's money: `checkout.session.completed`
+-- (a plan with no trial) and `invoice.payment_succeeded` (a trialed plan's first
+-- real charge — and every renewal after it). Whichever sees money first claims
+-- this stamp with `WHERE ga4_purchase_reported_at IS NULL`, so a renewal can
+-- never be reported to Google Ads as an acquisition.
+--
+-- Nullable and additive: an existing subscription simply has no stamp, which
+-- means "not yet reported". Nothing reads it except the claim itself, and a
+-- failed claim degrades an MP send to "skipped", never to a webhook error.
+ALTER TABLE "subscriptions" ADD COLUMN IF NOT EXISTS "ga4_purchase_reported_at" timestamp;
