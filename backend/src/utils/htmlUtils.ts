@@ -74,6 +74,10 @@ export function htmlToPlainText(html: string): string {
     const links: string[] = [];
 
     const parked = html
+        // Comments first: an Outlook conditional block wraps FALLBACK markup,
+        // and leaving it in prints that fallback as body text — the waitlist
+        // campaign renders its CTA label twice without this.
+        .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '')
         // The preheader is a display:none div holding the inbox preview line.
         // It is chrome, not content, and it usually repeats the opening
@@ -86,7 +90,13 @@ export function htmlToPlainText(html: string): string {
                 // A link whose text already IS its destination — a bare support
                 // address — reads as noise when printed twice.
                 const bare = href.replace(/^mailto:/, '');
-                links.push(text && text !== bare ? `${text} <${href}>` : bare);
+                // The href is parked BEFORE the decode pass, so it is the one
+                // string that never reaches it. A URL written `?a=1&amp;b=2` in
+                // the HTML would otherwise arrive in the text part with the
+                // entity intact and fail to resolve. Latent today only because
+                // every live CTA URL happens to have a single parameter.
+                const url = decodeHtmlEntities(href);
+                links.push(text && text !== bare ? `${text} <${url}>` : decodeHtmlEntities(bare));
                 return `${SLOT}${links.length - 1}${SLOT}`;
             },
         )

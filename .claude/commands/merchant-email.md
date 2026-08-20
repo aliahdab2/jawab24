@@ -124,9 +124,17 @@ lands cannot diverge. Verify both are real, monitored mailboxes:
 
 ```bash
 ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196 \
-  'docker exec jawab24-backend-green sh -c "printenv RESEND_REPLY_TO; printenv RESEND_FROM_EMAIL" \
-     || echo "(unset → info@jawab24.com)"'
+  'docker exec jawab24-backend-green sh -c \
+     "echo reply_to=$(printenv RESEND_REPLY_TO || echo UNSET); \
+      echo from=$(printenv RESEND_FROM_EMAIL || echo UNSET)"'
 ```
+
+> The two `printenv` calls each carry their own `|| echo UNSET`. A single
+> `sh -c "printenv A; printenv B"` with one trailing `||` takes its exit status from
+> the LAST command only, so the fallback line would describe the wrong variable —
+> the snippet would misreport in exactly the configuration it exists to catch.
+
+
 
 ⚠️ Container names flip **blue/green** on deploy — always `docker ps` first, never hardcode.
 
@@ -156,7 +164,7 @@ And state it in the email so the merchant knows it isn't a robot:
 Facts about the options, established 2026-08-12:
 - **There is no sanctioned *endpoint*, but the platform send works.** `adminWaitlistService.sendEmail` (`backend/src/controllers/admin.ts`) is waitlist-only, so send by running a script in the prod backend container against `emailService.send`. This was done successfully on 2026-08-12 (`status=sent`, audit row written) — do not tell the founder it is impossible.
 - **Use an existing `EmailType`.** `account_notice` fits a formal notice about a problem in the merchant's account; `transactional` is the generic fallback. ⛔ Never invent a value — the union in `backend/src/services/email.ts` is the contract. Pass `userId` so the send is filterable per merchant, and verify the `email_sends` row afterwards (`status` must be `sent`).
-- ⛔ **NEVER hand-roll the HTML.** Use the branded template — `accountNoticeEmailTemplate({ name, subject, body })` from `backend/src/utils/emailTemplates.ts`, which returns `{ subject, html }`. It wraps the body in `emailShell`: teal `#0d9488` brand header, white rounded card, `Jawab24 — jawab24.com` footer, hidden preheader, and the Cairo/Tajawal stack with `dir`/`lang`/alignment auto-detected from the content. This was got wrong on 2026-08-12 — a hand-written `<html dir="rtl">` was sent to a merchant with no brand chrome at all. Grep `emailTemplates.ts` for an existing template before writing a single tag.
+- ⛔ **NEVER hand-roll the HTML.** Use the branded template — `accountNoticeEmailTemplate({ name, subject, body })` from `backend/src/utils/emailTemplates.ts`, which returns `{ subject, html }`. It wraps the body in `emailShell`: the Jawab24 logo lockup on a white card, a footer carrying the reply address plus an identity and preferences line, a hidden preheader, dark-mode rules, and the Cairo/Tajawal stack with `dir`/`lang`/alignment auto-detected from the content. (The teal header band and the one-line `Jawab24 — jawab24.com` footer were removed in the shell rebuild.) This was got wrong on 2026-08-12 — a hand-written `<html dir="rtl">` was sent to a merchant with no brand chrome at all. Grep `emailTemplates.ts` for an existing template before writing a single tag.
 - **The body is PLAIN TEXT, not HTML.** `accountNoticeEmailTemplate` does `escapeHtml(body).replace(/\n/g,'<br>')`, so any `<p>`, `<ol>` or `<blockquote>` you pass appears literally as tags in the merchant's inbox. Structure with newlines, «أولاً/ثانياً/ثالثاً» headings and «•» / «١.» bullets — not markup.
 - ⚠️ **The template prepends its own greeting** — «مرحبًا {name}،» (or «مرحبًا،» when `name` is null), which is *informal* and collides with the formal «حضرة السيد … المحترم» these emails require. Today you must choose: accept «مرحبًا أحمد،» and drop the formal salutation, or pass `name: null` and open the body formally (accepting a redundant «مرحبًا،» above it). **Neither is right** — the real fix is a formal-register option on the template, and it is not built. Flag it to the founder rather than silently picking.
 - **`docker exec` is sometimes blocked** by the permission classifier and sometimes not, with no obvious pattern. If it is blocked twice, hand the command over rather than hunting for a third shape.

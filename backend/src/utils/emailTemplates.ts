@@ -57,6 +57,15 @@ function standardBodyCell(align: string, fontFamily: string): string {
 }
 
 /**
+ * The closing line. Carries `.soft` so the dark block can reach it — the muted
+ * layer was declared in the stylesheet and applied to nothing, which left every
+ * sign-off at 2.23:1 in dark mode.
+ */
+function signoffLine(text: string): string {
+    return `<p class="soft" style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${text}</p>`;
+}
+
+/**
  * The body's leading headline. Eight templates carried a byte-identical `<h1>`
  * string before this existed — the kind of clone a grep for a function name
  * never finds.
@@ -78,7 +87,7 @@ function ctaButton(url: string, label: string, opts: { margin?: string; paddingX
     // alignment parameter — a shrink-to-fit table settles on the start edge, so
     // it follows the document's `dir` in both locales on its own.
     return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:${margin};">
-                <tr><td bgcolor="#0d9488" style="background-color:#0d9488;border-radius:8px;">
+                <tr><td class="cta" bgcolor="#0d9488" style="background-color:#0d9488;border-radius:8px;">
                   <a href="${escapeHtml(url)}" style="display:inline-block;padding:13px ${paddingX}px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">${label}</a>
                 </td></tr>
               </table>`;
@@ -117,13 +126,27 @@ const EMAIL_ASSET_ORIGIN = process.env.EMAIL_ASSET_ORIGIN || 'https://jawab24.co
  */
 const SHELL_STYLE = `<style>
   @media (prefers-color-scheme: dark) {
-    .ground { background-color:#0a1214 !important; }
+    body, .ground { background-color:#0a1214 !important; }
     .card { background-color:#111d1f !important; border-color:#223335 !important; }
-    .ink, .ink h1 { color:#e6efef !important; }
-    .soft { color:#9db2b1 !important; }
-    .panel { background-color:#16262a !important; color:#c3d4d4 !important; }
-    .rule { border-color:#223335 !important; }
-    .foot, .foot a { color:#8fa4a3 !important; }
+    /*
+     * Reach DESCENDANTS, not just the cells the shell owns. A class on the body
+     * cell recolours that cell; it does not touch a child that declares its own
+     * inline \`color:\`, and most of the copy does. The first version of this
+     * block styled only the scaffold, so the card went dark while the lead rows
+     * and the whole invite body stayed #18181b — 1.03:1, invisible. An author
+     * !important beats a non-important inline style, which is what makes this
+     * work at all.
+     */
+    .card td, .card th, .card p, .card h1, .card span, .card div, .card strong, .card b, .card a { color:#e6efef !important; }
+    /* Everything below re-asserts AFTER the sweep above; equal specificity, so
+     * source order decides. Moving any of these up silently disables it. */
+    .soft, .soft p { color:#9db2b1 !important; }
+    .panel, .panel td { background-color:#16262a !important; color:#c3d4d4 !important; }
+    .rule, .ld-cell, .ld-row, .card th { border-color:#223335 !important; }
+    .ld-head, .ld-head td { background-color:#0d1719 !important; }
+    .foot, .foot p, .foot td { color:#8fa4a3 !important; }
+    .foot a { color:#8fa4a3 !important; }
+    .cta, .cta a { color:#ffffff !important; }
   }
   @media only screen and (max-width:600px) {
     .pad { padding:26px 22px !important; }
@@ -166,7 +189,7 @@ function emailShell(opts: {
     const brandName = getBrandName();
     const maxWidth = opts.maxWidth ?? 600;
     const isArabic = opts.lang.startsWith('ar');
-    const footerHtml = opts.footerHtml ?? defaultFooter(isArabic ? 'ar' : 'en');
+    const footerHtml = opts.footerHtml ?? defaultFooter([isArabic ? 'ar' : 'en']);
 
     return `<!DOCTYPE html>
 <html lang="${opts.lang}" dir="${opts.dir}">
@@ -178,7 +201,7 @@ function emailShell(opts: {
   <title>${escapeHtml(opts.title)}</title>
   ${SHELL_STYLE}${opts.headExtra ? `\n${opts.headExtra}` : ''}
 </head>
-<body style="margin:0;padding:0;background-color:#f1f4f4;font-family:${opts.bodyFontFamily};">
+<body class="ground" style="margin:0;padding:0;background-color:#f1f4f4;font-family:${opts.bodyFontFamily};">
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${opts.preheader}</div>
   <table role="presentation" class="ground" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f4f4;padding:36px 16px;">
     <tr>
@@ -188,7 +211,7 @@ function emailShell(opts: {
             <td class="padtop" style="padding:26px 34px 0 34px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td width="34" valign="middle" style="padding-inline-end:10px;"><img src="${EMAIL_ASSET_ORIGIN}/brand/logo-small.png" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0;border-radius:8px;"></td>
+                  <td width="34" valign="middle" style="padding-${opts.dir === 'rtl' ? 'left' : 'right'}:10px;"><img src="${EMAIL_ASSET_ORIGIN}/brand/logo-small.png" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0;border-radius:8px;"></td>
                   <td valign="middle"><span class="ink" style="font-size:17px;font-weight:700;color:#0b1f24;letter-spacing:-0.01em;">${escapeHtml(brandName)}</span></td>
                 </tr>
               </table>
@@ -216,26 +239,46 @@ function emailShell(opts: {
 }
 
 /**
- * The footer every email gets unless it passes its own. Three lines, because
- * one line reading "Jawab24 — jawab24.com" tells a merchant nothing it needs:
- * where to ask a question, who is writing, and how to stop.
+ * The footer every email gets unless it passes its own. Three lines, because one
+ * line reading "Jawab24 — jawab24.com" tells a merchant nothing it needs: who to
+ * ask, who is writing, and where to change what they receive.
+ *
+ * Takes a LIST of languages, not one. The invite renders both languages in its
+ * body and only sets `lang: 'ar'` to pick a layout direction — inferring the
+ * footer's language from that gave a deliberately bilingual email an
+ * Arabic-only footer, which is a regression against the language-neutral line
+ * it replaced.
+ *
+ * `preferences` is off for recipients who have no account to manage: the link is
+ * auth-gated, so pointing an invitee at it lands them on a login wall from the
+ * email inviting them to sign up.
+ *
+ * The contact line names the address WITHOUT inviting a reply. That is
+ * deliberate — `.claude/commands/merchant-email.md` carries a standing ruling
+ * against asking a merchant to write back, and this footer renders on
+ * `account_notice`, which is that skill's own send path.
  */
-function defaultFooter(lang: 'ar' | 'en'): string {
+function defaultFooter(langs: Array<'ar' | 'en'>, opts: { preferences?: boolean } = {}): string {
+    const { preferences = true } = opts;
     const brandName = escapeHtml(getBrandName());
-    const settingsUrl = `${config.frontendUrl}/${lang}/settings`;
-    // Whatever address is actually configured — the Reply-To if one is set,
-    // otherwise the From. Never a hardcoded `support@`: a footer that names a
-    // mailbox nobody created is a worse promise than the bare brand line it
-    // replaced.
-    const contact = config.resend.replyToEmail || config.resend.fromEmail;
-    // No address configured → no contact line. A footer must never advertise a
-    // mailbox that does not resolve, and one unrenderable line is not a reason
-    // to fail the whole email.
-    const contactLine = contact
-        ? `<p style="margin:0 0 6px 0;">${t('emailFooterSupport', lang)} <a href="mailto:${escapeHtml(contact)}" style="color:#0d7a86;text-decoration:underline;">${escapeHtml(contact)}</a></p>\n              `
-        : '';
-    return `${contactLine}<p style="margin:0 0 6px 0;">${brandName} &middot; ${t('emailFooterIdentity', lang)}</p>
-              <p style="margin:0;"><a href="${settingsUrl}" style="color:#728486;text-decoration:underline;">${t('emailFooterPreferences', lang)}</a></p>`;
+    // `fromEmail` carries a hardcoded default in config, so this is never empty.
+    // An earlier version guarded for that and shipped a branch no production
+    // config could reach, plus a test that "covered" it by assigning a state the
+    // real module cannot produce. Resolve, do not pretend to fall back.
+    const contact = escapeHtml(config.resend.replyToEmail || config.resend.fromEmail);
+
+    const lines = langs.map((lang) =>
+        `<p style="margin:0 0 6px 0;">${t('emailFooterSupport', lang)} <a href="mailto:${contact}" style="color:#0d7a86;text-decoration:underline;">${contact}</a></p>`);
+
+    lines.push(`<p style="margin:0 0 6px 0;">${brandName} &middot; ${langs.map((l) => t('emailFooterIdentity', l)).join(' &middot; ')}</p>`);
+
+    if (preferences) {
+        const lang = langs[0];
+        const settingsUrl = `${config.frontendUrl}/${lang}/settings`;
+        lines.push(`<p style="margin:0;"><a href="${settingsUrl}" style="color:#728486;text-decoration:underline;">${t('emailFooterPreferences', lang)}</a></p>`);
+    }
+
+    return lines.join('\n              ');
 }
 
 /**
@@ -364,7 +407,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
               <p style="margin:0 0 24px 0;">${nextSteps}</p>
               ${ctaButton(dashboardUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${billing}</p>
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -412,7 +455,7 @@ export function trialEndingEmailTemplate(params: {
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${calloutPanel(rtl, whatHappens)}
               ${ctaButton(pricingUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -456,7 +499,7 @@ export function trialEndedEmailTemplate(params: {
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${calloutPanel(rtl, whatRemains)}
               ${ctaButton(pricingUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -512,7 +555,7 @@ export function paymentFailedEmailTemplate(params: {
               ${calloutPanel(rtl, grace)}
               ${ctaButton(payUrl, ctaLabel)}
               <p style="margin:0 0 16px 0;color:#52525b;font-size:14px;">${updateCard}</p>
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -560,7 +603,7 @@ export function serviceSuspendedEmailTemplate(params: {
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${calloutPanel(rtl, whatRemains)}
               ${ctaButton(ctaUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -601,7 +644,7 @@ export function paymentRecoveredEmailTemplate(params: {
         bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${ctaButton(dashboardUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -649,7 +692,7 @@ export function autoPausedEmailTemplate(params: {
               <p style="margin:0 0 16px 0;">${fixSteps}</p>
               ${calloutPanel(rtl, passwordNote)}
               ${ctaButton(dashboardUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -709,7 +752,7 @@ export function pageReconnectEmailTemplate(params: {
               <p style="margin:0 0 16px 0;">${fixSteps}</p>
               ${calloutPanel(rtl, passwordNote)}
               ${ctaButton(dashboardUrl, ctaLabel)}
-              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+              ${signoffLine(signoff)}`,
     });
 
     return { subject, html };
@@ -756,9 +799,10 @@ export function inviteEmailTemplate(params: {
         lang: 'ar',
         dir: 'rtl',
         bodyFontFamily: enFont,
+        footerHtml: defaultFooter(['ar', 'en'], { preferences: false }),
         title: t('inviteEmailSubject', 'en', { workspace: workspaceName }),
         preheader: intro('en'),
-        bodyCellAttrs: ` style="padding:32px;"`,
+        bodyCellAttrs: ` class="pad ink" style="padding:32px;"`,
         bodyHtml: `${block('ar')}
               <hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0;">
               ${block('en')}
@@ -865,7 +909,7 @@ export function leadDigestEmailTemplate(params: {
             preheader: escapeHtml(intro),
             headExtra,
             maxWidth: 720,
-            bodyCellAttrs: ` style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+            bodyCellAttrs: ` class="pad ink" style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
             bodyHtml: `${pageHeading(escapeHtml(heading), 8)}
               <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
               <table class="ld-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
@@ -876,7 +920,7 @@ export function leadDigestEmailTemplate(params: {
                   <col style="width:12%;">
                   <col style="width:16%;">
                 </colgroup>
-                <thead class="ld-thead">
+                <thead class="ld-thead ld-head">
                   <tr style="background-color:#fafafa;">
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thName)}</th>
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thPhone)}</th>

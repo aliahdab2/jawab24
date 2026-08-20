@@ -295,19 +295,18 @@ describe('shared footer', () => {
         expect(html).toContain('mailto:info@jawab24.com');
     });
 
-    it('omits the contact line entirely when no address resolves', () => {
-        const from = config.resend.fromEmail;
-        config.resend.fromEmail = '';
+    it('escapes the configured address into the mailto and the text node', () => {
+        // config is trusted, but it is an env file a human edits, and the value
+        // lands in an href attribute as well as a text node.
+        config.resend.replyToEmail = 'a"b@jawab24.com';
 
         try {
             const { html } = inviteEmailTemplate(params);
 
-            // Never advertise a mailbox that does not exist — and never fail the
-            // whole email over one footer line that cannot be rendered.
-            expect(html).not.toContain('mailto:');
-            expect(html).toContain('Jawab24 Test');
+            expect(html).toContain('mailto:a&quot;b@jawab24.com');
+            expect(html).not.toContain('mailto:a"b@');
         } finally {
-            config.resend.fromEmail = from;
+            config.resend.replyToEmail = '';
         }
     });
 });

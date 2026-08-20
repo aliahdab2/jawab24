@@ -66,6 +66,25 @@ describe('htmlToPlainText', () => {
         expect(text).toBe('A\n\nB');
     });
 
+    it('decodes entities inside the link destination, not just the label', () => {
+        // The href is parked before the decode pass runs, so it is the one string
+        // that can miss it. A multi-parameter CTA would otherwise arrive carrying
+        // a literal &amp; and fail to resolve when the recipient pastes it.
+        const text = htmlToPlainText('<p><a href="https://jawab24.com/p?a=1&amp;b=2">Go</a></p>');
+
+        expect(text).toBe('Go <https://jawab24.com/p?a=1&b=2>');
+    });
+
+    it('drops Outlook conditional comments rather than printing their fallback', () => {
+        // A conditional block wraps FALLBACK markup for one client. Left in, its
+        // content becomes body text and the CTA prints twice.
+        const text = htmlToPlainText(
+            '<p>Before</p><!--[if mso]><p>Outlook only</p><![endif]--><p>After</p>',
+        );
+
+        expect(text).toBe('Before\n\nAfter');
+    });
+
     it('preserves RTL content unchanged', () => {
         const text = htmlToPlainText('<p>مرحبا بك في جواب24</p>');
 

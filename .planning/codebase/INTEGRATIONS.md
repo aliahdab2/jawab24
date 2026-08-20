@@ -1046,12 +1046,16 @@ All webhooks use HMAC-SHA256 signature verification:
 - **Team invites**: `workspaceInviteService.createInvite()` sends the invite via email (for email contacts) or SMS (for phone contacts). The invite email is **bilingual** (Arabic + English in one message, since the recipient's language is unknown) and links to `/invites/accept?token=…`. If the email send fails, the API returns the raw token so the UI can fall back to a copy-and-share link. Template: `inviteEmailTemplate()` in `emailTemplates.ts`.
 - **API**: Resend REST API (`https://api.resend.com/emails`) via native `fetch` (no SDK)
 - **From**: `info@jawab24.com` (configurable via `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME`)
+- **Reply-To**: `RESEND_REPLY_TO` when set, otherwise the key is omitted from the request and Resend defaults to the From address. The same resolved address is printed in the shared footer, so what a merchant reads and where a reply lands cannot diverge.
+- **Multipart**: every send carries a `text/plain` alternative alongside the HTML, derived from the HTML by `htmlToPlainText()` unless the caller passes its own `text`. HTML-only mail reads as a bulk signal to spam filters.
 - **Graceful degradation**: In development, logs email payload without sending. If `RESEND_API_KEY` is not set, returns error without crashing.
 
 - **Configuration**:
   - `RESEND_API_KEY` — Resend API key
   - `RESEND_FROM_EMAIL` — Sender email (default: `info@jawab24.com`)
   - `RESEND_FROM_NAME` — Sender name (default: `Jawab24`)
+  - `RESEND_REPLY_TO` — Optional. Reply-To header and the footer's printed address
+  - `EMAIL_ASSET_ORIGIN` — Optional. Origin for images embedded in email (default: `https://jawab24.com`). Deliberately not `FRONTEND_URL`: an email outlives the environment that sent it, so a message opened next month must still resolve its logo.
 
 - **Implementation Location**:
   - Service: `/backend/src/services/email.ts` (singleton `emailService`)

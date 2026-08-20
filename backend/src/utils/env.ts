@@ -113,6 +113,10 @@ const EnvSchema = z.object({
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email').default('info@jawab24.com'),
     RESEND_FROM_NAME: z.string().default('Jawab24'),
+    // Validated like its sibling: this one is BOTH an SMTP reply_to and a
+    // mailto: printed in every shell footer, so a typo is merchant-visible.
+    // Optional by design — unset means replies keep going to RESEND_FROM_EMAIL.
+    RESEND_REPLY_TO: z.union([z.string().email('RESEND_REPLY_TO must be a valid email'), z.literal('')]).optional(),
 }).refine(
     data => data.NODE_ENV !== 'production' || (!!data.REDIS_PASSWORD && data.REDIS_PASSWORD !== 'changeme_in_production'),
     {
