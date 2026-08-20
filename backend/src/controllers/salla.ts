@@ -463,11 +463,25 @@ const {
  * error page. With the Easy-Mode flag on AND the public listing URL configured, send the
  * App Store listing instead (the frontend redirects to whatever `authUrl` it receives);
  * installs then arrive via app.store.authorize → pending install → email-match claim.
- * Dev/Custom-Mode setups (flag off, or URL unset pre-approval) keep the OAuth flow.
+ * Dev/Custom-Mode setups keep the OAuth flow, but must opt in explicitly with
+ * SALLA_OAUTH_CONNECT_ENABLED — otherwise this answers 409 SALLA_CONNECT_UNAVAILABLE
+ * rather than handing out an authorize URL that Easy Mode makes dead.
  */
 async function connectStore(request: FastifyRequest, reply: FastifyReply) {
     if (config.salla.easyModeClaimEnabled && config.salla.appStoreUrl) {
         return reply.send({ authUrl: config.salla.appStoreUrl, easyMode: true });
+    }
+    // Easy Mode with no published listing yet: there is nowhere to send the merchant.
+    // The OAuth authorize endpoint 404s for an Easy-Mode app, so answering with it would
+    // strand them on a Salla error page — refuse honestly instead of handing out a URL we
+    // know is dead. `oauthConnectEnabled` is the Custom-Mode dev opt-in.
+    if (!config.salla.oauthConnectEnabled) {
+        return reply.status(409).send({
+            error: {
+                code: 'SALLA_CONNECT_UNAVAILABLE',
+                message: 'Salla connect is not open yet',
+            },
+        });
     }
     return oauthConnectStore(request, reply);
 }

@@ -154,6 +154,9 @@ vi.mock('../../src/config', () => ({
             scopes: 'offline_access products.read_write settings.read',
             easyModeClaimEnabled: true,
             appStoreUrl: '',
+            // This suite models a Custom-Mode dev app, which is the only shape where the
+            // OAuth connect flow is real. Production runs Easy Mode with this OFF.
+            oauthConnectEnabled: true,
         },
     },
 }));
@@ -1277,6 +1280,44 @@ describe('Salla Controller', () => {
                 expect(rep.send).toHaveBeenCalledWith({ authUrl: 'https://apps.salla.sa/ar/app/123456', easyMode: true });
                 expect(rep.setCookie).not.toHaveBeenCalled(); // no OAuth nonce for a listing redirect
             } finally {
+                config.salla.appStoreUrl = '';
+            }
+        });
+
+        it('refuses with 409 SALLA_CONNECT_UNAVAILABLE when OAuth connect is not enabled', async () => {
+            // Production shape: the app is Easy Mode in the Partners portal, no listing exists
+            // yet, so appStoreUrl is empty. The authorize URL is dead — answering with it would
+            // strand the merchant on a Salla error page, so the endpoint must refuse instead.
+            config.salla.oauthConnectEnabled = false;
+            try {
+                const req = mockRequest();
+                const rep = mockReply();
+                await connectStore(req, rep);
+                expect(rep.status).toHaveBeenCalledWith(409);
+                expect(rep.send).toHaveBeenCalledWith({
+                    error: { code: 'SALLA_CONNECT_UNAVAILABLE', message: expect.any(String) },
+                });
+                expect(rep.setCookie).not.toHaveBeenCalled(); // no OAuth nonce minted
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+            }
+        });
+
+        it('still returns the listing URL when it is set, even with OAuth connect disabled', async () => {
+            // Once published, appStoreUrl wins and the OAuth opt-in stays off for good.
+            config.salla.oauthConnectEnabled = false;
+            config.salla.appStoreUrl = 'https://apps.salla.sa/ar/app/665811310';
+            try {
+                const req = mockRequest();
+                const rep = mockReply();
+                await connectStore(req, rep);
+                expect(rep.send).toHaveBeenCalledWith({
+                    authUrl: 'https://apps.salla.sa/ar/app/665811310',
+                    easyMode: true,
+                });
+                expect(rep.status).not.toHaveBeenCalledWith(409);
+            } finally {
+                config.salla.oauthConnectEnabled = true;
                 config.salla.appStoreUrl = '';
             }
         });

@@ -56,10 +56,15 @@ interface PlatformConfig {
   iconClass: string;
   storeMetaClass: string;
   /** Public availability. 'coming_soon' shows a badge on the not-connected card
-   *  (the connect flow stays open for admin/early-access testing; the backend
-   *  route only exists when the platform's client id is configured). Defaults to
-   *  'live' when omitted. */
+   *  (the connect flow stays open for admin/early-access testing, unless
+   *  `connectEnabled` says the flow itself is dead). Defaults to 'live' when
+   *  omitted. */
   status?: 'live' | 'coming_soon';
+  /** Whether the connect action can actually work today. Defaults to true.
+   *  false = render the card without a Connect button, because the flow behind it
+   *  is known to be dead — a disabled-looking button the merchant can still click
+   *  into an error page is worse than no button. */
+  connectEnabled?: boolean;
   /** Returns the backend path to initiate reconnect OAuth. */
   getReconnectPath: (storeDomain: string) => string;
   getStore: () => Promise<EcommerceStore>;
@@ -106,6 +111,12 @@ const PLATFORMS: PlatformConfig[] = [
     // verified and the listing form is reachable, but an approved partner
     // account is not a published app — the card said "live" for neither.
     status: 'coming_soon',
+    // The Salla app is in EASY MODE (portal read 2026-08-20), which drops the registered
+    // redirect URIs and 404s the OAuth authorize endpoint — so the connect flow cannot
+    // work, and there is no published listing to redirect to yet either. Offering the
+    // button would send merchants to a Salla error page. Re-enable together with
+    // SALLA_APP_STORE_URL once the listing is live.
+    connectEnabled: false,
     getReconnectPath: () => '/salla/auth',
     getStore: sallaApi.getStore,
     syncProducts: sallaApi.syncProducts,
@@ -454,6 +465,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
   ];
 
   const handleConnect = async () => {
+    if (platform.connectEnabled === false) return;
     if (platform.requiresDomain && !shopDomain.trim()) return;
     setConnecting(true);
     try {
@@ -532,11 +544,12 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 
         {/* Connect action.
             For a status==='coming_soon' platform the header shows a "coming soon"
-            badge as a public signal — but the Connect flow stays open so early-access
-            merchants and internal testing can still complete OAuth (the backend route
-            only exists when the platform's client id is configured, so it fails safe
-            otherwise). When the platform graduates to status='live', the badge
-            disappears; nothing else changes here. */}
+            badge as a public signal, and the Connect flow stays open so early-access
+            merchants and internal testing can still complete OAuth. That only holds
+            while the flow CAN succeed: connectEnabled === false means the platform's
+            connect path is known-dead (Salla in Easy Mode with no published listing),
+            so we say so in words instead of shipping a button to an error page.
+            When the platform graduates to status='live', the badge disappears. */}
         <div className="flex flex-col gap-2">
           {platform.requiresDomain && (
             <div>
@@ -562,23 +575,29 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
               </p>
             </div>
           )}
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleConnect}
-            disabled={!canEdit || connecting || (platform.requiresDomain && !shopDomain.trim())}
-            className="w-full sm:w-auto"
-          >
-            <span className="flex items-center gap-1.5">
-              {tInt('notConnected.connectBtn')}
-              {connecting ? (
-                <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180" aria-hidden="true" />
-              )}
-            </span>
-          </Button>
-          {!platform.requiresDomain && (
+          {platform.connectEnabled === false ? (
+            <p className="text-sm text-muted-foreground">
+              {tInt('notConnected.connectNotOpen')}
+            </p>
+          ) : (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleConnect}
+              disabled={!canEdit || connecting || (platform.requiresDomain && !shopDomain.trim())}
+              className="w-full sm:w-auto"
+            >
+              <span className="flex items-center gap-1.5">
+                {tInt('notConnected.connectBtn')}
+                {connecting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180" aria-hidden="true" />
+                )}
+              </span>
+            </Button>
+          )}
+          {platform.connectEnabled !== false && !platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
               {tInt(`notConnected.${pid}ConnectHint`)}
             </p>

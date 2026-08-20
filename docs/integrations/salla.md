@@ -288,7 +288,7 @@ plan management, and `hasLiveStripeBilling` is replaced by a subscription-readin
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/salla/store` | Get connected store info — response includes `webhookHealth: 'ok' \| 'pending' \| 'failed' \| 'unknown'` |
-| POST | `/salla/store/connect` | Start connection (returns OAuth URL) |
+| POST | `/salla/store/connect` | Start connection. Returns the App Store listing URL when Easy Mode + `SALLA_APP_STORE_URL` are set; the OAuth URL only when `SALLA_OAUTH_CONNECT_ENABLED=true` (Custom-Mode dev); otherwise **409 `SALLA_CONNECT_UNAVAILABLE`** |
 | DELETE | `/salla/store` | Disconnect store |
 | POST | `/salla/store/sync` | Trigger manual product sync |
 | POST | `/salla/store/webhooks/reregister` | Manual webhook re-registration. Used by the integrations-card "Try again" button when `webhookHealth === 'failed'` (retry queue exhausted). Returns `{ ok, webhookStatus }`. Admin role required. Implementation is the shared `createReregisterHandler('salla')` factory in `controllers/ecommerceWebhooks.ts` |
