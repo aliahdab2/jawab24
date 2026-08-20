@@ -1966,6 +1966,58 @@ export function resolveEffectiveReplyMode(
   return page ?? ws ?? 'sales';
 }
 
+// --- Per-page persona pin (D-084), the same override-with-fallback family ---
+
+/**
+ * Normalize a multilingual JSONB value to a plain object.
+ *
+ * Some rows store these columns double-encoded (a JSON *string* inside the
+ * jsonb cell), so the driver hands back a string instead of an object. Indexing
+ * a string by language (`multi['ar']`) silently yields `undefined`. Lives here
+ * rather than in the backend so every consumer — reply pipeline, admin console,
+ * eval — normalizes identically; `backend/services/multiLangTranslation`
+ * re-exports it.
+ */
+export function coerceMultiLang(value: unknown): Record<string, string> {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, string>;
+    } catch { /* fall through to empty */ }
+    return {};
+  }
+  if (value && typeof value === 'object') return value as Record<string, string>;
+  return {};
+}
+
+/**
+ * The language variants a page's own persona (`pages.brand_voice_notes_multi`)
+ * actually carries, normalized: the `sourceLang` bookkeeping key removed and
+ * whitespace-only variants dropped.
+ *
+ * THE single definition of "this page pins its own persona". A non-empty result
+ * is a PIN — `resolveBrandVoiceNotes` then picks entirely within it, with no
+ * workspace and no legacy-column fallback, so the workspace persona reaches
+ * none of that page's customers. NULL, `{}` and an all-cleared record all mean
+ * "inherit", mirroring the "no keys = no persona written" rule.
+ *
+ * Exported so the reply pipeline and the support console cannot drift: the
+ * console's whole reason for showing this is that a workspace-scoped persona
+ * verdict is wrong for a pinned page, and it would be worth nothing if it
+ * decided "pinned" by a second, slightly different expression.
+ */
+export function resolvePagePersonaLanguages(pageOverride: unknown): Record<string, string> {
+  const { sourceLang: _sourceLang, ...raw } = coerceMultiLang(pageOverride);
+  return Object.fromEntries(
+    Object.entries(raw).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
+  );
+}
+
+/** True when this page's persona pin suppresses the workspace persona. */
+export function hasPagePersonaPin(pageOverride: unknown): boolean {
+  return Object.keys(resolvePagePersonaLanguages(pageOverride)).length > 0;
+}
+
 /**
  * The placeholder phone used inside the INFO-DESK prompt block's
  * counter-demonstrations (ai-worker promptBuilder). Deliberately an

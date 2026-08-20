@@ -96,14 +96,20 @@ vi.mock('../../src/db/schema', () => ({
     subscriptions: { id: 'id', userId: 'userId', status: 'status', planId: 'planId', currentPeriodStart: 'cps', currentPeriodEnd: 'cpe', paymentMethod: 'pm', trialEndsAt: 'te' },
     plans: { id: 'id', name: 'name', slug: 'slug', price: 'price', isActive: 'isActive', sortOrder: 'sortOrder', maxAiRepliesPerMonth: 'max_ai', maxPages: 'max_pages' },
     adminAuditLogs: { id: 'id', action: 'action', previousValue: 'pv', newValue: 'nv', paymentReference: 'pr', note: 'note', createdAt: 'createdAt', adminUserId: 'adminUserId', targetUserId: 'targetUserId' },
-    pages: { id: 'id', userId: 'userId', name: 'name', workspaceId: 'workspaceId', knowledgeBase: 'kb', kbVersion: 'kbv', kbActiveVersion: 'kbav', kbUpdatedAt: 'kbua' },
+    pages: { id: 'id', userId: 'userId', name: 'name', workspaceId: 'workspaceId', knowledgeBase: 'kb', kbVersion: 'kbv', kbActiveVersion: 'kbav', kbUpdatedAt: 'kbua', businessProfile: 'bp', brandVoiceNotesMulti: 'bvnm', ecommerceStoreId: 'esi', replyMode: 'rm' },
     usage: { userId: 'userId', aiRepliesCount: 'airc', periodStart: 'ps', periodEnd: 'pe' },
     posts: { id: 'id', pageId: 'pageId', triggerReply: 'triggerReply' },
     instagramMedia: { id: 'id', pageId: 'pageId', triggerReply: 'triggerReply' },
     comments: { id: 'id', postId: 'postId', replied: 'replied', replyMethod: 'replyMethod' },
     instagramComments: { id: 'id', mediaId: 'mediaId', replied: 'replied', replyMethod: 'replyMethod' },
     messages: { id: 'id', pageId: 'pageId', direction: 'direction', replied: 'replied', replyMethod: 'replyMethod' },
-    kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
+    kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion', type: 'type' },
+    // The structured Business Info stores the console counts alongside the free
+    // text — a page whose whole Business Info is a catalog or a fact list must
+    // not read as empty.
+    catalogItems: { id: 'id', pageId: 'pageId' },
+    factCollections: { id: 'id', pageId: 'pageId' },
+    factRows: { id: 'id', collectionId: 'collectionId' },
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
     workspaces: { id: 'id', name: 'name', ownerId: 'ownerId', createdAt: 'createdAt' },
     workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
@@ -1122,7 +1128,28 @@ describe('Admin Routes', () => {
                 where: vi.fn().mockReturnThis(),
                 groupBy: vi.fn().mockResolvedValue([]),
             };
-            // Eleventh–thirteenth: post replies actually SENT (replyMethod='post_reply') across
+            // Eleventh–thirteenth: the STRUCTURED Business Info stores, which the
+            // console must count because a chunk total cannot see them — newest
+            // ingested chunk version (unpinned, to tell "never ingested" from
+            // "outrun by a structured write"), catalog items, and fact
+            // collections joined to their rows.
+            const kbNewestChunkChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([{ pageId: 'page-1', maxVersion: 5 }]),
+            };
+            const catalogCountChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([]),
+            };
+            const factCountChain = {
+                from: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([]),
+            };
+            // Fourteenth–sixteenth: post replies actually SENT (replyMethod='post_reply') across
             // FB comments, IG comments and DMs → 4 + 6 + 2 = 12.
             const fbPostReplyChain = {
                 from: vi.fn().mockReturnThis(),
@@ -1157,6 +1184,9 @@ describe('Admin Routes', () => {
                 .mockReturnValueOnce(ownedPagesChain as any)
                 .mockReturnValueOnce(kbChunksChain as any)
                 .mockReturnValueOnce(kbGapsChain as any)
+                .mockReturnValueOnce(kbNewestChunkChain as any)
+                .mockReturnValueOnce(catalogCountChain as any)
+                .mockReturnValueOnce(factCountChain as any)
                 .mockReturnValueOnce(fbPostReplyChain as any)
                 .mockReturnValueOnce(igPostReplyChain as any)
                 .mockReturnValueOnce(dmPostReplyChain as any)

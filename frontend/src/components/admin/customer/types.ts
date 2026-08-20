@@ -23,6 +23,27 @@ export interface PageKbSummary {
     chunksTotal: number;
     chunksByType: Record<string, number>;
     unresolvedGaps: number;
+    /**
+     * Business Info is FOUR stores, and each reaches the prompt on its own: the
+     * free-text KB (`kbLength`), the structured merchant profile
+     * (`businessProfileFields` — the authoritative BUSINESS_INFO block),
+     * `catalogItems` (the `<product_catalog>` block, which outranks the free
+     * text) and fact collections. `chunksTotal` is NOT a fifth store — it is the
+     * RAG index over the free text, and it drops to zero on its own whenever a
+     * structured write moves `kbActiveVersion` past the newest ingested set.
+     * Never decide "empty" from it; use `hasAnyContent`.
+     */
+    businessProfileFields: number;
+    catalogItems: number;
+    factCollections: number;
+    factRows: number;
+    newestChunkVersion: number | null;
+    /** Chunks exist, but at an older version than the active pointer. */
+    chunksStale: boolean;
+    /** Replies for this page actually read chunks (store or catalog items). */
+    onRetrievalPath: boolean;
+    /** The one honest "the AI has something to answer from" — all four stores. */
+    hasAnyContent: boolean;
 }
 
 /**
@@ -123,6 +144,13 @@ export interface CustomerDetail {
          *  default. Distinct from `replyMode` on purpose — an inherited 'info' is
          *  fixed on the workspace, a pinned one is not. */
         replyModeEffective: string | null;
+        /**
+         * The page's OWN persona pin (`pages.brand_voice_notes_multi`, D-084).
+         * When it carries any language, the WORKSPACE persona shown on the
+         * Settings tab reaches none of this page's customers — the pipeline
+         * resolves entirely within the pin, with no workspace fallback.
+         */
+        brandVoiceNotesMulti: Record<string, string> | null;
         /** Business Info (KB) health summary for this page. */
         kb: PageKbSummary;
     }>;

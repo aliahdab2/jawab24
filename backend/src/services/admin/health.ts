@@ -1,5 +1,7 @@
-import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
-import { coerceMultiLang } from '../multiLangTranslation';
+import {
+    DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus,
+    coerceMultiLang, hasPagePersonaPin,
+} from '@jawab24/shared';
 import { overlayWorkspaceFields } from '../pipelineFields';
 
 /**
@@ -27,7 +29,19 @@ export interface HealthFlag {
     meta?: Record<string, string | number>;
 }
 
-/** Per-page KB summary (counts/lengths only — never the raw KB text). */
+/**
+ * Per-page Business Info summary (counts/lengths only — never the raw text).
+ *
+ * Business Info is FOUR stores now, not one, and every one of them reaches the
+ * prompt on its own: the free-text KB (`<business_knowledge>`), the structured
+ * merchant profile (the authoritative BUSINESS_INFO block), catalog items
+ * (`<product_catalog>`, which outranks the free text), and fact collections
+ * (list facts + their derived completeness statement). `chunksTotal` is NOT a
+ * fifth store — it is the RAG index over the free text, read only on the
+ * retrieval path, and it goes to zero on its own whenever a structured write
+ * moves `kbActiveVersion` past the newest ingested set. Deciding "empty" from it
+ * put 49 of 92 live prod pages permanently RED (2026-08-20).
+ */
 export interface PageKbSummary {
     kbLength: number;
     kbActiveVersion: number | null;
@@ -35,6 +49,56 @@ export interface PageKbSummary {
     chunksTotal: number;
     chunksByType: Record<string, number>;
     unresolvedGaps: number;
+    /** Non-empty keys of `business_profile.merchant` (the BUSINESS_INFO block). */
+    businessProfileFields: number;
+    /** Merchant-authored `<product_catalog>` rows. */
+    catalogItems: number;
+    factCollections: number;
+    factRows: number;
+    /**
+     * Newest ingested chunk version, ignoring the active pointer — null when the
+     * page was never ingested. Together with `kbActiveVersion` it separates the
+     * two zero-chunk causes, which need opposite actions: never ingested, versus
+     * ingested and then outrun by a structured write.
+     */
+    newestChunkVersion: number | null;
+    /** Chunks exist but at an older version than the active pointer. */
+    chunksStale: boolean;
+    /** This page's replies actually read chunks (store or catalog items). */
+    onRetrievalPath: boolean;
+    /**
+     * True when ANY of the four stores holds content — shipped to the console so
+     * the browser does not re-derive it. DERIVED, never authored: build it with
+     * `hasBusinessInfoContent` below, which is also what the flag logic calls, so
+     * the field and the flags cannot disagree.
+     */
+    hasAnyContent: boolean;
+}
+
+/**
+ * "Does the AI have anything to answer from?" — the ONE definition, over all
+ * four Business Info stores.
+ *
+ * `chunksTotal` is deliberately absent. It is the RAG index over the free text,
+ * not a store, and it drops to zero whenever a structured write moves
+ * `kbActiveVersion` past the newest ingested set — which is how the old
+ * `kbLength === 0 || chunksTotal === 0` test put 49 of 92 live prod pages
+ * permanently RED with their Business Info fully intact (2026-08-20).
+ *
+ * The flag logic calls this rather than reading `kb.hasAnyContent`, so a caller
+ * that computes the field wrongly cannot make the flags lie — the flags derive
+ * it themselves from the counts.
+ */
+export function hasBusinessInfoContent(kb: {
+    kbLength: number;
+    businessProfileFields: number;
+    catalogItems: number;
+    factRows: number;
+}): boolean {
+    return kb.kbLength > 0
+        || kb.businessProfileFields > 0
+        || kb.catalogItems > 0
+        || kb.factRows > 0;
 }
 
 /** The subset of the settings row the support console reads. */
@@ -73,6 +137,12 @@ export interface HealthInputPage {
     disconnected: boolean;
     autoReplyEnabled: boolean | null;
     autoReplyDisabledReason: string | null;
+    /**
+     * The page's own persona pin (`pages.brand_voice_notes_multi`, D-084). Raw
+     * jsonb — normalized here, not trusted, per the double-encoding precedent in
+     * MULTI_LANG_SUPPORT_FIELDS below.
+     */
+    brandVoiceNotesMulti?: unknown;
     kb: PageKbSummary;
 }
 
@@ -134,7 +204,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const TRIAL_ENDING_SOON_DAYS = 3;
 const DORMANT_DAYS = 14;
 const KB_THIN_CHARS = 500;
-const KB_THIN_CHUNKS = 5;
+// Structured Business Info counts toward substance too, so a merchant who filled
+// the profile/catalog/fact tables instead of typing prose is not called thin.
+// Scale: the fleet median profile is ~9 filled fields, so 5 entries across the
+// three structured stores is a deliberately low floor — it only has to clear
+// "barely started".
+const KB_THIN_STRUCTURED_ENTRIES = 5;
 // A page with chunks but no `offering` is red (can't answer pricing) UNLESS the
 // KB is a substantial FAQ/info knowledge base — a legitimate service business
 // shouldn't sit permanently red. At/above this many FAQ chunks it downgrades to
@@ -154,7 +229,8 @@ export const HEALTH_FLAG_KEYS = [
     'usage_on_topup', 'usage_near_cap_on_topup', 'usage_topup_nearly_drained',
     'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
-    'no_offering_chunks', 'kb_thin', 'unresolved_kb_gaps', 'persona_placeholder',
+    'no_offering_chunks', 'kb_thin', 'kb_chunks_stale', 'unresolved_kb_gaps',
+    'persona_placeholder', 'page_persona_override',
     'hold_low_confidence', 'business_hours_only', 'timezone_default',
     'no_away_message', 'greeting_written_not_enabled', 'trial_ending_soon',
     'merchant_dormant', 'team_member', 'settings_untouched', 'onboarding_incomplete',
@@ -297,6 +373,11 @@ export function resolvePipelineWorkspaceId(
 /** Template markers left in a persona, e.g. "[Your Assistant's Name]". */
 const PLACEHOLDER_MARKER = /\[[^\]]{2,}\]/;
 
+// `hasPagePersonaPin` (imported above, from @jawab24/shared) is the ONE
+// predicate for "this page pins its own persona" — the reply pipeline's
+// resolveBrandVoiceNotes decides the pin with the same function, so the console
+// can never claim a page is pinned when the pipeline disagrees.
+
 /**
  * A persona counts as "not really set" when every variant (the base notes and
  * each language in brandVoiceNotesMulti) is either empty or still carries an
@@ -437,22 +518,55 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
             }
         }
 
-        const { kbLength, chunksTotal, chunksByType, unresolvedGaps } = p.kb;
-        if (kbLength === 0 || chunksTotal === 0) {
+        const {
+            kbLength, chunksTotal, chunksByType, unresolvedGaps,
+            businessProfileFields, catalogItems, factRows,
+            chunksStale, onRetrievalPath,
+        } = p.kb;
+        // Derived here, not read off the payload — see hasBusinessInfoContent.
+        const hasAnyContent = hasBusinessInfoContent(p.kb);
+
+        // "The AI has nothing to answer from" — true only when ALL FOUR stores
+        // are empty. It was `kbLength === 0 || chunksTotal === 0`, which is two
+        // separate errors: the OR made a stale RAG index alone sufficient for a
+        // RED (the 49-page class), and neither operand could see the structured
+        // stores, so a page whose entire Business Info is a catalog price list
+        // or a delivery-zone table read as empty no matter how complete it was.
+        if (!hasAnyContent) {
             add('red', 'kb_empty', scope);
             anyThinOrEmptyKb = true;
         } else {
-            if (!chunksByType.offering) {
+            // Offerings: `catalog_items` is the FIRST-CLASS home for priced
+            // offerings now (its block outranks the free text in the prompt), so
+            // having items settles the question — no chunk can contradict it.
+            // Only when there are none do we fall back to asking the chunk index,
+            // and that question is meaningless while the index is stale: a page
+            // with 40 offering chunks at v51 and the pointer at v54 would be told
+            // it cannot answer pricing.
+            const chunkIndexUsable = chunksTotal > 0;
+            if (catalogItems === 0 && chunkIndexUsable && !chunksByType.offering) {
                 // Product merchant with no offerings can't answer pricing (red),
                 // but a substantial FAQ/info KB is a legitimate service business —
                 // downgrade to yellow so it isn't permanently red.
                 const substantialFaq = (chunksByType.faq ?? 0) >= NO_OFFERING_FAQ_DOWNGRADE;
                 add(substantialFaq ? 'yellow' : 'red', 'no_offering_chunks', scope);
             }
-            if (kbLength < KB_THIN_CHARS || chunksTotal < KB_THIN_CHUNKS) {
+            // Thin: measured on what the merchant actually authored across the
+            // stores. The chunk-count half of the old test is dropped rather than
+            // repaired — a stale index reports 0 chunks for a 10k-character KB,
+            // and on the non-retrieval path (most pages) the count describes
+            // nothing the customer ever receives.
+            const structuredEntries = businessProfileFields + catalogItems + factRows;
+            if (kbLength < KB_THIN_CHARS && structuredEntries < KB_THIN_STRUCTURED_ENTRIES) {
                 add('yellow', 'kb_thin', scope);
                 anyThinOrEmptyKb = true;
             }
+        }
+        // A stale index is only a real defect where replies read it. Elsewhere
+        // it is invisible bookkeeping and must not colour the account — that
+        // conflation is what this whole block was fixed for.
+        if (chunksStale && onRetrievalPath) {
+            add('yellow', 'kb_chunks_stale', scope);
         }
         if (unresolvedGaps > 0) {
             add('yellow', 'unresolved_kb_gaps', { ...scope, meta: { count: unresolvedGaps } });
@@ -461,7 +575,25 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
 
     // ---- Settings-level warnings (YELLOW) ----
     if (settings) {
-        if (isPlaceholderPersona(settings.brandVoiceNotes, settings.brandVoiceNotesMulti)) {
+        // The persona flags below describe the WORKSPACE persona. Any page
+        // carrying its own pin ignores it outright — resolveBrandVoiceNotes
+        // returns inside the override with no workspace fallback — so a
+        // workspace-scoped verdict must not be read as fleet-wide. Same trap
+        // D-087 fixed for reply mode; named here so the console cannot repeat it.
+        const personaPinnedPages = pages.filter(p => hasPagePersonaPin(p.brandVoiceNotesMulti));
+        if (personaPinnedPages.length > 0) {
+            add('info', 'page_persona_override', {
+                meta: { count: personaPinnedPages.length, pages: personaPinnedPages.map(p => p.name ?? p.id).join('، ') },
+            });
+        }
+        // Scoped to the pages that actually USE the workspace persona: a
+        // placeholder nobody reads is not a live defect, and firing on it sends
+        // support to fix text that reaches no customer. With no pages at all
+        // there is nothing to scope by, so the flag keeps its original meaning
+        // (the persona is still the account's, and `no_pages` already fired).
+        const anyPageUsesWorkspacePersona = pages.length === 0 || personaPinnedPages.length < pages.length;
+        if (anyPageUsesWorkspacePersona
+            && isPlaceholderPersona(settings.brandVoiceNotes, settings.brandVoiceNotesMulti)) {
             add('yellow', 'persona_placeholder');
         }
         if (settings.holdLowConfidence === true) {

@@ -2109,3 +2109,72 @@ have more than one membership, maximum 2 each** — small, live, and silent.
 **Post-GA measurement owed:** re-run the eval-phrase ask/promise query weekly across every
 effective-`info` page — the pilot measured pages WE chose; the point of GA is that
 merchants choose next.
+
+## D-088 · Business Info presence is measured across all four stores; the RAG chunk index is not evidence of content (2026-08-20, owner-reported)
+
+**Ruling.** "Does this page have Business Info?" is answered by `hasBusinessInfoContent` —
+`knowledge_base` characters OR non-empty `business_profile.merchant` fields OR
+`catalog_items` OR `fact_rows`. `kb_chunks` is EXCLUDED from that question. It is the RAG
+index over the free text, not a fifth store, and it is read at reply time only on the
+retrieval path. One function, called by both the health flags and the payload field the
+console renders, so a badge and a banner on the same screen cannot contradict each other.
+
+**What it shipped.** The support console decided emptiness from `chunksTotal` — chunk rows
+joined at `pages.kb_active_version`. Since Business Info became structured, THREE writers
+bump that pointer without re-ingesting: `updatePage`'s `business_profile` branch, and
+`invalidatePageCaches` from `services/catalog.ts` and `services/factCollections.ts`. The
+pointer outruns the newest ingested set, the join matches nothing, and the page reads as
+empty. Measured on prod: **49 of 92 live pages**, every one of them holding real Business
+Info. «Shahin Resort» — active v54, newest chunks v51, **10,494 KB characters and 10 filled
+profile fields** — printed «معلومات النشاط فارغة» on the same card that was offering "view
+full Business Info" for those 10,494 characters. The owner caught it on screen.
+
+**It was never only cosmetic, which is why the fix is not only in the UI.** `health.ts`
+read the same signal: `kbLength === 0 || chunksTotal === 0` → RED `kb_empty`, so those 49
+accounts were permanently red and the red was load-bearing — `anyThinOrEmptyKb` escalated
+`hold_low_confidence` to a string asserting "the Business Info is empty/thin" about a 10k
+KB. `chunksTotal < 5` fired `kb_thin` on the same rows. And `no_offering_chunks` asked the
+chunk index whether the page had offerings while ignoring `catalog_items` entirely — so a
+merchant whose whole Business Info is a catalog price list was told the AI cannot answer
+pricing, even though the `<product_catalog>` block outranks the free text in the prompt.
+Catalog items now settle that question; the chunk index is consulted only when there are
+none, and never while it is stale.
+
+**Replies were never affected, and that was checked before anything was written.** D-050
+sends non-ecommerce pages the FULL KB text with no retrieval call at all, and on the
+retrieval path `resolveKnowledge` falls back to the full KB when `chunks.length === 0`. Of
+the 49, **zero** are store-backed and **2** reach the retrieval path via `catalog_items`
+(«Jawab24», «Shahin Resort»); both degrade to the full KB. So the cost is one wasted
+embedding round-trip per reply on two pages — reported as its own flag,
+`kb_chunks_stale`, and ONLY for pages that actually read the index. Flagging the other 47
+would re-create the same conflation in a new colour.
+
+**The generalisable rule.** A console must report the thing it names. `chunksTotal` was a
+faithful measurement of the RAG index and a false one of Business Info; nothing was broken
+in it, it was being asked the wrong question. When a domain concept splits into several
+stores, every predicate that ever meant "the concept" has to be re-derived — grepping for
+the READERS is what found `health.ts`, which was three levels away from the banner the
+owner reported and carried the more damaging half.
+
+**Also fixed, same class, found by the same sweep.** The Persona card showed the WORKSPACE
+persona with nothing saying that a page carrying its own pin (D-084) never reads it —
+`resolveBrandVoiceNotes` resolves inside the override with no workspace fallback. That is
+D-087's reply-mode trap exactly, one field over: a workspace-scoped value presented as
+fleet truth, wrong for precisely the pages someone deliberately configured. **5 of 92 live
+pages** carry a persona pin. The card now names them, `persona_placeholder` no longer fires
+when every page is pinned (fixing text no customer reads), and `hasPagePersonaPin` moved to
+`@jawab24/shared` so the console and the pipeline decide "pinned" with ONE predicate.
+
+**And the mode badge now shows on every page, sales included.** It was rendered for `'info'`
+only, on the reasoning that `'sales'` is the default and a badge on every page is noise.
+That is wrong about how an absent badge reads: not "sales", but "this console does not
+know" — which is what sends support back to the workspace value, the exact failure D-087
+created the badge to prevent. Both badges also state pinned-vs-inherited, because support
+has to change a different setting depending on which it is.
+
+**NOT fixed here, deliberately: the pointer bump itself.** Making `invalidatePageCaches`
+re-ingest would spend embeddings on every catalog and fact write for the 47 pages that
+never read a chunk. The honest options are to stop bumping `kb_active_version` for writes
+that do not invalidate the chunk set, or to re-ingest only on the retrieval path — a
+reply-path change needing its own measurement and its own ruling. Re-saving Business Info
+re-indexes a page today, and the console now says so.
