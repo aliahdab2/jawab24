@@ -289,6 +289,14 @@ export const config = {
         // the OAuth authorize URL — which Salla 404s for Easy-Mode apps (no registered
         // redirect_uri), so the OAuth connect flow must not be offered for the published app.
         appStoreUrl: process.env.SALLA_APP_STORE_URL || '',
+        // The OAuth "Connect Salla" action. OFF by default, because the production app
+        // runs in EASY MODE (read directly from the Partners portal 2026-08-20: OAuth Mode
+        // = Easy Mode, and no callback-URL field is even rendered in that mode). Easy Mode
+        // drops the registered redirect URIs, so Salla 404s the authorize endpoint — handing
+        // a merchant that URL strands them on a Salla error page. Turn this ON only for a
+        // Custom-Mode dev app. Once the listing is published, `appStoreUrl` above takes
+        // precedence and this stays off permanently.
+        oauthConnectEnabled: process.env.SALLA_OAUTH_CONNECT_ENABLED === 'true',
         // Easy Mode delivers tokens via the app.store.authorize webhook (server-to-server)
         // and RE-fires it to push refreshed tokens. When true, the proactive 6h pull-refresh
         // skips Easy-Mode stores so our OAuth refresh-token grant doesn't race Salla's push

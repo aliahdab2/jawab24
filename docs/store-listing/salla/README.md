@@ -35,6 +35,7 @@ Produced 2026-07-18 for founder review. All sizes match Salla's confirmed specs
 | `benefit-3.png` | 1600×1600 | Three channels card — WhatsApp/Facebook/Instagram chips flowing into one Jawab24 hub («كل رسائلك وتعليقاتك في مكان واحد»). |
 | `icon-512.png` | 512×512, 58 KB | Existing brand mark (`frontend/public/brand/icon-vector.svg`) re-framed: symbol only, no text, transparent background, 40 px margin all sides, centered. |
 | `benefits.md` | — | AR-primary + EN titles/descriptions to paste alongside each Key-Benefits image. |
+| `PORTAL_FIELD_MAP.md` | — | Which portal field takes which file/section, plus the decisions the drafts don't cover (sub-category, supported countries, pricing type, contact + service-trial gaps). |
 | `raw-*.png` | 2560×1440 | Unframed 2× app captures (kept in case a different frame is wanted). |
 | `*.html`, `frame.css`, `render.js`, `icon.html` | — | Sources; re-render everything with `node render.js`. |
 

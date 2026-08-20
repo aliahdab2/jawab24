@@ -154,6 +154,9 @@ vi.mock('../../src/config', () => ({
             scopes: 'offline_access products.read_write settings.read',
             easyModeClaimEnabled: true,
             appStoreUrl: '',
+            // This suite models a Custom-Mode dev app, which is the only shape where the
+            // OAuth connect flow is real. Production runs Easy Mode with this OFF.
+            oauthConnectEnabled: true,
         },
     },
 }));
@@ -185,6 +188,7 @@ vi.mock('../../src/lib/ecommerceSyncQueue', () => ({
 import {
     authRedirect,
     authCallback,
+    isConnectAvailable,
     webhookHandler,
     getStore,
     connectStore,
@@ -263,6 +267,37 @@ describe('Salla Controller', () => {
             const nonce1 = rep1.setCookie.mock.calls[0][1];
             const nonce2 = rep2.setCookie.mock.calls[0][1];
             expect(nonce1).not.toBe(nonce2);
+        });
+
+        it('sends the merchant back to /integrations instead of a dead Salla page when connect is unavailable', async () => {
+            // GET /salla/auth is PUBLIC and the UI's "reconnect" action points at it, so
+            // guarding only POST /store/connect would leave a live path to the authorize
+            // URL that Easy Mode 404s.
+            config.salla.oauthConnectEnabled = false;
+            try {
+                const rep = mockReply();
+                await authRedirect(mockRequest(), rep);
+                expect(rep.redirect).toHaveBeenCalledWith(
+                    'https://jawab24.com/integrations?salla_error=connect_unavailable',
+                );
+                expect(mockBuildAuthUrl).not.toHaveBeenCalled();
+                expect(rep.setCookie).not.toHaveBeenCalled(); // no nonce for a flow we refuse
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+            }
+        });
+
+        it('still redirects to Salla once the listing URL is set, without the dev opt-in', async () => {
+            config.salla.oauthConnectEnabled = false;
+            config.salla.appStoreUrl = 'https://apps.salla.sa/ar/app/665811310';
+            try {
+                const rep = mockReply();
+                await authRedirect(mockRequest(), rep);
+                expect(mockBuildAuthUrl).toHaveBeenCalled();
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+                config.salla.appStoreUrl = '';
+            }
         });
 
         it('should not require a shop domain (unlike Shopify)', async () => {
@@ -1240,6 +1275,32 @@ describe('Salla Controller', () => {
         });
     });
 
+    describe('isConnectAvailable', () => {
+        it('is false when the app is Easy Mode with no listing and no dev opt-in', () => {
+            config.salla.oauthConnectEnabled = false;
+            try {
+                expect(isConnectAvailable()).toBe(false);
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+            }
+        });
+
+        it('is true once the listing URL is published', () => {
+            config.salla.oauthConnectEnabled = false;
+            config.salla.appStoreUrl = 'https://apps.salla.sa/ar/app/665811310';
+            try {
+                expect(isConnectAvailable()).toBe(true);
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+                config.salla.appStoreUrl = '';
+            }
+        });
+
+        it('is true for a Custom-Mode dev app that opted in', () => {
+            expect(isConnectAvailable()).toBe(true); // suite config has the opt-in on
+        });
+    });
+
     describe('connectStore', () => {
         it('should set nonce cookie and return auth URL', async () => {
             const req = mockRequest();
@@ -1277,6 +1338,44 @@ describe('Salla Controller', () => {
                 expect(rep.send).toHaveBeenCalledWith({ authUrl: 'https://apps.salla.sa/ar/app/123456', easyMode: true });
                 expect(rep.setCookie).not.toHaveBeenCalled(); // no OAuth nonce for a listing redirect
             } finally {
+                config.salla.appStoreUrl = '';
+            }
+        });
+
+        it('refuses with 404 SALLA_CONNECT_UNAVAILABLE when OAuth connect is not enabled', async () => {
+            // Production shape: the app is Easy Mode in the Partners portal, no listing exists
+            // yet, so appStoreUrl is empty. The authorize URL is dead — answering with it would
+            // strand the merchant on a Salla error page, so the endpoint must refuse instead.
+            config.salla.oauthConnectEnabled = false;
+            try {
+                const req = mockRequest();
+                const rep = mockReply();
+                await connectStore(req, rep);
+                expect(rep.status).toHaveBeenCalledWith(404);
+                expect(rep.send).toHaveBeenCalledWith({
+                    error: { code: 'SALLA_CONNECT_UNAVAILABLE', message: expect.any(String) },
+                });
+                expect(rep.setCookie).not.toHaveBeenCalled(); // no OAuth nonce minted
+            } finally {
+                config.salla.oauthConnectEnabled = true;
+            }
+        });
+
+        it('still returns the listing URL when it is set, even with OAuth connect disabled', async () => {
+            // Once published, appStoreUrl wins and the OAuth opt-in stays off for good.
+            config.salla.oauthConnectEnabled = false;
+            config.salla.appStoreUrl = 'https://apps.salla.sa/ar/app/665811310';
+            try {
+                const req = mockRequest();
+                const rep = mockReply();
+                await connectStore(req, rep);
+                expect(rep.send).toHaveBeenCalledWith({
+                    authUrl: 'https://apps.salla.sa/ar/app/665811310',
+                    easyMode: true,
+                });
+                expect(rep.status).not.toHaveBeenCalledWith(404);
+            } finally {
+                config.salla.oauthConnectEnabled = true;
                 config.salla.appStoreUrl = '';
             }
         });

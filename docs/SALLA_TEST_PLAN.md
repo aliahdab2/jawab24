@@ -33,31 +33,49 @@ Run every row. All must pass before a single Tier-3 step.
 | # | Check | Command | Pass criteria |
 |---|-------|---------|---------------|
 | 0.1 | Prod runs the intended commit | `ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196 'cd /var/www/jawab24 && git log --oneline -1'` | equals `origin/main` HEAD; in particular carries `4c6469a1` (List Shipments fix) |
-| 0.2 | Easy-Mode switches set | `docker exec jawab24-backend-<colour> printenv \| grep '^SALLA_'` | `SALLA_EASY_MODE_CLAIM_ENABLED=true`, `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`, `SALLA_APP_STORE_URL=<listing URL>` all present |
-| 0.3 | Prod app creds are the **production** app | same `printenv` | `SALLA_CLIENT_ID` ≠ Jawab24-Dev `1565152053`; `SALLA_HOST_NAME=jawab24.com` |
+| 0.2 | Easy-Mode switches set | `docker exec jawab24-backend-<colour> printenv \| grep '^SALLA_'` | `SALLA_EASY_MODE_CLAIM_ENABLED=true` and `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` present. ⚠️ `SALLA_APP_STORE_URL` is **post-publish** — the URL does not exist until the listing is live, so it cannot be a pre-publish pass criterion |
+| 0.3 | Prod app creds are the **production** app | same `printenv` | 🔴 **FAILING as of 2026-08-20.** `SALLA_CLIENT_ID` must MATCH app `665811310` (fingerprint `c18dcc…8f4d`) — ⛔ *not* merely differ from Jawab24-Dev `1565152053`. "Not the dev app" is what let a third, phantom app survive since 07-31. Check the webhook token in the same pass; `SALLA_HOST_NAME=jawab24.com` |
 | 0.4 | `shipping.read` granted | Salla Partners portal → app → scopes | ticked. ⛔ Without it `track_shipment` returns status with no tracking (403 → degrade). Config alone does **not** grant it — Easy Mode never calls `buildAuthUrl` |
 | 0.5 | Article-5 Stripe guard live (D-065) | `docker exec jawab24-backend-<colour> sh -c "ls /app/backend/dist/config/sallaBilling.js"` | file present |
 | 0.6 | Container healthy after any recreate | `docker ps` + `scripts/health-check.sh` | all healthy; **`nginx -s reload` after `--force-recreate`** — recreate changes the container IP and nginx 502s until reloaded |
-| 0.7 | ⚠️ **Is the production app in Easy Mode?** | Salla Partners portal → app → mode | See the dead-end note below. Portal state — must be read by a human; not inspectable from the server |
+| 0.7 | ✅ **Is the production app in Easy Mode?** | Salla Partners portal → app → OAuth Mode | **Answered 2026-08-20: YES.** See the resolved note below. Portal state must be read by a human — Turnstile blocks chrome-devtools MCP; use the Claude-in-Chrome extension |
 
-### ⚠️ 0.7 — the "Connect Salla" dead end (possible LIVE bug, not launch-only)
+### ✅ 0.7 — RESOLVED 2026-08-20: Easy Mode confirmed, dead end confirmed, now guarded
 
-Easy Mode is **mandatory for published apps**, so the production app is very likely already
-switched. In Easy Mode Salla drops the registered redirect URIs and
-`accounts.salla.sa/oauth2/auth` fails before any login screen (D-031, proven 2026-07-18).
+Portal read (app `665811310`, founder's Claude-in-Chrome extension): **OAuth Mode = Easy Mode**,
+selected. So the hypothesis below was correct — in Easy Mode Salla drops the registered redirect
+URIs and `accounts.salla.sa/oauth2/auth` fails before any login screen (D-031, proven 2026-07-18),
+while `connectStore` returned the App Store listing URL **only** when `SALLA_EASY_MODE_CLAIM_ENABLED`
+**and** `SALLA_APP_STORE_URL` were both set — and neither is. The `/integrations` Salla card kept its
+Connect button live under the "coming soon" badge, so the button led to a Salla error page.
 
-Meanwhile `connectStore` (`controllers/salla.ts`) returns the App Store listing URL **only**
-when `SALLA_EASY_MODE_CLAIM_ENABLED` **and** `SALLA_APP_STORE_URL` are both set. Neither is
-set in production. It therefore falls back to `oauthConnectStore` — handing the merchant the
-authorize URL that Salla no longer accepts.
+**Blast radius, measured before acting** (7 days of nginx logs, the retained window):
 
-And the Salla card on `/integrations` keeps its **Connect button live** while showing the
-"coming soon" badge (deliberate — the flow stays open for early access, `integrations.tsx`).
+| Path | Requests in 7d |
+|---|---|
+| `POST /api/salla/store/connect` | **0** |
+| `/salla/auth` | **0** |
+| `GET /api/salla/store` (page-load status poll) | many — the integrations page, not a connect attempt |
 
-**⇒ If the app is already in Easy Mode, every merchant who clicks "Connect Salla" right now
-lands on a Salla error page.** This is not a launch-day concern; it is live today. Confirm
-0.7 first — if the app is in Easy Mode, Phase 2.5's env vars are an **urgent fix**, not a
-launch preparation.
+**Nobody had walked through the open door.** Recording the number matters more than the fix: the
+same finding with a non-zero count would have been an incident with merchants to contact.
+
+⚠️ **Correction to an earlier draft of this section:** it said merchants clicking "Connect Salla"
+were landing on a Salla error page. They were not — `/integrations` is **admin-only** today
+(`isAuthenticated && !isAdmin → /dashboard`), so only we could reach the card. The dead end was real
+but ours, and it would have become merchant-facing the moment the page opened up.
+
+**Guard shipped** (same PR as the runbook correction). One predicate,
+`controllers/salla.ts:isConnectAvailable`, answers for every entry point — `POST /store/connect`
+(**404**, matching the sibling flag-gated claim routes rather than a 409 that implies a state
+conflict), the PUBLIC `GET /salla/auth` redirect that the UI's *reconnect* action targets, and
+`GET /salla/capabilities`, which is what the page renders its buttons from. Pinned by
+`backend/test/controllers/salla.test.ts`, `backend/test/routes/ecommerceRoutes.test.ts` and
+`frontend/src/__tests__/pages/connectAvailability.test.ts`.
+
+⛔ **The guard lifts by CONFIGURATION, not by a code change.** Publish the listing, set
+`SALLA_APP_STORE_URL`, and the predicate answers true — endpoints open, buttons return. Nothing to
+revert, nothing to forget.
 
 > Colour suffix alternates per deploy (`-blue` / `-green`). Read it from `docker ps`, don't assume.
 

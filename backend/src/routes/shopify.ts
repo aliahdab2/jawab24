@@ -39,6 +39,12 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
 
     // --- Read: all workspace members ---
 
+    // Deployment capability (see routes/ecommerceRoutes.ts). Shopify does not use the
+    // shared route factory, so the same endpoint is declared here to keep the three
+    // platforms' API surface identical for the integrations page.
+    fastify.get('/capabilities', { preHandler: [authenticate] }, async (_request, reply) =>
+        reply.send({ connectAvailable: true }),
+    );
     fastify.get('/store', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.getStore);
     fastify.get('/store/products', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.getStoreProducts);
 

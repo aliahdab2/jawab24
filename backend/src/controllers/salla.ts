@@ -434,7 +434,7 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
 // --- Protected API (Jawab24 JWT required) ---
 
 const {
-    authRedirect,
+    authRedirect: oauthAuthRedirect,
     authCallback,
     getStore,
     connectStore: oauthConnectStore,
@@ -457,15 +457,61 @@ const {
 });
 
 /**
+/**
+ * Can this deployment start a Salla connect flow at all?
+ *
+ * Two ways to say yes: the published-listing redirect (Easy-Mode claim flag + a listing
+ * URL to send the merchant to), or an explicit Custom-Mode dev opt-in for the OAuth flow.
+ * Neither holds today — the app is in Easy Mode (portal read 2026-08-20) and no listing
+ * exists — so every entry point must refuse rather than hand out a URL Salla 404s.
+ *
+ * This is the ONE place that answers the question. `connectStore`, `authRedirect` and the
+ * `GET /salla/capabilities` the UI reads all defer to it, so the button, the redirect and
+ * the API can never disagree.
+ */
+function isConnectAvailable(): boolean {
+    if (config.salla.easyModeClaimEnabled && config.salla.appStoreUrl) return true;
+    return config.salla.oauthConnectEnabled;
+}
+
+/**
+ * GET /salla/auth — the OAuth authorize redirect, wrapped in the same availability check.
+ * It is a PUBLIC route and the UI's "reconnect" action points at it, so leaving it
+ * unguarded would keep a live path to the dead authorize URL open after `connectStore`
+ * was closed.
+ */
+async function authRedirect(request: FastifyRequest, reply: FastifyReply) {
+    if (!isConnectAvailable()) {
+        // A browser navigation, not an API call — send them back to the page they came
+        // from rather than rendering raw JSON, mirroring the OAuth failure redirects.
+        return reply.redirect(`${config.frontendUrl}/integrations?salla_error=connect_unavailable`);
+    }
+    return oauthAuthRedirect(request, reply);
+}
+
+/**
  * POST /salla/store/connect — mode-aware. Once the published app runs in Easy Mode, the
  * OAuth authorize endpoint 404s for it (Salla drops registered redirect URIs — proven in
  * the 2026-07-18 dry-run), so offering the OAuth URL would strand merchants on a Salla
  * error page. With the Easy-Mode flag on AND the public listing URL configured, send the
  * App Store listing instead (the frontend redirects to whatever `authUrl` it receives);
  * installs then arrive via app.store.authorize → pending install → email-match claim.
- * Dev/Custom-Mode setups (flag off, or URL unset pre-approval) keep the OAuth flow.
+ * Dev/Custom-Mode setups keep the OAuth flow, but must opt in explicitly with
+ * SALLA_OAUTH_CONNECT_ENABLED — otherwise this answers 409 SALLA_CONNECT_UNAVAILABLE
+ * rather than handing out an authorize URL that Easy Mode makes dead.
  */
 async function connectStore(request: FastifyRequest, reply: FastifyReply) {
+    // 404, not 409: nothing about the request conflicts with resource state (RFC 9110
+    // §15.5.10) — the capability simply is not exposed on this deployment. It also matches
+    // how the sibling flag-gated routes above answer when their flag is off.
+    if (!isConnectAvailable()) {
+        return reply.status(404).send({
+            error: {
+                code: 'SALLA_CONNECT_UNAVAILABLE',
+                message: 'Salla connect is not open yet',
+            },
+        });
+    }
     if (config.salla.easyModeClaimEnabled && config.salla.appStoreUrl) {
         return reply.send({ authUrl: config.salla.appStoreUrl, easyMode: true });
     }
@@ -477,6 +523,7 @@ export {
     authCallback,
     getStore,
     connectStore,
+    isConnectAvailable,
     disconnectStoreHandler,
     syncStore,
     getStoreProducts,

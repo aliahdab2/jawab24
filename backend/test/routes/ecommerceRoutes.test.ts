@@ -28,14 +28,25 @@ function makeController() {
 
 function makeMockFastify() {
     const registeredRoutes: string[] = [];
+    // Handlers are captured too, so a route whose behaviour lives in the factory itself
+    // (rather than in a controller function) can be exercised — `GET /capabilities` is
+    // the first such route.
+    const handlers: Record<string, (...args: any[]) => any> = {};
+    const record = (method: string) =>
+        vi.fn((path: string, ...rest: any[]) => {
+            registeredRoutes.push(`${method} ${path}`);
+            const last = rest[rest.length - 1];
+            if (typeof last === 'function') handlers[`${method} ${path}`] = last;
+        });
     return {
         fastify: {
-            get: vi.fn((path: string) => registeredRoutes.push(`GET ${path}`)),
-            post: vi.fn((path: string) => registeredRoutes.push(`POST ${path}`)),
-            delete: vi.fn((path: string) => registeredRoutes.push(`DELETE ${path}`)),
-            patch: vi.fn((path: string) => registeredRoutes.push(`PATCH ${path}`)),
+            get: record('GET'),
+            post: record('POST'),
+            delete: record('DELETE'),
+            patch: record('PATCH'),
         },
         registeredRoutes,
+        handlers,
     };
 }
 
@@ -55,6 +66,7 @@ describe('createEcommerceRoutes', () => {
         expect(registeredRoutes).toContain('POST /webhooks');
 
         // Read routes (all workspace members)
+        expect(registeredRoutes).toContain('GET /capabilities');
         expect(registeredRoutes).toContain('GET /store');
         expect(registeredRoutes).toContain('GET /store/products');
 
@@ -67,14 +79,32 @@ describe('createEcommerceRoutes', () => {
         expect(registeredRoutes).toContain('PATCH /store/unlink-page');
     });
 
-    it('should register exactly 11 routes', async () => {
+    it('should register exactly 12 routes', async () => {
         const controller = makeController();
         const routes = createEcommerceRoutes('salla', controller);
         const { fastify, registeredRoutes } = makeMockFastify();
 
         await routes(fastify as any);
 
-        expect(registeredRoutes).toHaveLength(11);
+        expect(registeredRoutes).toHaveLength(12);
+    });
+
+    it('answers connectAvailable from the controller, defaulting to available', async () => {
+        // The frontend renders its connect action from this, so the default matters:
+        // a platform that never declares the predicate (Shopify, Zid) must keep working.
+        const withoutPredicate = makeController();
+        const withPredicate = { ...makeController(), isConnectAvailable: () => false };
+
+        for (const [controller, expected] of [
+            [withoutPredicate, true],
+            [withPredicate, false],
+        ] as const) {
+            const { fastify, handlers } = makeMockFastify();
+            await createEcommerceRoutes('salla', controller as any)(fastify as any);
+            const send = vi.fn();
+            await handlers['GET /capabilities']({} as any, { send } as any);
+            expect(send).toHaveBeenCalledWith({ connectAvailable: expected });
+        }
     });
 
     it('should wire controller functions to the correct routes', async () => {
