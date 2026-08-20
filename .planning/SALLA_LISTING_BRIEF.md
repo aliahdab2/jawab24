@@ -209,29 +209,30 @@ Salla App Store listings benefit from a short demo video. Draft script:
 
 ---
 
-## 6. Privacy policy — gap analysis (2026-05-07)
+## 6. Privacy policy — ✅ GAP CLOSED (re-verified 2026-08-20)
 
-**Current state:** [`frontend/src/pages/privacy.tsx`](../frontend/src/pages/privacy.tsx) exists but the copy is generic — driven by `t('introText')`, `t('collectText')` etc. translation keys with no Salla-specific or processor-specific content. Verified by grep: no mentions of Salla, AES, encryption, OpenAI, Sentry, Resend, or PDPL.
+⚠️ **The 2026-05-07 analysis below was true when written and is now STALE.** It said
+`frontend/src/pages/privacy.tsx` was "generic … no Salla-specific or processor-specific content".
+Re-verified against the source on 2026-08-20: the policy now carries **§7 E-commerce Store
+Integrations** naming Shopify, Salla and Zid, plus ten named processors, PDPL, EU data residency
+with cross-border consent, retention, children's data and deletion — in **both** locales.
 
-This means the privacy policy must be **updated**, not just verified, before submission. Treat each item below as required content the policy must explicitly include:
+Item-by-item, against the original required list:
 
-- [ ] **Salla data scope** — name Salla as a data source: products, store info, customer details that arrive via cart/order webhooks
-- [ ] **Token storage** — state that platform access/refresh tokens are encrypted at rest (AES-256-GCM via `services/ecommerceCrypto.ts`)
-- [ ] **Customer data retention** — how long DMs/comments are stored; deletion path on disconnect
-- [ ] **Third-party processors** — name each: OpenAI (AI generation), Resend (transactional email), Sentry (error tracking), and any image hosting / CDN actually in use (verify against `package.json` before naming)
-- [ ] **Data residency** — where the database is hosted (per project memory: production runs on the user's own server, not a managed cloud DB)
-- [ ] **PDPL compliance** — Saudi Personal Data Protection Law applies to most Salla merchants and their end customers; even though Salla doesn't require GDPR endpoints, PDPL data-subject rights must be honored
-- [ ] **Right to deletion** — explicit path: merchant emails support, all data is purged within X days
-- [ ] **Children's data** — state no targeting of users <13 (NA in a B2B context but reviewers ask)
-- [ ] **Localization** — Arabic version of the privacy policy must exist alongside English; both must say the same thing. Currently driven by `next-intl` keys, so both locales render the same content — but the keys themselves need to be filled in for both languages.
+| Required | State |
+|---|---|
+| Salla data scope | ✅ `shareItem5` + `ecommerceText` — products, orders, abandoned carts, webhooks, per authorized scopes |
+| Token storage encrypted at rest | ✅ `ecommerceItem1` — AES-256-GCM, decrypted only at the outbound call |
+| Customer data retention + deletion on disconnect | ✅ `ecommerceItem5`, `retentionText`, `deletionText` |
+| Third-party processors named | ✅ OpenAI, Meta, Shopify, Salla, Zid, Vonage, Resend, Sentry, Google — **plus Stripe, added 2026-08-20** (it was the one genuine omission: subscription payments were processed but the processor was unnamed) |
+| Data residency | ✅ `residencyText` — dedicated EU servers (Germany/Finland) |
+| PDPL | ✅ named in `residencyText`, with explicit cross-border-transfer consent |
+| Right to deletion | ✅ `deletionText` |
+| Children's data | ✅ `childrenText` |
+| Arabic version | ✅ both locales, key-for-key (`translation:validate` enforces parity) |
 
-Update path:
-1. Edit `frontend/src/i18n/{en,ar}/privacy.json` (or whatever namespace `privacy.tsx` reads from) to add the new sections.
-2. Run `npm run translation:validate` per `AI_INSTRUCTIONS.md` rule 5.
-3. Verify the page renders correctly at `/en/privacy` and `/ar/privacy` (RTL).
-4. Commit with the matching listing-asset PR so the policy and the listing go live together.
-
----
+**Nothing blocks submission on the privacy policy.** ⛔ Do not re-run this analysis from the
+2026-05-07 text — verify against `frontend/src/i18n/{en,ar}/privacy.json`, which is the source.
 
 ## 7. Support + business decisions
 

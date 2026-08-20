@@ -150,11 +150,15 @@ submission happens on the production app.
 > cross-check below are restated as executable steps in **Phase 2.5** — do them there, once,
 > and use this section as the reference for *why* each one matters.
 
-- [ ] **Open the WhatsApp canary first** — the listing copy claims WhatsApp as shipped, so it
-      must be genuinely available at review time (`docs/WHATSAPP_LAUNCH_RUNBOOK.md` Phase 5:
-      clear `WHATSAPP_ALLOWLIST`, remove `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`, keep
-      `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`, rebuild). If Meta approval hasn't landed yet, HOLD the
-      Salla submission — do not submit a listing that over-claims.
+- [ ] **Confirm the WhatsApp canary is actually open** — the listing copy claims WhatsApp as
+      shipped, so it must be genuinely available at review time (`docs/WHATSAPP_LAUNCH_RUNBOOK.md`
+      Phase 5: clear `WHATSAPP_ALLOWLIST`, remove `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`, keep
+      `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`, rebuild). WhatsApp went GA 2026-07-26, so this is expected
+      to be done — but ⚠️ **`NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY` still exists in the code**
+      (`frontend/src/lib/featureFlags.ts`) and a `NEXT_PUBLIC_*` value cannot be read from the
+      server env — it is baked at build time. **Verify at the read path**: open the dashboard as a
+      NON-admin account in production and confirm the WhatsApp entry point is visible. Do not mark
+      this done from the GA date alone.
 - [ ] **Re-save the v2 short description** in the production app's portal listing
       (adds واتساب; brief §2, within the 200-char limit):
       - AR: مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على واتساب وفيسبوك وإنستغرام طوال اليوم.

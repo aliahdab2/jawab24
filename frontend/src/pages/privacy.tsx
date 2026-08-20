@@ -20,7 +20,7 @@ export default function PrivacyPolicy() {
     {
       title: t('shareTitle'),
       text: t('shareText'),
-      items: [t('shareItem1'), t('shareItem2'), t('shareItem3'), t('shareItem4'), t('shareItem5'), t('shareItem6'), t('shareItem7'), t('shareItem8'), t('shareItem9'), t('shareItem10')]
+      items: [t('shareItem1'), t('shareItem2'), t('shareItem3'), t('shareItem4'), t('shareItem5'), t('shareItem6'), t('shareItem7'), t('shareItem8'), t('shareItem9'), t('shareItem10'), t('shareItem11')]
     },
     {
       title: t('analyticsTitle'),
