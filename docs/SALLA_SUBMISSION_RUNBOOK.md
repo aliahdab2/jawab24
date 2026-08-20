@@ -8,33 +8,54 @@
 > Created 2026-07-10, while both Salla and WhatsApp were staged dark
 > (WhatsApp awaiting Meta App Review; Salla awaiting Partners ID verification).
 
-## ⛔ STATUS 2026-08-17 — APPROVED, NOT PUBLISHED, AND NOT SAFE TO PUBLISH YET
+## ⛔ STATUS 2026-08-20 — NEVER SUBMITTED. The app is a draft in Development.
 
-Salla approval is in hand. **Phase 2 completed while Phase 1 was never applied**, so the
-preconditions that were supposed to bind at submission time are still open. A live check on
-2026-08-17 found:
+**Correcting this runbook's own previous claim.** It said "APPROVED 2026-08-17 … Phase 2 ✅ DONE".
+That was wrong. A direct read of the Partners portal (app `665811310`, 2026-08-20, via the
+founder's Claude-in-Chrome extension) found:
 
 | | State |
 |---|---|
+| App status | ❌ **`Status: Development`** — publish wizard is an **unsubmitted draft**; "Start publishing your App" still present, **no Withdraw option** |
+| OAuth Mode | ✅ **Easy Mode** confirmed selected (`callback-type=inhouse`; no callback-URL field is rendered in this mode) |
+| Listing content | ❌ ~85% empty — only App Name + EN short description. 0 of 3 required screenshots |
+| `shipping.read` in the portal | ❌ **not ticked** (Shipping card has neither Read nor Read/Write selected) |
+| Prod `SALLA_CLIENT_ID` | 🔴 **wrong app** — portal id fingerprints `c18dcc…8f4d`; prod's value contains neither fragment |
+| Prod commit | ✅ `abd77ac7` — includes the tracking fix `4c6469a1` (#798) |
 | Article-5 Stripe guard (D-065 / #695) | ✅ live in the running image |
-| Prod commit | ❌ `c6afb8e2` — **four commits behind `main`**, missing the tracking fix `4c6469a1` (#798) |
-| `SALLA_EASY_MODE_CLAIM_ENABLED` | ❌ absent |
-| `SALLA_APP_STORE_URL` | ❌ absent |
-| `SALLA_SKIP_PULL_REFRESH_EASY_MODE` | ❌ absent |
-| `shipping.read` in the portal | ❓ unticked as far as we know |
+| `SALLA_EASY_MODE_CLAIM_ENABLED` / `SALLA_SKIP_PULL_REFRESH_EASY_MODE` / `SALLA_APP_STORE_URL` | ❌ absent (last measured 08-17; unchanged since — they are a manual server edit) |
 
-**Publishing in this state strands every install.** A merchant installs → `app.store.authorize`
-stages a pending install → the claim endpoints 404 because the flag is off → `connectStore`
-falls back to the OAuth authorize URL, which Salla 404s for Easy-Mode apps (D-031). The
-merchant has installed the app with no route to their account, and unpublishing is **not
-self-serve**.
+**What was actually approved on 2026-08-10 was the partner ID / payout verification, not an app
+review.** Conflating the two is what put "APPROVED" in this file. Three consequences:
 
-> ⚠️ **This may already be biting, before any publish.** Easy Mode is mandatory for published
-> apps, so the production app is likely switched already — and the Salla card on
-> `/integrations` keeps its **Connect button live** under the "coming soon" badge. If so,
-> merchants clicking "Connect Salla" **today** are being handed the dead authorize URL. First
-> action is therefore to read the app's mode in the portal (test plan Tier 0.7): if it is Easy
-> Mode, the Phase 2.5 env vars are an **urgent fix**, not launch prep.
+1. ⭐ **Scope changes are free right now.** Nothing is under review, so the old open question
+   "ask Salla whether a scope change on an approved app needs re-review" is **MOOT**. Tick
+   `shipping.read` today.
+2. ⭐ **Drafting is safe.** The publish wizard has three distinct buttons — **Save Draft**, **Next**,
+   **Submit for Review**. The entire listing can be built and saved without submitting anything.
+   Only "Submit for Review" is irreversible (assume approval auto-publishes; no hold control was
+   visible in the 06-12 recon, and that assumption has never been confirmed by Salla — ask support
+   before submitting).
+3. 🔴 **The wrong-app creds are the highest-severity item.** Prod is wired to a different app than
+   the one being published, so the first real `app.store.authorize` push would arrive for an app
+   whose secrets prod does not hold. Repoint Client ID **and** Client Secret **and** the webhook
+   token together — fixing one and leaving another leaves the same failure.
+
+### The Connect dead end — confirmed live, now guarded
+
+Easy Mode is confirmed, so `connectStore` had no working destination: the OAuth authorize URL 404s
+for an Easy-Mode app (D-031) and `SALLA_APP_STORE_URL` cannot be set because **no listing exists to
+point at**. The `/integrations` Salla card kept its Connect button live under the "coming soon"
+badge, so any merchant clicking it was handed a dead URL.
+
+**Measured before acting: ZERO `/salla/store/connect` and `/salla/auth` requests in 7 days of nginx
+logs** (only `GET /api/salla/store` status polls from the page). A door left open that nobody walked
+through — so this was cleanup, not an incident.
+
+Guarded in the same PR as this correction: `POST /salla/store/connect` answers **409
+`SALLA_CONNECT_UNAVAILABLE`** unless `SALLA_OAUTH_CONNECT_ENABLED=true` (Custom-Mode dev opt-in),
+and the card renders no Connect button (`connectEnabled: false`). **Both revert when the listing is
+published and `SALLA_APP_STORE_URL` is set.**
 
 Work Phase 2.5 below, then Phase 3. Do not skip Tier 0 of the test plan.
 
@@ -49,9 +70,15 @@ Work Phase 2.5 below, then Phase 3. Do not skip Tier 0 of the test plan.
 | Portal **Easy Mode** toggle | Salla Partners portal, per app | portal | — (published apps MUST use Easy Mode) |
 
 Two apps exist on the Partners portal: **Jawab24-Dev** (`1565152053`, Custom Mode, dev-store
-testing, ngrok callbacks) and the **production app** (creds live in prod `backend.env` — verified
-2026-07-10: `SALLA_CLIENT_ID/SECRET/WEBHOOK_SECRET` present, `SALLA_HOST_NAME=jawab24.com`,
-client id ≠ dev app). The dry-run happens on Dev; the submission happens on the production app.
+testing, ngrok callbacks) and the **production app `665811310`**. The dry-run happens on Dev; the
+submission happens on the production app.
+
+> 🔴 **Prod is wired to NEITHER of them.** The 2026-07-10 note "creds already in place, client id ≠
+> dev app" was true and useless — *not the dev app* is not *the production app*. The 07-31 recon
+> found the prod client id belongs to an app reachable under no account, and a fingerprint check on
+> **2026-08-20** confirms it is still that way: prod's `SALLA_CLIENT_ID` contains neither `c18dcc`
+> nor `8f4d`, the first/last fragments of `665811310`'s id. **Verify a credential against the app you
+> intend to publish, never against the one you don't.**
 
 ## Phase 0 — Prerequisites (before submission day)
 
@@ -129,49 +156,74 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
         added must **reconnect** to pick up the new grant.
       - Webhook secret in the portal == prod `SALLA_WEBHOOK_SECRET`.
       - Switch the production app to **Easy Mode** (mandatory for published apps).
+        ✅ **Confirmed already selected** — portal read 2026-08-20.
 - [ ] **Prod env flips** → **executed in Phase 2.5** (backend.env, then container recreate —
       NOT plain `docker restart`; use `up -d --force-recreate` per deploy convention):
       - `SALLA_EASY_MODE_CLAIM_ENABLED=true` (binding merged 2026-07-18 — verify deployed)
       - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` (re-push confirmed in the 2026-07-18 dry-run)
       - `SALLA_APP_STORE_URL=<listing URL>` (was Phase 3; the URL is known at approval)
-      **Verified absent from prod on 2026-08-17** — none of the three is set.
+      **Verified absent from prod on 2026-08-17** — none of the three is set. See Phase 2.5:
+      the first two are settable now, `SALLA_APP_STORE_URL` is a post-publish step.
 - [ ] **Live smoke** → superseded by `docs/SALLA_TEST_PLAN.md` **Tier 3**, which covers this
       plus the order/shipment/tracking gates: store row created with refresh token +
       `token_expires_at`; products sync; webhook delivery 200s in nginx/backend logs;
       test-reply returns real prices.
 
-## Phase 2 — Submit — ✅ DONE, APPROVED 2026-08-17
+## Phase 2 — Submit — ❌ NOT DONE (this section previously claimed otherwise)
 
-- [x] Partners portal → production app → **"Start publishing your App"** (agrees to Apps T&C).
-      6 sections: Basic Info, App Configurations, App Features, Pricing
-      (**Salla-managed billing is mandatory for paid apps** — launch is free-tier-only per the
-      2026-05-30 decision, so no billing integration needed), Contact, Service Trial.
-- [x] Review completed; **approval in hand**. Assume **auto-publish on going live** (portal
-      shows no hold control — recon 2026-06-12).
+- [ ] Fill the 6 wizard sections and **Save Draft** — safe, reversible, submits nothing.
+      Portal state 2026-08-20: Basic Info **partial** (App Name + EN short description only);
+      App Configuration **full**; Features & Media **empty** (0 of 3 screenshots minimum);
+      App Pricing **untouched defaults** (`One-Time`, price 0 — ⚠️ almost certainly the wrong
+      type for a free launch, since **Salla-managed billing is mandatory for paid apps** and
+      launch is free-tier-only per the 2026-05-30 decision); Contact Info **empty**; Service
+      Trial **empty** (Salla's reviewer needs working test credentials).
+      Field-by-field paste map: `docs/store-listing/salla/PORTAL_FIELD_MAP.md`.
+      ⚠️ `Sub Category = "Cross-sell / Upsell"` looks wrong for a customer-service assistant.
+- [ ] **Ask Salla support whether approval auto-publishes**, or whether we control go-live.
+      This has never been confirmed — it was inferred from the absence of a hold control in the
+      06-12 UI recon. Support answered a comparable question in ~29 minutes.
+- [ ] **"Start publishing your App"** — this IS submit-for-review, and approval is assumed to
+      auto-publish. Press it only when every line of the readiness gate below is ticked.
 
-## Phase 2.5 — Catch up the skipped Phase-1 preconditions ⛔ DO THIS FIRST
+### Readiness gate — every line must be ticked before Submit
 
-Phase 2 completed while Phase 1 was open. Close it before anything else — in this order,
-because each step depends on the previous.
+- [ ] Prod creds repointed at `665811310` (client id + secret + webhook token) and verified
+- [ ] `shipping.read` ticked in the portal
+- [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
+- [ ] A real Salla store connected end-to-end (partner demo store)
+- [ ] **Tier 3 green — including `track_shipment`, which has never once been run**
+- [ ] The three Easy-Mode env vars set, incl. `SALLA_APP_STORE_URL` (only knowable post-publish
+      — see the ordering note in Phase 2.5)
 
-- [ ] **Deploy `main` to production.** Prod is behind and lacks the tracking fix (#798).
-      `./scripts/deploy-production.sh` (runs the full pre-deploy gate: lint, `tsc`,
-      schema drift, unit ×4 packages, backend integration, Playwright E2E).
-      ⚠️ Do not run two pre-deploy passes concurrently — it produces a false red.
-- [ ] **Set the three env vars** in `/var/www/jawab24/env/backend.env`:
+## Phase 2.5 — Preconditions, in dependency order ⛔ DO THIS FIRST
+
+Phase 1 was never applied. Close it before anything else — in this order, because each step
+depends on the previous.
+
+- [x] **Deploy `main` to production.** Done: prod runs `abd77ac7`, which contains the tracking
+      fix `4c6469a1` (#798). ⚠️ Do not run two pre-deploy passes concurrently — false red.
+- [ ] 🔴 **Repoint prod at app `665811310` — the highest-severity item.** Copy Client ID, Client
+      Secret **and** the webhook token from the portal into `/var/www/jawab24/env/backend.env`,
+      then `docker compose up -d --force-recreate --no-deps <backend>` **and `nginx -s reload`**
+      (recreate changes the container IP; nginx 502s until reloaded).
+      ⚠️ The backend reads `env/backend.env`, **not** the root `.env`.
+      Verify without printing secrets — presence and shape only:
+      `grep -c '^SALLA_CLIENT_ID=' <file>` and `grep -c 'c18dcc' <file>` (expect `1` and `1`).
+      ⛔ Fixing the client id while leaving the webhook token behind reproduces the same failure
+      on the first real install — the push authenticates on the token.
+- [ ] **Tick `shipping.read`** on `665811310`. Config alone does not grant it: Easy Mode never
+      calls `buildAuthUrl`, so `config.salla.scopes` has zero effect and the portal is the whole
+      grant. ⭐ No re-review question — the app is not under review (see STATUS).
+- [ ] **Set the two runtime flags** in `/var/www/jawab24/env/backend.env`, then recreate + reload:
       - `SALLA_EASY_MODE_CLAIM_ENABLED=true`
       - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`
-      - `SALLA_APP_STORE_URL=<public listing URL>` (known now that approval landed; makes
-        "Connect Salla" send merchants to the listing, since the OAuth authorize URL is dead
-        for Easy-Mode apps — D-031)
-      Then `docker compose up -d --force-recreate --no-deps <backend>` **and `nginx -s reload`**
-      — recreate changes the container IP and nginx 502s until reloaded.
-      ⚠️ The backend reads `env/backend.env`, **not** the root `.env`. Verify with
-      `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
-- [ ] **Tick `shipping.read`** on the production app in Salla Partners. Config alone does not
-      grant it: Easy Mode never calls `buildAuthUrl`, so `config.salla.scopes` has zero effect
-      in production and the portal is the whole grant.
-      **Ask Salla support whether a scope change on an approved app needs re-review.**
+      Verify with `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
+- [ ] **`SALLA_APP_STORE_URL` — CANNOT be set yet, and that is not an oversight.** The URL only
+      exists once the listing is published, so this is a **post-publish** step, not a
+      pre-publish one. Until then `POST /salla/store/connect` answers 409
+      `SALLA_CONNECT_UNAVAILABLE` and the `/integrations` card shows no Connect button. Setting
+      the URL and reverting `connectEnabled: false` is the last step of go-live, not the first.
 - [ ] **Run Tier 0** of `docs/SALLA_TEST_PLAN.md` and confirm every row passes.
 
 ## Phase 3 — Go-live verification (the rehearsal, before publishing)
@@ -197,6 +249,9 @@ Summary of the gates:
 
 - `SALLA_EASY_MODE_CLAIM_ENABLED=false` + backend recreate → claim endpoints 404 (new installs
   stage but can't bind; existing stores unaffected).
+- `SALLA_OAUTH_CONNECT_ENABLED` — leave unset in production. It exists only so a **Custom-Mode dev**
+  app can still use the OAuth connect flow; setting it on prod re-opens the dead authorize URL the
+  409 guard was added to close.
 - Webhook ingestion can't be "turned off" per store from our side — deactivate a misbehaving
   store row via the admin tooling instead.
 - **Unpublishing a live app is NOT self-serve**: Salla requires a booked meeting
