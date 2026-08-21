@@ -2,7 +2,7 @@
 
 > Owner submits from developers.facebook.com → App 774211662298446 → App Review.
 
-## Status — verified 2026-08-17
+## Status — re-verified against production 2026-08-20
 
 | Prerequisite | State |
 |---|---|
@@ -11,18 +11,57 @@
 | Frontend flag built into the image (`env/frontend.env`) | ✅ bundle-verified, connect option renders |
 | TEST professional account, no Facebook Page | ✅ `@jawab24app` — ⛔ **never link it to the Jawab24 Facebook Page**, that destroys the prerequisite AND our connect refuses the hybrid row |
 | Instagram Tester role accepted | ✅ added on the PARENT app's Roles page, accepted from instagram.com → Settings → Apps and websites → Tester invitations (no phone needed) |
-| Real end-to-end connect | ✅ 2026-08-17 — log line `connected @jawab24app (webhooks: ok)`, i.e. `subscribed_apps` installed |
-| Public use-case URL | ✅ `https://jawab24.com/en/instagram` (200), privacy 200, data-deletion URL valid (POST-only, so GET 404 is correct) |
+| Real end-to-end connect | ✅ 2026-08-17 — log line `connected @jawab24app (webhooks: ok)`, i.e. `subscribed_apps` installed. Row `19bc2d2d-c268-4c9f-8a21-438f6c1c1ca7`, `facebook_page_id` empty, IG token present, expires 2026-10-15 |
+| Public use-case URL | ✅ re-checked 2026-08-20: `/instagram`, `/en/instagram`, `/en/privacy` all 200. Data-deletion URL valid (POST-only, so GET 404 is correct) |
 | Reviewer demo login | ✅ `DEMO_MODE_ENABLED=true` in prod |
-| **Inbound DM test** | ❌ **NOT DONE** — needs a second Instagram account (owner's phone). Do this BEFORE recording: if the auto-reply does not land there is nothing to film |
-| **Screencast** | ❌ not recorded — the ONLY thing blocking submission |
+| Server-side code | ✅ everything merged and live: #772 (connect), #770 (demand signal), #775 (mass-assignment), #790 (`/instagram` page). Re-review fixes (`serializePage` identity flag, `runWebhookResubscribeSweep`, `appReturnPage`) confirmed present on `main` |
+| **Page seat for the test card** | ❌ **BLOCKED — new since 08-17.** `instagram_auto_reply_enabled` on the test row is now **`false`** (turned off 2026-08-19 18:28). Re-enabling needs a free seat and there is none — see below |
+| **Inbound DM test** | ❌ **NOT DONE** — `SELECT count(*) FROM messages WHERE page_id='19bc2d2d…'` → **0**, no message has ever arrived. Needs a second Instagram account (owner's phone) |
+| **Screencast** | ❌ not recorded — the last thing blocking submission |
 
-⚠️ **Page-limit gotcha when testing.** Enabling auto-reply on the connected
-Instagram-direct card consumes a page seat. The founder workspace is on the
-**Business** plan (`plans.max_pages = 2`) and both seats are normally taken, so the
-toggle answers `403 PAGE_LIMIT_REACHED` until one is freed. It also 409s
-(`BUSINESS_INFO_REQUIRED`) until the page has a grounding source — Business Info or
-a knowledge base. Both are by design, not defects.
+### ⛔ The seat blocker, measured 2026-08-20
+
+`countEnabledPageSlots` (`services/subscriptions.ts:990`) counts pages where
+`auto_reply_enabled OR instagram_auto_reply_enabled` — WhatsApp does not consume a seat.
+Founder workspace, right now:
+
+| Page | seat held by |
+|---|---|
+| `2d27eaba` Jawab24 (our own FB page, IG `ali.ahdab`) | FB **and** IG toggles both on |
+| `39aeab89` الفريق الدمشقي للتدريب والتأهيل | FB toggle on — ⛔ **a live flagship customer, never touch** |
+
+`used = 2`, plan `business`, `max_pages = 2` ⇒ the Instagram-direct card answers
+`403 PAGE_LIMIT_REACHED`. The Business-Info gate is **already satisfied** on that row
+(`knowledge_base` = 478 chars), so the seat is the only thing standing in the way.
+
+Two ways out, and the second is the recommended one:
+
+1. Turn **both** toggles off on `2d27eaba` (a page holding FB *and* IG counts as one seat,
+   so turning off only one frees nothing) — this silences Jawab24's own Facebook and
+   Instagram replies for the duration of the test.
+2. ⭐ **Upgrade the founder account to `pro` (`max_pages = 5`)** via the admin console
+   (`POST /admin/users/:userId/upgrade`). The founder subscription is
+   `payment_method = 'manual'` with **no Stripe customer or subscription id**, so there is
+   no Stripe state to desync — this is a clean internal grant, it costs nothing, and it
+   leaves our own page and the customer's page answering while the test runs.
+
+### ⛔ Why the seat is a hard prerequisite, not a nice-to-have
+
+Read-path verified 2026-08-20, `services/reply/messageProcessor.ts:261` and
+`services/messages.ts:63`:
+
+- The webhook **stores** an inbound IG DM before it consults the toggle (step 3 precedes
+  step 4), so nothing is lost if a DM arrives while the card is off — and turning the
+  toggle on later makes the stored message appear retroactively, because the filter is
+  evaluated at read time.
+- But the inbox list query requires
+  `auto_reply_enabled OR instagram_auto_reply_enabled OR whatsapp_auto_reply_enabled`
+  on the page. All three are false on that row today ⇒ a DM sent now is **invisible in the
+  Jawab24 inbox and gets no auto-reply**. The reviewer's mandatory step (2) is a manual
+  reply *sent from our UI*, which cannot be filmed from an empty inbox.
+
+**Order of operations: free the seat → enable the Instagram toggle → send the test DM →
+confirm auto-reply + inbox row → then record.**
 
 ## Public use-case URL
 
