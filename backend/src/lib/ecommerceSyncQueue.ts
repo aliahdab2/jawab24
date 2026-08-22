@@ -42,3 +42,48 @@ export async function enqueueSyncJob(
         jobType,
     });
 }
+
+export const ECOMMERCE_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Same lead-in as the reconcile crons in index.ts: late enough for the app to be healthy, early enough to run on every deploy. */
+export const ECOMMERCE_SYNC_INITIAL_DELAY_MS = 3 * 60 * 1000;
+
+export interface ScheduleEcommerceSyncOptions {
+    getAllActiveStores: () => Promise<Array<{ id: string; platform: string }>>;
+    log: { info: (msg: string) => void; error: (err: unknown, msg: string) => void };
+    onError?: (err: unknown) => void;
+    intervalMs?: number;
+    initialDelayMs?: number;
+}
+
+/**
+ * Schedule the catalog refresh for every active store: one sweep shortly after
+ * boot, then every `intervalMs`.
+ *
+ * The initial sweep is the point. This used to be a bare `setInterval` anchored
+ * to process start, so the first refresh came 6 h after boot — and with a
+ * blue/green deploy every few hours, no container lived that long. Checked on
+ * prod 2026-08-22: neither backend container had ever logged
+ * `[EcommerceScheduler]`, and every store's `last_sync_at` came from an install
+ * or a manual sync. "Refreshes inventory every 6 hours" was true only on days
+ * nothing shipped. Mirrors `scheduleReconcileCron`, which already runs an
+ * initial sweep 3 min after boot for the same reason.
+ *
+ * Returns the timers so a caller (or a test) can clear them.
+ */
+export function scheduleEcommerceSync(opts: ScheduleEcommerceSyncOptions): { initial: NodeJS.Timeout; interval: NodeJS.Timeout } {
+    const sweep = async (phase: string) => {
+        try {
+            const stores = await opts.getAllActiveStores();
+            for (const store of stores) {
+                await enqueueSyncJob(store.id, store.platform as 'shopify' | 'salla' | 'zid');
+            }
+            opts.log.info(`[EcommerceScheduler] ${phase}: enqueued sync for ${stores.length} store(s)`);
+        } catch (err) {
+            opts.log.error(err, `[EcommerceScheduler] ${phase} failed`);
+            opts.onError?.(err);
+        }
+    };
+    const initial = setTimeout(() => { void sweep('initial sweep'); }, opts.initialDelayMs ?? ECOMMERCE_SYNC_INITIAL_DELAY_MS);
+    const interval = setInterval(() => { void sweep('scheduled sweep'); }, opts.intervalMs ?? ECOMMERCE_SYNC_INTERVAL_MS);
+    return { initial, interval };
+}

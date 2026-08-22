@@ -700,22 +700,17 @@ const start = async () => {
       recovered: r => ({ count: r.healed, message: `Zid billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
     });
 
-    // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
-    // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
+    // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms.
+    // Catches stock changes from sales that webhooks don't cover (inventory_levels/update).
+    // Runs an initial sweep 3 min after boot: a process-anchored interval alone never
+    // fired on prod, because a deploy restarted the container before 6 h elapsed.
     const { getAllActiveStores } = await import('./services/ecommerce');
-    const { enqueueSyncJob } = await import('./lib/ecommerceSyncQueue');
-    setInterval(async () => {
-      try {
-        const stores = await getAllActiveStores();
-        for (const store of stores) {
-          await enqueueSyncJob(store.id, store.platform as 'shopify' | 'salla' | 'zid');
-        }
-        server.log.info(`[EcommerceScheduler] Enqueued sync for ${stores.length} store(s)`);
-      } catch (err) {
-        server.log.error(err, '[EcommerceScheduler] Scheduled sync failed');
-        captureError(err, '[EcommerceScheduler] Scheduled sync failed', { tags: { cron: 'ecommerce_sync' }, level: 'error' });
-      }
-    }, 6 * 60 * 60 * 1000); // Every 6 hours
+    const { scheduleEcommerceSync } = await import('./lib/ecommerceSyncQueue');
+    scheduleEcommerceSync({
+      getAllActiveStores,
+      log: server.log,
+      onError: err => captureError(err, '[EcommerceScheduler] Scheduled sync failed', { tags: { cron: 'ecommerce_sync' }, level: 'error' }),
+    });
 
     // Payment-request reconciliation — recover `pending` admin "collect payment"
     // rows whose checkout.session.completed webhook was missed/late. markPaid is

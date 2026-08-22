@@ -12,7 +12,9 @@
  * - Store ownership verified before tool execution
  * - Tool call names validated against whitelist
  * - Max 2 tool loop iterations (Phase 1 + Phase 2 verification)
- * - All tool executions are audit-logged
+ * - Every tool execution is counted at `metrics:ecom:tool:{name}:{outcome}`
+ *   (ecommerceActions.ts). There is NO per-call audit row — an earlier version
+ *   of this header claimed one that never existed.
  *
  * IMPORTANT: This is a SEPARATE file from ai.ts. The existing AiService
  * (cache hierarchy, billing, etc.) is NOT modified. When no store is
