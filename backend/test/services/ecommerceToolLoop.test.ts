@@ -32,6 +32,15 @@ vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
 }));
 
+// Card builders are unit-tested on their own (productCardBuilder*.test.ts);
+// here we only pin WHEN the loop asks for which kind of card.
+const mockCardsFromTools = vi.fn();
+const mockCardsFromText = vi.fn();
+vi.mock('../../src/services/reply/productCardBuilder', () => ({
+    buildProductCardsFromToolResults: (...args: unknown[]) => mockCardsFromTools(...args),
+    buildProductCardsFromReplyText: (...args: unknown[]) => mockCardsFromText(...args),
+}));
+
 const mockAxiosPost = vi.fn();
 vi.mock('axios', () => ({
     default: {
@@ -57,6 +66,8 @@ import type { AiGenerateRequest } from '../../src/types';
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mockCardsFromTools.mockResolvedValue([]);
+    mockCardsFromText.mockResolvedValue([]);
     mockAiServiceGenerateReply.mockResolvedValue({
         reply: 'fallback reply',
         language: 'en',
@@ -90,7 +101,7 @@ describe('generateReplyWithTools', () => {
         mockGetStoreById.mockRejectedValue(new Error('DB down'));
         const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
 
-        const result = await generateReplyWithTools(request);
+        await generateReplyWithTools(request);
         expect(mockAiServiceGenerateReply).toHaveBeenCalled();
     });
 
@@ -110,6 +121,64 @@ describe('generateReplyWithTools', () => {
         const result = await generateReplyWithTools(request);
         expect(result.reply).toBe('direct answer');
         expect(result.intent).toBe('QUESTION');
+    });
+
+    // The common small-catalog path: the model answers from the inlined
+    // catalog and never calls a tool. This branch returned with no card at
+    // all — live on the Zid dev store the purchase turn got a bare URL.
+    it('attaches a mention card on the direct-reply path (no tool calls)', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost.mockResolvedValue({
+            data: { reply: 'تقدر تطلب كاميرا Sony A7S III من متجرنا', language: 'ar', tokensUsed: 50 },
+        });
+        const card = { title: 'Sony A7S III', subtitle: '10000 SAR · In stock', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromText.mockResolvedValue([card]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'تقدر تطلب كاميرا Sony A7S III من متجرنا');
+        expect(result.productCards).toEqual([card]);
+        expect(mockCardsFromTools).not.toHaveBeenCalled();
+    });
+
+    it('omits productCards entirely (not an empty array) when the reply names no product', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost.mockResolvedValue({ data: { reply: 'ما عندي معلومة', language: 'ar', tokensUsed: 50 } });
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect('productCards' in result).toBe(false);
+    });
+
+    it('on the tool path, falls back to a mention card ONLY when no tool result produced one', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'lookup_order', arguments: { order_number: '1' } }], tokensUsed: 10 } })
+            .mockResolvedValueOnce({ data: { reply: 'طلبك يحتوي Sony A7S III', language: 'ar', tokensUsed: 20 } });
+        mockExecuteToolCall.mockResolvedValue({ tool_name: 'lookup_order', success: true, data: {} });
+        const mention = { title: 'Sony A7S III', subtitle: 's', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromText.mockResolvedValue([mention]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(mockCardsFromTools).toHaveBeenCalled();
+        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'طلبك يحتوي Sony A7S III');
+        expect(result.productCards).toEqual([mention]);
+    });
+
+    it('on the tool path, a tool-result card wins and the mention builder is not consulted', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'check_inventory', arguments: { product_name: 'Sony' } }], tokensUsed: 10 } })
+            .mockResolvedValueOnce({ data: { reply: 'Sony A7S III متوفرة', language: 'ar', tokensUsed: 20 } });
+        mockExecuteToolCall.mockResolvedValue({ tool_name: 'check_inventory', success: true, data: { productName: 'Sony A7S III', available: true } });
+        const toolCard = { title: 'Sony A7S III', subtitle: 'from tool', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromTools.mockResolvedValue([toolCard]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(result.productCards).toEqual([toolCard]);
+        expect(mockCardsFromText).not.toHaveBeenCalled();
     });
 
     it('executes tool calls and returns final reply', async () => {

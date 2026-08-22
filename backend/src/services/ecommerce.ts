@@ -822,7 +822,7 @@ export async function unlinkStoreFromPage(pageId: string, workspaceId: string) {
 // --- Product Summary ---
 
 /** Build the public product URL from platform + domain + handle/slug */
-function buildProductUrl(platform: string | undefined, storeDomain: string, handle: string): string {
+export function buildProductUrl(platform: string | undefined, storeDomain: string, handle: string): string {
     if (platform === 'salla') return `https://${storeDomain}/p/${handle}`;
     if (platform === 'zid') return `https://${storeDomain}/products/${handle}`;
     // shopify + default

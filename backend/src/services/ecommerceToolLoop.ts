@@ -28,7 +28,7 @@ import { logAiUsage } from './aiUsageLog';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
-import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
+import { buildProductCardsFromToolResults, buildProductCardsFromReplyText } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { AiToolLoopExhaustedError } from '../utils/fbGraphErrors';
 import type { AiGenerateRequest, AiGenerateResponse } from '../types';
@@ -161,16 +161,22 @@ export async function generateReplyWithTools(
         logToolRoundUsage(request, data);
         let totalTokens = data.tokensUsed || 0;
 
-        // No tool calls → AI handled it directly
+        // No tool calls → AI handled it directly. This is the COMMON path for a
+        // small catalog (it is inlined in the prompt whole, so the model never
+        // needs a tool) — and it used to return with no card at all. Attach a
+        // card for the one product the reply names, if any.
         if (!data.toolCalls || data.toolCalls.length === 0) {
+            const reply = data.reply || '';
+            const productCards = await buildProductCardsFromReplyText(storeId, reply);
             return {
-                reply: data.reply || '',
+                reply,
                 language: data.language || request.language || 'en',
                 cached: false,
                 intent: data.intent,
                 confidence: data.confidence,
                 flags: data.flags,
                 tokensUsed: totalTokens,
+                ...(productCards.length ? { productCards } : {}),
             };
         }
 
@@ -246,8 +252,12 @@ export async function generateReplyWithTools(
             }
 
             // Final reply — attach product cards from any tool result that
-            // referenced a product. Absent when no tool carries product data.
-            const productCards = await buildProductCardsFromToolResults(storeId, allToolResults);
+            // referenced a product. When no tool carried product data (e.g. only
+            // lookup_order ran), fall back to the one product the reply names.
+            const toolCards = await buildProductCardsFromToolResults(storeId, allToolResults);
+            const productCards = toolCards.length
+                ? toolCards
+                : await buildProductCardsFromReplyText(storeId, roundData.reply);
             return {
                 reply: roundData.reply,
                 language: roundData.language || request.language || 'en',

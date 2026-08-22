@@ -10,6 +10,7 @@ import { WORST_CASE_ENRICHMENT_MS, WORST_CASE_ENRICHMENT_WHATSAPP_MS } from '../
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { redis } from '../../lib/redis';
+import { filterRecentlySentCards } from './productCardBuilder';
 import * as typingIndicator from './typingIndicator';
 import { computeHumanDelayMs } from './humanDelay';
 import { Logger, noopLogger } from '../../types';
@@ -939,8 +940,13 @@ export class MessageProcessor {
             // 13b. Follow-up: send product cards if the reply carries them and the
             // platform adapter supports rich attachments. Fire-and-forget — a card
             // send failure doesn't invalidate the text reply already delivered.
-            if (productCards?.length && adapter.sendProductCards) {
-                adapter.sendProductCards(page, senderId, productCards).catch((error) => {
+            // One card per product per customer per 24h — a conversation that keeps
+            // naming the same product must not re-send its card on every turn.
+            const cardsToSend = productCards?.length
+                ? await filterRecentlySentCards(page.id, senderId, productCards)
+                : [];
+            if (cardsToSend.length && adapter.sendProductCards) {
+                adapter.sendProductCards(page, senderId, cardsToSend).catch((error) => {
                     this.logger.warn(`[${platform}] Product card send failed (reply already sent)`, {
                         error: String(error),
                         messageId: platformMessageId,
