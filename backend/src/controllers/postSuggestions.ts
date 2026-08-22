@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import type { PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
-import { postSuggestionsService, isPostSuggestionsEnabledForWorkspace } from '../services/postSuggestions';
+import { postSuggestionsService, isPostSuggestionsEntitled } from '../services/postSuggestions';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 const EVENTS: readonly PostSuggestionEvent[] = ['opened', 'copied', 'downloaded'];
@@ -33,7 +33,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.params;
-        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+        if (!await isPostSuggestionsEntitled(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const result = await postSuggestionsService.getCurrent(req.workspaceId, pageId);
         // Null = the page isn't in this workspace — same 404 the sibling
@@ -102,7 +102,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId, suggestionId } = request.params;
-        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+        if (!await isPostSuggestionsEntitled(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const variantIndex = request.body?.variantIndex;
         if (typeof variantIndex !== 'number' || !Number.isInteger(variantIndex) || variantIndex < 0) {
@@ -134,7 +134,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId, suggestionId } = request.params;
-        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+        if (!await isPostSuggestionsEntitled(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const raw = request.query?.variant;
         let variantIndex: number | undefined;
@@ -171,7 +171,7 @@ class PostSuggestionsController {
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId, suggestionId } = request.params;
-        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+        if (!await isPostSuggestionsEntitled(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
 
         const event = request.body?.event;
         if (!event || !(EVENTS as readonly string[]).includes(event)) {
