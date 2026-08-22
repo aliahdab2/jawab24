@@ -22,7 +22,8 @@ export interface ProductData {
     status: string;
     priceRange?: string | null;
     currency?: string | null;
-    totalInventory: number;
+    /** Units in stock, or `null` for untracked/unlimited. `null` is NOT zero — see EcommerceProduct.totalInventory. */
+    totalInventory: number | null;
     hasVariants: boolean;
     variantSummary?: string | null;
     tags?: string | null;
@@ -333,7 +334,11 @@ export function chunkProducts(products: ProductData[]): KbChunk[] {
         if (p.hasVariants && p.variantSummary) {
             lines.push(`Variants: ${p.variantSummary}`);
         }
-        if (p.totalInventory === 0) lines.push('Availability: out of stock');
+        // null = untracked/unlimited → in stock. Checked FIRST because `null <= 5` is
+        // true in JS, which would otherwise write an unlimited product into the KB as
+        // "low stock" — i.e. the AI would tell customers stock is running out.
+        if (p.totalInventory === null) lines.push('Availability: in stock');
+        else if (p.totalInventory === 0) lines.push('Availability: out of stock');
         else if (p.totalInventory <= 5) lines.push('Availability: low stock');
         else lines.push('Availability: in stock');
         if (p.tags) lines.push(`Tags: ${p.tags}`);

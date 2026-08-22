@@ -957,7 +957,7 @@ export class PagesService {
                 status: p.status || 'active',
                 priceRange: p.priceRange,
                 currency: p.currency,
-                totalInventory: p.totalInventory ?? 0,
+                totalInventory: p.totalInventory,
                 hasVariants: p.hasVariants ?? false,
                 variantSummary: p.variantSummary,
                 tags: p.tags,

@@ -466,6 +466,12 @@ interface ZidProduct {
     sale_price?: number | null;
     currency?: string;
     quantity?: number | null;
+    /**
+     * Zid's "unlimited stock" flag. When true the product is always orderable and
+     * `quantity` comes back `null` — it is NOT out of stock. Live-verified on the
+     * dev store (3195980) with "Sony A7S III": `is_infinite: true, quantity: null`.
+     */
+    is_infinite?: boolean;
     sku?: string | null;
     html_url?: string;
     slug?: string | null;
@@ -594,7 +600,9 @@ export async function syncProducts(storeId: string) {
                 status: mapZidStatus(p.status),
                 priceRange,
                 currency: p.currency || currency,
-                totalInventory: p.quantity ?? 0,
+                // Unlimited → null (untracked), never 0. Only `is_infinite` earns the
+                // null: a bare missing quantity stays 0 rather than being guessed at.
+                totalInventory: p.is_infinite ? null : (p.quantity ?? 0),
                 hasVariants: p.has_variants || p.has_options || (p.options?.length ?? 0) > 0,
                 variantSummary: variantSummary || null,
                 tags: null as string | null,
@@ -775,6 +783,23 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
     };
 }
 
+/**
+ * A Zid product with `is_infinite: true` is always orderable and reports
+ * `quantity: null`. Reading the quantity alone marks it out of stock.
+ */
+function zidAvailable(p: ZidProduct): boolean {
+    return p.is_infinite === true || (p.quantity ?? 0) > 0;
+}
+
+/**
+ * Units in stock, or `undefined` for unlimited — an unlimited product has no
+ * meaningful number, and `0` next to `available: true` reads to the AI as
+ * out of stock.
+ */
+function zidQuantity(p: ZidProduct): number | undefined {
+    return p.is_infinite === true ? undefined : (p.quantity ?? 0);
+}
+
 export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
     const creds = await resolveZidCredentials(storeId);
     if (!creds) return null;
@@ -796,8 +821,8 @@ export async function checkInventory(storeId: string, productName: string, varia
     const allVariants = (bestMatch.options || []).flatMap(opt =>
         (opt.values || []).map(v => ({
             name: `${localizedText(opt.name)}: ${localizedText(v.name)}`,
-            available: (bestMatch.quantity ?? 0) > 0,
-            quantity: bestMatch.quantity ?? 0,
+            available: zidAvailable(bestMatch),
+            quantity: zidQuantity(bestMatch),
         }))
     );
 
@@ -817,8 +842,8 @@ export async function checkInventory(storeId: string, productName: string, varia
 
     return {
         productName: localizedText(bestMatch.name),
-        available: (bestMatch.quantity ?? 0) > 0,
-        quantity: bestMatch.quantity ?? 0,
+        available: zidAvailable(bestMatch),
+        quantity: zidQuantity(bestMatch),
         variants: variants.length > 0 ? variants : undefined,
         // InventoryInfo.price is optional — omit it entirely when Zid provides no
         // price rather than handing the AI an empty "price:" field.

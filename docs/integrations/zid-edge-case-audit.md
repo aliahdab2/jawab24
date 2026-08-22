@@ -15,7 +15,51 @@ Severity is customer impact, not code smell.
 
 ---
 
-## F1 — CRITICAL: a product with unlimited stock is advertised as *out of stock*
+## F1 — ✅ CONFIRMED BY LIVE CAPTURE, THEN FIXED (2026-08-22)
+
+**Verdict: confirmed bug.** Zid signals unlimited as a **separate flag** — the third row of
+the prediction table below. The flag was not parsed at all, so the product synced as
+`totalInventory: 0` and both the catalog block and `check_inventory` called it out of stock.
+
+Captured live from `GET /v1/products/` on dev store 3195980, the stock-bearing keys only:
+
+```json
+{"name":"Sony A7S III",  "quantity":null, "is_infinite":true,
+ "stocks":[{"available_quantity":null,"is_infinite":true,"location":{"name":"Default - الافتراضي"}}]}
+{"name":"نظارة شمسية",    "quantity":0,    "is_infinite":false, "stocks":[]}
+{"name":"Running Shoes", "quantity":0,    "is_infinite":false, "stocks":[]}
+{"name":"قميص قطني رجالي","quantity":0,    "is_infinite":false, "stocks":[]}
+```
+
+Then reproduced end-to-end in production: the first successful sync (2026-08-22, right after
+the Store-Id fix deployed) wrote **`Sony A7S III → total_inventory 0`** — the merchant's
+unlimited flagship, in the database, marked out of stock.
+
+Two things the capture settled that reading could not:
+
+- **`is_infinite` and "quantity absent" are different cases.** From source they looked like
+  one; live, the three tracked products carry `is_infinite: false` **with** `quantity: 0`.
+  So the flag is always present and always authoritative — the fix keys on it alone and a
+  bare missing quantity keeps mapping to `0`.
+- **There is a per-location `stocks[]` array** carrying its own `available_quantity` and
+  `is_infinite`. Not used: the top-level pair is authoritative for a single-location store
+  and is what the catalog needs. Revisit if a multi-location merchant ever needs per-branch
+  availability — the data is there.
+
+**Fixed together with F5** (they had to be — see F5): `is_infinite: true` now maps to
+`totalInventory: null` meaning *untracked/unlimited*, and every reader treats `null` as in
+stock. `null` is now load-bearing, so `NormalizedProduct.totalInventory`,
+`EcommerceProduct.totalInventory` and `chunker.ProductData.totalInventory` are
+`number | null`. A bare missing `quantity` with no `is_infinite` flag still maps to `0` — only
+the explicit flag earns the null, so the fix asserts nothing the platform did not say.
+`InventoryInfo.quantity` became optional and is OMITTED for unlimited: `quantity: 0` beside
+`available: true` reads to the model as out of stock.
+
+Regression coverage (all six mutation-checked): `test/services/zid.test.ts` (mapper + agent
+tool, both directions), `test/services/kb/chunker.test.ts`,
+`test/services/productSummary.determinism.test.ts`.
+
+### The original finding
 
 `backend/src/services/zid.ts:580`
 
@@ -60,6 +104,11 @@ product. Three outcomes:
 not a better default. `0` must mean "known to be zero" and `null` must survive as "unknown
 or unlimited", with the renderer and the agent tool both treating unknown as *do not assert
 either way* rather than as a number to compare against zero.
+
+> This is what shipped, with one refinement the capture forced: `null` is granted **only**
+> on an explicit `is_infinite: true`, never on a merely-absent `quantity`. Predicting from
+> source, "absent" and "unlimited" looked like the same case; the live payload separated
+> them.
 
 ---
 
@@ -180,6 +229,30 @@ recorded here because the moment F1 is fixed by letting `null` survive, **this b
 becomes live and silently flips the bug to its opposite**: unknown stock asserted as *in
 stock*. Fix F1 and F5 in the same change, or the fix produces a new customer-facing false
 claim instead of removing one.
+
+### ✅ Fixed with F1 (2026-08-22) — and F5 was worse than written
+
+The warning was right and understated. Letting `null` survive lit up **five** readers, not
+one, and only the renderer at `ecommerce.ts:862` handled it:
+
+| Reader | Pre-fix | What a null did |
+|---|---|---|
+| `ecommerce.ts:862` catalog renderer | `!== null && <= 5` | ✅ already correct — in stock |
+| `ecommerce.ts:958` KB ingestion feed | `?? 0` | ❌ re-coerced → out of stock |
+| `ecommerce.ts:1085` `getProducts` (API) | `\|\| 0` | ❌ re-coerced |
+| `pages.ts:960` per-page product feed | `?? 0` | ❌ re-coerced |
+| `kb/chunker.ts:336` KB availability line | `=== 0`, then `<= 5` | ❌ **`null <= 5` is `true`** → "low stock" |
+
+The chunker is the one that mattered most and was not in the F5 write-up. It is not a
+display string — it is the text written into the knowledge base the AI is grounded on, so an
+unlimited product would have been described to customers as *running out*. That is F1's
+damage restated in the model's own mouth, and it would have survived a fix that only touched
+the renderer and the agent tool.
+
+**The general rule this earns:** when a fix makes a previously-impossible value reachable,
+the work is not the write site — it is enumerating every reader of that value first. Three
+of the four broken readers were `?? 0` / `|| 0` idioms that look like defensive hygiene and
+are, in a nullable world, silent assertions. Grep the field name, not the bug.
 
 ---
 

@@ -144,3 +144,42 @@ describe('buildProductSummary — prompt-cache determinism', () => {
         expect(result).toBe('');
     });
 });
+
+/**
+ * F1 — stock vocabulary. `totalInventory: null` means the platform reports the
+ * product as untracked/unlimited (Zid `is_infinite: true`), NOT that it has zero
+ * units. The summary is the catalog blob every reply is grounded on, so getting
+ * this wrong tells customers a flagship product is unavailable.
+ */
+describe('buildProductSummary — stock vocabulary', () => {
+    const rowsWith = (totalInventory: number | null): ProductRow[] => [
+        { id: 'p-001', title: 'Sony A7S III', priceRange: '10000 SAR', variantSummary: null, totalInventory, handle: 'sony-a7s-iii' },
+    ];
+
+    it('renders unlimited (null) inventory as in stock', async () => {
+        setupQueryMocks(rowsWith(null));
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+
+        expect(summary).toContain('Sony A7S III');
+        expect(summary).toContain('in stock');
+        expect(summary).not.toContain('out of stock');
+        expect(summary).not.toContain('low stock');
+    });
+
+    it('still renders a genuinely empty tracked product as out of stock', async () => {
+        setupQueryMocks(rowsWith(0));
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+
+        expect(summary).toContain('out of stock');
+    });
+
+    it('still renders a nearly-empty tracked product as low stock', async () => {
+        setupQueryMocks(rowsWith(3));
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+
+        expect(summary).toContain('low stock');
+    });
+});

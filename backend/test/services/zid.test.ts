@@ -761,6 +761,31 @@ describe('Zid Service', () => {
             },
         );
 
+        // F1: Zid signals unlimited stock as `is_infinite: true` with `quantity: null`.
+        // Mapping that to 0 advertised a merchant's flagship product as out of stock.
+        // Live-verified on dev store 3195980 ("Sony A7S III").
+        it('maps is_infinite:true to a null totalInventory — unlimited is not zero', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ name: 'Sony A7S III', is_infinite: true, quantity: null })],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ totalInventory: number | null }>];
+            expect(products[0].totalInventory).toBeNull();
+        });
+
+        it('keeps a missing quantity at 0 when is_infinite is absent — only the flag earns null', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ quantity: null })],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ totalInventory: number | null }>];
+            expect(products[0].totalInventory).toBe(0);
+        });
+
         it('prefers Arabic for multilingual name/description objects', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({
                 results: [makeZidProduct({
@@ -1353,6 +1378,37 @@ describe('Zid Service', () => {
 
             expect(result).not.toBeNull();
             expect(result?.price).toBeUndefined();
+        });
+
+        it('reports an is_infinite product as available with NO quantity number', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({
+                    name: 'Sony A7S III',
+                    is_infinite: true,
+                    quantity: null,
+                    options: [{ name: 'Kit', values: [{ name: 'Body only' }] }],
+                })],
+            }));
+
+            const result = await checkInventory('store-1', 'Sony');
+
+            expect(result?.available).toBe(true);
+            // Omitted, not 0: `available: true, quantity: 0` reads to the AI as out of stock.
+            expect(result?.quantity).toBeUndefined();
+            expect(result?.variants).toEqual([
+                { name: 'Kit: Body only', available: true, quantity: undefined },
+            ]);
+        });
+
+        it('still reports a genuinely empty tracked product as unavailable', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ name: 'Sold Out', is_infinite: false, quantity: 0 })],
+            }));
+
+            const result = await checkInventory('store-1', 'Sold Out');
+
+            expect(result?.available).toBe(false);
+            expect(result?.quantity).toBe(0);
         });
 
         it('returns null when no product matches', async () => {

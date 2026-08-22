@@ -859,8 +859,10 @@ export async function buildProductSummary(storeId: string): Promise<string> {
         if (p.priceRange) parts.push(p.priceRange);
         if (p.variantSummary) parts.push(p.variantSummary);
 
-        if (p.totalInventory === 0) parts.push('out of stock');
-        else if (p.totalInventory !== null && p.totalInventory <= 5) parts.push('low stock');
+        // null = untracked/unlimited → in stock. Checked FIRST because `null <= 5` is true in JS.
+        if (p.totalInventory === null) parts.push('in stock');
+        else if (p.totalInventory === 0) parts.push('out of stock');
+        else if (p.totalInventory <= 5) parts.push('low stock');
         else parts.push('in stock');
 
         if (p.handle && store?.storeDomain) {
@@ -955,7 +957,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
             status: p.status || 'active',
             priceRange: p.priceRange,
             currency: p.currency,
-            totalInventory: p.totalInventory ?? 0,
+            totalInventory: p.totalInventory,
             hasVariants: p.hasVariants ?? false,
             variantSummary: p.variantSummary,
             tags: p.tags,
@@ -1082,7 +1084,7 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
         status: r.status || 'active',
         priceRange: r.priceRange,
         currency: r.currency,
-        totalInventory: r.totalInventory || 0,
+        totalInventory: r.totalInventory,
         hasVariants: r.hasVariants || false,
         variantSummary: r.variantSummary,
         tags: r.tags,
@@ -1513,7 +1515,8 @@ export interface NormalizedProduct {
     status: string;
     priceRange: string;
     currency: string;
-    totalInventory: number;
+    /** Units in stock, or `null` for untracked/unlimited. `null` is NOT zero — see EcommerceProduct.totalInventory. */
+    totalInventory: number | null;
     hasVariants: boolean;
     variantSummary?: string | null;
     tags?: string | null;

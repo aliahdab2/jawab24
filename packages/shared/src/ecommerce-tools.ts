@@ -106,8 +106,14 @@ export interface ShipmentInfo {
 export interface InventoryInfo {
     productName: string;
     available: boolean;
-    quantity: number;
-    variants?: Array<{ name: string; available: boolean; quantity: number }>;
+    /**
+     * Units in stock. OMITTED when the platform reports the product as
+     * untracked/unlimited (Zid `is_infinite: true`) — an unlimited product has
+     * no meaningful number, and `0` alongside `available: true` hands the AI a
+     * contradiction it resolves as "out of stock".
+     */
+    quantity?: number;
+    variants?: Array<{ name: string; available: boolean; quantity?: number }>;
     price?: string;
     currency?: string;
     productUrl?: string;

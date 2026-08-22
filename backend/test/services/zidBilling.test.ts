@@ -279,6 +279,24 @@ describe('adoptZidSubscription', () => {
         expect(db.insert).not.toHaveBeenCalled();
     });
 
+    /**
+     * JAWAB24-BACKEND-27: our own dev store sits on Zid's free «اختبار» plan, which
+     * maps to no slug and so paged a human every ~6h with Users Impacted: 0. A KNOWN
+     * no-entitlement plan is not an unrecognised identifier — skip it silently, but
+     * still activate nothing. A reviewer subscribing to «اختبار» would spam it too.
+     */
+    it.each([
+        ['by id', { planId: '3956', planName: null }],
+        ['by name', { planId: null, planName: 'اختبار' }],
+    ])('skips the known non-entitling «اختبار» plan silently (%s) — no Sentry, no activation', async (_label, plan) => {
+        const result = await adoptZidSubscription('u1', zidSub(plan), STORE, mkLog());
+
+        expect(result).toEqual({ outcome: 'non_entitling_plan', changed: false });
+        expect(mockCaptureError).not.toHaveBeenCalled();
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+    });
+
     it('fails loud when the mapped slug has no plans row', async () => {
         mockGetPlanBySlug.mockResolvedValue(null);
 

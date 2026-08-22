@@ -1638,7 +1638,13 @@ export interface EcommerceProduct {
   status: string;
   priceRange: string | null;
   currency: string | null;
-  totalInventory: number;
+  /**
+   * Units in stock, or `null` when the platform reports the product as
+   * untracked/unlimited (Zid `is_infinite: true`). `null` is NOT zero — every
+   * reader must treat it as in-stock. Coercing it with `?? 0` renders a
+   * merchant's unlimited flagship product as "out of stock".
+   */
+  totalInventory: number | null;
   hasVariants: boolean;
   variantSummary: string | null;
   tags: string | null;
