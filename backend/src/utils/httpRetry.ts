@@ -27,8 +27,8 @@ export interface EcommerceApiGetOptions {
     /**
      * Additional headers merged into the request AFTER the auth header. Zid's
      * Merchant API needs two credentials at once (`Authorization: Bearer` +
-     * `X-Manager-Token`, plus `Role: Manager` on some endpoints) — a single
-     * auth header cannot express that.
+     * `X-Manager-Token`, plus a `Store-Id` header on the non-`/managers/` store
+     * API) — a single auth header cannot express that.
      */
     extraHeaders?: Record<string, string>;
 }

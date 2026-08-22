@@ -702,7 +702,9 @@ describe('Zid Service', () => {
     // ============================================================
 
     describe('syncProducts mapping [provisional — pending Zid live captures]', () => {
-        it('fetches /v1/products/ with dual headers + Role: Manager and maps fields', async () => {
+        it('fetches /v1/products/ with dual headers + Store-Id (from platformData.merchantId) and maps fields', async () => {
+            // The store API 401s ("No such user") without Store-Id; sourced from platformData.merchantId.
+            mockGetStoreById.mockResolvedValue(makeStore({ platformData: { merchantId: 'zid-store-99' } }));
             mockFetch.mockResolvedValueOnce(jsonResponse({
                 results: [
                     makeZidProduct(),
@@ -718,7 +720,9 @@ describe('Zid Service', () => {
 
             const call = mockFetch.mock.calls[0] as [string, RequestInit];
             expect(call[0]).toBe('https://api.zid.sa/v1/products/?page_size=100&page=1');
-            expectDualHeaders(call, { 'Role': 'Manager' });
+            expectDualHeaders(call, { 'Store-Id': 'zid-store-99' });
+            // Role: Manager was proven a no-op against the live API and removed.
+            expect((call[1].headers as Record<string, string>)['Role']).toBeUndefined();
 
             expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalledWith(
                 'store-1',
@@ -1287,6 +1291,7 @@ describe('Zid Service', () => {
 
     describe('checkInventory [provisional — pending Zid live captures]', () => {
         it('matches a product by localized name and returns availability, price, and URL', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ platformData: { merchantId: 'zid-store-99' } }));
             mockFetch.mockResolvedValueOnce(jsonResponse({
                 results: [makeZidProduct({
                     name: { ar: 'جراب هاتف', en: 'Phone Case' },
@@ -1301,7 +1306,8 @@ describe('Zid Service', () => {
 
             const call = mockFetch.mock.calls[0] as [string, RequestInit];
             expect(call[0]).toBe('https://api.zid.sa/v1/products/?page_size=100&page=1');
-            expectDualHeaders(call, { 'Role': 'Manager' });
+            expectDualHeaders(call, { 'Store-Id': 'zid-store-99' });
+            expect((call[1].headers as Record<string, string>)['Role']).toBeUndefined();
 
             expect(result).toMatchObject({
                 productName: 'جراب هاتف',
