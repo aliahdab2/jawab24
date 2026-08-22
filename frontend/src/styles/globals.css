@@ -313,8 +313,18 @@
 }
 
 @layer components {
+  /* Typography and shape live HERE, once, for every variant.
+     They used to be redeclared per variant as 15px / 600 / 14px — and none of
+     that ever reached a merchant, because <Button> appended `text-sm
+     rounded-2xl` and wrapped the label in `font-bold tracking-tight`, and
+     utilities outrank @layer components. The spec described one button and the
+     app shipped another. These are the values that actually ship, so moving
+     them here is a no-op on screen and makes the spec true. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl
+           text-sm font-bold tracking-tight
+           transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn:active:not(:disabled) {
@@ -324,9 +334,6 @@
   .btn-primary {
     @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500;
     box-shadow: 0 8px 20px rgba(13, 148, 136, 0.28), 0 2px 6px rgba(0, 0, 0, 0.08);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-primary {
@@ -351,9 +358,6 @@
   .btn-secondary {
     @apply btn bg-card text-foreground/80 border border-theme-border hover:bg-muted hover:border-theme-border focus:ring-surface-400;
     box-shadow: 0 6px 16px rgba(13, 148, 136, 0.06), 0 2px 6px rgba(0, 0, 0, 0.05);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-secondary {
@@ -378,9 +382,6 @@
   .btn-accent {
     @apply btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-400;
     box-shadow: 0 8px 20px rgba(249, 115, 22, 0.25);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-accent {
@@ -402,9 +403,6 @@
   .btn-danger {
     @apply btn bg-red-500 text-white hover:bg-red-600 focus:ring-red-400;
     box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-danger {

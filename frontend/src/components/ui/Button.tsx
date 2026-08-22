@@ -28,10 +28,13 @@ export function Button({
     danger: 'btn-danger',
   };
 
+  // Size owns PADDING only, plus a font-size where the size genuinely differs.
+  // Typography and radius come from `.btn` — restating them here is what made
+  // every <Button> silently contradict the documented button spec.
   const sizeClasses = {
     sm: 'text-xs px-4 py-2 rounded-xl',
-    md: 'text-sm px-6 py-3 rounded-2xl',
-    lg: 'text-base px-8 py-4 rounded-2xl',
+    md: 'px-6 py-3',
+    lg: 'text-base px-8 py-4',
   };
 
   return (
@@ -50,7 +53,7 @@ export function Button({
         loading ? "opacity-0" : "opacity-100"
       )}>
         {icon && <span className="transition-transform group-hover:scale-110 group-hover:rotate-3">{icon}</span>}
-        <span className="font-bold tracking-tight">{children}</span>
+        <span>{children}</span>
       </div>
       
       {loading && (
