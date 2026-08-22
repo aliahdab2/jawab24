@@ -29,40 +29,20 @@ ERRORS=0
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # =============================================
-# Exclusive run lock — one gate run per working copy
+# Exclusive run lock — one frontend build per working copy
 # =============================================
-# Two runs of this script in the SAME checkout share frontend/.next (and that
-# checkout's test database — the name is per-checkout as of 2026-08-09, so runs
-# in DIFFERENT checkouts no longer collide, but two runs in this one still do).
-# The frontend build script begins with `rm -rf .next`,
-# so run B wipes the build directory while run A sits between "Collecting page
-# data" and "Generating static pages" — A then dies with "Could not find a
-# production build in the '.next' directory" (next-export-no-build-id), an error
-# that says nothing about the real cause. Confirmed live 2026-07-28: two runs in
-# this checkout each failed the other's frontend build.
-#
-# distDir isolation (PR #310, see the note at the frontend build step) cured
-# dev-vs-build because those are different modes; it cannot help here — two
-# PRODUCTION builds share `.next` by definition. Refusing to start twice at once
-# is the only structural fix. mkdir is atomic on every POSIX filesystem, which
-# is why it is used instead of flock (macOS has none).
-LOCK_DIR="$REPO_ROOT/.pre-deploy-check.lock"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    LOCK_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        echo -e "${RED}❌ Another pre-deploy check is already running in this checkout (PID $LOCK_PID).${NC}"
-        echo -e "${RED}   Both runs would build into frontend/.next and fail each other's frontend build.${NC}"
-        echo -e "${YELLOW}   Wait for it to finish, or stop it:  kill $LOCK_PID${NC}"
-        exit 1
-    fi
-    echo -e "${YELLOW}⚠️  Reclaiming a stale lock (PID ${LOCK_PID:-unknown} is no longer running)${NC}"
-fi
-echo $$ > "$LOCK_DIR/pid"
+# Guards against a second run of THIS script and against an Android release
+# (scripts/release-android.sh), which builds into the same frontend/.next.
+# The full rationale — including why distDir isolation cannot help and why the
+# mobile build shares `.next` despite its name — lives in the helper.
+# shellcheck source=scripts/lib/build-lock.sh
+source "$REPO_ROOT/scripts/lib/build-lock.sh"
+acquire_frontend_build_lock "pre-deploy check" || exit 1
 # Also sweep the mktemp logs. Each step rm's its own $_TEST_LOG once it has been
 # consumed, but a Ctrl-C in between would otherwise leak one file per interrupted
 # run — and this gate is interrupted often. Removing an already-removed path is a
 # no-op under `rm -f`, so the trap is safe to fire in any state.
-trap 'rm -rf "$LOCK_DIR"; rm -f "${_TEST_LOG:-}" "${_DB_LOG:-}"' EXIT INT TERM
+trap 'release_frontend_build_lock; rm -f "${_TEST_LOG:-}" "${_DB_LOG:-}"' EXIT INT TERM
 
 # Database URL: CI provides this via env; locally falls back to a test database
 # whose name is unique to THIS checkout, so a gate run and a suite running in
@@ -103,6 +83,15 @@ echo ""
 if ! (cd "$REPO_ROOT" && npm run --silent test:db-tooling) > /dev/null 2>&1; then
     echo -e "${RED}❌ Test-database tooling self-tests failed — isolation is not trustworthy${NC}"
     (cd "$REPO_ROOT" && npm run --silent test:db-tooling)
+    exit 1
+fi
+
+# Same reasoning for the build lock this run is already holding: if its
+# invariants have broken, an Android release could start mid-gate and delete
+# frontend/.next underneath us. Seconds to check, a corrupted run to miss.
+if ! (cd "$REPO_ROOT" && npm run --silent test:build-lock) > /dev/null 2>&1; then
+    echo -e "${RED}❌ Build-lock self-tests failed — concurrent-build protection is not trustworthy${NC}"
+    (cd "$REPO_ROOT" && npm run --silent test:build-lock)
     exit 1
 fi
 
