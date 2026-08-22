@@ -64,9 +64,25 @@ surprise.
 | P-9 | Dev-store catalog seeded per §B-0 | Zid admin → Products | ☐ |
 | P-10 | Partner Dashboard lifecycle webhook points at the tunnel for the session: `app.market.application.uninstall` → `https://<ngrok>/zid/webhooks?e=app.market.application.uninstall` (today it points at prod jawab24.com) | Dashboard → app → Webhooks | ☐ |
 
-> ⚠️ **Do NOT click "Install App" on the dev store before P-3/P-4/P-6 are green** — the
-> app's Redirection URL otherwise sends the OAuth flow to prod `jawab24.com`, where
-> `ZID_CLIENT_ID` is unset and the flow dead-ends.
+> ⛔ **REVISED 2026-08-22 — the warning below was built on a false premise and now points
+> the wrong way.** It used to read: *"Do NOT click Install App on the dev store before
+> P-3/P-4/P-6 are green — the app's Redirection URL otherwise sends the OAuth flow to prod
+> `jawab24.com`, where `ZID_CLIENT_ID` is unset and the flow dead-ends."* `ZID_CLIENT_ID`
+> is **set** (7192) and prod `/zid/auth` returns its 302 — verified again 2026-08-22. So
+> installing against **production** does not dead-end; it is the *safest* route, and the
+> tunnel was never required for a first capture.
+>
+> ⚠️ **While app 7367 is `In review`, prefer the production route and change NOTHING in
+> the portal.** Editing the app to point at a tunnel risks two things at once: it may drop
+> 7367 back to `Draft` (a Draft app leaves the review queue silently — see P-1b), and if
+> Zid's reviewer installs during your tunnel window they reach your laptop or a dead URL,
+> costing a second review round. The ngrok route (P-3/P-6/P-10) is for when the app is NOT
+> under review.
+>
+> ⚠️ **If a production-route install fails halfway, it leaves an orphan account that will
+> block the reviewer's install** (same failure mode as 08-11 — see R-4 in
+> `docs/integrations/zid.md`). Re-check R-4 immediately after any failed attempt and clean
+> up before walking away.
 >
 > ⚠️ Partner-dashboard Vue forms fight automation: v-model needs native-setter + events;
 > "Save disabled" usually means a hidden required field (e.g. scope justification,
