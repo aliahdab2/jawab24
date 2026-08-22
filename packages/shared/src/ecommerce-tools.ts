@@ -45,8 +45,54 @@ export interface ShipmentTrackArgs {
 }
 
 export interface InventoryCheckArgs {
+    /** The platform product id shown after `ID:` in a `[product: …]` entry. Preferred when listed. */
+    product_id?: string;
+    /** The customer's wording, when no id is available. Resolved in code (D-092), never by the model. */
     product_name?: string;
     variant?: string; // e.g. "medium", "black"
+}
+
+// --- Stock vocabulary (the ONE copy of the null-first ladder) ---
+
+/**
+ * Statuses a customer may hear about. Everything the model sees — the inline
+ * catalog block, the KB product chunks, the resolver's candidates, the page's
+ * re-ingest input — reads through this one list, so a sold-out product stays
+ * VISIBLE as "out of stock" instead of vanishing into "we don't sell that"
+ * (the pre-D-092 behaviour, when every reader filtered `status = 'active'`).
+ * `hidden` / `draft` / `archived` stay invisible.
+ */
+export const SELLABLE_STATUSES: readonly string[] = ['active', 'out_of_stock'];
+
+/** At or below this many tracked units a product reads as "low stock". */
+export const LOW_STOCK_UNITS = 5;
+
+export type StockAvailability = 'in_stock' | 'low_stock' | 'out_of_stock';
+
+/**
+ * The null-first stock ladder, in one place.
+ *
+ * `totalInventory === null` means untracked/unlimited (Zid `is_infinite`, Shopify
+ * untracked) and is checked FIRST: `null <= 5` is true in JavaScript, and the
+ * three hand-written copies this replaced (catalog block, KB chunker, card
+ * builder) each had to remember that independently. A platform-level
+ * `out_of_stock` status wins over any count — Salla reports `out` with the
+ * quantity still on the row.
+ */
+export function availabilityOf(product: { totalInventory: number | null; status?: string | null }): StockAvailability {
+    if (product.status === 'out_of_stock') return 'out_of_stock';
+    if (product.totalInventory === null) return 'in_stock';
+    if (product.totalInventory <= 0) return 'out_of_stock';
+    if (product.totalInventory <= LOW_STOCK_UNITS) return 'low_stock';
+    return 'in_stock';
+}
+
+/** One of the products a name could mean. Returned on `ambiguous_product` so the model can ask, never pick. */
+export interface InventoryCandidate {
+    platformProductId: string;
+    title: string;
+    availability: StockAvailability;
+    price?: string;
 }
 
 export interface VerifyAndGetArgs {
@@ -61,7 +107,13 @@ export interface EcommerceToolResult {
     tool_name: string;
     success: boolean;
     data?: Record<string, unknown>;
-    error?: string; // 'order_not_found', 'product_not_found', 'insufficient_permissions', 'api_error', 'verification_failed'
+    error?: string; // 'order_not_found', 'product_not_found', 'ambiguous_product', 'insufficient_permissions', 'api_error', 'verification_failed'
+    /**
+     * Present only with `error: 'ambiguous_product'` — the ≤3 products the
+     * customer's words could mean. The model lists them and asks; it never
+     * picks one (D-051: identity is decided in code).
+     */
+    candidates?: InventoryCandidate[];
 }
 
 // --- Normalized Data Types (platform-agnostic) ---
@@ -102,10 +154,21 @@ export interface ShipmentInfo {
     shippingCity?: string;
 }
 
-/** Inventory data returned by check_inventory tool. No verification needed. */
+/**
+ * Inventory data returned by check_inventory. No verification needed.
+ *
+ * Identity travels with it (D-092): `platformProductId` is what the card
+ * builder and any later call key on, so nothing downstream re-resolves the
+ * product by name — a second, different matcher was how a card could show a
+ * product the answer never named.
+ */
 export interface InventoryInfo {
+    /** The platform's own product id — the key for cards, by-id follow-ups and the stock cache. */
+    platformProductId: string;
     productName: string;
     available: boolean;
+    /** Three-way stock state from the shared ladder; `available` is derived from it. */
+    availability: StockAvailability;
     /**
      * Units in stock. OMITTED when the platform reports the product as
      * untracked/unlimited (Zid `is_infinite: true`) — an unlimited product has
@@ -113,10 +176,29 @@ export interface InventoryInfo {
      * contradiction it resolves as "out of stock".
      */
     quantity?: number;
+    /** Per-variant stock — only a LIVE platform read knows it; a local answer carries `variantSummary` instead. */
     variants?: Array<{ name: string; available: boolean; quantity?: number }>;
+    /** The catalog's variant line ("S, M, L in Black, White") when no per-variant stock is known. */
+    variantSummary?: string;
+    /** Display price as the catalog shows it, currency INCLUDED ("10000 SAR", "3,800 - 4,500 SAR"). Printed as-is; never append `currency` to it. */
     price?: string;
     currency?: string;
     productUrl?: string;
+    imageUrl?: string;
+    handle?: string;
+    /**
+     * `local` = answered from the synced catalog row; `live` = the platform was
+     * asked by id because the local answer was risky (≤ LOW_STOCK_UNITS tracked
+     * units and the sync is stale). A platform failure degrades to `local`,
+     * never to a wrong product.
+     */
+    source: 'local' | 'live';
+    /**
+     * ISO timestamp the stock figure is as of: the row's last sync for `local`,
+     * now for `live`. ABSENT when the store has never synced — never a
+     * placeholder date, which the model would read out to the customer.
+     */
+    asOf?: string;
 }
 
 // --- Internal types (used by backend only, never sent to AI) ---

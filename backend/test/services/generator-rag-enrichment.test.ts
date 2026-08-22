@@ -93,13 +93,20 @@ vi.mock('../../src/services/kb/gap-detector', () => ({
 const mockRetrieve = vi.fn();
 const mockRetrieveMulti = vi.fn();
 
-vi.mock('../../src/services/kb/retrieval', () => ({
-    RetrievalService: vi.fn().mockImplementation(() => ({
+// The lazy singleton lives in kb/retrieval since D-092, so the mock owns it too.
+// (The factory is hoisted above the `const` mocks, so it must reach them lazily.)
+vi.mock('../../src/services/kb/retrieval', () => {
+    const instance = () => ({
         setLogger: vi.fn(),
-        retrieve: mockRetrieve,
-        retrieveMulti: mockRetrieveMulti,
-    })),
-}));
+        retrieve: (...args: unknown[]) => mockRetrieve(...args),
+        retrieveMulti: (...args: unknown[]) => mockRetrieveMulti(...args),
+    });
+    return {
+        RetrievalService: vi.fn().mockImplementation(instance),
+        getRetrievalService: instance,
+        ragRetrievalMode: () => 'dual',
+    };
+});
 
 // The (enriched) RAG query passed to retrieval, regardless of path: dual-retrieve
 // (the default when enrichment changes the query) calls retrieveMulti([enriched, raw]),

@@ -697,12 +697,15 @@ describe titles (grep for it).
 - ⛔ **Products search: the param exists and is NOT usable.** `?search=` is documented as
   "Searches products by product name", but **live-captured 2026-08-22 on dev store 3195980
   it ignores the term**: `search=نظارة` and `search=كاميرا` each returned **all 4 products**
-  (`count: 4`). So it cannot replace `checkInventory`'s client-side match, and the planned
-  "swap in Zid's server-side search" is dead — product resolution has to be solved on our
-  side (see the resolver plan, D-092). What IS confirmed and useful from the same capture:
-  **`id__in` works** (exact row, `is_infinite: true` preserved) and **`in_stock=true` works**
-  (returned only the one sellable product). ⚠️ An **unknown id answers HTTP 400, not an empty
-  list** — a by-id reader must treat 400 as "no such product", not as an API failure.
+  (`count: 4`). So it could not replace the old `checkInventory` client-side match, and the
+  planned "swap in Zid's server-side search" is dead. ✅ **Product resolution now happens on
+  our side (D-092, `backend/src/services/reply/productResolver.ts`)**: trigram over the
+  page's product index first, then the reply's own embedding, `ambiguous` with candidates
+  when the lead is not clear. `checkInventory` is gone from all three platform modules;
+  Zid's `getProductById` reads ONE product with **`?id__in=<id>&page_size=1`** (live-verified:
+  exact row, `is_infinite: true` preserved), picks the row by id — never `[0]` — and treats
+  the **HTTP 400 an unknown id answers with as "no such product"**, not as an API failure.
+  `in_stock=true` also works (returned only the one sellable product) and is unused so far.
 - Tracking fields on orders (`tracking_number` / `shipping.*`) — read tolerantly,
   `undefined` when absent.
 - Whether the refresh-token grant response rotates the `Authorization` token (handled
@@ -795,7 +798,8 @@ an entry gate idled this work for eight days.
    on both grants?), profile, products (+ multilingual name shape), orders, and full
    webhook deliveries (headers + envelope + order payload).
 3. Resolve the orders search/filter params (incl. the phone-indexing question) and swap
-   the `findOrderByCode` / `checkInventory` scans for real filters.
+   the `findOrderByCode` scan for real filters. (The product side is closed: `checkInventory`
+   and its `?search=` dependency are gone — D-092.)
 4. Finalize every `[provisional]` parser + fixture from the captures; run the unit suite
    and `ADMIN_TOKEN=… npm run test:ecommerce:zid` (live smoke).
 5. Full round-trip: connect → product sync → KB enrichment → place order →

@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores, postSuggestions } from '../db/schema';
 import { eq, and, or, ne, desc, sql, count, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, SELLABLE_STATUSES, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
@@ -954,10 +954,12 @@ export class PagesService {
         if (!ecommerceStoreId) return [];
         try {
             const { ecommerceProducts } = await import('../db/schema');
+            // Same reader contract as invalidateCachesForStore (D-092): sold-out
+            // products are re-ingested too, so a KB edit cannot silently drop them.
             const products = await db.select().from(ecommerceProducts)
                 .where(and(
                     eq(ecommerceProducts.ecommerceStoreId, ecommerceStoreId),
-                    eq(ecommerceProducts.status, 'active'),
+                    inArray(ecommerceProducts.status, [...SELLABLE_STATUSES]),
                 ));
             return products.map(p => ({
                 platformProductId: p.platformProductId,

@@ -1,4 +1,4 @@
-import { normalizeArabic, dayOrderIndex, DAY_LABELS_EN, DAY_LABELS_AR } from '@jawab24/shared';
+import { normalizeArabic, dayOrderIndex, DAY_LABELS_EN, DAY_LABELS_AR, availabilityOf, SELLABLE_STATUSES } from '@jawab24/shared';
 
 export interface KbChunk {
     type: 'offering' | 'policy' | 'faq' | 'info' | 'hours' | 'location' | 'contact' | 'product';
@@ -321,26 +321,29 @@ export function chunkProducts(products: ProductData[]): KbChunk[] {
     const chunks: KbChunk[] = [];
 
     for (const p of products) {
-        if (p.status !== 'active') continue;
+        // Sold-out products ARE indexed (D-092): a customer asking about one
+        // must hear "out of stock", not "we don't sell that". Hidden/draft/
+        // archived rows stay out.
+        if (!SELLABLE_STATUSES.includes(p.status)) continue;
 
         const lines: string[] = [`Product: ${p.title} (ID: ${p.platformProductId})`];
         if (p.description) lines.push(p.description);
         if (p.productType) lines.push(`Category: ${p.productType}`);
         if (p.vendor) lines.push(`Vendor: ${p.vendor}`);
         if (p.priceRange) {
-            const priceStr = p.currency ? `${p.priceRange} ${p.currency}` : p.priceRange;
+            // `priceRange` already carries its currency as every sync writes it
+            // ("10000 SAR", "3,800 - 4,500 SAR"); appending `currency` again
+            // produced "Price: 300 SAR SAR" in every Zid chunk (seen on prod
+            // 2026-08-22). Only a bare number gets the currency.
+            const priceStr = p.currency && !p.priceRange.includes(p.currency) ? `${p.priceRange} ${p.currency}` : p.priceRange;
             lines.push(`Price: ${priceStr}`);
         }
         if (p.hasVariants && p.variantSummary) {
             lines.push(`Variants: ${p.variantSummary}`);
         }
-        // null = untracked/unlimited → in stock. Checked FIRST because `null <= 5` is
-        // true in JS, which would otherwise write an unlimited product into the KB as
-        // "low stock" — i.e. the AI would tell customers stock is running out.
-        if (p.totalInventory === null) lines.push('Availability: in stock');
-        else if (p.totalInventory === 0) lines.push('Availability: out of stock');
-        else if (p.totalInventory <= 5) lines.push('Availability: low stock');
-        else lines.push('Availability: in stock');
+        // The shared null-first ladder (`availabilityOf`): null = untracked/unlimited
+        // → in stock, checked before any comparison because `null <= 5` is true in JS.
+        lines.push(`Availability: ${availabilityOf(p).replace(/_/g, ' ')}`);
         if (p.tags) lines.push(`Tags: ${p.tags}`);
         if (p.productUrl) lines.push(`URL: ${p.productUrl}`);
 

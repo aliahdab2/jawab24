@@ -33,20 +33,39 @@ vi.mock('../../src/lib/redis', () => ({
 const mockGetStoreById = vi.fn();
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+    writeBackProductStock: vi.fn(),
+    buildProductUrl: (_p: string, domain: string, handle: string) => `https://${domain}/products/${handle}`,
 }));
 
+// check_inventory resolves in code (D-092); here the resolver is a seam.
+const mockResolveProduct = vi.fn();
+vi.mock('../../src/services/reply/productResolver', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/services/reply/productResolver')>();
+    return {
+        ...actual,
+        resolveProduct: (...args: unknown[]) => mockResolveProduct(...args),
+        recordResolverOutcome: vi.fn(),
+    };
+});
+vi.mock('../../src/services/demoStore', () => ({ isDemoStore: vi.fn(() => false) }));
+
 const mockLookupOrder = vi.fn();
-const mockCheckInventory = vi.fn();
+const mockGetProductById = vi.fn();
 vi.mock('../../src/services/zid', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: vi.fn(),
-    checkInventory: (...args: unknown[]) => mockCheckInventory(...args),
+    getProductById: (...args: unknown[]) => mockGetProductById(...args),
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 const STORE = 'store-1';
-const zidStore = { id: STORE, platform: 'zid', isActive: true };
+const zidStore = { id: STORE, platform: 'zid', isActive: true, storeDomain: 'shop.zid.store', lastSyncAt: new Date(), platformData: {} };
+const sonyRow = {
+    id: 'row-1', ecommerceStoreId: STORE, platformProductId: 'sony-1', handle: 'sony-a7s-iii', title: 'Sony A7S III',
+    description: null, productType: null, vendor: null, status: 'active', priceRange: '10000 SAR', currency: 'SAR',
+    totalInventory: null, hasVariants: false, variantSummary: null, tags: null, imageUrl: null,
+};
 
 const call = (name: EcommerceToolCall['name'], args: Record<string, string>): EcommerceToolCall =>
     ({ name, arguments: args });
@@ -63,13 +82,24 @@ beforeEach(() => {
 });
 
 describe('executeToolCall outcome counter', () => {
-    it('counts a successful platform answer as success — exactly once', async () => {
-        mockCheckInventory.mockResolvedValue({ productName: 'Sony A7S III', available: true });
+    it('counts a successful answer as success — exactly once', async () => {
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'trigram', product: sonyRow });
 
         await executeToolCall(STORE, call('check_inventory', { product_name: 'Sony' }));
 
         expect(mockRedisIncr).toHaveBeenCalledTimes(1);
         expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:tool:check_inventory:success');
+    });
+
+    it('counts an ambiguous resolution under its own code', async () => {
+        mockResolveProduct.mockResolvedValue({ kind: 'ambiguous', candidates: [
+            { platformProductId: 'a', title: 'A', availability: 'in_stock' },
+            { platformProductId: 'b', title: 'B', availability: 'in_stock' },
+        ] });
+
+        await executeToolCall(STORE, call('check_inventory', { product_name: 'عباية' }));
+
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:tool:check_inventory:ambiguous_product');
     });
 
     it('counts a platform miss under its error code (order_not_found)', async () => {
@@ -90,14 +120,14 @@ describe('executeToolCall outcome counter', () => {
         expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:tool:lookup_order:invalid_order_number');
     });
 
-    it('counts a cache hit as cached, not success', async () => {
-        mockRedisGet.mockResolvedValue(JSON.stringify({ tool_name: 'check_inventory', success: true, data: {} }));
+    it('counts an order-tool cache hit as cached, not success', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({ tool_name: 'lookup_order', success: true, data: { orderFound: true } }));
 
-        await executeToolCall(STORE, call('check_inventory', { product_name: 'Sony' }));
+        await executeToolCall(STORE, call('lookup_order', { order_number: '1234' }));
 
-        expect(mockCheckInventory).not.toHaveBeenCalled();
+        expect(mockLookupOrder).not.toHaveBeenCalled();
         expect(mockRedisIncr).toHaveBeenCalledTimes(1);
-        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:tool:check_inventory:cached');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:tool:lookup_order:cached');
     });
 
     it('counts the early refusals too (unknown tool, disconnected store, verification)', async () => {
@@ -115,7 +145,7 @@ describe('executeToolCall outcome counter', () => {
     });
 
     it('counts an api_error without masking the result', async () => {
-        mockCheckInventory.mockRejectedValue(new Error('boom'));
+        mockResolveProduct.mockRejectedValue(new Error('boom'));
 
         const result = await executeToolCall(STORE, call('check_inventory', { product_name: 'Sony' }));
 
@@ -125,7 +155,7 @@ describe('executeToolCall outcome counter', () => {
 
     it('is fail-open: a Redis failure on the counter never affects the reply', async () => {
         mockRedisIncr.mockRejectedValue(new Error('redis down'));
-        mockCheckInventory.mockResolvedValue({ productName: 'Sony A7S III', available: true });
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'trigram', product: sonyRow });
 
         const result = await executeToolCall(STORE, call('check_inventory', { product_name: 'Sony' }));
         await settle();

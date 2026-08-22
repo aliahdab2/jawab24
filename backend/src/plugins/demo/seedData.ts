@@ -2026,7 +2026,7 @@ const DEMO_SALLA_STORE = {
     storeCurrency: 'SAR',
     storeTimezone: 'Asia/Riyadh',
     platformData: { merchant_id: 'demo_salla_merchant', demo: true },
-    productCount: 6,
+    productCount: 40,
     productSummary: `Store: https://gulf-fashion.salla.sa\nTop Products:\nعباية كلاسيك سوداء — 450 SAR — S، M، L، XL — أسود — in stock — https://gulf-fashion.salla.sa/products/classic-black-abaya\nعباية مطرزة فاخرة — 750 - 950 SAR — S، M، L، XL، XXL — أسود، كحلي — in stock — https://gulf-fashion.salla.sa/products/embroidered-luxury-abaya\nثوب رجالي قطن مصري — 280 - 450 SAR — 52، 54، 56، 58، 60 — أبيض — in stock — https://gulf-fashion.salla.sa/products/egyptian-cotton-thobe\nبشت رجالي فاخر — 1,200 - 2,500 SAR — 56، 58، 60 — بيج، بني — low stock — https://gulf-fashion.salla.sa/products/luxury-bisht\nعطر عود ملكي — 350 SAR — 100ml — in stock — https://gulf-fashion.salla.sa/products/royal-oud-perfume\nطقم أطفال عيد — 180 - 250 SAR — 4-6، 7-9، 10-12 سنة — أبيض، بيج — in stock — https://gulf-fashion.salla.sa/products/kids-eid-set`,
     policiesSummary: `استبدال واسترجاع: 14 يوم من تاريخ الاستلام\nتوصيل: 3-5 أيام عمل لجميع مناطق المملكة\nتوصيل مجاني: للطلبات فوق 300 ريال\nطرق الدفع: بطاقة ائتمان، مدى، Apple Pay، الدفع عند الاستلام`,
 };
@@ -2116,6 +2116,65 @@ const DEMO_SALLA_PRODUCTS = [
         variantSummary: '4-6، 7-9، 10-12 سنة — أبيض، بيج',
         tags: 'أطفال,عيد,طقم',
     },
+    // --- Catalog growth (D-092) ---------------------------------------------
+    // The six products above fit inside the 15-product inline catalog block, so
+    // the model answered every stock question from the prompt and never called
+    // `check_inventory` — the resolver was unreachable from the eval. The rows
+    // below push the fashion store past the inline cap (40 products, 25 outside
+    // the block), so the tool path is reached the way a real Zid/Salla merchant
+    // with an ordinary catalog reaches it: naturally, not by instruction.
+    // Two rows carry `status: 'out_of_stock'` (Salla's `out` status) to pin that
+    // a sold-out product is answered as sold out, never as "we don't sell that".
+    ...([
+        ['black-crepe-abaya', 'عباية كريب سوداء', 'Abayas', '390 SAR', 22, 'S، M، L — أسود', 'عباية,كريب'],
+        ['open-abaya-beads', 'عباية مفتوحة بخرز', 'Abayas', '520 - 640 SAR', 12, 'S، M، L، XL — أسود، رمادي', 'عباية,خرز'],
+        ['linen-summer-abaya', 'عباية كتان صيفية', 'Abayas', '410 SAR', 18, 'S، M، L — بيج', 'عباية,كتان,صيفي'],
+        ['velvet-winter-abaya', 'عباية مخمل شتوية', 'Abayas', '680 SAR', 0, 'M، L، XL — كحلي', 'عباية,مخمل,شتوي', 'out_of_stock'],
+        ['pleated-abaya', 'عباية بليسيه', 'Abayas', '460 SAR', 9, 'S، M، L — أسود', 'عباية,بليسيه'],
+        ['chiffon-shayla', 'شيلة شيفون', 'Shaylas', '85 SAR', 60, 'أسود، بني، رمادي', 'شيلة,شيفون'],
+        ['crepe-shayla', 'شيلة كريب', 'Shaylas', '95 SAR', 45, 'أسود', 'شيلة,كريب'],
+        ['niqab-two-layer', 'نقاب طبقتين', 'Niqabs', '60 SAR', 50, 'أسود', 'نقاب'],
+        ['summer-thobe-white', 'ثوب صيفي أبيض', 'Thobes', '220 SAR', 30, '52، 54، 56، 58 — أبيض', 'ثوب,صيفي'],
+        ['winter-thobe-wool', 'ثوب شتوي صوف', 'Thobes', '380 SAR', 14, '54، 56، 58 — رمادي، بني', 'ثوب,شتوي,صوف'],
+        ['kids-thobe', 'ثوب أطفال', 'Kids', '120 SAR', 28, '4-6، 7-9، 10-12 سنة — أبيض', 'ثوب,أطفال'],
+        ['shemagh-red', 'شماغ أحمر', 'Shemaghs', '140 SAR', 40, 'أحمر', 'شماغ'],
+        ['ghutra-white', 'غترة بيضاء', 'Shemaghs', '110 SAR', 35, 'أبيض', 'غترة'],
+        ['igal-classic', 'عقال كلاسيك', 'Shemaghs', '75 SAR', 55, 'أسود', 'عقال'],
+        ['leather-sandals-men', 'صندل جلد رجالي', 'Footwear', '260 SAR', 16, '40، 41، 42، 43، 44 — بني، أسود', 'صندل,جلد,رجالي'],
+        ['leather-sandals-women', 'صندل جلد نسائي', 'Footwear', '240 SAR', 0, '36، 37، 38، 39 — أسود، بيج', 'صندل,جلد,نسائي', 'out_of_stock'],
+        ['kids-eid-shoes', 'حذاء أطفال عيد', 'Footwear', '150 SAR', 20, '28 - 34 — أبيض', 'حذاء,أطفال,عيد'],
+        ['oud-oil-cambodian', 'دهن عود كمبودي', 'Perfumes', '900 SAR', 6, '3 مل، 6 مل', 'عود,دهن'],
+        ['bakhoor-royal', 'بخور ملكي', 'Perfumes', '180 SAR', 30, '50 غرام', 'بخور'],
+        ['musk-tahara', 'مسك طهارة', 'Perfumes', '65 SAR', 80, '10 مل', 'مسك'],
+        ['rose-taif-perfume', 'عطر ورد طائفي', 'Perfumes', '420 SAR', 11, '100 مل', 'عطر,ورد'],
+        ['amber-perfume', 'عطر عنبر', 'Perfumes', '310 SAR', 19, '100 مل', 'عطر,عنبر'],
+        ['leather-handbag', 'حقيبة يد جلد', 'Bags', '540 SAR', 8, 'أسود، بني', 'حقيبة,جلد'],
+        ['evening-clutch', 'كلتش سهرة', 'Bags', '290 SAR', 13, 'ذهبي، فضي', 'كلتش,سهرة'],
+        ['kids-backpack', 'حقيبة ظهر أطفال', 'Bags', '130 SAR', 24, 'أزرق، وردي', 'حقيبة,أطفال'],
+        ['silver-bracelet', 'أسوارة فضة', 'Jewelry', '220 SAR', 17, '—', 'أسوارة,فضة'],
+        ['pearl-necklace', 'عقد لؤلؤ', 'Jewelry', '650 SAR', 5, '—', 'عقد,لؤلؤ'],
+        ['gold-plated-earrings', 'أقراط مطلية بالذهب', 'Jewelry', '190 SAR', 26, '—', 'أقراط'],
+        ['prayer-dress', 'إسدال صلاة', 'Prayer', '160 SAR', 38, 'S، M، L — أسود، كحلي', 'إسدال,صلاة'],
+        ['prayer-rug-velvet', 'سجادة صلاة مخمل', 'Prayer', '140 SAR', 33, 'أخضر، بني', 'سجادة,صلاة'],
+        ['embroidered-cushion', 'وسادة مطرزة', 'Home', '120 SAR', 21, '45×45 سم', 'وسادة,مطرزة'],
+        ['eid-gift-box', 'بوكس هدايا العيد', 'Gifts', '260 SAR', 15, '—', 'هدايا,عيد'],
+        ['wedding-gift-set', 'طقم هدايا زواج', 'Gifts', '980 SAR', 3, '—', 'هدايا,زواج'],
+        ['mens-belt-leather', 'حزام جلد رجالي', 'Accessories', '170 SAR', 27, '95، 105، 115 سم — بني، أسود', 'حزام,جلد'],
+    ] as const).map(([handle, title, productType, priceRange, totalInventory, variantSummary, tags, status], i) => ({
+        platformProductId: `demo_salla_prod_${7 + i}`,
+        handle,
+        title,
+        description: null as string | null,
+        productType,
+        vendor: 'أزياء الخليج',
+        priceRange,
+        currency: 'SAR',
+        totalInventory,
+        hasVariants: variantSummary !== '—',
+        variantSummary: variantSummary === '—' ? null : variantSummary,
+        tags,
+        ...(status ? { status } : {}),
+    })),
 ];
 
 const DEMO_SHOPIFY_PRODUCTS = [
@@ -2690,7 +2749,14 @@ async function seedDemoStore(
     }).returning({ id: ecommerceStores.id });
 
     for (const prod of products) {
-        await db.insert(ecommerceProducts).values({ ecommerceStoreId: store.id, ...prod, status: 'active' });
+        // A fixture may carry its own status (`out_of_stock` for the sold-out
+        // cases); everything else is active. Hardcoding 'active' here used to
+        // silently flatten every fixture, so no eval could see a sold-out product.
+        await db.insert(ecommerceProducts).values({
+            ecommerceStoreId: store.id,
+            ...prod,
+            status: (prod as { status?: string }).status ?? 'active',
+        });
     }
 
     // Regenerate the catalog block from the rows we just inserted, with the SAME

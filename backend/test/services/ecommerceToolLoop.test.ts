@@ -32,6 +32,13 @@ vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
 }));
 
+// Which embedding the reply carries (D-092): the resolver may reuse it only when it
+// is the message's own (`dual` / `off`), never an enriched, history-laden one.
+const mockRagRetrievalMode = vi.fn<() => 'off' | 'enriched' | 'dual'>(() => 'dual');
+vi.mock('../../src/services/kb/retrieval', () => ({
+    ragRetrievalMode: () => mockRagRetrievalMode(),
+}));
+
 // Card builders are unit-tested on their own (productCardBuilder*.test.ts);
 // here we only pin WHEN the loop asks for which kind of card.
 const mockCardsFromTools = vi.fn();
@@ -213,8 +220,43 @@ describe('generateReplyWithTools', () => {
         const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
         const result = await generateReplyWithTools(request);
 
-        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }));
+        // Third argument: the reply context the resolver reuses (D-092).
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }), expect.any(Object));
         expect(result.reply).toContain('found your order');
+    });
+
+    /** One tool round: the AI asks for check_inventory, the tool answers, the AI replies. */
+    function primeOneInventoryRound() {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'check_inventory', arguments: { product_name: 'نظارة' } }], tokensUsed: 50 } })
+            .mockResolvedValueOnce({ data: { reply: 'متوفرة', language: 'ar', intent: 'QUESTION', confidence: 'high', tokensUsed: 80 } });
+        mockExecuteToolCall.mockResolvedValueOnce({ tool_name: 'check_inventory', success: true, data: { platformProductId: 'p1', available: true } });
+    }
+
+    it('hands the resolver the reply context — the message\'s own embedding in dual mode — and the request logger', async () => {
+        primeOneInventoryRound();
+        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+        const request = {
+            ...baseRequest,
+            context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1' },
+        };
+
+        await generateReplyWithTools(request, logger);
+
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'check_inventory' }), {
+            pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1', logger,
+        });
+    });
+
+    it('withholds an ENRICHED embedding — the resolver was calibrated on the asked phrase, not on recent history', async () => {
+        mockRagRetrievalMode.mockReturnValue('enriched');
+        primeOneInventoryRound();
+        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2] } };
+
+        await generateReplyWithTools(request);
+
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.anything(), expect.objectContaining({ queryEmbedding: null, pageId: 'page-1' }));
     });
 
     it('falls back to aiService on tool loop error', async () => {
@@ -257,7 +299,8 @@ describe('generateReplyWithTools', () => {
 
         // Only the valid tool should be executed
         expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
-        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }));
+        // Third argument: the reply context the resolver reuses (D-092).
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }), expect.any(Object));
     });
 
     it('throws AiToolLoopExhaustedError when the AI keeps requesting tools past MAX_TOOL_ROUNDS', async () => {

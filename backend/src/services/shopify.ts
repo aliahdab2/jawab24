@@ -50,6 +50,8 @@ import {
     getStoreByWorkspaceAny as _getStoreByWorkspaceAny,
     applySyncedStoreInfo,
     PRODUCT_SAFETY_CAP,
+    type NormalizedProduct,
+    type PlatformProductDetail,
 } from './ecommerce';
 
 // Shopify supports each API version for ~12 months from its quarterly release. Bump this
@@ -61,7 +63,6 @@ const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = Math.ceil(PRODUCT_SAFETY_CAP / MAX_PRODUCTS_PER_PAGE);
 const ERROR_TEXT_MAX_LENGTH = 200;
 const POLICY_PREVIEW_LENGTH = 100;
-const GRAPHQL_STRING_MAX_LENGTH = 100;
 
 // --- OAuth ---
 
@@ -639,34 +640,40 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
 
     const products = await fetchAllProducts(storeDomain, accessToken);
 
-    const mapped = products.map(p => {
-        const minPrice = parseFloat(p.priceRangeV2?.minVariantPrice?.amount ?? '0');
-        const maxPrice = parseFloat(p.priceRangeV2?.maxVariantPrice?.amount ?? '0');
-        const currency = p.priceRangeV2?.minVariantPrice?.currencyCode ?? '';
-        const priceRange = formatPriceRange(minPrice, maxPrice, currency);
-        const variantSummary = buildVariantSummary(
-            (p.variants?.edges ?? []).map(e => e.node)
-        );
-
-        return {
-            platformProductId: p.id.replace('gid://shopify/Product/', ''),
-            handle: p.handle,
-            title: p.title,
-            description: p.description || null,
-            productType: p.productType || null,
-            vendor: p.vendor || null,
-            status: p.status.toLowerCase(),
-            priceRange,
-            currency,
-            totalInventory: p.totalInventory,
-            hasVariants: !p.hasOnlyDefaultVariant,
-            variantSummary: variantSummary || null,
-            tags: Array.isArray(p.tags) ? (p.tags.join(', ') || null) : null,
-            imageUrl: p.featuredImage?.url || null,
-        };
-    });
+    const mapped = products.map(mapShopifyProduct);
 
     return replaceProductsAndRebuildSummary(storeId, mapped);
+}
+
+/**
+ * The Shopify GraphQL product node → NormalizedProduct mapper, shared by the
+ * full sync and the by-id read (D-092, Rule 10.8). `mapShopifyWebhookProduct`
+ * below stays separate on purpose: it maps the REST webhook payload, a
+ * different shape (snake_case, per-variant prices, no priceRangeV2), and
+ * converging the two would mean inventing fields one side does not have.
+ */
+export function mapShopifyProduct(p: ShopifyGQLProduct): NormalizedProduct {
+    const minPrice = parseFloat(p.priceRangeV2?.minVariantPrice?.amount ?? '0');
+    const maxPrice = parseFloat(p.priceRangeV2?.maxVariantPrice?.amount ?? '0');
+    const currency = p.priceRangeV2?.minVariantPrice?.currencyCode ?? '';
+    const variantSummary = buildVariantSummary((p.variants?.edges ?? []).map(e => e.node));
+
+    return {
+        platformProductId: p.id.replace('gid://shopify/Product/', ''),
+        handle: p.handle,
+        title: p.title,
+        description: p.description || null,
+        productType: p.productType || null,
+        vendor: p.vendor || null,
+        status: p.status.toLowerCase(),
+        priceRange: formatPriceRange(minPrice, maxPrice, currency),
+        currency,
+        totalInventory: p.totalInventory,
+        hasVariants: !p.hasOnlyDefaultVariant,
+        variantSummary: variantSummary || null,
+        tags: Array.isArray(p.tags) ? (p.tags.join(', ') || null) : null,
+        imageUrl: p.featuredImage?.url || null,
+    };
 }
 
 /**
@@ -871,7 +878,7 @@ export async function fullSync(storeId: string) {
 
 // --- E-Commerce Agent Tools (read-only order/tracking/inventory) ---
 
-import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
+import type { OrderInfoFull, ShipmentInfoFull } from '@jawab24/shared';
 
 /**
  * Resolve store credentials for a given storeId.
@@ -1080,94 +1087,68 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
 }
 
 /**
- * Check real-time inventory for a product by name search via Shopify GraphQL.
- * Returns normalized InventoryInfo or null if no matching product found.
+ * Read ONE product by its Shopify id — the platform call the resolver makes
+ * only when the local answer is risky (D-092). Admin GraphQL `product(id:)`
+ * with the Product GID (the sync strips that prefix when it stores the id, so
+ * it is re-added here). A missing or non-ACTIVE product is null. The former
+ * `products(query: "title:*…*")` search is gone with the matcher that used it:
+ * it returned the FIRST hit when nothing matched (`|| products[0]`).
  */
-export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
+export async function getProductById(storeId: string, platformProductId: string): Promise<PlatformProductDetail | null> {
     const creds = await resolveStoreCredentials(storeId);
     if (!creds) return null;
 
-    const data = await shopifyGraphQL<{
-        data: {
-            products: {
-                edges: Array<{
-                    node: {
-                        title: string;
-                        handle: string;
-                        totalInventory: number;
-                        priceRangeV2: { minVariantPrice: { amount: string; currencyCode: string } };
-                        variants: {
-                            edges: Array<{
-                                node: {
-                                    title: string;
-                                    inventoryQuantity: number | null;
-                                    selectedOptions: Array<{ name: string; value: string }>;
-                                };
-                            }>;
-                        };
-                    };
-                }>;
-            };
-        };
-    }>(creds.storeDomain, creds.accessToken, `{
-        products(first: 5, query: "title:*${sanitizeGraphQLString(productName)}* status:active") {
-            edges {
-                node {
-                    title
-                    handle
-                    totalInventory
-                    priceRangeV2 { minVariantPrice { amount currencyCode } }
-                    variants(first: 30) {
-                        edges {
-                            node {
-                                title
-                                inventoryQuantity
-                                selectedOptions { name value }
-                            }
+    type ProductNode = Omit<ShopifyGQLProduct, 'variants'> & {
+        variants: { edges: Array<{ node: { title: string; inventoryQuantity: number | null; selectedOptions: Array<{ name: string; value: string }> } }> };
+    };
+    const data = await shopifyGraphQL<{ data: { product: ProductNode | null } }>(
+        creds.storeDomain,
+        creds.accessToken,
+        `query ($id: ID!) {
+            product(id: $id) {
+                id
+                handle
+                title
+                description
+                productType
+                vendor
+                status
+                tags
+                totalInventory
+                hasOnlyDefaultVariant
+                featuredImage { url }
+                priceRangeV2 {
+                    minVariantPrice { amount currencyCode }
+                    maxVariantPrice { amount currencyCode }
+                }
+                variants(first: 30) {
+                    edges {
+                        node {
+                            title
+                            inventoryQuantity
+                            selectedOptions { name value }
                         }
                     }
                 }
             }
-        }
-    }`);
+        }`,
+        { id: `gid://shopify/Product/${platformProductId}` },
+    );
 
-    const products = data.data.products.edges.map(e => e.node);
-    if (products.length === 0) return null;
+    const product = data.data.product;
+    if (!product || product.status !== 'ACTIVE') return null;
 
-    // Find best match by title similarity (case-insensitive contains)
-    const lowerQuery = productName.toLowerCase();
-    const bestMatch = products.find(p => p.title.toLowerCase().includes(lowerQuery)) || products[0];
-
-    const allVariants = bestMatch.variants.edges.map(e => e.node);
-
-    // If a specific variant was requested, filter to matching variants
-    let filteredVariants = allVariants;
-    if (variant) {
-        const lowerVariant = variant.toLowerCase();
-        filteredVariants = allVariants.filter(v =>
-            v.title.toLowerCase().includes(lowerVariant) ||
-            v.selectedOptions.some(opt => opt.value.toLowerCase().includes(lowerVariant))
-        );
-    }
-
-    const variantResults = (filteredVariants.length > 0 ? filteredVariants : allVariants).map(v => ({
+    const base = mapShopifyProduct(product);
+    const variants = product.variants.edges.map(e => e.node).map(v => ({
         name: v.title,
         available: (v.inventoryQuantity ?? 0) > 0,
         quantity: v.inventoryQuantity ?? 0,
     }));
 
-    const totalAvailable = variant
-        ? variantResults.reduce((sum, v) => sum + v.quantity, 0)
-        : bestMatch.totalInventory;
-
     return {
-        productName: bestMatch.title,
-        available: totalAvailable > 0,
-        quantity: totalAvailable,
-        variants: variantResults.length > 1 || variant ? variantResults : undefined,
-        price: `${bestMatch.priceRangeV2.minVariantPrice.amount} ${bestMatch.priceRangeV2.minVariantPrice.currencyCode}`,
-        currency: bestMatch.priceRangeV2.minVariantPrice.currencyCode,
-        productUrl: bestMatch.handle ? `https://${creds.storeDomain}/products/${bestMatch.handle}` : undefined,
+        ...base,
+        productUrl: product.handle ? `https://${creds.storeDomain}/products/${product.handle}` : undefined,
+        variants: variants.length > 0 ? variants : undefined,
     };
 }
 
@@ -1199,9 +1180,4 @@ function mapShopifyFinancialStatus(status: string): string {
         'VOIDED': 'cancelled',
     };
     return map[status] || status.toLowerCase();
-}
-
-/** Sanitize user input for use in Shopify GraphQL query strings */
-function sanitizeGraphQLString(input: string): string {
-    return input.replace(/["\\\n\r]/g, '').slice(0, GRAPHQL_STRING_MAX_LENGTH);
 }

@@ -107,7 +107,7 @@ import {
     mapZidOrderStatus,
     lookupOrder,
     getShipmentTracking,
-    checkInventory,
+    getProductById,
     type ZidCredentials,
 } from '../../src/services/zid';
 
@@ -1314,106 +1314,67 @@ describe('Zid Service', () => {
         });
     });
 
-    describe('checkInventory [provisional — pending Zid live captures]', () => {
-        it('matches a product by localized name and returns availability, price, and URL', async () => {
+    describe('getProductById [id__in live-verified 2026-08-22] (D-092)', () => {
+        it('GETs /v1/products/?id__in=<id>&page_size=1 with dual headers + Store-Id and maps through the sync mapper', async () => {
             mockGetStoreById.mockResolvedValue(makeStore({ platformData: { merchantId: 'zid-store-99' } }));
             mockFetch.mockResolvedValueOnce(jsonResponse({
                 results: [makeZidProduct({
-                    name: { ar: 'جراب هاتف', en: 'Phone Case' },
-                    quantity: 8,
-                    price: 45,
-                    html_url: 'https://demo.zid.store/products/phone-case',
-                })],
-            }));
-
-            // Matching runs against the LOCALIZED (Arabic-preferred) name.
-            const result = await checkInventory('store-1', 'جراب');
-
-            const call = mockFetch.mock.calls[0] as [string, RequestInit];
-            expect(call[0]).toBe('https://api.zid.sa/v1/products/?page_size=100&page=1');
-            expectDualHeaders(call, { 'Store-Id': 'zid-store-99' });
-            expect((call[1].headers as Record<string, string>)['Role']).toBeUndefined();
-
-            expect(result).toMatchObject({
-                productName: 'جراب هاتف',
-                available: true,
-                quantity: 8,
-                price: '45 SAR',
-                currency: 'SAR',
-                productUrl: 'https://demo.zid.store/products/phone-case',
-            });
-        });
-
-        it('builds a product URL from the slug and store domain when html_url is absent', async () => {
-            mockFetch.mockResolvedValueOnce(jsonResponse({
-                results: [makeZidProduct({ name: 'Widget', slug: 'widget-1' })],
-            }));
-
-            const result = await checkInventory('store-1', 'Widget');
-            expect(result?.productUrl).toBe('https://demo.zid.store/products/widget-1');
-        });
-
-        it('filters variants by the requested variant text', async () => {
-            mockFetch.mockResolvedValueOnce(jsonResponse({
-                results: [makeZidProduct({
-                    name: 'Shirt',
-                    quantity: 3,
-                    options: [{ name: 'Size', values: [{ name: 'S' }, { name: 'M' }, { name: 'L' }] }],
-                })],
-            }));
-
-            const result = await checkInventory('store-1', 'Shirt', 'M');
-
-            expect(result?.variants).toEqual([
-                { name: 'Size: M', available: true, quantity: 3 },
-            ]);
-        });
-
-        it('omits price entirely (undefined, not an empty string) when Zid provides none', async () => {
-            mockFetch.mockResolvedValueOnce(jsonResponse({
-                results: [makeZidProduct({ price: undefined, sale_price: undefined })],
-            }));
-
-            const result = await checkInventory('store-1', 'Test Product');
-
-            expect(result).not.toBeNull();
-            expect(result?.price).toBeUndefined();
-        });
-
-        it('reports an is_infinite product as available with NO quantity number', async () => {
-            mockFetch.mockResolvedValueOnce(jsonResponse({
-                results: [makeZidProduct({
-                    name: 'Sony A7S III',
-                    is_infinite: true,
-                    quantity: null,
+                    id: 'd2fc56d9', name: { ar: 'سوني A7S III', en: 'Sony A7S III' }, is_infinite: true, quantity: null,
+                    price: 10000, html_url: 'https://demo.zid.store/products/sony-a7s-iii',
                     options: [{ name: 'Kit', values: [{ name: 'Body only' }] }],
                 })],
             }));
 
-            const result = await checkInventory('store-1', 'Sony');
+            const result = await getProductById('store-1', 'd2fc56d9');
 
-            expect(result?.available).toBe(true);
-            // Omitted, not 0: `available: true, quantity: 0` reads to the AI as out of stock.
-            expect(result?.quantity).toBeUndefined();
-            expect(result?.variants).toEqual([
-                { name: 'Kit: Body only', available: true, quantity: undefined },
-            ]);
+            const call = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(call[0]).toBe('https://api.zid.sa/v1/products/?id__in=d2fc56d9&page_size=1');
+            expectDualHeaders(call, { 'Store-Id': 'zid-store-99' });
+
+            expect(result).toMatchObject({
+                platformProductId: 'd2fc56d9',
+                title: 'سوني A7S III',
+                status: 'active',
+                priceRange: '10000 SAR',
+                // is_infinite → null (unlimited), never 0 — F1 must survive the by-id read too.
+                totalInventory: null,
+                productUrl: 'https://demo.zid.store/products/sony-a7s-iii',
+                variants: [{ name: 'Kit: Body only', available: true, quantity: undefined }],
+            });
         });
 
-        it('still reports a genuinely empty tracked product as unavailable', async () => {
+        it('picks the row BY ID from the envelope — never [0]', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({
-                results: [makeZidProduct({ name: 'Sold Out', is_infinite: false, quantity: 0 })],
+                results: [makeZidProduct({ id: 'other-1', name: 'Other' }), makeZidProduct({ id: 'want-2', name: 'Wanted', quantity: 3 })],
             }));
-
-            const result = await checkInventory('store-1', 'Sold Out');
-
-            expect(result?.available).toBe(false);
-            expect(result?.quantity).toBe(0);
+            const result = await getProductById('store-1', 'want-2');
+            expect(result?.title).toBe('Wanted');
+            expect(result?.totalInventory).toBe(3);
         });
 
-        it('returns null when no product matches', async () => {
-            mockFetch.mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct({ name: 'Other' })] }));
-            expect(await checkInventory('store-1', 'nonexistent')).toBeNull();
+        it('returns null when the envelope holds a different product than asked for', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct({ id: 'other-1' })] }));
+            expect(await getProductById('store-1', 'want-2')).toBeNull();
+        });
+
+        it('treats HTTP 400 as "no such product" (live capture: an unknown id answers 400, not an empty list)', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ detail: 'invalid id' }, 400));
+            expect(await getProductById('store-1', 'nope')).toBeNull();
+        });
+
+        it('still throws on other failures (a 5xx is an API error, not a missing product)', async () => {
+            // ecommerceApiGet retries a 5xx three times with 1s/2s/4s backoff — real
+            // timers would blow the 5s test budget, so the clock is advanced instead.
+            vi.useFakeTimers();
+            try {
+                mockFetch.mockResolvedValue(jsonResponse({ detail: 'down' }, 503));
+                const outcome = expect(getProductById('store-1', 'x')).rejects.toThrow();
+                await vi.runAllTimersAsync();
+                await outcome;
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
-});
+
+    });

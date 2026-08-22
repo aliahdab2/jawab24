@@ -29,6 +29,8 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
     desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
     notInArray: vi.fn(),
+    // buildProductSummary admits every SELLABLE status (active + out_of_stock) since D-092.
+    inArray: vi.fn((col: unknown, values: unknown[]) => ({ op: 'inArray', col, values })),
     lt: vi.fn(),
     sql: Object.assign((s: TemplateStringsArray) => ({ op: 'sql', s }), { raw: vi.fn() }),
 }));
@@ -98,9 +100,12 @@ describe('buildProductSummary — prompt-cache determinism', () => {
         await buildProductSummary('store-1');
 
         expect(productsOrderBy).toHaveBeenCalledTimes(1);
-        // The orderBy column is the products table's id (passed through the schema mock).
-        const arg = productsOrderBy.mock.calls[0]![0]!;
-        expect(arg).toBe('id');
+        // In-stock rows first (a sold-out row must not displace a buyable one from
+        // the 15 inline slots), then the products table's id as the total order —
+        // the tiebreak is what keeps the output byte-stable.
+        const [first, second] = productsOrderBy.mock.calls[0]!;
+        expect(first).toMatchObject({ op: 'sql' });
+        expect(second).toBe('id');
     });
 
     it('returns byte-identical output for identical inputs across calls', async () => {

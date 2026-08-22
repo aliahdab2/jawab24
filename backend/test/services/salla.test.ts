@@ -109,7 +109,7 @@ import {
     refreshExpiringTokens,
     lookupOrder,
     getShipmentTracking,
-    checkInventory,
+    getProductById,
     composeSallaPhone,
 } from '../../src/services/salla';
 
@@ -1024,7 +1024,7 @@ describe('Salla Service', () => {
     });
 
     // ============================================================
-    // lookupOrder / getShipmentTracking / checkInventory
+    // lookupOrder / getShipmentTracking / getProductById
     // ============================================================
 
     describe('lookupOrder', () => {
@@ -1285,7 +1285,7 @@ describe('Salla Service', () => {
         });
     });
 
-    describe('checkInventory', () => {
+    describe('getProductById (D-092)', () => {
         beforeEach(() => {
             mockGetStoreById.mockResolvedValue(makeStore({
                 tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
@@ -1293,20 +1293,49 @@ describe('Salla Service', () => {
             }));
         });
 
-        it('returns inventory info for a matching product', async () => {
-            const product = makeSallaProduct({ name: 'Phone Case', quantity: 15, status: 'sale' });
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ data: [product] }),
+        it('GETs /admin/v2/products/{id} and maps through the SAME mapper the sync uses', async () => {
+            const product = makeSallaProduct({
+                id: 1001, name: 'Phone Case', quantity: 15, status: 'sale', slug: 'phone-case', thumbnail: 'https://cdn/case.jpg',
+                options: [{ name: 'Color', values: [{ name: 'Black' }, { name: 'Blue' }] }],
             });
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: product }) });
 
-            const result = await checkInventory('store-1', 'Phone Case');
+            const result = await getProductById('store-1', '1001');
 
-            expect(result).not.toBeNull();
-            expect(result?.productName).toBe('Phone Case');
-            expect(result?.available).toBe(true);
-            expect(result?.quantity).toBe(15);
-            expect(result?.price).toBe('100 SAR');
+            expect((mockFetch.mock.calls[0] as [string])[0]).toBe('https://api.salla.dev/admin/v2/products/1001');
+            expect(result).toMatchObject({
+                platformProductId: '1001',
+                title: 'Phone Case',
+                status: 'active',
+                priceRange: '100 SAR',
+                totalInventory: 15,
+                handle: 'phone-case',
+                imageUrl: 'https://cdn/case.jpg',
+                productUrl: 'https://mystore.salla.sa/p/phone-case',
+                // Salla reports stock per product; the per-option figure is the product's, labelled as such.
+                variants: [
+                    { name: 'Color: Black', available: true, quantity: 15 },
+                    { name: 'Color: Blue', available: true, quantity: 15 },
+                ],
+            });
+        });
+
+        it('maps a sold-out product to status out_of_stock (never hides it)', async () => {
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: makeSallaProduct({ id: 1002, status: 'out', quantity: 0 }) }) });
+            const result = await getProductById('store-1', '1002');
+            expect(result?.status).toBe('out_of_stock');
+        });
+
+        it('returns null on 404, on a deleted product, and when the envelope carries a DIFFERENT id', async () => {
+            mockFetch.mockResolvedValueOnce({ ok: false, status: 404, headers: new Headers(), text: async () => 'nope' });
+            expect(await getProductById('store-1', '9999')).toBeNull();
+
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: makeSallaProduct({ id: 1003, status: 'deleted' }) }) });
+            expect(await getProductById('store-1', '1003')).toBeNull();
+
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: makeSallaProduct({ id: 5555 }) }) });
+            expect(await getProductById('store-1', '1004')).toBeNull();
         });
     });
-});
+
+    });

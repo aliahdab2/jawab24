@@ -20,15 +20,15 @@
  * Extension point: Phase 4a will add `recommend_products` — its results will also
  * flow through here. Add a new case in `extractCardsFromResult()` at that point.
  */
-import { and, asc, eq, ilike } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db } from '../../db';
 import { redis } from '../../lib/redis';
 import { ecommerceProducts, ecommerceStores } from '../../db/schema';
 import { captureError } from '../../utils/sentryHelpers';
-import { buildProductUrl } from '../ecommerce';
+import { buildProductUrl, getProductByPlatformId } from '../ecommerce';
 import { t } from '../../utils/i18n';
-import { normalizeArabic } from '@jawab24/shared';
-import type { EcommerceToolResult, InventoryInfo, ProductCard } from '@jawab24/shared';
+import { normalizeArabic, availabilityOf } from '@jawab24/shared';
+import type { EcommerceToolResult, InventoryInfo, ProductCard, StockAvailability } from '@jawab24/shared';
 
 /**
  * Upper bound on catalog rows scanned for a mention match.
@@ -79,10 +79,24 @@ type MentionOutcome =
     | 'scan_capped'
     | 'error';
 
-/** Fire-and-forget diagnostic counter — never blocks or fails a reply. */
-function recordMentionOutcome(outcome: MentionOutcome): void {
-    redis.incr(`metrics:product_card:mention:${outcome}`).catch(() => { });
+/** Why a TOOL-result card was or wasn't produced — this path emitted nothing until D-092. */
+type ToolCardOutcome = 'fired' | 'no_identity' | 'no_image' | 'no_url' | 'error';
+
+/**
+ * Fire-and-forget diagnostic counter — never blocks or fails a reply.
+ * `metrics:product_card:{source}:{outcome}`; the mention keys are unchanged
+ * from before the tool source was added, so existing reads keep working.
+ */
+function recordCardOutcome(source: 'mention', outcome: MentionOutcome): void;
+function recordCardOutcome(source: 'tool', outcome: ToolCardOutcome): void;
+function recordCardOutcome(source: 'mention' | 'tool', outcome: string): void {
+    try {
+        redis.incr(`metrics:product_card:${source}:${outcome}`).catch(() => { });
+    } catch {
+        // never on the reply path
+    }
 }
+const recordMentionOutcome = (outcome: MentionOutcome) => recordCardOutcome('mention', outcome);
 
 export async function buildProductCardsFromToolResults(
     storeId: string,
@@ -98,6 +112,7 @@ export async function buildProductCardsFromToolResults(
             if (card) cards.push(card);
         } catch (error) {
             // Degrade gracefully — one failed lookup shouldn't kill the reply
+            recordCardOutcome('tool', 'error');
             captureError(error, 'Failed to build product card from tool result', {
                 tags: { service: 'product-card-builder', tool: result.tool_name },
             });
@@ -120,32 +135,58 @@ async function extractCardFromResult(
     }
 }
 
+/**
+ * A tool-result card is keyed on the product the resolver CHOSE
+ * (`platformProductId`), never re-resolved by name: the old `ILIKE 'title%'`
+ * lookup was a second, different matcher, and a card could show a product the
+ * answer never named. A result without identity (an old cached shape during
+ * rollout) gets no card rather than a guessed one.
+ */
 async function inventoryToCard(
     storeId: string,
     info: InventoryInfo,
     lang: string,
 ): Promise<ProductCard | null> {
-    // A card without an image isn't worth sending — looks worse than plain text
-    const imageUrl = await findProductImage(storeId, info.productName);
-    if (!imageUrl) return null;
+    if (!info.platformProductId) {
+        recordCardOutcome('tool', 'no_identity');
+        return null;
+    }
 
     // A card without a link is a dead end — defer to text-only reply
-    if (!info.productUrl) return null;
+    if (!info.productUrl) {
+        recordCardOutcome('tool', 'no_url');
+        return null;
+    }
 
-    const price = info.price
-        ? (info.currency ? `${info.price} ${info.currency}` : info.price)
-        : null;
+    // The image rides on the result when the resolver had it; otherwise read
+    // the row by key. A card without an image looks worse than plain text.
+    const imageUrl = info.imageUrl
+        ?? (await getProductByPlatformId(storeId, info.platformProductId, { sellable: false }))?.imageUrl
+        ?? null;
+    if (!imageUrl) {
+        recordCardOutcome('tool', 'no_image');
+        return null;
+    }
 
+    recordCardOutcome('tool', 'fired');
     return buildCard({
         title: info.productName,
-        price,
-        // The tool asked the platform LIVE, so this is the one path that can
-        // state availability as a fact rather than as a sync snapshot.
-        availability: info.available ? 'cardInStock' : 'cardOutOfStock',
+        // `price` already carries its currency ("10000 SAR") — printed once.
+        price: info.price ?? null,
+        availability: cardAvailability(info.availability ?? (info.available ? 'in_stock' : 'out_of_stock')),
         productUrl: info.productUrl,
         imageUrl,
         lang,
     });
+}
+
+/** The card's three-way vocabulary, from the shared ladder. */
+function cardAvailability(availability: StockAvailability): 'cardInStock' | 'cardLowStock' | 'cardOutOfStock' {
+    switch (availability) {
+        case 'out_of_stock': return 'cardOutOfStock';
+        case 'low_stock': return 'cardLowStock';
+        default: return 'cardInStock';
+    }
 }
 
 /**
@@ -178,25 +219,6 @@ function buildCard(input: {
             },
         ],
     };
-}
-
-/**
- * Look up a synced product by title (case-insensitive prefix match) and return
- * its stored image URL. Returns null when no match or no image is available.
- */
-async function findProductImage(storeId: string, productName: string): Promise<string | null> {
-    const rows = await db
-        .select({ imageUrl: ecommerceProducts.imageUrl })
-        .from(ecommerceProducts)
-        .where(
-            and(
-                eq(ecommerceProducts.ecommerceStoreId, storeId),
-                ilike(ecommerceProducts.title, `${productName}%`),
-            ),
-        )
-        .limit(1);
-
-    return rows[0]?.imageUrl ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +330,11 @@ export async function buildProductCardsFromReplyText(
         return [buildCard({
             title: p.title,
             price: p.priceRange,
-            // Availability here comes from the last product SYNC, not from a live
-            // platform call the way the tool path's does — so it uses the same
-            // three-way vocabulary as the catalog block the model answered from
-            // (`ecommerce.ts:buildProductSummary`) and never overstates a thin
-            // shelf as a full one.
-            availability: p.totalInventory !== null && p.totalInventory <= 5 ? 'cardLowStock' : 'cardInStock',
+            // Availability here comes from the last product SYNC — the same
+            // shared ladder the catalog block and the KB chunks read, so a thin
+            // shelf is never overstated as a full one. (The scan above admits
+            // only `active` rows, so the status branch of the ladder cannot fire.)
+            availability: cardAvailability(availabilityOf(p)),
             productUrl: buildProductUrl(store.platform, store.storeDomain, p.handle),
             imageUrl: p.imageUrl,
             lang,
@@ -395,7 +416,14 @@ export async function filterRecentlySentCards(
     if (cards.length === 0) return cards;
     try {
         const seen = await redis.mget(...cards.map(c => cooldownKey(pageId, senderId, c.productUrl)));
-        return cards.filter((_, i) => seen[i] === null);
+        const kept = cards.filter((_, i) => seen[i] === null);
+        // Counted, because a card built and then swallowed here used to be
+        // indistinguishable from a card sent: on the Zid dev store the builder
+        // reported `fired=2` for ONE delivered card (2026-08-22).
+        for (let i = kept.length; i < cards.length; i++) {
+            try { redis.incr('metrics:product_card:cooldown:suppressed').catch(() => { }); } catch { /* diagnostic only */ }
+        }
+        return kept;
     } catch (error) {
         // Behaviour fails open; the SIGNAL must not. A silently broken cooldown
         // looks exactly like "merchants report card spam" with nothing in Sentry.

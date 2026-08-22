@@ -6,9 +6,8 @@ import { subscriptionsService } from '../subscriptions';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { postsService } from '../posts';
 import { config } from '../../config';
-import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
-import { RetrievalService } from '../kb/retrieval';
-import { OpenAIEmbeddingProvider } from '../kb/embedding';
+import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
+import { getRetrievalService, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
@@ -24,10 +23,10 @@ import { detectBusinessActionFlags } from './urgentFlags';
  * playground/test-reply paths must use this — bypassing it caused the AI
  * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
-async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
+async function dispatchAiReply(request: AiGenerateRequest, logger: Logger): Promise<AiGenerateResponse> {
     if (request.context?.ecommerceStoreId) {
         const { generateReplyWithTools } = await import('../ecommerceToolLoop');
-        return generateReplyWithTools(request);
+        return generateReplyWithTools(request, logger);
     }
     return aiService.generateReply(request);
 }
@@ -458,19 +457,14 @@ export interface PlaygroundResult {
      *  the customer receives, and Rule 19 requires the eval to be able to see
      *  every such change. Absent when the reply carries no card. */
     productCards?: ProductCard[];
+    /** What each e-commerce tool call decided (D-092) — present only when a tool
+     *  round ran, so the eval can pin the resolver's choice next to the reply. */
+    toolOutcomes?: ToolOutcome[];
 }
 
-/** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
-let _retrievalService: RetrievalService | null = null;
-function getRetrievalService(): RetrievalService | null {
-    if (!config.ragMode || config.ragMode === 'off') return null;
-    if (!config.openai?.apiKey) return null;
-    if (!_retrievalService) {
-        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
-        _retrievalService = new RetrievalService(embeddingProvider);
-    }
-    return _retrievalService;
-}
+// The lazy retrieval singleton lives in kb/retrieval.ts (`getRetrievalService`)
+// since D-092 — the product resolver shares it, and importing the generator from
+// the resolver would be a cycle.
 
 /** Max chars of the enriched RAG query sent to the embedding model. */
 const ENRICHED_QUERY_MAX_CHARS = 500;
@@ -753,7 +747,7 @@ export class ReplyGenerator {
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
-                const aiResponse = await dispatchAiReply(aiRequest);
+                const aiResponse = await dispatchAiReply(aiRequest, this.logger);
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
             }
@@ -829,7 +823,7 @@ export class ReplyGenerator {
             //   dual     → union(enriched, raw): keeps the vague-follow-up benefit AND lets a
             //              self-contained query recover its own chunk (primaryEmbeddingIndex=1 → raw
             //              query's embedding for the cache key).
-            const retrievalMode = process.env.RAG_RETRIEVAL_MODE || 'dual';
+            const retrievalMode = ragRetrievalMode();
             const { chunks, queryEmbedding } = await (
                 retrievalMode === 'off'
                     ? retrieval.retrieve(pageId, query, kbActiveVersion, undefined, userId)
@@ -986,7 +980,7 @@ export class ReplyGenerator {
             },
         };
 
-        const aiResponse = await dispatchAiReply(aiRequest);
+        const aiResponse = await dispatchAiReply(aiRequest, this.logger);
 
         // 5. Derive flags + intent — shared with processAiResponse (production), so the
         // test tool/eval can't drift from production. Playground skips the billing + gap
@@ -1055,6 +1049,7 @@ export class ReplyGenerator {
             gapRecorded,
             replyShortened,
             ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
+            ...(aiResponse.toolOutcomes ? { toolOutcomes: aiResponse.toolOutcomes } : {}),
         };
     }
 

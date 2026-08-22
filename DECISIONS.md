@@ -2374,3 +2374,77 @@ internal-traffic filter is a reporting nicety, not a correctness requirement.
 **Limits, stated.** Mobile (Capacitor) signups attribute to nothing: the WebView's cookie jar
 never saw the ad click. A merchant who signs up with analytics blocked and logs in elsewhere more
 than 24 h later is honestly lost. Neither is a regression — both were unreachable before too.
+
+## D-092 · `check_inventory` resolves the product in code over the page's own index and answers stock locally; the platform is consulted by id only when the local answer is risky (2026-08-22)
+
+**Ruling.** The product a customer means is decided by `backend/src/services/reply/productResolver.ts`,
+never by a platform search and never by the model: a model-supplied `product_id` is validated
+against the store's rows; otherwise the page's `kb_chunks` product rows are scored (`retrieveProducts`)
+— pg_trgm first, then the reply's reused embedding — and the decision is `resolved`, `ambiguous` with
+≤3 candidates, or `not_found`. Stock is answered from the synced `ecommerce_products` row; the platform
+is asked **by id** (`getProductById`) only for a tracked row at/below `LOW_STOCK_UNITS` (5) whose store
+last synced more than `STOCK_REFRESH_MIN` (10, env) ago — never for unlimited (`null`) rows or demo
+stores — and the live figure is written back to the row only (count AND status together: `availabilityOf`
+lets a platform `out_of_stock` status win over the count, so a count written alone after a restock
+leaves the row saying "out of stock" at 10 units — not "risky", so every later local answer repeats
+it until the next sync). Sold-out products stay visible as
+"out of stock" through every reader that feeds the model — catalog block, index, re-ingest input,
+resolver (`SELLABLE_STATUSES`); the mention-card scan stays `active`-only on purpose, so a product the
+reply calls sold out gets no card. Per D-051, identity is a code decision;
+per D-004, the retired `search_products` tool stays retired — resolution moved *inside*
+`check_inventory` behind one seam. `PROMPT_VERSION` is untouched: the tool path bypasses the reply
+cache.
+
+**What was wrong, verified in source.** Each platform's `checkInventory` matched the model's free
+text by substring; Shopify and Salla returned the FIRST search hit when nothing matched
+(`|| products[0]`), so a wrong product, price and URL came back as `success:true` and was cached for
+five minutes; Zid scanned page 1 only and its documented `?search=` ignores the term (live capture
+2026-08-22). Every reader of `ecommerce_products` filtered `status = 'active'`, so a sold-out product
+vanished from the catalog block, the index and the tool — the model said "we don't sell that" for a
+product the merchant carries. The card builder re-resolved the product by `ILIKE 'title%'`, a second
+matcher, and printed the currency twice; the index printed it twice as well ("Price: 300 SAR SAR").
+
+**Calibration (measured, not guessed).** `scripts/product-resolver-probe.ts` replayed 65 customer
+phrasings against the whole production product index (16 products, 3 stores, read-only):
+`docs/integrations/product-resolver-probe-2026-08-22.md`. Trigram resolves exact/near-exact titles
+(0.62–0.65, «عباية سوداء» 0.40) and close spelling variants (0.33); it RANKS the «ال»-article cases
+first but at ~0.16, below the floor — the semantic stage decides those («النظارة» 0.536 vs 0.236).
+Cosine cannot separate "right" from "unrelated" («كاميرا»→Sony 0.33, «ساعة ذكية»→nothing 0.41), so
+the semantic stage mostly PROPOSES. The cost-weighted sweep (wrong resolve −3, false not-found −3,
+ambiguous-with-answer 0) fixed `T_TRI=0.3 G_TRI=0.15 T_VEC=0.25 T_SOLO=0.35 G_VEC=0.12`: **0 wrong
+resolves, 2 false not-founds, 42/65 strict**. Tuning to strict accuracy instead (floor 0.35) gives
+48/65 with 4 wrong prices and 10 false not-founds — never do that. The two false not-founds are
+Arabic transliterations of Latin brands with no Arabic description («جالكسي» 0.24, «ايربودز» 0.18),
+which score below unrelated queries: no similarity signal separates them, so they are the open gap.
+
+**Calibration limit, stated.** The probe scored trigram and cosine on the same short phrase. In
+production stage 1 runs on the model's `product_name` paraphrase and stage 2 on the reply's reused
+embedding of the customer's whole message — the distribution the thresholds were fit on only
+approximately (the corpus has a few full sentences; most entries are fragments). Two consequences:
+the embedding is reused only in `dual`/`off` retrieval mode, where it is the raw message's — in
+`enriched` mode it carries earlier turns about other products, so the resolver embeds the phrase
+itself (`ragRetrievalMode()`); and every index-stage decision is logged at info
+(`[ProductResolver] decision`: phrase, top-3 ids with tri/vec, outcome) so the real score
+distribution can be read off production before the thresholds are trusted further. The candidate
+cut is the UNION of top-20 by trigram and top-20 by cosine, not one top-20 by the greater of the
+two — a single-category catalog has more than 20 products at cosine 0.3–0.5, and one cut would drop
+a near-exact title at trigram 0.33 before stage 1 saw it.
+
+**Premise corrected by the eval.** The plan assumed a 50-product catalog makes the tool "the primary
+path" because the inline block caps at 15 products. It does not: RAG's top-10 product chunks cover
+a 40-product store, and at temp 0 the model called `check_inventory` **0 times in 12 attempts** on
+the grown fashion fixture — answering correctly from context (sold-out stated, ambiguity listed,
+not-found honest). The resolver therefore governs every call the tool *does* get, not every stock
+question; its index-side half (sold-out rows indexed, price printed once) is what the eval exercises.
+Eval: Cat 80 added (6 PASS pinning the customer-visible behaviour, 3 XGAP pinning the tool outcomes
+until the model reaches the tool); Cat 48 6/6 and Cat 79 3/3 after the change; Cat 79's ids moved
+785–787 → 788–790 because Cat 48 already used 786/787.
+
+**Observability.** `metrics:ecom:check_inventory:{by_id,id_unknown,by_trigram,by_hybrid,
+by_title_trigram,embedded,ambiguous,not_found,no_index,local,stale_served,demo_local,
+live_refresh,live_cached,live_missing,live_failed}` — every resolved call emits one resolver
+outcome AND one stock outcome, so the keys sum to twice the calls — `metrics:product_card:tool:*`,
+`metrics:product_card:cooldown:suppressed`. A failed live refresh reaches Sentry once per store per
+refresh window (`ecom:stock:failed:{store}`); the counter carries the volume. Re-probe on the first real 50+ product catalog; the
+`not_found` share is the alarm. Deferred with their triggers: IDs in the inline block, a
+`title_normalized` column, a partial index on `type='product'`, Shopify `inventory_levels/update`.

@@ -33,9 +33,20 @@ const retrieveMulti = vi.fn().mockResolvedValue({ chunks: [WRONG_CHUNK], queryEm
 vi.mock('../services/kb/embedding', () => ({
     OpenAIEmbeddingProvider: vi.fn(() => ({})),
 }));
-vi.mock('../services/kb/retrieval', () => ({
-    RetrievalService: vi.fn(() => ({ setLogger: vi.fn(), retrieve, retrieveMulti })),
-}));
+// The lazy singleton lives in kb/retrieval since D-092, so the mock owns it too.
+// (The factory is hoisted above the `const` mocks, so it must reach them lazily.)
+vi.mock('../services/kb/retrieval', () => {
+    const instance = () => ({
+        setLogger: vi.fn(),
+        retrieve: (...args: unknown[]) => retrieve(...args),
+        retrieveMulti: (...args: unknown[]) => retrieveMulti(...args),
+    });
+    return {
+        RetrievalService: vi.fn(instance),
+        getRetrievalService: instance,
+        ragRetrievalMode: () => 'dual',
+    };
+});
 
 import { ReplyGenerator } from '../services/reply/generator';
 

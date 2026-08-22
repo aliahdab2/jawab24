@@ -5,12 +5,12 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, or, lt, gt, sql, desc, isNull, isNotNull, notInArray } from 'drizzle-orm';
+import { eq, and, or, lt, gt, sql, desc, isNull, isNotNull, notInArray, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import { isDemoStore } from './demoStore';
-import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
+import { SELLABLE_STATUSES, availabilityOf, type EcommerceStore, type EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { fitVarchar, wasDropped } from '../utils/columnText';
 import { customerNotificationService } from './customerNotifications';
@@ -838,9 +838,15 @@ export async function buildProductSummary(storeId: string): Promise<string> {
         platform: ecommerceStores.platform,
     }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
 
+    // Sold-out products stay in the block (D-092): "out of stock" is an answer,
+    // "we don't sell that" for a product the merchant carries is a false denial.
+    // In-stock rows fill the 15 inline slots first: a sold-out product must stay
+    // VISIBLE, but it must not displace a product the customer can actually buy
+    // from the block. The id tiebreak keeps the output byte-stable for the
+    // prompt cache (see productSummary.determinism.test.ts).
     const products = await db.select().from(ecommerceProducts)
-        .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), eq(ecommerceProducts.status, 'active')))
-        .orderBy(ecommerceProducts.id)
+        .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), inArray(ecommerceProducts.status, [...SELLABLE_STATUSES])))
+        .orderBy(sql`CASE WHEN ${ecommerceProducts.status} = 'active' THEN 0 ELSE 1 END`, ecommerceProducts.id)
         .limit(15);
 
     if (products.length === 0) return '';
@@ -858,11 +864,8 @@ export async function buildProductSummary(storeId: string): Promise<string> {
         if (p.priceRange) parts.push(p.priceRange);
         if (p.variantSummary) parts.push(p.variantSummary);
 
-        // null = untracked/unlimited → in stock. Checked FIRST because `null <= 5` is true in JS.
-        if (p.totalInventory === null) parts.push('in stock');
-        else if (p.totalInventory === 0) parts.push('out of stock');
-        else if (p.totalInventory <= 5) parts.push('low stock');
-        else parts.push('in stock');
+        // The shared null-first ladder (`availabilityOf`): null = untracked/unlimited → in stock.
+        parts.push(availabilityOf(p).replace(/_/g, ' '));
 
         if (p.handle && store?.storeDomain) {
             parts.push(buildProductUrl(store.platform, store.storeDomain, p.handle));
@@ -940,10 +943,12 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
         const policiesText = storeInfo?.policiesSummary ?? '';
 
+        // Sold-out products are ingested too (D-092): the chunker renders them
+        // "out of stock", so the model can say so instead of denying the product.
         const allProducts = await db.select().from(ecommerceProducts)
             .where(and(
                 eq(ecommerceProducts.ecommerceStoreId, storeId),
-                eq(ecommerceProducts.status, 'active'),
+                inArray(ecommerceProducts.status, [...SELLABLE_STATUSES]),
             ));
 
         const productData = allProducts.map(p => ({
@@ -1070,11 +1075,64 @@ export async function getEnrichedKnowledgeBase(pageKB: string | undefined, ecomm
 
 // --- List products for frontend ---
 
-export async function getProducts(storeId: string): Promise<EcommerceProduct[]> {
-    const rows = await db.select().from(ecommerceProducts)
-        .where(eq(ecommerceProducts.ecommerceStoreId, storeId));
+/**
+ * One synced product by the platform's own id (unique index
+ * `idx_ecommerce_products_store_product`). The by-id path of the product
+ * resolver (D-092): a model-supplied id is VALIDATED here — an id that is not
+ * in this store's catalog is a hallucinated id, not a product, and the caller
+ * falls through to name resolution.
+ *
+ * `sellable` restricts to the statuses a customer may be told about:
+ * `active` and `out_of_stock` (a sold-out product is still "we sell that, it
+ * is out"); `hidden` / `draft` / `archived` rows are invisible.
+ */
+export async function getProductByPlatformId(
+    storeId: string,
+    platformProductId: string,
+    opts: { sellable?: boolean } = { sellable: true },
+): Promise<EcommerceProduct | null> {
+    const [r] = await db.select().from(ecommerceProducts)
+        .where(and(
+            eq(ecommerceProducts.ecommerceStoreId, storeId),
+            eq(ecommerceProducts.platformProductId, platformProductId),
+        ))
+        .limit(1);
+    if (!r) return null;
+    if (opts.sellable !== false && !SELLABLE_STATUSES.includes(r.status || 'active')) return null;
+    return mapProductRow(r);
+}
 
-    return rows.map(r => ({
+/**
+ * Write a live stock reading back onto the ROW ONLY. Deliberately does not call
+ * `refreshStoreProductMetadata`: that rebuilds the catalog block and re-ingests
+ * every linked page, which is the sync's job, not a single stock read's. The
+ * catalog block may lag by one figure until the next sync; the tool answer the
+ * customer just got is the fresh one.
+ *
+ * The STATUS rides along with the count, always. `availabilityOf` lets a
+ * platform `out_of_stock` status win over any count, and for Salla (`out`) and
+ * Zid that status — not the count — is the sold-out signal. Writing the count
+ * alone after a restock left the row at `out_of_stock / 10`: no longer "risky"
+ * (10 > LOW_STOCK_UNITS), so every later answer came from the row and said
+ * "out of stock" for a product the platform had just reported in stock — until
+ * the next sync. Both fields come from the same platform mapper the sync uses,
+ * so the vocabulary cannot differ.
+ */
+export async function writeBackProductStock(
+    storeId: string,
+    platformProductId: string,
+    stock: { totalInventory: number | null; status: string },
+): Promise<void> {
+    await db.update(ecommerceProducts)
+        .set({ totalInventory: stock.totalInventory, status: stock.status, updatedAt: new Date() })
+        .where(and(
+            eq(ecommerceProducts.ecommerceStoreId, storeId),
+            eq(ecommerceProducts.platformProductId, platformProductId),
+        ));
+}
+
+function mapProductRow(r: typeof ecommerceProducts.$inferSelect): EcommerceProduct {
+    return {
         id: r.id,
         ecommerceStoreId: r.ecommerceStoreId,
         platformProductId: r.platformProductId,
@@ -1091,7 +1149,14 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
         variantSummary: r.variantSummary,
         tags: r.tags,
         imageUrl: r.imageUrl,
-    }));
+    };
+}
+
+export async function getProducts(storeId: string): Promise<EcommerceProduct[]> {
+    const rows = await db.select().from(ecommerceProducts)
+        .where(eq(ecommerceProducts.ecommerceStoreId, storeId));
+
+    return rows.map(mapProductRow);
 }
 
 // --- Pending Install Flow ---
@@ -1523,6 +1588,17 @@ export interface NormalizedProduct {
     variantSummary?: string | null;
     tags?: string | null;
     imageUrl?: string | null;
+}
+
+/**
+ * What a platform's by-id read returns (D-092): the same normalized row the
+ * sync writes, plus what only a live read knows — per-variant stock and the
+ * storefront URL. Each platform builds it with the SAME mapper its sync uses,
+ * so a live answer and a synced row can never disagree on shape.
+ */
+export interface PlatformProductDetail extends NormalizedProduct {
+    productUrl?: string;
+    variants?: Array<{ name: string; available: boolean; quantity?: number }>;
 }
 
 /** Map a NormalizedProduct (caller's shape) to the ecommerce_products row shape. */

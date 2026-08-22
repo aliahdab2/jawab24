@@ -1,6 +1,8 @@
 import { db } from '../../db';
 import { sql } from 'drizzle-orm';
 import { normalizeArabic } from '@jawab24/shared';
+import { config } from '../../config';
+import { OpenAIEmbeddingProvider } from './embedding';
 import type { EmbeddingProvider } from './interfaces';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
@@ -68,6 +70,17 @@ export class RetrievalService {
 
     setLogger(logger: Logger): void {
         this.logger = logger;
+    }
+
+    /**
+     * Embed an already-normalized query for the product resolver's semantic
+     * stage. Only reached when the caller had no reply embedding to reuse
+     * (e.g. a by-name check outside the reply path); the common path never
+     * calls this (Rule 17.2). Attributed to the merchant when a userId is known.
+     */
+    embedForResolver(normalizedQuery: string, userId?: string): Promise<number[]> {
+        const logCtx = userId ? { userId, pipeline: 'embedding_rag' as const } : undefined;
+        return this.embeddingProvider.embed(normalizedQuery, logCtx);
     }
 
     /**
@@ -218,4 +231,127 @@ export class RetrievalService {
 
         return { chunks: merged, queryEmbedding: results[primaryIdx].queryEmbedding };
     }
+}
+
+// ---------------------------------------------------------------------------
+// Product resolution (D-092)
+// ---------------------------------------------------------------------------
+
+/** One product of a page's index, scored against a customer's words. */
+export interface ProductHit {
+    platformProductId: string;
+    title: string;
+    /** Cosine similarity of the page's best chunk for this product; null when no embedding was supplied. */
+    vecScore: number | null;
+    /** 0.6·similarity(title) + 0.4·similarity(content), pg_trgm, on the best chunk. */
+    triScore: number;
+}
+
+/**
+ * Score every product chunk of a page against a query — the candidate set
+ * `resolveProduct` decides over (D-092).
+ *
+ * Deliberately NOT `retrieve()`:
+ *   - exact scan of `type = 'product'` at the active version, no HNSW top-20
+ *     pre-filter — at ≤ 5,000 product rows a product that ranks low on cosine
+ *     but high on trigram must still be in the set, and the HNSW candidate
+ *     cut would drop it before the trigram stage ever saw it;
+ *   - no LANGUAGE_BOOST, no tier boost — product chunks are all one tier and
+ *     the boosts would add a constant to every row;
+ *   - grouped by `metadata->>'platformProductId'` taking the MAX of each score,
+ *     because a long product becomes several chunks (chunker.ts splitLongText)
+ *     and a product must be one candidate, not three;
+ *   - the cut is the UNION of the top-`limit` by trigram and the top-`limit` by
+ *     cosine, not one top-`limit` by the greater of the two: with an embedding
+ *     supplied, a large single-category catalog has more than `limit` products
+ *     at cosine 0.3–0.5 ("related"), and one cut by GREATEST would drop a
+ *     near-exact title at trigram 0.33 before the trigram stage ever saw it;
+ *   - the embedding is OPTIONAL: the trigram stage runs without one, and the
+ *     reply's own `queryEmbedding` is reused when the caller has it, so the
+ *     common path costs no embedding call (Rule 17.2).
+ *
+ * Thresholds live in productResolver.ts; this only scores.
+ */
+export async function retrieveProducts(
+    pageId: string,
+    kbActiveVersion: number,
+    normalizedQuery: string,
+    queryEmbedding: number[] | null,
+    limit = 20,
+): Promise<ProductHit[]> {
+    const vectorStr = queryEmbedding ? `[${queryEmbedding.join(',')}]` : null;
+    const vecExpr = vectorStr
+        ? sql`1 - (embedding <=> ${vectorStr}::vector)`
+        : sql`NULL::float8`;
+
+    const results = await db.execute(sql`
+        WITH scored AS (
+            SELECT
+                metadata->>'platformProductId' AS platform_product_id,
+                title,
+                ${vecExpr} AS vec_score,
+                COALESCE(
+                    0.6 * similarity(title_normalized, ${normalizedQuery})
+                    + 0.4 * similarity(content_normalized, ${normalizedQuery}),
+                    0
+                ) AS tri_score
+            FROM kb_chunks
+            WHERE page_id = ${pageId}
+              AND kb_version = ${kbActiveVersion}
+              AND type = 'product'
+              AND embedding IS NOT NULL
+              AND metadata->>'platformProductId' IS NOT NULL
+        )
+        , grouped AS (
+            SELECT
+                platform_product_id,
+                MIN(title) AS title,
+                MAX(vec_score) AS vec_score,
+                MAX(tri_score) AS tri_score
+            FROM scored
+            GROUP BY platform_product_id
+        )
+        SELECT * FROM (
+            (SELECT * FROM grouped ORDER BY tri_score DESC LIMIT ${limit})
+            ${vectorStr ? sql`UNION (SELECT * FROM grouped ORDER BY vec_score DESC LIMIT ${limit})` : sql``}
+        ) AS candidates
+        ORDER BY GREATEST(COALESCE(vec_score, 0), tri_score) DESC
+    `);
+
+    return (results as unknown as Array<Record<string, unknown>>).map(row => ({
+        platformProductId: String(row.platform_product_id),
+        // A split product's chunk titles read "Title (1/3)"; MIN() picks a stable one
+        // and the resolver re-reads the real title from the product row anyway.
+        title: String(row.title ?? ''),
+        vecScore: row.vec_score === null || row.vec_score === undefined ? null : Number(row.vec_score),
+        triScore: Number(row.tri_score ?? 0),
+    }));
+}
+
+/**
+ * How the reply's RAG query is embedded (`RAG_RETRIEVAL_MODE`): `dual` (default)
+ * returns the RAW message's embedding, `enriched` the embedding of the message
+ * plus recent history, `off` the raw message's. Read here, once, because two
+ * callers depend on the answer: the generator chooses the retrieval call, and
+ * the product resolver may only reuse that embedding when it is the message's
+ * own (D-092) — an enriched vector carries earlier turns about other products.
+ */
+export function ragRetrievalMode(): 'off' | 'enriched' | 'dual' {
+    const raw = process.env.RAG_RETRIEVAL_MODE;
+    return raw === 'off' || raw === 'enriched' ? raw : 'dual';
+}
+
+/**
+ * Lazy singleton — the ONE RetrievalService both the reply generator and the
+ * product resolver use (moved here from generator.ts so the resolver does not
+ * import the generator). Null when RAG is off or there is no OpenAI key.
+ */
+let _retrievalService: RetrievalService | null = null;
+export function getRetrievalService(): RetrievalService | null {
+    if (!config.ragMode || config.ragMode === 'off') return null;
+    if (!config.openai?.apiKey) return null;
+    if (!_retrievalService) {
+        _retrievalService = new RetrievalService(new OpenAIEmbeddingProvider(config.openai.apiKey));
+    }
+    return _retrievalService;
 }

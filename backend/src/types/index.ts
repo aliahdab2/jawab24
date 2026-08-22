@@ -126,6 +126,24 @@ export interface AiGenerateResponse {
      * Undefined for non-ecommerce replies and tools that return only scalar data.
      */
     productCards?: import('@jawab24/shared').ProductCard[];
+    /**
+     * What each e-commerce tool call decided, in execution order. Present only
+     * when a tool round ran (omitted, not `[]`, on the no-tool path) so the eval
+     * can pin "the resolver chose product X" / "answered ambiguous" next to the
+     * reply text (Rule 19).
+     */
+    toolOutcomes?: ToolOutcome[];
+}
+
+/** One executed e-commerce tool call, reduced to what an assertion can read. */
+export interface ToolOutcome {
+    name: string;
+    /** `success`, or the result's error code (`ambiguous_product`, `product_not_found`, …). */
+    outcome: string;
+    /** The product the resolver chose, when the tool answered about one. */
+    platformProductId?: string;
+    /** The candidates offered, when the tool answered `ambiguous_product`. */
+    candidateIds?: string[];
 }
 
 export interface AiCacheEntry {

@@ -49,7 +49,7 @@ global.fetch = mockFetch;
 
 // --- Import after mocks ---
 
-import { lookupOrder, getShipmentTracking, checkInventory, getOrderNotificationTarget, formatPriceRange, mapShopifyWebhookProduct } from '../../src/services/shopify';
+import { lookupOrder, getShipmentTracking, getProductById, getOrderNotificationTarget, formatPriceRange, mapShopifyWebhookProduct } from '../../src/services/shopify';
 
 // --- Helpers ---
 
@@ -102,7 +102,7 @@ describe('Shopify — mapShopifyWebhookProduct currency', () => {
     });
 });
 
-describe('Shopify — lookupOrder / getShipmentTracking / checkInventory', () => {
+describe('Shopify — lookupOrder / getShipmentTracking / getProductById', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockGetStoreById.mockResolvedValue(makeStore());
@@ -220,47 +220,62 @@ describe('Shopify — lookupOrder / getShipmentTracking / checkInventory', () =>
     });
 
     // ============================================================
-    // checkInventory
+    // getProductById (D-092 — the by-id read that replaced checkInventory's title search)
     // ============================================================
 
-    describe('checkInventory', () => {
-        it('returns inventory info for a matching product', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    data: {
-                        products: {
-                            edges: [{
-                                node: {
-                                    title: 'Phone Case',
-                                    handle: 'phone-case',
-                                    totalInventory: 25,
-                                    priceRangeV2: { minVariantPrice: { amount: '49.00', currencyCode: 'SAR' } },
-                                    variants: {
-                                        edges: [{
-                                            node: {
-                                                title: 'Default Title',
-                                                inventoryQuantity: 25,
-                                                selectedOptions: [{ name: 'Title', value: 'Default Title' }],
-                                            },
-                                        }],
-                                    },
-                                },
-                            }],
-                        },
-                    },
-                }),
+    describe('getProductById', () => {
+        const productNode = (overrides: Record<string, unknown> = {}) => ({
+            id: 'gid://shopify/Product/7001',
+            handle: 'phone-case',
+            title: 'Phone Case',
+            description: 'A case',
+            productType: 'Accessories',
+            vendor: 'Acme',
+            status: 'ACTIVE',
+            tags: ['case'],
+            totalInventory: 25,
+            hasOnlyDefaultVariant: true,
+            featuredImage: { url: 'https://cdn/case.jpg' },
+            priceRangeV2: {
+                minVariantPrice: { amount: '49.00', currencyCode: 'SAR' },
+                maxVariantPrice: { amount: '49.00', currencyCode: 'SAR' },
+            },
+            variants: { edges: [{ node: { title: 'Default Title', inventoryQuantity: 25, selectedOptions: [{ name: 'Title', value: 'Default Title' }] } }] },
+            ...overrides,
+        });
+
+        it('queries product(id:) with the Product GID and maps through the SAME mapper the sync uses', async () => {
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { product: productNode() } }) });
+
+            const result = await getProductById('store-1', '7001');
+
+            const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+            expect(body.query).toMatch(/product\(id: \$id\)/);
+            expect(body.variables).toEqual({ id: 'gid://shopify/Product/7001' });
+            // No title search anywhere in the request — the platform is asked by id only.
+            expect(body.query).not.toMatch(/title:\*/);
+
+            expect(result).toMatchObject({
+                platformProductId: '7001',
+                title: 'Phone Case',
+                status: 'active',
+                // formatPriceRange renders whole amounts without decimals, same as the sync does.
+                priceRange: '49 SAR',
+                currency: 'SAR',
+                totalInventory: 25,
+                handle: 'phone-case',
+                imageUrl: 'https://cdn/case.jpg',
+                productUrl: 'https://test-store.myshopify.com/products/phone-case',
+                variants: [{ name: 'Default Title', available: true, quantity: 25 }],
             });
+        });
 
-            const result = await checkInventory('store-1', 'Phone Case');
+        it('returns null for a missing product and for a non-ACTIVE one', async () => {
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { product: null } }) });
+            expect(await getProductById('store-1', '404')).toBeNull();
 
-            expect(result).not.toBeNull();
-            expect(result?.productName).toBe('Phone Case');
-            expect(result?.available).toBe(true);
-            expect(result?.quantity).toBe(25);
-            expect(result?.price).toBe('49.00 SAR');
-            expect(result?.currency).toBe('SAR');
-            expect(result?.productUrl).toBe('https://test-store.myshopify.com/products/phone-case');
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { product: productNode({ status: 'ARCHIVED' }) } }) });
+            expect(await getProductById('store-1', '7001')).toBeNull();
         });
     });
 
