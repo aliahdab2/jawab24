@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/aliahdab/Documents/AutoReply/.codex/hooks/guard-secrets.sh'",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "'/Users/aliahdab/Documents/AutoReply/.codex/hooks/guard-destructive.sh'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/aliahdab/Documents/AutoReply/.codex/hooks/guard-docs.sh'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/aliahdab/Documents/AutoReply/.codex/hooks/remind-docs.sh'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
