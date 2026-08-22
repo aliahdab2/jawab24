@@ -637,6 +637,53 @@ className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
 - `status-warning`, `status-success`, `status-error` — status colors
 - `icon-bg-*` — background + icon color together
 
+#### ⚠️ The scales INVERT in dark mode — never pair one with a fixed foreground
+
+`surface-*`, `brand-*` and `accent-*` are **not** the same colors in both themes.
+The scale is deliberately inverted: `--surface-800` is `33 44 43` (near-black) in
+light and `210 218 230` (near-white) in dark. That inversion is *load-bearing* —
+`text-surface-800` has to be near-white in dark mode — and it must not be undone.
+
+It is also a trap. **If the background flips and the foreground does not, the text
+disappears in exactly one theme.**
+
+```tsx
+// ❌ WRONG — background flips, `text-white` does not.
+className="bg-surface-800 text-white"   // 14.39:1 light → 1.41:1 dark
+className="bg-surface-200 text-white"   // 18.08:1 dark  →  1.23:1 LIGHT
+className="bg-brand-100 text-brand-700" //  4.63:1 light →  2.57:1 dark
+
+// ✅ CORRECT — pin the half that would otherwise stay put.
+className="bg-surface-800 text-white dark:bg-surface-500"
+className="bg-brand-100 text-brand-700 dark:text-brand-400"
+```
+
+Two of these shipped, in opposite directions — `.offline-banner` was unreadable in
+dark, the collapsed-sidebar tooltips were invisible in **light**, i.e. on the
+default theme, and neither was caught by review. Reading a class string tells you
+nothing about what it resolves to in the other theme; only measuring does.
+
+Rules:
+
+1. A `bg-{surface,brand,accent}-*` in the same class string as `text-white`,
+   `text-black` or a literal color **needs a `dark:` counterpart**.
+2. Same-family scale pairs (`bg-surface-200 text-surface-700`) are fine — both
+   flip together.
+3. **Cross-shade pairs within one family are not.** The brand scale *compresses*
+   in dark mode (`--brand-200` and `--brand-800` are nearly the same color there,
+   1.16:1). Measure before assuming.
+4. Prefer an existing semantic class over a hand-rolled pairing — that is what
+   they are for.
+
+Pinned by `frontend/src/__tests__/styles/scaleTokenContrast.test.ts`, which
+resolves both palettes out of `globals.css` and fails on any pairing that passes
+in one theme and fails in the other. It reports `file:line` and both ratios.
+
+> Separately, and **not** what that gate covers: several pairings fail in *both*
+> themes (`bg-brand-500 text-white` is 2.71:1 light / 3.27:1 dark across ~30 CTAs).
+> Those are a brand-palette question, not an inversion bug — see the open item in
+> `DECISIONS.md`.
+
 ### Safe Areas (Mobile)
 - **Single source of truth**: CSS variables in `globals.css`
 - **Never hardcode** safe area values
