@@ -243,6 +243,82 @@ describe('KbIngestionService', () => {
             expect(mockEmbedding.embedBatch).not.toHaveBeenCalled();
         });
 
+        it('reuses the active version\'s embedding for byte-identical chunk text and embeds only the misses', async () => {
+            const { db } = await import('../../../src/db');
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            const products = [
+                { platformProductId: 'p1', title: 'Margherita', status: 'active' as const, totalInventory: 99, hasVariants: false },
+                { platformProductId: 'p2', title: 'Pepperoni', status: 'active' as const, totalInventory: 5, hasVariants: false },
+            ];
+
+            // First ingest (no active version yet): everything is embedded — this also hands us
+            // the exact stored text of one chunk, so the reuse row below is built from what
+            // production would have written, not from a hand-typed guess.
+            await service.ingestFullPage('page-1', undefined, products, 1);
+            const firstCallTexts = vi.mocked(mockEmbedding.embedBatch).mock.calls[0][0];
+            expect(firstCallTexts).toHaveLength(2);
+            const reusedChunk = capturedChunks.find(c => c.title === 'Margherita')!;
+            const reusedVector = new Array(512).fill(0.5);
+
+            // Second ingest: the page now has active version 1 holding Margherita's embedding.
+            vi.mocked(db.select).mockImplementationOnce((() => ({
+                from: () => ({ where: () => ({ limit: () => Promise.resolve([{ userId: null, kbActiveVersion: 1 }]) }) }),
+            })) as never);
+            vi.mocked(db.execute).mockResolvedValueOnce([{
+                title: reusedChunk.title,
+                content_normalized: reusedChunk.contentNormalized,
+                embedding: JSON.stringify(reusedVector),
+            }] as never);
+            capturedChunks = [];
+
+            await service.ingestFullPage('page-1', undefined, products, 2);
+
+            // Only Pepperoni went to the provider; Margherita carries the stored vector.
+            const secondCallTexts = vi.mocked(mockEmbedding.embedBatch).mock.calls[1][0];
+            expect(secondCallTexts).toHaveLength(1);
+            expect(secondCallTexts[0]).toContain('Pepperoni');
+            expect(capturedChunks.find(c => c.title === 'Margherita')!.embedding).toEqual(reusedVector);
+            expect(capturedChunks.find(c => c.title === 'Pepperoni')!.embedding).toEqual(new Array(512).fill(0.1));
+        });
+
+        it('skips the provider entirely when every chunk is reusable', async () => {
+            const { db } = await import('../../../src/db');
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            const products = [{ platformProductId: 'p1', title: 'Margherita', status: 'active' as const, totalInventory: 99, hasVariants: false }];
+
+            await service.ingestFullPage('page-1', undefined, products, 1);
+            const stored = capturedChunks[0];
+            vi.mocked(mockEmbedding.embedBatch).mockClear();
+
+            vi.mocked(db.select).mockImplementationOnce((() => ({
+                from: () => ({ where: () => ({ limit: () => Promise.resolve([{ userId: null, kbActiveVersion: 1 }]) }) }),
+            })) as never);
+            vi.mocked(db.execute).mockResolvedValueOnce([{
+                title: stored.title, content_normalized: stored.contentNormalized, embedding: JSON.stringify(stored.embedding),
+            }] as never);
+
+            await service.ingestFullPage('page-1', undefined, products, 2);
+
+            // The unchanged 6-hourly sync must cost zero embedding calls.
+            expect(mockEmbedding.embedBatch).not.toHaveBeenCalled();
+            expect(mockStore.upsertChunks).toHaveBeenCalledTimes(2);
+        });
+
+        it('embeds everything when the reuse lookup fails', async () => {
+            const { db } = await import('../../../src/db');
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+
+            vi.mocked(db.select).mockImplementationOnce((() => ({
+                from: () => ({ where: () => ({ limit: () => Promise.resolve([{ userId: null, kbActiveVersion: 1 }]) }) }),
+            })) as never);
+            vi.mocked(db.execute).mockRejectedValueOnce(new Error('relation kb_chunks is locked'));
+
+            await service.ingestFullPage('page-1', 'Some KB text', [], 2);
+
+            expect(mockEmbedding.embedBatch).toHaveBeenCalledTimes(1);
+            expect(mockStore.upsertChunks).toHaveBeenCalledTimes(1);
+        });
+
         it('resolves gaps after full page ingestion', async () => {
             const { gapDetectorService } = await import('../../../src/services/kb/gap-detector');
             const service = new KbIngestionService(mockEmbedding, mockStore);

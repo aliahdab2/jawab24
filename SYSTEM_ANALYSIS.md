@@ -1184,14 +1184,25 @@ Products synced from Shopify/Salla
 ┌──────────────────────────────┐
 │ INVALIDATE AI CACHES:        │
 │ 1. Bump kbVersion per page   │
-│ 2. Flush Redis exact cache   │
-│ 3. Delete semantic cache     │
-│ 4. Re-ingest KB + products   │
-│    into RAG (new embeddings) │
-│ 5. Activate new kbVersion    │
+│ 2. Delete semantic cache     │
+│ 3. Re-ingest KB + products   │
+│    into RAG — embeddings are │
+│    REUSED from the active    │
+│    version for unchanged     │
+│    text; only misses embed   │
+│ 4. Activate new kbVersion    │
 │    (atomic — no empty window)│
+│    → exact-cache keys carry  │
+│      kbv:, so the old ones   │
+│      go stale by themselves  │
 └──────────────────────────────┘
 ```
+
+> ⚠️ Until 2026-08-22 step 2 was «Flush Redis exact cache» — a `SCAN`/`DEL` of
+> `cache:ai_reply:*` for the **entire fleet** on every product webhook and every 6-hourly
+> sync (the hashed key cannot be scoped to a page), and step 3 re-embedded every chunk of
+> every linked page each time. Both removed under **D-090**; the per-page key rotation in
+> step 4 was always what kept the exact cache correct (its Postgres tier was never flushed).
 
 ## عربي
 
@@ -1530,7 +1541,7 @@ Customer question arrives
 | Event | Exact Cache | Semantic Cache |
 |-------|------------|----------------|
 | KB updated | Old keys stale (new kbVersion) | Old entries filtered out |
-| Products synced | Redis flushed | Rows deleted |
+| Products synced | Old keys stale (new kbActiveVersion, activated by the re-ingest). ⚠️ Until 2026-08-22 this row read "Redis flushed": every product webhook and 6-hourly sync SCAN-deleted `cache:ai_reply:*` for the WHOLE fleet, because the hashed key cannot be scoped to a page — removed under D-090 | Rows deleted |
 | Policies changed | Hash changes = new keys | Auto (part of KB ingest) |
 | Reply style changed | New keys (style in hash) | N/A |
 | Customer context differs | New keys (context in hash) | Skipped entirely |
