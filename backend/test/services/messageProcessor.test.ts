@@ -74,6 +74,18 @@ vi.mock('../../src/lib/redis', () => {
                 store.set(key, value);
                 return 'OK';
             }),
+            // The product-card cooldown reads with MGET and writes with a pipeline
+            // (see productCardBuilder). Backed by the same map so a card marked
+            // sent in one call is really seen by the next.
+            mget: vi.fn(async (...keys: string[]) => keys.map(k => store.get(k) ?? null)),
+            pipeline: vi.fn(() => {
+                const queued: [string, string][] = [];
+                const chain = {
+                    set: (key: string, value: string) => { queued.push([key, value]); return chain; },
+                    exec: async () => { for (const [k, v] of queued) store.set(k, v); return []; },
+                };
+                return chain;
+            }),
             quit: vi.fn(),
             incr: vi.fn(),
             expire: vi.fn(),
@@ -1316,6 +1328,92 @@ describe('MessageProcessor — Product Card Follow-up', () => {
 
         expect(result.success).toBe(true);
         expect(adapter.sendReply).toHaveBeenCalled();
+    });
+
+    // --- Cooldown ordering (the two Critical findings on PR #876) ------------
+
+    it('never awaits the cooldown between the delivered reply and the mark-as-replied transaction', async () => {
+        // BLAST RADIUS: this is the shared send path for every FB/IG/WhatsApp DM.
+        // An await here widens the window in which a crash leaves a reply that is
+        // already on the wire unmarked — and the retry then sends it TWICE.
+        // A cooldown read that never settles must therefore not hold the pipeline.
+        vi.mocked(redis.mget).mockReturnValueOnce(new Promise(() => { }) as never);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Sure, take a look:',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const adapter = createMockAdapter({ sendProductCards: vi.fn().mockResolvedValue(undefined) });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'show me', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(messagesService.markAsReplied).toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).toHaveBeenCalled();
+    });
+
+    it('sends a card once per customer per day, then suppresses the repeat', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Yes, here it is!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const sendProductCards = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendProductCards });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'the shirt?', 'msg-1');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'and the shirt again?', 'msg-2');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        expect(sendProductCards).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT burn the cooldown when the card send fails — the next turn tries again', async () => {
+        // Claiming the window before the send meant a card the customer never saw
+        // silenced itself for 24h, inverting the "fails open, never a missing
+        // card" contract the cooldown documents.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Sure, take a look:',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const sendProductCards = vi.fn()
+            .mockRejectedValueOnce(new Error('IG attachment 400'))
+            .mockResolvedValueOnce(undefined);
+        const adapter = createMockAdapter({ sendProductCards });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'show me', 'msg-1');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'show me again', 'msg-2');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        expect(sendProductCards).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not touch the cooldown at all on a platform that cannot send cards', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Sure!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const adapter = createMockAdapter();
+        delete (adapter as { sendProductCards?: unknown }).sendProductCards;
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'show me', 'msg-1');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        // WhatsApp has no card support — writing a 24h key for a card that is
+        // structurally impossible to deliver is pure waste, and a live suppression
+        // the day it gains support.
+        expect(redis.mget).not.toHaveBeenCalled();
+        expect(redis.pipeline).not.toHaveBeenCalled();
     });
 });
 

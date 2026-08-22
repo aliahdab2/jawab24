@@ -116,5 +116,9 @@
     "waReturnCta": "Open Jawab24",
     "emailFooterSupport": "Contact:",
     "emailFooterIdentity": "Automatic replies for Facebook, Instagram and WhatsApp",
-    "emailFooterPreferences": "Account settings"
+    "emailFooterPreferences": "Account settings",
+    "cardInStock": "In stock",
+    "cardLowStock": "Low stock",
+    "cardOutOfStock": "Out of stock",
+    "cardViewProduct": "View product"
 }

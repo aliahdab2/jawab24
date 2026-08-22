@@ -116,5 +116,9 @@
     "waReturnCta": "فتح جواب24",
     "emailFooterSupport": "للتواصل:",
     "emailFooterIdentity": "ردود تلقائية على فيسبوك وإنستغرام وواتساب",
-    "emailFooterPreferences": "إعدادات الحساب"
+    "emailFooterPreferences": "إعدادات الحساب",
+    "cardInStock": "متوفر",
+    "cardLowStock": "الكمية محدودة",
+    "cardOutOfStock": "غير متوفر",
+    "cardViewProduct": "عرض المنتج"
 }

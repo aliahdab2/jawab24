@@ -103,6 +103,14 @@ interface TestCase {
          *  count is the robust form. An empty reply fails (counts as a tie).
          *  Scripts are counted from SCRIPT_COUNTERS; add one there to assert on it. */
         replyDominantScript?: 'arabic' | 'latin' | 'bengali';
+        /** EXACT set of rich-card titles the reply must carry, order-insensitive.
+         *  `[]` asserts the reply carries NO card. A product card is part of what
+         *  the customer receives, so a change to card behaviour has to be visible
+         *  here (Rule 19) — the reply text alone cannot express it.
+         *  ⚠️ Only the 'electronics' fixture can produce a card: exactly ONE demo
+         *  product (Apple TV 4K) carries an imageUrl, deliberately, so the
+         *  negative cases can still fail. */
+        productCardTitles?: string[];
     };
     notes?: string;
     /**
@@ -136,6 +144,7 @@ interface PlaygroundResponse {
         model: string | null;
         commentReplyMode?: string | null;
         nudgeText?: string | null;
+        productCards?: { title: string }[];
     };
     error?: string;
 }
@@ -3443,6 +3452,37 @@ const TEST_CASES: TestCase[] = [
         notes: 'Full-URL guard: when AI sends a Shopify link, it must be the complete URL with the store subdomain (demo-electronics), not a generic myshopify.com fragment.',
     },
 
+    // --- Mention cards (2026-08-22) ------------------------------------------
+    // Tool-result cards only exist when the model calls `check_inventory`; a
+    // small catalog is inlined in the prompt whole, so the model answers
+    // directly and no tool runs. Live on the Zid dev store the purchase turn got
+    // a correct reply with a bare URL and NO card while image, URL and stock all
+    // sat in the DB. These pin the replacement through production's own path.
+    //
+    // The fixture is deliberately asymmetric: Apple TV 4K is the ONLY demo
+    // product with an imageUrl, so 786 can pass only if a card was really built,
+    // and 787 can fail if the "exactly one" rule is ever loosened.
+    {
+        id: 786, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'كم سعر Apple TV 4K؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            productCardTitles: ['Apple TV 4K'],
+        },
+        notes: 'Mention card: the reply names exactly one in-stock catalog product with an image → one card. Also the F1 rule at the card layer — Apple TV 4K carries totalInventory: null (untracked/unlimited), which must read as sellable, not as zero.',
+    },
+    {
+        id: 787, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'ايش الفرق بين Apple TV 4K و MacBook Air M3؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            productCardTitles: [],
+        },
+        notes: 'A comparison names SEVERAL products — no card, because a wrong card is worse than none. Fails loudly if the exactly-one rule degrades to first-match-wins (Apple TV 4K would card).',
+    },
+
     // -------------------------------------------------------------------------
     // Category 49: Short Retrieval-Sensitive Queries (regression guard)
     // -------------------------------------------------------------------------
@@ -5674,6 +5714,20 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
             field: 'replyDominantScript',
             pass,
             detail: `expected ${e.replyDominantScript} got ${dominant} (${counts.map(([n, c]) => `${n} ${c}`).join(' / ')})${d.reply ? '' : ' — reply was empty'}`,
+        });
+    }
+
+    // productCardTitles — the EXACT card set, order-insensitive. Asserted as a set
+    // rather than a "contains" so `[]` is a real assertion (no card) and so a
+    // change that starts carding a second product cannot pass by accident.
+    if (e.productCardTitles) {
+        const got = (d.productCards ?? []).map(c => c.title).sort();
+        const want = [...e.productCardTitles].sort();
+        const pass = got.length === want.length && got.every((t, i) => t === want[i]);
+        checks.push({
+            field: 'productCardTitles',
+            pass,
+            detail: `expected [${want.join(', ')}] got [${got.join(', ')}]`,
         });
     }
 
