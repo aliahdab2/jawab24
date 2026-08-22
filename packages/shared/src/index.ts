@@ -950,6 +950,51 @@ export interface UsageSummary {
     status: SubscriptionStatus;
     trialDaysRemaining?: number;
     renewsAt?: string;
+    /**
+     * When entitlement actually lapses. For a MANUAL (cash/transfer) plan this
+     * is snapped back to UTC midnight of the period-end day — up to ~24h before
+     * `renewsAt` — because the reply gate enforces that snapped boundary. Any
+     * surface answering "how long am I covered?" must read this, never
+     * `renewsAt`, which reads a full calendar day later than the truth.
+     */
+    entitlementEndsAt?: string;
+    /**
+     * Verdict of THE reply gate (`checkSubscriptionStatus`) — the same predicate
+     * `enforceAutoReplyGate` blocks on, not a second opinion derived from
+     * `status` or from percent-of-quota.
+     *
+     * `status` alone cannot answer "are replies flowing?": a manual subscription
+     * sits at 'active' forever, and expires only by the snapped boundary above.
+     * Reading `status` is what let the dashboard and the admin console both show
+     * a healthy account while every reply was refused.
+     *
+     * No human-readable reason is carried: the backend's is internal English, so
+     * clients render a translated message keyed off `code`.
+     */
+    autoReply?: {
+      allowed: boolean;
+      code?: LimitCheckResult['code'];
+      /**
+       * Why the gate refused, when that changes the copy: an expired TRIAL is
+       * told "your free trial ended — subscribe", never "your subscription
+       * ended — renew". See LimitCheckResult.cause.
+       */
+      cause?: LimitCheckResult['cause'];
+      /**
+       * Customer messages and comments that arrived AFTER coverage lapsed and
+       * were never answered — the cost of the block, in the merchant's own
+       * numbers. Present only while `allowed` is false and the boundary is
+       * known; computed at the same choke point as the verdict.
+       *
+       * It exists because "your subscription ended" is an accounting statement
+       * a merchant can defer, while "579 customers wrote to you this month and
+       * nobody answered" is not. The fleet audit that motivated it found 17
+       * blocked pages holding 1,513 unanswered messages in one week
+       * (2026-08-22), four of them with the dashboard still showing
+       * auto-reply ON.
+       */
+      unansweredSinceBlock?: number;
+    };
     hasStripeCustomer?: boolean;
     /** 'shopify' = billing lives in Shopify admin: the frontend must route
      * plan changes there and never into Stripe checkout/top-ups (D-G). */
@@ -998,6 +1043,17 @@ export interface LimitCheckResult {
   reason?: string;
   /** Stable machine code for clients to switch on. */
   code?: 'ai_limit_reached' | 'page_limit_reached' | 'subscription_inactive';
+  /**
+   * WHY a `subscription_inactive` refusal happened, when the distinction changes
+   * what a merchant should be told. `code` stays `subscription_inactive` for
+   * every billing block — several callers switch on it — so this is additive.
+   *
+   * 'trial_expired' = a trial-origin row past `trial_ends_at`. 19 of the 20
+   * `past_due` rows on prod (2026-08-22) were exactly this, and a dashboard
+   * that tells them "your subscription has ended — renew" is addressing a
+   * customer who never subscribed. They need "your free trial ended — subscribe".
+   */
+  cause?: 'trial_expired';
   limit?: number;
   used?: number;
   remaining?: number;
@@ -1102,6 +1158,7 @@ export {
     MAX_TEMPLATE_MESSAGE_LENGTH,
     MAX_BRAND_VOICE_LENGTH,
     DEFAULT_AI_MODEL,
+    PAST_DUE_GRACE_DAYS,
     PLACEHOLDER_TIMEZONE,
     ALLOWED_AI_MODELS,
     isAllowedAiModel,

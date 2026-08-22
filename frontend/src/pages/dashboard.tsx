@@ -646,7 +646,9 @@ const DashboardPage: NextPageWithLayout = () => {
         showChannelBadge={showChannelBadge}
       />
 
-      {/* AI usage warning — appears at 80%, turns critical at 100% */}
+      {/* AI usage warning — appears at 80%, turns critical at 100%, and turns into
+          a blocking billing-paused notice whenever the reply gate itself refuses
+          (which no quota number can express: a lapsed plan reports 0 used). */}
       {usage?.aiReplies && (
         <AiUsageWarningBanner
           aiReplies={usage.aiReplies}
@@ -656,6 +658,10 @@ const DashboardPage: NextPageWithLayout = () => {
           marketplaceBilled={!!getMarketplaceBilling(usage)}
           userEmail={user?.email}
           topupBalance={usage.topup?.balance}
+          autoReply={usage.subscription?.autoReply}
+          entitlementEndsAt={usage.subscription?.entitlementEndsAt}
+          unansweredSinceBlock={usage.subscription?.autoReply?.unansweredSinceBlock}
+          cause={usage.subscription?.autoReply?.cause}
         />
       )}
 
