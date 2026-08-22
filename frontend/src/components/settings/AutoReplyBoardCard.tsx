@@ -205,7 +205,7 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
                 // sr-only, so surface its focus on the label.
                 'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500/40 has-[:focus-visible]:z-10',
                 settings.commentReplyMode === opt.value
-                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 font-bold'
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400 font-bold'
                   : 'text-muted-foreground hover:bg-muted/60',
               )}
             >
@@ -242,7 +242,7 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
         {settings.commentReplyMode === 'dual' && (
           <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40">
-              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('dualReplyConfigTitle.improved')}</h4>
+              <h4 className="font-bold text-brand-900 dark:text-brand-400 text-sm mb-1">{t('dualReplyConfigTitle.improved')}</h4>
               <p className="text-xs text-muted-foreground mb-3">{t('dualReplyConfigDesc')}</p>
               <InputFieldWrapper trailing={<CharCounter value={dualNudgeInput.length} max={80} />}>
                 <textarea

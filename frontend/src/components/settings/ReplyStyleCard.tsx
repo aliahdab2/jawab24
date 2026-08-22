@@ -532,7 +532,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasUnsavedRe
         {/* Persona scope switcher (D-084) — multi-page workspaces only. */}
         {switcherPages.length > 1 && (
           <div className="mb-2 flex items-center gap-2 flex-wrap p-2 rounded-xl bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/30">
-            <span id="persona-scope-label" className="text-xs font-bold text-brand-700 dark:text-brand-300 shrink-0">
+            <span id="persona-scope-label" className="text-xs font-bold text-brand-700 dark:text-brand-400 shrink-0">
               {t('replyStyle.scopeLabel')}
             </span>
             <Select
@@ -582,7 +582,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasUnsavedRe
                 below the button carries the how-to; a paragraph here repeated
                 both (merchant feedback 2026-08-17: crowded, duplicated info). */}
             {!scopedPage && (
-              <p className="w-full text-[11px] text-brand-700/80 dark:text-brand-300/80 mt-0.5" dir="auto">
+              <p className="w-full text-[11px] text-brand-700/80 dark:text-brand-400/80 mt-0.5" dir="auto">
                 {t('replyStyle.allPagesExplainer')}
               </p>
             )}
@@ -831,7 +831,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, hasUnsavedRe
             <button
               type="button"
               onClick={() => insertExample(t('replyStyle.exampleTemplate'))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 transition-colors active:scale-[0.98] text-start"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-400 border border-brand-500/30 hover:bg-brand-500/20 transition-colors active:scale-[0.98] text-start"
             >
               {t('replyStyle.templateLabel')}
             </button>

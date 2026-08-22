@@ -506,7 +506,7 @@ export function FactEntitySheet({
       {weekdayInfo(intlLocale)
         .filter((d) => days.includes(d.index))
         .map((d) => (
-          <span key={d.index} className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs font-medium">
+          <span key={d.index} className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-brand-400 text-xs font-medium">
             {d.long}
           </span>
         ))}
@@ -617,7 +617,7 @@ export function FactEntitySheet({
                 <button
                   type="button"
                   onClick={addSession}
-                  className="mt-3 min-h-[36px] inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-3 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/20"
+                  className="mt-3 min-h-[36px] inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-3 text-xs font-semibold text-brand-700 dark:text-brand-400 hover:bg-brand-500/20"
                 >
                   <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                   {t('lists.addFirstSession')}

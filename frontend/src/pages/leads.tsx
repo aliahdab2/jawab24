@@ -943,7 +943,7 @@ const LeadsPage: NextPageWithLayout = () => {
                           className={clsx(
                             'w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-start transition-colors',
                             active
-                              ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-semibold'
+                              ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 font-semibold'
                               : 'text-foreground/90 hover:bg-muted',
                           )}
                         >

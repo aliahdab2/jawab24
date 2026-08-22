@@ -186,7 +186,7 @@ export function ReviewInfoStep({
                   isActive
                     ? 'bg-brand-500 text-white shadow-sm'
                     : hasContent
-                    ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800'
+                    ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-800'
                     : 'bg-muted text-foreground border border-theme-border hover:border-brand-300 hover:bg-brand-50/50 dark:hover:bg-brand-950/20'
                 }`}
               >

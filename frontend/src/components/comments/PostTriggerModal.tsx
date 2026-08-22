@@ -42,7 +42,7 @@ const CHANNEL_META = {
   private: {
     Icon: MessageCircle,
     labelKey: 'postTriggerChannelPrivate',
-    pill: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700',
+    pill: 'text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700',
   },
   public: {
     Icon: MessageSquare,
@@ -479,7 +479,7 @@ export function PostTriggerModal({
                 className={clsx(
                   'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   mode === m
-                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400'
                     : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-300',
                 )}
               >
@@ -687,7 +687,7 @@ export function PostTriggerModal({
                         className={clsx(
                           'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
                           buttonKind === k
-                            ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
+                            ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400'
                             : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-300',
                         )}
                       >

@@ -646,14 +646,14 @@ function MobileMenuOverlay({
                       <span className={clsx(
                         "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0",
                         isActive
-                          ? "bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300"
+                          ? "bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-400"
                           : "bg-muted text-muted-foreground"
                       )}>
                         {ws.name?.charAt(0) || 'W'}
                       </span>
                       <span className={clsx(
                         "text-sm font-medium truncate flex-1 text-start",
-                        isActive ? "text-brand-700 dark:text-brand-300" : "text-foreground"
+                        isActive ? "text-brand-700 dark:text-brand-400" : "text-foreground"
                       )}>
                         {ws.name}
                       </span>
@@ -676,7 +676,7 @@ function MobileMenuOverlay({
                     "flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200",
                     "bg-muted hover:bg-brand-50 dark:hover:bg-brand-950/30 border border-theme-border hover:border-brand-200 dark:hover:border-brand-800",
                     "active:scale-95 min-h-[48px]",
-                    router.pathname === item.path && "bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300"
+                    router.pathname === item.path && "bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400"
                   )}
                 >
                   <item.icon className="w-6 h-6 text-brand-600 flex-shrink-0" />

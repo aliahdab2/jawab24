@@ -323,7 +323,7 @@ export function TeamPanel() {
               <div className="mt-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
                 <div className="flex items-center gap-2 mb-2">
                   <Link className="w-4 h-4 text-brand-600 dark:text-brand-400 flex-shrink-0" aria-hidden="true" />
-                  <p className="text-sm font-bold text-brand-700 dark:text-brand-300 min-w-0 truncate">
+                  <p className="text-sm font-bold text-brand-700 dark:text-brand-400 min-w-0 truncate">
                     {t('shareLinkDesc', { contact: inviteLink.contact })}
                   </p>
                 </div>

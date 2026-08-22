@@ -514,7 +514,7 @@
   }
   .status-brand {
     @apply bg-brand-50 text-brand-700 border-brand-100
-           dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-800;
+           dark:bg-brand-900/30 dark:text-brand-400 dark:border-brand-800;
   }
   .status-orange {
     @apply bg-orange-50 text-orange-700 border-orange-100
