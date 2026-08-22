@@ -16,16 +16,17 @@
 > is dark. Two things follow that the old wording hid: the 6-hourly `ZidBillingReconcile`
 > cron **is running** (it is gated on `!!config.zid.clientId`; harmless today because it
 > scans zero active Zid stores), and anyone hitting `/zid/auth` reaches Zid's consent
-> screen — where the install currently dies at `EC3` because app 7367 is Rejected, not
-> because of anything on our side.
+> screen.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
 >
 > **Shipped since the rebuild, all still unvalidated against a live store:** Embedded Apps
 > direct merchant access (#704/#708, D-066/D-067) and the App Market **billing rail**
 > (#711, D-070–D-073). Both **deployed to production 2026-08-11** — but deployed is not
-> validated: no Zid store has ever exercised either one, because `EC3` blocks installing
-> a Rejected app. The rail is inert in the meantime (`ZID_CLIENT_ID` unset, `coming_soon`
-> badge, no `payment_method='zid'` row can exist). See **What's next** immediately below.
+> validated: no Zid store has ever exercised either one, because no merchant install has
+> happened yet. The rail is inert in the meantime (`coming_soon` badge, no
+> `payment_method='zid'` row can exist) — note `ZID_CLIENT_ID` **is** set (7192); an
+> earlier version of this paragraph said "unset", contradicting the correction two
+> paragraphs above it. See **What's next** immediately below.
 >
 > **Exception, deliberate:** as of 2026-08-07 four *public* surfaces already describe Zid
 > as a live integration (llms.txt, llms-full.txt, the `SoftwareApplication` schema, and the
@@ -33,19 +34,69 @@
 > and approval is expected imminently. See the ⚠️ note in the live-validation checklist
 > below before changing anything on either side of that disagreement.
 
-## What's next (updated 2026-08-11)
+## What's next (updated 2026-08-22)
 
-### 🔴 One thing blocks everything
+### 🟡 We are waiting on Zid, and the wait has gone quiet
 
-**App 7367 is REJECTED, and a Rejected app cannot be installed.** A real install attempt
-on dev store 3195980 fails at Zid with `error_code=EC3` *before reaching our code*. So
-every unvalidated parser on this page — OAuth, products, orders, webhooks, and now the
-billing envelope — stays unvalidated until 7367 is back in review and approved. Nothing
-below step 4 can start before that.
+**App 7367 is `In review` — not Rejected.** Read directly from
+`partner.zid.sa/applications` on **2026-08-22**: app 7367 "Jawab24", created 01/08/2026,
+type OAuth, 1 install, status **In review**. Everything below step 3 is now blocked on
+Zid, not on us.
+
+How it got here, from the Intercom thread with Zid partner support:
+
+| Date | What happened |
+|------|---------------|
+| 2026-08-09 | Zid (Mohammed): the app was sitting in **`Draft`** and had to be flipped to `In review` before any technical review could run. Flipped the same day. |
+| 2026-08-11 | Zid's reviewer attempted an install (store "Test") and hit an error on our side. Fixed, deployed, and a retest requested. |
+| 2026-08-12 | Zid: "سيتم اختبار التطبيق مرة أخرى في أقرب وقت" (will retest shortly). |
+| 2026-08-18 | Follow-up asking whether the retest ran — **still unread** as of 2026-08-22. |
+
+⛔ **The earlier "REJECTED / `EC3`" framing in this section was stale**, and it mattered:
+it described the next action as ours (resubmit) when the app had already been in review
+since 08-09 and the next action was Zid's. Verify the status in the portal before
+planning around it — that is one page load.
 
 ⛔ Do **not** re-read this as "waiting on the partnership agreement". The agreement is an
 **exit** condition (technical review passes → agreement countersigned), never an entry
 one. That misreading idled this work for eight days (2026-08-01 → 08-09).
+
+⚠️ **Because the app is in review, a Zid reviewer can install it at any moment.** The
+production OAuth path must stay working and `/zid/embedded` must keep serving — the
+2026-08-11 review round was lost to an install-time error, and a second avoidable failure
+costs another round trip. Do not deploy anything that touches the Zid path without
+re-running the readiness check below.
+
+### Readiness check — run this before asking Zid to retest
+
+Verified **2026-08-22**, all green. Each line is a command, not a belief:
+
+| # | Check | Command | Result 2026-08-22 |
+|---|-------|---------|-------------------|
+| R-1 | OAuth entry redirects to Zid with the right app | `curl -sI https://jawab24.com/zid/auth` | ✅ `302` → `oauth.zid.sa/oauth/authorize?client_id=7192&scope=embedded_apps_tokens_write&redirect_uri=https%3A%2F%2Fjawab24.com%2Fzid%2Fauth%2Fcallback&…` with a `state` |
+| R-2 | Embedded URL serves (a 404 fails the review on its own) | `curl -so /dev/null -w '%{http_code}' https://jawab24.com/zid/embedded` | ✅ `200` |
+| R-3 | **No sign-in prompt** — rejection bullet 1. Load `/zid/embedded` with NO session, in a clean browser profile | render it, do not grep the HTML | ✅ renders «تعذّر فتح التطبيق» + "reopen from the Zid dashboard". ⚠️ The bundled i18n makes `login` / «تسجيل الدخول» appear in the HTML source — grepping the markup gives a FALSE positive here; you must render it. |
+| R-4 | No orphan reviewer account blocking the retry | `SELECT … FROM users WHERE email = 'appmarket@zid.sa'` | ✅ 0 rows — the 08-11 orphan (user `c754f159…`, workspace `2b91491a…`) was cleaned up; `ecommerce_stores WHERE platform='zid'` is also 0, and there is no Zid row in `pending_ecommerce_installs` |
+| R-5 | Production is running the commit with the 08-11 parser fix | `curl -s https://jawab24.com/api/version` | ✅ `b625c5e` deployed 2026-08-20 (current `main`, env `blue`) |
+
+**R-4 is the one that silently re-breaks the review.** `provisionEcommerceMerchantUser`
+refuses to auto-provision onto an existing email (account-takeover guard), so a leftover
+`appmarket@zid.sa` makes the next install fall back to claim-after-login and lands the
+reviewer on `/login?zid_pending=true` — *verbatim* the "sign-in prompt" defect that caused
+the 08-10 rejection. If an install fails again, re-check R-4 before anything else, and use
+`~/.claude/plans/zid-orphan-cleanup-2026-08-11.sql` (guarded — `DELETE 0` means STOP).
+
+✅ **`ZID_CLIENT_SECRET` is proven, and the "unverified" note elsewhere is stale.** The
+08-11 reviewer install got *past* the token exchange and *past* an authenticated call to
+`/v1/managers/account/profile` — it failed afterwards, on the Postgres write. A wrong
+secret could not have reached that point. §A-1 no longer has anything to prove.
+
+**What is still genuinely unproven** is rejection bullet 2, "full data integration":
+products, orders, webhooks and the billing envelope have never round-tripped a live store.
+Those parsers were built from docs.zid.sa and validated against fixtures built from the
+same docs — which is exactly the blind spot that let the `currency`-object bug through a
+green suite. Expect the next reviewer install to surface at least one more shape
+mismatch, and read the Sentry `zid-profile-field-drop` fingerprint after it runs.
 
 ### The unblock path, in order
 
@@ -53,12 +104,12 @@ one. That misreading idled this work for eight days (2026-08-01 → 08-09).
 |---|------|-----------|-------|
 | 1 | ✅ **DONE 2026-08-11.** Deployed to production: Embedded Apps (#704/#708) and the billing rail (#711). This had to go first — step 2 points Zid's reviewer at `https://jawab24.com/zid/embedded`, and a 404 there would fail the resubmission for a second, avoidable reason. That URL now serves. | — | us |
 | 2 | **Portal changes.** ✅ Mostly DONE 2026-08-11: the **Embedded App** toggle was already on and the **Application URL** already read `https://jawab24.com/zid/embedded` (verified, and the URL now serves 200). The nine `app.market.subscription.*` webhooks were **newly subscribed** — without them the billing rail would have depended entirely on the 6h reconciler, making a paying merchant wait up to six hours for activation. ✅ **Plan 3956 «اختبار» CANNOT be deleted — it is a Zid SYSTEM plan.** `DELETE /v1/market/delete/7367/plan` answers `400 {"code":"cannot_delete_system_plan"}` (captured 2026-08-11). The dashboard renders a delete icon for it anyway, so the UI and the API disagree; there is no permission or workaround that changes this. Step 2 is therefore COMPLETE — nothing here is owed. | 1 deployed | us |
-| 3 | **Resubmit 7367 for review**, answering the rejection: *"Direct merchant access (no sign-in prompt)"* → the auto-provision + embedded session (D-066/D-067); *"Full data integration with Zid"* → the App Market billing rail (D-070). | 2 | us |
-| 4 | **Zid approves** → install on dev store 3195980. | 3 | ⏳ Zid |
+| 3 | ✅ **DONE 2026-08-09.** App flipped `Draft` → `In review`, answering the rejection: *"Direct merchant access (no sign-in prompt)"* → the auto-provision + embedded session (D-066/D-067); *"Full data integration with Zid"* → the App Market billing rail (D-070). The 2026-08-11 install error found by Zid's reviewer was fixed and deployed the same day, and a retest was requested. | 2 | us |
+| 4 | **Zid completes the technical review and approves** → install on dev store 3195980. ⏳ **Where we are as of 2026-08-22.** Zid said on 08-12 it would retest shortly; the 08-18 follow-up is still unread. If this stays quiet, chase it in the Intercom thread — nothing on our side unblocks it. | 3 | ⏳ Zid |
 | 5 | **Run `docs/testing/ZID_TEST_PLAN.md` A→I, capturing every response.** This is the D-020 gate. §H (billing) is the newest and least-evidenced section — see "what the first capture must collapse" below. | 4 | us |
 | 6 | **Finalize the `[provisional]` parsers from the captures**, then flip the badge and the status tables (step 6 of the checklist below) and append the D-NNN that closes D-020. | 5 | us |
 
-### Owed in parallel — NOT blocked by EC3
+### Owed in parallel — NOT blocked by the review
 
 These can all be done today; none of them needs Zid to approve anything.
 
@@ -430,7 +481,7 @@ describe titles (grep for it).
 - The exact casing of the `Basic` scheme on deliveries: verification compares the full
   header string (fails closed on `basic …`) — confirm Zid's casing from a real capture.
 - **Billing (D-070), the whole envelope.** `GET /v1/market/app/subscription` has never
-  been called against a live store — `EC3` blocks installing a Rejected app. Unconfirmed:
+  been called against a live store — no merchant install has happened yet. Unconfirmed:
   the response nesting (root / `data` / `subscription`, **and the two composed** — all
   four tolerated, up to two wrappers deep), the field spellings (`subscription_status` vs
   `status`, `end_date` vs `expiry_date` vs `ends_at`, whether a subscription `id` is
@@ -490,6 +541,12 @@ an entry gate idled this work for eight days.
    standards. Key updates needed: • Direct merchant access (no sign-in prompt) • Full
    data integration with Zid."* The app returned to an editable state (verified 08-11).
    Addressed by the Embedded Apps work above; see `docs/testing/ZID_TEST_PLAN.md` §L.
+
+   ✅ **Superseded 2026-08-09 → the app is `In review` again** (portal read 2026-08-22).
+   Zid pointed out on 08-09 that the app had fallen back to `Draft`, which is why the
+   rejection appeared to be the standing state for longer than it was — a `Draft` app is
+   not under review and nobody is looking at it. Flipping it back is what restarted the
+   clock. Keep this rejection text as history; it is no longer the current status.
 
    ✅ **Scope strings: RESOLVED 2026-08-11 — the question was malformed.** The authorize
    URL takes one documented scope (`embedded_apps_tokens_write`); the dashboard matrix
