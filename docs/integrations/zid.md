@@ -19,14 +19,20 @@
 > screen.
 > Rebuild ruling: [`DECISIONS.md` D-053](../../DECISIONS.md).
 >
-> **Shipped since the rebuild, all still unvalidated against a live store:** Embedded Apps
-> direct merchant access (#704/#708, D-066/D-067) and the App Market **billing rail**
-> (#711, D-070–D-073). Both **deployed to production 2026-08-11** — but deployed is not
-> validated: no Zid store has ever exercised either one, because no merchant install has
-> happened yet. The rail is inert in the meantime (`coming_soon` badge, no
-> `payment_method='zid'` row can exist) — note `ZID_CLIENT_ID` **is** set (7192); an
-> earlier version of this paragraph said "unset", contradicting the correction two
-> paragraphs above it. See **What's next** immediately below.
+> **Shipped since the rebuild:** Embedded Apps direct merchant access (#704/#708,
+> D-066/D-067) and the App Market **billing rail** (#711, D-070–D-073), both deployed
+> 2026-08-11. ⚠️ **Their validation status is now SPLIT — do not read them as one:**
+> - ✅ **Embedded Apps is validated against a live store** (2026-08-22): the App-Market
+>   install auto-provisioned an account with no login and rendered the app framed in the
+>   Zid dashboard (§L-1…L-5, L-10, L-12 live). The old "no Zid store has ever exercised
+>   either one" claim is retired — a store exists (`e3deb6f2-…`) and has synced products
+>   and answered real DMs.
+> - 🔴 **The billing rail is still inert and unexercised.** No `payment_method='zid'` /
+>   `zid_store_id` row exists (count 0 on 2026-08-22). Paid checkout refuses while the app is `Draft`, so the first live
+>   subscription envelope will most likely come from Zid's own reviewer.
+>
+> `ZID_CLIENT_ID` **is** set (7192); an earlier version of this paragraph said "unset",
+> contradicting the correction two paragraphs above it. See **What's next** below.
 >
 > **Exception, deliberate:** as of 2026-08-07 four *public* surfaces already describe Zid
 > as a live integration (llms.txt, llms-full.txt, the `SoftwareApplication` schema, and the
@@ -59,6 +65,10 @@ in `Draft` as it did in `In review`** — verified immediately after the withdra
 > produce an identical silent bounce to `dashboard.zid.sa/…?error_code=EC3`. Any future
 > theory about EC3 must explain why *neither* state is installable. Do not spend the
 > queue position on this hypothesis again — it is now falsified, not untested.
+
+➡️ **That challenge is answered in the next section: the axis is SUBSCRIPTION state.**
+This block stays because its finding (review state is not the cause) is correct and was
+the step that made the real cause findable — but stop here and read on before acting.
 
 The honest post-mortem: a cheap decisive test existed — create a throwaway app, leave it
 in `Draft`, and see whether its authorize URL reaches Zid's consent screen. That test
@@ -459,7 +469,7 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 |---|---|---|
 | Store profile | `GET /v1/managers/account/profile` | ✅ **live-confirmed 2026-08-11** — see below. `storeDomain` = hostname of the store `url` (fallback: store id); `merchantId` = `String(store.id)`; **`currency` is an OBJECT**, not a string |
 | Orders | `GET /v1/managers/store/orders?page=&per_page=&payload_type=default` | `per_page` ≤ 100; `payload_type=default` includes items; envelope `{orders: [...]}` |
-| Products | `GET /v1/products/?page_size=&page=` | NOT under `/managers`, but requires the dual headers **plus `Role: Manager`** |
+| Products | `GET /v1/products/?page_size=&page=` | NOT under `/managers`. Requires the dual headers **plus `Store-Id: <numeric merchantId>`** — without it the API answers `401 {"detail":"No such user"}`, a body that describes the *caller*, not the token, which is why it read as an auth failure for so long (#865). ⛔ `Role: Manager` is **not** required — it was removed in the same change and proven a no-op against the live API |
 | Webhook subscribe | `POST /v1/managers/webhooks` | body `{event, target_url, original_id, username?, password?}` |
 
 - `customer.mobile` in orders is a **full international number WITHOUT `+`**
@@ -689,7 +699,7 @@ describe titles (grep for it).
   it ignores the term**: `search=نظارة` and `search=كاميرا` each returned **all 4 products**
   (`count: 4`). So it cannot replace `checkInventory`'s client-side match, and the planned
   "swap in Zid's server-side search" is dead — product resolution has to be solved on our
-  side (see the resolver plan, D-091). What IS confirmed and useful from the same capture:
+  side (see the resolver plan, D-092). What IS confirmed and useful from the same capture:
   **`id__in` works** (exact row, `is_infinite: true` preserved) and **`in_stock=true` works**
   (returned only the one sellable product). ⚠️ An **unknown id answers HTTP 400, not an empty
   list** — a by-id reader must treat 400 as "no such product", not as an API failure.

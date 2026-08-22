@@ -328,7 +328,7 @@ product name", but live-captured the same day it **ignores the term** (`search=�
 for is dead.
 
 **Ruling:** resolution moves to our side, reusing the hybrid retrieval that already scores
-16/17, with the platform consulted by `id__in` only. Planned as **D-091**; see
+16/17, with the platform consulted by `id__in` only. Planned as **D-092** (⚠️ D-091 was taken by the Google Ads ruling minutes after this was reserved; `backend/src/services/zid.ts:819` still says D-091 and is corrected in the resolver PR); see
 `~/.claude/plans/rethink-everything-then-tender-hopcroft.md`. Cross-script stays the
 hardest class and is expected to remain an eval XGAP until semantic resolution lands.
 
