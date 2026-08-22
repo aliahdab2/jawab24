@@ -106,7 +106,7 @@ export default function MyDocument({ locale }: DocProps) {
               "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب 24", "نظام جواب", "جواب للرد التلقائي", "Jawab Auto-Reply"],
               "url": "https://jawab24.com",
               "logo": "https://jawab24.com/brand/apple-touch-icon.png",
-              "description": "Arabic-first AI auto-reply platform for businesses on WhatsApp, Facebook, Instagram, Shopify, and Salla. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
+              "description": "Arabic-first AI auto-reply platform for businesses on WhatsApp, Facebook, Instagram, Shopify, Salla, and Zid. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
               "slogan": "جواب — نظام الرد التلقائي الذكي بالذكاء الاصطناعي لواتساب وفيسبوك وإنستغرام",
               "knowsLanguage": ["ar", "en"],
               "areaServed": [
