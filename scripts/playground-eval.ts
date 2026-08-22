@@ -3401,7 +3401,7 @@ const TEST_CASES: TestCase[] = [
     // hallucinated product URLs (e.g. "myshopify.com/products/cotton-shirt"
     // instead of "demo-electronics.myshopify.com/products/...").
     // Without ecommerceStoreId wired through the playground input, the AI
-    // has no search_products tool and falls back to inventing URLs from
+    // gets no tool loop at all and falls back to inventing URLs from
     // the productCatalog text.
     {
         id: 317, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
@@ -3411,7 +3411,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             replyContains: ['airpods-pro-2'],
         },
-        notes: 'Direct product link request — AI must call search_products and return the real Shopify URL handle, not a hallucinated one.',
+        notes: 'Direct product link request — the reply must carry the real Shopify URL handle from the catalog block, not a hallucinated one. (Reached via the inlined catalog: a 6-product demo store never triggers a tool call.)',
     },
     {
         id: 318, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',

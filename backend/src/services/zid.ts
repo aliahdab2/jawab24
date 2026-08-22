@@ -98,7 +98,15 @@ export interface ZidTokenResponse {
     /** Zid's second credential (`Authorization` field) — required for all API calls. */
     authorizationToken: string;
     refreshToken: string;
-    expiresIn: number; // seconds — typically 1 year
+    /**
+     * Seconds. Live-captured 2026-08-22 on dev store 3195980: Zid grants **3 years**
+     * (`token_expires_at` landed on 2029-08-22 for a grant made 2026-08-22), not the
+     * "typically 1 year" this comment used to claim. Consequence worth knowing: the
+     * shared refresher fires 24h before expiry (`ecommerceTokenRefresh.ts`), so on a
+     * real store the refresh path cannot run naturally until 2029 — §F-1 has to force
+     * it by shrinking the column, and until someone does, that path is untested.
+     */
+    expiresIn: number;
 }
 
 export async function exchangeCodeForToken(code: string): Promise<ZidTokenResponse> {
@@ -804,8 +812,13 @@ export async function checkInventory(storeId: string, productName: string, varia
     const creds = await resolveZidCredentials(storeId);
     if (!creds) return null;
 
-    // [provisional] No confirmed product-search param — fetch the first page and
-    // match client-side (same seam as findOrderByCode for the live-validation swap).
+    // Fetch the first page and match client-side. Zid DOES document a `?search=` param,
+    // but it is unusable: live-captured 2026-08-22 on dev store 3195980, `search=نظارة`
+    // and `search=كاميرا` each returned ALL 4 products — it ignores the term. So the
+    // server-side swap this seam was left open for is dead; resolution moves to our side
+    // (D-091). Two limits stand until then: only the first PRODUCTS_PAGE_SIZE products are
+    // candidates, and the match is a substring on the ar-preferred name, which answers
+    // ~4/14 natural Arabic queries (measured 2026-08-22).
     const data = await zidApiGet<ZidProductsResponse>(
         `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=1`,
         creds,
