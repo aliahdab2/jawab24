@@ -1355,6 +1355,17 @@ while that cache key is `kbVersion`-scoped.
 └────────────────────────────────────────────────────────────────┘
 ```
 
+> **An EMPTY version is activated too (2026-08-22).** "kbActiveVersion set AFTER all chunks
+> stored" used to have an exception nobody wrote down: a version with zero chunks returned
+> before activation, and `updatePage` did not even start ingestion for an empty text. So
+> clearing the Business Info bumped `kbVersion`, left the old version active, and the AI kept
+> quoting the deleted facts until an unrelated product sync replaced the version (seen on prod:
+> 5½ hours) — while `reingestDriftedPages` retried the page every cycle, since the versions
+> could never converge. Now `ingestFullPage` / `ingestKnowledgeBase` activate an empty version
+> (retrieval filters on the active version, so the old chunks simply stop being reachable), and
+> both `updatePage` and the admin KB editor ingest a cleared text. Pinned by
+> `test/integration/kbClearActivatesEmptyVersion.test.ts` and `test/services/pages.updatePage-kb-clear.test.ts`.
+
 ### Voice KB Input (Merchant Side)
 
 Merchants can add KB content via voice recording in addition to typing:
