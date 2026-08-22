@@ -1504,7 +1504,7 @@ const PagesPage: NextPageWithLayout = () => {
                         {/* A member opens the same editor read-only, so the CTA
                             must not promise a write: «أضف معلومات» and «اضغط
                             للتعديل» are both instructions they cannot follow. */}
-                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
+                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-400' : 'text-foreground/70'}`}>
                           {!canEdit
                             ? t('viewBusinessInfo')
                             : kbFilled

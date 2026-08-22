@@ -148,7 +148,7 @@ export default function PaymentReturnPage() {
               </p>
 
               <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4 mb-6" aria-live="polite">
-                <p className="text-sm text-brand-700 dark:text-brand-300">
+                <p className="text-sm text-brand-700 dark:text-brand-400">
                   {fromApp ? t('success.returnToApp') : `${t('success.redirecting')} ${countdown}s...`}
                 </p>
               </div>

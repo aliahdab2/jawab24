@@ -236,7 +236,7 @@ export function PaymentForm({
         <div className="mt-5 flex items-start gap-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/30 px-4 py-3">
           <Shield className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
-            <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">
+            <p className="text-sm font-semibold text-brand-700 dark:text-brand-400">
               {t('startTrial', { days: trialDays! })}
             </p>
             <p className="text-xs text-brand-600/80 dark:text-brand-400/80 mt-0.5">

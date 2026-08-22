@@ -683,7 +683,7 @@ export function BusinessFactSheet({
                             className={clsx(
                               'min-h-[36px] max-sm:min-h-[44px] inline-flex items-center gap-1.5 rounded-lg px-1 text-xs transition select-none focus-within:ring-2 focus-within:ring-brand-500',
                               !e.value.trim() ? 'opacity-40' : 'cursor-pointer',
-                              e.wa ? 'text-brand-700 dark:text-brand-300 font-medium' : 'text-muted-foreground',
+                              e.wa ? 'text-brand-700 dark:text-brand-400 font-medium' : 'text-muted-foreground',
                             )}
                           >
                             <input
@@ -760,7 +760,7 @@ export function BusinessFactSheet({
                 className={clsx(
                   'min-h-[44px] rounded-full border px-4 text-sm font-medium transition',
                   deliveryAnswer === 'yes'
-                    ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500'
+                    ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 border-brand-500'
                     : 'bg-card text-muted-foreground border-theme-border hover:bg-surface-100',
                 )}
               >
@@ -857,7 +857,7 @@ export function BusinessFactSheet({
                   className={clsx(
                     'min-h-[44px] rounded-full border px-4 text-sm font-medium transition',
                     payMethods.has(m)
-                      ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500'
+                      ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-400 border-brand-500'
                       : 'bg-card text-muted-foreground border-theme-border hover:bg-surface-100',
                   )}
                 >

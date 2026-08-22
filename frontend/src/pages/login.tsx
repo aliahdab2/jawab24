@@ -550,7 +550,7 @@ export default function LoginPage() {
                       <Bot className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-0.5">{t('didYouKnow')}</h3>
+                      <h3 className="font-bold text-brand-900 dark:text-brand-400 text-sm mb-0.5">{t('didYouKnow')}</h3>
                       <p className="text-brand-700 dark:text-brand-400/80 text-sm font-medium leading-relaxed">
                         {t('didYouKnowDesc')}
                       </p>

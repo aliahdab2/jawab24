@@ -60,7 +60,7 @@ export function KeywordChipInput({
       {value.map((kw, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-700"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-700"
         >
           <span dir="auto">{kw}</span>
           <button

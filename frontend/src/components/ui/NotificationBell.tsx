@@ -294,7 +294,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         e.stopPropagation();
                                         handleReplyNow(notification);
                                     }}
-                                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
+                                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
                                     aria-label={t('replyNow')}
                                 >
                                     <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
@@ -377,7 +377,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             ? 'bg-white/20 text-white'
                             : 'hover:bg-white/10 text-white/90'
                         : isOpen
-                            ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
+                            ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400'
                             : 'hover:bg-muted text-muted-foreground',
                 )}
                 aria-label={t('title')}
@@ -416,7 +416,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 {t('title')}
                             </h3>
                             {unreadCount > 0 && (
-                                <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/50 rounded-full">
+                                <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 dark:text-brand-400 bg-brand-100 dark:bg-brand-900/50 rounded-full">
                                     {formatBadgeCount(unreadCount)}
                                 </span>
                             )}

@@ -140,7 +140,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                 {t('cardTitle')}
               </h2>
               {hasPost && suggestion && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-500/10 dark:bg-brand-400/15 text-brand-800 dark:text-brand-300">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-500/10 dark:bg-brand-400/15 text-brand-800 dark:text-brand-400">
                   {t(`type_${suggestion.postType}`)}
                 </span>
               )}
@@ -153,7 +153,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                 'mt-1 text-xs sm:text-sm leading-relaxed',
                 hasPost
                   ? 'text-foreground/80 line-clamp-2'
-                  : 'text-brand-800/80 dark:text-brand-300/80',
+                  : 'text-brand-800/80 dark:text-brand-400/80',
               )}
             >
               {pending ? t('generating') : hasPost && suggestion ? suggestion.text : t('cardDesc')}

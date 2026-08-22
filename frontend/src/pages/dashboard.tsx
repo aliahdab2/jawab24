@@ -1029,7 +1029,7 @@ const DashboardPage: NextPageWithLayout = () => {
                   </p>
                   <p className={clsx(
                     'text-xs mt-0.5',
-                    isEcomVariant ? 'text-muted-foreground' : 'text-brand-700/80 dark:text-brand-300/80'
+                    isEcomVariant ? 'text-muted-foreground' : 'text-brand-700/80 dark:text-brand-400/80'
                   )}>
                     {isEcomVariant ? t('kbNudgeEcomBody') : t('kbNudgeBody')}
                   </p>

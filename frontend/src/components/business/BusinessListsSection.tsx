@@ -589,7 +589,7 @@ export function BusinessListsSection({ pageId, readOnly = false }: BusinessLists
    *  expert's point 4; the chip reads as the row's action, not as a caption.
    *  Absent when view-only: there is no action for it to name. */
   const editChip = readOnly ? null : (
-    <span className="inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-1 text-[11px] font-semibold text-brand-700 dark:text-brand-300 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-1 text-[11px] font-semibold text-brand-700 dark:text-brand-400 whitespace-nowrap">
       <Pencil className="w-3 h-3" aria-hidden="true" />
       {t('lists.edit')}
     </span>
