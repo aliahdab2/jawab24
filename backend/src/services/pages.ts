@@ -755,10 +755,18 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
-        // Fire-and-forget: trigger full page ingestion (KB text + product chunks) when KB changes
+        // Fire-and-forget: trigger full page ingestion (KB text + product chunks) when KB changes.
+        //
+        // Runs for a CLEARED KB too. This used to be gated on `kbText.trim()`, so
+        // emptying the Business Info bumped kbVersion but never re-ingested —
+        // the previous version stayed active and the AI kept quoting facts the
+        // merchant had just deleted, until an unrelated product sync happened to
+        // replace the version (observed on prod 2026-08-22: a page emptied at
+        // 13:54 served its old info/location chunks for 5½ hours). Deleting
+        // wrong information is the one edit that must take effect immediately.
         const kbText = data.knowledgeBase;
         const kbVersion = updatedPage?.kbVersion;
-        if (kbText !== undefined && kbText.trim() && kbVersion) {
+        if (kbText !== undefined && kbVersion) {
             const ingestion = getIngestionService();
             if (ingestion) {
                 this.fetchProductsForPage(updatedPage.ecommerceStoreId)
@@ -773,7 +781,10 @@ export class PagesService {
             // (hours/phone/address) that feed the authoritative BUSINESS_INFO block,
             // so they stay in sync with the KB the merchant just typed instead of
             // going stale. Flag-gated (off|shadow|on), fire-and-forget, off the reply path.
-            void this.maybeExtractOperationalFacts(pageId, updatedPage.userId, kbText);
+            // Nothing to extract from an emptied KB.
+            if (kbText.trim()) {
+                void this.maybeExtractOperationalFacts(pageId, updatedPage.userId, kbText);
+            }
         }
 
         return updatedPage;
