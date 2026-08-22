@@ -17,6 +17,17 @@
 > (`ZID_CLIENT_ID`=7192 verified live); `ZID_CLIENT_SECRET` remains the one unverified
 > value — §A-1 is what proves it.
 >
+> 🔴 **Current status, portal-verified 2026-08-22: app 7367 is `Draft`** — withdrawn
+> deliberately (rollback icon on the app row; one click, no confirmation). Earlier the
+> same day it was `In review`, flipped there on 08-09; Zid's reviewer install on 08-11 hit
+> an error on our side, fixed and deployed the same day; Zid said on 08-12 it would retest
+> shortly and the 08-18 follow-up went unread.
+>
+> ⛔ **The withdrawal did not unblock dev-store installs.** `EC3` fires identically in
+> `Draft` and in `In review` — so review state is **not** the cause, and that hypothesis
+> is falsified rather than untested. Resubmitting is via the wizard's **Request to
+> Publish** step → "Send for review".
+>
 > **Companion docs:** `docs/integrations/zid.md` (verified API contract + `[provisional]`
 > parser list), `SHOPIFY_TEST_PLAN.md` (same structure; shared-infrastructure cases mirror
 > it). This plan supersedes the session file
@@ -47,9 +58,9 @@ surprise.
 | # | Item | How to verify | Status |
 |---|------|---------------|:--:|
 | P-1 | ⛔ **INVERTED 2026-08-11 — the agreement is NOT a precondition.** It is countersigned only AFTER Zid's technical review passes (Zid support, 08-08/09), so this run-book runs FIRST. Nothing here waits on partner.zid.sa. | Agreement state is an EXIT check in §K, not an entry one | n/a |
-| P-1b | App **7367 is editable** (it returned to Draft after the 08-10 rejection — verified 08-11: the wizard shows Edit + "Send for review") | partner.zid.sa → My Apps → row shows `Rejected`, pencil icon opens the wizard | ☑ |
-| P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures) | `https://h47p59.zid.store/` renders the storefront publicly | ☐ |
-| P-3 | Partner app **7367** (Client ID 7192) reachable; decide dev-redirect strategy: dedicated DEV app (mirrors `Jawab24-Dev` on Salla, recommended) OR temporarily point app 7367's Redirection/Callback URLs at ngrok | Partner Dashboard → app → General Settings | ☐ |
+| P-1b | App **7367 is `Draft`** (withdrawn 2026-08-22). ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you — it can look like "waiting on Zid" for days. ⛔ But do NOT treat `Draft` as the thing standing between you and a dev-store install: `EC3` fires the same in both states. Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 | ☑ verified 2026-08-22 |
+| P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures). Store email **`qwhfqfihvm@zam-partner.email`** — ✅ confirmed to have NO existing Jawab24 account (2026-08-22), so §L's account-takeover guard will not fire and the auto-provision path is genuinely exercised. Re-check that before every §L run; if it ever has one, §L-1 fails for the WRONG reason. | `https://h47p59.zid.store/` renders the storefront publicly | ☑ 200, verified 2026-08-22 |
+| P-3 | 🔴 **BLOCKED — no working dev-redirect strategy today.** The production route (app 7367 → `https://jawab24.com/zid/auth/callback`, prod answers with a correct 302) is the one that exercises what a reviewer walks, and it is the route to prefer *when it works*. It does not work right now: the install bounces at Zid with **`EC3`**, in `Draft` and `In review` alike, before reaching our code. Until EC3 is explained, §A–§I cannot run against 7367 at all. The dedicated-DEV-app + ngrok route (P-4/P-5/P-6/P-10) is the documented fallback, but it is **unproven against EC3** — a second app may bounce the same way, so probe it with a throwaway app before investing in the local setup. | `curl -sI https://jawab24.com/zid/auth` → 302 ✅, but completing it → `?error_code=EC3` ❌ | 🔴 |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
 | P-5 | ai-worker running — the KB-enrichment reply and agent-tool cases need it. Default port **3002** (`ai-worker/src/config.ts`); if you run it on 3005 per the worktree convention, you MUST also set `AI_SERVICE_URL=http://localhost:3005` on the backend or every reply dies `AiWorkerUnreachable` | `curl http://localhost:3002/health` (or 3005 + matching `AI_SERVICE_URL`) | ☐ |
 | P-6 | ngrok tunnel to the backend; inspector open at `127.0.0.1:4040` | `https://<ngrok>/health` OK | ☐ |
@@ -58,9 +69,27 @@ surprise.
 | P-9 | Dev-store catalog seeded per §B-0 | Zid admin → Products | ☐ |
 | P-10 | Partner Dashboard lifecycle webhook points at the tunnel for the session: `app.market.application.uninstall` → `https://<ngrok>/zid/webhooks?e=app.market.application.uninstall` (today it points at prod jawab24.com) | Dashboard → app → Webhooks | ☐ |
 
-> ⚠️ **Do NOT click "Install App" on the dev store before P-3/P-4/P-6 are green** — the
-> app's Redirection URL otherwise sends the OAuth flow to prod `jawab24.com`, where
-> `ZID_CLIENT_ID` is unset and the flow dead-ends.
+> ⛔ **REVISED 2026-08-22 — the warning below was built on a false premise and now points
+> the wrong way.** It used to read: *"Do NOT click Install App on the dev store before
+> P-3/P-4/P-6 are green — the app's Redirection URL otherwise sends the OAuth flow to prod
+> `jawab24.com`, where `ZID_CLIENT_ID` is unset and the flow dead-ends."* `ZID_CLIENT_ID`
+> is **set** (7192) and prod `/zid/auth` returns its 302 — verified again 2026-08-22. So
+> installing against **production** does not dead-end; it is the *safest* route, and the
+> tunnel was never required for a first capture.
+>
+> ⚠️ **Whenever 7367 is back `In review`, prefer the production route and change NOTHING
+> in the portal.** Editing the app to point at a tunnel risks two things at once: it drops
+> 7367 back to `Draft` (leaving the review queue silently — see P-1b), and if Zid's
+> reviewer installs during your tunnel window they reach your laptop or a dead URL, costing
+> a second review round. The ngrok route (P-3/P-6/P-10) is for when the app is NOT under
+> review. ⛔ **This is not a reason to withdraw the app in order to test** — that was tried
+> on 2026-08-22 and `EC3` was unaffected.
+>
+> ⚠️ **If a production-route install fails halfway, it leaves an orphan account that will
+> block the reviewer's install** (same failure mode as 08-11 — see R-4 in
+> `docs/integrations/zid.md`). Re-check R-4 immediately after any failed attempt and clean
+> up before walking away. Note the two 2026-08-22 EC3 bounces left **nothing** — Zid
+> rejects before reaching our code, so R-4 came back clean both times.
 >
 > ⚠️ Partner-dashboard Vue forms fight automation: v-model needs native-setter + events;
 > "Save disabled" usually means a hidden required field (e.g. scope justification,
@@ -290,9 +319,12 @@ webhooks re-registered 6/6.
 > most a six-hour delay, healed by the reconciler — and means an uncaptured envelope
 > cannot write wrong billing state, because nothing is read out of it.
 >
-> ⛔ **Still not runnable against a live store.** `EC3` (§5 of the 08-11 handoff — a
-> Rejected app cannot be installed) blocks every real round-trip until app 7367 is
-> resubmitted. H-1…H-9 below are covered at the UNIT level by
+> ⛔ **Still not captured against a live store, and still blocked by `EC3`.** Verified
+> 2026-08-22: the install bounces at Zid with `error_code=EC3` before reaching our code, in
+> `Draft` and `In review` alike — so review state is not the cause and withdrawing the app
+> does not unblock it. Until EC3 is explained, the only way this section gets a live
+> capture is a Zid-side reviewer install.
+> H-1…H-9 below are covered at the UNIT level by
 > `backend/test/services/zidBilling.test.ts` (40 cases) and
 > `backend/test/controllers/zid.test.ts` (webhook wiring) against an envelope inferred
 > from Zid's docs. **Unit-green is NOT the live validation this section asks for** — the
