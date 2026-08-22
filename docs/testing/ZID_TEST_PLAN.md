@@ -458,6 +458,33 @@ If throttling appears, verify the sync retries rather than truncating (the old s
 > browser profile.** A stray session silently routes you down the logged-in path and the
 > whole section passes for the wrong reason. Use a fresh private window per case.
 
+### Status — 11 of 17 pinned (2026-08-22)
+
+Bullet 1 of the rejection is the one §L answers, so it is worth being precise about what
+"done" means per case. Three states, and they are **not** interchangeable:
+
+| State | Meaning |
+|---|---|
+| ✅ **live** | executed against the real dev store / prod surface, with the capture saved |
+| 🧪 **pinned** | the logic is exercised deterministically by a test, so a refactor cannot silently remove it — but the live capture is still owed |
+| ☐ **owed** | neither; needs the live app |
+
+| Case | State | Evidence |
+|---|---|---|
+| L-3, L-4 | ✅ live | Rendered + navigated inside the Zid dashboard iframe, authenticated, no sign-in prompt (2026-08-22) |
+| L-5 | ✅ live | `POST /api/zid/embedded/session` → **200** five times at ~15-min idle in the nginx log; never a `/login` redirect |
+| L-10 | ✅ live | `curl -sI`: no `X-Frame-Options`; `frame-ancestors 'self' https://dashboard.zid.sa https://web.zid.sa`; no `zid.dev`. Re-checked on `/`, `/pricing`, `/dashboard` (the header is global — a CSP typo would drop clickjacking protection fleet-wide) |
+| L-12 | ✅ live | 96h of nginx logs: `/zid/embedded` appears **path-only**, never with `?token=`. The 33 `token=` hits in that window are all Meta's `hub.verify_token` on `/webhook`, not ours |
+| L-7, L-8, L-13 | 🧪 pinned | `backend/test/integration/embeddedTokenLookup.test.ts` — all three are one predicate each in `getStoreByEmbeddedTokenHash`; every other test **mocks** that function, so until #883 none had ever executed. Real Postgres; mutation-checked (drop `is_active` → only L-8 fails; drop the idle window → only L-13 fails) |
+| L-11 | 🧪 pinned | `test/middleware/workspace.test.ts` (pins to the token workspace, rejects a different `X-Workspace-Id`, refuses rather than fall back when membership is lost) + `test/middleware/authRequireAdmin.test.ts` — *"rejects an embedded session outright, before the isAdmin check"*, so admin denial does not depend on `isAdmin` being right |
+| L-16 | 🧪 pinned | `test/controllers/auth.browser-handoff.test.ts` — the code carries the caller scope, the exchanged token is *still* scoped, **no refresh cookie is issued**, and a pre-existing one is **cleared** (not issuing is not enough) |
+| L-17 | 🧪 pinned | `test/controllers/whatsapp-redirect.test.ts` — *"REFUSES a code minted by a restricted embedded session — no full session, no WhatsApp credentials"* |
+| L-1, L-2, L-6, L-9, L-14, L-15 | ☐ owed | All need a **fresh logged-out install** or an uninstall→reinstall of the live app. L-1/L-2 are the exact scenario Zid rejected us on, so they cannot be substituted with a test |
+
+⚠️ **A pinned case is not a passed case for submission purposes.** The tests prove the logic
+cannot regress; they do not prove Zid's reviewer walks the flow successfully. §L is green for
+the gate only once L-1/L-2 have been run live.
+
 | ID | Test | Expected | Capture |
 |----|------|----------|:--:|
 | L-1 | Install app 7367 on the dev store from the Zid App Market, logged OUT of Jawab24 | **No login page at any point.** Account auto-created from the store profile; browser ends on `dashboard.zid.sa/…/apps/7367/embedded` | C12: the full redirect chain |
