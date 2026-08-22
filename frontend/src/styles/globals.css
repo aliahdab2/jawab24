@@ -477,7 +477,7 @@
   }
 
   .badge-info {
-    @apply badge bg-brand-100 text-brand-700;
+    @apply badge bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400;
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -634,6 +634,24 @@
      nobody had ever seen it in either theme. */
   .offline-banner {
     @apply bg-surface-800 text-white dark:bg-surface-500;
+  }
+
+  /* --- Collapsed-sidebar hover tooltip ---
+     A dark chip with white text in BOTH themes, so it reads as an overlay
+     rather than as part of the rail. Same inversion trap as .offline-banner,
+     caught in the other direction: the four call sites (Sidebar ×3,
+     ThemeToggleButton) all carried a bare `bg-surface-200 text-white`, which is
+     18.08:1 in dark but **1.23:1 in light** — white on #e1e9e8, i.e. an
+     invisible tooltip for every merchant on the default theme.
+     Reuses the .offline-banner pairing: 14.39:1 light, 8.81:1 dark.
+     Extracted here because the four class strings were byte-identical
+     (Rule 10.8) — one definition, one place to keep accessible. */
+  .nav-tooltip {
+    @apply absolute start-full ms-3 px-2.5 py-1.5 rounded-lg
+           bg-surface-800 text-white dark:bg-surface-500
+           text-xs font-medium whitespace-nowrap
+           opacity-0 group-hover/nav:opacity-100 pointer-events-none
+           transition-opacity duration-200 z-50 shadow-lg;
   }
 
   /* --- Danger zone (destructive action sections) --- */

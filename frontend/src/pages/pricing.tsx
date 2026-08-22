@@ -205,7 +205,7 @@ function PlanCard({
         )}
         {/* Trial badge — inside the card, visible on all breakpoints */}
         {plan.trialDays > 0 && !hasActiveSubscription && (
-          <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
+          <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 dark:text-brand-400 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
             <Zap className="w-3 h-3" />
             {t('pricing.trialDays', { days: plan.trialDays })}
           </div>

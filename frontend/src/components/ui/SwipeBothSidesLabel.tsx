@@ -6,7 +6,8 @@ interface SwipeBothSidesLabelProps {
   icon: React.ReactNode;
   /** Label text shown on both sides */
   label: string;
-  /** Background + text color classes (e.g., "bg-brand-50 text-brand-700") */
+  /** Background + text color classes (e.g., "bg-brand-50 text-brand-700 dark:text-brand-400" — the scales invert,
+   *  so a scale background needs a dark: foreground; see CONVENTIONS.md) */
   className?: string;
 }
 

@@ -482,7 +482,7 @@ export default function AdminPlaygroundPage() {
                             className={clsx(
                                 'p-2 rounded-lg transition-colors',
                                 sidebarOpen
-                                    ? 'bg-brand-100 text-brand-700'
+                                    ? 'bg-brand-100 text-brand-700 dark:text-brand-400'
                                     : 'text-muted-foreground hover:bg-muted'
                             )}
                             aria-label={t('playground.toggleSidebar')}
@@ -728,7 +728,7 @@ export default function AdminPlaygroundPage() {
                                                 'flex items-center gap-3 p-3 rounded-xl bg-background border border-theme-border',
                                                 !selectedPageId && 'opacity-50'
                                             )}>
-                                                <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                <div className="w-6 h-6 rounded-full bg-surface-500 dark:bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                                     2
                                                 </div>
                                                 <span className="text-sm text-muted-foreground flex-1">
@@ -742,7 +742,7 @@ export default function AdminPlaygroundPage() {
                                                 'flex items-center gap-3 p-3 rounded-xl bg-background border border-theme-border',
                                                 !selectedPageId && 'opacity-50'
                                             )}>
-                                                <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                <div className="w-6 h-6 rounded-full bg-surface-500 dark:bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                                     3
                                                 </div>
                                                 <span className="text-sm text-muted-foreground">
@@ -879,7 +879,7 @@ export default function AdminPlaygroundPage() {
                                                             </Badge>
                                                         )}
                                                         {msg.metadata.cached && (
-                                                            <Badge className="bg-brand-100 text-brand-800">
+                                                            <Badge className="bg-brand-100 text-brand-800 dark:text-brand-400">
                                                                 <Zap className="w-3 h-3 me-0.5" aria-hidden="true" />
                                                                 {t('playground.cached')}
                                                             </Badge>

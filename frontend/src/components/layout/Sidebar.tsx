@@ -257,7 +257,7 @@ function NavItem({ href, icon: Icon, label, isActive, sidebarOpen, badge }: NavI
 
       {/* Tooltip — visible only when sidebar is collapsed */}
       {!sidebarOpen && (
-        <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+        <span className="nav-tooltip">
           {label}
         </span>
       )}
@@ -533,7 +533,7 @@ export const Sidebar = memo(function Sidebar() {
               )} />
               {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tAdmin('title')}</span>}
               {!sidebarOpen && (
-                <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+                <span className="nav-tooltip">
                   {tAdmin('title')}
                 </span>
               )}
@@ -584,7 +584,7 @@ export const Sidebar = memo(function Sidebar() {
           <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
           {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tNav('logout')}</span>}
           {!sidebarOpen && (
-            <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+            <span className="nav-tooltip">
               {tNav('logout')}
             </span>
           )}

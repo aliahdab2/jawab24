@@ -52,7 +52,7 @@ export function ThemeToggleButton({ variant = 'nav', sidebarOpen = true }: Theme
           <span className="font-bold text-sm tracking-tight">{label}</span>
         )}
         {!sidebarOpen && (
-          <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+          <span className="nav-tooltip">
             {label}
           </span>
         )}
