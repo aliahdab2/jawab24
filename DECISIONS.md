@@ -2290,9 +2290,31 @@ linked page, several times a day.
 **Baseline captured before the change (prod Redis, 2026-08-22 ~16:45 UTC):** 15
 `cache:ai_reply:*` keys in the entire fleet — the flush had been keeping the exact cache
 near-empty — and `metrics:ai:attempts:embedding_ingestion:text-embedding-3-small = 1214`
-against `embedding_rag = 50378`. The after-numbers (key count surviving a product edit;
-ingestion attempts flat across an unchanged scheduled sync) are owed in the PR that ships
-this and must be read before the entry is cited as proven.
+against `embedding_rag = 50378`.
+
+**After-measurement, read on prod 2026-08-22 19:25 UTC — the entry may now be cited as
+proven.** Method: prod on `4185a37` (contains this change), one real `full_sync` enqueued for
+the Zid dev store `e3deb6f2-…` (the same `replaceProductsAndRebuildSummary` →
+`invalidateCachesForStore` path a product webhook takes), counters read either side.
+
+| | before | after | expected before this change |
+|---|---|---|---|
+| `cache:ai_reply:*` keys, fleet-wide | 37 | **38** | 0 — the SCAN deleted the namespace |
+| `metrics:ai:attempts:embedding_ingestion:…` | 1214 | **1214** | +1 — `embedBatch` emits once per batch, and 4 chunks are one batch |
+| `metrics:ai:returns:embedding_ingestion:…` | 1211 | **1211** | +1 |
+
+The fleet key count had already recovered 15 → 37 in the ~3 h since the deploy, which is the
+flush's absence showing up on its own. **The ingestion half is not vacuous:** the sync really
+did re-ingest — `kb_chunks` gained a complete version 5 for page `d88d7c02-…` at 19:25:15
+(4 chunks, 4 with embeddings, replacing version 4) — and the provider was never called, which
+only reuse can produce. `embedding_rag` moved 50412 → 50420 over the same window: ordinary
+reply traffic, untouched by this change and the control that shows the counters were live.
+
+⚠️ Read the counter for what it is: `embedBatch` emits **one attempt per batch**
+(`kb/embedding.ts:98`, `MAX_BATCH_SIZE` texts each), so it proves "zero provider calls" and
+never measures how many texts or tokens were saved. A store with a catalog larger than one
+batch saves proportionally more than this counter can show. If the size of the saving ever
+needs a number, take it from `ai_usage_log` rows for `embedding_ingestion`, not from here.
 
 **Consequences.** A page whose fire-and-forget ingest fails keeps its old version and
 therefore its old cache entries — that drift is `reingestDriftedPages`' job, unchanged. The

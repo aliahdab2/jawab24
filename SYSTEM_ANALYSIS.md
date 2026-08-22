@@ -1203,6 +1203,8 @@ Products synced from Shopify/Salla
 > sync (the hashed key cannot be scoped to a page), and step 3 re-embedded every chunk of
 > every linked page each time. Both removed under **D-090**; the per-page key rotation in
 > step 4 was always what kept the exact cache correct (its Postgres tier was never flushed).
+> Proven on prod 2026-08-22 19:25 UTC: a real store sync left the fleet key count at 38
+> (never 0) and cost **zero** embedding calls while writing a complete new chunk version.
 
 ## عربي
 
