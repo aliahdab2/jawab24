@@ -126,7 +126,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           <div className="grid grid-cols-2 gap-3">
             {/* During hours */}
             <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card">
-              <div className="w-9 h-9 rounded-xl icon-bg-green flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl icon-bg-emerald flex items-center justify-center flex-shrink-0">
                 <Sun className="w-4 h-4" />
               </div>
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -140,7 +140,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
             {/* Outside hours */}
             <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card">
-              <div className="w-9 h-9 rounded-xl icon-bg-purple flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl icon-bg-violet flex items-center justify-center flex-shrink-0">
                 <Moon className="w-4 h-4" />
               </div>
               <div className="flex items-center gap-1.5 flex-1 min-w-0">

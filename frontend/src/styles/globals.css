@@ -554,14 +554,17 @@
     @apply bg-orange-100 text-orange-600
            dark:bg-orange-900/30 dark:text-orange-400;
   }
-  .icon-bg-purple {
-    @apply bg-purple-100 text-purple-600
-           dark:bg-purple-900/30 dark:text-purple-400;
-  }
-  .icon-bg-green {
-    @apply bg-green-100 text-green-600
-           dark:bg-green-900/30 dark:text-green-400;
-  }
+  /* `.icon-bg-green` and `.icon-bg-purple` were removed 2026-08 (design-system
+     audit). They were near-duplicates of `.icon-bg-emerald` / `.icon-bg-violet`
+     with no documented distinction, so the choice at each call site was
+     arbitrary and the same state could render two different colors on two
+     screens. Emerald and violet survive because they are anchored: emerald is
+     the delivered/success hue (`reply-source-template`, `.reply-bubble`) and
+     violet is the Smart Reply identity (`reply-source-ai`, `alert-violet`,
+     `status-violet`). Green and purple anchored nothing.
+     Deleted outright rather than aliased — each had exactly one call site and
+     nothing builds these names dynamically, so an alias would have been dead
+     code. Add a hue back only with a written reason for the distinction. */
 
   /* Lighter icon variant (50 instead of 100 base, with shadow) */
   .icon-bg-emerald-light {
