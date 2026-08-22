@@ -112,14 +112,39 @@ minutes. Reach for the decisive test first.
 ### 🔴 NEW, CAPTURED 2026-08-22: product sync 401s after a successful install
 
 The install succeeds but the first `full_sync` job fails: `zid API HTTP error: 401` on
-`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). The store row,
-the token pair, and `token_expires_at` (2029) are all present and the embedded session
-works — so this is not the token being absent. Candidates, unverified: the wrong credential
-in the `X-Manager-Token` vs `Bearer authorizationToken` split (`zidApiGet`,
-`services/zid.ts:253`), the `Role: Manager` header the products call adds, or a
-Zid-side delay between install and API readiness. **This is exactly the docs-vs-reality gap
-D-020 exists to catch — a real captured failure, not a predicted one.** It blocks §B and
-everything downstream until fixed. Investigate against the live store while it exists.
+`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). **This is a real
+captured failure of exactly the kind D-020 exists to catch** — not a prediction. It blocks
+§B and everything downstream.
+
+**What is ruled out (so the fix is not misdirected):**
+- *Not* a missing/absent token — the store row carries both `access_token` and
+  `authorization_token`, and the embedded session works.
+- *Not* token expiry — `token_expires_at` is 2029, far in the future, so
+  `ensureValidToken` does not refresh and the sync uses the stored pair as-is.
+- *Not* decryption corruption — AES-GCM (`lib/aesGcm.ts`) throws on a bad auth tag rather
+  than returning a corrupted string; a 401 (not a decrypt exception) means the decrypted
+  tokens are byte-identical to what was exchanged.
+- *Not* the whole token pair being rejected — at least one authenticated Zid call in the
+  same install worked: `fetchStoreInfo` (`GET /v1/managers/account/profile`) must have
+  returned 200, because it throws on non-OK and the store row (real name "Jawab24 Dev",
+  currency SAR) was nonetheless created. So Zid accepts these tokens for
+  `/v1/managers/account/profile` but rejects them for `/v1/products/`, seconds apart.
+
+**The remaining candidates** (need the 401 response body to decide — our HTTP wrapper
+`utils/httpRetry.ts:90` discards it, logging only the status):
+- The `/v1/products/` endpoint is **not** under `/managers/`, and may need a different
+  auth arrangement than the `/managers/*` calls that work — e.g. the `X-Manager-Token`
+  and `Bearer authorizationToken` roles swapped, or a store-scoped token this pair is not.
+- The `Role: Manager` header the products call adds (`services/zid.ts:526`) may be
+  wrong/insufficient for a freshly-installed store.
+- A Zid-side readiness delay between install and products-API availability (least likely —
+  it stayed 401 across retries and a later manual check).
+
+**Next step is a decisive capture, not more theory:** replay the profile call (expect 200)
+and the products call (expect 401) with the app's own resolved credentials and print Zid's
+401 **body** — its message names the missing/invalid thing. This must run where the
+decryption key lives (inside the backend container); it prints only statuses and the error
+body, never the token values.
 
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
