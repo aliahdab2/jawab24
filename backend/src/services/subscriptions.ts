@@ -1,6 +1,6 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases } from '../db/schema';
+import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases, messages, comments, instagramComments } from '../db/schema';
 import { plansService } from './plans';
 import { trialLedgerService, type TrialIdentity } from './trialLedger';
 import { redis } from '../lib/redis';
@@ -11,6 +11,7 @@ import { resolveMarketplaceBilling } from './marketplaceBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
+    PAST_DUE_GRACE_DAYS,
     type AiQuotaStatus,
     type Subscription, type Plan, type Usage, type UsageSummary,
     type SubscriptionStatus, type LimitCheckResult,
@@ -155,8 +156,6 @@ const LAZY_EXPIRY_CANARIES: Record<string, {
     },
 };
 
-/** Statuses that allow AI reply generation. */
-const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
 const STATUS_CACHE_TTL = 60;
 /**
@@ -166,10 +165,12 @@ const STATUS_CACHE_TTL = 60;
  * Matches Shopify. Exported because the dunning emails print the same boundary
  * (services/dunningNotices.ts) — display and enforcement must share one clock.
  *
- * NOTE: PR #749 extracts this to `PAST_DUE_GRACE_DAYS` in @jawab24/shared —
- * whichever lands second folds the two into the shared constant.
+ * The value itself lives in @jawab24/shared as `PAST_DUE_GRACE_DAYS`, because
+ * the support console (admin/health.ts, deliberately DB-free) must date the
+ * same fuse this gate burns. This name is kept for the dunning sweep's
+ * existing import; it is the same constant, never a second literal.
  */
-export const GRACE_PERIOD_DAYS = 3;
+export const GRACE_PERIOD_DAYS = PAST_DUE_GRACE_DAYS;
 
 /**
  * Snap a date to 00:00:00 UTC. Used to align usage rollover to a calendar boundary
@@ -180,6 +181,76 @@ export function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
     return d;
+}
+
+/**
+ * Exactly the fields `checkSubscriptionStatus` reads. Narrower than
+ * `Subscription & { plan: Plan }` on purpose: entitlement never depends on the
+ * plan, and demanding one forced every caller that only has a subscription row
+ * — the admin console among them — to either fabricate a plan or re-implement
+ * the predicate. A second implementation is precisely how the console came to
+ * disagree with the gate.
+ */
+export type SubscriptionStatusInput = Pick<
+    Subscription,
+    'status' | 'paymentMethod' | 'currentPeriodEnd' | 'trialEndsAt'
+>;
+
+/**
+ * The instant a subscription's entitlement ACTUALLY ends — the same boundary
+ * `checkSubscriptionStatus` enforces, exported so every display surface reads
+ * it from one place instead of re-deriving it from `currentPeriodEnd`.
+ *
+ * For a MANUAL (cash/transfer) subscription that boundary is snapped back to
+ * UTC midnight of the period-end day, because `initializeUsagePeriod` snaps the
+ * usage window the same way — see the long comment in `checkSubscriptionStatus`.
+ * That snap is deliberate and load-bearing (it closes the free-refill hole), but
+ * it means entitlement ends up to ~24h BEFORE the raw `currentPeriodEnd` instant
+ * every UI used to print. Printing the raw instant is what let a merchant read
+ * "14 August" while replies had already stopped at 14 August 00:00 UTC.
+ *
+ * Returns null when nothing bounds the subscription in time (no period end).
+ */
+export function resolveEntitlementEnd(subscription: SubscriptionStatusInput): Date | null {
+    const { status, paymentMethod, currentPeriodEnd, trialEndsAt } = subscription;
+
+    // Order mirrors checkSubscriptionStatus branch for branch. Each arm answers
+    // "which clock cuts this subscription off?", and it is NOT currentPeriodEnd
+    // on three of the four rails:
+    //
+    //   manual        → currentPeriodEnd SNAPPED to UTC midnight (up to 24h early)
+    //   trial-origin  → trialEndsAt, which can be WEEKS before currentPeriodEnd
+    //   past_due      → currentPeriodEnd + the retry grace (3 days LATE)
+    //   trialing      → trialEndsAt
+    //
+    // The first cut of this function modelled only the manual rail and returned
+    // the raw currentPeriodEnd for everything else. On a trial that is a date
+    // ~23 days in the FUTURE, which the dashboard then printed as "Coverage
+    // ended <future date>" — reproducing, larger, the very defect this PR was
+    // written to remove. Keep the arms in lockstep with the gate.
+    // null means "no CLOCK bounds this row", never "it has ended". canceled/paused
+    // are refused by status, and a past_due row with no currentPeriodEnd is never
+    // refused at all — both are unbounded in time, so no date may be shown for them.
+    if (status === 'canceled' || status === 'paused') return null;
+
+    if (paymentMethod === 'manual' && currentPeriodEnd) {
+        return startOfUtcDay(new Date(currentPeriodEnd));
+    }
+
+    if (!paymentMethod && trialEndsAt && (status === 'trialing' || status === 'past_due')) {
+        return new Date(trialEndsAt);
+    }
+
+    if (status === 'past_due') {
+        if (!currentPeriodEnd) return null; // gate never blocks this row — see below
+        const graceEnd = new Date(currentPeriodEnd);
+        graceEnd.setDate(graceEnd.getDate() + PAST_DUE_GRACE_DAYS);
+        return graceEnd;
+    }
+
+    if (status === 'trialing' && trialEndsAt) return new Date(trialEndsAt);
+
+    return currentPeriodEnd ? new Date(currentPeriodEnd) : null;
 }
 
 /**
@@ -295,8 +366,16 @@ export const subscriptionsService = {
 
     /**
      * Fast subscription status check for the reply pipeline.
-     * Returns true if the user has an active/trialing subscription.
+     * Returns true if the user is entitled to auto-replies.
      * Cached in Redis for 60s to keep the hot path fast.
+     *
+     * Delegates to `checkSubscriptionStatus` — THE entitlement predicate — rather
+     * than testing `status in (active, trialing)` itself. It used to do the latter,
+     * which made it a second, disagreeing answer to "is this account replying?":
+     * a manual (cash/transfer) plan holds `status = 'active'` for good and lapses
+     * only at a snapped UTC-midnight boundary, so this would have called a frozen
+     * account active. It has no production caller today, and its docstring invites
+     * one onto the hot path — so it must not be able to disagree with the gate.
      */
     async isSubscriptionActive(userId: string): Promise<boolean> {
         const cacheKey = `sub:active:${userId}`;
@@ -309,9 +388,9 @@ export const subscriptionsService = {
         }
 
         const sub = await this.getUserSubscription(userId);
-        // No subscription row = free/trial user → allow replies
-        // Only block when an explicit subscription exists with inactive status
-        const active = sub === null || ACTIVE_STATUSES.has(sub.status);
+        // No subscription row = free/trial user → allow replies, matching
+        // canAutoReply. Only an explicit, unentitled subscription blocks.
+        const active = sub === null || this.checkSubscriptionStatus(sub).allowed;
 
         try {
             await redis.set(cacheKey, active ? '1' : '0', 'EX', STATUS_CACHE_TTL);
@@ -593,6 +672,33 @@ export const subscriptionsService = {
         // payment controller's guard uses, so the UI and the API cannot disagree.
         const marketplaceVerdict = await resolveMarketplaceBilling(subscriptionOwnerId, subscription);
 
+        // THE gate verdict — the very predicate enforceAutoReplyGate blocks on,
+        // not a second opinion assembled from `status` or percent-of-quota.
+        //
+        // Without this the dashboard had no way to know replies were frozen: a
+        // manual subscription past its snapped boundary closes the usage window,
+        // getCurrentUsage then matches no row, `used` reads 0 — and the warning
+        // banner, seeing 0 of 4,500, concluded everything was healthy and hid
+        // itself. The merchant saw a green dashboard while every reply was
+        // refused (owner's own account, 2026-08-14). `reason` is deliberately NOT
+        // forwarded: it is an internal English string, and the client renders a
+        // translated message keyed off `code`.
+        const entitlement = this.checkSubscriptionStatus(subscription);
+        const entitlementEnd = resolveEntitlementEnd(subscription);
+
+        // What the block has cost so far, counted only when there IS a block and
+        // a boundary to count from. "Your subscription ended" is a statement a
+        // merchant can put off; "579 customers wrote and nobody answered" is the
+        // same fact in the terms they actually decide on.
+        //
+        // Scoped to the WORKSPACE being viewed, not the subscription owner: the
+        // merchant is asking about the pages on this screen, and an owner with
+        // two workspaces would otherwise see one workspace's silence reported on
+        // the other's dashboard.
+        const unansweredSinceBlock = !entitlement.allowed && entitlementEnd
+            ? await this.countUnansweredSince(workspaceId, entitlementEnd)
+            : undefined;
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -615,6 +721,11 @@ export const subscriptionsService = {
                 status: subscription.status,
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
+                // When entitlement actually lapses — snapped for manual plans, so
+                // this can be ~24h earlier than `renewsAt`. Surfaces that tell a
+                // merchant "until when am I covered?" must read THIS, not renewsAt.
+                entitlementEndsAt: entitlementEnd?.toISOString(),
+                autoReply: { allowed: entitlement.allowed, code: entitlement.code, cause: entitlement.cause, unansweredSinceBlock },
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
                 // A CANCELED shopify mirror must NOT read as shopify-billed
                 // (isShopifyBilled carries the exemption): the merchant
@@ -1000,6 +1111,45 @@ export const subscriptionsService = {
     },
 
     /**
+     * Customer messages and comments that arrived after `since` and were never
+     * answered — what a billing block actually cost this workspace.
+     *
+     * The three inbound surfaces are counted together because the merchant
+     * experiences one thing ("nobody answered my customers"), and a DM-only
+     * number would understate a comment-heavy page by an order of magnitude —
+     * the 2026-08-13 lesson that a predicate governing three tables must be
+     * measured on three tables. Each leg is served by that table's
+     * (workspace_id, created_at) index.
+     *
+     * Called ONLY when the gate refuses (getUsageSummary), so the healthy
+     * dashboard path pays nothing for it. `replied = false` is the same column
+     * the inbox's unanswered filters read, so the number the merchant is shown
+     * is the number they can go and work.
+     */
+    async countUnansweredSince(workspaceId: string, since: Date): Promise<number> {
+        const [dm, fb, ig] = await Promise.all([
+            db.select({ count: sql<number>`count(*)` }).from(messages).where(and(
+                eq(messages.workspaceId, workspaceId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                gte(messages.createdAt, since),
+            )),
+            db.select({ count: sql<number>`count(*)` }).from(comments).where(and(
+                eq(comments.workspaceId, workspaceId),
+                eq(comments.replied, false),
+                gte(comments.createdAt, since),
+            )),
+            db.select({ count: sql<number>`count(*)` }).from(instagramComments).where(and(
+                eq(instagramComments.workspaceId, workspaceId),
+                eq(instagramComments.replied, false),
+                gte(instagramComments.createdAt, since),
+            )),
+        ]);
+
+        return Number(dm[0]?.count ?? 0) + Number(fb[0]?.count ?? 0) + Number(ig[0]?.count ?? 0);
+    },
+
+    /**
      * Check if user can enable another page.
      * 1 page = 1 slot (FB + IG on the same page share the slot).
      * Pass pageId to allow enabling the other platform on an already-active page.
@@ -1192,7 +1342,7 @@ export const subscriptionsService = {
      * Check subscription status (canceled/paused/expired trial/past_due beyond grace)
      * Reusable across all limit-check methods.
      */
-    checkSubscriptionStatus(subscription: Subscription & { plan: Plan }): LimitCheckResult {
+    checkSubscriptionStatus(subscription: SubscriptionStatusInput): LimitCheckResult {
         if (subscription.status === 'canceled' || subscription.status === 'paused') {
             return { allowed: false, reason: `Subscription is ${subscription.status}`, code: 'subscription_inactive' };
         }
@@ -1216,7 +1366,10 @@ export const subscriptionsService = {
         // Admin reopens the window (and the quota) via manualUpgrade once the
         // cash/transfer lands.
         if (subscription.paymentMethod === 'manual' && subscription.currentPeriodEnd) {
-            if (startOfUtcDay(new Date(subscription.currentPeriodEnd)) < new Date()) {
+            // resolveEntitlementEnd applies the snap; display surfaces call the
+            // same helper so the date a merchant reads is the date enforced here.
+            const entitlementEnd = resolveEntitlementEnd(subscription);
+            if (entitlementEnd && entitlementEnd < new Date()) {
                 return {
                     allowed: false,
                     reason: 'Subscription expired. Please renew to continue.',
@@ -1240,7 +1393,7 @@ export const subscriptionsService = {
             (subscription.status === 'trialing' || subscription.status === 'past_due') &&
             new Date(subscription.trialEndsAt) < new Date()
         ) {
-            return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
+            return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired' };
         }
 
         if (subscription.status === 'past_due') {
@@ -1248,7 +1401,7 @@ export const subscriptionsService = {
 
             if (periodEnd) {
                 const gracePeriodEnd = new Date(periodEnd);
-                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + PAST_DUE_GRACE_DAYS);
 
                 if (new Date() > gracePeriodEnd) {
                     return {
@@ -1263,7 +1416,7 @@ export const subscriptionsService = {
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
             const trialEnd = new Date(subscription.trialEndsAt);
             if (trialEnd < new Date()) {
-                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
+                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired' };
             }
         }
 

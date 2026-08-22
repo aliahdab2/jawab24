@@ -9,6 +9,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
+import { subscriptionsService, resolveEntitlementEnd } from '../subscriptions';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
@@ -805,13 +806,63 @@ class AdminUsersService {
             replyModeEffective: resolveEffectiveReplyMode(p.replyMode, workspaceReplyMode),
         }));
 
+        // THE gate verdict, from the same predicate enforceAutoReplyGate blocks on.
+        // The console must never form its own opinion of "is this account replying?"
+        // — that is how it showed 🟢 active through a manual expiry that had frozen
+        // every reply, and why the fleet-wide past_due suspension survived a month.
+        // Resolved through getUserSubscription — the SAME accessor the reply path
+        // uses — not the raw row selected above. Two things live in there that a
+        // plain SELECT does not reproduce, and both made the console lie:
+        //
+        //  1. LAZY EXPIRY. An expired Stripe/Shopify/Zid row still reads
+        //     status='active' until something flips it. checkSubscriptionStatus has
+        //     no period check for those rails, so evaluating the raw row returned
+        //     allowed=true — a green console over exactly the silent auto-renew
+        //     suspension this work exists to expose.
+        //  2. ROW PRIORITY. The SELECT above is limit(1) with no ORDER BY, while
+        //     getUserSubscription orders active/trialing > past_due > others. On a
+        //     user with more than one subscription row the console could evaluate a
+        //     different subscription than the one being enforced — and now that it
+        //     claims to be reading THE gate, that disagreement would be invisible.
+        const gateSubscription = await subscriptionsService.getUserSubscription(userId);
+        const entitlement = gateSubscription
+            ? subscriptionsService.checkSubscriptionStatus(gateSubscription)
+            : null;
+        const entitlementEndsAt = gateSubscription ? resolveEntitlementEnd(gateSubscription) : null;
+
+        // The display row above and the gate row here should be the same
+        // subscription. When they are not, the console would show one row's plan and
+        // dates beside another row's verdict — silently, and with the authority of
+        // "this is what the gate says". Surface it instead of rendering the blend.
+        if (gateSubscription && subscription && gateSubscription.id !== subscription.id) {
+            captureError(
+                new Error('admin getUserDetail: display row and gate row differ'),
+                'User has multiple subscription rows; console panels may disagree',
+                {
+                    level: 'warning',
+                    tags: { context: 'admin', action: 'subscription-row-mismatch' },
+                    extra: { userId, displayRowId: subscription.id, gateRowId: gateSubscription.id },
+                },
+            );
+        }
+
+        const healthSubscription = gateSubscription && entitlement
+            ? {
+                status: gateSubscription.status,
+                // Subscription.trialEndsAt is typed `string | Date | null | undefined`
+                // (it crosses the API boundary); computeHealthFlags does date maths on it.
+                trialEndsAt: gateSubscription.trialEndsAt ? new Date(gateSubscription.trialEndsAt) : null,
+                autoReplyAllowed: entitlement.allowed,
+                blockCause: entitlement.cause,
+                entitlementEndsAt,
+            }
+            : null;
+
         const health = computeHealthFlags({
             now,
             lastSeenAt: user.lastSeenAt,
             settings: effectiveSettings,
-            subscription: subscription
-                ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt }
-                : null,
+            subscription: healthSubscription,
             pages: pagesWithReplyMode.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -848,7 +899,21 @@ class AdminUsersService {
                     source: settingsSource,
                 }
                 : null,
-            subscription: subscription || null,
+            subscription: subscription
+                ? {
+                    ...subscription,
+                    // Support reads THIS, not `status`. `entitlementEndsAt` is the
+                    // snapped boundary the gate enforces — for a manual plan it is up
+                    // to ~24h before `currentPeriodEnd`, which is the raw instant the
+                    // console used to print as the coverage end.
+                    // No `?? true` fallback: `entitlement` is non-null whenever a
+                    // subscription resolved, and defaulting a missing verdict to
+                    // "replies are flowing" is the exact assumption this work exists
+                    // to stop making. A row the gate could not evaluate reports null.
+                    autoReply: entitlement && { allowed: entitlement.allowed, code: entitlement.code, cause: entitlement.cause },
+                    entitlementEndsAt,
+                }
+                : null,
             pages: pagesWithReplyMode,
             usage: currentUsage ? {
                 aiRepliesCount: currentUsage.aiRepliesCount || 0,
