@@ -2385,7 +2385,9 @@ against the store's rows; otherwise the page's `kb_chunks` product rows are scor
 is asked **by id** (`getProductById`) only for a tracked row at/below `LOW_STOCK_UNITS` (5) whose store
 last synced more than `STOCK_REFRESH_MIN` (10, env) ago — never for unlimited (`null`) rows or demo
 stores — and the live figure is written back to the row only. Sold-out products stay visible as
-"out of stock" through every reader (`SELLABLE_STATUSES`). Per D-051, identity is a code decision;
+"out of stock" through every reader that feeds the model — catalog block, index, re-ingest input,
+resolver (`SELLABLE_STATUSES`); the mention-card scan stays `active`-only on purpose, so a product the
+reply calls sold out gets no card. Per D-051, identity is a code decision;
 per D-004, the retired `search_products` tool stays retired — resolution moved *inside*
 `check_inventory` behind one seam. `PROMPT_VERSION` is untouched: the tool path bypasses the reply
 cache.

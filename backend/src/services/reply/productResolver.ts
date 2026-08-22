@@ -152,30 +152,35 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
                 }
             }
 
-            const semantic = decideSemantic(hits);
-            if (semantic.kind === 'resolved') {
-                const product = await validated(storeId, semantic.platformProductId);
-                if (product) {
-                    recordResolverOutcome('by_hybrid');
-                    return { kind: 'resolved', product, via: 'hybrid' };
-                }
-                // The index named a product the catalog no longer has (drifted
-                // version): fall through to the candidates minus that row.
-            }
-            if (semantic.kind !== 'not_found') {
-                const candidates = await candidatesFor(storeId, semantic.candidateIds);
-                if (candidates.length === 1) {
-                    // Every other candidate turned out to be stale — one real product is not ambiguous.
-                    const product = await validated(storeId, candidates[0].platformProductId);
+            // Stage 2 — decided over the hits whose rows still exist. The index
+            // may lag the catalog, so a hit whose row is gone is dropped and the
+            // decision is RE-TAKEN over the rest with the SAME thresholds. A lone
+            // survivor below T_SOLO is proposed, never resolved: that is the
+            // probe's procedure, and "0 wrong resolves" was measured for it alone
+            // (on the corpus, three single-candidate cases sit in 0.25–0.35 —
+            // «ماك بوك» 0.253, «ابل تي في» 0.292, «العود» 0.318 — all right, but
+            // the zone is the one cosine cannot tell from unrelated; see §5).
+            let remaining = hits;
+            for (;;) {
+                const semantic = decideSemantic(remaining);
+                if (semantic.kind === 'not_found') break;
+                if (semantic.kind === 'resolved') {
+                    const product = await validated(storeId, semantic.platformProductId);
                     if (product) {
                         recordResolverOutcome('by_hybrid');
                         return { kind: 'resolved', product, via: 'hybrid' };
                     }
+                    remaining = remaining.filter(h => h.platformProductId !== semantic.platformProductId);
+                    continue;
                 }
-                if (candidates.length > 1) {
+                const candidates = await candidatesFor(storeId, semantic.candidateIds);
+                if (candidates.length === semantic.candidateIds.length) {
                     recordResolverOutcome('ambiguous');
                     return { kind: 'ambiguous', candidates };
                 }
+                // At least one candidate row is gone: drop those and decide again.
+                const alive = new Set(candidates.map(c => c.platformProductId));
+                remaining = remaining.filter(h => alive.has(h.platformProductId) || !semantic.candidateIds.includes(h.platformProductId));
             }
             recordResolverOutcome('not_found');
             return { kind: 'not_found', reason: 'below_floor' };
@@ -225,8 +230,7 @@ export function decideTrigram(hits: ProductHit[]): ProductHit | null {
 }
 
 export type SemanticDecision =
-    /** `candidateIds` is carried on a resolve too: if the chosen row turns out stale, the caller falls back to the rest. */
-    | { kind: 'resolved'; platformProductId: string; candidateIds: string[] }
+    | { kind: 'resolved'; platformProductId: string }
     | { kind: 'ambiguous'; candidateIds: string[] }
     | { kind: 'not_found' };
 
@@ -240,11 +244,10 @@ export function decideSemantic(hits: ProductHit[]): SemanticDecision {
         .filter(h => h.vecScore !== null && h.vecScore >= T_VEC)
         .sort((a, b) => (b.vecScore ?? 0) - (a.vecScore ?? 0));
     if (ranked.length === 0) return { kind: 'not_found' };
-    const candidateIds = ranked.slice(0, MAX_CANDIDATES).map(h => h.platformProductId);
     const top = ranked[0].vecScore ?? 0;
     const lead = ranked.length === 1 ? 1 : top - (ranked[1].vecScore ?? 0);
-    if (top >= T_SOLO && lead >= G_VEC) return { kind: 'resolved', platformProductId: ranked[0].platformProductId, candidateIds };
-    return { kind: 'ambiguous', candidateIds };
+    if (top >= T_SOLO && lead >= G_VEC) return { kind: 'resolved', platformProductId: ranked[0].platformProductId };
+    return { kind: 'ambiguous', candidateIds: ranked.slice(0, MAX_CANDIDATES).map(h => h.platformProductId) };
 }
 
 // --- Helpers ---

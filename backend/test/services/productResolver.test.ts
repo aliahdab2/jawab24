@@ -12,6 +12,7 @@
  *   - trigram stage skipped when embedding absent→ "never embeds" fails
  *   - by-id path trusts the id without the row   → "hallucinated id" fails
  *   - stale hit not re-validated against the row → "index lags the catalog" fails
+ *   - lone candidate resolved without T_SOLO    → "lone survivor" and "«العود»" fail (the probe never resolved those)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProductHit } from '../../src/services/kb/retrieval';
@@ -100,9 +101,14 @@ describe('decideSemantic — stage 2 proposes more than it decides', () => {
         expect(narrow.kind).toBe('ambiguous');
     });
 
-    it('caps candidates at three and carries them on a resolve too (for the stale-row fallback)', () => {
-        const d = decideSemantic([hit('a', 0, 0.9), hit('b', 0, 0.3), hit('c', 0, 0.29), hit('d', 0, 0.28), hit('e', 0, 0.27)]);
-        expect(d).toEqual({ kind: 'resolved', platformProductId: 'a', candidateIds: ['a', 'b', 'c'] });
+    it('caps candidates at three', () => {
+        const d = decideSemantic([hit('a', 0, 0.3), hit('b', 0, 0.29), hit('c', 0, 0.28), hit('d', 0, 0.27), hit('e', 0, 0.26)]);
+        expect(d).toEqual({ kind: 'ambiguous', candidateIds: ['a', 'b', 'c'] });
+    });
+
+    it('a lone candidate above the floor but below T_SOLO is proposed, not resolved («العود» 0.318 alone ≥ 0.25)', () => {
+        expect(decideSemantic([hit('oud', 0, 0.318), hit('a', 0, 0.230), hit('b', 0, 0.209)]))
+            .toEqual({ kind: 'ambiguous', candidateIds: ['oud'] });
     });
 
     it('hits without a vector can never be candidates', () => {
@@ -191,14 +197,34 @@ describe('resolveProduct — flow', () => {
         ] });
     });
 
-    it('index lags the catalog: a hit whose row is gone is dropped, the rest decide', async () => {
+    it('index lags the catalog: a stale row is dropped and the decision is RE-TAKEN over the rest with the same thresholds', async () => {
+        mockRetrieveProducts.mockResolvedValue([hit('stale', 0.5, 0.9), hit('shoes', 0.0, 0.5), hit('shirt', 0.0, 0.3)]);
+        mockGetProductByPlatformId.mockImplementation(async (_s: string, id: string) => (id === 'stale' ? null : row(id)));
+
+        const r = await resolveProduct({ ...base, productName: 'x', queryEmbedding: [1] });
+
+        // Trigram winner was stale → semantic resolved 'stale' too → dropped → 0.5 vs 0.3 clears T_SOLO and G_VEC.
+        expect(r).toMatchObject({ kind: 'resolved', via: 'hybrid', product: { platformProductId: 'shoes' } });
+    });
+
+    it('a lone survivor of stale candidates is PROPOSED, never resolved — T_SOLO still gates it', async () => {
         mockRetrieveProducts.mockResolvedValue([hit('stale', 0.5, 0.9), hit('real', 0.0, 0.3)]);
         mockGetProductByPlatformId.mockImplementation(async (_s: string, id: string) => (id === 'stale' ? null : row(id)));
 
         const r = await resolveProduct({ ...base, productName: 'x', queryEmbedding: [1] });
 
-        // Trigram winner was stale → semantic resolved 'stale' too → stale → the one real candidate left wins.
-        expect(r).toMatchObject({ kind: 'resolved', via: 'hybrid', product: { platformProductId: 'real' } });
+        // 0.3 alone is above the floor but below T_SOLO: "did you mean X?", not "X is in stock".
+        expect(r).toMatchObject({ kind: 'ambiguous', candidates: [{ platformProductId: 'real' }] });
+        expect((r as { candidates: unknown[] }).candidates).toHaveLength(1);
+    });
+
+    it('a lone candidate in the 0.25–0.35 zone is proposed end to end («العود» 0.318 vs 0.230)', async () => {
+        mockRetrieveProducts.mockResolvedValue([hit('oud', 0.1, 0.318), hit('abaya', 0.0, 0.230), hit('bisht', 0.0, 0.209)]);
+
+        const r = await resolveProduct({ ...base, productName: 'العود', queryEmbedding: [1] });
+
+        expect(r).toMatchObject({ kind: 'ambiguous', candidates: [{ platformProductId: 'oud' }] });
+        expect((r as { candidates: unknown[] }).candidates).toHaveLength(1);
     });
 
     it('nothing above the floor → not_found, and nothing is guessed', async () => {
