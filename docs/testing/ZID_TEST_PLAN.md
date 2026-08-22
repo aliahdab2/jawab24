@@ -179,12 +179,18 @@ there a `next`/pagination field? Multilingual `name` shape confirmed?
 **Expected:** Green — covers data quality, store info, page linking, and a
 KB-enrichment reply that cites a real product.
 
-### B-3. Incremental webhook (`product.update`)
+### B-3. Incremental webhook (`product.update`) — ✅ PROVEN LIVE 2026-08-22 (×3)
 **Steps:** Edit a product's price in the Zid admin.
 
 **Expected:** Delivery hits `/zid/webhooks` (Basic-auth verified) → product sync
 enqueued → row reflects the change. Save the delivery (headers + body) — it doubles as
 the product-event envelope capture.
+
+> ✅ Proven by the F7 image uploads instead of a price edit: each dashboard image upload
+> saves instantly and fires `product.update`; three separate deliveries were consumed
+> end-to-end (Basic-auth verified → sync → all four `ecommerce_products` rows carried
+> `media.zid.store` image URLs, progressive `updated_at` 12:40:13 → 12:42:39 UTC).
+> The auth negatives ran the same day: wrong Basic → 401, no auth → 401, no writes.
 
 ---
 
@@ -336,7 +342,7 @@ Business/الأعمال id 3740 = 189 SAR · Pro/الاحترافي id 3741 = 37
 
 | ID | Test | Expected |
 |----|------|----------|
-| H-1 | Subscribe on the dev store (trial) | `app.market.subscription.active` (or install-time equivalent — CAPTURE the real first event) → local mirror row `payment_method='zid'`, status `trialing`, subject = workspace OWNER |
+| H-1 | Subscribe on the dev store (trial) — ⛔ **BLOCKED while the app is in `Draft`** (captured 2026-08-22: «ترقية الخطة» → consent → checkout answers «تعذر بدء عملية الشراء … غير متاح للشراء حاليًا»; the free «اختبار» subscribe worked the same morning, so the gate is on PAID checkout specifically). First live capture will likely come from Zid's reviewer. | `app.market.subscription.active` (or install-time equivalent — CAPTURE the real first event) → local mirror row `payment_method='zid'`, status `trialing`, subject = workspace OWNER |
 | H-2 | Trial expiry / `subscription.expired` | Mirror → `paused` (not canceled: the app is still installed, re-subscribing recovers); lazy-expiry canary does NOT fire when the triggers work |
 | H-3 | `subscription.renew` | Period advances contiguously from the previous end; no duplicate row |
 | H-4 | `subscription.upgrade` | `plan_id` moves; usage window re-initialized to the new period |
