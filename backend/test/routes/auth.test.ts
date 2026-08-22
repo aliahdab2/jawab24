@@ -79,6 +79,8 @@ vi.mock('../../src/services/refreshToken', () => ({
     },
 }));
 
+// The controller's replay trigger pulls in services/activation → lib/redis; stub it like the rest.
+vi.mock('../../src/services/activation', () => ({ replayPendingActivationEventsToGa4: vi.fn() }));
 vi.mock('../../src/services/cookies', () => ({
     cookiesService: {
         setAuthCookies: vi.fn(),

@@ -15,8 +15,10 @@
  *
  * Covers:
  *   1. a fresh user starts with no attribution id
- *   2. the first write lands
- *   3. a second write with a different id is a no-op — the first value survives
+ *   2. the first write lands — and reports that it did
+ *   3. a second write with a different id is a no-op — the first value survives,
+ *      and the call reports that it wrote nothing (that verdict is what gates the
+ *      signup-session replay, so it must never be true twice for one user)
  *   4. the guard is scoped per user: another user's write is unaffected
  */
 
@@ -44,15 +46,15 @@ describe('users.ga_client_id first-touch', () => {
 
         expect(await readClientId(user.id)).toBeNull();
 
-        await storeGaClientIdFirstTouch(user.id, '1111111111.1700000000');
+        expect(await storeGaClientIdFirstTouch(user.id, '1111111111.1700000000')).toBe(true);
         expect(await readClientId(user.id)).toBe('1111111111.1700000000');
 
         // A later session on another browser reports a different cookie.
-        await storeGaClientIdFirstTouch(user.id, '2222222222.1800000000');
+        expect(await storeGaClientIdFirstTouch(user.id, '2222222222.1800000000')).toBe(false);
         expect(await readClientId(user.id)).toBe('1111111111.1700000000');
 
         // And repeatedly — the guard is not a one-shot.
-        await storeGaClientIdFirstTouch(user.id, '3333333333.1900000000');
+        expect(await storeGaClientIdFirstTouch(user.id, '3333333333.1900000000')).toBe(false);
         expect(await readClientId(user.id)).toBe('1111111111.1700000000');
     });
 

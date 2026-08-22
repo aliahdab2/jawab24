@@ -14,6 +14,7 @@ import { eq, and } from 'drizzle-orm';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { storeGaClientIdFirstTouch } from '../services/ga4';
+import { replayPendingActivationEventsToGa4 } from '../services/activation';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
@@ -708,7 +709,15 @@ export class AuthController {
         }
 
         try {
-            await storeGaClientIdFirstTouch(userId, clientId);
+            const wrote = await storeGaClientIdFirstTouch(userId, clientId);
+
+            // The id has just become known for the first time. Milestones this
+            // user reached BEFORE it existed — `sign_up` always, since it is
+            // recorded inside the auth request that issued the token this call
+            // carries — were left unclaimed by the live mirror. Send them now,
+            // once: `wrote` is true a single time per user, and the replay claims
+            // each row before sending. Fire-and-forget like every GA4 call.
+            if (wrote) void replayPendingActivationEventsToGa4(userId);
 
             // Always 204, whether we wrote or the first-touch guard held. The
             // client has nothing to do differently either way, and telling it

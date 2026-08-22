@@ -107,6 +107,13 @@ export const activationEvents = pgTable('activation_events', {
     event: text('event').notNull(),
     metadata: jsonb('metadata').default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // Exactly-once claim for the GA4 mirror (services/activation.ts). Set by the
+    // single `UPDATE … WHERE ga4_mirrored_at IS NULL RETURNING` that both the live
+    // mirror and the signup-session replay go through, so a milestone can never be
+    // reported to Google Ads twice however the two race. NULL means "not claimed by
+    // that code" — NOT "never sent": rows mirrored before migration 0176 carry no
+    // stamp although they were sent. Never read it as a send log.
+    ga4MirroredAt: timestamp('ga4_mirrored_at', { withTimezone: true }),
 }, (table) => ({
     userEventUnique: uniqueIndex('activation_events_user_event_idx').on(table.userId, table.event),
     createdAtIdx: index('activation_events_created_at_idx').on(table.createdAt),

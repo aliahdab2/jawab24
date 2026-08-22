@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import {
     ACTIVATION_FUNNEL_STEPS,
     KB_FILLED_MIN_CHARS,
@@ -7,9 +7,9 @@ import {
     type ActivationFunnel,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { activationEvents, pages } from '../db/schema';
+import { activationEvents, pages, users } from '../db/schema';
 import { captureError } from '../utils/sentryHelpers';
-import { sendGa4EventForUser } from './ga4';
+import { isGa4Configured, sendGa4Event } from './ga4';
 import { workspaceSettingsService } from './workspaceSettings';
 
 /**
@@ -58,18 +58,23 @@ export async function recordActivationEvent(
     // query builder — e.g. a mocked `db` in unit tests — is contained and never
     // escapes into the caller's request path.
     try {
-        // RETURNING is what makes the GA4 mirror below idempotent for free: with
+        // RETURNING is what decides whether a GA4 mirror is even attempted: with
         // ON CONFLICT DO NOTHING, Postgres returns a row ONLY when the insert
         // actually happened. A re-emit (the hot `first_autoreply_sent` path fires
-        // on every send) conflicts, returns zero rows, and sends nothing — so GA4
-        // sees each milestone exactly once per user without a second dedup layer.
+        // on every send) conflicts, returns zero rows, and touches GA4 not at all.
+        // Exactly-once for the rows that ARE new is then the row claim inside
+        // mirrorActivationEventToGa4.
         const inserted = await db
             .insert(activationEvents)
             .values({ userId, event, metadata })
             .onConflictDoNothing()
             .returning({ id: activationEvents.id });
 
-        if (inserted.length > 0) void mirrorActivationEventToGa4(userId, event);
+        // Awaited, not `void`: every production caller already dispatches
+        // recordActivationEvent itself with `void`, so nothing is held up, the
+        // mirror's own containment keeps this try block clean, and a test that
+        // awaits the record call observes the send without polling.
+        if (inserted.length > 0) await mirrorActivationEventToGa4(inserted[0].id, userId, event);
     } catch (err) {
         captureError(err, 'Failed to record activation event', {
             tags: { context: 'activation' },
@@ -98,27 +103,143 @@ const GA4_EVENT_NAMES: Record<ActivationEvent, string> = {
 };
 
 /**
- * Mirror a just-recorded milestone to GA4 so Google Ads can import it as a
- * conversion. Called ONLY on a genuine first insert (see above), so GA4 receives
- * each milestone exactly once per user.
+ * How far back the signup-session replay reaches, in hours.
  *
- * `sendGa4EventForUser` owns the credential guard and the attribution-id lookup,
- * and contains its own failures — but this function is invoked with `void`, so a
- * rejection escaping it would surface as an UNHANDLED REJECTION rather than as a
- * caught error. Containment is therefore repeated here on purpose: the caller's
- * request path (a signup, a page connect, a reply send) must not be able to fail
- * because an analytics beacon did, and "the callee promises not to throw" is not
- * something a fire-and-forget call site may rely on.
+ * The replay runs once per user, the moment their GA4 client id is first stored
+ * (`storeGaClientIdFirstTouch` returned true), and re-sends the milestones that
+ * were recorded while the id was still missing. It is bounded by the EVENT's age,
+ * not the account's: `sign_up` is recorded seconds after the account row, so for
+ * the conversion that matters the two are the same bound, while a page connected
+ * minutes ago by an older account whose id we only now captured is a truthful
+ * event for this session and keeps its attribution.
+ *
+ * 24 h, not 1 h: the normal path (callback → dashboard → the id POST) is seconds,
+ * but `/complete-profile`, the store-install wizards and a tab closed right after
+ * OAuth all sit between signup and the first dashboard mount. The cost of the
+ * wider window is nil — the first-touch gate already makes the replay a
+ * once-in-a-lifetime event per user, and Google Ads ignores a conversion whose
+ * client id never carried an ad click, so a stale id is a no-op there rather
+ * than pollution. What the bound exists for is the ~80 accounts created before
+ * any id was captured: their weeks-old `sign_up` must never be replayed when a
+ * later login finally stores an id that has nothing to do with their signup.
  */
-async function mirrorActivationEventToGa4(userId: string, event: ActivationEvent): Promise<void> {
+export const GA4_REPLAY_WINDOW_HOURS = 24;
+
+interface ClaimedActivationEvent {
+    id: string;
+    event: string;
+    clientId: string;
+    createdAt: Date;
+}
+
+/**
+ * THE exactly-once claim for the GA4 mirror — the one statement both the live
+ * mirror and the replay go through, so the predicate cannot drift between them.
+ *
+ * Joins `users` so that a row is claimed ONLY when the attribution id exists,
+ * and hands that id back in the same round trip. That join is load-bearing, not
+ * an optimisation: the purchase claim may burn its stamp without an id because
+ * nothing ever retries it, but here a claimed-yet-unsent row would be lost for
+ * good — the replay is the retry, and it only sees rows still unclaimed.
+ *
+ * Two callers racing on the same row (a `page_connected` inserted just as the
+ * id POST lands) are settled by Postgres: the second UPDATE re-evaluates
+ * `ga4_mirrored_at IS NULL` against the committed row and updates nothing.
+ */
+async function claimActivationEventsForGa4(filter: SQL | undefined): Promise<ClaimedActivationEvent[]> {
+    const rows = await db
+        .update(activationEvents)
+        .set({ ga4MirroredAt: sql`now()` })
+        .from(users)
+        .where(and(
+            eq(users.id, activationEvents.userId),
+            isNotNull(users.gaClientId),
+            isNull(activationEvents.ga4MirroredAt),
+            filter,
+        ))
+        .returning({
+            id: activationEvents.id,
+            event: activationEvents.event,
+            clientId: users.gaClientId,
+            createdAt: activationEvents.createdAt,
+        });
+    // `clientId` is non-null by the predicate; the cast states what the SQL
+    // guarantees rather than re-checking it in JS.
+    return rows as ClaimedActivationEvent[];
+}
+
+/**
+ * Mirror a just-recorded milestone to GA4 so Google Ads can import it as a
+ * conversion. Called ONLY on a genuine first insert (see above).
+ *
+ * When the user's client id is not stored yet the claim returns nothing and the
+ * row stays pending — that is the normal state for `sign_up`, whose row is
+ * written inside the auth request while the browser can only post the id after
+ * the dashboard mounts. `replayPendingActivationEventsToGa4` picks it up then.
+ *
+ * Contained on purpose: the caller's request path (a signup, a page connect, a
+ * reply send) must not be able to fail because an analytics beacon did, and
+ * "the callee promises not to throw" is not something a fire-and-forget call
+ * site may rely on.
+ */
+async function mirrorActivationEventToGa4(eventId: string, userId: string, event: ActivationEvent): Promise<void> {
     try {
-        await sendGa4EventForUser(userId, GA4_EVENT_NAMES[event]);
+        // Before the claim, for the same reason as the purchase hook: an
+        // unconfigured environment must not stamp a row it can never send.
+        if (!isGa4Configured()) return;
+
+        const [claimed] = await claimActivationEventsForGa4(eq(activationEvents.id, eventId));
+        if (!claimed) return;
+
+        await sendGa4Event(claimed.clientId, GA4_EVENT_NAMES[event]);
     } catch (err) {
         captureError(err, 'Failed to mirror activation event to GA4', {
             level: 'warning',
             tags: { context: 'activation' },
             extra: { userId, event },
             fingerprint: ['ga4-activation-mirror'],
+        });
+    }
+}
+
+/**
+ * Send the milestones a user reached before their GA4 client id was known.
+ *
+ * Triggered exactly once per user, by the first-touch write of the id
+ * (authController.setAnalyticsClientId). Claims every still-unclaimed row of the
+ * user inside GA4_REPLAY_WINDOW_HOURS and sends them oldest-first, so `sign_up`
+ * reaches GA4 before anything the merchant did afterwards.
+ *
+ * Why this exists at all: until 2026-08-22 every `sign_up` mirror resolved
+ * `no_client_id` and the Google Ads signup conversion had never received a
+ * single event, because the id is captured after the dashboard mounts and the
+ * signup row is written inside the auth request that precedes it.
+ *
+ * Fire-and-forget and fully contained — the id POST answers 204 regardless.
+ */
+export async function replayPendingActivationEventsToGa4(userId: string): Promise<void> {
+    try {
+        if (!isGa4Configured()) return;
+
+        const claimed = await claimActivationEventsForGa4(and(
+            eq(activationEvents.userId, userId),
+            sql`${activationEvents.createdAt} >= now() - make_interval(hours => ${GA4_REPLAY_WINDOW_HOURS})`,
+        ));
+        // RETURNING carries no order guarantee.
+        claimed.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+        for (const row of claimed) {
+            // `event` is text in the schema; anything outside the union (there is
+            // nothing today) goes through verbatim rather than being dropped.
+            const name = GA4_EVENT_NAMES[row.event as ActivationEvent] ?? row.event;
+            await sendGa4Event(row.clientId, name);
+        }
+    } catch (err) {
+        captureError(err, 'Failed to replay activation events to GA4', {
+            level: 'warning',
+            tags: { context: 'activation' },
+            extra: { userId },
+            fingerprint: ['ga4-activation-replay'],
         });
     }
 }
