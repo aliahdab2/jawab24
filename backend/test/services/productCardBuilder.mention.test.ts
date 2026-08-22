@@ -9,15 +9,19 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// db.select() chain: select → from → where → limit. The builder issues TWO
-// selects per call (store, then products); `mockLimit` is primed per call.
+// db.select() chain: select → from → where → [orderBy] → limit. The builder
+// issues TWO selects per call: the store row (where → limit) and the product
+// scan (where → orderBy → limit). `mockLimit` is primed per call; both shapes
+// resolve to it so priming order is unchanged.
 const mockLimit = vi.fn();
+const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(() => ({
             from: vi.fn(() => ({
                 where: vi.fn(() => ({
                     limit: mockLimit,
+                    orderBy: mockOrderBy,
                 })),
             })),
         })),
@@ -153,6 +157,48 @@ describe('buildProductCardsFromReplyText', () => {
         primeCatalog([SHIRT], { platform: 'salla', storeDomain: 'demo.salla.sa' });
         const cards = await buildProductCardsFromReplyText('store-1', 'عندنا قميص قطني رجالي');
         expect(cards[0].productUrl).toBe('https://demo.salla.sa/p/قميص-قطني-رجالي');
+    });
+
+    // --- Scan window ------------------------------------------------------
+    // The exactly-one rule is only sound over the WHOLE active catalog. A bare
+    // LIMIT let Postgres return an arbitrary subset, so on a big catalog a
+    // reply naming TWO products could leave exactly one inside the window and
+    // send a card — the precise case the rule exists to suppress.
+
+    it('orders the product scan so the window is the same set on every call', async () => {
+        primeCatalog();
+        await buildProductCardsFromReplyText('store-1', 'عندنا Sony A7S III');
+        expect(mockOrderBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('over-fetches by exactly one row so the overflow is detectable at all', async () => {
+        // Without the +1 a catalog of WINDOW+1 comes back as WINDOW rows and the
+        // guard below can never trip — the subset bug returns silently.
+        primeCatalog();
+        await buildProductCardsFromReplyText('store-1', 'عندنا Sony A7S III');
+        expect(mockLimit).toHaveBeenLastCalledWith(1001);
+    });
+
+    it('declines when the catalog is larger than the scan window — the rule is unprovable there', async () => {
+        // One row beyond the window: the builder over-fetches by one purely to
+        // detect the overflow, so this is the smallest catalog that trips it.
+        const oversized = Array.from({ length: 1001 }, (_, i) => ({
+            ...SHIRT, title: `منتج رقم ${i}`, handle: `p-${i}`,
+        }));
+        oversized[0] = SONY;
+        primeCatalog(oversized);
+        expect(await buildProductCardsFromReplyText('store-1', 'عندنا Sony A7S III')).toEqual([]);
+    });
+
+    it('still cards a catalog exactly at the window — the guard is off-by-one safe', async () => {
+        const atLimit = Array.from({ length: 1000 }, (_, i) => ({
+            ...SHIRT, title: `منتج رقم ${i}`, handle: `p-${i}`,
+        }));
+        atLimit[0] = SONY;
+        primeCatalog(atLimit);
+        const cards = await buildProductCardsFromReplyText('store-1', 'عندنا Sony A7S III');
+        expect(cards).toHaveLength(1);
+        expect(cards[0].title).toBe('Sony A7S III');
     });
 });
 

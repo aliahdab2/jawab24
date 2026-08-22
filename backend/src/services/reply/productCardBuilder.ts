@@ -24,12 +24,21 @@ import { normalizeArabic } from '@jawab24/shared';
 import type { EcommerceToolResult, InventoryInfo, ProductCard } from '@jawab24/shared';
 
 /**
- * Upper bound on catalog rows scanned for a mention match. The catalog block
- * the model answers from is capped at 15 products / ~1200 chars, so a reply
- * can only ever name a product from a small set; 200 keeps the scan bounded
- * for large stores without ever cutting a product the reply could mention.
+ * Upper bound on catalog rows scanned for a mention match.
+ *
+ * The "exactly one match" rule below is only sound when the scan sees the
+ * WHOLE active catalog. On a catalog larger than this window the scan sees a
+ * subset, so a reply naming TWO products can leave exactly one of them inside
+ * the window — and the rule that exists to suppress comparison replies would
+ * pass and send a card. That is why exceeding this window fails CLOSED
+ * (`MENTION_SCAN_LIMIT + 1` is fetched purely to detect the overflow).
+ *
+ * 1000 covers the ordinary Salla/Zid/Shopify catalog while keeping the reply
+ * path to one indexed read of five small columns (Rule 17). Bigger catalogs
+ * are not inlined in the prompt anyway — the model reaches for a tool there,
+ * and tool-result cards (above) still fire.
  */
-const MENTION_SCAN_LIMIT = 200;
+const MENTION_SCAN_LIMIT = 1000;
 
 /** One card per product per customer per day — a card on every turn of a
  *  conversation about the same product is noise, not help. */
@@ -177,7 +186,17 @@ export async function buildProductCardsFromReplyText(
                 eq(ecommerceProducts.ecommerceStoreId, storeId),
                 eq(ecommerceProducts.status, 'active'),
             ))
-            .limit(MENTION_SCAN_LIMIT);
+            // Ordered so the scanned window is the SAME set on every call — a
+            // bare LIMIT lets Postgres return an arbitrary (and drifting)
+            // subset, which makes a missing card unreproducible. Matches the
+            // ordering `buildProductSummary` uses for the catalog the model
+            // actually sees.
+            .orderBy(ecommerceProducts.id)
+            .limit(MENTION_SCAN_LIMIT + 1);
+
+        // Catalog larger than the window → the exactly-one rule is unprovable.
+        // A wrong card is worse than none, so decline rather than guess.
+        if (products.length > MENTION_SCAN_LIMIT) return [];
 
         const haystack = foldForMatch(replyText);
         const mentioned = products.filter(p => {
