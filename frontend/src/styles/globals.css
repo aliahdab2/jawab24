@@ -518,6 +518,15 @@
     @apply bg-orange-50 text-orange-700 border-orange-100
            dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800;
   }
+  /* Neutral chip. Same colours the Badge component used to inline as raw
+     `bg-surface-50 text-surface-600 border-surface-200`; they are correct
+     (6.93:1 light, 5.35:1 dark — the surface scale flips both halves together),
+     but a component naming raw scale steps is the pattern CONVENTIONS.md
+     forbids, and it left the neutral chip as the one status with nowhere to
+     apply a fix. */
+  .status-neutral {
+    @apply bg-surface-50 text-surface-600 border-surface-200;
+  }
 
   /* --- Icon backgrounds (circle/rounded-lg containers for icons) --- */
   .icon-bg-emerald {
