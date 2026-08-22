@@ -2303,8 +2303,11 @@ the Zid dev store `e3deb6f2-…` (the same `replaceProductsAndRebuildSummary` �
 | `metrics:ai:attempts:embedding_ingestion:…` | 1214 | **1214** | +1 — `embedBatch` emits once per batch, and 4 chunks are one batch |
 | `metrics:ai:returns:embedding_ingestion:…` | 1211 | **1211** | +1 |
 
-The fleet key count had already recovered 15 → 37 in the ~3 h since the deploy, which is the
-flush's absence showing up on its own. **The ingestion half is not vacuous:** the sync really
+⚠️ Do not read the 15 → 37 rise between the baseline (16:45) and the first read (19:10) as
+evidence of anything: the change only went live at 18:53, and the old flush fired only on a
+product webhook or sync — none ran in that window (`last_sync_at` 13:36 / 14:35). The cache
+would have grown the same way under the old code. The proof is the row above, and only the
+row above: a real sync ran and the count went **up**. **The ingestion half is not vacuous:** the sync really
 did re-ingest — `kb_chunks` gained a complete version 5 for page `d88d7c02-…` at 19:25:15
 (4 chunks, 4 with embeddings, replacing version 4) — and the provider was never called, which
 only reuse can produce. `embedding_rag` moved 50412 → 50420 over the same window: ordinary
