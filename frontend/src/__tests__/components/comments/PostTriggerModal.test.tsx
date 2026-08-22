@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { POST_REPLY_BUTTON_TEXT_MAX, POST_REPLY_MAX_REPLY_LEN } from '@jawab24/shared';
 import type { ReactNode } from 'react';
 
 vi.mock('@/lib/api', () => ({
@@ -365,6 +366,43 @@ describe('PostTriggerModal — CTA button', () => {
         await screen.findByText('Add a button');
         expect((container.querySelector('#trigger-button-label') as HTMLInputElement).value).toBe('Buy');
         expect((container.querySelector('#trigger-button-url') as HTMLInputElement).value).toBe('https://shop.example');
+    });
+
+    // Regression: attaching a button (without an image) drops the reply ceiling to the
+    // button-template limit the backend enforces, but the textarea kept the higher flat
+    // cap — so a merchant could type past the real limit with only the counter to warn them.
+    it('caps the reply textarea at the button-template limit once a button is attached', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
+        fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'https://shop.example/x' } });
+
+        const textarea = container.querySelector('#trigger-reply') as HTMLTextAreaElement;
+        expect(textarea.maxLength).toBe(POST_REPLY_BUTTON_TEXT_MAX);
+        expect(POST_REPLY_BUTTON_TEXT_MAX).toBeLessThan(POST_REPLY_MAX_REPLY_LEN);
+    });
+
+    // Regression: disabling Save on replyOverLimit blocked onClick, making the component's
+    // own postTriggerReplyTooLong toast unreachable — Save just did nothing, unexplained.
+    // Must stay clickable and toast, like every other check in handleSave.
+    it('keeps Save clickable and toasts — never silently disables — when a hydrated reply exceeds the button-template limit', async () => {
+        const overLimitReply = 'x'.repeat(POST_REPLY_BUTTON_TEXT_MAX + 1);
+        renderModal({
+            source: 'facebook',
+            triggerType: 'all',
+            triggerReply: overLimitReply,
+            triggerButtonLabel: 'Buy',
+            triggerButtonUrl: 'https://shop.example',
+        });
+        await screen.findByDisplayValue('Buy');
+
+        const saveButton = screen.getByRole('button', { name: 'Save' });
+        expect(saveButton).not.toBeDisabled();
+
+        fireEvent.click(saveButton);
+        await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+        expect(updateTriggerMock).not.toHaveBeenCalled();
     });
 });
 
