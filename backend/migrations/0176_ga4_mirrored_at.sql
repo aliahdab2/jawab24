@@ -1,0 +1,15 @@
+-- Exactly-once claim for the GA4 mirror of activation milestones.
+--
+-- Until 2026-08-22 the `sign_up` conversion Google Ads is meant to bid on had
+-- never received an event: the milestone is recorded inside the auth request,
+-- while the attribution id (`users.ga_client_id`) is only posted by the browser
+-- once the dashboard has mounted — so every mirror resolved `no_client_id`.
+-- The fix replays a user's un-mirrored milestones the moment their id is first
+-- stored. Both the live mirror and that replay now claim each row with
+-- `UPDATE … WHERE ga4_mirrored_at IS NULL RETURNING` before sending, so however
+-- the two race a milestone reaches GA4 at most once.
+--
+-- Nullable and additive. NULL means "not claimed by that code", NOT "never
+-- sent": rows mirrored before this migration carry no stamp although they were
+-- sent. The replay is bounded to recent events, so those rows are never touched.
+ALTER TABLE "activation_events" ADD COLUMN IF NOT EXISTS "ga4_mirrored_at" timestamp with time zone;

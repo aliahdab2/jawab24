@@ -72,6 +72,7 @@ import {
     sendGa4Event,
     sendGa4EventForUser,
     sendPurchaseConversion,
+    storeGaClientIdFirstTouch,
     isGa4Configured,
 } from '../services/ga4';
 
@@ -374,5 +375,27 @@ describe('sendPurchaseConversion', () => {
         expect(JSON.parse(fetchMock.mock.calls[0][1].body).events[0].params.items).toEqual([
             { item_id: 'unknown', item_name: 'unknown', quantity: 1 },
         ]);
+    });
+});
+
+/**
+ * The boolean is what triggers the signup-session replay in the auth
+ * controller, so it must report THIS call's write and nothing else. The
+ * first-touch SQL itself is proven against Postgres in
+ * test/integration/gaClientIdFirstTouch.test.ts; here only the mapping from
+ * RETURNING to the verdict is pinned.
+ */
+describe('storeGaClientIdFirstTouch', () => {
+    it('reports true when the first-touch UPDATE returned the row', async () => {
+        claimQueue.value = [[{ id: 'user-1' }]];
+
+        await expect(storeGaClientIdFirstTouch('user-1', '1234567890.1700000000')).resolves.toBe(true);
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports false when the guard held — the id was already stored', async () => {
+        claimQueue.value = [[]];
+
+        await expect(storeGaClientIdFirstTouch('user-1', '1234567890.1700000000')).resolves.toBe(false);
     });
 });

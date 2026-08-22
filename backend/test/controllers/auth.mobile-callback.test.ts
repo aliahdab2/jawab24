@@ -23,6 +23,8 @@ vi.mock('../../src/services/otp', () => ({
     },
 }));
 vi.mock('../../src/services/cookies', () => ({ cookiesService: { setAuthCookies: vi.fn() } }));
+// The controller's replay trigger pulls in services/activation → lib/redis; stub it like the rest.
+vi.mock('../../src/services/activation', () => ({ replayPendingActivationEventsToGa4: vi.fn() }));
 vi.mock('../../src/services/refreshToken', () => ({ refreshTokenService: {} }));
 vi.mock('../../src/services/settings', () => ({
     settingsService: { getSettings: vi.fn().mockResolvedValue({}) },

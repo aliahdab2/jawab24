@@ -33,6 +33,8 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('../../src/services/auth', () => ({ authService: {}, ACCESS_TOKEN_EXPIRY: 900 }));
 vi.mock('../../src/services/cookies', () => ({ cookiesService: {} }));
+// The controller's replay trigger pulls in services/activation → lib/redis; stub it like the rest.
+vi.mock('../../src/services/activation', () => ({ replayPendingActivationEventsToGa4: vi.fn() }));
 vi.mock('../../src/services/refreshToken', () => ({ refreshTokenService: {} }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/pages', () => ({ pagesService: {} }));

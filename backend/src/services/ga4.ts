@@ -264,20 +264,32 @@ export async function sendPurchaseConversion(params: {
  * The guarantee IS this WHERE clause, which is why this lives in one place and
  * both the controller and its integration test call it rather than restating the
  * SQL — a restated predicate drifts silently the moment this one changes.
+ *
+ * Returns whether THIS call stored the id — true exactly once per user, ever.
+ * That single `true` is what triggers the replay of the milestones recorded
+ * before the id existed (`replayPendingActivationEventsToGa4`): the `sign_up`
+ * row is inserted inside the auth request, while the browser can only post the
+ * id after it holds the token from that same response, so at mirror time the
+ * column is always still NULL. Keying the replay on the first-touch write also
+ * means a user whose id is already stored can never be replayed again.
  */
-export async function storeGaClientIdFirstTouch(userId: string, clientId: string): Promise<void> {
-    await db
+export async function storeGaClientIdFirstTouch(userId: string, clientId: string): Promise<boolean> {
+    const written = await db
         .update(users)
         .set({ gaClientId: clientId })
-        .where(and(eq(users.id, userId), isNull(users.gaClientId)));
+        .where(and(eq(users.id, userId), isNull(users.gaClientId)))
+        .returning({ id: users.id });
+    return written.length > 0;
 }
 
 /**
  * Send an event on behalf of a user, resolving their stored attribution id.
  *
- * This is the entry point every server-side conversion should use — the
- * activation mirror and the Stripe purchase hook both need "look up
- * users.ga_client_id, then send", and that lookup must not be written twice.
+ * Used by the Stripe purchase hook, which claims its stamp on `subscriptions`
+ * and then needs "look up users.ga_client_id, then send". The activation mirror
+ * does NOT come through here: its claim joins `users` and returns the client id
+ * in the same statement (services/activation.ts), so a row can never be claimed
+ * while the id is still missing.
  *
  * Fire-and-forget: contained failures only, never throws into the caller.
  */

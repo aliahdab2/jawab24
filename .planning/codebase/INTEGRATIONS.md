@@ -926,10 +926,35 @@ Voice-to-text for KB content via microphone:
   (measured that day: 79 of 85 production subscriptions carried a
   `trial_ends_at`). A `billing_reason` test would not have separated the first
   post-trial charge from a renewal either: both are `subscription_cycle`.
-- **Idempotency**: the activation mirror fires only when
-  `INSERT … ON CONFLICT DO NOTHING RETURNING id` returns a row, so GA4 receives
-  each milestone exactly once per user — `first_autoreply_sent` re-emits on
-  every reply and must not re-convert.
+- **Idempotency**: the activation mirror is *attempted* only when
+  `INSERT … ON CONFLICT DO NOTHING RETURNING id` returns a row —
+  `first_autoreply_sent` re-emits on every reply and must not re-convert. Whether
+  a new row is *sent* is decided by a row claim, **`activation_events.ga4_mirrored_at`**
+  (migration 0176): `UPDATE activation_events … FROM users WHERE ga_client_id IS
+  NOT NULL AND ga4_mirrored_at IS NULL RETURNING …, ga_client_id`. One statement,
+  shared by the live mirror and the signup-session replay below, so however the
+  two race a milestone reaches GA4 at most once. The `users` join is load-bearing:
+  a row is never claimed while the id is missing, because here — unlike the
+  purchase stamp — the replay is the retry, and it only sees unclaimed rows.
+  NULL means "not claimed by that code", not "never sent": rows mirrored before
+  0176 carry no stamp although they were sent.
+- **⭐ The signup-session replay — why `sign_up` was empty until 2026-08-22.**
+  `sign_up` is recorded *inside* the auth request, but the attribution id is
+  posted by the browser only after the dashboard mounts, with the token that very
+  response issued. So at mirror time `users.ga_client_id` was always still NULL,
+  every `sign_up` resolved `no_client_id`, and the Primary conversion action Ads
+  was meant to bid on had never received an event (confirmed in the GA4 events
+  report on 2026-08-20). Fix: `storeGaClientIdFirstTouch` now reports whether it
+  wrote, and on that single `true` per user the controller fires
+  `replayPendingActivationEventsToGa4`, which claims the user's still-unclaimed
+  rows younger than `GA4_REPLAY_WINDOW_HOURS` (24 h, keyed on the *event's*
+  `created_at`) and sends them oldest-first. The window exists for the ~80
+  accounts created before any id was captured: their weeks-old `sign_up` must
+  not become a conversion when a later login finally stores an id that never
+  carried their click. Mobile (Capacitor) signups are out of scope: the WebView's
+  cookie jar never saw the ad click, so its id attributes to nothing either way.
+  Pinned by `test/integration/activationGa4Replay.test.ts` (real Postgres, incl.
+  the live-vs-replay election) and `test/controllers/auth.analytics-client-id.test.ts`.
 
   `purchase` is made exactly-once by **`subscriptions.ga4_purchase_reported_at`**:
   whichever of the two paths sees money first claims it with
@@ -979,10 +1004,12 @@ Voice-to-text for KB content via microphone:
   - Both empty ⇒ integration disabled (the correct local-dev setting)
 - **Implementation Location**:
   - `/backend/src/services/ga4.ts` (MP client, purchase conversion, first-touch write)
-  - `/backend/src/services/activation.ts` (the milestone mirror)
+  - `/backend/src/services/activation.ts` (the milestone mirror, its row claim, the signup-session replay)
+  - `/backend/src/controllers/auth.ts` (`setAnalyticsClientId` — the replay trigger)
   - `/backend/src/controllers/paymentWebhookHandlers.ts` (`purchase`)
   - `/backend/scripts/verify-ga4.ts` (`npm run verify:ga4`)
-  - `/backend/test/integration/ga4PurchaseClaim.test.ts` (the exactly-once claim, real Postgres)
+  - `/backend/migrations/0174_ga_client_id.sql`, `0175_ga4_purchase_reported_at.sql`, `0176_ga4_mirrored_at.sql`
+  - `/backend/test/integration/ga4PurchaseClaim.test.ts`, `activationGa4Replay.test.ts` (the exactly-once claims, real Postgres)
   - `/frontend/src/utils/analytics.ts`, `/frontend/src/hooks/useGaClientIdSync.ts`
 - **Still owed after deploy**: mark the events as **key events** in GA4, then
   import them into Google Ads as conversions. Do not switch bidding away from
@@ -1006,7 +1033,7 @@ Voice-to-text for KB content via microphone:
 | PostgreSQL | Primary database | `DATABASE_URL` | ✅ Production |
 | Redis | Cache + job queue | `REDIS_*` env vars | ✅ Production |
 | Sentry | Error tracking | `SENTRY_DSN` | ✅ Production |
-| GA4 Measurement Protocol | Server-side conversions for Google Ads | `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` | ⚠️ Code ready, credentials not yet set in prod |
+| GA4 Measurement Protocol | Server-side conversions for Google Ads | `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` | ✅ Production (`purchase` imported into Ads 2026-08-20; `sign_up` attributable since the 2026-08-22 replay fix — import it next) |
 | Geoip-lite | User geolocation (fallback when CDN header missing) | (npm package) | ✅ Production (Tier 2 fallback after Cloudflare) |
 
 ---

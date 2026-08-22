@@ -2304,3 +2304,48 @@ unchanged text is now free, changed text still costs; that ruling's other reason
 Pinned by `backend/test/services/ecommerce-rag.test.ts` (no SCAN/DEL on invalidation) and
 `backend/test/services/kb/ingestion.test.ts` (reuse, all-reusable ⇒ zero provider calls,
 fail-open).
+
+## D-091 · The Google Ads signup conversion is the server-side `sign_up`, not a page-load rule and not a `/welcome` route (2026-08-22, owner ruling)
+
+**Ruling.** The conversion Google Ads counts as "a new account was created" is the GA4
+`sign_up` event the backend already sends once per account (`recordActivationEvent('signup')`
+→ Measurement Protocol), imported into Ads from GA4. There will be **no** dedicated
+post-signup route (`/welcome` + `has_seen_welcome`), **no** client-side
+`gtag('event','conversion')`, and **no** conversion label copied into the code. The existing
+`Sign-up (dashboard)` action — a page-load rule on `jawab24.com/dashboard` — is demoted to
+Secondary after the import, never deleted, renamed, or re-pointed at a route that does not exist.
+
+**Why not the brief's `/welcome`.** A page-load rule counts page loads. The defect it was meant
+to cure — logins, reloads and the owner's own visits all counting as sign-ups — is a property of
+*every* page-load rule, only narrowed by a dedicated route, and still defeated by the lazy-loaded
+tag (`strategy="lazyOnload"`, a first-paint decision) on a page that redirects in under a second,
+and by any ad blocker. The server already knows the exact moment an account row is inserted, and
+sends an event that cannot double-fire (unique `(user_id, event)` index) and cannot be blocked.
+Building a weaker signal next to a stronger one that was merely broken is not a fix.
+
+**Why not the onboarding wizard as the trigger.** It is a modal on `/dashboard` gated on
+`pages.length === 0 && !onboardingCompletedAt` — a returning merchant with no page sees it, and a
+Facebook signup that auto-syncs a page never does. It has no URL. It measures "no page yet", not
+"new account".
+
+**The bug that made the server event look absent.** `sign_up` had never reached GA4 — not
+because the code path was missing, but because the attribution id it needs
+(`users.ga_client_id`) is posted by the browser only after the dashboard mounts, with the token
+the auth response issued, while the `sign_up` row is inserted inside that same auth request. At
+mirror time the id was always NULL; every send resolved `no_client_id`. The 2026-08-20 synthetic
+test that "proved" the event could land was confounded by a fake client id and proved nothing
+about the real path. Fix: replay a user's un-mirrored milestones the moment the id is first
+stored, with a row claim (`activation_events.ga4_mirrored_at`, migration 0176) shared by the live
+mirror and the replay so nothing ever sends twice, bounded to events younger than 24 h so the
+~80 pre-existing accounts never convert retroactively. Details in
+`.planning/codebase/INTEGRATIONS.md` § GA4.
+
+**What this means for the Ads account (owner-side, after deploy).** Mark `sign_up` a key event
+in GA4 once the first real one lands → import it into Ads as a Primary conversion, count One,
+90-day click window → set `Sign-up (dashboard)` to Secondary. Internal traffic is then a
+non-issue for this conversion — the owner opening the dashboard creates no account — and the GA4
+internal-traffic filter is a reporting nicety, not a correctness requirement.
+
+**Limits, stated.** Mobile (Capacitor) signups attribute to nothing: the WebView's cookie jar
+never saw the ad click. A merchant who signs up with analytics blocked and logs in elsewhere more
+than 24 h later is honestly lost. Neither is a regression — both were unreachable before too.
