@@ -16,17 +16,41 @@
 import crypto from 'crypto';
 import {
     VALID_TOOL_NAMES,
+    LOW_STOCK_UNITS,
+    availabilityOf,
     type EcommerceToolCall, type EcommerceToolResult,
     type OrderInfoFull, type ShipmentInfoFull, type PendingVerification,
-    type InventoryInfo,
+    type InventoryInfo, type EcommerceProduct,
 } from '@jawab24/shared';
-import { getStoreById } from './ecommerce';
+import {
+    getStoreById, writeBackProductStock, buildProductUrl,
+    type PlatformProductDetail,
+} from './ecommerce';
+import { isDemoStore } from './demoStore';
+import { resolveProduct, sanitizeProductId, recordResolverOutcome } from './reply/productResolver';
 import { redis } from '../lib/redis';
 import { captureError } from '../utils/sentryHelpers';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
 const VERIFICATION_TTL_SECONDS = 600; // 10 minutes — pending verification data
 const PRODUCT_NAME_MAX_LENGTH = 200;
+const VARIANT_MAX_LENGTH = 60;
+/**
+ * Minutes after which a synced stock figure counts as stale (D-092 decision 1).
+ * A live platform read happens only for a TRACKED product at or below
+ * LOW_STOCK_UNITS whose store synced longer ago than this — the one case where
+ * a stale "3 left" can turn into "sold out" between syncs. Env-overridable.
+ */
+export const STOCK_REFRESH_MIN = Math.max(1, parseInt(process.env.STOCK_REFRESH_MIN || '10', 10) || 10);
+const STOCK_CACHE_TTL_SECONDS = STOCK_REFRESH_MIN * 60;
+
+/** What the tool loop knows about the reply it is serving — lets the resolver reuse its work. */
+export interface ToolExecutionContext {
+    pageId?: string | null;
+    kbActiveVersion?: number | null;
+    queryEmbedding?: number[] | null;
+    userId?: string | null;
+}
 
 // --- Input Sanitization ---
 
@@ -52,6 +76,30 @@ export function sanitizePhone(raw: string): string | null {
     const cleaned = raw.trim().replace(/[\s()-]/g, '');
     if (!/^\+?\d{7,15}$/.test(cleaned)) return null;
     return cleaned;
+}
+
+/** Sanitize a variant hint ("medium", "أسود"): same character policy as product names, shorter cap. Was passed through raw before D-092. */
+export function sanitizeVariant(raw: string | undefined): string | undefined {
+    const cleaned = (raw ?? '').trim().slice(0, VARIANT_MAX_LENGTH).replace(/[<>{}[\]\\"`]/g, '');
+    return cleaned.length > 0 ? cleaned : undefined;
+}
+
+/** The arguments a tool call is actually executed with — what the cache key must be built from, not the model's raw text. */
+function sanitizedArgsOf(toolCall: EcommerceToolCall): Record<string, string> {
+    const a = toolCall.arguments;
+    const out: Record<string, string> = {};
+    const orderNumber = sanitizeOrderNumber(a.order_number || '');
+    if (orderNumber) out.order_number = orderNumber;
+    const productId = sanitizeProductId(a.product_id);
+    if (productId) out.product_id = productId;
+    const productName = sanitizeProductName(a.product_name || '');
+    if (productName) out.product_name = productName;
+    const variant = sanitizeVariant(a.variant);
+    if (variant) out.variant = variant;
+    if (a.provided_name?.trim()) out.provided_name = a.provided_name.trim();
+    const phone = sanitizePhone(a.provided_phone || '');
+    if (phone) out.provided_phone = phone;
+    return out;
 }
 
 // --- Verification Helpers ---
@@ -127,8 +175,9 @@ function recordToolOutcome(toolName: string, outcome: string): void {
 export async function executeToolCall(
     ecommerceStoreId: string,
     toolCall: EcommerceToolCall,
+    ctx: ToolExecutionContext = {},
 ): Promise<EcommerceToolResult> {
-    const { result, cached } = await runToolCall(ecommerceStoreId, toolCall);
+    const { result, cached } = await runToolCall(ecommerceStoreId, toolCall, ctx);
     recordToolOutcome(
         toolCall.name,
         cached ? 'cached' : result.success ? 'success' : (result.error ?? 'unknown'),
@@ -139,6 +188,7 @@ export async function executeToolCall(
 async function runToolCall(
     ecommerceStoreId: string,
     toolCall: EcommerceToolCall,
+    ctx: ToolExecutionContext,
 ): Promise<{ result: EcommerceToolResult; cached: boolean }> {
     const live = (result: EcommerceToolResult) => ({ result, cached: false });
 
@@ -158,8 +208,26 @@ async function runToolCall(
         return live({ tool_name: toolCall.name, success: false, error: 'store_not_connected' });
     }
 
-    // 4. Check Redis cache
-    const cacheKey = buildToolCacheKey(ecommerceStoreId, toolCall);
+    // 4. check_inventory resolves and answers LOCALLY (D-092): no result cache.
+    //    The old raw-args cache keyed on the model's free text and pinned whatever
+    //    the platform matcher returned — including a wrong product — for five
+    //    minutes. The only cache on this path now is the per-product LIVE stock
+    //    read inside readStock, keyed by platform product id.
+    if (toolCall.name === 'check_inventory') {
+        try {
+            return live(await executeInventoryCheck(store, toolCall, ctx));
+        } catch (err) {
+            captureError(err, 'E-commerce tool execution failed: check_inventory', {
+                tags: { service: 'ecommerce-tools', platform: store.platform },
+                extra: { storeId: ecommerceStoreId, tool: toolCall.name },
+            });
+            return live({ tool_name: toolCall.name, success: false, error: 'api_error' });
+        }
+    }
+
+    // 5. Order tools: Redis result cache, keyed on the SANITIZED arguments so
+    //    '#123' and '123' share an entry.
+    const cacheKey = buildToolCacheKey(ecommerceStoreId, toolCall.name, sanitizedArgsOf(toolCall));
     try {
         const cached = await redis.get(cacheKey);
         if (cached) {
@@ -169,7 +237,7 @@ async function runToolCall(
         // Redis unavailable — proceed without cache
     }
 
-    // 5. Route to platform-specific executor
+    // 6. Route to platform-specific executor
     let result: EcommerceToolResult;
     try {
         switch (store.platform) {
@@ -198,7 +266,7 @@ async function runToolCall(
         return live({ tool_name: toolCall.name, success: false, error: 'api_error' });
     }
 
-    // 6. Cache successful results
+    // 7. Cache successful results
     if (result.success) {
         try {
             await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS);
@@ -266,14 +334,19 @@ async function handleVerification(
 
 // --- Phase 1: Platform-Specific Executors ---
 
-/** Platform module interface — both Shopify and Salla export these functions */
+/**
+ * Platform module interface — Shopify, Salla and Zid each export these.
+ * `getProductById` replaced the three `checkInventory` matchers (D-092): the
+ * platform is asked about ONE product, by its own id, and never asked to guess
+ * which product a name means.
+ */
 interface PlatformModule {
     lookupOrder: (storeId: string, orderNumber: string) => Promise<OrderInfoFull | null>;
     getShipmentTracking: (storeId: string, orderNumber: string) => Promise<ShipmentInfoFull | null>;
-    checkInventory: (storeId: string, productName: string, variant?: string) => Promise<InventoryInfo | null>;
+    getProductById: (storeId: string, platformProductId: string) => Promise<PlatformProductDetail | null>;
 }
 
-/** Shared executor — platform-agnostic tool routing */
+/** Shared executor — platform-agnostic routing for the ORDER tools. */
 async function executePlatformTool(
     mod: PlatformModule, storeId: string, toolCall: EcommerceToolCall,
 ): Promise<EcommerceToolResult> {
@@ -294,16 +367,176 @@ async function executePlatformTool(
             await storePendingVerification(storeId, orderNumber, 'shipment', fullData);
             return buildVerificationChallenge(toolCall.name, orderNumber);
         }
-        case 'check_inventory': {
-            const productName = sanitizeProductName(toolCall.arguments.product_name || '');
-            if (!productName) return { tool_name: toolCall.name, success: false, error: 'invalid_product_name' };
-            const data = await mod.checkInventory(storeId, productName, toolCall.arguments.variant);
-            return data
-                ? { tool_name: toolCall.name, success: true, data: data as unknown as Record<string, unknown> }
-                : { tool_name: toolCall.name, success: false, error: 'product_not_found' };
-        }
         default:
             return { tool_name: toolCall.name, success: false, error: 'unknown_tool' };
+    }
+}
+
+// --- check_inventory (D-092: resolve in code, answer locally, platform by id only when risky) ---
+
+type StoreRow = NonNullable<Awaited<ReturnType<typeof getStoreById>>>;
+
+async function executeInventoryCheck(
+    store: StoreRow,
+    toolCall: EcommerceToolCall,
+    ctx: ToolExecutionContext,
+): Promise<EcommerceToolResult> {
+    const productId = sanitizeProductId(toolCall.arguments.product_id);
+    const productName = sanitizeProductName(toolCall.arguments.product_name || '');
+    if (!productId && !productName) {
+        return { tool_name: toolCall.name, success: false, error: 'invalid_product_name' };
+    }
+
+    const resolution = await resolveProduct({
+        storeId: store.id,
+        pageId: ctx.pageId,
+        kbActiveVersion: ctx.kbActiveVersion,
+        productId,
+        productName,
+        queryEmbedding: ctx.queryEmbedding,
+        userId: ctx.userId,
+    });
+
+    if (resolution.kind === 'not_found') {
+        return { tool_name: toolCall.name, success: false, error: 'product_not_found' };
+    }
+    if (resolution.kind === 'ambiguous') {
+        return { tool_name: toolCall.name, success: false, error: 'ambiguous_product', candidates: resolution.candidates };
+    }
+
+    const info = await readStock(store, resolution.product, sanitizeVariant(toolCall.arguments.variant));
+    return { tool_name: toolCall.name, success: true, data: info as unknown as Record<string, unknown> };
+}
+
+/**
+ * Answer from the synced row; go to the platform by id only when the local
+ * answer is RISKY — a tracked product at or below LOW_STOCK_UNITS whose store
+ * last synced more than STOCK_REFRESH_MIN ago. Unlimited (`null`) rows and
+ * demo stores never refresh. A platform failure degrades to the local answer
+ * (reported once), never to a wrong product or an api_error for the customer.
+ */
+async function readStock(store: StoreRow, product: EcommerceProduct, variant?: string): Promise<InventoryInfo> {
+    const local = inventoryFromRow(store, product);
+    const demo = isDemoStore(store);
+    const risky = product.totalInventory !== null && product.totalInventory <= LOW_STOCK_UNITS;
+    const lastSync = store.lastSyncAt ? new Date(store.lastSyncAt).getTime() : 0;
+    const stale = Date.now() - lastSync > STOCK_REFRESH_MIN * 60 * 1000;
+
+    if (demo) { recordResolverOutcome('demo_local'); return local; }
+    if (!risky) { recordResolverOutcome(stale ? 'stale_served' : 'local'); return local; }
+    if (!stale) { recordResolverOutcome('local'); return local; }
+
+    const cacheKey = `ecom:stock:${store.id}:${product.platformProductId}`;
+    try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            const detail = JSON.parse(cached) as { detail: PlatformProductDetail; asOf: string };
+            recordResolverOutcome('live_cached');
+            return inventoryFromDetail(store, product, detail.detail, detail.asOf, variant);
+        }
+    } catch {
+        // cache miss path below
+    }
+
+    try {
+        const mod = await platformModule(store.platform);
+        const detail = await mod.getProductById(store.id, product.platformProductId);
+        if (!detail) {
+            // The platform no longer knows this product; the synced row is the
+            // best answer we have, and the next sync will reconcile the row.
+            recordResolverOutcome('live_missing');
+            return local;
+        }
+        const asOf = new Date().toISOString();
+        await writeBackProductStock(store.id, product.platformProductId, detail.totalInventory);
+        try {
+            await redis.set(cacheKey, JSON.stringify({ detail, asOf }), 'EX', STOCK_CACHE_TTL_SECONDS);
+        } catch {
+            // cache write is best-effort
+        }
+        recordResolverOutcome('live_refresh');
+        return inventoryFromDetail(store, product, detail, asOf, variant);
+    } catch (err) {
+        recordResolverOutcome('live_failed');
+        captureError(err, 'Live stock refresh failed — serving the synced figure', {
+            tags: { service: 'ecommerce-tools', platform: store.platform },
+            extra: { storeId: store.id, platformProductId: product.platformProductId },
+        });
+        return local;
+    }
+}
+
+/** InventoryInfo from the synced catalog row. `asOf` is the store's last sync. */
+function inventoryFromRow(store: StoreRow, product: EcommerceProduct): InventoryInfo {
+    const availability = availabilityOf(product);
+    return {
+        platformProductId: product.platformProductId,
+        productName: product.title,
+        available: availability !== 'out_of_stock',
+        availability,
+        ...(product.totalInventory !== null ? { quantity: product.totalInventory } : {}),
+        ...(product.variantSummary ? { variantSummary: product.variantSummary } : {}),
+        ...(product.priceRange ? { price: product.priceRange } : {}),
+        ...(product.currency ? { currency: product.currency } : {}),
+        ...(productUrlOf(store, product.handle) ? { productUrl: productUrlOf(store, product.handle) } : {}),
+        ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
+        ...(product.handle ? { handle: product.handle } : {}),
+        source: 'local',
+        asOf: store.lastSyncAt ? new Date(store.lastSyncAt).toISOString() : new Date(0).toISOString(),
+    };
+}
+
+/** InventoryInfo from a live platform read, keyed on the SAME product the resolver chose. */
+function inventoryFromDetail(
+    store: StoreRow,
+    product: EcommerceProduct,
+    detail: PlatformProductDetail,
+    asOf: string,
+    variant?: string,
+): InventoryInfo {
+    const availability = availabilityOf(detail);
+    const variants = filterVariants(detail.variants, variant);
+    return {
+        platformProductId: product.platformProductId,
+        productName: detail.title || product.title,
+        available: availability !== 'out_of_stock',
+        availability,
+        ...(detail.totalInventory !== null ? { quantity: detail.totalInventory } : {}),
+        ...(variants ? { variants } : {}),
+        ...(detail.priceRange ? { price: detail.priceRange } : {}),
+        ...(detail.currency ? { currency: detail.currency } : {}),
+        ...((detail.productUrl ?? productUrlOf(store, detail.handle ?? product.handle))
+            ? { productUrl: detail.productUrl ?? productUrlOf(store, detail.handle ?? product.handle) }
+            : {}),
+        ...((detail.imageUrl ?? product.imageUrl) ? { imageUrl: (detail.imageUrl ?? product.imageUrl) as string } : {}),
+        ...((detail.handle ?? product.handle) ? { handle: (detail.handle ?? product.handle) as string } : {}),
+        source: 'live',
+        asOf,
+    };
+}
+
+function productUrlOf(store: { platform: string; storeDomain: string | null }, handle: string | null | undefined): string | undefined {
+    return handle && store.storeDomain ? buildProductUrl(store.platform, store.storeDomain, handle) : undefined;
+}
+
+/** Variant filtering happens ONCE, here — it used to be re-implemented per platform on unsanitized input. */
+function filterVariants(
+    variants: PlatformProductDetail['variants'],
+    variant: string | undefined,
+): PlatformProductDetail['variants'] | undefined {
+    if (!variants || variants.length === 0) return undefined;
+    if (!variant) return variants;
+    const needle = variant.toLowerCase();
+    const matched = variants.filter(v => v.name.toLowerCase().includes(needle));
+    return matched.length > 0 ? matched : variants;
+}
+
+async function platformModule(platform: string): Promise<PlatformModule> {
+    switch (platform) {
+        case 'shopify': return import('./shopify');
+        case 'salla': return import('./salla');
+        case 'zid': return import('./zid');
+        default: throw new Error(`unsupported platform: ${platform}`);
     }
 }
 
@@ -352,14 +585,11 @@ function buildVerificationChallenge(toolName: string, orderNumber: string): Ecom
     return { tool_name: toolName, success: true, data: challenge as unknown as Record<string, unknown> };
 }
 
-/** Build a deterministic cache key from store ID + tool call */
-function buildToolCacheKey(storeId: string, toolCall: EcommerceToolCall): string {
-    const argsHash = crypto
-        .createHash('md5')
-        .update(JSON.stringify(toolCall.arguments))
-        .digest('hex')
-        .slice(0, 12);
-    return `ecom:tool:${storeId}:${toolCall.name}:${argsHash}`;
+/** Build a deterministic cache key from store ID + tool name + the SANITIZED arguments (key order fixed). */
+function buildToolCacheKey(storeId: string, toolName: string, args: Record<string, string>): string {
+    const canonical = Object.keys(args).sort().map(k => `${k}=${args[k]}`).join('&');
+    const argsHash = crypto.createHash('md5').update(canonical).digest('hex').slice(0, 12);
+    return `ecom:tool:${storeId}:${toolName}:${argsHash}`;
 }
 
 /** Check if an error is a permission/scope error (401/403) */

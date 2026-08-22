@@ -33,24 +33,48 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 const mockGetStoreById = vi.fn();
+const mockWriteBackProductStock = vi.fn();
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+    writeBackProductStock: (...args: unknown[]) => mockWriteBackProductStock(...args),
+    buildProductUrl: (_p: string, domain: string, handle: string) => `https://${domain}/products/${handle}`,
 }));
+
+// check_inventory resolves in code (D-092); the resolver has its own suites.
+// Here it is a seam: each test states what the resolver decided.
+const mockResolveProduct = vi.fn();
+vi.mock('../../src/services/reply/productResolver', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/services/reply/productResolver')>();
+    return {
+        ...actual,
+        resolveProduct: (...args: unknown[]) => mockResolveProduct(...args),
+        recordResolverOutcome: vi.fn(),
+    };
+});
+vi.mock('../../src/services/demoStore', () => ({ isDemoStore: vi.fn(() => false) }));
 
 const mockLookupOrder = vi.fn();
 const mockGetShipmentTracking = vi.fn();
-const mockCheckInventory = vi.fn();
+const mockGetProductById = vi.fn();
 
 vi.mock('../../src/services/shopify', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
-    checkInventory: (...args: unknown[]) => mockCheckInventory(...args),
+    getProductById: (...args: unknown[]) => mockGetProductById(...args),
 }));
 
 vi.mock('../../src/services/salla', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
-    checkInventory: (...args: unknown[]) => mockCheckInventory(...args),
+    getProductById: (...args: unknown[]) => mockGetProductById(...args),
+}));
+
+// Zid was never mocked here before D-092 — a zid-platform test silently loaded
+// the real module. The live-refresh cases below run on a zid store.
+vi.mock('../../src/services/zid', () => ({
+    lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
+    getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
+    getProductById: (...args: unknown[]) => mockGetProductById(...args),
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({
@@ -285,17 +309,43 @@ describe('executeToolCall', () => {
         expect(result.error).toBe('store_not_connected');
     });
 
-    it('returns cached result when available', async () => {
+    it('returns cached result when available (order tools only)', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
-        const cached = { tool_name: 'check_inventory', success: true, data: { available: true } };
+        const cached = { tool_name: 'lookup_order', success: true, data: { orderFound: true } };
         mockRedisGet.mockResolvedValue(JSON.stringify(cached));
 
         const result = await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
         expect(result).toEqual(cached);
-        expect(mockCheckInventory).not.toHaveBeenCalled();
+        expect(mockLookupOrder).not.toHaveBeenCalled();
+    });
+
+    it('keys the order cache on SANITIZED arguments — "#1234" and "1234" share an entry', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockLookupOrder.mockResolvedValue({
+            orderNumber: '1234', status: 'paid', customerFirstName: 'محمد', orderDate: '2026-01-01',
+            items: [], totalAmount: '100', currency: 'SAR', paymentStatus: 'paid',
+        });
+
+        await executeToolCall(storeId, { name: 'lookup_order', arguments: { order_number: '#1234' } });
+        await executeToolCall(storeId, { name: 'lookup_order', arguments: { order_number: ' 1234 ' } });
+
+        const keys = mockRedisGet.mock.calls.map(c => c[0]).filter(k => String(k).startsWith('ecom:tool:'));
+        expect(keys).toHaveLength(2);
+        expect(keys[0]).toBe(keys[1]);
+    });
+
+    it('check_inventory: NEVER reads or writes the result cache (resolution is local and deterministic)', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid', id: storeId, storeDomain: 'shop.zid.store', lastSyncAt: new Date(), platformData: {} });
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'trigram', product: productRow({ totalInventory: 20 }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: 'نظارة' } });
+
+        expect(result.success).toBe(true);
+        expect(mockRedisGet.mock.calls.some(c => String(c[0]).startsWith('ecom:tool:'))).toBe(false);
+        expect(mockRedisSet.mock.calls.some(c => String(c[0]).startsWith('ecom:tool:'))).toBe(false);
     });
 
     it('calls shopify service for lookup_order on shopify stores', async () => {
@@ -363,8 +413,8 @@ describe('executeToolCall', () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'woocommerce' });
 
         const result = await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
         expect(result.success).toBe(false);
         expect(result.error).toBe('unsupported_platform');
@@ -372,11 +422,11 @@ describe('executeToolCall', () => {
 
     it('returns insufficient_permissions for 403 errors', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
-        mockCheckInventory.mockRejectedValue(new Error('403 Forbidden'));
+        mockLookupOrder.mockRejectedValue(new Error('403 Forbidden'));
 
         const result = await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
         expect(result.success).toBe(false);
         expect(result.error).toBe('insufficient_permissions');
@@ -384,27 +434,26 @@ describe('executeToolCall', () => {
 
     it('returns api_error for unexpected errors', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
-        mockCheckInventory.mockRejectedValue(new Error('network timeout'));
+        mockLookupOrder.mockRejectedValue(new Error('network timeout'));
 
         const result = await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
         expect(result.success).toBe(false);
         expect(result.error).toBe('api_error');
     });
 
-    it('caches successful results in Redis', async () => {
+    it('caches successful order results in Redis', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
-        mockCheckInventory.mockResolvedValue({
-            productName: 'iPhone',
-            available: true,
-            quantity: 5,
+        mockLookupOrder.mockResolvedValue({
+            orderNumber: '1234', status: 'paid', customerFirstName: 'محمد', orderDate: '2026-01-01',
+            items: [], totalAmount: '100', currency: 'SAR', paymentStatus: 'paid',
         });
 
         await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
 
         expect(mockRedisSet).toHaveBeenCalledWith(
@@ -418,18 +467,206 @@ describe('executeToolCall', () => {
     it('handles Redis unavailability gracefully', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
         mockRedisGet.mockRejectedValue(new Error('Redis down'));
-        mockCheckInventory.mockResolvedValue({
-            productName: 'iPhone',
-            available: true,
-            quantity: 5,
+        mockLookupOrder.mockResolvedValue({
+            orderNumber: '1234', status: 'paid', customerFirstName: 'محمد', orderDate: '2026-01-01',
+            items: [], totalAmount: '100', currency: 'SAR', paymentStatus: 'paid',
         });
 
         const result = await executeToolCall(storeId, {
-            name: 'check_inventory',
-            arguments: { product_name: 'iPhone' },
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
         });
         // Should still succeed — Redis is non-critical
         expect(result.success).toBe(true);
+    });
+});
+
+// ==========================================
+// check_inventory — resolve in code, answer locally, platform by id only when risky (D-092)
+// ==========================================
+
+/** A synced ecommerce_products row as getProductByPlatformId returns it. */
+function productRow(overrides: Record<string, unknown> = {}) {
+    return {
+        id: 'row-1',
+        ecommerceStoreId: 'store-123',
+        platformProductId: 'zid-42',
+        handle: 'sunglasses',
+        title: 'نظارة شمسية',
+        description: null,
+        productType: null,
+        vendor: null,
+        status: 'active',
+        priceRange: '250 SAR',
+        currency: 'SAR',
+        totalInventory: 20,
+        hasVariants: false,
+        variantSummary: null,
+        tags: null,
+        imageUrl: 'https://cdn/sunglasses.jpg',
+        ...overrides,
+    };
+}
+
+const MINUTES = 60 * 1000;
+
+describe('executeToolCall — check_inventory', () => {
+    const storeId = 'store-123';
+    const freshStore = () => ({
+        id: storeId, isActive: true, platform: 'zid', storeDomain: 'shop.zid.store',
+        lastSyncAt: new Date(), platformData: {},
+    });
+    const staleStore = () => ({ ...freshStore(), lastSyncAt: new Date(Date.now() - 60 * MINUTES) });
+
+    beforeEach(() => {
+        mockGetStoreById.mockResolvedValue(freshStore());
+    });
+
+    it('rejects a call with neither product_id nor product_name', async () => {
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: '   ' } });
+        expect(result).toEqual({ tool_name: 'check_inventory', success: false, error: 'invalid_product_name' });
+        expect(mockResolveProduct).not.toHaveBeenCalled();
+    });
+
+    it('hands the resolver the sanitized id + name AND the reply context (page, version, embedding, user)', async () => {
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow() });
+        const ctx = { pageId: 'page-1', kbActiveVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1' };
+
+        await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: ' zid-42 ', product_name: 'نظارة <b>' } }, ctx);
+
+        expect(mockResolveProduct).toHaveBeenCalledWith(expect.objectContaining({
+            storeId, productId: 'zid-42', productName: 'نظارة b', pageId: 'page-1', kbActiveVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1',
+        }));
+    });
+
+    it('not_found → product_not_found, nothing cached, platform never called', async () => {
+        mockResolveProduct.mockResolvedValue({ kind: 'not_found', reason: 'below_floor' });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: 'ساعة ذكية' } });
+
+        expect(result).toEqual({ tool_name: 'check_inventory', success: false, error: 'product_not_found' });
+        expect(mockGetProductById).not.toHaveBeenCalled();
+        expect(mockRedisSet).not.toHaveBeenCalled();
+    });
+
+    it('ambiguous → ambiguous_product WITH the candidates, no card data, nothing cached', async () => {
+        const candidates = [
+            { platformProductId: 'salla1', title: 'عباية كلاسيك سوداء', availability: 'in_stock', price: '450 SAR' },
+            { platformProductId: 'salla2', title: 'عباية مطرزة فاخرة', availability: 'in_stock', price: '750 - 950 SAR' },
+        ];
+        mockResolveProduct.mockResolvedValue({ kind: 'ambiguous', candidates });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: 'عباية' } });
+
+        expect(result).toEqual({ tool_name: 'check_inventory', success: false, error: 'ambiguous_product', candidates });
+        expect(mockRedisSet).not.toHaveBeenCalled();
+    });
+
+    it('resolved + plenty in stock → answers LOCALLY with identity, price as stored, and asOf = last sync', async () => {
+        const lastSyncAt = new Date('2026-08-22T13:36:06.758Z');
+        mockGetStoreById.mockResolvedValue({ ...staleStore(), lastSyncAt });
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'trigram', product: productRow({ totalInventory: 20 }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: 'النظارة' } });
+
+        expect(result.success).toBe(true);
+        expect(result.data).toMatchObject({
+            platformProductId: 'zid-42',
+            productName: 'نظارة شمسية',
+            available: true,
+            availability: 'in_stock',
+            quantity: 20,
+            price: '250 SAR',
+            productUrl: 'https://shop.zid.store/products/sunglasses',
+            imageUrl: 'https://cdn/sunglasses.jpg',
+            source: 'local',
+            asOf: lastSyncAt.toISOString(),
+        });
+        // Stale but NOT risky (20 units): no platform call.
+        expect(mockGetProductById).not.toHaveBeenCalled();
+    });
+
+    it('unlimited (null) stock never refreshes, even when stale — and carries no quantity', async () => {
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: null }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(result.data).toMatchObject({ available: true, availability: 'in_stock', source: 'local' });
+        expect(result.data).not.toHaveProperty('quantity');
+        expect(mockGetProductById).not.toHaveBeenCalled();
+    });
+
+    it('low stock but FRESH sync → local (the figure is recent enough)', async () => {
+        mockGetStoreById.mockResolvedValue(freshStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 2 }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(result.data).toMatchObject({ availability: 'low_stock', quantity: 2, source: 'local' });
+        expect(mockGetProductById).not.toHaveBeenCalled();
+    });
+
+    it('low stock AND stale → asks the platform BY ID, writes the figure back to the row, answers live', async () => {
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 2 }) });
+        mockGetProductById.mockResolvedValue({
+            platformProductId: 'zid-42', title: 'نظارة شمسية', status: 'active', priceRange: '250 SAR', currency: 'SAR',
+            totalInventory: 0, hasVariants: false, handle: 'sunglasses', imageUrl: 'https://cdn/sunglasses.jpg',
+            variants: [{ name: 'Color: Black', available: false, quantity: 0 }],
+        });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(mockGetProductById).toHaveBeenCalledWith(storeId, 'zid-42');
+        expect(mockWriteBackProductStock).toHaveBeenCalledWith(storeId, 'zid-42', 0);
+        expect(result.data).toMatchObject({
+            platformProductId: 'zid-42', available: false, availability: 'out_of_stock', quantity: 0, source: 'live',
+            variants: [{ name: 'Color: Black', available: false, quantity: 0 }],
+        });
+        // The live read is cached per product, not per phrasing.
+        expect(mockRedisSet).toHaveBeenCalledWith(`ecom:stock:${storeId}:zid-42`, expect.any(String), 'EX', expect.any(Number));
+    });
+
+    it('live refresh FAILS → the synced figure is served as local, never api_error, never a wrong product', async () => {
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 2 }) });
+        mockGetProductById.mockRejectedValue(new Error('zid API HTTP error: 502'));
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(result.success).toBe(true);
+        expect(result.data).toMatchObject({ platformProductId: 'zid-42', quantity: 2, source: 'local' });
+        expect(mockWriteBackProductStock).not.toHaveBeenCalled();
+    });
+
+    it('a sold-out product (status out_of_stock) is answered as out of stock, not denied', async () => {
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'trigram', product: productRow({ status: 'out_of_stock', totalInventory: 3 }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_name: 'نظارة' } });
+
+        expect(result.success).toBe(true);
+        expect(result.data).toMatchObject({ available: false, availability: 'out_of_stock' });
+    });
+
+    it('filters live variants by the sanitized variant hint, falling back to all when nothing matches', async () => {
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 1 }) });
+        const variants = [
+            { name: 'Size: M', available: true, quantity: 1 },
+            { name: 'Size: L', available: false, quantity: 0 },
+        ];
+        mockGetProductById.mockResolvedValue({
+            platformProductId: 'zid-42', title: 'قميص', status: 'active', priceRange: '150 SAR', currency: 'SAR',
+            totalInventory: 1, hasVariants: true, handle: 'shirt', imageUrl: null, variants,
+        });
+
+        // Quotes/brackets are stripped, case is folded: ' "M" ' → 'M' → matches 'Size: M'.
+        const m = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42', variant: ' "M" ' } });
+        expect((m.data as { variants: unknown[] }).variants).toEqual([variants[0]]);
+
+        const none = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42', variant: 'XXL' } });
+        expect((none.data as { variants: unknown[] }).variants).toEqual(variants);
     });
 });
 

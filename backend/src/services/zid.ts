@@ -30,6 +30,8 @@ import {
     applySyncedStoreInfo,
     PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
+    type NormalizedProduct,
+    type PlatformProductDetail,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyBasicAuthHeader } from '../utils/basicAuthVerify';
@@ -591,34 +593,41 @@ export async function syncProducts(storeId: string) {
 
     const mapped = products
         .filter(p => p.status !== 'deleted')
-        .map(p => {
-            const price = p.sale_price ?? p.price;
-            const priceRange = price !== undefined && price !== null ? `${price} ${p.currency || currency}` : '';
-            const variantSummary = buildZidVariantSummary(p.options);
-            const category = localizedText(p.categories?.[0]?.name) || null;
-            const description = localizedText(p.description);
-
-            return {
-                platformProductId: String(p.id),
-                handle: p.slug || p.handle || null,
-                title: localizedText(p.name),
-                description: description ? stripHtml(description) : null,
-                productType: category,
-                vendor: null as string | null,
-                status: mapZidStatus(p.status),
-                priceRange,
-                currency: p.currency || currency,
-                // Unlimited → null (untracked), never 0. Only `is_infinite` earns the
-                // null: a bare missing quantity stays 0 rather than being guessed at.
-                totalInventory: p.is_infinite ? null : (p.quantity ?? 0),
-                hasVariants: p.has_variants || p.has_options || (p.options?.length ?? 0) > 0,
-                variantSummary: variantSummary || null,
-                tags: null as string | null,
-                imageUrl: productImageUrl(p),
-            };
-        });
+        .map(p => mapZidProduct(p, currency));
 
     return replaceProductsAndRebuildSummary(storeId, mapped);
+}
+
+/**
+ * The ONE Zid product → NormalizedProduct mapper: the full sync and the by-id
+ * read (`getProductById`) both go through it, so a live answer can never carry
+ * a shape the synced row does not (D-092, Rule 10.8).
+ */
+export function mapZidProduct(p: ZidProduct, storeCurrency: string): NormalizedProduct {
+    const price = p.sale_price ?? p.price;
+    const priceRange = price !== undefined && price !== null ? `${price} ${p.currency || storeCurrency}` : '';
+    const variantSummary = buildZidVariantSummary(p.options);
+    const category = localizedText(p.categories?.[0]?.name) || null;
+    const description = localizedText(p.description);
+
+    return {
+        platformProductId: String(p.id),
+        handle: p.slug || p.handle || null,
+        title: localizedText(p.name),
+        description: description ? stripHtml(description) : null,
+        productType: category,
+        vendor: null,
+        status: mapZidStatus(p.status),
+        priceRange,
+        currency: p.currency || storeCurrency,
+        // Unlimited → null (untracked), never 0. Only `is_infinite` earns the
+        // null: a bare missing quantity stays 0 rather than being guessed at.
+        totalInventory: p.is_infinite ? null : (p.quantity ?? 0),
+        hasVariants: p.has_variants || p.has_options || (p.options?.length ?? 0) > 0,
+        variantSummary: variantSummary || null,
+        tags: null,
+        imageUrl: productImageUrl(p),
+    };
 }
 
 export async function fullSync(storeId: string) {
@@ -679,7 +688,7 @@ export function normalizeZidPhone(mobile?: string | number | null): string | und
 
 // --- E-Commerce Agent Tools (read-only order/inventory) ---
 
-import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
+import type { OrderInfoFull, ShipmentInfoFull } from '@jawab24/shared';
 
 // --- Zid Order Response Types (orders list — verified fields, tolerant extras) ---
 
@@ -808,63 +817,56 @@ function zidQuantity(p: ZidProduct): number | undefined {
     return p.is_infinite === true ? undefined : (p.quantity ?? 0);
 }
 
-export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
+/**
+ * Read ONE product by its Zid id — the platform call the resolver makes only
+ * when the local answer is risky (D-092). `?id__in=` is live-verified on the
+ * dev store (2026-08-22): it returns the exact row with `is_infinite`
+ * preserved. An UNKNOWN id answers HTTP 400, not an empty list, so a 400 here
+ * is "no such product", never an API failure. The row is picked by id from the
+ * envelope — never `[0]` — because a list endpoint answering with a different
+ * product than the one asked for is exactly the defect this replaces.
+ *
+ * (Zid's documented `?search=` is not used anywhere: live-captured the same
+ * day, `search=نظارة` returned all four products — it ignores the term.)
+ */
+export async function getProductById(storeId: string, platformProductId: string): Promise<PlatformProductDetail | null> {
     const creds = await resolveZidCredentials(storeId);
     if (!creds) return null;
 
-    // Fetch the first page and match client-side. Zid DOES document a `?search=` param,
-    // but it is unusable: live-captured 2026-08-22 on dev store 3195980, `search=نظارة`
-    // and `search=كاميرا` each returned ALL 4 products — it ignores the term. So the
-    // server-side swap this seam was left open for is dead; resolution moves to our side
-    // (D-091). Two limits stand until then: only the first PRODUCTS_PAGE_SIZE products are
-    // candidates, and the match is a substring on the ar-preferred name, which answers
-    // ~4/14 natural Arabic queries (measured 2026-08-22).
-    const data = await zidApiGet<ZidProductsResponse>(
-        `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=1`,
-        creds,
-    );
+    let data: ZidProductsResponse;
+    try {
+        data = await zidApiGet<ZidProductsResponse>(
+            `https://api.zid.sa/v1/products/?id__in=${encodeURIComponent(platformProductId)}&page_size=1`,
+            creds,
+        );
+    } catch (err) {
+        if (err instanceof Error && /HTTP error: 400\b/.test(err.message)) return null;
+        throw err;
+    }
 
-    const products = extractProducts(data).filter(p => p.status !== 'deleted');
-    if (products.length === 0) return null;
+    const product = extractProducts(data).find(p => String(p.id) === platformProductId);
+    if (!product || product.status === 'deleted') return null;
 
-    const lowerQuery = productName.toLowerCase();
-    const bestMatch = products.find(p => localizedText(p.name).toLowerCase().includes(lowerQuery)) || null;
-    if (!bestMatch) return null;
+    const store = await getStoreById(storeId);
+    const base = mapZidProduct(product, store?.storeCurrency || 'SAR');
+    const storeDomain = store?.storeDomain || null;
+    const handle = product.slug || product.handle;
 
-    const allVariants = (bestMatch.options || []).flatMap(opt =>
+    const variants = (product.options || []).flatMap(opt =>
         (opt.values || []).map(v => ({
             name: `${localizedText(opt.name)}: ${localizedText(v.name)}`,
-            available: zidAvailable(bestMatch),
-            quantity: zidQuantity(bestMatch),
+            // Zid reports stock per product, not per option value.
+            available: zidAvailable(product),
+            quantity: zidQuantity(product),
         }))
     );
 
-    let filteredVariants = allVariants;
-    if (variant) {
-        const lowerVariant = variant.toLowerCase();
-        filteredVariants = allVariants.filter(v => v.name.toLowerCase().includes(lowerVariant));
-    }
-
-    const store = await getStoreById(storeId);
-    const storeDomain = store?.storeDomain || null;
-    const currency = bestMatch.currency || store?.storeCurrency || 'SAR';
-    const price = bestMatch.sale_price ?? bestMatch.price;
-    const handle = bestMatch.slug || bestMatch.handle;
-
-    const variants = filteredVariants.length > 0 ? filteredVariants : allVariants;
-
     return {
-        productName: localizedText(bestMatch.name),
-        available: zidAvailable(bestMatch),
-        quantity: zidQuantity(bestMatch),
-        variants: variants.length > 0 ? variants : undefined,
-        // InventoryInfo.price is optional — omit it entirely when Zid provides no
-        // price rather than handing the AI an empty "price:" field.
-        price: price !== undefined && price !== null ? `${price} ${currency}` : undefined,
-        currency,
-        productUrl: bestMatch.html_url || (handle && storeDomain
+        ...base,
+        productUrl: product.html_url || (handle && storeDomain
             ? `https://${storeDomain}/products/${handle}`
             : undefined),
+        variants: variants.length > 0 ? variants : undefined,
     };
 }
 

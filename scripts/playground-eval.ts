@@ -111,6 +111,14 @@ interface TestCase {
          *  product (Apple TV 4K) carries an imageUrl, deliberately, so the
          *  negative cases can still fail. */
         productCardTitles?: string[];
+        /** EXACT list of e-commerce tool outcomes the reply went through, in
+         *  execution order (D-092). `outcome` is `success` or the tool's error
+         *  code; `platformProductId` pins WHICH product the resolver chose and
+         *  `candidateIds` which ones it offered on `ambiguous_product`. A case
+         *  that asserts this only passes when the tool actually fired — so a
+         *  catalog small enough to be inlined (no tool call) fails it loudly
+         *  rather than passing on the prompt text. Omit to leave tools unasserted. */
+        toolOutcomes?: Array<{ name: string; outcome: string; platformProductId?: string; candidateIds?: string[] }>;
     };
     notes?: string;
     /**
@@ -145,6 +153,7 @@ interface PlaygroundResponse {
         commentReplyMode?: string | null;
         nudgeText?: string | null;
         productCards?: { title: string }[];
+        toolOutcomes?: Array<{ name: string; outcome: string; platformProductId?: string; candidateIds?: string[] }>;
     };
     error?: string;
 }
@@ -5549,17 +5558,17 @@ const TEST_CASES: TestCase[] = [
     // constant, a case reading that block measured the seed text and would have passed
     // no matter what the code did.
     {
-        id: 785, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        id: 788, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
         message: 'هل Apple TV 4K متوفر عندكم؟',
         page: 'electronics',
         expected: {
             confidence: ['high', 'medium'],
             replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'خلص', 'خلصت', 'مو متوفر', 'لا يوجد', 'كمية محدودة', 'أوشك', 'قارب على الانتهاء'],
         },
-        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). MUTATION-CHECKED 2026-08-22: with the fixture at 0, 785 and 786 both go PARTIAL on the banned substring and the category drops to 66.7%; 787 stays green. ⚠️ TO RE-RUN THAT CHECK, MINT THE ADMIN TOKEN FIRST — `POST /auth/demo` RE-SEEDS the fixtures, so fetching the token after mutating silently restores `totalInventory: null` and the mutation appears to survive (it did, twice, before this was spotted). Mutating the row alone is also not enough: the catalog block and the KB chunks are both derived, so rebuild `productSummary` and re-ingest, then confirm the page\'s ACTIVE kb_version is the one saying "out of stock" — stale versions linger by design.',
+        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). MUTATION-CHECKED 2026-08-22: with the fixture at 0, 788 and 789 both go PARTIAL on the banned substring and the category drops to 66.7%; 790 stays green. (These three were 785–787 until D-092 — the same ids were also used by Cat 48\'s 786/787, so a failure report showed two different cases as #786.) ⚠️ TO RE-RUN THAT CHECK, MINT THE ADMIN TOKEN FIRST — `POST /auth/demo` RE-SEEDS the fixtures, so fetching the token after mutating silently restores `totalInventory: null` and the mutation appears to survive (it did, twice, before this was spotted). Mutating the row alone is also not enough: the catalog block and the KB chunks are both derived, so rebuild `productSummary` and re-ingest, then confirm the page\'s ACTIVE kb_version is the one saying "out of stock" — stale versions linger by design.',
     },
     {
-        id: 786, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        id: 789, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
         message: 'Is the Apple TV 4K in stock?',
         page: 'electronics',
         expected: {
@@ -5569,11 +5578,126 @@ const TEST_CASES: TestCase[] = [
         notes: 'Same pin, EN over an AR-majority catalog — the prod capture answered both languages correctly («متوفرة حالياً» / "Yes, the Sony A7S III is in stock"), so both are pinned.',
     },
     {
-        id: 787, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        id: 790, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
         message: 'عندكم MacBook Air M3؟',
         page: 'electronics',
         expected: { confidence: ['high', 'medium'] },
-        notes: 'CONTROL for 785/786. A TRACKED low-stock product (`totalInventory: 5`, rendered "low stock") must still be answerable — the F1 fix must not flatten every product into "in stock". Without this control, 785 would also pass if a bug made the renderer stop reporting stock state at all.',
+        notes: 'CONTROL for 788/789. A TRACKED low-stock product (`totalInventory: 5`, rendered "low stock") must still be answerable — the F1 fix must not flatten every product into "in stock". Without this control, 788 would also pass if a bug made the renderer stop reporting stock state at all.',
+    },
+
+    // --- Cat 80: catalog resolution (D-092) ------------------------------------
+    //
+    // The product a customer means is decided in CODE (productResolver.ts) whenever
+    // `check_inventory` runs. These run on the FASHION page, whose catalog was grown
+    // to 40 products (seedData.ts) so 25 sit OUTSIDE the 15-product inline block —
+    // the first eval fixture where a stock question cannot be answered from the
+    // catalog block alone.
+    //
+    // ⚠️ MEASURED 2026-08-22 (temp 0, two passes, 12 attempts): the model called the
+    // tool 0 times. RAG retrieves the asked product's chunk — "Availability: …"
+    // included — so the model answers from context, and correctly: sold-out stated,
+    // ambiguity listed, not-found honest. The plan's premise that a 50-product store
+    // makes the tool "the primary path" was wrong; top-10 retrieval covers it. So the
+    // customer-visible behaviour is pinned as PASS cases below (791–796) — that is
+    // the index path the resolver shares (sold-out rows are now indexed) — and the
+    // tool outcomes are pinned as XGAP cases (797–799): the harness says so loudly
+    // the day the model starts reaching the tool, and the resolver's own decisions
+    // are covered by test/services/productResolver.test.ts + the real-Postgres
+    // integration suite in the meantime.
+    {
+        id: 791, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'هل شيلة الشيفون متوفرة عندكم؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['شيلة'],
+            replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'لا نبيع', 'ما عندنا'],
+        },
+        notes: 'A product OUTSIDE the inline block (row 12 of 40), asked with the «ال» article. Answered in stock (60 units) from the indexed product chunk — before the catalog grew, no eval case ever asked about a product the block did not list.',
+    },
+    {
+        id: 792, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عندكم الشماغ الأحمر؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['شماغ'],
+            replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'لا نبيع', 'ما عندنا'],
+        },
+        notes: 'Definite article on BOTH words, product outside the inline block. Pins that the article phrasing reaches the right product (in stock, 40 units) through the index.',
+    },
+    {
+        id: 793, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عباية المخمل الشتوية متوفرة؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['نفد', 'نفدت', 'غير متوفر', 'غير متوفرة', 'انتهت', 'خلصت', 'مو متوفر', 'حالياً غير'],
+            replyNotContains: ['لا نبيع', 'ما نبيع', 'لا يوجد لدينا هذا المنتج'],
+        },
+        notes: 'SOLD-OUT VISIBILITY (D-092 defect 3). The row carries status `out_of_stock` (Salla `out`). Before: every reader filtered `status = \'active\'`, so the product was absent from the block AND the index, and the model said "we don\'t sell that". Now it is indexed as "Availability: out of stock" and the reply says so. Measured 2026-08-22: «عباية المخمل الشتوية غير متوفرة حالياً.»',
+    },
+    {
+        id: 794, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عندكم صندل جلد؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['رجالي', 'نسائي'],
+            productCardTitles: [],
+        },
+        notes: 'AMBIGUITY handled, never a silent pick. Two sandals («صندل جلد رجالي» in stock, «صندل جلد نسائي» sold out) match equally; the reply must distinguish them. No card: two products, not one. Measured 2026-08-22: the model listed both with their stock states.',
+    },
+    {
+        id: 795, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عندكم ساعة ذكية؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['عباية', 'شيلة', 'ثوب', 'بشت', 'عطر عود', 'صندل', 'حقيبة'],
+        },
+        notes: 'NOT FOUND → say so, never substitute a catalog product for the one asked. (The `|| products[0]` regression: Shopify/Salla\'s old matcher returned the first search hit as "found".) The model may name CATEGORIES it does carry ("عطور، أزياء") — that is an honest redirect, not a substitution — so only product TITLES are banned.',
+    },
+    {
+        id: 796, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'كم سعر دهن العود الكمبودي؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['900', '٩٠٠'],
+            replyNotContains: ['SAR SAR', 'ريال ريال'],
+        },
+        notes: 'Price from the synced row, printed ONCE. The "900 SAR SAR" double-print lived in every Zid/Salla product chunk (chunker appended `currency` to a `priceRange` that already carried it) until D-092.',
+    },
+    {
+        id: 797, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'هل شيلة الشيفون متوفرة عندكم؟',
+        page: 'fashion',
+        expected: {
+            toolOutcomes: [{ name: 'check_inventory', outcome: 'success', platformProductId: 'demo_salla_prod_12' }],
+        },
+        expectedFail: true,
+        notes: 'XGAP — the resolver\'s RESOLVED outcome through the model. Fails today because the model answers from the retrieved chunk and never calls the tool (0/12 at temp 0, 2026-08-22). When this passes, the tool path is being reached in practice: remove expectedFail and keep the pin.',
+    },
+    {
+        id: 798, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عندكم صندل جلد؟',
+        page: 'fashion',
+        expected: {
+            toolOutcomes: [{ name: 'check_inventory', outcome: 'ambiguous_product', candidateIds: ['demo_salla_prod_21', 'demo_salla_prod_22'] }],
+        },
+        expectedFail: true,
+        notes: 'XGAP — the resolver\'s AMBIGUOUS outcome through the model (D-051: candidates, never a pick). Same gate as 797.',
+    },
+    {
+        id: 799, category: 80, categoryName: 'Catalog Resolution', channel: 'dm',
+        message: 'عندكم ساعة ذكية؟',
+        page: 'fashion',
+        expected: {
+            toolOutcomes: [{ name: 'check_inventory', outcome: 'product_not_found' }],
+        },
+        expectedFail: true,
+        notes: 'XGAP — the resolver\'s NOT_FOUND outcome through the model. Same gate as 797.',
     },
 
 ];
@@ -5728,6 +5852,29 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
             field: 'productCardTitles',
             pass,
             detail: `expected [${want.join(', ')}] got [${got.join(', ')}]`,
+        });
+    }
+
+    // toolOutcomes — the EXACT sequence of tool decisions (D-092). `undefined` on
+    // the response means no tool fired, which is itself a failure when the case
+    // asserts one: the resolver cannot be measured by a reply that never reached it.
+    if (e.toolOutcomes) {
+        const got = d.toolOutcomes ?? [];
+        const fmt = (t: { name: string; outcome: string; platformProductId?: string; candidateIds?: string[] }) =>
+            `${t.name}:${t.outcome}${t.platformProductId ? `=${t.platformProductId}` : ''}${t.candidateIds ? `[${[...t.candidateIds].sort().join(',')}]` : ''}`;
+        const want = e.toolOutcomes.map(fmt);
+        const have = got.map(t => fmt({
+            name: t.name,
+            outcome: t.outcome,
+            // Only compare the identity fields the case asked about.
+            platformProductId: e.toolOutcomes!.some(x => x.platformProductId) ? t.platformProductId : undefined,
+            candidateIds: e.toolOutcomes!.some(x => x.candidateIds) ? t.candidateIds : undefined,
+        }));
+        const pass = want.length === have.length && want.every((w, i) => w === have[i]);
+        checks.push({
+            field: 'toolOutcomes',
+            pass,
+            detail: `expected [${want.join(' → ')}] got [${have.join(' → ') || (d.toolOutcomes === undefined ? 'NO TOOL FIRED' : '')}]`,
         });
     }
 

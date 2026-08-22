@@ -213,7 +213,8 @@ describe('generateReplyWithTools', () => {
         const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
         const result = await generateReplyWithTools(request);
 
-        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }));
+        // Third argument: the reply context the resolver reuses (D-092).
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }), expect.any(Object));
         expect(result.reply).toContain('found your order');
     });
 
@@ -257,7 +258,8 @@ describe('generateReplyWithTools', () => {
 
         // Only the valid tool should be executed
         expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
-        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }));
+        // Third argument: the reply context the resolver reuses (D-092).
+        expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }), expect.any(Object));
     });
 
     it('throws AiToolLoopExhaustedError when the AI keeps requesting tools past MAX_TOOL_ROUNDS', async () => {

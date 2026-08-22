@@ -20,6 +20,8 @@ import {
     applySyncedStoreInfo,
     PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
+    type NormalizedProduct,
+    type PlatformProductDetail,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
@@ -327,30 +329,35 @@ export async function syncProducts(storeId: string) {
 
     const mapped = products
         .filter(p => p.status !== 'deleted')
-        .map(p => {
-            const priceRange = `${p.price.amount} ${p.price.currency}`;
-            const variantSummary = buildSallaVariantSummary(p.options);
-            const category = p.categories?.[0]?.name || null;
-
-            return {
-                platformProductId: String(p.id),
-                handle: p.slug || null,
-                title: p.name,
-                description: p.description ? stripHtml(p.description) : null,
-                productType: category,
-                vendor: null as string | null,
-                status: mapSallaStatus(p.status),
-                priceRange,
-                currency: p.price.currency,
-                totalInventory: p.quantity ?? 0,
-                hasVariants: (p.options?.length ?? 0) > 0,
-                variantSummary: variantSummary || null,
-                tags: null as string | null,
-                imageUrl: p.thumbnail || null,
-            };
-        });
+        .map(mapSallaProduct);
 
     return replaceProductsAndRebuildSummary(storeId, mapped);
+}
+
+/**
+ * The ONE Salla product → NormalizedProduct mapper, shared by the full sync
+ * and the by-id read (D-092, Rule 10.8). Salla has no "unlimited" concept, so a
+ * missing quantity is 0, never null — the F1 null-first ladder cannot fire for
+ * a Salla row; its sold-out signal is the `out` STATUS instead.
+ */
+export function mapSallaProduct(p: SallaProduct): NormalizedProduct {
+    const variantSummary = buildSallaVariantSummary(p.options);
+    return {
+        platformProductId: String(p.id),
+        handle: p.slug || null,
+        title: p.name,
+        description: p.description ? stripHtml(p.description) : null,
+        productType: p.categories?.[0]?.name || null,
+        vendor: null,
+        status: mapSallaStatus(p.status),
+        priceRange: `${p.price.amount} ${p.price.currency}`,
+        currency: p.price.currency,
+        totalInventory: p.quantity ?? 0,
+        hasVariants: (p.options?.length ?? 0) > 0,
+        variantSummary: variantSummary || null,
+        tags: null,
+        imageUrl: p.thumbnail || null,
+    };
 }
 
 /**
@@ -403,7 +410,7 @@ export async function getStoresNeedingTokenRefresh() {
 
 // --- E-Commerce Agent Tools (read-only order/tracking/inventory) ---
 
-import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
+import type { OrderInfoFull, ShipmentInfoFull } from '@jawab24/shared';
 
 /**
  * Resolve store credentials for a given storeId.
@@ -571,53 +578,49 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
 }
 
 /**
- * Check real-time inventory for a product by name search via Salla REST API.
- * Returns normalized InventoryInfo or null if no matching product found.
+ * Read ONE product by its Salla id — the platform call the resolver makes only
+ * when the local answer is risky (D-092). `GET /admin/v2/products/{id}` per
+ * docs.salla.dev (single-product envelope `{ data: Product }`); a 404 is "no
+ * such product". The former `?keyword=` search is gone with the matcher that
+ * used it: it returned the FIRST hit when nothing matched (`|| products[0]`),
+ * which handed the model a wrong product and cached it for five minutes.
+ *
+ * Salla reports stock per product, not per option value — the per-variant
+ * figure below is the product's, and is labelled as such rather than invented.
  */
-export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
+export async function getProductById(storeId: string, platformProductId: string): Promise<PlatformProductDetail | null> {
     const accessToken = await resolveStoreCredentials(storeId);
     if (!accessToken) return null;
 
-    const data = await sallaApiGet<{ data: SallaProduct[] }>(
-        `https://api.salla.dev/admin/v2/products?keyword=${encodeURIComponent(productName)}&per_page=5`,
-        accessToken,
-    );
+    let data: { data: SallaProduct };
+    try {
+        data = await sallaApiGet<{ data: SallaProduct }>(
+            `https://api.salla.dev/admin/v2/products/${encodeURIComponent(platformProductId)}`,
+            accessToken,
+        );
+    } catch (err) {
+        if (err instanceof Error && /HTTP error: 404\b/.test(err.message)) return null;
+        throw err;
+    }
 
-    const products = data.data.filter(p => p.status !== 'deleted');
-    if (products.length === 0) return null;
+    const product = data.data;
+    if (!product || String(product.id) !== platformProductId || product.status === 'deleted') return null;
 
-    // Find best match by title similarity (case-insensitive contains)
-    const lowerQuery = productName.toLowerCase();
-    const bestMatch = products.find(p => p.name.toLowerCase().includes(lowerQuery)) || products[0];
-
-    // Map options to variant format
-    const allVariants = (bestMatch.options || []).flatMap(opt =>
+    const base = mapSallaProduct(product);
+    const storeDomain = await getStoreDomainForProduct(storeId);
+    const productAvailable = (product.quantity ?? 0) > 0;
+    const variants = (product.options || []).flatMap(opt =>
         opt.values.map(v => ({
             name: `${opt.name}: ${v.name}`,
-            available: (bestMatch.quantity ?? 0) > 0, // Salla doesn't have per-variant inventory in list
-            quantity: bestMatch.quantity ?? 0,
+            available: productAvailable,
+            quantity: product.quantity ?? 0,
         }))
     );
 
-    // If specific variant requested, filter
-    let filteredVariants = allVariants;
-    if (variant) {
-        const lowerVariant = variant.toLowerCase();
-        filteredVariants = allVariants.filter(v => v.name.toLowerCase().includes(lowerVariant));
-    }
-
-    const storeDomain = await getStoreDomainForProduct(storeId);
-
     return {
-        productName: bestMatch.name,
-        available: (bestMatch.quantity ?? 0) > 0,
-        quantity: bestMatch.quantity ?? 0,
-        variants: (filteredVariants.length > 0 ? filteredVariants : allVariants).length > 0
-            ? (filteredVariants.length > 0 ? filteredVariants : allVariants)
-            : undefined,
-        price: `${bestMatch.price.amount} ${bestMatch.price.currency}`,
-        currency: bestMatch.price.currency,
-        productUrl: bestMatch.slug && storeDomain ? `https://${storeDomain}/p/${bestMatch.slug}` : undefined,
+        ...base,
+        productUrl: product.slug && storeDomain ? `https://${storeDomain}/p/${product.slug}` : undefined,
+        variants: variants.length > 0 ? variants : undefined,
     };
 }
 

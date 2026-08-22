@@ -327,10 +327,19 @@ product name", but live-captured the same day it **ignores the term** (`search=�
 `search=كاميرا` each returned all 4 products). The server-side swap the seam was left open
 for is dead.
 
-**Ruling:** resolution moves to our side, reusing the hybrid retrieval that already scores
-16/17, with the platform consulted by `id__in` only. Planned as **D-092** (⚠️ D-091 was taken by the Google Ads ruling minutes after this was reserved; `backend/src/services/zid.ts:819` still says D-091 and is corrected in the resolver PR); see
-`~/.claude/plans/rethink-everything-then-tender-hopcroft.md`. Cross-script stays the
-hardest class and is expected to remain an eval XGAP until semantic resolution lands.
+**Ruling — ✅ SHIPPED as D-092 (2026-08-22).** Resolution moved to our side:
+`backend/src/services/reply/productResolver.ts` decides over the page's own product index
+(pg_trgm first, then the reply's reused embedding, `ambiguous` with ≤3 candidates when the
+lead is not clear), and the platform is consulted **by id only** (`getProductById` — Zid
+`?id__in=`). The three `checkInventory` matchers are gone. Calibrated on this catalog plus
+the two demo stores — 65 phrasings × 16 products, read-only on prod
+(`docs/integrations/product-resolver-probe-2026-08-22.md`): at the chosen thresholds
+**0 wrong resolves** and 2 false not-founds out of 65. ⚠️ Those two are the class this
+section predicted: Arabic transliterations of Latin brand names with no Arabic description
+(«جالكسي» 0.24, «ايربودز» 0.18) score *below* unrelated queries, so no similarity signal can
+separate them — they stay an eval XGAP. A merchant who writes the Arabic name in the
+description fixes it for their own catalog. (D-091 had been reserved for this and was taken
+by the Google Ads ruling first; the number is D-092 everywhere.)
 
 ---
 

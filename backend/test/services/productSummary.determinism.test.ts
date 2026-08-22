@@ -29,6 +29,8 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
     desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
     notInArray: vi.fn(),
+    // buildProductSummary admits every SELLABLE status (active + out_of_stock) since D-092.
+    inArray: vi.fn((col: unknown, values: unknown[]) => ({ op: 'inArray', col, values })),
     lt: vi.fn(),
     sql: Object.assign((s: TemplateStringsArray) => ({ op: 'sql', s }), { raw: vi.fn() }),
 }));

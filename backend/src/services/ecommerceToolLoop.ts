@@ -210,9 +210,17 @@ export async function generateReplyWithTools(
                 });
             }
 
-            // Execute tool calls
+            // Execute tool calls. The reply's own context rides along so the
+            // product resolver can reuse its query embedding and scan the right
+            // page index (D-092) instead of embedding again.
+            const toolCtx = {
+                pageId: request.context?.pageId,
+                kbActiveVersion: request.context?.kbActiveVersion,
+                queryEmbedding: request.context?.queryEmbedding,
+                userId: request.context?.userId,
+            };
             lastToolResults = await Promise.all(
-                validToolCalls.map((tc) => executeToolCall(storeId, tc as EcommerceToolCall)),
+                validToolCalls.map((tc) => executeToolCall(storeId, tc as EcommerceToolCall, toolCtx)),
             );
             allToolResults.push(...lastToolResults);
 
@@ -273,6 +281,14 @@ export async function generateReplyWithTools(
                 flags: roundData.flags,
                 tokensUsed: totalTokens,
                 ...(productCards.length ? { productCards } : {}),
+                // What each tool DECIDED, for the eval to assert on (Rule 19):
+                // present only when a tool round ran, omitted on the no-tool path.
+                toolOutcomes: allToolResults.map(r => ({
+                    name: r.tool_name,
+                    outcome: r.success ? 'success' : (r.error ?? 'unknown'),
+                    ...(typeof r.data?.platformProductId === 'string' ? { platformProductId: r.data.platformProductId } : {}),
+                    ...(r.candidates?.length ? { candidateIds: r.candidates.map(c => c.platformProductId) } : {}),
+                })),
             };
         }
 

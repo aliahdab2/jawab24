@@ -94,20 +94,24 @@ export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
         type: 'function',
         function: {
             name: 'check_inventory',
-            description: 'Check real-time stock availability for a product. No identity verification needed — this is public information.',
+            description: 'Check stock availability, price and link for ONE product the customer asked about. No identity verification needed — this is public information. The product is identified by the backend: pass product_id when the catalog entry shows one (the value after "ID:"), otherwise pass the customer\'s own wording as product_name. If the result is error "ambiguous_product", it lists the candidates — name them and ask which one; never pick for the customer. If the result is error "product_not_found", the store does not carry it — say so plainly and never substitute another product.',
             parameters: {
                 type: 'object',
                 properties: {
+                    product_id: {
+                        type: 'string',
+                        description: 'The id shown after "ID:" in a [product: …] catalog entry. Prefer this whenever it is listed.',
+                    },
                     product_name: {
                         type: 'string',
-                        description: 'Product name or keyword to search for',
+                        description: 'Only when no id is available: the product as the customer worded it (their language and spelling are fine).',
                     },
                     variant: {
                         type: 'string',
                         description: 'Specific variant to check (size, color, etc.)',
                     },
                 },
-                required: ['product_name'],
+                required: [],
             },
         },
     },
@@ -165,7 +169,7 @@ export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
 
 // --- Tool-specific system prompt additions ---
 
-const TOOL_PROMPT_ADDITION = `
+export const TOOL_PROMPT_ADDITION = `
 
 ECOMMERCE TOOLS:
 You have access to tools that can look up real-time data from the merchant's online store.
@@ -193,6 +197,10 @@ CRITICAL RULES:
 - NEVER skip the verification step. NEVER make up order details.
 - NEVER call verify_and_get_* without first getting the customer's name or phone.
 - For check_inventory: No verification needed — stock info is public.
+- check_inventory identifies the product for you. Pass product_id when the catalog entry shows "ID:"; otherwise pass the customer's own words as product_name.
+- If check_inventory returns error "ambiguous_product", its "candidates" are the products the customer may mean: name them (title and price) and ask which one. NEVER pick one yourself.
+- If check_inventory returns error "product_not_found", the store does not carry that product. Say so plainly; NEVER answer with a different product instead.
+- A check_inventory result has "source": "local" means the figure is from the store's last sync ("asOf"); "live" means the store was asked just now. Either is fine to state; do not mention the word "sync" to the customer.
 `;
 
 /**

@@ -6,9 +6,8 @@ import { subscriptionsService } from '../subscriptions';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { postsService } from '../posts';
 import { config } from '../../config';
-import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
-import { RetrievalService } from '../kb/retrieval';
-import { OpenAIEmbeddingProvider } from '../kb/embedding';
+import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
+import { getRetrievalService } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
@@ -458,19 +457,14 @@ export interface PlaygroundResult {
      *  the customer receives, and Rule 19 requires the eval to be able to see
      *  every such change. Absent when the reply carries no card. */
     productCards?: ProductCard[];
+    /** What each e-commerce tool call decided (D-092) — present only when a tool
+     *  round ran, so the eval can pin the resolver's choice next to the reply. */
+    toolOutcomes?: ToolOutcome[];
 }
 
-/** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
-let _retrievalService: RetrievalService | null = null;
-function getRetrievalService(): RetrievalService | null {
-    if (!config.ragMode || config.ragMode === 'off') return null;
-    if (!config.openai?.apiKey) return null;
-    if (!_retrievalService) {
-        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
-        _retrievalService = new RetrievalService(embeddingProvider);
-    }
-    return _retrievalService;
-}
+// The lazy retrieval singleton lives in kb/retrieval.ts (`getRetrievalService`)
+// since D-092 — the product resolver shares it, and importing the generator from
+// the resolver would be a cycle.
 
 /** Max chars of the enriched RAG query sent to the embedding model. */
 const ENRICHED_QUERY_MAX_CHARS = 500;
@@ -1055,6 +1049,7 @@ export class ReplyGenerator {
             gapRecorded,
             replyShortened,
             ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
+            ...(aiResponse.toolOutcomes ? { toolOutcomes: aiResponse.toolOutcomes } : {}),
         };
     }
 
