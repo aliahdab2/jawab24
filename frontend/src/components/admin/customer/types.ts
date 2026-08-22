@@ -124,7 +124,7 @@ export interface CustomerDetail {
          * snapped UTC-midnight boundary, so `status` rendered a green "active"
          * badge over an account whose every reply was refused.
          */
-        autoReply?: { allowed: boolean; code?: string };
+        autoReply?: { allowed: boolean; code?: string; cause?: 'trial_expired' };
         /** The instant coverage actually ends — snapped, so up to ~24h before
          *  `currentPeriodEnd`. The honest number to show a support agent. */
         entitlementEndsAt?: string | null;

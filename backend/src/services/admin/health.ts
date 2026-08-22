@@ -165,6 +165,16 @@ export interface HealthInput {
          */
         autoReplyAllowed: boolean;
         /**
+         * The gate's own account of WHY it refused (`LimitCheckResult.cause`).
+         * Optional for callers that predate it; when present it outranks the
+         * status heuristic below. Needed because an expired trial is lazily
+         * flipped `trialing → past_due`, after which `status` alone reads as a
+         * lapsed paid subscription — 19 of the 20 `past_due` rows on prod were
+         * trials (2026-08-22), and the console labelled every one of them as
+         * a customer whose subscription had lapsed.
+         */
+        blockCause?: 'trial_expired';
+        /**
          * `resolveEntitlementEnd`'s answer — the instant the CLOCK cuts this
          * subscription off, already rail-correct (snapped for manual, trialEndsAt
          * for a trial, +grace for past_due). null = no clock bounds this row.
@@ -464,7 +474,8 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
         if (!subscription.autoReplyAllowed) {
             // `trial_expired` stays the more specific label when that is genuinely
             // the cause; otherwise the generic refusal carries the raw status as meta.
-            const trialIsTheCause = status === 'trialing' && trialEndsAt && trialEndsAt.getTime() < now.getTime();
+            const trialIsTheCause = subscription.blockCause === 'trial_expired'
+                || (status === 'trialing' && trialEndsAt && trialEndsAt.getTime() < now.getTime());
             if (trialIsTheCause) {
                 add('red', 'trial_expired');
             } else {

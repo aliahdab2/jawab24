@@ -339,6 +339,24 @@ describe('AiUsageWarningBanner — billing paused (gate refuses)', () => {
         expect(screen.queryByText(/gone unanswered/i)).not.toBeInTheDocument();
     });
 
+    it('tells an expired TRIAL to choose a plan — never to "renew" something it never had', () => {
+        // 19 of the 20 blocked accounts on prod (2026-08-22) were expired trials
+        // reading "your subscription has ended — Renew subscription".
+        render(
+            <AiUsageWarningBanner planSlug="starter" aiReplies={lapsed()} autoReply={blocked} cause="trial_expired" />,
+        );
+        expect(screen.getByText(/your free trial has ended/i)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /choose a plan/i })).toHaveAttribute('href', '/pricing');
+        expect(screen.queryByText(/subscription has ended/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /renew subscription/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps the renewal copy for a lapsed PAID subscription (no cause)', () => {
+        render(<AiUsageWarningBanner planSlug="starter" aiReplies={lapsed()} autoReply={blocked} />);
+        expect(screen.getByText(/subscription has ended/i)).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /renew subscription/i })).toBeInTheDocument();
+    });
+
     it('leaves quota behaviour untouched when the gate allows', () => {
         const { container } = render(
             <AiUsageWarningBanner aiReplies={lapsed()} autoReply={{ allowed: true }} />,

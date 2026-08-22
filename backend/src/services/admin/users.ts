@@ -9,7 +9,6 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
-import type { SubscriptionStatus } from '@jawab24/shared';
 import { subscriptionsService, resolveEntitlementEnd } from '../subscriptions';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
@@ -854,6 +853,7 @@ class AdminUsersService {
                 // (it crosses the API boundary); computeHealthFlags does date maths on it.
                 trialEndsAt: gateSubscription.trialEndsAt ? new Date(gateSubscription.trialEndsAt) : null,
                 autoReplyAllowed: entitlement.allowed,
+                blockCause: entitlement.cause,
                 entitlementEndsAt,
             }
             : null;
@@ -910,7 +910,7 @@ class AdminUsersService {
                     // subscription resolved, and defaulting a missing verdict to
                     // "replies are flowing" is the exact assumption this work exists
                     // to stop making. A row the gate could not evaluate reports null.
-                    autoReply: entitlement && { allowed: entitlement.allowed, code: entitlement.code },
+                    autoReply: entitlement && { allowed: entitlement.allowed, code: entitlement.code, cause: entitlement.cause },
                     entitlementEndsAt,
                 }
                 : null,

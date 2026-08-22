@@ -975,6 +975,12 @@ export interface UsageSummary {
       allowed: boolean;
       code?: LimitCheckResult['code'];
       /**
+       * Why the gate refused, when that changes the copy: an expired TRIAL is
+       * told "your free trial ended — subscribe", never "your subscription
+       * ended — renew". See LimitCheckResult.cause.
+       */
+      cause?: LimitCheckResult['cause'];
+      /**
        * Customer messages and comments that arrived AFTER coverage lapsed and
        * were never answered — the cost of the block, in the merchant's own
        * numbers. Present only while `allowed` is false and the boundary is
@@ -1037,6 +1043,17 @@ export interface LimitCheckResult {
   reason?: string;
   /** Stable machine code for clients to switch on. */
   code?: 'ai_limit_reached' | 'page_limit_reached' | 'subscription_inactive';
+  /**
+   * WHY a `subscription_inactive` refusal happened, when the distinction changes
+   * what a merchant should be told. `code` stays `subscription_inactive` for
+   * every billing block — several callers switch on it — so this is additive.
+   *
+   * 'trial_expired' = a trial-origin row past `trial_ends_at`. 19 of the 20
+   * `past_due` rows on prod (2026-08-22) were exactly this, and a dashboard
+   * that tells them "your subscription has ended — renew" is addressing a
+   * customer who never subscribed. They need "your free trial ended — subscribe".
+   */
+  cause?: 'trial_expired';
   limit?: number;
   used?: number;
   remaining?: number;

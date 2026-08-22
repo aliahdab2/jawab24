@@ -165,10 +165,12 @@ const STATUS_CACHE_TTL = 60;
  * Matches Shopify. Exported because the dunning emails print the same boundary
  * (services/dunningNotices.ts) — display and enforcement must share one clock.
  *
- * NOTE: PR #749 extracts this to `PAST_DUE_GRACE_DAYS` in @jawab24/shared —
- * whichever lands second folds the two into the shared constant.
+ * The value itself lives in @jawab24/shared as `PAST_DUE_GRACE_DAYS`, because
+ * the support console (admin/health.ts, deliberately DB-free) must date the
+ * same fuse this gate burns. This name is kept for the dunning sweep's
+ * existing import; it is the same constant, never a second literal.
  */
-export const GRACE_PERIOD_DAYS = 3;
+export const GRACE_PERIOD_DAYS = PAST_DUE_GRACE_DAYS;
 
 /**
  * Snap a date to 00:00:00 UTC. Used to align usage rollover to a calendar boundary
@@ -723,7 +725,7 @@ export const subscriptionsService = {
                 // this can be ~24h earlier than `renewsAt`. Surfaces that tell a
                 // merchant "until when am I covered?" must read THIS, not renewsAt.
                 entitlementEndsAt: entitlementEnd?.toISOString(),
-                autoReply: { allowed: entitlement.allowed, code: entitlement.code, unansweredSinceBlock },
+                autoReply: { allowed: entitlement.allowed, code: entitlement.code, cause: entitlement.cause, unansweredSinceBlock },
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
                 // A CANCELED shopify mirror must NOT read as shopify-billed
                 // (isShopifyBilled carries the exemption): the merchant
@@ -1391,7 +1393,7 @@ export const subscriptionsService = {
             (subscription.status === 'trialing' || subscription.status === 'past_due') &&
             new Date(subscription.trialEndsAt) < new Date()
         ) {
-            return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
+            return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired' };
         }
 
         if (subscription.status === 'past_due') {
@@ -1414,7 +1416,7 @@ export const subscriptionsService = {
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
             const trialEnd = new Date(subscription.trialEndsAt);
             if (trialEnd < new Date()) {
-                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
+                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired' };
             }
         }
 

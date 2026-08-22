@@ -661,6 +661,7 @@ const DashboardPage: NextPageWithLayout = () => {
           autoReply={usage.subscription?.autoReply}
           entitlementEndsAt={usage.subscription?.entitlementEndsAt}
           unansweredSinceBlock={usage.subscription?.autoReply?.unansweredSinceBlock}
+          cause={usage.subscription?.autoReply?.cause}
         />
       )}
 

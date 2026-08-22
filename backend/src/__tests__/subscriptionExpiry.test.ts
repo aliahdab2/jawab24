@@ -357,3 +357,48 @@ describe('resolveEntitlementEnd — one boundary for enforcement and display', (
         expect(subscriptionsService.checkSubscriptionStatus(flipped).allowed).toBe(false);
     });
 });
+
+/**
+ * `cause` — the gate's own account of WHY it refused.
+ *
+ * 19 of the 20 `past_due` rows on prod (2026-08-22) were expired TRIALS, lazily
+ * flipped from `trialing`. Every surface keyed on `code` told those merchants
+ * "your subscription ended — renew". They never subscribed. `code` must stay
+ * `subscription_inactive` (several callers switch on it); `cause` is the
+ * additive field that lets the copy tell the two apart.
+ */
+describe('checkSubscriptionStatus — cause', () => {
+    const PAST = new Date('2026-08-01T00:00:00.000Z');
+
+    it('names an expired trial-origin row as trial_expired, in BOTH lazy-flip states', () => {
+        vi.setSystemTime(new Date('2026-08-22T00:00:00.000Z'));
+        for (const status of ['trialing', 'past_due'] as const) {
+            const result = subscriptionsService.checkSubscriptionStatus(
+                sub({ status, paymentMethod: null, trialEndsAt: PAST, currentPeriodEnd: new Date('2026-08-02T00:00:00.000Z') }),
+            );
+            expect({ status, allowed: result.allowed, code: result.code, cause: result.cause })
+                .toEqual({ status, allowed: false, code: 'subscription_inactive', cause: 'trial_expired' });
+        }
+    });
+
+    it('names a plain trialing row past its end as trial_expired too', () => {
+        vi.setSystemTime(new Date('2026-08-22T00:00:00.000Z'));
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({ status: 'trialing', paymentMethod: 'stripe', trialEndsAt: PAST, currentPeriodEnd: null }),
+        );
+        expect(result.cause).toBe('trial_expired');
+    });
+
+    it('carries NO cause for a lapsed paid subscription — that one really should renew', () => {
+        vi.setSystemTime(new Date('2026-08-22T00:00:00.000Z'));
+        for (const s of [
+            sub({ status: 'active', paymentMethod: 'manual', currentPeriodEnd: PAST, trialEndsAt: null }),
+            sub({ status: 'past_due', paymentMethod: 'stripe', currentPeriodEnd: PAST, trialEndsAt: null }),
+            sub({ status: 'canceled', paymentMethod: 'stripe', currentPeriodEnd: PAST, trialEndsAt: null }),
+        ]) {
+            const result = subscriptionsService.checkSubscriptionStatus(s);
+            expect(result.allowed).toBe(false);
+            expect(result.cause).toBeUndefined();
+        }
+    });
+});

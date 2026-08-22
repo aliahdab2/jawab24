@@ -1494,6 +1494,23 @@ describe('isSubscriptionActive', () => {
                 expect(result!.subscription.autoReply?.unansweredSinceBlock).toBeUndefined();
             });
 
+            it('forwards the gate\'s cause so the dashboard can tell a trial from a lapsed plan', async () => {
+                vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+                    ...mockSubscription,
+                    status: 'past_due' as const,
+                    paymentMethod: null as unknown as typeof mockSubscription.paymentMethod,
+                    trialEndsAt: new Date('2026-08-01T00:00:00.000Z'),
+                });
+                vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+                vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+                vi.spyOn(subscriptionsService, 'countUnansweredSince').mockResolvedValue(7);
+                await mockWorkspaceOwner('owner-1');
+
+                const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+                expect(result!.subscription.autoReply).toMatchObject({ allowed: false, cause: 'trial_expired', unansweredSinceBlock: 7 });
+            });
+
             it('omits the count when the block has no boundary to count from', async () => {
                 // canceled/paused are refused by STATUS, so resolveEntitlementEnd
                 // returns null — there is no "since" and inventing one (the row's

@@ -46,6 +46,13 @@ interface AiUsageWarningBannerProps {
      * Backend-computed, present only while the gate refuses.
      */
     unansweredSinceBlock?: number;
+    /**
+     * Why the gate refused (`usage.subscription.autoReply.cause`). An expired
+     * trial is told "your free trial ended — choose a plan"; telling someone who
+     * never subscribed to "renew" is the copy 19 of 20 blocked accounts on prod
+     * were reading (2026-08-22).
+     */
+    cause?: 'trial_expired';
 }
 
 /**
@@ -76,7 +83,7 @@ interface AiUsageWarningBannerProps {
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
  * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance, autoReply, entitlementEndsAt, unansweredSinceBlock }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance, autoReply, entitlementEndsAt, unansweredSinceBlock, cause }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
@@ -84,6 +91,8 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
     // quota says. Explicit `=== false` so an older API response (field absent)
     // leaves the banner on its pre-existing quota behaviour rather than alarming.
     const isBillingPaused = autoReply?.allowed === false;
+    // Same block, different story: a trial that ran out has nothing to "renew".
+    const isTrialEnded = isBillingPaused && cause === 'trial_expired';
 
     const { used, limit } = aiReplies;
     // The plan cap is a billing boundary, not the wall: canUseAiReplies falls
@@ -240,7 +249,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm sm:text-base leading-tight">
                         {isBillingPaused
-                            ? tSub('limitBanner.billingPausedTitle')
+                            ? tSub(isTrialEnded ? 'limitBanner.trialEndedTitle' : 'limitBanner.billingPausedTitle')
                             : onTopup
                                 ? tSub('limitBanner.onTopupTitle')
                                 : isTopupLow
@@ -254,7 +263,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                         null on unmetered plans, which this state no longer skips. */}
                     {isBillingPaused ? (
                         <p className="text-xs sm:text-sm opacity-80 mt-1">
-                            <span className="block">{tSub('limitBanner.billingPausedBody')}</span>
+                            <span className="block">{tSub(isTrialEnded ? 'limitBanner.trialEndedBody' : 'limitBanner.billingPausedBody')}</span>
                             {coverageEndedDate && (
                                 <span className="block">
                                     {tSub('limitBanner.coverageEndedOn', { date: coverageEndedDate })}
@@ -375,7 +384,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                                     : <Sparkles className="w-4 h-4" aria-hidden="true" />}
                             >
                                 {isBillingPaused
-                                    ? tSub('limitBanner.renewNow')
+                                    ? tSub(isTrialEnded ? 'limitBanner.subscribeNow' : 'limitBanner.renewNow')
                                     : tSub(atTopPublicTier ? 'limitBanner.highVolumeLink' : 'upgradePlan')}
                             </Button>
                         </UpgradeCTA>

@@ -908,3 +908,32 @@ describe('resolvePipelineWorkspaceId — which workspace the pipeline actually o
         expect(resolvePipelineWorkspaceId([null], [], 'me')).toBeUndefined();
     });
 });
+
+describe('computeHealthFlags — the gate says WHY (blockCause)', () => {
+    it('labels a lazily-flipped expired trial as trial_expired, not subscription_inactive', () => {
+        // The row prod actually holds for an expired trial: status already
+        // flipped to past_due by getUserSubscription, trialEndsAt in the past.
+        // The status heuristic alone calls this "subscription inactive — DB
+        // status: past due", i.e. a customer whose subscription lapsed. 19 of
+        // the 20 past_due rows on prod (2026-08-22) were this shape, and none
+        // of them had ever subscribed.
+        const flags = computeHealthFlags(healthyInput({
+            subscription: {
+                status: 'past_due',
+                trialEndsAt: new Date('2026-07-20T00:00:00Z'),
+                autoReplyAllowed: false,
+                blockCause: 'trial_expired',
+                entitlementEndsAt: new Date('2026-07-20T00:00:00Z'),
+            },
+        }));
+        expect(keys(flags)).toContain('trial_expired');
+        expect(keys(flags)).not.toContain('subscription_inactive');
+    });
+
+    it('still falls back to the status heuristic when the caller predates blockCause', () => {
+        const flags = computeHealthFlags(healthyInput({
+            subscription: { status: 'trialing', trialEndsAt: new Date('2026-07-20T00:00:00Z'), autoReplyAllowed: false, entitlementEndsAt: null },
+        }));
+        expect(keys(flags)).toContain('trial_expired');
+    });
+});
