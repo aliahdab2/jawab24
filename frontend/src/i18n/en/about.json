@@ -1,12 +1,12 @@
 {
-  "seoTitle": "What is Jawab24? | Arabic-First AI Auto-Reply for WhatsApp, Facebook, Instagram, Shopify & Salla",
-  "seoDescription": "Jawab24 is an Arabic-first AI auto-reply platform for businesses selling through WhatsApp, Facebook, Instagram, Shopify, and Salla. It automatically replies to customer comments and messages in the customer’s language, syncs product catalogs, and uses a 3-layer reply system with built-in price verification. Free trial available.",
+  "seoTitle": "What is Jawab24? | Arabic-First AI Auto-Reply for WhatsApp, Facebook, Instagram, Shopify, Salla & Zid",
+  "seoDescription": "Jawab24 is an Arabic-first AI auto-reply platform for businesses selling through WhatsApp, Facebook, Instagram, Shopify, Salla, and Zid. It automatically replies to customer comments and messages in the customer’s language, syncs product catalogs, and uses a 3-layer reply system with built-in price verification. Free trial available.",
   "title": "What is Jawab24?",
   "backToHome": "Back to Home",
   "intro": {
     "title": "What is Jawab24?",
     "text": "Jawab24 is an AI-powered auto-reply platform built specifically for Arabic-speaking and bilingual businesses. It connects to Facebook Pages, Instagram business accounts, WhatsApp Business numbers, and e-commerce stores on Shopify, Salla, and Zid, reads incoming comments and direct messages, and automatically replies to customers in their language — 24 hours a day, 7 days a week.",
-    "text2": "Jawab24 is not a chatbot — it is an intelligent auto-reply system designed for Arabic-first businesses. Unlike chatbots that follow rigid decision trees, Jawab24 understands context, recognizes Arabic dialect groups, integrates natively with Salla, and uses a built-in safety system to prevent the AI from inventing prices or unsupported facts. Every AI-generated reply passes through 6 automated post-validation checks before it is sent."
+    "text2": "Jawab24 is not a chatbot — it is an intelligent auto-reply system designed for Arabic-first businesses. Unlike chatbots that follow rigid decision trees, Jawab24 understands context, recognizes Arabic dialect groups, integrates natively with Salla and Zid, and uses a built-in safety system to prevent the AI from inventing prices or unsupported facts. Every AI-generated reply passes through 6 automated post-validation checks before it is sent."
   },
   "subtitle": "Jawab24 is an AI auto-reply tool that helps businesses automatically reply to Facebook comments, Instagram and WhatsApp messages, and customer questions using artificial intelligence.",
   "howItWorks": {
@@ -36,11 +36,11 @@
     "feature1": "Organize your Business Info into sections with titles and content",
     "feature2": "Version history — restore previous versions if needed",
     "feature3": "RAG-powered search finds the right context for each question",
-    "feature4": "Product catalog from Shopify or Salla is automatically included"
+    "feature4": "Product catalog from Shopify, Salla or Zid is automatically included"
   },
   "ecommerce": {
     "title": "E-Commerce Integration",
-    "text": "Jawab24 connects directly to your Shopify or Salla store to sync your product catalog. When a customer asks about a product, the AI can:",
+    "text": "Jawab24 connects directly to your Shopify, Salla or Zid store to sync your product catalog. When a customer asks about a product, the AI can:",
     "feature1": "Answer with the correct price, description, and availability",
     "feature2": "Suggest relevant products based on the customer's question",
     "feature3": "Handle \"how much is...\" and \"is this in stock?\" questions automatically",
@@ -103,7 +103,7 @@
   "whoShouldUse": {
     "title": "Who Should Use Jawab24?",
     "text": "Jawab24 is built for:",
-    "user1": "E-commerce store owners on Shopify or Salla who get frequent product questions",
+    "user1": "E-commerce store owners on Shopify, Salla or Zid who get frequent product questions",
     "user2": "Facebook Page managers who receive high volumes of comments and messages",
     "user3": "Small businesses that can't afford a 24/7 customer support team",
     "user4": "Arabic-speaking businesses that need a tool built for their language",
@@ -130,16 +130,16 @@
     "a2": "Yes. Jawab24 supports Facebook Pages and Instagram Business Accounts on all plans, and WhatsApp Business numbers on the Business plan and up. It auto-replies to comments and direct messages, all from one shared inbox.",
     "q3": "Can Jawab24 reply in Arabic?",
     "a3": "Yes. Jawab24 is built for Arabic-first businesses. The AI understands Arabic (including dialects), replies in Arabic, and the entire interface supports right-to-left layout.",
-    "q4": "Does it integrate with Shopify and Salla?",
-    "a4": "Yes. You can connect your Shopify or Salla store to sync your product catalog. The AI uses your product information to answer customer questions with accurate prices and availability.",
+    "q4": "Does it integrate with Shopify, Salla and Zid?",
+    "a4": "Yes. You can connect your Shopify, Salla or Zid store to sync your product catalog. The AI uses your product information to answer customer questions with accurate prices and availability.",
     "q5": "Will the AI make mistakes?",
     "a5": "Jawab24 uses confidence scoring. When the AI is uncertain, it flags the reply for human review instead of sending an incorrect response. It also checks for hallucinated prices to ensure accuracy.",
     "q6": "Can I control what the AI says?",
     "a6": "Absolutely. You control the AI through your Business Info (what it knows), post replies (per-post keyword triggers for common questions), reply style settings (professional, casual, or enthusiastic), and business hours (when it's active).",
     "q7": "How does Jawab24 handle Arabic dialects?",
     "a7": "Jawab24's AI can recognize and reply in 6 Arabic dialect families: Gulf (Saudi, Emirati, Kuwaiti), Egyptian, Levantine (Syrian, Lebanese, Jordanian), Maghrebi (Moroccan, Tunisian, Algerian), Iraqi, and Modern Standard Arabic. It detects which dialect the customer is using and replies naturally in the same dialect. It also handles Franco-Arabic (Arabic written in Latin letters) and mixed Arabic-English messages.",
-    "q8": "Can Jawab24 answer product pricing questions from my Shopify or Salla store?",
-    "a8": "Yes. When you connect your Shopify or Salla store, Jawab24 automatically syncs your product catalog (names, prices, variants, and stock status) every 6 hours. When a customer asks \"how much is the blue shirt?\" the AI looks up the exact price from your catalog and replies with accurate information. If the product isn't in your catalog, the AI says \"let me check\" instead of guessing — it never makes up a price.",
+    "q8": "Can Jawab24 answer product pricing questions from my Shopify, Salla or Zid store?",
+    "a8": "Yes. When you connect your Shopify, Salla or Zid store, Jawab24 automatically syncs your product catalog (names, prices, variants, and stock status) every 6 hours. When a customer asks \"how much is the blue shirt?\" the AI looks up the exact price from your catalog and replies with accurate information. If the product isn't in your catalog, the AI says \"let me check\" instead of guessing — it never makes up a price.",
     "q9": "What happens when Jawab24 doesn't know the answer?",
     "a9": "When the AI can't find an answer in your Business Info or product catalog, it assigns a low confidence score and responds with something like \"Let me check with the team and get back to you.\" If you have the hold-low-confidence setting enabled, the reply is held for your manual review before being sent. The system also tracks which questions it can't answer, and after 3 occurrences of the same unanswered question, it notifies you so you can update your Business Info.",
     "q10": "Does Jawab24 work with Salla?",
@@ -149,7 +149,7 @@
   },
   "whyDifferent": {
     "title": "Why Jawab24 Is Different",
-    "text": "Jawab24 is not a chatbot — it is an intelligent auto-reply system. Traditional chatbots force you to build conversation flows manually and follow rigid decision trees. Jawab24 understands what customers are asking, checks your product catalog for accurate information, and generates natural responses — all without any flow setup. It combines post replies, AI-generated smart replies, product catalog data, and business knowledge into a single system that works in Arabic and English. Designed from the ground up for Arabic-speaking markets, with native Salla integration, dialect-aware AI, and right-to-left interface support."
+    "text": "Jawab24 is not a chatbot — it is an intelligent auto-reply system. Traditional chatbots force you to build conversation flows manually and follow rigid decision trees. Jawab24 understands what customers are asking, checks your product catalog for accurate information, and generates natural responses — all without any flow setup. It combines post replies, AI-generated smart replies, product catalog data, and business knowledge into a single system that works in Arabic and English. Designed from the ground up for Arabic-speaking markets, with native Salla and Zid integration, dialect-aware AI, and right-to-left interface support."
   },
   "related": {
     "title": "Learn more",
