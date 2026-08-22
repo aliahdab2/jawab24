@@ -71,4 +71,38 @@ describe('validate-sitemap', () => {
     const { errors } = validateSitemap(SITEMAP, { ...OPTS, checkCoverage: false });
     expect(errors).toEqual([]);
   });
+
+  // ── Check 7: data-driven <lastmod> must match the data module ─────────────
+  // The defect this guards: the ManyChat comparison was rewritten on 2026-08-14
+  // while its hand-typed <lastmod> stayed 2026-03-08, so IndexNow (which only
+  // submits URLs changed inside its window) never told Bing.
+  it('fails when a data-driven <lastmod> is older than the data module says', () => {
+    const stale = SITEMAP.replace(
+      /(<loc>https:\/\/jawab24\.com\/compare\/manychat<\/loc>[\s\S]*?<lastmod>)[^<]+/,
+      '$12026-03-08',
+    );
+    expect(stale).not.toBe(SITEMAP); // the mutation must have landed
+    const { errors } = validateSitemap(stale, OPTS);
+    expect(errors.some(e => e.includes('https://jawab24.com/compare/manychat') && e.includes('disagrees with competitors.ts'))).toBe(true);
+  });
+
+  it('fails on the EN twin too — both locales carry the date', () => {
+    const stale = SITEMAP.replace(
+      /(<loc>https:\/\/jawab24\.com\/en\/blog\/best-auto-reply-tools-2026<\/loc>[\s\S]*?<lastmod>)[^<]+/,
+      '$12026-03-18',
+    );
+    expect(stale).not.toBe(SITEMAP);
+    const { errors } = validateSitemap(stale, OPTS);
+    expect(errors.some(e => e.includes('/en/blog/best-auto-reply-tools-2026') && e.includes('disagrees with blog-posts.ts'))).toBe(true);
+  });
+
+  it('does not second-guess static pages (they have no data module)', () => {
+    const bumped = SITEMAP.replace(
+      /(<loc>https:\/\/jawab24\.com\/pricing<\/loc>[\s\S]*?<lastmod>)[^<]+/,
+      '$12026-01-01',
+    );
+    expect(bumped).not.toBe(SITEMAP);
+    const { errors } = validateSitemap(bumped, OPTS);
+    expect(errors.some(e => e.includes('disagrees'))).toBe(false);
+  });
 });

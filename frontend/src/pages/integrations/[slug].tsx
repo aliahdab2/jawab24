@@ -4,7 +4,9 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { isRTLLocale } from '@/utils/locale';
+import { isRTLLocale, getIntlLocale } from '@/utils/locale';
+import { formatPlainDate } from '@/utils/dateUtils';
+import { contentLastModified } from '@/data/contentDates';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing';
 import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import {
@@ -29,10 +31,14 @@ const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>
 
 export default function IntegrationPage({ integration }: IntegrationPageProps) {
   const t = useTranslations('ecommerce');
+  const tc = useTranslations('common');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const slug = integration.slug;
+  // See ContentDates — shown to the reader and emitted as dateModified.
+  const lastModified = contentLastModified(integration);
+  const formattedLastModified = formatPlainDate(lastModified, getIntlLocale(locale), { alwaysYear: true }) ?? lastModified;
 
   const PlatformIcon = PLATFORM_ICONS[slug];
 
@@ -72,6 +78,8 @@ export default function IntegrationPage({ integration }: IntegrationPageProps) {
               'name': t(k(`${slug}.seoTitle`)),
               'description': t(k(`${slug}.seoDescription`)),
               'url': BRAND_ASSETS.urls.canonical(`/integrations/${slug}`),
+              'datePublished': integration.date,
+              'dateModified': lastModified,
               'isPartOf': {
                 '@type': 'WebSite',
                 'name': 'Jawab24',
@@ -129,8 +137,11 @@ export default function IntegrationPage({ integration }: IntegrationPageProps) {
               {t(k(`${slug}.heroTitle`))}
             </h1>
           </div>
-          <p className="text-lg text-foreground/70 leading-relaxed mb-12">
+          <p className="text-lg text-foreground/70 leading-relaxed mb-3">
             {t(k(`${slug}.heroSubtitle`))}
+          </p>
+          <p className="text-sm text-muted-foreground mb-12">
+            <time dateTime={lastModified}>{tc('lastUpdatedOn', { date: formattedLastModified })}</time>
           </p>
 
           {/* How It Works */}

@@ -6,7 +6,10 @@
  * All display text lives in the `ecommerce` translation namespace.
  */
 
-export interface Integration {
+import type { ContentDates } from './contentDates';
+
+/** `date` / `updated` semantics (and who reads them) are documented on ContentDates. */
+export interface Integration extends ContentDates {
   slug: string;
   name: string;
   /** Platform brand color hex for accent styling */
@@ -20,8 +23,11 @@ export interface Integration {
 }
 
 export const INTEGRATIONS: Record<string, Integration> = {
+  // No `updated` on any integration page yet: every commit since launch was a
+  // terminology or link sweep, not a content revision (see ContentDates).
   shopify: {
     slug: 'shopify',
+    date: '2026-03-17',
     name: 'Shopify',
     brandColor: '#96BF47',
     stepCount: 3,
@@ -30,6 +36,7 @@ export const INTEGRATIONS: Record<string, Integration> = {
   },
   salla: {
     slug: 'salla',
+    date: '2026-03-17',
     name: 'Salla',
     brandColor: '#004956',
     stepCount: 3,
@@ -38,6 +45,7 @@ export const INTEGRATIONS: Record<string, Integration> = {
   },
   zid: {
     slug: 'zid',
+    date: '2026-03-27',
     name: 'Zid',
     // Zid's brand purple (zid.sa). Was #E94F1C — an invented orange.
     brandColor: '#AE72FF',

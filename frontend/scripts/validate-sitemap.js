@@ -12,6 +12,12 @@
  *  6. Route coverage          — every public index,follow build route is in the sitemap
  *                               (the recurrence guard: the static sitemap can no longer
  *                               silently drift from the app's routes)
+ *  7. Data-driven <lastmod>   — every blog / compare / integration URL carries the
+ *                               `updated ?? date` of its data module entry, so a page
+ *                               revised in the data cannot keep an old date here (which
+ *                               is what kept IndexNow from ever resubmitting it)
+ *
+ * The file itself is produced by generate-sitemap.js; this script is the gate.
  *
  * Usage:  node scripts/validate-sitemap.js
  * Exit:   0 = pass, 1 = errors found
@@ -19,7 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { slugsFromDataFile } = require('./lib/dataSlugs');
+const { slugsFromDataFile, entriesFromDataFile, entryLastModified } = require('./lib/dataSlugs');
 
 const PROD_ORIGIN = 'https://jawab24.com';
 const SITEMAP_PATH = path.join(__dirname, '..', 'public', 'sitemap.xml');
@@ -240,6 +246,29 @@ function validateSitemap(xml, opts = {}) {
     }
   }
 
+  // ── Check 7: data-driven <lastmod> agrees with the data module ───────────
+  // A URL generated from src/data/*.ts must carry that entry's `updated ?? date`.
+  // Absence is check 6's job; this only judges dates on URLs that are present.
+  const byLoc = new Map(entries.map(e => [e.loc, e]));
+  for (const [route, source] of Object.entries(DYNAMIC_SLUG_SOURCES)) {
+    const dataEntries = entriesFromDataFile(dataDir, source);
+    if (!dataEntries) continue;
+    const base = route.replace(/\/\[[^\]]+\]$/, '');
+    for (const dataEntry of dataEntries) {
+      const expected = entryLastModified(dataEntry);
+      if (!expected) {
+        errors.push(`${source}: "${dataEntry.slug}" has no date: — every entry needs a publish date (see src/data/contentDates.ts)`);
+        continue;
+      }
+      for (const loc of [`${prodOrigin}/${base}/${dataEntry.slug}`, `${prodOrigin}/en/${base}/${dataEntry.slug}`]) {
+        const entry = byLoc.get(loc);
+        if (entry && entry.lastmod !== expected) {
+          errors.push(`<lastmod> ${entry.lastmod} for ${loc} disagrees with ${source} (${expected}) — run \`npm run sitemap:generate\``);
+        }
+      }
+    }
+  }
+
   return { errors, entryCount: entries.length };
 }
 
@@ -260,6 +289,6 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  console.log(`Sitemap clean — ${entryCount} entries, no future dates, hreflang pairs intact, route coverage complete.`);
+  console.log(`Sitemap clean — ${entryCount} entries, no future dates, hreflang pairs intact, route coverage complete, data-driven dates current.`);
   process.exit(0);
 }

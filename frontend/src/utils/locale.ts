@@ -51,6 +51,19 @@ export function getNextLocale(current: string): SupportedLocale {
   return SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length];
 }
 
+/**
+ * Intl locale tags for Date / number formatting. `-u-nu-latn` forces Latin
+ * digits even in the Arabic UI — product decision to keep numerals consistent
+ * across languages. Lives here (not in i18n/hooks) so public pages can format
+ * a date without pulling the app store and Capacitor into their bundle.
+ */
+const INTL_LOCALES: Record<string, string> = { ar: 'ar-SA-u-nu-latn', en: 'en-US' };
+
+/** Get Intl locale string for toLocaleString() / Intl.DateTimeFormat. */
+export function getIntlLocale(locale: string): string {
+  return INTL_LOCALES[locale] ?? 'en-US';
+}
+
 /** Open Graph locale mapping. */
 const OG_LOCALE_MAP: Record<string, string> = {
   ar: 'ar_SA',

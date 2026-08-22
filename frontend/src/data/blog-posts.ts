@@ -1,7 +1,8 @@
-export interface BlogPost {
+import type { ContentDates } from './contentDates';
+
+/** `date` / `updated` semantics (and who reads them) are documented on ContentDates. */
+export interface BlogPost extends ContentDates {
   slug: string;
-  /** ISO date string (YYYY-MM-DD) */
-  date: string;
   /** Translation key for category label (e.g. 'guides', 'comparisons') */
   category: string;
   /** Estimated reading time in minutes */
@@ -24,6 +25,8 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'whatsapp-auto-reply-jawab24',
     date: '2026-07-09',
+    // Teaser rewritten as the GA announcement (#504), Zid added to the store list (08-08).
+    updated: '2026-08-08',
     category: 'integrations',
     readingTime: 6,
   },
@@ -48,18 +51,24 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'auto-reply-facebook-setup-guide',
     date: '2026-03-18',
+    // Comment modes clarified (#417).
+    updated: '2026-07-08',
     category: 'guides',
     readingTime: 8,
   },
   {
     slug: 'instagram-auto-reply-guide',
     date: '2026-03-18',
+    // Voice-transcription and Instagram content added.
+    updated: '2026-04-03',
     category: 'guides',
     readingTime: 8,
   },
   {
     slug: 'best-auto-reply-tools-2026',
     date: '2026-03-18',
+    // Every competitor re-verified against its live pricing page (#751).
+    updated: '2026-08-14',
     category: 'comparisons',
     readingTime: 10,
   },
@@ -84,6 +93,8 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'jawab24-setup-tutorial',
     date: '2026-03-18',
+    // Illustrated with app screenshots; WhatsApp covered (#533).
+    updated: '2026-07-31',
     category: 'guides',
     readingTime: 10,
   },
@@ -114,6 +125,8 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'turn-comments-into-sales',
     date: '2026-05-20',
+    // WhatsApp added to the channel walkthrough (#533).
+    updated: '2026-07-29',
     category: 'guides',
     readingTime: 9,
   },

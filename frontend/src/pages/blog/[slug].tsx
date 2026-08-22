@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Clock,
   Calendar,
+  RefreshCw,
   List,
   ChevronDown,
   ArrowUpRight,
@@ -16,8 +17,10 @@ import { useTranslations, useLocale } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { isRTLLocale } from '@/utils/locale';
+import { isRTLLocale, getIntlLocale } from '@/utils/locale';
+import { formatPlainDate } from '@/utils/dateUtils';
 import { slugify } from '@/utils/headingSlug';
+import { contentLastModified } from '@/data/contentDates';
 import { buildWebUrl } from '@/lib/webUrl';
 import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -233,15 +236,20 @@ export default function BlogPostPage({
   imageSizes,
 }: BlogPostPageProps) {
   const t = useTranslations('blog');
+  const tc = useTranslations('common');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const slug = post.slug;
 
-  const formattedDate = new Date(post.date).toLocaleDateString(
-    locale === 'en' ? 'en-US' : 'ar-SA-u-nu-latn',
-    { year: 'numeric', month: 'long', day: 'numeric' },
-  );
+  const intlLocale = getIntlLocale(locale);
+  const formattedDate = formatPlainDate(post.date, intlLocale, { alwaysYear: true });
+  // Substantive revisions carry their own date (see ContentDates); it is what
+  // search engines and readers are told the content was last checked.
+  const lastModified = contentLastModified(post);
+  const formattedUpdated = post.updated
+    ? formatPlainDate(post.updated, intlLocale, { alwaysYear: true })
+    : null;
 
   const tocItems = useMemo(() => extractToc(content), [content]);
 
@@ -260,7 +268,7 @@ export default function BlogPostPage({
         <meta key="og:image:height" property="og:image:height" content="630" />
         <meta key="og:image:alt" property="og:image:alt" content={frontmatter.title} />
         <meta key="article:published_time" property="article:published_time" content={post.date} />
-        <meta key="article:modified_time" property="article:modified_time" content={post.date} />
+        <meta key="article:modified_time" property="article:modified_time" content={lastModified} />
         <meta key="article:author" property="article:author" content="Jawab24" />
         <meta key="article:section" property="article:section" content="Technology" />
 
@@ -278,7 +286,7 @@ export default function BlogPostPage({
               'headline': frontmatter.title,
               'description': frontmatter.seoDescription,
               'datePublished': post.date,
-              'dateModified': post.date,
+              'dateModified': lastModified,
               'author': {
                 '@type': 'Organization',
                 'name': 'Jawab24',
@@ -336,6 +344,15 @@ export default function BlogPostPage({
             <Calendar className="w-3.5 h-3.5 text-icon-muted" aria-hidden="true" />
             {formattedDate}
           </time>
+          {formattedUpdated && (
+            <>
+              <span className="text-subtle" aria-hidden="true">&middot;</span>
+              <time dateTime={post.updated} className="flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-icon-muted" aria-hidden="true" />
+                {tc('lastUpdatedOn', { date: formattedUpdated })}
+              </time>
+            </>
+          )}
           <span className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-icon-muted" aria-hidden="true" />
             {t('readTime', { minutes: post.readingTime })}
