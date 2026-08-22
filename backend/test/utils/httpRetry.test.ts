@@ -56,14 +56,14 @@ describe('ecommerceApiGet', () => {
     it('sends Zid dual-header auth: default Authorization Bearer + extraHeaders (X-Manager-Token, Role)', async () => {
         // Zid's Merchant API needs two credentials at once — the `Authorization`
         // token via the default auth header, and the access token as X-Manager-Token
-        // (plus Role: Manager on products endpoints) via extraHeaders.
+        // (plus a Store-Id header on the non-/managers/ store API) via extraHeaders.
         mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
         await ecommerceApiGet('https://api.zid.sa/v1/products/?page_size=100&page=1', {
             platform: 'zid',
             authHeaderValue: 'Bearer zid-authorization-jwt',
             extraHeaders: {
                 'X-Manager-Token': 'manager-token-xyz',
-                'Role': 'Manager',
+                'Store-Id': '3195980',
             },
         });
         expect(mockFetch).toHaveBeenCalledWith(
@@ -72,7 +72,7 @@ describe('ecommerceApiGet', () => {
                 headers: expect.objectContaining({
                     Authorization: 'Bearer zid-authorization-jwt',
                     'X-Manager-Token': 'manager-token-xyz',
-                    Role: 'Manager',
+                    'Store-Id': '3195980',
                 }),
             }),
         );
