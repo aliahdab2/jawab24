@@ -39,7 +39,15 @@ export class KbIngestionService {
         // 1. Chunk the raw text
         const chunks = chunkKnowledgeBase(rawText);
         if (chunks.length === 0) {
-            this.logger.debug('KB ingestion skipped: no chunks from text', { pageId, kbVersion });
+            // Activate the empty version anyway — same reason as ingestFullPage
+            // below: a cleared KB must stop serving its old chunks. Profile chunks
+            // stored under this version by ingestBusinessProfile become active
+            // too, which is what that method's doc promises. No gap resolution:
+            // nothing was answered.
+            await db.update(pages)
+                .set({ kbActiveVersion: kbVersion })
+                .where(eq(pages.id, pageId));
+            this.logger.info('KB ingestion activated an empty version: no chunks from text', { pageId, kbVersion });
             return;
         }
 
@@ -108,7 +116,18 @@ export class KbIngestionService {
         const allChunks = [...kbChunks, ...productChunks];
 
         if (allChunks.length === 0) {
-            this.logger.debug('Full page ingestion skipped: no chunks', { pageId, kbVersion });
+            // An EMPTY version must still be activated. Returning early here left
+            // the previous version active, so a page whose Business Info was
+            // cleared (and has no sellable products) kept serving its old chunks
+            // indefinitely — and `reingestDriftedPages` retried it every cycle,
+            // since kbVersion stayed ahead of kbActiveVersion forever. Retrieval
+            // filters on the active version, so activating an empty one is what
+            // makes the deleted facts disappear. Nothing is stored, nothing is
+            // embedded, and no gap is resolved (nothing was answered).
+            await db.update(pages)
+                .set({ kbActiveVersion: kbVersion })
+                .where(eq(pages.id, pageId));
+            this.logger.info('Full page ingestion activated an empty version: no chunks', { pageId, kbVersion });
             return;
         }
 

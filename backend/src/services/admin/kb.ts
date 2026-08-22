@@ -162,8 +162,10 @@ class AdminKbService {
             .where(eq(pages.id, pageId))
             .returning();
 
-        // Fire-and-forget: trigger KB ingestion
-        if (knowledgeBase.trim() && updated?.kbVersion) {
+        // Fire-and-forget: trigger KB ingestion — for a CLEARED KB too, so the
+        // emptied version is activated and the old chunks stop being served
+        // (same gate that hid stale facts in pagesService.updatePage).
+        if (updated?.kbVersion) {
             const ingestion = getIngestionService();
             if (ingestion) {
                 ingestion.ingestKnowledgeBase(pageId, knowledgeBase, updated.kbVersion)
