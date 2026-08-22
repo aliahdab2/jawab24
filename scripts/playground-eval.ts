@@ -5503,6 +5503,11 @@ const TEST_CASES: TestCase[] = [
     // coerced it to 0 (→ "out of stock" in the catalog block) and `chunker.ts`
     // evaluated `null <= 5` as true (→ "low stock" in the KB the reply is grounded
     // on) — two different wrong answers about a product the merchant can always sell.
+    //
+    // These cases are only meaningful because the demo seed now GENERATES the store's
+    // catalog block from its product rows (seedData.ts). While it was a hand-written
+    // constant, a case reading that block measured the seed text and would have passed
+    // no matter what the code did.
     {
         id: 785, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
         message: 'هل Apple TV 4K متوفر عندكم؟',
@@ -5511,7 +5516,7 @@ const TEST_CASES: TestCase[] = [
             confidence: ['high', 'medium'],
             replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'خلص', 'خلصت', 'مو متوفر', 'لا يوجد', 'كمية محدودة', 'أوشك', 'قارب على الانتهاء'],
         },
-        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). Mutation-check: set the seeded product back to `totalInventory: 0` and this must go red.',
+        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). MUTATION-CHECKED 2026-08-22: with the fixture at 0, 785 and 786 both go PARTIAL on the banned substring and the category drops to 66.7%; 787 stays green. ⚠️ TO RE-RUN THAT CHECK, MINT THE ADMIN TOKEN FIRST — `POST /auth/demo` RE-SEEDS the fixtures, so fetching the token after mutating silently restores `totalInventory: null` and the mutation appears to survive (it did, twice, before this was spotted). Mutating the row alone is also not enough: the catalog block and the KB chunks are both derived, so rebuild `productSummary` and re-ingest, then confirm the page\'s ACTIVE kb_version is the one saying "out of stock" — stale versions linger by design.',
     },
     {
         id: 786, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',

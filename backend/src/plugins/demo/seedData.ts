@@ -2684,6 +2684,24 @@ async function seedDemoStore(
         await db.insert(ecommerceProducts).values({ ecommerceStoreId: store.id, ...prod, status: 'active' });
     }
 
+    // Regenerate the catalog block from the rows we just inserted, with the SAME
+    // renderer production uses. The hand-written `productSummary` on the store
+    // constant is only a placeholder for the window before products exist: left
+    // standing, it silently drifts from the seeded catalog — a demo store could
+    // advertise "in stock" for a product seeded at zero, and any eval case reading
+    // the catalog block would then be measuring the seed text, not the renderer.
+    try {
+        const { buildProductSummary } = await import('../../services/ecommerce');
+        const productSummary = await buildProductSummary(store.id);
+        if (productSummary) {
+            await db.update(ecommerceStores)
+                .set({ productSummary })
+                .where(eq(ecommerceStores.id, store.id));
+        }
+    } catch {
+        // Non-critical — the hand-written placeholder stays as the fallback.
+    }
+
     await db.update(pages)
         .set({ ecommerceStoreId: store.id })
         .where(eq(pages.id, pageId));
