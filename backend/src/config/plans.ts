@@ -61,7 +61,7 @@ export const PLANS: PlanSeed[] = [
         // `isActive` from this file on every deploy.
         slug: 'basic',
         name: 'Basic',
-        description: 'For post replies',
+        description: 'For one page getting started',
         price: 800,
         yearlyPrice: 8000,
         currency: 'USD',
