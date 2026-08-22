@@ -15,17 +15,20 @@ import {
     phonesMatch,
     executeToolCall,
 } from '../../src/services/ecommerceActions';
-import type { EcommerceToolCall } from '@jawab24/shared';
 
 // ---------- Mocks ----------
 
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn();
+// The outcome counter (`metrics:ecom:tool:*`) is fire-and-forget; it is pinned in
+// ecommerceActions.metrics.test.ts. Present here so the mock matches the real client.
+const mockRedisIncr = vi.fn().mockResolvedValue(1);
 
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: (...args: unknown[]) => mockRedisGet(...args),
         set: (...args: unknown[]) => mockRedisSet(...args),
+        incr: (...args: unknown[]) => mockRedisIncr(...args),
     },
 }));
 

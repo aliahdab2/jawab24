@@ -89,6 +89,31 @@ function pendingVerificationKey(storeId: string, orderNumber: string, toolType: 
     return `ecom:pending:${storeId}:${toolType}:${orderNumber}`;
 }
 
+// --- Outcome counter ---
+
+/**
+ * Fire-and-forget diagnostic counter, one increment per tool execution:
+ * `metrics:ecom:tool:{tool_name}:{outcome}` where outcome is `success`, `cached`
+ * (answered from the 5-min result cache, no platform call), or the result's
+ * error code. Same idiom as `metrics:product_card:mention:*` (§13c) — never
+ * blocks, never fails a reply.
+ *
+ * Why it exists: the order tools had ZERO recorded invocations in production and
+ * nothing could say whether that meant "never called" or "called and failed
+ * before the API". With the first real Zid order this is the only signal that
+ * `lookup_order` ran at all, and `invalid_order_number` vs `order_not_found`
+ * tells apart "our sanitizer refused the code" from "the platform had no such
+ * order" — two defects with opposite fixes.
+ */
+function recordToolOutcome(toolName: string, outcome: string): void {
+    try {
+        redis.incr(`metrics:ecom:tool:${toolName}:${outcome}`).catch(() => { });
+    } catch {
+        // A client that throws synchronously (disconnected, or a partial mock) is
+        // still not allowed to touch the reply.
+    }
+}
+
 // --- Main Executor ---
 
 /**
@@ -96,25 +121,41 @@ function pendingVerificationKey(storeId: string, orderNumber: string, toolType: 
  *
  * Returns a normalized result regardless of platform (Shopify, Salla, etc.).
  * Caches successful results in Redis (5-min TTL) to avoid hammering APIs.
+ * Every execution — including cache hits and early validation failures — is
+ * counted once via `recordToolOutcome`.
  */
 export async function executeToolCall(
     ecommerceStoreId: string,
     toolCall: EcommerceToolCall,
 ): Promise<EcommerceToolResult> {
+    const { result, cached } = await runToolCall(ecommerceStoreId, toolCall);
+    recordToolOutcome(
+        toolCall.name,
+        cached ? 'cached' : result.success ? 'success' : (result.error ?? 'unknown'),
+    );
+    return result;
+}
+
+async function runToolCall(
+    ecommerceStoreId: string,
+    toolCall: EcommerceToolCall,
+): Promise<{ result: EcommerceToolResult; cached: boolean }> {
+    const live = (result: EcommerceToolResult) => ({ result, cached: false });
+
     // 1. Validate tool name against shared whitelist
     if (!VALID_TOOL_NAMES.includes(toolCall.name)) {
-        return { tool_name: toolCall.name, success: false, error: 'unknown_tool' };
+        return live({ tool_name: toolCall.name, success: false, error: 'unknown_tool' });
     }
 
     // 2. Handle verification tools (Phase 2) — no store API call needed
     if (toolCall.name === 'verify_and_get_order' || toolCall.name === 'verify_and_get_shipment') {
-        return handleVerification(ecommerceStoreId, toolCall);
+        return live(await handleVerification(ecommerceStoreId, toolCall));
     }
 
     // 3. Look up store to determine platform
     const store = await getStoreById(ecommerceStoreId);
     if (!store || !store.isActive) {
-        return { tool_name: toolCall.name, success: false, error: 'store_not_connected' };
+        return live({ tool_name: toolCall.name, success: false, error: 'store_not_connected' });
     }
 
     // 4. Check Redis cache
@@ -122,7 +163,7 @@ export async function executeToolCall(
     try {
         const cached = await redis.get(cacheKey);
         if (cached) {
-            return JSON.parse(cached) as EcommerceToolResult;
+            return { result: JSON.parse(cached) as EcommerceToolResult, cached: true };
         }
     } catch {
         // Redis unavailable — proceed without cache
@@ -142,11 +183,11 @@ export async function executeToolCall(
                 result = await executeZidTool(ecommerceStoreId, toolCall);
                 break;
             default:
-                return { tool_name: toolCall.name, success: false, error: 'unsupported_platform' };
+                return live({ tool_name: toolCall.name, success: false, error: 'unsupported_platform' });
         }
     } catch (err) {
         if (isPermissionError(err)) {
-            return { tool_name: toolCall.name, success: false, error: 'insufficient_permissions' };
+            return live({ tool_name: toolCall.name, success: false, error: 'insufficient_permissions' });
         }
 
         captureError(err, `E-commerce tool execution failed: ${toolCall.name}`, {
@@ -154,7 +195,7 @@ export async function executeToolCall(
             extra: { storeId: ecommerceStoreId, tool: toolCall.name },
         });
 
-        return { tool_name: toolCall.name, success: false, error: 'api_error' };
+        return live({ tool_name: toolCall.name, success: false, error: 'api_error' });
     }
 
     // 6. Cache successful results
@@ -166,7 +207,7 @@ export async function executeToolCall(
         }
     }
 
-    return result;
+    return live(result);
 }
 
 // --- Phase 2: Server-Side Verification ---

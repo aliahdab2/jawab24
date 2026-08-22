@@ -1815,7 +1815,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
 | 1 | Zid rebuilt but unvalidated against a live store | Medium | The 2026-08-01 rebuild (D-053) replaced the broken auth/endpoint/webhook layer with the docs.zid.sa-verified contract, but payload-shape parsers are provisional until a real dev-store round-trip. **Blocked on Zid, and not on the agreement:** app 7367 is **`Draft`** — withdrawn deliberately on **2026-08-22** (it read `In review` earlier that day; portal-verified both times) (created 01/08/2026, type OAuth, 1 install). It was Rejected on 08-10, then fell back to `Draft`, and was flipped to `In review` on **08-09** after Zid pointed the `Draft` state out; a reviewer's install attempt on 08-11 hit an error on our side that was fixed and deployed the same day. Zid said on 08-12 it would retest shortly, and the 08-18 follow-up is still unread. ⚠️ The partnership agreement is an **exit** condition (technical review passes → agreement countersigned), never an entry one — the earlier "unblocks on Zid's approval / agreement In Review" reading cost eight idle days. Stays "coming soon" / not user-facing until the review passes (D-020 gate). **Next step is ours:** the withdrawal did NOT unblock dev-store installs — `EC3` fires identically in `Draft` and `In review`, so review state is not the cause and that hypothesis is falsified. Find the real cause of EC3, validate on the dev store, then resubmit via the wizard's Request-to-Publish step. The ordered path and what is owed in parallel live in `docs/integrations/zid.md` § **What's next**; run-book `docs/testing/ZID_TEST_PLAN.md` |
-| ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
+| ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync: an initial sweep **3 min after boot**, then every 6 hours (`scheduleEcommerceSync`, `lib/ecommerceSyncQueue.ts`). ⚠️ Until 2026-08-22 this row said a bare `setInterval` was "acceptable for single-instance deploy" — it was not: the interval was anchored to process start, a blue/green deploy restarted the container every few hours, and **no prod container ever reached its first tick** (zero `[EcommerceScheduler]` log lines; every `last_sync_at` came from an install or a manual sync). The initial sweep is the fix |
 | ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
 | 4 | Single-language KB | Medium | Must mix both languages in one text |
 | 5 | Templates not auto-translated | Low | Manual both-language maintenance |
@@ -2381,7 +2381,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | **Worker Concurrency** | `5 jobs` | `replyWorker.ts` |
 | **KB Max** | `16,000 chars` | prompt builder |
 | **Product Catalog** | `15 products, ~800 chars` | `ecommerce.ts` |
-| **Product Sync** | every `6 hours` via `setInterval` | `index.ts` |
+| **Product Sync** | `3 min` after boot, then every `6 hours` | `lib/ecommerceSyncQueue.ts` (`scheduleEcommerceSync`) |
 
 ---
 
