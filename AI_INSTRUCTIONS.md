@@ -4,6 +4,8 @@
 
 > **Settled decisions live in [`DECISIONS.md`](DECISIONS.md).** Before re-opening a settled architectural or product question, consult it first. When a decision is made or reversed, append a `D-NNN` entry (append-only — never edit past rulings).
 
+> **Before touching anything that can change a reply, read [`docs/REPLY_ANATOMY.md`](docs/REPLY_ANATOMY.md).** It maps the ten stages a reply passes through, exactly which blocks the model is allowed to read and which of them are gated, where each known defect class lives, and the two prompt approaches that were measured at zero. It is also the answer to "why did the AI say that?" — start there instead of reading the pipeline from scratch.
+
 ## Quick Summary
 
 | Item | Value |
@@ -249,6 +251,7 @@ After any feature addition, integration, or architectural change, update these d
 | `.planning/codebase/ARCHITECTURE.md` | Structural changes to how the system is built |
 | `backend/docs/OBJECT_STORAGE.md` | Anything about merchant image storage — provider, backups, key rotation, the `ImageStorage` S3 abstraction (see D-032) |
 | `backend/docs/SETTINGS.md` | Any settings field added/renamed/removed, any change to the reply gate chain, or any change to what/when auto-messages (away, greeting, quota fallback, nudges) are sent |
+| `docs/REPLY_ANATOMY.md` | Any change to the reply path: a new context block, a new guard, a gate change, a defect class opened or closed, or a measured result that moves one of its numbers. Rule 19 already requires the eval mirror — this is the map that tells the next reader where the change sits |
 
 Rules:
 - Never leave a doc saying "Planned" or "Not implemented" after shipping the feature
