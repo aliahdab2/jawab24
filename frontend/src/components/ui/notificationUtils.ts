@@ -88,7 +88,10 @@ export function getNotificationBucket(n: Notification): Exclude<NotificationFilt
 
 export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     stale_comment:         { icon: MessageCircle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
-    stale_message:         { icon: Mail,          iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
+    // Amber, matching stale_comment above: both mean "waiting on the merchant".
+    // It was orange, which is the billing/quota hue — so the SAME state rendered
+    // in two colors depending on whether it arrived as a comment or a message.
+    stale_message:         { icon: Mail,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
     new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'notif-ring-blue' },
     flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },

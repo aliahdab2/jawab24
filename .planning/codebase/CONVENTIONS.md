@@ -684,6 +684,33 @@ in one theme and fails in the other. It reports `file:line` and both ratios.
 > Those are a brand-palette question, not an inversion bug — see the open item in
 > `DECISIONS.md`.
 
+#### Amber vs orange — which warning hue
+
+Both exist and they are **not** interchangeable. The split (settled 2026-08):
+
+| Hue | Means | Used by |
+|-----|-------|---------|
+| **orange** | brand accent, and **commercial** state — billing, quota, trial, "coming soon" | `--accent-*` (CTA, notification count badge, body radial tint), `status-orange`, `icon-bg-orange`, `notif-ring-orange` → `subscription_expiring`, `trial_ending`, `page_trial_used` |
+| **amber** | **operational** warning — something in the product needs the merchant's attention | `status-warning`, `alert-warning`, `icon-bg-amber`, `notif-ring-amber` → `stale_comment`, `stale_message`, `skipped_reply`, `kb_gap`, `post_reply_orphaned` |
+
+Rule of thumb: if it is about **money or time left on the plan**, orange. If it is
+about **work waiting to be done**, amber.
+
+The audit that produced this rule found exactly one violation — `stale_comment`
+was amber while `stale_message` was orange, so the same state rendered in two
+colors depending on whether it arrived as a comment or a message. Fixed in the
+same commit. That is the failure mode an undocumented near-duplicate produces:
+nobody chooses wrongly on purpose, they just have nothing to choose by.
+
+`emerald`/`green` and `violet`/`purple` were the other two near-duplicate pairs.
+Those had no defensible distinction at all, so green and purple were removed —
+emerald and violet survive because they are anchored to an identity (delivered /
+Smart Reply). Do not reintroduce a hue without writing down what distinguishes it.
+
+**`reply-source-*` is exempt from all consolidation.** Violet = Smart Reply,
+sky = Post Reply, emerald = template, slate = manual. The merchant reads the
+colour before the label, so there the hue is load-bearing, not decorative.
+
 ### Safe Areas (Mobile)
 - **Single source of truth**: CSS variables in `globals.css`
 - **Never hardcode** safe area values
