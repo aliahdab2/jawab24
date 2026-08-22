@@ -16,6 +16,7 @@ import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
@@ -120,6 +121,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [replyText, setReplyText] = useState(isHeldReply ? comment.aiOriginalReply! : '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Keeps the comment in view while the keyboard resizes the thread — without
+  // it the bottom-anchored thread snaps to its top the moment it overflows.
+  const threadRef = useRef<HTMLDivElement>(null);
+  useStickToBottom(threadRef);
 
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<PauseStatus | null>(null);
@@ -285,7 +290,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         />
 
         {/* Chat Thread */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50" {...swipeHandlers}>
+        <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50" {...swipeHandlers}>
           {/* When navigating (fixed-height modal) anchor content to the top so the
               post + comment stay in the same place across comments; otherwise keep
               the chat-style bottom anchoring near the compose box. */}

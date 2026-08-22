@@ -8,6 +8,7 @@ import { isKbFilled } from '@/utils/kb';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
+import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { pagesApi } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import { captureError } from '@/lib/sentryHelpers';
@@ -76,12 +77,12 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion, replyMode 
   useEscapeKey(onClose, true);
   useModalBackHandler(true, onClose);
 
-  // Auto-scroll to bottom when messages change
+  // Follow the thread: newest message on change, and stay there while the
+  // keyboard resizes the thread.
+  const { scrollToBottom } = useStickToBottom(scrollRef);
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, loading]);
+    scrollToBottom();
+  }, [messages, loading, scrollToBottom]);
 
   // Auto-focus input on open
   useEffect(() => {
@@ -356,8 +357,12 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion, replyMode 
           )}
         </div>
 
-        {/* Fixed footer */}
-        <div className="px-4 pt-3 pb-4 md:px-6 md:pt-4 md:pb-5 border-t border-theme-border bg-card flex-shrink-0">
+        {/* Fixed footer. pb-safe-modal (not a fixed pb-*) clears the system bar on
+            native — the sheet is full-height there, so the composer otherwise sits
+            flush on the safe area — and collapses on its own when the keyboard is up.
+            Same class as MessageDetailModal's footer; a md:pb-* override would be
+            dead because .pb-safe-modal is emitted after the Tailwind utilities. */}
+        <div className="px-4 pt-3 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Error */}
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-2">{error}</p>

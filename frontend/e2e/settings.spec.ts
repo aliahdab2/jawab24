@@ -792,4 +792,62 @@ test.describe('Settings — reply mode', () => {
     // in full — proving the constraint reached the truncating span.
     expect(fit.ellipsised).toBe(true);
   });
+
+  /**
+   * The OPEN picker must stay on screen too — in Arabic, where it was reported.
+   *
+   * `Select`'s compact menu hung from the trigger's start edge and was capped
+   * only to the viewport's width, never to the room between that edge and the
+   * far side of the screen. From a trigger sitting mid-row it grew inward
+   * straight off the screen, and the ends of the page names were unreachable
+   * (2026-08-22, /ar/settings on a phone). It now hangs from whichever trigger
+   * edge leaves it more room, capped to that room.
+   *
+   * Why E2E: the decision is made from real boxes. Select.test.tsx pins it for
+   * declared geometry; only a layout engine can show the menu actually fits.
+   *
+   * Mutation check: restore `start-0 max-w-[calc(100vw-2rem)]` on the menu and
+   * its left edge lands below 0.
+   */
+  test('persona scope menu stays inside the phone viewport in Arabic', async ({ page }) => {
+    const LONG_PAGE = 'الفريق الدمشقي للتدريب والتأهيل المهني المتقدم';
+
+    await page.addInitScript(seed, { wsId: ALLOWED_WS });
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+    });
+    await routeMocks(page);
+    await page.route('**/api/**', async (route) => {
+      if (route.request().url().includes('/pages') && route.request().method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            { ...TWO_PAGES[0], name: LONG_PAGE, brandVoiceNotesMulti: { ar: 'شخصية خاصة.' } },
+            TWO_PAGES[1],
+          ]),
+        });
+      }
+      return route.fallback();
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/ar/settings');
+    await expect(page.getByText(tAr('settings.replyMode.question')).first()).toBeVisible({ timeout: 15000 });
+
+    await page.getByRole('button', { name: tAr('settings.replyStyle.scopeLabel') }).click();
+    const option = page.getByRole('button', { name: LONG_PAGE, exact: false });
+    await expect(option).toBeVisible();
+
+    const menu = await option.evaluate((btn) => {
+      const box = (btn.parentElement as HTMLElement).getBoundingClientRect(); // the open menu
+      return { left: box.left, right: box.right, viewport: document.documentElement.clientWidth };
+    });
+    // Sub-pixel slack only; the reported overflow was the width of a page name.
+    expect(menu.left).toBeGreaterThanOrEqual(-1);
+    expect(menu.right).toBeLessThanOrEqual(menu.viewport + 1);
+  });
 });

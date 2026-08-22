@@ -1436,8 +1436,8 @@
    keyboard-aware modals via `bottom: var(--keyboard-height)` / `max-height: calc(...)`.
    Register it as an animatable <length> and EASE every change so the modal can never
    shake: the soft keyboard's open/close drives --keyboard-height through several noisy
-   per-frame visualViewport readings (pan / offsetTop jitter), and MessageDetailModal's
-   ResizeObserver re-pins a bottom-anchored thread on every size change — so raw per-frame
+   per-frame visualViewport readings (pan / offsetTop jitter), and the thread modals'
+   useStickToBottom hook re-pins their bottom-anchored threads on every size change — so raw per-frame
    updates juddered. The transition damps that into one smooth move regardless of how the
    value arrives (and regardless of whether keyboardWillHide fires on a given device — the
    reason a collapse-gated transition wasn't enough). It is intentionally ALWAYS ON, not
