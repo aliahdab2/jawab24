@@ -1101,8 +1101,24 @@
   }
 }
 
+/* The float family lives here in full — keyframes and all three utilities.
+   `float-delayed` and `float-slow` used to sit in tailwind.config.js while
+   referencing THIS file's `@keyframes float`, so the config's own 8px/3s
+   keyframes were shadowed and the two delayed variants silently ran the 20px
+   travel instead of the 8px they were written for. Neither file said so.
+   Moved here 2026-08: one file owns the name and its keyframes. Safe as raw
+   CSS because none of the three is used with a Tailwind variant prefix —
+   `shimmer` is the only animation that is, which is why it stays in the config. */
 .animate-float {
   animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 2.5s ease-in-out infinite 0.5s;
+}
+
+.animate-float-slow {
+  animation: float 3.5s ease-in-out infinite 1s;
 }
 
 .animate-float-rotate {
@@ -1255,6 +1271,7 @@
    - Infinite/looping animations (float, pulse, orbit) → disabled completely.
    - One-shot entrance animations (fade-in, slide-up) → instant (no motion, still appear). */
 @media (prefers-reduced-motion: reduce) {
+  /* Defined in this file */
   .animate-glass-sweep,
   .animate-float,
   .animate-float-rotate,
@@ -1262,7 +1279,27 @@
   .animate-float-pulse,
   .animate-bounce-slow,
   .animate-empty-state-icon,
-  .animate-bounce-subtle {
+  .animate-bounce-subtle,
+  /* Defined in tailwind.config.js — these were missed entirely until 2026-08.
+     Every one of them is INFINITE and several sit on always-on chrome: an
+     `animate-pulse-soft` urgency chip, the `animate-pulse-attention` status
+     banner, the 404 float pair, and Tailwind's own `animate-pulse` skeletons.
+     WCAG 2.2.2 — a reduce preference has to reach them too. */
+  .animate-pulse-soft,
+  .animate-pulse-attention,
+  .animate-float-delayed,
+  .animate-float-slow,
+  /* Tailwind's own infinite utilities. `animate-spin` is deliberately NOT here:
+     it only ever marks a request in flight, which 2.2.2 treats as essential
+     activity, and freezing it would leave a dead-looking control. */
+  .animate-pulse,
+  .animate-bounce,
+  .animate-ping,
+  /* Substring match, not `.animate-shimmer`: the only shipped use is
+     `group-hover:animate-shimmer` on EVERY Button, and Tailwind emits that as
+     the class `group-hover:animate-shimmer` — a different class name that a
+     bare `.animate-shimmer` selector never matches. */
+  [class*="animate-shimmer"] {
     animation: none !important;
   }
 
@@ -1793,8 +1830,12 @@ body.is-native .pt-hero {
   }
 }
 
-/* Shimmer animation for loading states */
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
-}
+/* `@keyframes shimmer` used to be duplicated here as 0% -100% → 100% 200%.
+   It was DEAD, and not for the obvious reason: raw CSS in this file normally
+   outranks the generated utilities, but `.animate-shimmer` ships only as
+   `group-hover:animate-shimmer` (Button), and Tailwind emits variant utilities
+   — and the keyframes they reference — at the very END of the sheet. So the
+   config's `shimmer` landed after this one and won. Removed 2026-08 so the
+   single surviving definition is the one that was already in effect;
+   tailwind.config.js owns shimmer because only the config can generate the
+   `group-hover:` variant. */
