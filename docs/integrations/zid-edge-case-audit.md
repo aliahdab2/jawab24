@@ -256,6 +256,52 @@ are, in a nullable world, silent assertions. Grep the field name, not the bug.
 
 ---
 
+## F6 — NEW, found by the live run: `check_inventory` cannot match an Arabic query against a Latin product name
+
+`backend/src/services/zid.ts` (`checkInventory`)
+
+```js
+const bestMatch = products.find(p => localizedText(p.name).toLowerCase().includes(lowerQuery));
+```
+
+A plain substring match. Captured against the dev store, 2026-08-22:
+
+```
+q="Sony"  -> Sony A7S III   ✅
+q="سوني"  -> null           ❌ no match
+q="نظارة" -> نظارة شمسية     ✅
+```
+
+An Arabic-speaking customer asking about a product whose name the merchant typed in
+Latin script gets nothing back from the agent tool. §D of the test plan asks explicitly
+for "Arabic queries resolve", so this is a §D failure, not a nice-to-have.
+
+**Customer impact today is LOW, and the reason matters.** The whole catalog is already in
+the prompt as the `<product_catalog>` block, so the model answered every probe correctly
+without the tool ever matching — including «هل الـ Sony A7S III متوفر؟». The tool is the
+fallback for catalogs too large to inline: `buildProductSummary` caps at ~1200 chars and
+15 products. So the failure mode is **latent** and arrives with catalog size, which is
+exactly when it is hardest to notice.
+
+⛔ **No fix proposed here — measure first.** The obvious reaches (transliteration, fuzzy
+matching, a hosted matcher) are all either a hand-maintained linguistic list or a network
+hop on the reply path, and both are ruled out by standing project rules. The number that
+should drive the decision is: across live e-commerce stores, how many catalogs exceed the
+inline cap? If almost none do, the tool's matching is not where the effort belongs.
+
+---
+
+## F7 — the dev store's seeding is incomplete: 3 of 4 products carry no image
+
+Not a parser defect — verified against the raw payload, `images: []` on three products
+and a well-formed `images[].image.full_size` on the fourth (which also confirms the C4
+image shape). Recorded because it is a **test-coverage** gap: `productCardBuilder`
+returns null for any product without an image ("a card without an image isn't worth
+sending"), so product cards can only be exercised with "Sony A7S III" until the other
+three are given images in the Zid admin.
+
+---
+
 ## What this audit does not cover
 
 Read-only analysis of the product and order path. **Not** examined: the billing envelope

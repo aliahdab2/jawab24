@@ -2011,8 +2011,8 @@ const DEMO_SHOPIFY_STORE = {
     // demo: true excludes this store from every real-API path (scheduled sync,
     // webhook registration/retry, token refresh) — see services/demoStore.ts.
     platformData: { planName: 'basic', demo: true },
-    productCount: 5,
-    productSummary: `Store: https://demo-electronics.myshopify.com\nTop Products:\niPhone 15 Pro — 3,800 - 4,500 SAR — 128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم — in stock — https://demo-electronics.myshopify.com/products/iphone-15-pro\nSamsung Galaxy S24 — 2,900 - 3,400 SAR — 256GB، 512GB — أسود، فضي — in stock — https://demo-electronics.myshopify.com/products/samsung-galaxy-s24\nMacBook Air M3 — 5,200 - 6,500 SAR — 13 بوصة، 15 بوصة — فضي، رمادي — low stock — https://demo-electronics.myshopify.com/products/macbook-air-m3\nAirPods Pro (الجيل الثاني) — 850 SAR — in stock — https://demo-electronics.myshopify.com/products/airpods-pro-2\nكفر حماية iPhone 15 — 120 - 180 SAR — أسود، أبيض، أزرق، أحمر، شفاف — in stock — https://demo-electronics.myshopify.com/products/iphone-15-case`,
+    productCount: 6,
+    productSummary: `Store: https://demo-electronics.myshopify.com\nTop Products:\niPhone 15 Pro — 3,800 - 4,500 SAR — 128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم — in stock — https://demo-electronics.myshopify.com/products/iphone-15-pro\nSamsung Galaxy S24 — 2,900 - 3,400 SAR — 256GB، 512GB — أسود، فضي — in stock — https://demo-electronics.myshopify.com/products/samsung-galaxy-s24\nMacBook Air M3 — 5,200 - 6,500 SAR — 13 بوصة، 15 بوصة — فضي، رمادي — low stock — https://demo-electronics.myshopify.com/products/macbook-air-m3\nAirPods Pro (الجيل الثاني) — 850 SAR — in stock — https://demo-electronics.myshopify.com/products/airpods-pro-2\nكفر حماية iPhone 15 — 120 - 180 SAR — أسود، أبيض، أزرق، أحمر، شفاف — in stock — https://demo-electronics.myshopify.com/products/iphone-15-case\nApple TV 4K — 750 SAR — in stock — https://demo-electronics.myshopify.com/products/apple-tv-4k`,
     policiesSummary: `ضمان: سنة كاملة على جميع المنتجات\nإرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض، مجاني للطلبات فوق 500 ريال\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
 };
 
@@ -2174,6 +2174,25 @@ const DEMO_SHOPIFY_PRODUCTS = [
         hasVariants: false,
         variantSummary: null,
         tags: 'AirPods,سماعات,Apple',
+    },
+    {
+        // F1 regression fixture: `totalInventory: null` = untracked/unlimited, the
+        // shape Zid sends as `is_infinite: true`. NOT zero. Every reader must call
+        // this in stock — `null <= 5` is true in JS, so a careless chain reports it
+        // as "low stock" and the AI tells customers a flagship product is running
+        // out. Pinned by eval cases 685/686 (Cat 62).
+        platformProductId: 'demo_prod_6',
+        handle: 'apple-tv-4k',
+        title: 'Apple TV 4K',
+        description: 'جهاز بث بدقة 4K مع HDR وDolby Vision وDolby Atmos، معالج A15 Bionic، ذاكرة 128 جيجابايت، يدعم تطبيقات البث ومزامنة الصوت مع HomePod، يأتي مع ريموت Siri Remote بمنفذ USB-C',
+        productType: 'Accessories',
+        vendor: 'Apple',
+        priceRange: '750 SAR',
+        currency: 'SAR',
+        totalInventory: null,
+        hasVariants: false,
+        variantSummary: null,
+        tags: 'AppleTV,بث,Apple',
     },
     {
         platformProductId: 'demo_prod_5',

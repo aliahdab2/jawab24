@@ -135,6 +135,34 @@ That same first sync also reproduced **F1** in production: `Sony A7S III → tot
 — the merchant's unlimited flagship, stored as out of stock. Fix and live payload capture in
 `zid-edge-case-audit.md`.
 
+### ✅ F1 fixed and proven at all five read paths (2026-08-22, prod `0ed9acf`)
+
+The page was moved onto the auto-provisioned Zid account and linked to the store, so the
+whole chain could be exercised end to end. Every layer that decides what a customer is
+told was checked — a landed write is not a fixed behaviour:
+
+| Layer | Sony A7S III (unlimited) | نظارة شمسية (tracked, 0) |
+|---|---|---|
+| stored row | `total_inventory = null` | `0` |
+| catalog prompt block | `10000 SAR — in stock` | `out of stock` |
+| `check_inventory` tool | `available: true`, no quantity | `available: false, quantity: 0` |
+| KB chunk (RAG) | `Availability: in stock` | `Availability: out of stock` |
+| **generated reply** | «كاميرا Sony A7S III متوفرة حالياً في المخزون» / "Yes, the Sony A7S III is in stock." | «سعرها 250 ريال سعودي، لكنها حالياً غير متوفرة» |
+
+The tracked-empty column is the half that matters most: the fix had to make unlimited read
+as available **without** flattening genuinely-empty products into "in stock". That was F5's
+warning, and it held.
+
+Two further probes in the same run: «بكم النظارة الشمسية؟» → 250 SAR (the sale price, F4)
+with the correct out-of-stock caveat in one sentence, and «عندكم منتج مخفي للاختبار؟» →
+«صراحة ما عندي معلومة» at low confidence (F2 — the unpublished product is neither offered
+nor hallucinated). Language mirroring was correct in both directions.
+
+Two new findings came out of the same run and are written up in `zid-edge-case-audit.md`:
+**F6** (`check_inventory` cannot match an Arabic query against a Latin product name — a §D
+failure, latent because the catalog is inlined in the prompt today) and **F7** (three dev-store
+products carry no image, which blocks product-card coverage — a seeding gap, not a parser bug).
+
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
 Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;

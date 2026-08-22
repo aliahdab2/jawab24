@@ -5491,6 +5491,46 @@ const TEST_CASES: TestCase[] = [
         notes: 'ATTRIBUTION CONTROL — a page with NO persona override at the same thread depth must still ask for order details (today\'s Ex-14 sales default). If this stops firing, that is a regression of the DEFAULT mode, and Cat 78\'s clean results can no longer be attributed to the override.',
     },
 
+    // --- Cat 79: E-commerce Catalog Stock (Rule 19 mirror for the F1 fix) ------
+    //
+    // DISTINCT FROM Cat 62 «Native Catalog», which runs on `catalog_items` (the
+    // manually-entered catalog) through its own renderer. These cases run on
+    // `ecommerce_products` — the Shopify/Salla/Zid sync path — which had NO eval
+    // coverage at all before the F1 fix, even though it feeds the same replies.
+    //
+    // `totalInventory: null` means untracked/unlimited (Zid `is_infinite: true`);
+    // it is NOT zero. The seeded «Apple TV 4K» carries it. Pre-fix, the Zid parser
+    // coerced it to 0 (→ "out of stock" in the catalog block) and `chunker.ts`
+    // evaluated `null <= 5` as true (→ "low stock" in the KB the reply is grounded
+    // on) — two different wrong answers about a product the merchant can always sell.
+    {
+        id: 785, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'هل Apple TV 4K متوفر عندكم؟',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'خلص', 'خلصت', 'مو متوفر', 'لا يوجد', 'كمية محدودة', 'أوشك', 'قارب على الانتهاء'],
+        },
+        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). Mutation-check: set the seeded product back to `totalInventory: 0` and this must go red.',
+    },
+    {
+        id: 786, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'Is the Apple TV 4K in stock?',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            replyNotContains: ['out of stock', 'sold out', 'unavailable', 'not available', 'running low', 'low stock', 'limited stock'],
+        },
+        notes: 'Same pin, EN over an AR-majority catalog — the prod capture answered both languages correctly («متوفرة حالياً» / "Yes, the Sony A7S III is in stock"), so both are pinned.',
+    },
+    {
+        id: 787, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'عندكم MacBook Air M3؟',
+        page: 'electronics',
+        expected: { confidence: ['high', 'medium'] },
+        notes: 'CONTROL for 785/786. A TRACKED low-stock product (`totalInventory: 5`, rendered "low stock") must still be answerable — the F1 fix must not flatten every product into "in stock". Without this control, 785 would also pass if a bug made the renderer stop reporting stock state at all.',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at
