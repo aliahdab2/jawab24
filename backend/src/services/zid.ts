@@ -7,7 +7,8 @@
  * - DUAL-HEADER auth on every Merchant API call:
  *     `Authorization: Bearer <authorization token>`  (the token response's `Authorization` field)
  *     `X-Manager-Token: <access token>`              (the token response's `access_token` field)
- *   Products endpoints additionally want `Role: Manager`.
+ *   The store API (`/v1/products/`) additionally requires a `Store-Id` header (the
+ *   numeric merchant id); `Role: Manager` is NOT required (verified live 2026-08-22).
  * - OAuth: https://oauth.zid.sa/oauth/{authorize,token}; token lifetime ~1 year.
  * - Endpoints live under https://api.zid.sa — store profile is
  *   /v1/managers/account/profile, orders are /v1/managers/store/orders,
@@ -62,13 +63,19 @@ const ZID_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
 };
 
 /**
- * The two credentials every Zid Merchant API call needs.
+ * The credentials every Zid Merchant API call needs.
  * `managerToken` = OAuth `access_token` → sent as `X-Manager-Token`.
  * `authorizationToken` = OAuth `Authorization` field → sent as `Authorization: Bearer`.
+ * `storeId` = the Zid numeric store id (`platformData.merchantId`) → sent as `Store-Id`.
+ *   REQUIRED by the non-`/managers/` store API (e.g. `GET /v1/products/`): without it that
+ *   endpoint returns `401 {"detail":"No such user"}` regardless of the tokens (captured
+ *   live 2026-08-22). The `/managers/*` endpoints resolve the store from the token and do
+ *   not need it, so it is optional here and only sent when present.
  */
 export interface ZidCredentials {
     managerToken: string;
     authorizationToken: string;
+    storeId?: string;
 }
 
 // --- OAuth ---
@@ -256,6 +263,8 @@ export function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extra
         authHeaderValue: `Bearer ${creds.authorizationToken}`,
         extraHeaders: {
             'X-Manager-Token': creds.managerToken,
+            // The store API keys off Store-Id; harmless on /managers/* calls that ignore it.
+            ...(creds.storeId ? { 'Store-Id': creds.storeId } : {}),
             ...extraHeaders,
         },
     });
@@ -523,7 +532,6 @@ async function fetchAllProducts(creds: ZidCredentials): Promise<ZidProduct[]> {
         const data = await zidApiGet<ZidProductsResponse>(
             `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=${page}`,
             creds,
-            { 'Role': 'Manager' },
         );
 
         const products = extractProducts(data);
@@ -545,7 +553,16 @@ export async function resolveZidCredentials(storeId: string): Promise<ZidCredent
         // (or the exchange failed to persist it) — every API call would 401.
         throw new Error(`Zid store ${storeId} has no Authorization token — merchant must reconnect`);
     }
-    return { managerToken: pair.accessToken, authorizationToken: pair.authorizationToken };
+    // The Zid numeric store id (persisted as platformData.merchantId at install) is the
+    // Store-Id header the store API requires. Absent for pre-dual-token rows; the store
+    // API then 401s with "No such user" until the merchant reconnects.
+    const store = await getStoreById(storeId);
+    const merchantId = (store?.platformData as { merchantId?: string } | null)?.merchantId;
+    return {
+        managerToken: pair.accessToken,
+        authorizationToken: pair.authorizationToken,
+        storeId: merchantId,
+    };
 }
 
 export async function syncProducts(storeId: string) {
@@ -767,7 +784,6 @@ export async function checkInventory(storeId: string, productName: string, varia
     const data = await zidApiGet<ZidProductsResponse>(
         `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=1`,
         creds,
-        { 'Role': 'Manager' },
     );
 
     const products = extractProducts(data).filter(p => p.status !== 'deleted');
