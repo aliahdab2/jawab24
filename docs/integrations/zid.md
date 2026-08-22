@@ -27,8 +27,8 @@
 >   Zid dashboard (§L-1…L-5, L-10, L-12 live). The old "no Zid store has ever exercised
 >   either one" claim is retired — a store exists (`e3deb6f2-…`) and has synced products
 >   and answered real DMs.
-> - 🔴 **The billing rail is still inert and unexercised.** No `payment_method='zid'` row
->   has ever existed. Paid checkout refuses while the app is `Draft`, so the first live
+> - 🔴 **The billing rail is still inert and unexercised.** No `payment_method='zid'` /
+>   `zid_store_id` row exists (count 0 on 2026-08-22). Paid checkout refuses while the app is `Draft`, so the first live
 >   subscription envelope will most likely come from Zid's own reviewer.
 >
 > `ZID_CLIENT_ID` **is** set (7192); an earlier version of this paragraph said "unset",
