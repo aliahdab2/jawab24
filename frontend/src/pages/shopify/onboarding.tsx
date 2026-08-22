@@ -37,7 +37,10 @@ export default function ShopifyOnboarding() {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
-  const [linkedPageName, setLinkedPageName] = useState<string | null>(null);
+  // The linked PAGE, not just its name: `autoReplyEnabled` is gate 1 of the
+  // reply chain and outranks the workspace switches, so StoreAutoReplyRow needs
+  // the row itself to tell the truth about whether replies can reach anyone.
+  const [linkedPage, setLinkedPage] = useState<Page | null>(null);
   const [linking, setLinking] = useState(false);
 
   // Redirect to login if not authenticated
@@ -72,7 +75,7 @@ export default function ShopifyOnboarding() {
     try {
       await shopifyApi.linkPage(selectedPageId);
       const page = pages.find((p) => p.id === selectedPageId);
-      setLinkedPageName(page?.name || null);
+      setLinkedPage(page ?? null);
       setStep(3);
     } catch {
       toast.error(t('pageLinkError'));
@@ -345,15 +348,15 @@ export default function ShopifyOnboarding() {
                         </span>
                       </div>
                     )}
-                    {linkedPageName && (
+                    {linkedPage && (
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                         <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {t('onboarding.doneCheckPage', { name: linkedPageName })}
+                          {t('onboarding.doneCheckPage', { name: linkedPage.name })}
                         </span>
                       </div>
                     )}
-                    <StoreAutoReplyRow />
+                    <StoreAutoReplyRow page={linkedPage} />
                   </div>
 
                   <Button

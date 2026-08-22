@@ -47,6 +47,11 @@ export interface SettingsResponseData {
   /** Auto-reply masters shown on the dashboard. */
   commentsAutoReply?: boolean;
   messagesAutoReply?: boolean;
+  /** Gate 5 folds the masters WITH the business-hours schedule
+   *  (`isAutoReplyEnabledFromSettings`), so a UI that claims "replies are on"
+   *  from the masters alone overstates it outside those hours
+   *  (StoreAutoReplyRow). See backend/docs/SETTINGS.md, "The gate chain". */
+  businessHoursOnly?: boolean;
   /** Drives the dashboard's onboarding/setup panel. */
   onboardingCompletedAt?: string | null;
   /** Stored account UI language, reconciled by useDashboardLanguageSync. */

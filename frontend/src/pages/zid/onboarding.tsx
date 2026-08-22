@@ -38,7 +38,10 @@ export default function ZidOnboarding() {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
-  const [linkedPageName, setLinkedPageName] = useState<string | null>(null);
+  // The linked PAGE, not just its name: `autoReplyEnabled` is gate 1 of the
+  // reply chain and outranks the workspace switches, so StoreAutoReplyRow needs
+  // the row itself to tell the truth about whether replies can reach anyone.
+  const [linkedPage, setLinkedPage] = useState<Page | null>(null);
   const [linking, setLinking] = useState(false);
   const isEmbedded = typeof window !== 'undefined' && getEmbeddedPlatform() !== null;
 
@@ -77,7 +80,7 @@ export default function ZidOnboarding() {
     try {
       await zidApi.linkPage(selectedPageId);
       const page = pages.find((p) => p.id === selectedPageId);
-      setLinkedPageName(page?.name || null);
+      setLinkedPage(page ?? null);
       setStep(3);
     } catch {
       toast.error(t('pageLinkError'));
@@ -381,15 +384,15 @@ export default function ZidOnboarding() {
                         </span>
                       </div>
                     )}
-                    {linkedPageName && (
+                    {linkedPage && (
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                         <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {t('onboarding.doneCheckPage', { name: linkedPageName })}
+                          {t('onboarding.doneCheckPage', { name: linkedPage.name })}
                         </span>
                       </div>
                     )}
-                    <StoreAutoReplyRow />
+                    <StoreAutoReplyRow page={linkedPage} />
                   </div>
 
                   <Button

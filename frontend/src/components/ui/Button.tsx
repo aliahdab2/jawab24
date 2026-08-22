@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger' | 'warning';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   icon?: React.ReactNode;
@@ -26,6 +26,7 @@ export function Button({
     accent: 'btn-accent',
     ghost: 'btn-ghost',
     danger: 'btn-danger',
+    warning: 'btn-warning',
   };
 
   const sizeClasses = {

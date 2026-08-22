@@ -60,5 +60,7 @@
   "storeAutoReplyActive": "الردود التلقائية مفعّلة",
   "storeAutoReplyOff": "الردود التلقائية متوقفة — فعّلها ليبدأ جواب24 بالرد على عملائك",
   "storeAutoReplyEnable": "تفعيل الآن",
-  "storeAutoReplyEnableFailed": "تعذّر تفعيل الردود التلقائية. حاول مرة أخرى."
+  "storeAutoReplyEnableFailed": "تعذّر تفعيل الردود التلقائية. حاول مرة أخرى.",
+  "storeAutoReplyActiveHours": "الردود التلقائية مفعّلة خلال ساعات عملك",
+  "storeAutoReplyPageOff": "الردود التلقائية متوقفة لصفحة {name} — فعّل الصفحة من لوحة التحكم ليتمكن جواب24 من الرد"
 }

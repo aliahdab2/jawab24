@@ -419,6 +419,33 @@
     box-shadow: none;
   }
 
+  /* The action inside an `.alert-warning` row — "your replies are off, turn them
+     on". Both themes are picked for WCAG AA on NORMAL text (§9, 4.5:1), which
+     the obvious amber-600 does NOT reach: #d97706 under white is only 3.19:1.
+     Light amber-700 under white is 5.02:1; dark amber-400 under stone-900 is
+     10.48:1 — the dark side inverts to a dark label because white on any amber
+     dark enough to sit on a dark surface fails again. */
+  .btn-warning {
+    @apply btn bg-amber-700 text-white hover:bg-amber-800 focus:ring-amber-500;
+    box-shadow: 0 8px 20px rgba(180, 83, 9, 0.22);
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 14px;
+  }
+
+  .dark .btn-warning {
+    @apply bg-amber-400 text-stone-900 hover:bg-amber-300;
+    box-shadow: none;
+  }
+
+  .btn-warning:active:not(:disabled) {
+    box-shadow: 0 4px 12px rgba(180, 83, 9, 0.18);
+  }
+
+  .dark .btn-warning:active:not(:disabled) {
+    box-shadow: none;
+  }
+
   .card {
     @apply bg-card rounded-[1.5rem] border border-theme-border;
     box-shadow: 0 10px 30px rgba(13, 148, 136, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
