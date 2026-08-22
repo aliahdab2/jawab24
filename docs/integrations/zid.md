@@ -163,6 +163,18 @@ Two new findings came out of the same run and are written up in `zid-edge-case-a
 failure, latent because the catalog is inlined in the prompt today) and **F7** (three dev-store
 products carry no image, which blocks product-card coverage — a seeding gap, not a parser bug).
 
+### ✅ Later the same day: F7 closed, §B-3 proven live, §H-1 captured as Draft-blocked
+
+Images were added to the three imageless products through the Zid admin (real-browser
+session). Each dashboard upload saves instantly and fires a `product.update` webhook, and
+all three deliveries round-tripped into `ecommerce_products` image URLs within ~2 minutes —
+**§B-3 (incremental webhook) is live-proven, three deliveries, no separate price-edit run
+needed.** The paid-plan upgrade path was then walked to the checkout page, which refuses
+with «تعذر بدء عملية الشراء … غير متاح للشراء حاليًا»: **a paid plan cannot be bought while
+the app is in `Draft`** (the free «اختبار» subscribe worked the same morning), so §H-1's
+live capture waits on review state and will most likely first be produced by Zid's own
+reviewer. Details + exact captures in `zid-edge-case-audit.md`.
+
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
 Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;

@@ -291,14 +291,44 @@ inline cap? If almost none do, the tool's matching is not where the effort belon
 
 ---
 
-## F7 — the dev store's seeding is incomplete: 3 of 4 products carry no image
+## F7 — ✅ CLOSED 2026-08-22: images added, and closing it live-proved B-3 for free
 
-Not a parser defect — verified against the raw payload, `images: []` on three products
-and a well-formed `images[].image.full_size` on the fourth (which also confirms the C4
-image shape). Recorded because it is a **test-coverage** gap: `productCardBuilder`
-returns null for any product without an image ("a card without an image isn't worth
-sending"), so product cards can only be exercised with "Sony A7S III" until the other
-three are given images in the Zid admin.
+Originally: 3 of 4 products carried `images: []` (a seeding gap, not a parser defect —
+the fourth product's well-formed `images[].image.full_size` confirmed the C4 shape), and
+`productCardBuilder` returns null for an imageless product, so product cards were
+untestable on three of four fixtures.
+
+Closed by uploading images through the Zid admin (driven via the authenticated real
+browser). Two operational facts captured on the way:
+
+- **The dashboard's image upload saves IMMEDIATELY** («تم الاستيراد والحفظ بنجاح») — no
+  «حفظ المنتج» click involved, so every upload is a `product.update` the moment it lands.
+- **Each save fired a `product.update` webhook that our backend consumed end-to-end**:
+  three separate deliveries → Basic-auth verified → sync jobs → all four
+  `ecommerce_products` rows carried `media.zid.store` image URLs within ~2 minutes of the
+  last upload (progressive `updated_at` stamps 12:40:13 → 12:42:39 UTC). That is test
+  plan **§B-3 (incremental webhook), proven live three times over** — it no longer needs
+  a separate price-edit run.
+
+## H-1 capture (2026-08-22): a PAID plan cannot be bought while the app is in `Draft`
+
+Attempting to upgrade the dev store from «اختبار» to «الأعمال» (217.35 SAR incl. VAT)
+walks: plan card → «ترقية الخطة» → permissions-consent modal → «المتابعة للدفع» → the
+checkout page at `dashboard.zid.sa/…/checkout` answers:
+
+> **تعذر بدء عملية الشراء** — هذا التطبيق غير متاح للشراء حاليًا
+
+The free «اختبار» subscription had succeeded the same morning in the same `Draft` state,
+so the gate is specifically on **paid checkout**, not on subscribing per se. Consequence
+for the test plan: **§H-1's live capture is blocked on review state** — it becomes
+possible only once Zid publishes (or possibly re-reviews) the app, which means the FIRST
+live paid-subscription envelope will likely be produced by Zid's own reviewer. That is
+acceptable: the read path is already live-proven (the reconciler reads and parses the
+real «اختبار» subscription every 6h), adoption logic is unit-covered (56 cases), and the
+non-entitling-plan fix keeps the reviewer's free-plan subscription from paging anyone.
+
+No app-side defect here; do not chase it. Recorded so nobody burns another session
+rediscovering that the checkout error is Zid's Draft gate, not our bug.
 
 ---
 
