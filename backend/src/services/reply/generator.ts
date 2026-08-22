@@ -18,8 +18,9 @@ import { detectBusinessActionFlags } from './urgentFlags';
 
 /**
  * Single source of truth for AI dispatch: when a store is linked, route
- * through the e-commerce tool loop (search_products / check_inventory /
- * lookup_order). Otherwise, use the standard aiService. Both real DM and
+ * through the e-commerce tool loop (check_inventory / lookup_order /
+ * track_shipment / verify_and_get_*). Otherwise, use the standard aiService.
+ * (`search_products` never existed — D-004 retired it as dead code.) Both real DM and
  * playground/test-reply paths must use this — bypassing it caused the AI
  * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
@@ -428,7 +429,7 @@ export interface PlaygroundInput {
     /** See GenerateReplyContext.ourFacebookPageId. */
     ourFacebookPageId?: string;
     /** Linked e-commerce store id — when set, the tool loop is invoked so the AI
-     *  can call search_products / check_inventory / lookup_order. Mirrors the
+     *  can call check_inventory / lookup_order / track_shipment. Mirrors the
      *  real DM path; without this, playground/test-reply would hallucinate URLs. */
     ecommerceStoreId?: string;
     /** Pipeline tag for ai_usage_log — distinguishes interactive playground from batch eval runs. */

@@ -175,6 +175,41 @@ the app is in `Draft`** (the free «اختبار» subscribe worked the same mor
 live capture waits on review state and will most likely first be produced by Zid's own
 reviewer. Details + exact captures in `zid-edge-case-audit.md`.
 
+### ✅ §C-3 live DMs — the transcript (2026-08-22, 13:53–14:16 UTC)
+
+The FB page "Jawab24 Test" was moved into the Zid-provisioned workspace and linked to the
+store, then driven from a real Messenger thread. **Every reply is grounded in the synced Zid
+catalog** — prices, stock and the storefront URL all come from `ecommerce_products`:
+
+```
+هل كاميرا Sony A7S III متوفرة؟      → نعم، كاميرا Sony A7S III متوفرة حالياً في المخزون.
+اديش سعرها                          → سعر كاميرا Sony A7S III هو 10000 ريال سعودي.
+في توصيل للدمام                     → حالياً ما عندي معلومات مؤكدة عن التوصيل للدمام.   ← honest gap, not invented
+بكم النظارة الشمسية؟                → نظارة شمسية سعرها 250 ريال، لكنها حالياً غير متوفرة في المخزون.  ← sale price, correct
+Is the Sony camera in stock?        → Yes, the Sony A7S III camera is in stock right now.   ← EN mirrors the customer
+عندكم منتج مخفي للاختبار؟           → ما عندي معلومة عن منتج مخفي للاختبار.   ← the unpublished product stays invisible
+شو أسعار الأحذية عندكم؟              → حذاء رياضي سعره 300 ريال، لكنه غير متوفر حالياً في المخزون.
+طيب بدي اشتري الكاميرا، كيف أطلبها؟ → storefront link + lead ask
+فيك تحطها بالسلة عندي               → honest "I can't add to cart here, use the link"
+```
+
+Two things this proves beyond §C-3 itself: the **dialect is mirrored** (Levantine in,
+Levantine out) and **F1's unlimited-stock fix holds at the reply path** — Sony carries
+`total_inventory = NULL` (`is_infinite`) and is reported available, not out of stock.
+
+**Product cards were added later the same day** (#876 + the review fixes in #878) and
+proven on this same thread after deploy: «طيب بدي اشتري الكاميرا، كيف أطلبها؟» now returns
+the reply **plus a Sony card carrying the real product image, `10000 SAR · متوفر` and an
+Arabic «عرض المنتج» button**; re-sending the identical turn returns the reply with **no
+second card** (24h per-customer cooldown, one Redis key, TTL not re-stamped).
+
+> ⚠️ **The first DM of that day got no reply at all**, and the cause was not a bug: a
+> newly-provisioned workspace is seeded **auto-reply OFF** (D-025), so the pipeline logged
+> `skipReason "Messages auto-reply disabled"`. It cost ~20 minutes of log-chasing. **When a
+> new or test account does not reply, check the workspace seed before the logs.** Fixed by
+> enabling both toggles in the embedded app's own Settings — which incidentally proved §L
+> (the embedded surface can write settings, authenticated, with no login).
+
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
 Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;
@@ -639,12 +674,25 @@ describe titles (grep for it).
 - ~~Profile envelope nesting (`user.store` vs `store` — both tolerated).~~ ✅ **CONFIRMED
   2026-08-11 by the first real App Market install** — see "First live capture" below. Zid
   sent `user.store`. Both are still tolerated; the nesting is no longer a guess.
-- Orders search: **no confirmed search/filter param** — `lookupOrder`/`getShipmentTracking`
-  scan up to 3 × 100 recent orders client-side behind the single `findOrderByCode` seam;
-  swap in the real filter once confirmed. Same for `checkInventory`'s product search
-  (first page + client-side match). Open question folded in from
-  `.planning/ECOMMERCE_POWER_FEATURES_PLAN.md`: does the orders search index the customer
-  phone? (gates order auto-resolve).
+- Orders search: the param **is documented** (docs.zid.sa "List Orders", read 2026-08-22) —
+  `search_term`, *"Natural language lookup through (customer phone, customer email, order
+  code, or customer name)"*, plus `order_id`, `order_status`, `date_from`/`date_to` and
+  `per_page` ≤ 100. **That answers the open question folded in from
+  `.planning/ECOMMERCE_POWER_FEATURES_PLAN.md` #3: yes, the orders search indexes the
+  customer phone**, so order auto-resolve is unblocked in principle. NOT yet live-captured
+  — `lookupOrder`/`getShipmentTracking` still scan up to 3 × 100 recent orders client-side
+  behind the single `findOrderByCode` seam, so an order older than the 300 most recent
+  answers `order_not_found` (the AI then tells a real customer their order does not exist).
+  Swap the seam once §E has produced a real order to test against.
+- ⛔ **Products search: the param exists and is NOT usable.** `?search=` is documented as
+  "Searches products by product name", but **live-captured 2026-08-22 on dev store 3195980
+  it ignores the term**: `search=نظارة` and `search=كاميرا` each returned **all 4 products**
+  (`count: 4`). So it cannot replace `checkInventory`'s client-side match, and the planned
+  "swap in Zid's server-side search" is dead — product resolution has to be solved on our
+  side (see the resolver plan, D-091). What IS confirmed and useful from the same capture:
+  **`id__in` works** (exact row, `is_infinite: true` preserved) and **`in_stock=true` works**
+  (returned only the one sellable product). ⚠️ An **unknown id answers HTTP 400, not an empty
+  list** — a by-id reader must treat 400 as "no such product", not as an API failure.
 - Tracking fields on orders (`tracking_number` / `shipping.*`) — read tolerantly,
   `undefined` when absent.
 - Whether the refresh-token grant response rotates the `Authorization` token (handled

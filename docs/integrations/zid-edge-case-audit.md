@@ -289,6 +289,49 @@ hop on the reply path, and both are ruled out by standing project rules. The num
 should drive the decision is: across live e-commerce stores, how many catalogs exceed the
 inline cap? If almost none do, the tool's matching is not where the effort belongs.
 
+### ✅ MEASURED 2026-08-22 — the gate above is satisfied, and the answer is «zero»
+
+**The number it asked for: 0.** Every connected store in production is under the cap —
+`shopify 6`, `salla 6`, `zid 4` products — and all three are **our own dev stores**. There
+is no real merchant catalog in production at all, so `checkInventory`'s matcher is
+currently **unreachable**. That is the whole population, not a sample. Deprioritising this
+was correct.
+
+**But the threshold is 15, not 1200 chars.** `buildProductSummary` selects `.limit(15)`
+(`ecommerce.ts`), so a merchant with 50 products — completely ordinary on Zid — falls
+straight through the inline block onto the tool. At launch this becomes the primary path.
+
+**The defect is wider than the F6 headline.** Measured on the four real synced titles with
+14 phrasings a customer actually types:
+
+| matcher | correct |
+|---|---|
+| shipped substring | **4/14** |
+| `normalizeArabic` + substring | **4/14** |
+| the repo's existing hybrid retrieval over `kb_chunks` product rows | **16/17** |
+
+Three failure classes, only one of which F6 named:
+- **Definite article «ال»** — «النظارة», «القميص», «الحذاء» all miss. `"نظارة شمسية"` does
+  not contain `"النظارة"`, and «بكم القميص؟» is how customers actually ask.
+- **Cross-script** — «سوني»/«كاميرا» vs `Sony A7S III`; «حذاء» vs `Running Shoes`.
+- **Morphology** — «نظارات» (plural), «نظاره» (taa marbuta; `normalizeTaaMarbuta` is off).
+
+⛔ **The obvious fix is a measured no-op.** Reaching for the repo's own `foldForMatch`
+(`normalizeArabic` + lowercase, already used by the card builder) scores the *same* 4/14 —
+it strips diacritics and unifies alef, but does not remove the definite article, does not
+fold ى→ي, and cannot bridge scripts. Proposing it before measuring would have shipped
+nothing.
+
+⛔ **And Zid's own search cannot rescue it.** `?search=` is documented as "searches by
+product name", but live-captured the same day it **ignores the term** (`search=نظارة` and
+`search=كاميرا` each returned all 4 products). The server-side swap the seam was left open
+for is dead.
+
+**Ruling:** resolution moves to our side, reusing the hybrid retrieval that already scores
+16/17, with the platform consulted by `id__in` only. Planned as **D-091**; see
+`~/.claude/plans/rethink-everything-then-tender-hopcroft.md`. Cross-script stays the
+hardest class and is expected to remain an eval XGAP until semantic resolution lands.
+
 ---
 
 ## F7 — ✅ CLOSED 2026-08-22: images added, and closing it live-proved B-3 for free
