@@ -5,22 +5,19 @@ import { ar, enUS } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
 import { useUIStore } from '@/lib/store';
 import { isNativePlatform } from '@/lib/capacitor';
-import { getLocaleDirection } from '@/utils/locale';
+import { getLocaleDirection, getIntlLocale } from '@/utils/locale';
 export type Language = 'ar' | 'en';
 
 const DATE_LOCALES: Record<string, Locale> = { ar, en: enUS };
-// `-u-nu-latn` forces Latin digits even in Arabic UI — product decision to keep numerals consistent across languages.
-const INTL_LOCALES: Record<string, string> = { ar: 'ar-SA-u-nu-latn', en: 'en-US' };
 
 /** Get date-fns locale for a language string (standalone, for non-component code) */
 export function getDateLocale(language: string): Locale {
   return DATE_LOCALES[language] ?? enUS;
 }
 
-/** Get Intl locale string for toLocaleString() (standalone, for non-component code) */
-export function getIntlLocale(language: string): string {
-  return INTL_LOCALES[language] ?? 'en-US';
-}
+// Re-exported for the many existing importers; the mapping itself lives in
+// utils/locale so store-free public pages can use it too.
+export { getIntlLocale };
 
 /**
  * Hook to get/set language + date/intl locale helpers.
@@ -49,7 +46,7 @@ export function useLanguage() {
   );
 
   const dateLocale = DATE_LOCALES[language] ?? enUS;
-  const intlLocale = INTL_LOCALES[language] ?? 'en-US';
+  const intlLocale = getIntlLocale(language);
 
   return { language, setLanguage, dateLocale, intlLocale };
 }

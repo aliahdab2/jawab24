@@ -167,12 +167,15 @@ export function formatDaysAgo(
  *   fact-list dates are authored Gregorian, so the calendar is forced.
  *
  * The year renders only when it differs from the current year — «٤ أغسطس»
- * this year, «4 أغسطس 2027» next. Anything that is not YYYY-MM-DD is returned
- * unchanged: malformed data should be visible, not swallowed.
+ * this year, «4 أغسطس 2027» next — unless `alwaysYear` is set, which public
+ * article dates use: a blog post's «18 مارس» is ambiguous the moment the year
+ * turns. Anything that is not YYYY-MM-DD is returned unchanged: malformed data
+ * should be visible, not swallowed.
  */
 export function formatPlainDate(
     iso: string | null | undefined,
     intlLocale: string,
+    { alwaysYear = false }: { alwaysYear?: boolean } = {},
 ): string | null {
     if (!iso) return null;
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -186,7 +189,7 @@ export function formatPlainDate(
         date.getMonth() !== Number(mo) - 1 ||
         date.getDate() !== Number(d)
     ) return iso;
-    const withYear = y !== todayISODate().slice(0, 4);
+    const withYear = alwaysYear || y !== todayISODate().slice(0, 4);
     return new Intl.DateTimeFormat(intlLocale, {
         calendar: 'gregory',
         day: 'numeric',

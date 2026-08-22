@@ -12,6 +12,16 @@
  *  6. Route coverage          — every public index,follow build route is in the sitemap
  *                               (the recurrence guard: the static sitemap can no longer
  *                               silently drift from the app's routes)
+ *  7. Data-driven <lastmod>   — every blog / compare / integration URL carries the
+ *                               `updated ?? date` of its data module entry, so a page
+ *                               revised in the data cannot keep an old date here (which
+ *                               is what kept IndexNow from ever resubmitting it)
+ *  8. robots.txt agreement    — every auth-gated route in EXCLUDED_ROUTES is disallowed
+ *                               (AR + EN) in every user-agent group, and no Disallow is a
+ *                               prefix of a sitemap URL (a `Disallow: /integrations` would
+ *                               silently block every /integrations/<platform> page)
+ *
+ * The file itself is produced by generate-sitemap.js; this script is the gate.
  *
  * Usage:  node scripts/validate-sitemap.js
  * Exit:   0 = pass, 1 = errors found
@@ -19,10 +29,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { slugsFromDataFile } = require('./lib/dataSlugs');
+const { slugsFromDataFile, entriesFromDataFile, entryLastModified } = require('./lib/dataSlugs');
 
 const PROD_ORIGIN = 'https://jawab24.com';
 const SITEMAP_PATH = path.join(__dirname, '..', 'public', 'sitemap.xml');
+const ROBOTS_PATH = path.join(__dirname, '..', 'public', 'robots.txt');
 const PAGES_DIR = path.join(__dirname, '..', 'src', 'pages');
 const DATA_DIR = path.join(__dirname, '..', 'src', 'data');
 
@@ -84,6 +95,35 @@ const DYNAMIC_SLUG_SOURCES = {
   'integrations/[slug]': 'integrations.ts',
 };
 
+/**
+ * Parse robots.txt into groups. Consecutive `User-agent` lines share the
+ * directive block that follows them (RFC 9309) — a named group does NOT inherit
+ * from `*`, which is why the check runs per group.
+ */
+function parseRobots(text) {
+  const groups = [];
+  let current = null;
+  let lastWasAgent = false;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const agent = line.match(/^User-agent:\s*(.+)$/i);
+    if (agent) {
+      if (!current || !lastWasAgent) {
+        current = { agents: [], disallows: [] };
+        groups.push(current);
+      }
+      current.agents.push(agent[1].trim());
+      lastWasAgent = true;
+      continue;
+    }
+    lastWasAgent = false;
+    const disallow = line.match(/^Disallow:\s*(\S*)$/i);
+    if (disallow && current && disallow[1]) current.disallows.push(disallow[1]);
+  }
+  return groups;
+}
+
 /** Recursively list page routes under a Next.js pages dir (excludes /api). */
 function walkRoutes(dir, prefix = '') {
   const out = [];
@@ -127,6 +167,10 @@ function validateSitemap(xml, opts = {}) {
   const pagesDir = opts.pagesDir || PAGES_DIR;
   const dataDir = opts.dataDir || DATA_DIR;
   const checkCoverage = opts.checkCoverage !== false; // default on
+  // robots.txt text; `null` skips check 8 (tests that only exercise the XML).
+  const robotsTxt = opts.robotsTxt !== undefined
+    ? opts.robotsTxt
+    : (fs.existsSync(ROBOTS_PATH) ? fs.readFileSync(ROBOTS_PATH, 'utf-8') : null);
 
   const errors = [];
 
@@ -240,10 +284,66 @@ function validateSitemap(xml, opts = {}) {
     }
   }
 
+  // ── Check 7: data-driven <lastmod> agrees with the data module ───────────
+  // A URL generated from src/data/*.ts must carry that entry's `updated ?? date`.
+  // Absence is check 6's job; this only judges dates on URLs that are present.
+  const byLoc = new Map(entries.map(e => [e.loc, e]));
+  for (const [route, source] of Object.entries(DYNAMIC_SLUG_SOURCES)) {
+    const dataEntries = entriesFromDataFile(dataDir, source);
+    if (!dataEntries) continue;
+    const base = route.replace(/\/\[[^\]]+\]$/, '');
+    for (const dataEntry of dataEntries) {
+      const expected = entryLastModified(dataEntry);
+      if (!expected) {
+        errors.push(`${source}: "${dataEntry.slug}" has no date: — every entry needs a publish date (see src/data/contentDates.ts)`);
+        continue;
+      }
+      for (const loc of [`${prodOrigin}/${base}/${dataEntry.slug}`, `${prodOrigin}/en/${base}/${dataEntry.slug}`]) {
+        const entry = byLoc.get(loc);
+        if (entry && entry.lastmod !== expected) {
+          errors.push(`<lastmod> ${entry.lastmod} for ${loc} disagrees with ${source} (${expected}) — run \`npm run sitemap:generate\``);
+        }
+      }
+    }
+  }
+
+  // ── Check 8: robots.txt agrees with the route inventory ──────────────────
+  if (robotsTxt !== null) {
+    const groups = parseRobots(robotsTxt);
+    if (groups.length === 0) {
+      errors.push('robots.txt has no User-agent group');
+    }
+    // Every auth-gated route, in both locales, must fall under SOME Disallow
+    // prefix of the group (`/admin/` covers admin/ai-cost; `/partner` covers
+    // partner/merchant). noindex pages are not required — they must stay crawlable.
+    const required = [];
+    for (const [route, reason] of EXCLUDED_ROUTES) {
+      if (!/auth-gated/.test(reason)) continue;
+      required.push(`/${route}`, `/en/${route}`);
+    }
+    for (const group of groups) {
+      const label = group.agents.join(', ');
+      for (const urlPath of required) {
+        if (!group.disallows.some(rule => urlPath.startsWith(rule))) {
+          errors.push(`robots.txt group [${label}] does not disallow ${urlPath} (auth-gated route) — a named group does not inherit from "*", so every group must carry the full set`);
+        }
+      }
+      // A Disallow is a prefix match: it must not shadow anything we ask to have indexed.
+      for (const rule of group.disallows) {
+        for (const loc of locs) {
+          const urlPath = loc.slice(prodOrigin.length) || '/';
+          if (urlPath.startsWith(rule)) {
+            errors.push(`robots.txt group [${label}] disallows ${rule}, which is a prefix of the sitemap URL ${loc} — the page would never be crawled`);
+          }
+        }
+      }
+    }
+  }
+
   return { errors, entryCount: entries.length };
 }
 
-module.exports = { validateSitemap, EXCLUDED_ROUTES, DYNAMIC_SLUG_SOURCES };
+module.exports = { validateSitemap, parseRobots, EXCLUDED_ROUTES, DYNAMIC_SLUG_SOURCES };
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -260,6 +360,6 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  console.log(`Sitemap clean — ${entryCount} entries, no future dates, hreflang pairs intact, route coverage complete.`);
+  console.log(`Sitemap clean — ${entryCount} entries, no future dates, hreflang pairs intact, route coverage complete, data-driven dates current, robots.txt in agreement.`);
   process.exit(0);
 }

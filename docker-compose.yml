@@ -228,11 +228,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    # nginx's access log IS the only request log we have (access.log -> stdout).
+    # 10m x 3 held ~2 days, so the weekly AI-crawler report (scripts/ai-crawler-
+    # report.sh) and any incident forensics had nothing to read after a
+    # `--force-recreate`. 50m x 14 ≈ a month at current traffic (~100k lines / 2 days
+    # ≈ 20 MB), which is the usual floor for an access-log retention window.
+    # Takes effect only when the container is RECREATED, not on `nginx -s reload`.
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "14"
 
 networks:
   jawab24-network:

@@ -3,7 +3,9 @@ import Link from 'next/link';
 import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { isRTLLocale } from '@/utils/locale';
+import { isRTLLocale, getIntlLocale } from '@/utils/locale';
+import { formatPlainDate } from '@/utils/dateUtils';
+import { contentLastModified } from '@/data/contentDates';
 import { buildWebUrl } from '@/lib/webUrl';
 import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import type { MessageKeys, NestedKeyOf } from 'use-intl';
@@ -47,10 +49,16 @@ function FeatureLabel({ value }: { value: boolean | string }) {
 
 export default function ComparePage({ competitor }: ComparePageProps) {
   const t = useTranslations('compare');
+  const tc = useTranslations('common');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const slug = competitor.slug;
+  // The date the comparison was last re-verified (see ContentDates) — shown to
+  // the reader and emitted as dateModified, so a rewrite is not indistinguishable
+  // from the March original.
+  const lastModified = contentLastModified(competitor);
+  const formattedLastModified = formatPlainDate(lastModified, getIntlLocale(locale), { alwaysYear: true }) ?? lastModified;
 
   const faqs = [
     { question: t(k(`${slug}.faqQ1`)), answer: t(k(`${slug}.faqA1`)) },
@@ -87,6 +95,8 @@ export default function ComparePage({ competitor }: ComparePageProps) {
               'name': t(k(`${slug}.seoTitle`)),
               'description': t(k(`${slug}.seoDescription`)),
               'url': buildWebUrl(`/compare/${slug}`, locale),
+              'datePublished': competitor.date,
+              'dateModified': lastModified,
               'isPartOf': {
                 '@type': 'WebSite',
                 'name': 'Jawab24',
@@ -142,8 +152,11 @@ export default function ComparePage({ competitor }: ComparePageProps) {
           <h1 className="text-4xl font-bold mb-3">
             {t('vsTitle', { name: competitor.name })}
           </h1>
-          <p className="text-lg text-foreground/70 leading-relaxed mb-10">
+          <p className="text-lg text-foreground/70 leading-relaxed mb-3">
             {t(k(`${slug}.subtitle`))}
+          </p>
+          <p className="text-sm text-muted-foreground mb-10">
+            <time dateTime={lastModified}>{tc('lastUpdatedOn', { date: formattedLastModified })}</time>
           </p>
 
           {/* Feature Comparison Table */}

@@ -1,5 +1,6 @@
 {
   "appName": "Jawab24",
+  "lastUpdatedOn": "Last updated {date}",
   "intentLabel": {
     "QUESTION": "Question",
     "COMPLIMENT": "Compliment",

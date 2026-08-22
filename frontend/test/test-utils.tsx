@@ -111,6 +111,19 @@ const customRender = (
   return render(ui, { wrapper: AllTheProviders, ...options });
 };
 
+/**
+ * The parsed JSON-LD object of the given `@type` rendered into `container`.
+ * Only useful in tests that mock `next/head` to render its children inline —
+ * the default mock drops them, and the JSON-LD lives inside <Head>.
+ */
+export function jsonLdOfType(container: HTMLElement, type: string): Record<string, unknown> {
+  const found = Array.from(container.querySelectorAll('script[type="application/ld+json"]'))
+    .map((s) => JSON.parse(s.textContent ?? '{}') as Record<string, unknown>)
+    .find((j) => j['@type'] === type);
+  if (!found) throw new Error(`no JSON-LD of @type ${type} in the rendered page`);
+  return found;
+}
+
 // Re-export everything
 export * from '@testing-library/react';
 export { customRender as render };
