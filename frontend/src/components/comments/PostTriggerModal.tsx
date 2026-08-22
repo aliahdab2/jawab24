@@ -399,7 +399,11 @@ export function PostTriggerModal({
       )}
       <Button
         onClick={handleSave}
-        disabled={saving || replyOverLimit}
+        // In-flight only — validation errors toast instead, like every other check in
+        // handleSave. Disabling on replyOverLimit blocked onClick, so its own
+        // postTriggerReplyTooLong toast was unreachable and Save failed silently
+        // (WCAG 3.3.1 wants the error stated, not just the control removed).
+        disabled={saving}
         loading={savingSave}
         className="w-full sm:w-auto"
       >
@@ -543,9 +547,11 @@ export function PostTriggerModal({
             placeholder={mode === 'all' ? t('postTriggerAllReplyPlaceholder') : t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
-            // Flat 1000-char ceiling whether or not an image is attached — the image is
-            // sent as its own message, so it never shortens the text budget.
-            maxLength={REPLY_MAX}
+            // Tracks `replyMax` (not a flat REPLY_MAX): attaching a CTA button without an
+            // image drops the ceiling to the button-template limit the backend enforces.
+            // Hardcoding the higher cap let merchants type past the real limit with only
+            // the counter — which scrolls out of view once the CTA fields open — to warn them.
+            maxLength={replyMax}
             className="leading-relaxed"
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />

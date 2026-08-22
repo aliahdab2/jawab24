@@ -2226,3 +2226,42 @@ and `/reply-quality` both carried the same defect — "no `offering` chunks = no
 no prices" and "starved ≈ under 500 characters" — which would have produced a merchant
 email asking someone to add a price list they had already entered in `catalog_items`. Both
 playbooks now query all four stores and carry the re-measured calibration.
+
+## D-089 · Post Reply exclude-keywords stays, despite zero production use (2026-08-22, owner ruling)
+
+**Ruling.** The «كلمات الاستثناء» (exclude-keywords) field in `PostTriggerModal` is **kept**,
+and this is not to be re-opened on usage grounds alone. Owner decision, 2026-08-22.
+
+**The measurement that prompted the question.** A production sweep of `posts` on 2026-08-22
+found the field has **never been used, by anyone, since it shipped**:
+
+| field | placement | posts using it |
+|---|---|---|
+| like the comment | top level | 62 |
+| image | top level | 16 |
+| CTA button | inside «خيارات إضافية» | 4 |
+| **exclude keywords** | inside «خيارات إضافية» | **0** |
+
+(out of 271 configured triggers across 23 pages; 152 `all` mode / 119 keyword mode.)
+
+**Why zero is not grounds to delete.** It is a *veto* — a comment matching any exclude word
+skips the Post Reply and falls through to the AI pipeline. It costs nothing when unset (it is
+`NULL` for every row today) and it sits behind a collapsed disclosure, so it imposes no cost
+on the compose path the data shows merchants actually use. Its value is bounded-downside
+insurance for the merchant who eventually needs it, not throughput. A feature that is free
+when unused is not carrying its zero as a debt.
+
+**What zero DOES tell us, and what it does not.** It is evidence about *discovery and need*,
+not about *quality*: the field is deliberately buried, so no one has been offered it. Do not
+read the 0 as "merchants tried it and rejected it" — nothing here measures that.
+
+**Also settled by the same sweep: the layering is correct.** Keeping like + image at the top
+level and burying exclude + button was validated, not merely asserted — the two top-level
+options are used 23% and 6% of the time versus 1.5% and 0% for the two buried ones. That
+split is the intended shape working, so the disclosure structure is not to be re-litigated
+on "the modal feels long" grounds either.
+
+**Measurement limit, stated so it is not overclaimed later.** This counts *completed*
+configurations only. There is no telemetry for "opened the modal and gave up", so nothing
+here bounds abandonment, and the per-page concentration of the 271 was not measured — they
+may be skewed toward a few heavy pages.
