@@ -491,7 +491,7 @@ export default function AdminWaitlistPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-4">
-                                                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-brand-50 text-brand-700">
+                                                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-brand-50 text-brand-700 dark:text-brand-400">
                                                         {getFeatureLabel(entry.feature)}
                                                     </span>
                                                 </td>

@@ -11,32 +11,39 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helperText, className, id, dir = 'auto', value, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
-    // When dir is "auto" and value is empty, inherit direction from parent
-    // so placeholder text aligns correctly in RTL mode
-    const effectiveDir = dir === 'auto' && !value ? undefined : dir;
+    const messageId = `${inputId}-message`;
 
     return (
       <div className="w-full">
         {label && (
           <label htmlFor={inputId} className="label">{label}</label>
         )}
+        {/*
+          `dir` is passed through untouched. It used to be suppressed while the
+          field was empty, which broke UNCONTROLLED inputs outright: `value` is
+          always undefined there, so the element never received `dir="auto"` and
+          typed Arabic never flipped the field. Empty-field direction is handled
+          once, in globals.css, by `input[dir="auto"]:placeholder-shown`.
+        */}
         <input
           ref={ref}
           id={inputId}
-          dir={effectiveDir}
+          dir={dir}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || helperText ? messageId : undefined}
           className={clsx(
             'input',
-            error && 'border-red-500 focus:ring-red-500',
+            error && 'danger-input',
             className
           )}
           value={value}
           {...props}
         />
         {error && (
-          <p className="mt-1.5 text-sm text-red-500">{error}</p>
+          <p id={messageId} role="alert" className="mt-1.5 text-sm text-destructive">{error}</p>
         )}
         {helperText && !error && (
-          <p className="mt-1.5 text-sm text-surface-500">{helperText}</p>
+          <p id={messageId} className="mt-1.5 text-sm text-muted-foreground">{helperText}</p>
         )}
       </div>
     );
@@ -44,4 +51,3 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 );
 
 Input.displayName = 'Input';
-

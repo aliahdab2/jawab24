@@ -3,19 +3,27 @@ import clsx from 'clsx';
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'success' | 'warning' | 'error' | 'info' | 'default';
+  variant?: 'success' | 'warning' | 'error' | 'info' | 'brand' | 'violet' | 'orange' | 'default';
   size?: 'xs' | 'sm' | 'md';
   className?: string;
   onClick?: () => void;
 }
 
 export function Badge({ children, variant = 'default', size = 'md', className, onClick }: BadgeProps) {
+  // One entry per status-* class in globals.css, named after the class it maps
+  // to. `info` used to map to status-BRAND, which left status-info (blue)
+  // unreachable through this component and made the prop name a lie; violet and
+  // orange had no entry at all, so those two states could only be reached by
+  // writing the CSS class by hand.
   const variantClasses = {
     success: 'status-success border',
     warning: 'status-warning border',
     error: 'status-error border',
-    info: 'status-brand border',
-    default: 'bg-surface-50 text-surface-600 border border-surface-200',
+    info: 'status-info border',
+    brand: 'status-brand border',
+    violet: 'status-violet border',
+    orange: 'status-orange border',
+    default: 'status-neutral border',
   };
 
   const sizeClasses = {

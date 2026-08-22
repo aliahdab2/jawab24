@@ -313,8 +313,18 @@
 }
 
 @layer components {
+  /* Typography and shape live HERE, once, for every variant.
+     They used to be redeclared per variant as 15px / 600 / 14px — and none of
+     that ever reached a merchant, because <Button> appended `text-sm
+     rounded-2xl` and wrapped the label in `font-bold tracking-tight`, and
+     utilities outrank @layer components. The spec described one button and the
+     app shipped another. These are the values that actually ship, so moving
+     them here is a no-op on screen and makes the spec true. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl
+           text-sm font-bold tracking-tight
+           transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn:active:not(:disabled) {
@@ -324,9 +334,6 @@
   .btn-primary {
     @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500;
     box-shadow: 0 8px 20px rgba(13, 148, 136, 0.28), 0 2px 6px rgba(0, 0, 0, 0.08);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-primary {
@@ -351,9 +358,6 @@
   .btn-secondary {
     @apply btn bg-card text-foreground/80 border border-theme-border hover:bg-muted hover:border-theme-border focus:ring-surface-400;
     box-shadow: 0 6px 16px rgba(13, 148, 136, 0.06), 0 2px 6px rgba(0, 0, 0, 0.05);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-secondary {
@@ -378,9 +382,6 @@
   .btn-accent {
     @apply btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-400;
     box-shadow: 0 8px 20px rgba(249, 115, 22, 0.25);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-accent {
@@ -402,9 +403,6 @@
   .btn-danger {
     @apply btn bg-red-500 text-white hover:bg-red-600 focus:ring-red-400;
     box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 14px;
   }
 
   .dark .btn-danger {
@@ -477,7 +475,7 @@
   }
 
   .badge-info {
-    @apply badge bg-brand-100 text-brand-700;
+    @apply badge bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400;
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -520,6 +518,15 @@
     @apply bg-orange-50 text-orange-700 border-orange-100
            dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800;
   }
+  /* Neutral chip. Same colours the Badge component used to inline as raw
+     `bg-surface-50 text-surface-600 border-surface-200`; they are correct
+     (6.93:1 light, 5.35:1 dark — the surface scale flips both halves together),
+     but a component naming raw scale steps is the pattern CONVENTIONS.md
+     forbids, and it left the neutral chip as the one status with nowhere to
+     apply a fix. */
+  .status-neutral {
+    @apply bg-surface-50 text-surface-600 border-surface-200;
+  }
 
   /* --- Icon backgrounds (circle/rounded-lg containers for icons) --- */
   .icon-bg-emerald {
@@ -554,14 +561,17 @@
     @apply bg-orange-100 text-orange-600
            dark:bg-orange-900/30 dark:text-orange-400;
   }
-  .icon-bg-purple {
-    @apply bg-purple-100 text-purple-600
-           dark:bg-purple-900/30 dark:text-purple-400;
-  }
-  .icon-bg-green {
-    @apply bg-green-100 text-green-600
-           dark:bg-green-900/30 dark:text-green-400;
-  }
+  /* `.icon-bg-green` and `.icon-bg-purple` were removed 2026-08 (design-system
+     audit). They were near-duplicates of `.icon-bg-emerald` / `.icon-bg-violet`
+     with no documented distinction, so the choice at each call site was
+     arbitrary and the same state could render two different colors on two
+     screens. Emerald and violet survive because they are anchored: emerald is
+     the delivered/success hue (`reply-source-template`, `.reply-bubble`) and
+     violet is the Smart Reply identity (`reply-source-ai`, `alert-violet`,
+     `status-violet`). Green and purple anchored nothing.
+     Deleted outright rather than aliased — each had exactly one call site and
+     nothing builds these names dynamically, so an alias would have been dead
+     code. Add a hue back only with a written reason for the distinction. */
 
   /* Lighter icon variant (50 instead of 100 base, with shadow) */
   .icon-bg-emerald-light {
@@ -634,6 +644,24 @@
      nobody had ever seen it in either theme. */
   .offline-banner {
     @apply bg-surface-800 text-white dark:bg-surface-500;
+  }
+
+  /* --- Collapsed-sidebar hover tooltip ---
+     A dark chip with white text in BOTH themes, so it reads as an overlay
+     rather than as part of the rail. Same inversion trap as .offline-banner,
+     caught in the other direction: the four call sites (Sidebar ×3,
+     ThemeToggleButton) all carried a bare `bg-surface-200 text-white`, which is
+     18.08:1 in dark but **1.23:1 in light** — white on #e1e9e8, i.e. an
+     invisible tooltip for every merchant on the default theme.
+     Reuses the .offline-banner pairing: 14.39:1 light, 8.81:1 dark.
+     Extracted here because the four class strings were byte-identical
+     (Rule 10.8) — one definition, one place to keep accessible. */
+  .nav-tooltip {
+    @apply absolute start-full ms-3 px-2.5 py-1.5 rounded-lg
+           bg-surface-800 text-white dark:bg-surface-500
+           text-xs font-medium whitespace-nowrap
+           opacity-0 group-hover/nav:opacity-100 pointer-events-none
+           transition-opacity duration-200 z-50 shadow-lg;
   }
 
   /* --- Danger zone (destructive action sections) --- */
@@ -937,228 +965,20 @@
   }
 }
 
-@layer utilities {
+/* The hand-written logical-property utilities that used to live here
+   (`@layer utilities`, ~220 lines: .ms-*, .me-*, .ps-*, .pe-*, .start-*,
+   .end-*, .border-s*, .border-e*, .rounded-s-xl, .rounded-e-xl, .text-start,
+   .text-end, .float-start, .float-end) were deleted 2026-08: Tailwind has
+   shipped all of them natively since v3.3 and this project is on 3.4.
 
-  /* Logical properties for RTL support */
-  .ms-0 {
-    margin-inline-start: 0;
-  }
+   Verified rather than assumed — all 54 were diffed against Tailwind's own
+   output for the same class names: 48 byte-identical, and the other 6 differ
+   only as `0` vs `0px`. The hand-written set was also a hand-picked subset of
+   the spacing scale, so `ms-7` / `ms-9` / `ps-8` resolve through Tailwind
+   today exactly as they did before.
 
-  .ms-1 {
-    margin-inline-start: 0.25rem;
-  }
-
-  .ms-2 {
-    margin-inline-start: 0.5rem;
-  }
-
-  .ms-3 {
-    margin-inline-start: 0.75rem;
-  }
-
-  .ms-4 {
-    margin-inline-start: 1rem;
-  }
-
-  .ms-5 {
-    margin-inline-start: 1.25rem;
-  }
-
-  .ms-6 {
-    margin-inline-start: 1.5rem;
-  }
-
-  .ms-8 {
-    margin-inline-start: 2rem;
-  }
-
-  .ms-10 {
-    margin-inline-start: 2.5rem;
-  }
-
-  .ms-12 {
-    margin-inline-start: 3rem;
-  }
-
-  .ms-16 {
-    margin-inline-start: 4rem;
-  }
-
-  .ms-20 {
-    margin-inline-start: 5rem;
-  }
-
-  .ms-64 {
-    margin-inline-start: 16rem;
-  }
-
-  .ms-auto {
-    margin-inline-start: auto;
-  }
-
-  .me-0 {
-    margin-inline-end: 0;
-  }
-
-  .me-1 {
-    margin-inline-end: 0.25rem;
-  }
-
-  .me-2 {
-    margin-inline-end: 0.5rem;
-  }
-
-  .me-3 {
-    margin-inline-end: 0.75rem;
-  }
-
-  .me-4 {
-    margin-inline-end: 1rem;
-  }
-
-  .me-6 {
-    margin-inline-end: 1.5rem;
-  }
-
-  .me-8 {
-    margin-inline-end: 2rem;
-  }
-
-  .me-12 {
-    margin-inline-end: 3rem;
-  }
-
-  .me-16 {
-    margin-inline-end: 4rem;
-  }
-
-  .me-auto {
-    margin-inline-end: auto;
-  }
-
-  .ps-0 {
-    padding-inline-start: 0;
-  }
-
-  .ps-1 {
-    padding-inline-start: 0.25rem;
-  }
-
-  .ps-2 {
-    padding-inline-start: 0.5rem;
-  }
-
-  .ps-3 {
-    padding-inline-start: 0.75rem;
-  }
-
-  .ps-4 {
-    padding-inline-start: 1rem;
-  }
-
-  .ps-6 {
-    padding-inline-start: 1.5rem;
-  }
-
-  .ps-10 {
-    padding-inline-start: 2.5rem;
-  }
-
-  .ps-14 {
-    padding-inline-start: 3.5rem;
-  }
-
-  .pe-0 {
-    padding-inline-end: 0;
-  }
-
-  .pe-1 {
-    padding-inline-end: 0.25rem;
-  }
-
-  .pe-2 {
-    padding-inline-end: 0.5rem;
-  }
-
-  .pe-3 {
-    padding-inline-end: 0.75rem;
-  }
-
-  .pe-4 {
-    padding-inline-end: 1rem;
-  }
-
-  .pe-6 {
-    padding-inline-end: 1.5rem;
-  }
-
-  .pe-10 {
-    padding-inline-end: 2.5rem;
-  }
-
-  .pe-12 {
-    padding-inline-end: 3rem;
-  }
-
-  .start-0 {
-    inset-inline-start: 0;
-  }
-
-  .start-3 {
-    inset-inline-start: 0.75rem;
-  }
-
-  .end-0 {
-    inset-inline-end: 0;
-  }
-
-  .end-3 {
-    inset-inline-end: 0.75rem;
-  }
-
-  .text-start {
-    text-align: start;
-  }
-
-  .text-end {
-    text-align: end;
-  }
-
-  .border-s {
-    border-inline-start-width: 1px;
-  }
-
-  .border-s-2 {
-    border-inline-start-width: 2px;
-  }
-
-  .border-e {
-    border-inline-end-width: 1px;
-  }
-
-  .border-e-2 {
-    border-inline-end-width: 2px;
-  }
-
-  .rounded-s-xl {
-    border-start-start-radius: 0.75rem;
-    border-end-start-radius: 0.75rem;
-  }
-
-  .rounded-e-xl {
-    border-start-end-radius: 0.75rem;
-    border-end-end-radius: 0.75rem;
-  }
-
-  /* Float utilities */
-  .float-start {
-    float: inline-start;
-  }
-
-  .float-end {
-    float: inline-end;
-  }
-}
+   Do not reinstate them. A local copy of a framework utility shadows the
+   framework and drifts from it. */
 
 /* Hide scrollbar (for carousels / scroll-snap containers) */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -1288,8 +1108,24 @@
   }
 }
 
+/* The float family lives here in full — keyframes and all three utilities.
+   `float-delayed` and `float-slow` used to sit in tailwind.config.js while
+   referencing THIS file's `@keyframes float`, so the config's own 8px/3s
+   keyframes were shadowed and the two delayed variants silently ran the 20px
+   travel instead of the 8px they were written for. Neither file said so.
+   Moved here 2026-08: one file owns the name and its keyframes. Safe as raw
+   CSS because none of the three is used with a Tailwind variant prefix —
+   `shimmer` is the only animation that is, which is why it stays in the config. */
 .animate-float {
   animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 2.5s ease-in-out infinite 0.5s;
+}
+
+.animate-float-slow {
+  animation: float 3.5s ease-in-out infinite 1s;
 }
 
 .animate-float-rotate {
@@ -1442,6 +1278,7 @@
    - Infinite/looping animations (float, pulse, orbit) → disabled completely.
    - One-shot entrance animations (fade-in, slide-up) → instant (no motion, still appear). */
 @media (prefers-reduced-motion: reduce) {
+  /* Defined in this file */
   .animate-glass-sweep,
   .animate-float,
   .animate-float-rotate,
@@ -1449,7 +1286,27 @@
   .animate-float-pulse,
   .animate-bounce-slow,
   .animate-empty-state-icon,
-  .animate-bounce-subtle {
+  .animate-bounce-subtle,
+  /* Defined in tailwind.config.js — these were missed entirely until 2026-08.
+     Every one of them is INFINITE and several sit on always-on chrome: an
+     `animate-pulse-soft` urgency chip, the `animate-pulse-attention` status
+     banner, the 404 float pair, and Tailwind's own `animate-pulse` skeletons.
+     WCAG 2.2.2 — a reduce preference has to reach them too. */
+  .animate-pulse-soft,
+  .animate-pulse-attention,
+  .animate-float-delayed,
+  .animate-float-slow,
+  /* Tailwind's own infinite utilities. `animate-spin` is deliberately NOT here:
+     it only ever marks a request in flight, which 2.2.2 treats as essential
+     activity, and freezing it would leave a dead-looking control. */
+  .animate-pulse,
+  .animate-bounce,
+  .animate-ping,
+  /* Substring match, not `.animate-shimmer`: the only shipped use is
+     `group-hover:animate-shimmer` on EVERY Button, and Tailwind emits that as
+     the class `group-hover:animate-shimmer` — a different class name that a
+     bare `.animate-shimmer` selector never matches. */
+  [class*="animate-shimmer"] {
     animation: none !important;
   }
 
@@ -1980,8 +1837,12 @@ body.is-native .pt-hero {
   }
 }
 
-/* Shimmer animation for loading states */
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
-}
+/* `@keyframes shimmer` used to be duplicated here as 0% -100% → 100% 200%.
+   It was DEAD, and not for the obvious reason: raw CSS in this file normally
+   outranks the generated utilities, but `.animate-shimmer` ships only as
+   `group-hover:animate-shimmer` (Button), and Tailwind emits variant utilities
+   — and the keyframes they reference — at the very END of the sheet. So the
+   config's `shimmer` landed after this one and won. Removed 2026-08 so the
+   single surviving definition is the one that was already in effect;
+   tailwind.config.js owns shimmer because only the config can generate the
+   `group-hover:` variant. */

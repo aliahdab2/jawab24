@@ -32,9 +32,9 @@ export function SwipeableNotificationItem({
       foregroundClassName="bg-card"
       background={
         <SwipeBothSidesLabel
-          icon={<Check className="w-4 h-4 text-brand-600" />}
+          icon={<Check className="w-4 h-4 text-brand-700 dark:text-brand-400" />}
           label={t('markAsRead')}
-          className="bg-brand-50 text-brand-700"
+          className="bg-brand-50 text-brand-700 dark:text-brand-400"
         />
       }
     >

@@ -96,32 +96,23 @@ module.exports = {
         arabic: ['var(--font-cairo)', 'var(--font-tajawal)', 'sans-serif'],
         mono: ['var(--font-jetbrains-mono)', 'monospace'],
       },
+      // Animation utilities. A name defined as raw CSS in globals.css must NOT
+      // also appear here: the duplicate silently loses to the raw rule — or,
+      // for a variant-only utility, silently WINS, because Tailwind emits
+      // variants (and their keyframes) last. shimmer stays here because it is
+      // the only animation used with a variant prefix
+      // (`group-hover:animate-shimmer` on Button) and only the config can
+      // generate that. The float, fade-in and slide-up families live in
+      // globals.css. See CONVENTIONS.md.
       animation: {
-        'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.5s ease-out',
         'slide-in-right': 'slideInRight 0.3s ease-out',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
         'shimmer': 'shimmer 2s infinite linear',
-        'float': 'float 3s ease-in-out infinite',
-        'float-delayed': 'float 2.5s ease-in-out infinite 0.5s',
-        'float-slow': 'float 3.5s ease-in-out infinite 1s',
         'pulse-attention': 'pulseAttention 2s ease-in-out infinite',
       },
       keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-8px)' },
-        },
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
-        },
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideInRight: {
           '0%': { opacity: '0', transform: 'translateX(20px)' },

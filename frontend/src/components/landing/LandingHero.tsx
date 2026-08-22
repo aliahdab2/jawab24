@@ -196,13 +196,16 @@ const HERO_STEPS: [number, 'chat' | 'reset' | 'blank'][] = [
   [1400, 'chat'],  // 5: bot reply 2
   [2000, 'chat'],  // 6: hold
   [500, 'reset'],  // 7: fade out
-  [100, 'blank'],  // 8: blank → restart
+  // 250, not 100: `heroFadeSlide.exit` runs 180ms, so a shorter blank restarts
+  // the loop while the previous cycle's bubbles are still leaving — `hc1`
+  // re-mounts under the same key and the container snaps back to opacity 1
+  // (duration 0), making the half-exited bubbles visible under the new one.
+  [250, 'blank'],  // 8: blank → restart
 ];
 
 function HeroTypingDots() {
   return (
     <motion.div
-      key="hero-dots"
       variants={heroFadeSlide}
       initial="enter"
       animate="visible"
@@ -315,13 +318,18 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
           </AnimatePresence>
 
           {/* Phase 1→2: Typing dots → Bot reply 1 */}
-          <AnimatePresence mode="wait">
-            {phase === 1 && <HeroTypingDots />}
-            {show(2) && (
+          {/* One ternary, so only ONE child can ever exist here. Two sibling
+              conditionals gave AnimatePresence two slots, and `mode="wait"`
+              held the exiting dots mounted at slot 0 while mounting the reply
+              at slot 1 — both `justify-end`, so they stacked into one blob. */}
+          <AnimatePresence mode="wait" initial={false}>
+            {phase === 1 ? (
+              <HeroTypingDots key="dots-1" />
+            ) : show(2) ? (
               <motion.div key="hr1" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
                 <BotBubble text={t('hero.chatResponse')} />
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
 
           {/* Phase 3: Customer follow-up */}
@@ -334,13 +342,14 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
           </AnimatePresence>
 
           {/* Phase 4→5: Typing dots → Bot reply 2 */}
-          <AnimatePresence mode="wait">
-            {phase === 4 && <HeroTypingDots />}
-            {show(5) && (
+          <AnimatePresence mode="wait" initial={false}>
+            {phase === 4 ? (
+              <HeroTypingDots key="dots-2" />
+            ) : show(5) ? (
               <motion.div key="hr2" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
                 <BotBubble text={t('hero.chatResponse2')} />
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
         </motion.div>
       </div>
