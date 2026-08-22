@@ -2193,6 +2193,15 @@ const DEMO_SHOPIFY_PRODUCTS = [
         hasVariants: false,
         variantSummary: null,
         tags: 'AppleTV,بث,Apple',
+        // The ONLY demo product with an image, and deliberately so: a product
+        // card needs image + handle + stock, so this row is the one that lets a
+        // mention card actually be BUILT — and every other row is the control
+        // that proves the image gate still holds. Eval cases 786/787 (Cat 48)
+        // ride on exactly this asymmetry; giving the whole catalog images would
+        // make the negative case unable to fail. Synthetic like the rest of the
+        // demo store (`demo_page_*` is not a real Meta page, so nothing is ever
+        // sent to a platform and no image is ever fetched).
+        imageUrl: 'https://demo-electronics.myshopify.com/cdn/shop/products/apple-tv-4k.jpg',
     },
     {
         platformProductId: 'demo_prod_5',

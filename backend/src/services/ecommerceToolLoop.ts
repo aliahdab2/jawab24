@@ -167,10 +167,13 @@ export async function generateReplyWithTools(
         // card for the one product the reply names, if any.
         if (!data.toolCalls || data.toolCalls.length === 0) {
             const reply = data.reply || '';
-            const productCards = await buildProductCardsFromReplyText(storeId, reply);
+            // The card follows the reply into the same thread, so it carries the
+            // reply's OWN language — not the request hint, which may differ.
+            const language = data.language || request.language || 'en';
+            const productCards = await buildProductCardsFromReplyText(storeId, reply, language);
             return {
                 reply,
-                language: data.language || request.language || 'en',
+                language,
                 cached: false,
                 intent: data.intent,
                 confidence: data.confidence,
@@ -254,13 +257,14 @@ export async function generateReplyWithTools(
             // Final reply — attach product cards from any tool result that
             // referenced a product. When no tool carried product data (e.g. only
             // lookup_order ran), fall back to the one product the reply names.
-            const toolCards = await buildProductCardsFromToolResults(storeId, allToolResults);
+            const language = roundData.language || request.language || 'en';
+            const toolCards = await buildProductCardsFromToolResults(storeId, allToolResults, language);
             const productCards = toolCards.length
                 ? toolCards
-                : await buildProductCardsFromReplyText(storeId, roundData.reply);
+                : await buildProductCardsFromReplyText(storeId, roundData.reply, language);
             return {
                 reply: roundData.reply,
-                language: roundData.language || request.language || 'en',
+                language,
                 cached: false,
                 intent: roundData.intent,
                 confidence: roundData.confidence,

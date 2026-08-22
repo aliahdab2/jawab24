@@ -10,7 +10,7 @@ import { WORST_CASE_ENRICHMENT_MS, WORST_CASE_ENRICHMENT_WHATSAPP_MS } from '../
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { redis } from '../../lib/redis';
-import { filterRecentlySentCards } from './productCardBuilder';
+import { filterRecentlySentCards, markCardsSent } from './productCardBuilder';
 import * as typingIndicator from './typingIndicator';
 import { computeHumanDelayMs } from './humanDelay';
 import { Logger, noopLogger } from '../../types';
@@ -942,11 +942,24 @@ export class MessageProcessor {
             // send failure doesn't invalidate the text reply already delivered.
             // One card per product per customer per 24h — a conversation that keeps
             // naming the same product must not re-send its card on every turn.
-            const cardsToSend = productCards?.length
-                ? await filterRecentlySentCards(page.id, senderId, productCards)
-                : [];
-            if (cardsToSend.length && adapter.sendProductCards) {
-                adapter.sendProductCards(page, senderId, cardsToSend).catch((error) => {
+            //
+            // ⚠️ The cooldown lives INSIDE the fire-and-forget block, not in front
+            // of it. Nothing may be awaited between the reply that is already on
+            // the wire and the step 14-16 transaction below: an await here widens
+            // the window in which a crash leaves a DELIVERED reply unmarked, and
+            // the retry then sends it to the customer twice. This is the shared
+            // send path for every Facebook, Instagram and WhatsApp DM.
+            //
+            // The window is claimed only AFTER the platform accepts the cards —
+            // a failed send must not suppress the next turn's attempt for 24h.
+            if (productCards?.length && adapter.sendProductCards) {
+                const sendCards = adapter.sendProductCards.bind(adapter);
+                void (async () => {
+                    const cardsToSend = await filterRecentlySentCards(page.id, senderId, productCards);
+                    if (!cardsToSend.length) return;
+                    await sendCards(page, senderId, cardsToSend);
+                    await markCardsSent(page.id, senderId, cardsToSend);
+                })().catch((error) => {
                     this.logger.warn(`[${platform}] Product card send failed (reply already sent)`, {
                         error: String(error),
                         messageId: platformMessageId,

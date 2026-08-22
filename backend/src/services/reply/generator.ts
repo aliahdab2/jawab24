@@ -452,6 +452,11 @@ export interface PlaygroundResult {
     gapRecorded: boolean;
     /** See GenerateReplyResult.replyShortened — quiet badge signal, never an alarm. */
     replyShortened: boolean;
+    /** Rich cards the DM pipeline would send as a follow-up to this reply.
+     *  Surfaced so the eval can assert on them: a product card is part of what
+     *  the customer receives, and Rule 19 requires the eval to be able to see
+     *  every such change. Absent when the reply carries no card. */
+    productCards?: ProductCard[];
 }
 
 /** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
@@ -1048,6 +1053,7 @@ export class ReplyGenerator {
             model: aiResponse.model || null,
             gapRecorded,
             replyShortened,
+            ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
         };
     }
 

@@ -136,7 +136,7 @@ describe('generateReplyWithTools', () => {
 
         const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
 
-        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'تقدر تطلب كاميرا Sony A7S III من متجرنا');
+        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'تقدر تطلب كاميرا Sony A7S III من متجرنا', 'ar');
         expect(result.productCards).toEqual([card]);
         expect(mockCardsFromTools).not.toHaveBeenCalled();
     });
@@ -162,7 +162,7 @@ describe('generateReplyWithTools', () => {
         const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
 
         expect(mockCardsFromTools).toHaveBeenCalled();
-        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'طلبك يحتوي Sony A7S III');
+        expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'طلبك يحتوي Sony A7S III', 'ar');
         expect(result.productCards).toEqual([mention]);
     });
 
