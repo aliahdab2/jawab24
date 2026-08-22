@@ -36,12 +36,35 @@
 
 ## What's next (updated 2026-08-22)
 
-### 🟡 We are waiting on Zid, and the wait has gone quiet
+### 🔴 App 7367 is back in `Draft` — withdrawn deliberately on 2026-08-22
 
-**App 7367 is `In review` — not Rejected.** Read directly from
-`partner.zid.sa/applications` on **2026-08-22**: app 7367 "Jawab24", created 01/08/2026,
-type OAuth, 1 install, status **In review**. Everything below step 3 is now blocked on
-Zid, not on us.
+**Current status: `Draft`.** Earlier the same day it read `In review` (portal-verified:
+created 01/08/2026, type OAuth, 1 install). It was withdrawn on purpose via the
+`rollback-icon` on the app row — one click, **no confirmation dialog**, effective
+immediately. The Action column then swaps to Delete, and the wizard becomes editable.
+
+**Why it was withdrawn.** Zid's own lifecycle puts *"test your app in a development
+store"* at step 4, **before** publishing for review at step 5 — and we had never once
+installed 7367 on our dev store. With five predicted parser defects unresolved (see
+`zid-edge-case-audit.md`), the odds of passing a review that specifically rejected us for
+"full data integration" were poor, and a second rejection costs more than a voluntary
+withdrawal. Queue cost looked bounded: the app went `In review` on 08-09 and a reviewer
+touched it on 08-11, so the queue is ~2 days, not weeks.
+
+⛔ **The withdrawal did NOT achieve its purpose, and this is the finding that matters.**
+The whole point was to unblock installing on our dev store. `EC3` fires **exactly the same
+in `Draft` as it did in `In review`** — verified immediately after the withdrawal. So:
+
+> **`EC3` has nothing to do with the app's review state.** Both `In review` and `Draft`
+> produce an identical silent bounce to `dashboard.zid.sa/…?error_code=EC3`. Any future
+> theory about EC3 must explain why *neither* state is installable. Do not spend the
+> queue position on this hypothesis again — it is now falsified, not untested.
+
+The honest post-mortem: a cheap decisive test existed — create a throwaway app, leave it
+in `Draft`, and see whether its authorize URL reaches Zid's consent screen. That test
+needed no working backend and risked nothing. It was proposed and then skipped in favour
+of acting on the hypothesis directly. **Run the cheap falsifying test before spending
+something you cannot get back.**
 
 How it got here, from the Intercom thread with Zid partner support:
 

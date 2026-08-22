@@ -17,11 +17,16 @@
 > (`ZID_CLIENT_ID`=7192 verified live); `ZID_CLIENT_SECRET` remains the one unverified
 > value — §A-1 is what proves it.
 >
-> ✅ **Current status, portal-verified 2026-08-22: app 7367 is `In review`.** It was
-> flipped `Draft` → `In review` on 08-09; Zid's reviewer install on 08-11 hit an error on
-> our side that was fixed and deployed the same day; Zid said on 08-12 it would retest
-> shortly and the 08-18 follow-up is still unread. So the app is **installable by a
-> reviewer at any moment** — this plan is now waiting on Zid, not on a resubmission.
+> 🔴 **Current status, portal-verified 2026-08-22: app 7367 is `Draft`** — withdrawn
+> deliberately (rollback icon on the app row; one click, no confirmation). Earlier the
+> same day it was `In review`, flipped there on 08-09; Zid's reviewer install on 08-11 hit
+> an error on our side, fixed and deployed the same day; Zid said on 08-12 it would retest
+> shortly and the 08-18 follow-up went unread.
+>
+> ⛔ **The withdrawal did not unblock dev-store installs.** `EC3` fires identically in
+> `Draft` and in `In review` — so review state is **not** the cause, and that hypothesis
+> is falsified rather than untested. Resubmitting is via the wizard's **Request to
+> Publish** step → "Send for review".
 >
 > **Companion docs:** `docs/integrations/zid.md` (verified API contract + `[provisional]`
 > parser list), `SHOPIFY_TEST_PLAN.md` (same structure; shared-infrastructure cases mirror
@@ -53,7 +58,7 @@ surprise.
 | # | Item | How to verify | Status |
 |---|------|---------------|:--:|
 | P-1 | ⛔ **INVERTED 2026-08-11 — the agreement is NOT a precondition.** It is countersigned only AFTER Zid's technical review passes (Zid support, 08-08/09), so this run-book runs FIRST. Nothing here waits on partner.zid.sa. | Agreement state is an EXIT check in §K, not an entry one | n/a |
-| P-1b | App **7367 is `In review`** — flipped from `Draft` on 08-09 after Zid support pointed out it was sitting in Draft. ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you: it looked like "waiting on Zid" for days while the app was not in the queue at all. What put it back in Draft is NOT established — do not assume. Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 shows `In review` | ☑ verified 2026-08-22 |
+| P-1b | App **7367 is `Draft`** (withdrawn 2026-08-22). ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you — it can look like "waiting on Zid" for days. ⛔ But do NOT treat `Draft` as the thing standing between you and a dev-store install: `EC3` fires the same in both states. Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 | ☑ verified 2026-08-22 |
 | P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures). Store email **`qwhfqfihvm@zam-partner.email`** — ✅ confirmed to have NO existing Jawab24 account (2026-08-22), so §L's account-takeover guard will not fire and the auto-provision path is genuinely exercised. Re-check that before every §L run; if it ever has one, §L-1 fails for the WRONG reason. | `https://h47p59.zid.store/` renders the storefront publicly | ☑ 200, verified 2026-08-22 |
 | P-3 | **Dev-redirect strategy: DECIDED 2026-08-22 — run against PRODUCTION, change nothing in the portal.** App 7367 (Client ID 7192) already points at `https://jawab24.com/zid/auth/callback` and prod answers (see the revised warning below). While 7367 is `In review` this is the only route that cannot disturb the review, and it exercises exactly what the reviewer walks. The ngrok and dedicated-DEV-app options stay documented for when the app is not under review. **On the production route, P-4, P-5, P-6 and P-10 do not apply.** | Partner Dashboard → app → General Settings shows the prod callback | ☑ |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
