@@ -14,19 +14,23 @@
 > required standards. Key updates needed: • Direct merchant access (no sign-in prompt)
 > • Full data integration with Zid."* The first bullet is addressed by the Embedded Apps
 > work (§L below); the second needs §H billing plus a green §A–§F. Prod env vars ARE set
-> (`ZID_CLIENT_ID`=7192 verified live); `ZID_CLIENT_SECRET` remains the one unverified
-> value — §A-1 is what proves it.
+> (`ZID_CLIENT_ID`=7192 verified live); **`ZID_CLIENT_SECRET` is proven** — the 2026-08-22
+> install completed a token exchange and an authenticated profile call with it, so §A-1 has
+> nothing left to prove on that point.
 >
-> 🔴 **Current status, portal-verified 2026-08-22: app 7367 is `Draft`** — withdrawn
-> deliberately (rollback icon on the app row; one click, no confirmation). Earlier the
-> same day it was `In review`, flipped there on 08-09; Zid's reviewer install on 08-11 hit
-> an error on our side, fixed and deployed the same day; Zid said on 08-12 it would retest
-> shortly and the 08-18 follow-up went unread.
+> 🔴 **Current status: app 7367 is `Draft`** — withdrawn deliberately on 2026-08-22
+> (rollback icon on the app row; one click, no confirmation). Earlier the same day it was
+> `In review`, flipped there on 08-09; Zid's reviewer install on 08-11 hit an error on our
+> side, fixed and deployed the same day. Because it is Draft, **nobody is reviewing it and
+> the next move is entirely ours** — the wizard is editable, so listing fixes can land
+> before resubmitting. Resubmit via the wizard's **Request to Publish** → "Send for review".
 >
-> ⛔ **The withdrawal did not unblock dev-store installs.** `EC3` fires identically in
-> `Draft` and in `In review` — so review state is **not** the cause, and that hypothesis
-> is falsified rather than untested. Resubmitting is via the wizard's **Request to
-> Publish** step → "Send for review".
+> ✅ **`EC3` is SOLVED and the dev store is installed** (2026-08-22). The cause was never
+> the review state: `oauth/authorize` returns `EC3` until the store has **subscribed** to
+> the app in the App Market. Subscribe first (free «اختبار» plan → «تفعيل التطبيق»), and a
+> `Draft` app installs fine — 7367 did, creating store `e3deb6f2-…`. **This run-book is
+> therefore unblocked end to end**; §A–§F run against prod today. Full capture in
+> `docs/integrations/zid.md` → "EC3 — ACTUALLY SOLVED".
 >
 > **Companion docs:** `docs/integrations/zid.md` (verified API contract + `[provisional]`
 > parser list), `SHOPIFY_TEST_PLAN.md` (same structure; shared-infrastructure cases mirror
@@ -44,9 +48,13 @@ rename was wrong, the shipment event never fired on a status flip). Every Zid pa
 surprise.
 
 - Save **every raw webhook delivery** (headers + body, verbatim) and every notable API
-  response to `zid_live_payloads.jsonl` (same convention as
-  `memory/salla_phase42_real_payloads.jsonl`). The ngrok inspector
+  response to **`docs/testing/zid_live_payloads.jsonl`** (created 2026-08-22; same
+  convention as `memory/salla_phase42_real_payloads.jsonl`). The ngrok inspector
   (`http://127.0.0.1:4040`) records deliveries with headers — copy verbatim.
+  ⚠️ **What is in that file today is mostly DERIVED state** (resulting DB rows, job
+  results, counters), not raw envelopes — each line says so in `evidence_kind`. Derived
+  state proves the outcome; it does not pin the shape, which is what the `[provisional]`
+  parsers need. **The §E order captures must be saved verbatim**, headers and body.
 - Every capture ID below (**C1–C11**) must end up in that file. The fixture-finalization
   step (§K) consumes them one-to-one.
 - A test that "passes" without its capture saved is NOT passed.
@@ -58,9 +66,9 @@ surprise.
 | # | Item | How to verify | Status |
 |---|------|---------------|:--:|
 | P-1 | ⛔ **INVERTED 2026-08-11 — the agreement is NOT a precondition.** It is countersigned only AFTER Zid's technical review passes (Zid support, 08-08/09), so this run-book runs FIRST. Nothing here waits on partner.zid.sa. | Agreement state is an EXIT check in §K, not an entry one | n/a |
-| P-1b | App **7367 is `Draft`** (withdrawn 2026-08-22). ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you — it can look like "waiting on Zid" for days. ⛔ But do NOT treat `Draft` as the thing standing between you and a dev-store install: `EC3` fires the same in both states. Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 | ☑ verified 2026-08-22 |
-| P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures). Store email **`qwhfqfihvm@zam-partner.email`** — ✅ confirmed to have NO existing Jawab24 account (2026-08-22), so §L's account-takeover guard will not fire and the auto-provision path is genuinely exercised. Re-check that before every §L run; if it ever has one, §L-1 fails for the WRONG reason. | `https://h47p59.zid.store/` renders the storefront publicly | ☑ 200, verified 2026-08-22 |
-| P-3 | 🔴 **BLOCKED — no working dev-redirect strategy today.** The production route (app 7367 → `https://jawab24.com/zid/auth/callback`, prod answers with a correct 302) is the one that exercises what a reviewer walks, and it is the route to prefer *when it works*. It does not work right now: the install bounces at Zid with **`EC3`**, in `Draft` and `In review` alike, before reaching our code. Until EC3 is explained, §A–§I cannot run against 7367 at all. The dedicated-DEV-app + ngrok route (P-4/P-5/P-6/P-10) is the documented fallback, but it is **unproven against EC3** — a second app may bounce the same way, so probe it with a throwaway app before investing in the local setup. | `curl -sI https://jawab24.com/zid/auth` → 302 ✅, but completing it → `?error_code=EC3` ❌ | 🔴 |
+| P-1b | App **7367 is `Draft`** (withdrawn 2026-08-22). ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you — it can look like "waiting on Zid" for days. ⛔ But do NOT treat `Draft` as a blocker for dev-store installs either: a subscribed store installs a Draft app fine (EC3 is about subscription state, not review state). Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 | ☑ verified 2026-08-22 |
+| P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures). ⛔ **Store email `qwhfqfihvm@zam-partner.email` NOW HOLDS a Jawab24 account** — the 2026-08-22 install auto-provisioned it (user + workspace `5b1c323e-…`). The "no existing account" precondition this row used to assert is **spent**: a *repeat* L-1 on this store hits the account-takeover guard in `provisionEcommerceMerchantUser`, falls back to claim-after-login, and fails for the WRONG reason. A fresh L-1 needs a **second dev store** whose email has no account; the uninstall→reinstall path (F-2/F-3) exercises `reinstallPolicy:'reactivate-for-owner'` instead, which is L-2, not L-1. | `https://h47p59.zid.store/` renders the storefront publicly | ☑ 200, verified 2026-08-22 · ⚠️ email now claimed |
+| P-3 | ✅ **UNBLOCKED 2026-08-22 — the production route works.** App 7367 → `https://jawab24.com/zid/auth/callback` is the route a reviewer walks and the route we now use. `EC3` was never about the app's review state: `oauth/authorize` rejects a store that has not **subscribed** to the app. Enter from the App Market (old dashboard → app page → الأسعار والخطط → free «اختبار» plan → «تفعيل التطبيق»), and the consent screen renders normally. ⚠️ Consequence for our own entry point: `/zid/auth` is only valid as a **re-entry** for an already-subscribed store — never as a first install. The dedicated-DEV-app + ngrok route (P-4/P-5/P-6/P-10) is now only needed for cases that require intercepting deliveries locally (F-1, and any capture the prod path cannot show). | App-Market install completed; store `e3deb6f2-…` created | ✅ |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
 | P-5 | ai-worker running — the KB-enrichment reply and agent-tool cases need it. Default port **3002** (`ai-worker/src/config.ts`); if you run it on 3005 per the worktree convention, you MUST also set `AI_SERVICE_URL=http://localhost:3005` on the backend or every reply dies `AiWorkerUnreachable` | `curl http://localhost:3002/health` (or 3005 + matching `AI_SERVICE_URL`) | ☐ |
 | P-6 | ngrok tunnel to the backend; inspector open at `127.0.0.1:4040` | `https://<ngrok>/health` OK | ☐ |
@@ -83,7 +91,8 @@ surprise.
 > reviewer installs during your tunnel window they reach your laptop or a dead URL, costing
 > a second review round. The ngrok route (P-3/P-6/P-10) is for when the app is NOT under
 > review. ⛔ **This is not a reason to withdraw the app in order to test** — that was tried
-> on 2026-08-22 and `EC3` was unaffected.
+> on 2026-08-22 and `EC3` was unaffected. What *did* unblock it was subscribing the store to
+> the app first; the withdrawal bought nothing and cost the queue position.
 >
 > ⚠️ **If a production-route install fails halfway, it leaves an orphan account that will
 > block the reviewer's install** (same failure mode as 08-11 — see R-4 in
@@ -103,15 +112,30 @@ surprise.
 > previous value was four invented names.
 
 **Still-open questions this plan must answer from captures** (from
-`docs/integrations/zid.md`): whether
-`ZID_APP_ID` (webhook `original_id`) is the app id **7367** or the Client ID **7192**;
-what auth `app.market.*` lifecycle deliveries carry.
+`docs/integrations/zid.md`):
+
+- ✅ **RESOLVED 2026-08-22 — `ZID_APP_ID` is the app id `7367`, not the Client ID `7192`.**
+  Prod runs `ZID_APP_ID=7367` (`ZID_CLIENT_ID=7192`), `registerWebhooks` sends it as
+  `original_id` (`zid.ts:227`), and the live store's `platform_data->>'webhookStatus'` reads
+  **6 registered / 0 failed** (`lastAttempt` 2026-08-22T09:23:52Z). Zid accepted 7367.
+  ⚠️ Scope of the proof: this settles the **webhook** half only. The same value is also read
+  as `app_id` on the billing subscription (§H) — unproven until a subscription envelope lands.
+- ☐ What auth `app.market.*` lifecycle deliveries carry (F-2 / C11) — still open.
 
 ---
 
 ## A. OAuth Connect Loop (captures C1–C3)
 
-### A-1. Logged-in connect (integrations page)
+### A-1. Logged-in connect (integrations page) — 🟡 the App-Market equivalent is PROVEN LIVE
+> ✅ **Proven 2026-08-22 via the App-Market install** (the route a real merchant and a
+> reviewer take), not via the logged-in integrations card: store `e3deb6f2-…` was created
+> with both credentials encrypted, `platform_data->>'merchantId' = 3195980`,
+> `store_domain = h47p59.zid.store`, **webhookStatus 6 registered / 0 failed**, and the
+> product sync ran (`product_count = 4`). `ZID_CLIENT_SECRET` is proven by the same run.
+> ☐ **Still owed:** the raw C1/C2/C3 bodies (this row's evidence is the resulting DB state,
+> not the envelopes), and the logged-in-from-our-side variant, which is a different entry
+> point (`POST /zid/store/connect`) and is what a *merchant already using Jawab24* walks.
+
 **Steps:** `/en/integrations` → Connect on the Zid card (`POST /zid/store/connect` →
 authorize redirect) → approve on Zid → land back via `GET /zid/auth/callback`.
 
@@ -162,7 +186,16 @@ name+description · HTML-rich description · variants/options · an out-of-stock
 a draft/unpublished item · a `sale_price` item · **>100 products if feasible** (pins
 pagination at the `page_size` boundary; cap check against shared `PRODUCT_SAFETY_CAP`).
 
-### B-1. Full sync
+### B-1. Full sync — ✅ PROVEN LIVE 2026-08-22
+> ✅ A full sync of dev store 3195980 returned `{"synced":4,"capped":false}` and all four
+> published products landed in `ecommerce_products` — **Zid product sync had never once
+> worked, for any store, before this** (the cause was a missing `Store-Id` header, #865).
+> The hidden fifth product was correctly absent (F2) and «نظارة شمسية» landed at its
+> `250 SAR` sale price, not the 400 SAR list price (F4). The same sync reproduced **F1**
+> (`Sony A7S III → total_inventory 0` for an unlimited item), fixed and re-proven the same
+> day. Re-confirmed 2026-08-22 19:25 UTC by a fresh `full_sync` (4 products, 4 chunks).
+> ☐ **Still owed:** the >100-product pagination case from B-0, and the raw C4 envelope.
+
 **Steps:** `POST /zid/store/sync` (or wait for the post-connect sync).
 
 **Expected:**
@@ -199,10 +232,17 @@ the product-event envelope capture.
 Mirrors `SHOPIFY_TEST_PLAN.md` §C (link/unlink/multi-page/cross-workspace-rejection) —
 same shared routes, so run the happy path plus the security case:
 
-- **C-1.** Link the FB test page to the Zid store → `pages.ecommerce_store_id` set.
-- **C-2.** Cross-workspace link attempt via forged workspace header → 403/404.
-- **C-3.** Real DM to the linked page asking about a seeded product (Arabic) → reply
-  cites the real Zid product/price; `dir`/language correct.
+- **C-1.** ✅ **PROVEN LIVE 2026-08-22.** FB page "Jawab24 Test" (`d88d7c02-…`) carries
+  `ecommerce_store_id = e3deb6f2-…`; its RAG index holds the store's product chunks.
+- **C-2.** ☐ Cross-workspace link attempt via forged workspace header → 403/404.
+- **C-3.** ✅ **PROVEN LIVE 2026-08-22** — real Messenger DMs to the linked page:
+  Sony AR+EN → «متوفرة» (F1 answered correctly in a real DM) · «اديش سعرها» → 10000
+  (dialect + context carried) · نظارة → 250 + «نفدت» · a hidden product → «ما عندي معلومة»
+  (no fabrication) · purchase turn → correct product link + lead ask.
+  ⚠️ The first DM got **no reply**: the auto-provisioned workspace is seeded
+  `messagesAutoReply:false` on purpose (**D-025**), which every Zid/Salla/Shopify
+  auto-provisioned account inherits. Check that first when a new store's page is silent —
+  it is not a bug. Enabling it from inside the Zid iframe also exercised §L-3/§L-4.
 
 ---
 
@@ -308,7 +348,7 @@ webhooks re-registered 6/6.
 
 ---
 
-## H. Billing — Zid App Market subscriptions (rail SHIPPED; live validation blocked on EC3)
+## H. Billing — Zid App Market subscriptions (rail SHIPPED; live validation blocked on PAID CHECKOUT)
 
 > ✅ **The Zid billing PR exists.** `services/zidBilling.ts` + `config/zidBilling.ts`,
 > migration 0161 (`subscriptions.zid_store_id` + partial unique index + CHECK), the
@@ -325,11 +365,20 @@ webhooks re-registered 6/6.
 > most a six-hour delay, healed by the reconciler — and means an uncaptured envelope
 > cannot write wrong billing state, because nothing is read out of it.
 >
-> ⛔ **Still not captured against a live store, and still blocked by `EC3`.** Verified
-> 2026-08-22: the install bounces at Zid with `error_code=EC3` before reaching our code, in
-> `Draft` and `In review` alike — so review state is not the cause and withdrawing the app
-> does not unblock it. Until EC3 is explained, the only way this section gets a live
-> capture is a Zid-side reviewer install.
+> ⛔ **Still not captured against a live store — but NOT because of `EC3`, which is solved
+> (see the header).** The install works and the store is subscribed to the FREE «اختبار»
+> plan. What refuses is **paid checkout while the app is `Draft`**: Zid answers
+> «تعذر بدء عملية الشراء — هذا التطبيق غير متاح للشراء حاليًا». So the blocker is narrow and
+> named: *a Draft app cannot sell a paid plan*. Consequences to plan around:
+> - The **first live paid-subscription envelope will most likely be produced by Zid's own
+>   reviewer**, i.e. after resubmission — precisely when a parse failure is most expensive.
+>   D-070 is what makes that survivable: nothing is read out of the envelope, the API is the
+>   authority, so an unrecognised delivery costs at most a six-hour reconcile delay.
+> - Watch Sentry `zid-billing-unreadable-response` and `unknown_status` the day after any
+>   resubmission — that is the window in which this section finally gets its capture.
+> - The free-plan subscribe DID work, so the install/subscribe half of H-1 is exercised;
+>   only the paid half is blocked.
+>
 > H-1…H-9 below are covered at the UNIT level by
 > `backend/test/services/zidBilling.test.ts` (40 cases) and
 > `backend/test/controllers/zid.test.ts` (webhook wiring) against an envelope inferred
@@ -458,7 +507,7 @@ If throttling appears, verify the sync retries rather than truncating (the old s
 > browser profile.** A stray session silently routes you down the logged-in path and the
 > whole section passes for the wrong reason. Use a fresh private window per case.
 
-### Status — 11 of 17 pinned (2026-08-22)
+### Status — 13 of 17 covered (6 live, 7 pinned) · 2026-08-22
 
 Bullet 1 of the rejection is the one §L answers, so it is worth being precise about what
 "done" means per case. Three states, and they are **not** interchangeable:
@@ -471,6 +520,8 @@ Bullet 1 of the rejection is the one §L answers, so it is worth being precise a
 
 | Case | State | Evidence |
 |---|---|---|
+| L-1 | ✅ live | The 2026-08-22 App-Market install auto-provisioned user `4cfe23d4-…` from the store profile and landed on `dashboard.zid.sa/…/apps/7367/embedded` with **no login page**. ⭐ The logged-out precondition is proven by the code, not by memory: `provisionMerchant` is reachable **only** from the `else` branch of `if (userId)` (`ecommerceControllers.ts:219`, `:263`), so an auto-provisioned user could not exist had a session been present. ☐ C12 (the raw redirect chain) still owed |
+| L-2 | ✅ live | Prod rows, read 2026-08-22: user `4cfe23d4-…` email = the store email, `facebook_id` NULL, `phone` NULL, created 09:23:52.217; owns workspace `5b1c323e-…` "Jawab24 Dev"; subscription row created 09:23:52.230 — 13 ms later, same provisioning path. (It now reads `manual`/`active` to 2026-09-22 because the owner set it so afterwards; `zid_store_id` is empty, consistent with §H never having run) |
 | L-3, L-4 | ✅ live | Rendered + navigated inside the Zid dashboard iframe, authenticated, no sign-in prompt (2026-08-22) |
 | L-5 | ✅ live | `POST /api/zid/embedded/session` → **200** five times at ~15-min idle in the nginx log; never a `/login` redirect |
 | L-10 | ✅ live | `curl -sI`: no `X-Frame-Options`; `frame-ancestors 'self' https://dashboard.zid.sa https://web.zid.sa`; no `zid.dev`. Re-checked on `/`, `/pricing`, `/dashboard` (the header is global — a CSP typo would drop clickjacking protection fleet-wide) |
@@ -479,11 +530,16 @@ Bullet 1 of the rejection is the one §L answers, so it is worth being precise a
 | L-11 | 🧪 pinned | `test/middleware/workspace.test.ts` (pins to the token workspace, rejects a different `X-Workspace-Id`, refuses rather than fall back when membership is lost) + `test/middleware/authRequireAdmin.test.ts` — *"rejects an embedded session outright, before the isAdmin check"*, so admin denial does not depend on `isAdmin` being right |
 | L-16 | 🧪 pinned | `test/controllers/auth.browser-handoff.test.ts` — the code carries the caller scope, the exchanged token is *still* scoped, **no refresh cookie is issued**, and a pre-existing one is **cleared** (not issuing is not enough) |
 | L-17 | 🧪 pinned | `test/controllers/whatsapp-redirect.test.ts` — *"REFUSES a code minted by a restricted embedded session — no full session, no WhatsApp credentials"* |
-| L-1, L-2, L-6, L-9, L-14, L-15 | ☐ owed | All need a **fresh logged-out install** or an uninstall→reinstall of the live app. L-1/L-2 are the exact scenario Zid rejected us on, so they cannot be substituted with a test |
+| L-6, L-9, L-14, L-15 | ☐ owed | L-6 needs an uninstall→reinstall (F-2/F-3 produces it). L-9 (takeover guard) needs a store email that already has an account — ⚠️ **this dev store now qualifies by accident**, since its email was auto-provisioned on 08-22, so L-9 is newly cheap and L-1 is no longer repeatable here. L-14 (pending-invite) and L-15 (no-pages break-out) need a freshly provisioned merchant |
 
 ⚠️ **A pinned case is not a passed case for submission purposes.** The tests prove the logic
-cannot regress; they do not prove Zid's reviewer walks the flow successfully. §L is green for
-the gate only once L-1/L-2 have been run live.
+cannot regress; they do not prove Zid's reviewer walks the flow successfully.
+
+**§L is now green for the rejection bullet it answers**: L-1 and L-2 — the exact scenario Zid
+rejected us on — ran live on 2026-08-22, alongside L-3/L-4/L-5/L-10/L-12. The four owed cases
+are hardening (reinstall, takeover, invite, no-pages), not the rejection itself. ⚠️ What §L
+being green does NOT do is make the app resubmittable: §E/§F are still at zero and the listing
+assets are still Salla's. Do not read this heading as "ready".
 
 | ID | Test | Expected | Capture |
 |----|------|----------|:--:|
@@ -518,7 +574,8 @@ domain-wide is a change every response carries. Before publish, confirm on PROD 
 > the scope, so the frame could redeem a full, admin-capable session. See L-16/L-17.
 >
 > **Still required before resubmitting app 7367:** §A–§F live plus the §H billing
-> scenario. Do not resubmit on the embedded flow alone.
+> scenario. Do not resubmit on the embedded flow alone. ✅ §L itself is green as of
+> 2026-08-22 (L-1/L-2 ran live) — that closes bullet 1 and *only* bullet 1.
 
 ---
 
@@ -554,6 +611,18 @@ scenarios and features sync") + the listing gaps closed (5–12 min video, Arabi
 screenshots, activation steps in the description, in-app support channel with a stated
 response time, test-account credentials).
 
+**Where that gate actually stands (2026-08-22):**
+
+| Gate term | State | What is left |
+|---|---|---|
+| §L — bullet 1 | ✅ **green** | L-1/L-2 (the rejected scenario) + L-3/L-4/L-5/L-10/L-12 live; 7 pinned. L-6/L-9/L-14/L-15 are hardening |
+| §A–§F — bullet 3 | 🔴 **§E 0/6, §F 0/3** | **No order has ever been placed on the dev store.** One real order unblocks §E, §D's order tools, C5–C8, and (via F-2/F-3) L-6 |
+| §H — bullet 2 | 🔴 **0/11 live** | Paid checkout refuses while the app is `Draft`. Expect the reviewer to produce the first paid envelope |
+| Listing | 🔴 **all five open** | Gallery is still the **Salla** screenshots; no video, no reviewer credentials, no activation steps, no support SLA. The video is the longest-lead item and also clears Salla's blocker |
+
+⛔ **Read this honestly: one owner action — placing a single real order — is worth more to
+this gate than any amount of further code work.** Nothing in §A–§F can be closed by a test.
+
 **Effort estimate:** 1–2 focused sessions for §A–§F (Salla's equivalent took one
 evening); §L ~half a session; §I adds ~half a session.
 
@@ -574,3 +643,17 @@ code change before publish.
   08-08/09); the old header stalled this run-book for eight days. Records the 08-10
   rejection and its stated reasons, adds **§L** (direct merchant access / Embedded Apps,
   C12–C15) and a resubmission gate, and closes the scope-strings open question.
+- 2026-08-22 (a): §L coverage map added — the three states (live / pinned / owed), so
+  "11 of 17" could not be misread as "11 passed".
+- 2026-08-22 (b): **`EC3` solved and the header un-blocked.** The cause is subscription
+  state, never review state: subscribe the store to the app first and a `Draft` app
+  installs. P-3 flips 🔴 → ✅, the §H blocker is renamed to what it really is (paid
+  checkout refuses for a Draft app), and the `ZID_CLIENT_SECRET`-unverified claim is
+  retired. **L-1 and L-2 marked live** — with the logged-out precondition proven from
+  `ecommerceControllers.ts:219/:263` rather than from recollection — taking §L to 13 of 17
+  (6 live, 7 pinned) and closing rejection bullet 1. A-1/B-1/C-1/C-3 marked with the live
+  evidence they already had. **`ZID_APP_ID` resolved to 7367** by a 6/6 live webhook
+  registration. P-2's "this email has no Jawab24 account" precondition marked **spent** —
+  the install claimed it, so a repeat L-1 here would fail for the wrong reason (and L-9
+  became cheap by the same accident). Exit gates now carry a per-term state table whose
+  honest reading is that one owner action — a single real order — outweighs further code.
