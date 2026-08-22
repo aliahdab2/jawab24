@@ -11,32 +11,34 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, helperText, className, id, dir = 'auto', value, ...props }, ref) => {
     const generatedId = useId();
     const textareaId = id || generatedId;
-    // When dir is "auto" and value is empty, inherit direction from parent
-    // so placeholder text aligns correctly in RTL mode
-    const effectiveDir = dir === 'auto' && !value ? undefined : dir;
+    const messageId = `${textareaId}-message`;
 
     return (
       <div className="w-full">
         {label && (
           <label htmlFor={textareaId} className="label">{label}</label>
         )}
+        {/* See Input.tsx — `dir` is passed through; empty-field direction is
+            handled once in globals.css, not per component. */}
         <textarea
           ref={ref}
           id={textareaId}
-          dir={effectiveDir}
+          dir={dir}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || helperText ? messageId : undefined}
           className={clsx(
             'input min-h-[100px] resize-y',
-            error && 'border-red-500 focus:ring-red-500',
+            error && 'danger-input',
             className
           )}
           value={value}
           {...props}
         />
         {error && (
-          <p className="mt-1.5 text-sm text-red-500">{error}</p>
+          <p id={messageId} role="alert" className="mt-1.5 text-sm text-destructive">{error}</p>
         )}
         {helperText && !error && (
-          <p className="mt-1.5 text-sm text-surface-500">{helperText}</p>
+          <p id={messageId} className="mt-1.5 text-sm text-muted-foreground">{helperText}</p>
         )}
       </div>
     );
@@ -44,4 +46,3 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
 );
 
 Textarea.displayName = 'Textarea';
-
