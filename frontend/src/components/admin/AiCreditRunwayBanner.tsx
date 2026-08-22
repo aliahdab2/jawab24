@@ -17,11 +17,11 @@ export function AiCreditRunwayBanner({ runway }: { runway: AdminAiRunway }) {
 
     const critical = runway.severity === 'critical';
     const palette = critical
-        ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
-        : 'bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60';
+        ? 'alert-critical'
+        : 'alert-warning-banner';
     const iconBg = critical
-        ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
-        : 'bg-amber-200/50 text-amber-700 dark:bg-amber-800/40 dark:text-amber-400';
+        ? 'icon-bg-critical'
+        : 'icon-bg-warning-banner';
 
     const title = runway.currentlyParking
         ? t('aiCost.runwayParkingTitle')

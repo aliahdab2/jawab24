@@ -727,6 +727,10 @@ Rules:
 4. **Every `status-*` class should be reachable through its component.** `Badge`
    had no way to render `status-info`, `status-violet` or `status-orange`, and
    its `info` variant pointed at `status-brand`.
+5. **One family per job.** `.badge-success/-warning/-error/-info` was a parallel
+   family to `.status-*` — with `.badge-info` *teal* where `.status-info` is
+   *blue* — and had zero call sites, so Tailwind had been purging it from every
+   build. Removed 2026-08. Do not add a second family for a job one already does.
 
 #### Animations: one definition per name, and reduced motion must reach it
 
@@ -757,6 +761,44 @@ deliberate exception: it marks a request in flight, which 2.2.2 treats as
 essential activity.
 
 Pinned by `frontend/src/__tests__/styles/animationVocabulary.test.ts`.
+
+#### A semantic class owns its hue alone — `jawab24/no-mixed-semantic-palette`
+
+Enforced by ESLint (`frontend/eslint-rules/`, run in `npm run lint` and therefore
+in the deploy gate). The rule is deliberately **narrow**: it flags a semantic
+design-system class (`status-*`, `alert-*`, `icon-bg-*`, `notif-*`) sitting
+beside a raw Tailwind palette utility (`bg-red-50`, `dark:text-amber-300`, …)
+in the **same class string, `clsx()` call, ternary, or style object**. Nothing
+else.
+
+Why that shape and not "no raw colors": a blanket rule would have fired on
+~240 existing lines (`blog/[slug].tsx` alone has 52 `rose-*` sites) and been
+disabled within a week. The defect that actually shipped was narrower — a
+**half-migrated** row, where the ring was `notif-ring-amber` but the background
+beside it was hand-typed `bg-orange-50`. Two sources of truth for one hue is
+exactly how `stale_message` rendered orange while `stale_comment` stayed amber.
+Co-location is the one shape with no legitimate reading.
+
+What it does NOT flag, by construction rather than by allow-list:
+
+- a private colour map with no semantic class in it (leads `StatusControl`)
+- the Instagram brand gradient (`from-purple-500 to-pink-500` — gradient stops
+  are identity, not a status hue)
+- `SmartStatusBanner`'s rose utilities — no semantic class beside them, and it
+  sits on `.card` where utilities are needed to win on specificity
+- `landing-section-dark`'s token overrides (CSS, not class strings)
+
+When it fires, the fix is never to delete the semantic class: give the hue a
+class of its own. That is how the three banner states became `alert-critical`
+(rose, stopped), `alert-on-topup` (sky, calm) and `alert-warning-banner` (amber
+that stays amber in dark — *not* `.alert-usage-warning`, which flips to violet
+for a recorded reason). Its own tests live beside it: `npm run lint:rules`.
+
+**Notification avatars** follow the same principle one level up: a type names a
+`NotificationHue`, and `.notif-<hue>` in `globals.css` owns background, ring and
+icon colour together. The class names are spelled out as **literals** in
+`notificationUtils.ts` — a template literal (`notif-${hue}`) makes Tailwind purge
+every hue it cannot read verbatim, which a first cut of this did.
 
 #### Amber vs orange — which warning hue
 

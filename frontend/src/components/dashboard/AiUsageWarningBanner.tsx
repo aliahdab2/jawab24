@@ -210,20 +210,21 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
         }
         : undefined;
 
-    // Both warning states (approaching the wall, and running on a nearly-drained
-    // balance) fall through to amber in light / soft violet in dark — see the
-    // `.alert-usage-warning` / `.icon-bg-usage-warning` classes in globals.css.
-    // Only `onTopup` earns the calm sky palette.
+    // Three states, three semantic pairs in globals.css: stopped → rose
+    // (`alert-critical`), on top-up → calm sky (`alert-on-topup`), and both
+    // warning states (approaching the wall, nearly-drained balance) → amber in
+    // light / soft violet in dark (`alert-usage-warning`). No raw palette
+    // here: a hue lives in ONE place, and the lint rule holds that line.
     const palette = isStopped
-        ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
+        ? 'alert-critical'
         : onTopup
-            ? 'bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60'
+            ? 'alert-on-topup'
             : 'alert-usage-warning';
 
     const iconBg = isStopped
-        ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
+        ? 'icon-bg-critical'
         : onTopup
-            ? 'bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400'
+            ? 'icon-bg-on-topup'
             : 'icon-bg-usage-warning';
 
     const StateIcon = onTopup ? Sparkles : AlertTriangle;

@@ -23,7 +23,9 @@ import {
  *
  * Mutation check: revert any fix in the design-system-cleanup commit — e.g. put
  * `bg-surface-200 text-white` back on the tooltips, or drop the `dark:` half of
- * `.badge-info` — and the first test fails naming that file and line.
+ * `.nav-tooltip` — and the first test fails naming that file and line.
+ * (An earlier version named `.badge-info` here; that class turned out to have
+ * no call sites and was removed, so it could never have shipped either way.)
  */
 describe('scale tokens are never paired with a foreground that does not flip', () => {
   it('has no pairing that passes in one theme and fails in the other', () => {

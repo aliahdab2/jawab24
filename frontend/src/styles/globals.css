@@ -462,21 +462,12 @@
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
 
-  .badge-success {
-    @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
-  }
-
-  .badge-warning {
-    @apply badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
-  }
-
-  .badge-error {
-    @apply badge bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
-  }
-
-  .badge-info {
-    @apply badge bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400;
-  }
+  /* `.badge-success/-warning/-error/-info` were removed 2026-08. They had ZERO
+     call sites, so Tailwind had been purging them from every production build
+     — and they were a parallel family to `.status-*` for the same job, with
+     `.badge-info` teal where `.status-info` is blue. A chip's color must not
+     depend on which of two families the author happened to reach for. Use
+     `.status-*` (or the <Badge> component, which maps one variant per class). */
 
   /* ═══════════════════════════════════════════════════════════════════
      SEMANTIC COLOR CLASSES — Single source of truth for themed colors
@@ -635,6 +626,54 @@
     color: rgb(196, 181, 253);
   }
 
+  /* Critical / stopped banner — ROSE, not .alert-error's red, on purpose.
+     SmartStatusBanner earned this palette over three commits: amber clashed
+     with the dark teal theme (f0c607a7), and the dark background was then
+     tuned twice — softened to rose-900/50, then made OPAQUE again because the
+     translucent version let SwipeDismissWrapper's green check indicators bleed
+     through the card (02582075). `.alert-error` is dark:bg-red-900/30, MORE
+     translucent than the 50% that already produced that visible bug, so
+     migrating onto it would reintroduce a defect with a named precedent.
+     AiUsageWarningBanner and AiCreditRunwayBanner were byte-identical copies of
+     the treatment; they now share it here. SmartStatusBanner itself keeps its
+     inline utilities — it sits on `.card` and needs them to win on specificity,
+     not source order (see its own comment). Pair with `border` + `border-s-4`. */
+  .alert-critical {
+    @apply bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500
+           dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60;
+  }
+  .icon-bg-critical {
+    @apply bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400;
+  }
+
+  /* "On top-up" banner — SKY, the calm state. Introduced in 1291a7af as a
+     deliberate contrast to the red "limit reached" wall: the merchant's replies
+     are still flowing from a top-up balance and must not be told otherwise.
+     Sky is also the Post Reply identity hue (utils/postReply.ts); that is a
+     coincidence of palette, not a shared meaning, so each keeps its own class.
+     Pair with `border` + `border-s-4`. */
+  .alert-on-topup {
+    @apply bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500
+           dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60;
+  }
+  .icon-bg-on-topup {
+    @apply bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400;
+  }
+
+  /* Warning banner that STAYS amber in dark. This is not `.alert-usage-warning`
+     (amber→violet, because amber went muddy against the navy dashboard) and
+     not `.alert-warning` (32 call sites, no accent stripe). The admin AI-cost
+     runway banner lives on a plain admin surface with no navy clash, pairs its
+     palette with `border-s-4`, and was written once on purpose (f4ae9911).
+     11.71:1 dark / 8.75:1 light. Pair with `border` + `border-s-4`. */
+  .alert-warning-banner {
+    @apply bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500
+           dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60;
+  }
+  .icon-bg-warning-banner {
+    @apply bg-amber-200/50 text-amber-700 dark:bg-amber-800/40 dark:text-amber-400;
+  }
+
   /* --- Connectivity bar (native only; full-bleed, not a badge) ---
      A dark bar with white text in BOTH themes. It cannot use a bare
      `bg-surface-800`: the surface scale INVERTS in dark mode
@@ -693,25 +732,26 @@
            dark:border-red-800 dark:focus:border-red-400 dark:focus:ring-red-400;
   }
 
-  /* --- Notification ring colors --- */
-  .notif-ring-amber {
-    @apply ring-amber-200/60 dark:ring-amber-700/60;
-  }
-  .notif-ring-blue {
-    @apply ring-blue-200/60 dark:ring-blue-700/60;
-  }
-  .notif-ring-red {
-    @apply ring-red-200/60 dark:ring-red-700/60;
-  }
-  .notif-ring-orange {
-    @apply ring-orange-200/60 dark:ring-orange-700/60;
-  }
-  .notif-ring-emerald {
-    @apply ring-emerald-200/60 dark:ring-emerald-700/60;
-  }
-  .notif-ring-slate {
-    @apply ring-slate-200/60 dark:ring-slate-700/60;
-  }
+  /* --- Notification avatar hues ---
+     One class per hue carrying ALL THREE declarations the avatar needs: the
+     tile background, the 1px ring, and the icon color (via `color`, which the
+     icon inherits as currentColor). Until 2026-08 only the ring was semantic;
+     the background and icon color were raw Tailwind strings hand-copied per
+     notification type in notificationUtils.ts — three values to keep in step
+     on every row, and the same state could silently end up two colors. Now a
+     type names a hue, and the hue is defined once, here. Pair with `ring-1`.
+     The hue MEANINGS (amber = operational, orange = commercial, …) are in
+     CONVENTIONS.md. */
+  .notif-amber   { @apply bg-amber-50   text-amber-600   ring-amber-200/60   dark:bg-amber-900/30   dark:text-amber-400   dark:ring-amber-700/60; }
+  .notif-blue    { @apply bg-blue-50    text-blue-600    ring-blue-200/60    dark:bg-blue-900/30    dark:text-blue-400    dark:ring-blue-700/60; }
+  .notif-red     { @apply bg-red-50     text-red-600     ring-red-200/60     dark:bg-red-900/30     dark:text-red-400     dark:ring-red-700/60; }
+  .notif-orange  { @apply bg-orange-50  text-orange-600  ring-orange-200/60  dark:bg-orange-900/30  dark:text-orange-400  dark:ring-orange-700/60; }
+  .notif-emerald { @apply bg-emerald-50 text-emerald-600 ring-emerald-200/60 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-700/60; }
+  .notif-slate   { @apply bg-slate-100  text-slate-600   ring-slate-200/60   dark:bg-slate-900/30   dark:text-slate-400   dark:ring-slate-700/60; }
+  /* Fallback for an unknown type. The brand tile had no dark: half at all —
+     brand-50 text-brand-600 is 3.53:1 in light and, because the brand scale
+     inverts, the same string is fine in dark only by accident. Pinned now. */
+  .notif-brand   { @apply bg-brand-50   text-brand-600   ring-brand-200/60   dark:bg-brand-900/30   dark:text-brand-400   dark:ring-brand-700/60; }
 
   /* --- Reply source indicators --- */
   .reply-source-ai {

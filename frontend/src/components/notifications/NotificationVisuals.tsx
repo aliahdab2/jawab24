@@ -27,12 +27,13 @@ export function NotificationAvatar({ style, muted }: { style: NotificationStyle;
         <div
             className={clsx(
                 'w-10 h-10 rounded-xl ring-1 flex items-center justify-center flex-shrink-0',
-                style.bgColor,
-                style.ringColor,
+                // One class: background, ring and icon color (inherited as
+                // currentColor) all come from the hue. See NotificationHue.
+                style.className,
                 muted && 'opacity-50',
             )}
         >
-            <Icon className={clsx('w-5 h-5', style.iconColor)} aria-hidden="true" />
+            <Icon className="w-5 h-5" aria-hidden="true" />
         </div>
     );
 }
