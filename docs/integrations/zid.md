@@ -66,51 +66,60 @@ needed no working backend and risked nothing. It was proposed and then skipped i
 of acting on the hypothesis directly. **Run the cheap falsifying test before spending
 something you cannot get back.**
 
-### ✅ EC3 — SOLVED 2026-08-22: an unpublished app has no App Market page, so no store can install it
+### ✅ EC3 — ACTUALLY SOLVED 2026-08-22: the store must SUBSCRIBE to the app before OAuth; a Draft app IS installable
 
-**The cause.** App 7367 is not published, so it has **no App Market listing**, so no store —
-development stores included — can install it. `EC3` is what Zid returns when the authorize
-call names an app the store cannot install.
+⛔ **This section was wrong twice before. The install works.** An earlier version of this
+same section claimed "an unpublished app has no App Market page, so no store can install
+it." That was **falsified by direct evidence**: app 7367, while in `Draft`, was installed
+on dev store 3195980 and created a real `ecommerce_stores` row. Do not trust the struck
+reasoning below it — trust this.
 
-Verified in the **old** dashboard (`web.zid.sa/market`, reachable from the new dashboard via
-"Return to Old Dashboard" → the feedback prompt → Skip; the session carries over, no login),
-with a published app as the control:
+**The real cause of `EC3`: the store has no subscription record for the app yet.** Zid's
+`oauth/authorize` endpoint returns `EC3` when a store hits it for an app it has not first
+*subscribed* to. Our `/zid/auth` entry point jumps straight to `authorize`, so starting
+there directly always bounces with `EC3` — that is what every earlier test hit.
 
-| App | `/market/app/{id}` | Activate button |
-|---|---|---|
-| 7562 (published, unrelated) | ✅ full market page | ✅ «فعل التطبيق» |
-| **7367 (ours)** | ❌ 404, bounces to `/` | ❌ |
+**The working flow, captured end-to-end (2026-08-22):**
 
-⚠️ **Do not probe this with `fetch()`** — `web.zid.sa` is an SPA, so every id returns the
-same 600 KB shell and a naive 404 check reports true for *all* of them, published or not.
-The 404 is rendered client-side after routing; only real navigation distinguishes them.
-An early probe here did exactly that and briefly "confirmed" a false result.
+1. Old dashboard → App Market → app page → **الأسعار والخطط** → the free «اختبار» plan →
+   **«تفعيل التطبيق»**. This fires `POST /api/v1/app-market/subscription/free` — the
+   missing subscription record.
+2. A consent modal → **«تفعيل التطبيق»** again, which `window.open`s our
+   `https://jawab24.com/zid/auth`.
+3. Now that the store is subscribed, `authorize` renders the real Zid consent screen
+   («تثبيت Jawab24 على متجرك», full scope list) → **«تثبيت التطبيق»**.
+4. Redirect to `/zid/auth/callback?code=…` → our backend exchanges the code, provisions a
+   new user/workspace from the store profile (no login — §L-1 PASSED), establishes the
+   embedded session, and lands on `dashboard.zid.sa/…/apps/7367/embedded`.
 
-**This explains every observation at once:**
-- `Draft` and `In review` behave identically because **both mean "not published"** — the
-  review-state hypothesis was never the right axis.
-- The URL config being correct does not help; the request never gets that far.
-- Zid's reviewer install on 2026-08-11 **reached our code** because reviewers install
-  through a privileged path ordinary stores do not have.
+Result rows (production): store `e3deb6f2-…` (`h47p59.zid.store`, "Jawab24 Dev", SAR),
+auto-provisioned user `qwhfqfihvm@zam-partner.email`, workspace `5b1c323e-…`.
 
-🔴 **Consequence — the chicken-and-egg is total.** We cannot install 7367 on our own dev
-store at any point before approval. Every §A–§I capture in `ZID_TEST_PLAN.md` is therefore
-blocked on Zid approving the app, and Zid's own lifecycle advice ("test in a development
-store" at step 4, before publishing at step 5) is **not achievable** through the App Market
-for an OAuth app.
+**What this corrects:**
+- `Draft` / `In review` was never the axis. Subscription-state is. A Draft app installs
+  fine once subscribed.
+- The "chicken-and-egg is total, we can never test before approval" conclusion was
+  **wrong**. We can and did test on the dev store.
+- Production merchants come through the App Market, which always subscribes first, so they
+  never hit `EC3`. Our `/zid/auth` is only safe as a *re-entry* point for an
+  already-subscribed store — worth confirming that assumption holds for the reconnect path.
 
-**The one untried mechanism** is the partner dashboard's **"Public/Private Apps"** section —
-a *private* app is normally installable on named stores without market publication. In this
-account that nav item renders as **plain text with no link**, i.e. it is not enabled for us.
-That makes the question to Zid specific and answerable — *"please enable Public/Private
-Apps so we can install app 7367 on development store 3195980 for testing"* — instead of the
-unanswerable *"what does EC3 mean?"*.
+⚠️ **How this went wrong three times:** each fix reasoned from the newest single
+observation instead of testing the cheap decisive case. The App Market install was
+reachable the whole time (old dashboard, session carries over, no login) and settles it in
+minutes. Reach for the decisive test first.
 
-**Therefore: resubmit 7367.** Staying in `Draft` buys nothing — it does not enable testing,
-and it costs queue time. Fix the `zid-edge-case-audit.md` findings **blind** (F1 especially:
-it is fixable in a way that is correct whatever Zid sends, by refusing to assert
-availability on unknown stock) and resubmit, because a reviewer install is now the only
-route to a live capture.
+### 🔴 NEW, CAPTURED 2026-08-22: product sync 401s after a successful install
+
+The install succeeds but the first `full_sync` job fails: `zid API HTTP error: 401` on
+`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). The store row,
+the token pair, and `token_expires_at` (2029) are all present and the embedded session
+works — so this is not the token being absent. Candidates, unverified: the wrong credential
+in the `X-Manager-Token` vs `Bearer authorizationToken` split (`zidApiGet`,
+`services/zid.ts:253`), the `Role: Manager` header the products call adds, or a
+Zid-side delay between install and API readiness. **This is exactly the docs-vs-reality gap
+D-020 exists to catch — a real captured failure, not a predicted one.** It blocks §B and
+everything downstream until fixed. Investigate against the live store while it exists.
 
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
@@ -121,8 +130,8 @@ do not re-test them.**
 |---|---|---|---|
 | 1 | The app being `In review` locks it against installs | ❌ **FALSIFIED** | `EC3` is byte-identical in `Draft` and `In review`, tested minutes apart |
 | 2 | `redirect_uri` mismatch between our authorize call and the app's configured Callback URL | ❌ **FALSIFIED** | They match **exactly** — see the config below |
-| 3 | The store has no App-Market install record because we start the flow ourselves | 🟡 partly right, for the wrong reason — the store genuinely has no install record, but because the app has no market listing at all, not because of who starts the flow |
-| 4 | An unpublished app cannot be installed by any store, dev stores included | ✅ **CONFIRMED — this is the cause.** See the solved section above. It does contradict Zid's own lifecycle advice; the advice is simply not achievable for an OAuth app via the App Market |
+| 3 | The store has no subscription record because `/zid/auth` skips the App Market subscribe step | ✅ **CONFIRMED — this is the cause.** Subscribing first (App Market free plan) makes `authorize` succeed; starting at `/zid/auth` directly returns `EC3` |
+| 4 | An unpublished app cannot be installed by any store | ❌ **FALSIFIED** — a `Draft` app WAS installed on the dev store via the App Market subscribe→activate flow. See the corrected solved section above |
 
 **App 7367 URL configuration, verified correct — stop re-checking it:**
 
