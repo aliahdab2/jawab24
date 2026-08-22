@@ -175,10 +175,19 @@ class ResizeObserverMock {
   disconnect = vi.fn();
   constructor(_cb: ResizeObserverCallback) {}
 }
-Object.defineProperty(window, 'ResizeObserver', { value: ResizeObserverMock });
+// configurable for the same reason as IntersectionObserver above
+Object.defineProperty(window, 'ResizeObserver', { value: ResizeObserverMock, configurable: true });
 
 // Mock Element.scrollIntoView (not implemented in jsdom)
 Element.prototype.scrollIntoView = vi.fn();
+
+// Element.scrollTo is not implemented in jsdom either; move the scroll position
+// so code that reads scrollTop back after scrolling sees the effect.
+Element.prototype.scrollTo = function (this: Element, xOrOptions?: number | ScrollToOptions, y?: number) {
+  const opts = typeof xOrOptions === 'object' ? xOrOptions : { left: xOrOptions, top: y };
+  if (opts?.left !== undefined) this.scrollLeft = opts.left;
+  if (opts?.top !== undefined) this.scrollTop = opts.top;
+} as Element['scrollTo'];
 
 // Mock localStorage with functional implementation
 const localStorageMock = (() => {

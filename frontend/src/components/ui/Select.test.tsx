@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Select } from '@/components/ui/Select';
 
@@ -147,5 +147,78 @@ describe('Select — searchable', () => {
     fireEvent.click(screen.getByLabelText('timezone'));
     expect(screen.getByPlaceholderText('Search for a city')).toHaveValue('');
     expect(optionLabels()).toHaveLength(3);
+  });
+});
+
+// The compact menu was start-anchored with max-width 100vw − 2rem — capped to
+// the VIEWPORT, not to the room between the trigger's start edge and the far
+// side of the screen. From a trigger sitting mid-screen (the RTL persona scope
+// picker, reported 2026-08-22) it grew inward straight off the screen. It must
+// hang from whichever trigger edge leaves it more room, capped to that room.
+//
+// jsdom has no layout: the geometry is declared on the root and the menu.
+describe('Select — compact menu placement', () => {
+  const VIEWPORT = 412;
+  const GUTTER = 16;
+  const OPTIONS = [
+    { value: 'a', label: 'كل الصفحات' },
+    { value: 'b', label: 'الفريق الدمشقي للتدريب والتأهيل — شخصية خاصة' },
+  ];
+
+  afterEach(() => {
+    document.documentElement.removeAttribute('dir');
+    vi.restoreAllMocks();
+  });
+
+  /** Render a compact select whose trigger spans [left, right] px and whose open menu wants `naturalWidth` px. */
+  function openCompact({ dir, left, right, naturalWidth }: { dir: 'rtl' | 'ltr'; left: number; right: number; naturalWidth: number }) {
+    document.documentElement.setAttribute('dir', dir);
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(VIEWPORT);
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(naturalWidth);
+    const { container } = render(
+      <Select compact value="a" onChange={() => {}} aria-label="scope" options={OPTIONS} />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      left, right, top: 0, bottom: 40, width: right - left, height: 40, x: left, y: 0, toJSON: () => ({}),
+    });
+    fireEvent.click(screen.getByLabelText('scope'));
+    return screen.getByText(OPTIONS[1].label).closest('[class*="absolute"]') as HTMLElement;
+  }
+
+  it('RTL, trigger mid-screen: hangs from the end edge, capped to the room on that side', () => {
+    // Trigger at [120, 262] on a 412px screen. From its start (right) edge there
+    // are 262 − 16 = 246px inward; from its end (left) edge 412 − 120 − 16 = 276px.
+    const menu = openCompact({ dir: 'rtl', left: 120, right: 262, naturalWidth: 380 });
+    expect(menu.className).toContain('end-0');
+    expect(menu.className).not.toContain('start-0');
+    expect(menu.style.maxWidth).toBe(`${VIEWPORT - 120 - GUTTER}px`);
+  });
+
+  it('stays start-anchored when the menu fits inward', () => {
+    const menu = openCompact({ dir: 'ltr', left: 16, right: 160, naturalWidth: 300 });
+    expect(menu.className).toContain('start-0');
+    expect(menu.style.maxWidth).toBe(`${VIEWPORT - 16 - GUTTER}px`);
+  });
+
+  it('LTR, trigger near the end edge: flips to the end edge too', () => {
+    const menu = openCompact({ dir: 'ltr', left: 250, right: 396, naturalWidth: 380 });
+    expect(menu.className).toContain('end-0');
+    expect(menu.style.maxWidth).toBe(`${396 - GUTTER}px`);
+  });
+
+  it('never lets the 200px floor push the menu back off-screen', () => {
+    const menu = openCompact({ dir: 'ltr', left: 300, right: 396, naturalWidth: 380 });
+    expect(parseInt(menu.style.minWidth, 10)).toBeLessThanOrEqual(parseInt(menu.style.maxWidth, 10));
+  });
+
+  it('leaves the default (non-compact) menu spanning its trigger', () => {
+    render(
+      <Select value="a" onChange={() => {}} aria-label="plain" options={OPTIONS} />,
+    );
+    fireEvent.click(screen.getByLabelText('plain'));
+    const menu = screen.getByText(OPTIONS[1].label).closest('[class*="absolute"]') as HTMLElement;
+    expect(menu.className).toContain('inset-x-0');
+    expect(menu.style.maxWidth).toBe('');
   });
 });

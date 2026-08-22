@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDown, Check, Search } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -37,6 +37,25 @@ interface SelectProps {
   noResultsLabel?: string;
 }
 
+/** Gap the open compact menu keeps from the viewport edge, px. */
+const MENU_VIEWPORT_GUTTER = 16;
+/** Floor for the compact menu's width — unless the viewport leaves less room than that. */
+const MENU_MIN_WIDTH = 200;
+
+/** Which edge of the trigger the compact menu hangs from, plus the room it has on that side. */
+interface MenuPlacement {
+  anchor: 'start' | 'end';
+  maxWidth?: number;
+}
+const START_ANCHORED: MenuPlacement = { anchor: 'start' };
+
+function isRtl(el: HTMLElement): boolean {
+  // The computed `direction` is the answer in a browser. jsdom leaves it empty,
+  // so fall back to the nearest declared `dir` — `<html dir>` from _document.
+  const computed = getComputedStyle(el).direction;
+  return computed ? computed === 'rtl' : el.closest('[dir]')?.getAttribute('dir') === 'rtl';
+}
+
 function LabelWithBadge({ label, badge, badgeTone = 'brand', truncate = false }: { label: string; badge?: string; badgeTone?: 'brand' | 'muted'; truncate?: boolean }) {
   return (
     <span className="flex-1 flex items-center gap-2 min-w-0">
@@ -63,6 +82,7 @@ function LabelWithBadge({ label, badge, badgeTone = 'brand', truncate = false }:
 export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false, compact = false, searchable = false, searchPlaceholder, noResultsLabel }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [menuPlacement, setMenuPlacement] = useState<MenuPlacement>(START_ANCHORED);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -89,28 +109,60 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
     }
   }, [isOpen]);
 
-  // Position dropdown above or below based on available space
-  useEffect(() => {
-    if (isOpen && dropdownRef.current && containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const dropdownHeight = dropdownRef.current.offsetHeight;
-      const spaceBelow = window.innerHeight - containerRect.bottom;
-      const spaceAbove = containerRect.top;
-
-      // If not enough space below and more space above, position above
-      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
-        dropdownRef.current.style.bottom = '100%';
-        dropdownRef.current.style.top = 'auto';
-        dropdownRef.current.style.marginBottom = '4px';
-        dropdownRef.current.style.marginTop = '0';
-      } else {
-        dropdownRef.current.style.top = '100%';
-        dropdownRef.current.style.bottom = 'auto';
-        dropdownRef.current.style.marginTop = '4px';
-        dropdownRef.current.style.marginBottom = '0';
-      }
+  // Place the open menu: above or below by vertical room, and — compact only —
+  // hung from whichever trigger edge leaves it more horizontal room.
+  //
+  // A layout effect, because it measures the freshly rendered menu and then
+  // moves it; with a plain effect the unplaced menu would paint for a frame.
+  useLayoutEffect(() => {
+    if (!isOpen || !dropdownRef.current || !containerRef.current) {
+      // Reopen unconstrained, so the natural width measured below is real and
+      // not last time's cap. Same object, so a closed menu never re-renders.
+      setMenuPlacement(START_ANCHORED);
+      return;
     }
-  }, [isOpen]);
+    const dropdown = dropdownRef.current;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const dropdownHeight = dropdown.offsetHeight;
+    const spaceBelow = window.innerHeight - containerRect.bottom;
+    const spaceAbove = containerRect.top;
+
+    // If not enough space below and more space above, position above
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+      dropdown.style.bottom = '100%';
+      dropdown.style.top = 'auto';
+      dropdown.style.marginBottom = '4px';
+      dropdown.style.marginTop = '0';
+    } else {
+      dropdown.style.top = '100%';
+      dropdown.style.bottom = 'auto';
+      dropdown.style.marginTop = '4px';
+      dropdown.style.marginBottom = '0';
+    }
+
+    // The default menu is inset-x-0 — the trigger's own width — so only the
+    // compact pill, whose menu is wider than its trigger, needs placing.
+    if (!compact) return;
+
+    // The compact menu used to be start-anchored with max-width 100vw − 2rem.
+    // That caps it to the VIEWPORT's width, not to the room between the
+    // trigger's start edge and the far side of the viewport — so from a trigger
+    // sitting mid-screen (the persona scope picker in ReplyStyleCard, RTL,
+    // reported 2026-08-22) it grew inward straight off the screen and the
+    // options' ends were unreachable.
+    const rtl = isRtl(containerRef.current);
+    const viewportWidth = document.documentElement.clientWidth;
+    // Hung from the start edge, the menu grows toward the viewport's far side …
+    const roomFromStart = (rtl ? containerRect.right : viewportWidth - containerRect.left) - MENU_VIEWPORT_GUTTER;
+    // … hung from the end edge, back toward the near side.
+    const roomFromEnd = (rtl ? viewportWidth - containerRect.left : containerRect.right) - MENU_VIEWPORT_GUTTER;
+    // Natural width of the unconstrained, start-anchored menu this render produced.
+    const naturalWidth = dropdown.scrollWidth;
+
+    const anchor = naturalWidth <= roomFromStart || roomFromStart >= roomFromEnd ? 'start' : 'end';
+    const maxWidth = Math.max(0, Math.floor(anchor === 'start' ? roomFromStart : roomFromEnd));
+    setMenuPlacement({ anchor, maxWidth });
+  }, [isOpen, compact]);
 
   // Reset the filter whenever the menu closes, and focus the input when it opens,
   // so reopening never shows a stale, silently-filtered list.
@@ -208,11 +260,18 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
           className={clsx(
             "absolute z-[100] rounded-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150",
             compact
-              // Anchor to the trigger's start edge and grow inward, capped to the viewport,
-              // so a trigger near the screen edge never pushes the menu off-screen.
-              ? "start-0 min-w-[200px] max-w-[calc(100vw-2rem)] bg-card border-2 border-brand-500/30 shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5"
+              // Hung from the trigger edge the layout effect picked, and capped
+              // to the room on that side, so the menu stays on screen wherever
+              // the trigger sits.
+              ? [
+                menuPlacement.anchor === 'start' ? 'start-0' : 'end-0',
+                "bg-card border-2 border-brand-500/30 shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5",
+              ]
               : "inset-x-0 bg-card border border-theme-border shadow-xl"
           )}
+          style={!compact ? undefined : menuPlacement.maxWidth === undefined
+            ? { minWidth: MENU_MIN_WIDTH }
+            : { maxWidth: menuPlacement.maxWidth, minWidth: Math.min(MENU_MIN_WIDTH, menuPlacement.maxWidth) }}
         >
           {searchable && (
             // Sticky so the filter stays reachable while scrolling a long list.

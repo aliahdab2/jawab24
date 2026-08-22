@@ -13,7 +13,7 @@ import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReas
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { messagesApi } from '@/lib/api';
-import { useHandoffPauseDuration, useCopyToClipboard } from '@/hooks';
+import { useHandoffPauseDuration, useCopyToClipboard, useStickToBottom } from '@/hooks';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -144,19 +144,14 @@ export function MessageDetailModal({
   useEscapeKey(() => onClose(), !kbOpen);
   useBodyScrollLock(true);
 
-  // Check if user is scrolled near the bottom (within 100px)
-  const checkIfNearBottom = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return true;
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-  }, []);
+  // Thread scrolling, incl. the re-pin to the bottom when the keyboard
+  // opens/closes (container resize) — shared with the comment and test modals.
+  const { isNearBottom: checkIfNearBottom, scrollToBottom: scrollThreadToBottom } = useStickToBottom(scrollContainerRef);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'instant') => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+    scrollThreadToBottom(behavior);
     setHasNewMessage(false);
-  }, []);
+  }, [scrollThreadToBottom]);
 
   // Auto-scroll to bottom on mount (instant)
   useEffect(() => {
@@ -193,19 +188,6 @@ export function MessageDetailModal({
     setIsNearBottom(nearBottom);
     if (nearBottom) setHasNewMessage(false);
   }, [checkIfNearBottom]);
-
-  // Re-scroll to bottom when keyboard opens/closes (container resizes)
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => {
-      if (checkIfNearBottom()) {
-        requestAnimationFrame(() => scrollToBottom('instant'));
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [checkIfNearBottom, scrollToBottom]);
 
   const sortedMessages = useMemo(() => {
     return [...messages].sort((a, b) => {

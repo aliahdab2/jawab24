@@ -67,3 +67,19 @@ describe('TestSmartReplyModal — reply-mode override on the wire', () => {
     expect(body).toMatchObject({ question: 'عندكم توصيل؟', channel: 'dm', replyMode: 'sales' });
   });
 });
+
+describe('TestSmartReplyModal — composer above the safe area', () => {
+  // The footer carried a fixed `pb-4`, so on a native device — where the sheet
+  // is full-height — the composer sat 16px from the system bar, flush on the
+  // safe area (reported 2026-08-22). `pb-safe-modal` is the one class that adds
+  // --sai-bottom on native and collapses under the keyboard; every sibling
+  // modal footer (MessageDetailModal, CommentDetailModal) uses it. A `md:pb-*`
+  // next to it would be dead: .pb-safe-modal is emitted after the utilities.
+  it('pads the footer with pb-safe-modal and no fixed bottom padding', () => {
+    render(<TestSmartReplyModal page={PAGE} onClose={vi.fn()} />);
+    const footer = screen.getByRole('textbox').closest('.border-t') as HTMLElement;
+    expect(footer.className).toContain('pb-safe-modal');
+    expect(footer.className).not.toMatch(/\bpb-\d/);
+    expect(footer.className).not.toMatch(/\bmd:pb-\d/);
+  });
+});
