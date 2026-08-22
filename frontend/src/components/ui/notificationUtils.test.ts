@@ -57,8 +57,8 @@ describe('auto_reply_paused presentation', () => {
 
     it('is red — the page is live and actively dropping customer messages', () => {
         const style = getNotificationStyle('auto_reply_paused');
-        expect(style.iconColor).toContain('red');
-        expect(style.ringColor).toBe('notif-ring-red');
+        expect(style.hue).toBe('red');
+        expect(style.className).toBe('notif-red');
     });
 
     it('is pinned as account health, like the billing pause it mirrors', () => {
@@ -74,8 +74,8 @@ describe('auto_reply_paused_billing presentation', () => {
         expect(style).not.toBe(DEFAULT_STYLE);
         // Same family as payment_failed — the same incident one step later.
         expect(style.icon).toBe(getNotificationStyle('payment_failed').icon);
-        expect(style.iconColor).toContain('red');
-        expect(style.ringColor).toBe('notif-ring-red');
+        expect(style.hue).toBe('red');
+        expect(style.className).toBe('notif-red');
     });
 
     it('routes via the backend-supplied deepLink', () => {
@@ -89,6 +89,6 @@ describe('instagram_reconnect_needed — the dead Instagram-direct credential no
     it('has its own style (not the generic bell) with the dead-channel red severity', () => {
         const style = getNotificationStyle('instagram_reconnect_needed');
         expect(style).not.toBe(DEFAULT_STYLE);
-        expect(style.iconColor).toContain('red');
+        expect(style.hue).toBe('red');
     });
 });

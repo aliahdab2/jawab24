@@ -25,12 +25,43 @@ export interface GroupedNotifications {
     unreadCount: number;
 }
 
+/**
+ * The avatar hues, each a `.notif-<hue>` class in globals.css that owns the
+ * tile background, ring AND icon color together. A type names a hue; it never
+ * names three Tailwind strings that have to be kept in step by hand — that is
+ * how `stale_message` drifted to orange while its twin `stale_comment` stayed
+ * amber. Hue MEANINGS (amber = operational, orange = commercial, red = stopped,
+ * emerald = resolved, blue = informational, slate = neutral) live in
+ * CONVENTIONS.md; `brand` is the fallback for an unknown type only.
+ */
+export type NotificationHue = 'amber' | 'blue' | 'red' | 'orange' | 'emerald' | 'slate' | 'brand';
+
 export interface NotificationStyle {
     icon: LucideIcon;
-    iconColor: string;
-    bgColor: string;
-    ringColor: string;
+    hue: NotificationHue;
+    /** `.notif-<hue>` — the one class the avatar tile needs. */
+    className: string;
 }
+
+/**
+ * Spelled out as LITERALS, not built as `notif-${hue}`: Tailwind's content scan
+ * only emits a class it can read verbatim in source, so a template literal
+ * silently purges every hue from the production stylesheet except the ones some
+ * other file happens to mention. (A first cut of this did exactly that — only
+ * `notif-red` survived, kept alive by a test assertion.)
+ */
+const HUE_CLASS: Record<NotificationHue, string> = {
+    amber: 'notif-amber',
+    blue: 'notif-blue',
+    red: 'notif-red',
+    orange: 'notif-orange',
+    emerald: 'notif-emerald',
+    slate: 'notif-slate',
+    brand: 'notif-brand',
+};
+
+const hueStyle = (icon: LucideIcon, hue: NotificationHue): NotificationStyle =>
+    ({ icon, hue, className: HUE_CLASS[hue] });
 
 // ─── Filter taxonomy ───────────────────────────────────────────────────────────
 // Lives in the domain layer (not the pill component) so utilities like
@@ -87,40 +118,38 @@ export function getNotificationBucket(n: Notification): Exclude<NotificationFilt
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
-    stale_comment:         { icon: MessageCircle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    stale_comment:         hueStyle(MessageCircle, 'amber'),
     // Amber, matching stale_comment above: both mean "waiting on the merchant".
     // It was orange, which is the billing/quota hue — so the SAME state rendered
     // in two colors depending on whether it arrived as a comment or a message.
-    stale_message:         { icon: Mail,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
-    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'notif-ring-blue' },
-    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
-    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
-    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
+    stale_message:         hueStyle(Mail, 'amber'),
+    new_comment:           hueStyle(MessageCircle, 'blue'),
+    flagged_reply:         hueStyle(AlertTriangle, 'red'),
+    skipped_reply:         hueStyle(AlertTriangle, 'amber'),
+    payment_failed:        hueStyle(CreditCard, 'red'),
     // Dead Instagram-direct credential: red like the other dead-channel notices —
     // replies are stopped until the merchant acts.
-    instagram_reconnect_needed: { icon: Instagram, iconColor: 'text-red-600 dark:text-red-400',        bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
+    instagram_reconnect_needed: hueStyle(Instagram, 'red'),
     // Same red billing family as payment_failed: it is the same incident one
     // step later (the gate actually froze replies). Without this entry the
     // card fell through to DEFAULT_STYLE's neutral bell.
-    auto_reply_paused_billing: { icon: CreditCard, iconColor: 'text-red-600 dark:text-red-400',        bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
-    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
-    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
-    trial_ended:           { icon: Clock,         iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
-    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
-    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
+    auto_reply_paused_billing: hueStyle(CreditCard, 'red'),
+    subscription_expiring: hueStyle(Clock, 'orange'),
+    trial_ending:          hueStyle(Clock, 'orange'),
+    trial_ended:           hueStyle(Clock, 'red'),
+    subscription_renewed:  hueStyle(CheckCircle, 'emerald'),
+    page_disconnected:     hueStyle(Unplug, 'slate'),
     // Red, not slate: unlike a disconnected page, a send-failure pause means the
     // page is live and actively dropping customer messages until a human acts.
-    auto_reply_paused:     { icon: Unplug,        iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
-    page_trial_used:       { icon: CreditCard,    iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
-    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
-    provider_failover:     { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
-    new_lead:              { icon: UserPlus,      iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
-    post_reply_orphaned:   { icon: CalendarClock, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    auto_reply_paused:     hueStyle(Unplug, 'red'),
+    page_trial_used:       hueStyle(CreditCard, 'orange'),
+    kb_gap:                hueStyle(BookOpen, 'amber'),
+    provider_failover:     hueStyle(AlertTriangle, 'red'),
+    new_lead:              hueStyle(UserPlus, 'emerald'),
+    post_reply_orphaned:   hueStyle(CalendarClock, 'amber'),
 };
 
-export const DEFAULT_STYLE: NotificationStyle = {
-    icon: Bell, iconColor: 'text-brand-600', bgColor: 'bg-brand-50', ringColor: 'ring-brand-200/60',
-};
+export const DEFAULT_STYLE: NotificationStyle = hueStyle(Bell, 'brand');
 
 export const ACTIONABLE_TYPES = new Set<string>(ACTIONABLE_NOTIFICATION_TYPES);
 
