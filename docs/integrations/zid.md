@@ -66,6 +66,101 @@ needed no working backend and risked nothing. It was proposed and then skipped i
 of acting on the hypothesis directly. **Run the cheap falsifying test before spending
 something you cannot get back.**
 
+### ✅ EC3 — ACTUALLY SOLVED 2026-08-22: the store must SUBSCRIBE to the app before OAuth; a Draft app IS installable
+
+⛔ **This section was wrong twice before. The install works.** An earlier version of this
+same section claimed "an unpublished app has no App Market page, so no store can install
+it." That was **falsified by direct evidence**: app 7367, while in `Draft`, was installed
+on dev store 3195980 and created a real `ecommerce_stores` row. Do not trust the struck
+reasoning below it — trust this.
+
+**The real cause of `EC3`: the store has no subscription record for the app yet.** Zid's
+`oauth/authorize` endpoint returns `EC3` when a store hits it for an app it has not first
+*subscribed* to. Our `/zid/auth` entry point jumps straight to `authorize`, so starting
+there directly always bounces with `EC3` — that is what every earlier test hit.
+
+**The working flow, captured end-to-end (2026-08-22):**
+
+1. Old dashboard → App Market → app page → **الأسعار والخطط** → the free «اختبار» plan →
+   **«تفعيل التطبيق»**. This fires `POST /api/v1/app-market/subscription/free` — the
+   missing subscription record.
+2. A consent modal → **«تفعيل التطبيق»** again, which `window.open`s our
+   `https://jawab24.com/zid/auth`.
+3. Now that the store is subscribed, `authorize` renders the real Zid consent screen
+   («تثبيت Jawab24 على متجرك», full scope list) → **«تثبيت التطبيق»**.
+4. Redirect to `/zid/auth/callback?code=…` → our backend exchanges the code, provisions a
+   new user/workspace from the store profile (no login — §L-1 PASSED), establishes the
+   embedded session, and lands on `dashboard.zid.sa/…/apps/7367/embedded`.
+
+Result rows (production): store `e3deb6f2-…` (`h47p59.zid.store`, "Jawab24 Dev", SAR),
+auto-provisioned user `qwhfqfihvm@zam-partner.email`, workspace `5b1c323e-…`.
+
+**What this corrects:**
+- `Draft` / `In review` was never the axis. Subscription-state is. A Draft app installs
+  fine once subscribed.
+- The "chicken-and-egg is total, we can never test before approval" conclusion was
+  **wrong**. We can and did test on the dev store.
+- Production merchants come through the App Market, which always subscribes first, so they
+  never hit `EC3`. Our `/zid/auth` is only safe as a *re-entry* point for an
+  already-subscribed store — worth confirming that assumption holds for the reconnect path.
+
+⚠️ **How this went wrong three times:** each fix reasoned from the newest single
+observation instead of testing the cheap decisive case. The App Market install was
+reachable the whole time (old dashboard, session carries over, no login) and settles it in
+minutes. Reach for the decisive test first.
+
+### 🔴 NEW, CAPTURED 2026-08-22: product sync 401s after a successful install
+
+The install succeeds but the first `full_sync` job fails: `zid API HTTP error: 401` on
+`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). The store row,
+the token pair, and `token_expires_at` (2029) are all present and the embedded session
+works — so this is not the token being absent. Candidates, unverified: the wrong credential
+in the `X-Manager-Token` vs `Bearer authorizationToken` split (`zidApiGet`,
+`services/zid.ts:253`), the `Role: Manager` header the products call adds, or a
+Zid-side delay between install and API readiness. **This is exactly the docs-vs-reality gap
+D-020 exists to catch — a real captured failure, not a predicted one.** It blocks §B and
+everything downstream until fixed. Investigate against the live store while it exists.
+
+### EC3 — hypotheses tested along the way (2026-08-22)
+
+Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;
+do not re-test them.**
+
+| # | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| 1 | The app being `In review` locks it against installs | ❌ **FALSIFIED** | `EC3` is byte-identical in `Draft` and `In review`, tested minutes apart |
+| 2 | `redirect_uri` mismatch between our authorize call and the app's configured Callback URL | ❌ **FALSIFIED** | They match **exactly** — see the config below |
+| 3 | The store has no subscription record because `/zid/auth` skips the App Market subscribe step | ✅ **CONFIRMED — this is the cause.** Subscribing first (App Market free plan) makes `authorize` succeed; starting at `/zid/auth` directly returns `EC3` |
+| 4 | An unpublished app cannot be installed by any store | ❌ **FALSIFIED** — a `Draft` app WAS installed on the dev store via the App Market subscribe→activate flow. See the corrected solved section above |
+
+**App 7367 URL configuration, verified correct — stop re-checking it:**
+
+| Field | Value |
+|---|---|
+| Application Website | `https://jawab24.com` |
+| Application URL (embedded) | `https://jawab24.com/zid/embedded` |
+| Redirection URL | `https://jawab24.com/zid/auth` |
+| Callback URL | `https://jawab24.com/zid/auth/callback` |
+
+Our authorize call sends
+`redirect_uri=https%3A%2F%2Fjawab24.com%2Fzid%2Fauth%2Fcallback` — identical to the
+Callback URL above. Client ID `7192` also matches.
+
+⚠️ **`EC3` is undocumented.** It appears nowhere in `docs.zid.sa` or the partner help
+centre, and Zid returns it as a bare query parameter on a silent bounce to the store
+dashboard — no message, no page, nothing a merchant could act on. Any future explanation
+has to come from Zid support or from observing a *successful* install.
+
+🔑 **The one asymmetry worth chasing:** Zid's reviewer install on 2026-08-11 **reached our
+code** (it died on our `PostgresError`, not on EC3), against their own store "Test". Ours
+bounces at EC3 against dev store 3195980. Whatever differs between those two installs is
+the answer — and it is not the app's status or its URLs.
+
+⚠️ **Security note:** the General Settings step displays the app's **client secret in
+plain text**. Treat that screen as sensitive; do not screen-share or screenshot it, and
+rotate the secret if it has been exposed — production's `ZID_CLIENT_SECRET` must be
+updated in the same change or the whole Zid path breaks.
+
 How it got here, from the Intercom thread with Zid partner support:
 
 | Date | What happened |
