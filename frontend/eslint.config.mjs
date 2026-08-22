@@ -2,6 +2,7 @@ import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
+import noMixedSemanticPalette from './eslint-rules/no-mixed-semantic-palette.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,6 +32,9 @@ const eslintConfig = [
     // Custom rules for all files
     {
         files: ['**/*.{js,jsx,ts,tsx}'],
+        plugins: {
+            jawab24: { rules: { 'no-mixed-semantic-palette': noMixedSemanticPalette } },
+        },
         rules: {
             // Next.js specific
             '@next/next/no-img-element': 'off',
@@ -40,6 +44,10 @@ const eslintConfig = [
             'react/no-unescaped-entities': 'off',
             'react-hooks/exhaustive-deps': 'warn',
             
+            // Design system: a semantic status/alert/icon-bg/notif class must
+            // own its hue alone. See frontend/eslint-rules/ and CONVENTIONS.md.
+            'jawab24/no-mixed-semantic-palette': 'error',
+
             // General best practices
             'no-console': ['warn', { allow: ['warn', 'error'] }],
             'prefer-const': 'error',
