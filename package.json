@@ -47,6 +47,7 @@
     "check:duplication:baseline": "node scripts/check-duplication.mjs --update-baseline",
     "check:duplication:test": "node --test scripts/__tests__/check-duplication.test.mjs",
     "test:db-tooling": "node --test scripts/__tests__/test-db-url.test.mjs scripts/__tests__/test-db-name.test.mjs",
+    "test:build-lock": "node --test scripts/__tests__/build-lock.test.mjs",
     "print:test-db-url": "./scripts/test-db-url.sh",
     "prune:test-dbs": "./scripts/prune-test-dbs.sh",
     "check:openai-sync": "node -e \"const fs=require('fs');const b=JSON.parse(fs.readFileSync('backend/package.json','utf8'));const a=JSON.parse(fs.readFileSync('ai-worker/package.json','utf8'));const bv=b.dependencies&&b.dependencies.openai;const av=a.dependencies&&a.dependencies.openai;const exact=/^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$/;if(!bv||!av){console.error('❌ Missing openai dependency in backend or ai-worker package.json');process.exit(1);}if(!exact.test(bv)||!exact.test(av)){console.error('❌ OpenAI versions must be pinned exact (e.g., 6.21.0, no ^ or ~).');console.error('   backend:',bv);console.error('   ai-worker:',av);process.exit(1);}if(bv!==av){console.error('❌ OpenAI SDK versions are out of sync.');console.error('   backend:',bv);console.error('   ai-worker:',av);process.exit(1);}console.log('✅ OpenAI SDK versions are pinned and in sync at',bv);\"",

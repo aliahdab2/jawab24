@@ -22,6 +22,7 @@ If no track is passed, ask the user. Default bump is `patch`.
 2. **Clean tree** — `git status --porcelain` empty (unless `dry-run`). If dirty, stop and tell the user to commit/stash.
 3. **Signing present** — `frontend/android/local.properties` defines `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. If missing, stop with instructions to restore the keystore.
 4. **Play credentials present** (unless `dry-run`) — either the `ANDROID_PUBLISHER_CREDENTIALS` env var (raw service-account JSON) or a key file at `frontend/android/play-service-account.json` (gitignored). If missing, stop and point to the service-account setup.
+5. **No deploy in flight** — this script and `pre-deploy-check.sh` BOTH build into `frontend/.next` and both start with `rm -rf .next`, so either one started during the other destroys both runs. Since 2026-08-22 they share an exclusive lock (`scripts/lib/build-lock.sh`), so the script refuses in seconds and names the holder — you do not need to check by hand. ⛔ If it refuses, **WAIT**; do not kill the holder and do not retry until it exits. If you hit an unexplained `ENOENT: rename '.next/export/…html'` on an older checkout that predates the lock, that IS this collision.
 
 ## Step 1: Decide the version
 

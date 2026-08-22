@@ -37,7 +37,10 @@ GoogleService-Info.plist
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
-# Exclusive lock held by scripts/pre-deploy-check.sh while it runs (removed on exit).
+# Exclusive lock held by scripts/pre-deploy-check.sh or scripts/release-android.sh
+# while it runs (removed on exit). Both build into frontend/.next.
+/.frontend-build.lock/
+# Legacy name, kept so an interrupted pre-2026-08-22 run cannot leave a tracked file.
 # Ignored so a crashed run can never make deploy-production.sh refuse with
 # "You have uncommitted changes".
 /.pre-deploy-check.lock/

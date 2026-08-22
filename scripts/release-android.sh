@@ -68,6 +68,16 @@ BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 START_TIME=$(date +%s)
 
+# ─── Exclusive frontend-build lock ───
+# This script's `build:mobile` step begins with `rm -rf .next`, and `.next` is
+# ALSO the build directory of the production build run by pre-deploy-check.sh.
+# Taken before anything else so a collision is refused in seconds rather than
+# after a full lint+test cycle. Rationale in the helper.
+# shellcheck source=scripts/lib/build-lock.sh
+source "$ROOT_DIR/scripts/lib/build-lock.sh"
+acquire_frontend_build_lock "android release" || exit 1
+trap 'release_frontend_build_lock' EXIT INT TERM
+
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}${BOLD}🤖 JAWAB24 ANDROID RELEASE${NC}"
