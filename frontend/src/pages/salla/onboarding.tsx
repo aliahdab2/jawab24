@@ -17,6 +17,7 @@ import { useTranslations } from 'next-intl';
 import { sallaApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { useEcommerceStoreSync } from '@/hooks/useEcommerceStoreSync';
+import { StoreAutoReplyRow } from '@/components/onboarding/StoreAutoReplyRow';
 import type { Page } from '@jawab24/shared';
 
 
@@ -353,12 +354,7 @@ export default function SallaOnboarding() {
                         </span>
                       </div>
                     )}
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
-                      <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
-                      <span className="text-sm text-foreground font-medium">
-                        {t('onboarding.doneCheckActive')}
-                      </span>
-                    </div>
+                    <StoreAutoReplyRow />
                   </div>
 
                   <Button

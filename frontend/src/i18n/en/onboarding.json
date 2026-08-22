@@ -56,5 +56,9 @@
   "tryQuotaExceeded": "You've reached your monthly smart reply limit. Upgrade your plan for more.",
   "tryQuotaExceededIOS": "You've reached your monthly smart reply limit. It resets at the start of your next billing cycle.",
   "tryEmptyKbHint": "Tip: add your business info above to get more accurate replies.",
-  "tryEnableOnPage": "Great, enable it on my page"
+  "tryEnableOnPage": "Great, enable it on my page",
+  "storeAutoReplyActive": "Auto-replies are on",
+  "storeAutoReplyOff": "Auto-replies are off — turn them on so Jawab24 starts answering your customers",
+  "storeAutoReplyEnable": "Turn on now",
+  "storeAutoReplyEnableFailed": "Couldn't turn auto-replies on. Please try again."
 }

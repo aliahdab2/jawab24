@@ -19,6 +19,7 @@ import { useAuthStore } from '@/lib/store';
 import { getEmbeddedPlatform } from '@/lib/embeddedSession';
 import { openTopLevelAuthenticated } from '@/lib/embeddedBreakout';
 import { useEcommerceStoreSync } from '@/hooks/useEcommerceStoreSync';
+import { StoreAutoReplyRow } from '@/components/onboarding/StoreAutoReplyRow';
 import type { Page } from '@jawab24/shared';
 
 const TOTAL_STEPS = 4;
@@ -388,12 +389,7 @@ export default function ZidOnboarding() {
                         </span>
                       </div>
                     )}
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
-                      <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
-                      <span className="text-sm text-foreground font-medium">
-                        {t('onboarding.doneCheckActive')}
-                      </span>
-                    </div>
+                    <StoreAutoReplyRow />
                   </div>
 
                   <Button
