@@ -66,6 +66,7 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args) => ({ op: 'and', args })),
     lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
+    inArray: vi.fn((field, values) => ({ field, values, op: 'inArray' })),
     sql: Object.assign(
         (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values, _tag: 'sql' }),
         { raw: (s: string) => ({ raw: s, _tag: 'sql_raw' }) },

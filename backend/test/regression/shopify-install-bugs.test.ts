@@ -61,6 +61,7 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
     desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
     notInArray: vi.fn((col: unknown, vals: unknown[]) => ({ op: 'notInArray', col, vals })),
+    inArray: vi.fn((col: unknown, vals: unknown[]) => ({ op: 'inArray', col, vals })),
     lt: vi.fn(),
     sql: Object.assign(
         (strings: TemplateStringsArray, ..._values: unknown[]) => ({ op: 'sql', strings: [...strings] }),
