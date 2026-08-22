@@ -146,6 +146,63 @@ and the products call (expect 401) with the app's own resolved credentials and p
 decryption key lives (inside the backend container); it prints only statuses and the error
 body, never the token values.
 
+### ✅ SOLVED 2026-08-22 (live capture): `/v1/products/` needs a `Store-Id` header
+
+Replayed inside the backend container with the app's own `resolveZidCredentials`. The 401
+body is **`{"detail": "No such user"}`**, and probing every header arrangement isolated it:
+
+| Arrangement | Result |
+|---|---|
+| `Bearer=auth` + `X-Manager-Token=mgr` (current code) | 401 `No such user` |
+| tokens swapped | 401 `No such user` |
+| either token alone | 401 `No such user` |
+| with/without `Role: Manager` | identical — `Role` is irrelevant |
+| **current headers + `Store-Id: 3195980`** | **200, returns the products** |
+
+**The fix: the non-`/managers/` store API (`/v1/products/`) requires a `Store-Id` header
+carrying the Zid numeric store id.** `/v1/managers/account/profile` does not (it resolves
+the store from the token), which is why the install's profile fetch succeeded while every
+product sync 401'd. We already have the value: `platform_data.merchantId` (`"3195980"` for
+the dev store), set at install by `fetchStoreInfo`. `zidApiGet` / `fetchAllProducts` just
+never send it. **Zid product sync has therefore never worked for any store** — not a
+dev-store quirk. `Role: Manager` can be dropped; it does nothing.
+
+### The five predicted findings, corrected against the live payload
+
+Captured product rows (Store-Id header, real Zid response):
+
+```
+{name:"Sony A7S III",    is_infinite:true,  quantity:null, price:10000, sale_price:null}
+{name:"نظارة",   is_infinite:false, quantity:0,    price:400,   sale_price:250}
+{name:"Running Shoes",   is_infinite:false, quantity:0,    price:300,   sale_price:null}
+{name:"قميص", is_infinite:false, quantity:0,    price:150,   sale_price:null}
+```
+
+| # | Prediction | Verdict on live data |
+|---|---|---|
+| Store-Id | *(not predicted)* | 🔴 **THE showstopper.** Product sync 401s entirely without it. Reading the parser could not reveal a header the endpoint demands. |
+| F1 unlimited→out-of-stock | 🔴 **CONFIRMED CRITICAL.** Zid signals unlimited stock as **`is_infinite:true, quantity:null`**. Our `totalInventory: p.quantity ?? 0` collapses that to `0` → "out of stock" + agent `available:false`. Fix: honor `is_infinite`. |
+| F5 renderer null-vs-0 | 🟡 Real once F1 is fixed — keep the paired fix (`is_infinite` → in-stock in both renderer and agent tool). |
+| F2 unknown status→active | 🟢 **Not reproduced.** The endpoint omits unpublished products (`count:4`, hidden product absent), so the default-to-active branch never sees one via sync. Keep the safe default as hygiene. |
+| F4 `??` on price | 🟢 **Not reproduced.** Real `sale_price` is number-or-`null`, never `""`, so `sale_price ?? price` already picks correctly. Downgraded; numeric guard is hygiene. |
+
+**Method note:** the audit predicted five findings from reading code; the live capture shows
+the actual showstopper (Store-Id) was not among them, and two of the five (F2, F4) do not
+occur. Only real data shows what the vendor actually sends. Measure first.
+
+### The fix, both parts (one PR)
+
+1. **Store-Id header** — thread `merchantId` (`platform_data.merchantId`) into
+   `zidApiGet`/`fetchAllProducts` and send `Store-Id: <merchantId>` on the store API calls.
+   Drop `Role: Manager`. Regression test from the captured 401-vs-200 pair. Without this,
+   nothing else can be validated.
+2. **`is_infinite`** — map unlimited stock to a real unknown/unlimited state (not `0`),
+   and make the catalog renderer + agent tool treat it as in-stock (fixes F1+F5 together).
+
+Then re-sync the dev store (still installed), confirm the 4 products land with Sony
+in-stock, and only then resubmit 7367.
+
+
 ### EC3 — hypotheses tested along the way (2026-08-22)
 
 Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;
