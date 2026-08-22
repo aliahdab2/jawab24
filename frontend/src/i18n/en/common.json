@@ -17,6 +17,7 @@
   "loading": "Loading...",
   "save": "Save",
   "cancel": "Cancel",
+  "undo": "Undo",
   "delete": "Delete",
   "discardTitle": "Discard changes?",
   "discardMessage": "You have unsaved changes. If you close now, they will be lost.",

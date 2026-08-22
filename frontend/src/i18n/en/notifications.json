@@ -9,7 +9,6 @@
   "hoursAgo": "{count}h ago",
   "daysAgo": "{count}d ago",
   "dismissed": "Notification dismissed",
-  "undo": "Undo",
   "prePrompt": {
     "title": "Stay in the loop",
     "body": "Get notified when comments need your attention or when something important happens with your pages.",

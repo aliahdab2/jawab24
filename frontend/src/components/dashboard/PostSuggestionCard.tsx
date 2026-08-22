@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, Clock } from 'lucide-react';
 import clsx from 'clsx';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui';
+import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
+import { SwipeBothSidesLabel } from '@/components/ui/SwipeBothSidesLabel';
+import { captureError } from '@/lib/sentryHelpers';
 import { postSuggestionsApi, type PostSuggestionResponse } from '@/lib/api';
 import { isPostSuggestionsVisible } from '@/lib/featureFlags';
 import { useAuthStore } from '@/lib/store';
@@ -38,6 +42,9 @@ const PostSuggestionSheet = dynamic(
  */
 export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const t = useTranslations('postSuggestions');
+  // «تراجع» is a generic UI word, not this feature's copy — it lives in `common`
+  // so the notification toast and this one can never drift apart.
+  const tc = useTranslations('common');
   const { isAdmin } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -74,6 +81,32 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
       (!open && query.state.data?.inFlight?.status === 'pending' ? POST_SUGGESTION_POLL_MS : false),
   });
 
+  /**
+   * Swipe the card away for the rest of today, or bring it back.
+   *
+   * Optimistic: the cache flips first so the space is reclaimed on the frame
+   * the gesture ends — a card that lingers for a round trip reads as a swipe
+   * that did not take. A failed write rolls the flag back and says so, because
+   * silently leaving it hidden would promise a persistence we did not get.
+   */
+  const setHidden = useCallback(async (hidden: boolean) => {
+    const key = ['post-suggestion-current', pageId] as const;
+    const previous = queryClient.getQueryData<PostSuggestionResponse>(key);
+    queryClient.setQueryData<PostSuggestionResponse>(key, (prev) => prev && { ...prev, hiddenToday: hidden });
+    try {
+      await postSuggestionsApi.setVisibility(hidden);
+      if (hidden) {
+        toast.success(t('hiddenUntilTomorrow'), {
+          action: { label: tc('undo'), onClick: () => void setHidden(false) },
+        });
+      }
+    } catch (err) {
+      queryClient.setQueryData<PostSuggestionResponse>(key, previous);
+      toast.error(t('hideFailed'));
+      captureError(err, 'Post suggestion card visibility failed', { extra: { hidden } });
+    }
+  }, [pageId, queryClient, t, tc]);
+
   if (!pageId || isError) return null;
 
   // React-query cache is the SINGLE source of truth: generation results are
@@ -90,8 +123,32 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
   const suggestion = current?.suggestion ?? null;
   const pending = current?.inFlight?.status === 'pending';
   const hasPost = Boolean(suggestion);
+  // Today's attempts, straight from the read this card already performs. It was
+  // fetched here from the day the card shipped and never consulted, so a
+  // merchant whose attempts had all FAILED (a burned slot is never refunded —
+  // `requestSuggestion` bounds spend rather than refunding on every error path)
+  // saw a full-strength «أنشئ منشوراً الآن» that the server was guaranteed to
+  // refuse with a 429. Offering an action the system will decline is the defect;
+  // the count that prevents it was already on the wire.
+  const remaining = current?.remainingToday ?? null;
+  // Only a CONFIRMED 0 withholds the action. `null` means the cap store was
+  // unreachable, and blocking a merchant who may well have attempts left is the
+  // worse failure — the route fails closed behind us either way.
+  const exhausted = !hasPost && !pending && remaining === 0;
+  // Warn on the LAST attempt rather than counting down from the first: a quota
+  // printed on a fresh CTA makes the feature read as a limit, while silence
+  // until 0 makes the last attempt a cliff. Surface scarcity only once scarce.
+  const lastAttempt = !hasPost && !pending && remaining === 1;
   // Nothing to show and nothing this member may do about it → no card.
   if (!hasPost && !pending && !isAdmin) return null;
+  // Swiped away earlier today. The server decides this against the feature's
+  // own UTC day, so the card returns tomorrow with nothing to expire it — and
+  // a phone and a desktop browser agree on when that is.
+  if (current?.hiddenToday) return null;
+  // A generation the merchant started is still theirs to watch land: swiping
+  // mid-flight would hide paid work in progress and read as having cancelled
+  // it. The gesture comes back the moment the post is ready.
+  const canHide = isAdmin && !pending;
 
   // A text-only post (image degraded / cleaned up) keeps the brand tile rather
   // than a broken frame — same for a thumbnail whose URL fails to load. Any
@@ -101,9 +158,40 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
 
   return (
     <>
-      {/* Owns its own bottom margin: the dashboard renders this unwrapped, so a
-          null return (every non-pilot workspace) must leave NO stray gap. */}
-      <div className="mb-8 p-4 sm:p-5 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800">
+      {/* Swipe to hide for the day — the SAME two components the notifications
+          list uses, so the gesture a merchant learned in the inbox means the
+          same thing here. Brand-tinted, not red: this is not a delete, and the
+          card is back tomorrow. Icon + label on BOTH sides because the gesture
+          works in either direction, which also keeps it correct under RTL.
+
+          The wrapper owns the bottom margin now: it is the outermost node, and
+          a null return (every non-pilot workspace) must leave NO stray gap. */}
+      <SwipeDismissWrapper
+        onDismiss={() => void setHidden(true)}
+        enabled={canHide}
+        className="mb-8 rounded-2xl"
+        // ⭐ The foreground layer must be OPAQUE and carry the same radius —
+        // copied from SwipeableMessageCard, which had this right.
+        //
+        // Without it the swipe background bleeds through the card: this card's
+        // own fill is `bg-brand-50/60`, i.e. 60% alpha, so the teal «إخفاء
+        // لليوم» band was legible straight through the post — reported on the
+        // running build as "View your post is above Hide for Today". The
+        // wrapper draws background and foreground as stacked layers, so a
+        // translucent foreground is not a style choice here, it is a bug.
+        // `z-10` keeps the stacking explicit rather than relying on source
+        // order, again matching the message card.
+        foregroundClassName="z-10 rounded-2xl bg-card"
+        peekStorageKey="postSuggestionCardPeekSeen"
+        background={
+          <SwipeBothSidesLabel
+            icon={<Clock className="w-4 h-4 text-brand-600" aria-hidden="true" />}
+            label={t('hideForToday')}
+            className="bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300"
+          />
+        }
+      >
+      <div className="p-4 sm:p-5 rounded-2xl border bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800">
         {/* Wraps on narrow screens: the action drops to its own full-width row
             instead of squeezing the preview. One DOM, responsive — never a
             duplicated mobile/desktop copy. */}
@@ -156,23 +244,36 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
                   : 'text-brand-800/80 dark:text-brand-400/80',
               )}
             >
-              {pending ? t('generating') : hasPost && suggestion ? suggestion.text : t('cardDesc')}
+              {/* At a spent cap the description carries the REASON, replacing
+                  the generic pitch — which would otherwise sell a feature the
+                  merchant cannot use for the rest of the day. One message, in
+                  the spot the eye already reads. */}
+              {pending ? t('generating') : hasPost && suggestion ? suggestion.text : exhausted ? t('noRemaining') : t('cardDesc')}
             </p>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => setOpen(true)}
-            className="w-full sm:w-auto flex-shrink-0"
-            // Opening a pending row shows the same "writing…" state the card
-            // already shows, so the action waits until there is a post to open.
-            disabled={pending}
-          >
-            {/* "View" while pending, not "Suggest a post": a post IS coming,
-                and a disabled CTA to start one reads as "you may not do this"
-                rather than "this is nearly ready". */}
-            {hasPost || pending ? t('cardOpen') : t('cardCta')}
-          </Button>
+          {/* No control at all once the cap is spent, rather than a disabled
+              one. The same reasoning the `pending` label below already applies:
+              a greyed-out CTA reads as «you may not do this» — a permission
+              problem the merchant might try to solve — when the truth is «come
+              back tomorrow», which the description now states outright. There
+              is no live action left here to keep a button for: the sheet would
+              open on the same sentence. */}
+          {!exhausted && (
+            <Button
+              size="sm"
+              onClick={() => setOpen(true)}
+              className="w-full sm:w-auto flex-shrink-0"
+              // Opening a pending row shows the same "writing…" state the card
+              // already shows, so the action waits until there is a post to open.
+              disabled={pending}
+            >
+              {/* "View" while pending, not "Suggest a post": a post IS coming,
+                  and a disabled CTA to start one reads as "you may not do this"
+                  rather than "this is nearly ready". */}
+              {hasPost || pending ? t('cardOpen') : lastAttempt ? t('cardCtaLast') : t('cardCta')}
+            </Button>
+          )}
         </div>
 
         {eligiblePages.length > 1 && (
@@ -200,6 +301,7 @@ export function PostSuggestionCard({ pages }: { pages: Page[] }) {
           </div>
         )}
       </div>
+      </SwipeDismissWrapper>
 
       {open && (
         <PostSuggestionSheet
