@@ -351,6 +351,18 @@ describe('ChunkerService', () => {
             expect(chunks[0].contentOriginal).toContain('Availability: in stock');
         });
 
+        // F1: a null inventory means untracked/unlimited (Zid `is_infinite`), not zero.
+        // `null <= 5` is true in JS, so the pre-fix chain wrote unlimited stock into the
+        // KB as "low stock" — the AI then told customers a flagship product was running out.
+        it('marks unlimited (null inventory) products as in stock, never low stock', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Unlimited', status: 'active', totalInventory: null, hasVariants: false },
+            ]);
+            expect(chunks[0].contentOriginal).toContain('Availability: in stock');
+            expect(chunks[0].contentOriginal).not.toContain('low stock');
+            expect(chunks[0].contentOriginal).not.toContain('out of stock');
+        });
+
         it('normalizes Arabic product names and detects language', () => {
             const chunks = chunkProducts([
                 { platformProductId: '1', title: 'عطر أصلي مع التوصيل', status: 'active', totalInventory: 10, hasVariants: false },

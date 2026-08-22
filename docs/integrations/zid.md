@@ -109,17 +109,31 @@ observation instead of testing the cheap decisive case. The App Market install w
 reachable the whole time (old dashboard, session carries over, no login) and settles it in
 minutes. Reach for the decisive test first.
 
-### 🔴 NEW, CAPTURED 2026-08-22: product sync 401s after a successful install
+### ✅ SOLVED + PROVEN LIVE 2026-08-22: product sync 401'd for want of a `Store-Id` header
 
-The install succeeds but the first `full_sync` job fails: `zid API HTTP error: 401` on
-`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). The store row,
-the token pair, and `token_expires_at` (2029) are all present and the embedded session
-works — so this is not the token being absent. Candidates, unverified: the wrong credential
-in the `X-Manager-Token` vs `Bearer authorizationToken` split (`zidApiGet`,
-`services/zid.ts:253`), the `Role: Manager` header the products call adds, or a
-Zid-side delay between install and API readiness. **This is exactly the docs-vs-reality gap
-D-020 exists to catch — a real captured failure, not a predicted one.** It blocks §B and
-everything downstream until fixed. Investigate against the live store while it exists.
+The install succeeded but the first `full_sync` job failed: `zid API HTTP error: 401` on
+`GET https://api.zid.sa/v1/products/` (`jobId 355`, retried 3×, all 401). Not a missing
+token — the store row, the token pair and `token_expires_at` (2029) were all present and the
+embedded session worked. **Root cause: the non-`/managers/` store API requires a
+`Store-Id: <numeric merchant id>` header.** Without it the API answers
+`401 {"detail":"No such user"}` — a body that describes the *caller*, not the token, which is
+why it read as an auth failure for so long. Found by replaying every header arrangement
+in-container until arrangement F (the one carrying `Store-Id`) returned 200.
+
+Fixed in #865: `ZidCredentials.storeId` sourced from `platformData.merchantId`, sent by
+`zidApiGet` whenever present. `Role: Manager` was removed in the same change — proven a
+no-op against the live API.
+
+**Proven end-to-end on 2026-08-22**, minutes after `512853d` deployed: a full sync of dev
+store 3195980 returned `{"synced":4,"capped":false}` and all four published products landed
+in `ecommerce_products`. **Zid product sync had never once worked, for any store, before
+this.** The hidden fifth product was correctly absent (the endpoint omits unpublished
+products — see F2), and «نظارة شمسية» landed at `250 SAR`, its sale price, not its 400 SAR
+list price (F4).
+
+That same first sync also reproduced **F1** in production: `Sony A7S III → total_inventory 0`
+— the merchant's unlimited flagship, stored as out of stock. Fix and live payload capture in
+`zid-edge-case-audit.md`.
 
 ### EC3 — hypotheses tested along the way (2026-08-22)
 

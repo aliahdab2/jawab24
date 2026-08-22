@@ -81,6 +81,42 @@ const ZID_PLAN_NAME_TO_SLUG: Record<string, ZidBillablePlanSlug> = Object.fromEn
 );
 
 /**
+ * Zid plans that are REAL but grant nothing — the free «اختبار» plan (id 3956)
+ * the Partner Dashboard keeps for testing. `mapZidPlanToSlug` returns null for
+ * these, which is correct (they entitle no tier), but they are NOT the "we do
+ * not recognise this identifier" case fail-loud exists for: they are known, they
+ * resolve to no entitlement by design, and a reviewer or we ourselves will
+ * subscribe to one. Left to fail loud they page a human every reconcile pass
+ * (JAWAB24-BACKEND-27 fired every ~6h off our own dev store, Users Impacted: 0)
+ * — noise that trains the on-call to ignore the very alert that guards paying
+ * merchants from being activated on a guessed tier.
+ *
+ * Matched by id first for the same reason as the slug table: the id survives a
+ * rename, the Arabic name is the fallback.
+ */
+const ZID_NON_ENTITLING_PLAN_IDS = new Set(['3956']);
+
+const ZID_NON_ENTITLING_PLAN_NAMES = new Set(
+    ['اختبار', 'test'].map(name => normalizeArabic(name).toLowerCase()),
+);
+
+/**
+ * Is this a known Zid plan that deliberately grants no entitlement? Callers use
+ * it ONLY to downgrade an unmapped plan from fail-loud to a silent skip — it
+ * must never activate anything.
+ */
+export function isZidNonEntitlingPlan(plan: {
+    id?: string | number | null;
+    name?: string | null;
+}): boolean {
+    if (plan.id !== undefined && plan.id !== null
+        && ZID_NON_ENTITLING_PLAN_IDS.has(String(plan.id).trim())) {
+        return true;
+    }
+    return !!plan.name && ZID_NON_ENTITLING_PLAN_NAMES.has(normalizeArabic(plan.name).toLowerCase());
+}
+
+/**
  * Resolve a Zid plan identifier to a local plan slug. Returns null for anything
  * unknown; callers MUST treat null as fail-loud, never as a default.
  *

@@ -4,7 +4,7 @@ import { and, eq, desc, inArray, notInArray } from 'drizzle-orm';
 import { subscriptionsService } from './subscriptions';
 import { plansService } from './plans';
 import { resolveZidCredentials, zidApiGet, type ZidCredentials } from './zid';
-import { mapZidPlanToSlug } from '../config/zidBilling';
+import { isZidNonEntitlingPlan, mapZidPlanToSlug } from '../config/zidBilling';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
@@ -264,6 +264,7 @@ export type ZidBillingSyncOutcome =
     | 'adopted'          // local row now mirrors the Zid subscription
     | 'refused'          // a paying stripe/manual row is in the way — human decides
     | 'unknown_plan'     // plan resolves to no slug — fail loud, no activation
+    | 'non_entitling_plan' // a KNOWN free/test plan («اختبار») — grants nothing, skipped silently
     | 'unknown_status'   // status string we do not recognise — fail loud, no write
     | 'unreadable'       // a 200 we could not parse — fail loud, NEVER read as "no subscription"
     | 'paused'           // Zid shows no live subscription; live local mirror paused
@@ -341,6 +342,15 @@ export async function adoptZidSubscription(
 
     const slug = mapZidPlanToSlug({ id: zidSub.planId, name: zidSub.planName });
     if (!slug) {
+        // A known no-entitlement plan is not an unrecognised identifier — skip it
+        // without paging anyone. Still no activation: it grants nothing.
+        if (isZidNonEntitlingPlan({ id: zidSub.planId, name: zidSub.planName })) {
+            log.info(
+                { storeId, userId, planId: zidSub.planId, planName: zidSub.planName },
+                'Zid billing: known non-entitling plan — no activation, no alert',
+            );
+            return { outcome: 'non_entitling_plan', changed: false };
+        }
         return failLoud(
             'unknown_plan',
             `Zid plan (id=${zidSub.planId ?? 'none'}, name=${zidSub.planName ?? 'none'}) maps to no local plan slug`,
