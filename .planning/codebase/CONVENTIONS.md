@@ -679,10 +679,84 @@ Pinned by `frontend/src/__tests__/styles/scaleTokenContrast.test.ts`, which
 resolves both palettes out of `globals.css` and fails on any pairing that passes
 in one theme and fails in the other. It reports `file:line` and both ratios.
 
+**A bare `text-surface-*` with no background beside it is the blind spot in that
+gate** — it can only measure a pairing it can see, and here the background comes
+from an ancestor. Measured against `--card`, only **600–900** clear AA in both
+themes:
+
+| | on card, light | on card, dark |
+|---|---|---|
+| `text-surface-400` | 2.57 | 1.23 |
+| `text-surface-500` | 4.79 | **2.01** |
+| `text-surface-600` | 7.26 | 4.88 |
+| `text-surface-950` | 19.46 | **1.10** — `.dark` never redefines it |
+
+`text-surface-500` is how the form helper text ended up at 2.01:1. Use
+`text-muted-foreground` for body copy on a card and let the semantic token
+handle both themes. The exception is a deliberately dark surface — the landing
+footer (`landing-section-dark`) uses `text-surface-400` correctly, because there
+the ancestor is dark in *both* themes. That ambiguity is precisely why this is a
+written rule and not a gate.
+
 > Separately, and **not** what that gate covers: several pairings fail in *both*
 > themes (`bg-brand-500 text-white` is 2.71:1 light / 3.27:1 dark across ~30 CTAs).
 > Those are a brand-palette question, not an inversion bug — see the open item in
 > `DECISIONS.md`.
+
+#### A component must not restate what a semantic class already says
+
+`@layer components` loses to utilities, always. So a component that repeats a
+property the class already sets does not "reinforce" it — it silently replaces
+it, and the stylesheet becomes a description of something nobody ships.
+
+That is exactly what happened to buttons: `.btn-primary` declared 15px / weight
+600 / 14px radius, `<Button>` appended `text-sm rounded-2xl` plus a
+`font-bold tracking-tight` label span, and every button in the product rendered
+14px / 700 / 16px. Nothing was wrong on screen; the spec was simply fiction, and
+the design-system card documented the fiction.
+
+Rules:
+
+1. **The semantic class owns colour, typography and shape.** A component adds
+   only what genuinely varies — padding for a size, a layout utility, a state.
+2. **If the component needs a different value, change the class**, or add a
+   variant to it. Do not overrule it from the call site.
+3. **Never inline raw scale steps** (`bg-surface-50 text-surface-600`) where a
+   `status-*` / `icon-bg-*` / `alert-*` class exists. If none fits, add one —
+   that is how the neutral chip ended up with nowhere to apply a fix.
+4. **Every `status-*` class should be reachable through its component.** `Badge`
+   had no way to render `status-info`, `status-violet` or `status-orange`, and
+   its `info` variant pointed at `status-brand`.
+
+#### Animations: one definition per name, and reduced motion must reach it
+
+The vocabulary is split between `tailwind.config.js` and `globals.css`, and the
+split is load-bearing: **only the config can generate variant forms**
+(`group-hover:animate-shimmer`), and only raw CSS can hold hand-written
+keyframes. Defining the same *name* in both is the bug.
+
+Which one wins is not intuitive, and it goes both ways:
+
+- `float` was in both. The raw rule won, so `float-delayed` / `float-slow` —
+  config entries pointing at the raw keyframes — ran a 20px travel instead of
+  the 8px they were written for.
+- `shimmer` was in both and the **config won**, because Tailwind emits variant
+  utilities *and the keyframes they reference* at the very end of the sheet.
+  Deleting the config half as "dead code" would have changed every button.
+
+So: **one definition per name.** Put it in the config only if it needs a variant
+prefix; otherwise put it in `globals.css` next to its keyframes, and never let a
+config animation reference keyframes it does not own.
+
+**Every infinite animation must appear in the `prefers-reduced-motion` block**
+(WCAG 2.2.2). The block long covered only the `globals.css` half, missing the
+whole config half plus Tailwind's own `animate-pulse` / `bounce` / `ping`.
+A variant-only animation needs an attribute selector — `.animate-shimmer` never
+matches the class `group-hover:animate-shimmer`. `animate-spin` is the one
+deliberate exception: it marks a request in flight, which 2.2.2 treats as
+essential activity.
+
+Pinned by `frontend/src/__tests__/styles/animationVocabulary.test.ts`.
 
 #### Amber vs orange — which warning hue
 
