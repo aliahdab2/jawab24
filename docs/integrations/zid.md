@@ -66,7 +66,53 @@ needed no working backend and risked nothing. It was proposed and then skipped i
 of acting on the hypothesis directly. **Run the cheap falsifying test before spending
 something you cannot get back.**
 
-### EC3 — what has been ruled out (2026-08-22)
+### ✅ EC3 — SOLVED 2026-08-22: an unpublished app has no App Market page, so no store can install it
+
+**The cause.** App 7367 is not published, so it has **no App Market listing**, so no store —
+development stores included — can install it. `EC3` is what Zid returns when the authorize
+call names an app the store cannot install.
+
+Verified in the **old** dashboard (`web.zid.sa/market`, reachable from the new dashboard via
+"Return to Old Dashboard" → the feedback prompt → Skip; the session carries over, no login),
+with a published app as the control:
+
+| App | `/market/app/{id}` | Activate button |
+|---|---|---|
+| 7562 (published, unrelated) | ✅ full market page | ✅ «فعل التطبيق» |
+| **7367 (ours)** | ❌ 404, bounces to `/` | ❌ |
+
+⚠️ **Do not probe this with `fetch()`** — `web.zid.sa` is an SPA, so every id returns the
+same 600 KB shell and a naive 404 check reports true for *all* of them, published or not.
+The 404 is rendered client-side after routing; only real navigation distinguishes them.
+An early probe here did exactly that and briefly "confirmed" a false result.
+
+**This explains every observation at once:**
+- `Draft` and `In review` behave identically because **both mean "not published"** — the
+  review-state hypothesis was never the right axis.
+- The URL config being correct does not help; the request never gets that far.
+- Zid's reviewer install on 2026-08-11 **reached our code** because reviewers install
+  through a privileged path ordinary stores do not have.
+
+🔴 **Consequence — the chicken-and-egg is total.** We cannot install 7367 on our own dev
+store at any point before approval. Every §A–§I capture in `ZID_TEST_PLAN.md` is therefore
+blocked on Zid approving the app, and Zid's own lifecycle advice ("test in a development
+store" at step 4, before publishing at step 5) is **not achievable** through the App Market
+for an OAuth app.
+
+**The one untried mechanism** is the partner dashboard's **"Public/Private Apps"** section —
+a *private* app is normally installable on named stores without market publication. In this
+account that nav item renders as **plain text with no link**, i.e. it is not enabled for us.
+That makes the question to Zid specific and answerable — *"please enable Public/Private
+Apps so we can install app 7367 on development store 3195980 for testing"* — instead of the
+unanswerable *"what does EC3 mean?"*.
+
+**Therefore: resubmit 7367.** Staying in `Draft` buys nothing — it does not enable testing,
+and it costs queue time. Fix the `zid-edge-case-audit.md` findings **blind** (F1 especially:
+it is fixable in a way that is correct whatever Zid sends, by refusing to assert
+availability on unknown stock) and resubmit, because a reviewer install is now the only
+route to a live capture.
+
+### EC3 — hypotheses tested along the way (2026-08-22)
 
 Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;
 do not re-test them.**
@@ -75,8 +121,8 @@ do not re-test them.**
 |---|---|---|---|
 | 1 | The app being `In review` locks it against installs | ❌ **FALSIFIED** | `EC3` is byte-identical in `Draft` and `In review`, tested minutes apart |
 | 2 | `redirect_uri` mismatch between our authorize call and the app's configured Callback URL | ❌ **FALSIFIED** | They match **exactly** — see the config below |
-| 3 | The store has no App-Market install record, because we start the flow ourselves instead of via Zid's Install action | 🟡 **OPEN — current best candidate** | Fits both falsifications. But Zid's own OAuth doc says *"The installation process starts with your application via the redirection url"*, which argues our approach IS valid — so this is unproven and partly contradicted |
-| 4 | An unpublished app cannot be installed by any store, dev stores included | 🟡 **OPEN** | Would contradict Zid's lifecycle putting dev-store testing at step 4, before publishing at step 5 |
+| 3 | The store has no App-Market install record because we start the flow ourselves | 🟡 partly right, for the wrong reason — the store genuinely has no install record, but because the app has no market listing at all, not because of who starts the flow |
+| 4 | An unpublished app cannot be installed by any store, dev stores included | ✅ **CONFIRMED — this is the cause.** See the solved section above. It does contradict Zid's own lifecycle advice; the advice is simply not achievable for an OAuth app via the App Market |
 
 **App 7367 URL configuration, verified correct — stop re-checking it:**
 
