@@ -6,6 +6,8 @@ import { useTranslations, useLocale } from 'next-intl';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { BLOG_POSTS, type BlogPost } from '@/data/blog-posts';
 import type { BlogFrontmatter } from '@/lib/blog';
+import { getIntlLocale } from '@/utils/locale';
+import { formatPlainDate } from '@/utils/dateUtils';
 
 interface PostWithMeta extends BlogPost {
   frontmatter: BlogFrontmatter;
@@ -33,13 +35,9 @@ function PostCard({ post, featured = false }: { post: PostWithMeta; featured?: b
           <span className="text-xs font-medium uppercase tracking-wider text-brand-400">
             {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations' | 'category.statistics' | 'category.caseStudies')}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {new Date(post.date).toLocaleDateString(locale === 'en' ? 'en-US' : 'ar-SA-u-nu-latn', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </span>
+          <time dateTime={post.date} className="text-xs text-muted-foreground">
+            {formatPlainDate(post.date, getIntlLocale(locale), { alwaysYear: true })}
+          </time>
         </div>
 
         {/* Title */}

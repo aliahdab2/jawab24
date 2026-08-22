@@ -148,6 +148,12 @@ enforced server-side), but a wasteful and misleading signal.
 file: unnamed crawlers already inherit `Allow: /` from `*`, so naming them changes nothing
 functionally — it makes the file auditable.
 
+> **Superseded 2026-08-22.** Eleven verbatim copies of the same block was the wrong fix:
+> RFC 9309 lets consecutive `User-agent` lines share one directive block, so the file is now
+> a single group naming all eleven agents, with one `Disallow` set that `validate-sitemap.js`
+> check 8 keeps in step with the auth-gated `EXCLUDED_ROUTES`. See
+> `SEO_ACTIONS_2026-08-22.md` §C.4.
+
 ---
 
 ## 6. Added: IndexNow
@@ -227,6 +233,13 @@ that are actually observable should be used instead:
    `ClaudeBot`, `PerplexityBot`, `OAI-SearchBot`, `ChatGPT-User`, `CCBot` — and which paths
    they fetch. This directly answers "do AI tools fetch us", with no estimation. Capture a
    baseline before this change deploys so the llms.txt refresh has a before/after.
+
+   > **2026-08-22: this baseline was never captured, and it cannot be.** nginx logs to
+   > docker's `json-file` driver with `max-size: 10m, max-file: 3` — roughly two days of
+   > traffic — and the whole buffer is discarded on every `--force-recreate` (the last one
+   > was 2026-08-20). There is no weekly window to count. See
+   > `SEO_ACTIONS_2026-08-22.md` §1 for the ~40 hours that did survive, and §C there for
+   > the retention fix this needs.
 2. **Index coverage**, from GSC and (after §8.1) Bing Webmaster Tools: indexed page count,
    the discovered-not-indexed list, and position/CTR on tracked queries.
 

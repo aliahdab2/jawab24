@@ -139,10 +139,21 @@ else
 fi
 
 # =============================================
-# 0.55. Validate sitemap (no future <lastmod>, hreflang pairs intact, no dupes)
+# 0.55. Validate sitemap (generated file current, no future <lastmod>, hreflang pairs intact, no dupes)
 # =============================================
 echo ""
 echo "🗺️  Validating sitemap..."
+# public/sitemap.xml is generated from src/data/*.ts (generate-sitemap.js); a
+# page date bumped without regenerating would ship the old <lastmod> and Bing
+# would never be told the page changed — so staleness fails the deploy, like
+# the llms.txt gate below.
+if node frontend/scripts/generate-sitemap.js --check > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Sitemap current${NC}"
+else
+    echo -e "${RED}   ❌ Sitemap is stale — regenerate it (cd frontend && npm run sitemap:generate)${NC}"
+    node frontend/scripts/generate-sitemap.js --check
+    exit 1
+fi
 if node frontend/scripts/validate-sitemap.js > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Sitemap valid${NC}"
 else

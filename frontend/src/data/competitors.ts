@@ -9,13 +9,16 @@
  * on the Arabic page, which is what `'Subscription + AI credits'` used to do.
  */
 
+import type { ContentDates } from './contentDates';
+
 export interface CompetitorFeature {
   /** true | false, or an i18n key under `compare.val.*` — never literal text. */
   jawab24: boolean | string;
   competitor: boolean | string;
 }
 
-export interface Competitor {
+/** `date` / `updated` semantics (and who reads them) are documented on ContentDates. */
+export interface Competitor extends ContentDates {
   slug: string;
   name: string;
   website: string;
@@ -90,8 +93,12 @@ export const FEATURE_KEYS = [
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
 export const COMPETITORS: Record<string, Competitor> = {
+  // Every page was re-verified against the competitor's live pricing on
+  // 2026-08-14 (#751) — that is the `updated` on all five.
   manychat: {
     slug: 'manychat',
+    date: '2026-03-08',
+    updated: '2026-08-14',
     name: 'ManyChat',
     website: 'https://manychat.com',
     features: {
@@ -111,6 +118,8 @@ export const COMPETITORS: Record<string, Competitor> = {
   },
   chatfuel: {
     slug: 'chatfuel',
+    date: '2026-03-08',
+    updated: '2026-08-14',
     name: 'Chatfuel',
     website: 'https://chatfuel.com',
     features: {
@@ -130,6 +139,8 @@ export const COMPETITORS: Record<string, Competitor> = {
   },
   tidio: {
     slug: 'tidio',
+    date: '2026-03-17',
+    updated: '2026-08-14',
     name: 'Tidio',
     website: 'https://www.tidio.com',
     features: {
@@ -149,6 +160,8 @@ export const COMPETITORS: Record<string, Competitor> = {
   },
   botpress: {
     slug: 'botpress',
+    date: '2026-03-17',
+    updated: '2026-08-14',
     name: 'Botpress',
     website: 'https://botpress.com',
     features: {
@@ -168,6 +181,8 @@ export const COMPETITORS: Record<string, Competitor> = {
   },
   speedly: {
     slug: 'speedly',
+    date: '2026-05-13',
+    updated: '2026-08-14',
     name: 'Speedly',
     website: 'https://speedly.ly',
     features: {
