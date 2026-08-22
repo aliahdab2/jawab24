@@ -66,6 +66,46 @@ needed no working backend and risked nothing. It was proposed and then skipped i
 of acting on the hypothesis directly. **Run the cheap falsifying test before spending
 something you cannot get back.**
 
+### EC3 — what has been ruled out (2026-08-22)
+
+Read from the app wizard while 7367 was editable in `Draft`. **Two hypotheses are dead;
+do not re-test them.**
+
+| # | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| 1 | The app being `In review` locks it against installs | ❌ **FALSIFIED** | `EC3` is byte-identical in `Draft` and `In review`, tested minutes apart |
+| 2 | `redirect_uri` mismatch between our authorize call and the app's configured Callback URL | ❌ **FALSIFIED** | They match **exactly** — see the config below |
+| 3 | The store has no App-Market install record, because we start the flow ourselves instead of via Zid's Install action | 🟡 **OPEN — current best candidate** | Fits both falsifications. But Zid's own OAuth doc says *"The installation process starts with your application via the redirection url"*, which argues our approach IS valid — so this is unproven and partly contradicted |
+| 4 | An unpublished app cannot be installed by any store, dev stores included | 🟡 **OPEN** | Would contradict Zid's lifecycle putting dev-store testing at step 4, before publishing at step 5 |
+
+**App 7367 URL configuration, verified correct — stop re-checking it:**
+
+| Field | Value |
+|---|---|
+| Application Website | `https://jawab24.com` |
+| Application URL (embedded) | `https://jawab24.com/zid/embedded` |
+| Redirection URL | `https://jawab24.com/zid/auth` |
+| Callback URL | `https://jawab24.com/zid/auth/callback` |
+
+Our authorize call sends
+`redirect_uri=https%3A%2F%2Fjawab24.com%2Fzid%2Fauth%2Fcallback` — identical to the
+Callback URL above. Client ID `7192` also matches.
+
+⚠️ **`EC3` is undocumented.** It appears nowhere in `docs.zid.sa` or the partner help
+centre, and Zid returns it as a bare query parameter on a silent bounce to the store
+dashboard — no message, no page, nothing a merchant could act on. Any future explanation
+has to come from Zid support or from observing a *successful* install.
+
+🔑 **The one asymmetry worth chasing:** Zid's reviewer install on 2026-08-11 **reached our
+code** (it died on our `PostgresError`, not on EC3), against their own store "Test". Ours
+bounces at EC3 against dev store 3195980. Whatever differs between those two installs is
+the answer — and it is not the app's status or its URLs.
+
+⚠️ **Security note:** the General Settings step displays the app's **client secret in
+plain text**. Treat that screen as sensitive; do not screen-share or screenshot it, and
+rotate the secret if it has been exposed — production's `ZID_CLIENT_SECRET` must be
+updated in the same change or the whole Zid path breaks.
+
 How it got here, from the Intercom thread with Zid partner support:
 
 | Date | What happened |
