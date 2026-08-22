@@ -51,8 +51,7 @@
     "welcomeBenefit3": "المنتجات تُزامن تلقائياً — تستغرق حوالي دقيقتين",
     "welcomeCta": "ابدأ الآن",
     "doneCheckProducts": "{count, plural, zero {لا منتجات} one {تمت مزامنة منتج واحد} two {تمت مزامنة منتجين} few {تمت مزامنة # منتجات} many {تمت مزامنة # منتج} other {تمت مزامنة # منتج}}",
-    "doneCheckPage": "تم ربط {name}",
-    "doneCheckActive": "الردود التلقائية مفعّلة"
+    "doneCheckPage": "تم ربط {name}"
   },
   "claim": {
     "title": "اربط متجر سلة الخاص بك",

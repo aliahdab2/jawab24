@@ -51,8 +51,7 @@
     "welcomeBenefit3": "Products sync automatically — takes about 2 minutes",
     "welcomeCta": "Get Started",
     "doneCheckProducts": "{count, plural, one {# product synced} other {# products synced}}",
-    "doneCheckPage": "{name} linked",
-    "doneCheckActive": "Auto-replies active"
+    "doneCheckPage": "{name} linked"
   },
   "claim": {
     "title": "Connect your Salla store",
