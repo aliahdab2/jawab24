@@ -193,8 +193,12 @@ export interface InventoryInfo {
      * never to a wrong product.
      */
     source: 'local' | 'live';
-    /** ISO timestamp the stock figure is as of: the row's last sync for `local`, now for `live`. */
-    asOf: string;
+    /**
+     * ISO timestamp the stock figure is as of: the row's last sync for `local`,
+     * now for `live`. ABSENT when the store has never synced — never a
+     * placeholder date, which the model would read out to the customer.
+     */
+    asOf?: string;
 }
 
 // --- Internal types (used by backend only, never sent to AI) ---

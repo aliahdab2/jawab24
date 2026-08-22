@@ -52,12 +52,19 @@ vi.mock('../../src/services/workspaceSettings', () => ({
 // Mock the RetrievalService class
 const mockRetrieve = vi.fn();
 const mockSetLogger = vi.fn();
-vi.mock('../../src/services/kb/retrieval', () => ({
-    RetrievalService: vi.fn().mockImplementation(() => ({
-        retrieve: mockRetrieve,
-        setLogger: mockSetLogger,
-    })),
-}));
+// The lazy singleton lives in kb/retrieval since D-092, so the mock owns it too.
+// (The factory is hoisted above the `const` mocks, so it must reach them lazily.)
+vi.mock('../../src/services/kb/retrieval', () => {
+    const instance = () => ({
+        retrieve: (...args: unknown[]) => mockRetrieve(...args),
+        setLogger: (...args: unknown[]) => mockSetLogger(...args),
+    });
+    return {
+        RetrievalService: vi.fn().mockImplementation(instance),
+        getRetrievalService: instance,
+        ragRetrievalMode: () => 'dual',
+    };
+});
 
 // Mock the EmbeddingProvider class
 vi.mock('../../src/services/kb/embedding', () => ({

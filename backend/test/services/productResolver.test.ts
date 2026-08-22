@@ -253,6 +253,25 @@ describe('resolveProduct — flow', () => {
         expect(mockRetrieveProducts).not.toHaveBeenCalled();
     });
 
+    it('logs every index-stage decision with the phrase, the best-scored products and the outcome — the counters say how often, this says why', async () => {
+        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+        mockRetrieveProducts.mockResolvedValue([hit('shoes', 0.01, 0.532), hit('shirt', 0.0, 0.386), hit('sony', 0.0, 0.1), hit('glasses', 0.0, 0.05)]);
+
+        await resolveProduct({ ...base, productName: 'حذاء رياضي', queryEmbedding: [1], logger });
+
+        expect(logger.info).toHaveBeenCalledWith('[ProductResolver] decision', {
+            query: 'حذاء رياضي',
+            outcome: 'resolved',
+            via: 'hybrid',
+            chosen: 'shoes',
+            top: [
+                { id: 'shoes', tri: 0.01, vec: 0.532 },
+                { id: 'shirt', tri: 0, vec: 0.386 },
+                { id: 'sony', tri: 0, vec: 0.1 },
+            ],
+        });
+    });
+
     it('no input → not_found without any lookup', async () => {
         expect(await resolveProduct({ ...base })).toEqual({ kind: 'not_found', reason: 'no_input' });
         expect(mockRetrieveProducts).not.toHaveBeenCalled();

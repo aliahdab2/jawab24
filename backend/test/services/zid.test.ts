@@ -1363,8 +1363,17 @@ describe('Zid Service', () => {
         });
 
         it('still throws on other failures (a 5xx is an API error, not a missing product)', async () => {
-            mockFetch.mockResolvedValue(jsonResponse({ detail: 'down' }, 503));
-            await expect(getProductById('store-1', 'x')).rejects.toThrow();
+            // ecommerceApiGet retries a 5xx three times with 1s/2s/4s backoff — real
+            // timers would blow the 5s test budget, so the clock is advanced instead.
+            vi.useFakeTimers();
+            try {
+                mockFetch.mockResolvedValue(jsonResponse({ detail: 'down' }, 503));
+                const outcome = expect(getProductById('store-1', 'x')).rejects.toThrow();
+                await vi.runAllTimersAsync();
+                await outcome;
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 

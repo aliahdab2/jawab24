@@ -2384,7 +2384,10 @@ against the store's rows; otherwise the page's `kb_chunks` product rows are scor
 ≤3 candidates, or `not_found`. Stock is answered from the synced `ecommerce_products` row; the platform
 is asked **by id** (`getProductById`) only for a tracked row at/below `LOW_STOCK_UNITS` (5) whose store
 last synced more than `STOCK_REFRESH_MIN` (10, env) ago — never for unlimited (`null`) rows or demo
-stores — and the live figure is written back to the row only. Sold-out products stay visible as
+stores — and the live figure is written back to the row only (count AND status together: `availabilityOf`
+lets a platform `out_of_stock` status win over the count, so a count written alone after a restock
+leaves the row saying "out of stock" at 10 units — not "risky", so every later local answer repeats
+it until the next sync). Sold-out products stay visible as
 "out of stock" through every reader that feeds the model — catalog block, index, re-ingest input,
 resolver (`SELLABLE_STATUSES`); the mention-card scan stays `active`-only on purpose, so a product the
 reply calls sold out gets no card. Per D-051, identity is a code decision;
@@ -2414,6 +2417,19 @@ resolves, 2 false not-founds, 42/65 strict**. Tuning to strict accuracy instead 
 Arabic transliterations of Latin brands with no Arabic description («جالكسي» 0.24, «ايربودز» 0.18),
 which score below unrelated queries: no similarity signal separates them, so they are the open gap.
 
+**Calibration limit, stated.** The probe scored trigram and cosine on the same short phrase. In
+production stage 1 runs on the model's `product_name` paraphrase and stage 2 on the reply's reused
+embedding of the customer's whole message — the distribution the thresholds were fit on only
+approximately (the corpus has a few full sentences; most entries are fragments). Two consequences:
+the embedding is reused only in `dual`/`off` retrieval mode, where it is the raw message's — in
+`enriched` mode it carries earlier turns about other products, so the resolver embeds the phrase
+itself (`ragRetrievalMode()`); and every index-stage decision is logged at info
+(`[ProductResolver] decision`: phrase, top-3 ids with tri/vec, outcome) so the real score
+distribution can be read off production before the thresholds are trusted further. The candidate
+cut is the UNION of top-20 by trigram and top-20 by cosine, not one top-20 by the greater of the
+two — a single-category catalog has more than 20 products at cosine 0.3–0.5, and one cut would drop
+a near-exact title at trigram 0.33 before stage 1 saw it.
+
 **Premise corrected by the eval.** The plan assumed a 50-product catalog makes the tool "the primary
 path" because the inline block caps at 15 products. It does not: RAG's top-10 product chunks cover
 a 40-product store, and at temp 0 the model called `check_inventory` **0 times in 12 attempts** on
@@ -2425,8 +2441,10 @@ until the model reaches the tool); Cat 48 6/6 and Cat 79 3/3 after the change; C
 785–787 → 788–790 because Cat 48 already used 786/787.
 
 **Observability.** `metrics:ecom:check_inventory:{by_id,id_unknown,by_trigram,by_hybrid,
-by_title_trigram,resolved_embed,ambiguous,not_found,no_index,local,stale_served,demo_local,
-live_refresh,live_cached,live_missing,live_failed}`, `metrics:product_card:tool:*`,
-`metrics:product_card:cooldown:suppressed`. Re-probe on the first real 50+ product catalog; the
+by_title_trigram,embedded,ambiguous,not_found,no_index,local,stale_served,demo_local,
+live_refresh,live_cached,live_missing,live_failed}` — every resolved call emits one resolver
+outcome AND one stock outcome, so the keys sum to twice the calls — `metrics:product_card:tool:*`,
+`metrics:product_card:cooldown:suppressed`. A failed live refresh reaches Sentry once per store per
+refresh window (`ecom:stock:failed:{store}`); the counter carries the volume. Re-probe on the first real 50+ product catalog; the
 `not_found` share is the alarm. Deferred with their triggers: IDs in the inline block, a
 `title_normalized` column, a partial index on `type='product'`, Shopify `inventory_levels/update`.

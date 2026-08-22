@@ -7,7 +7,7 @@ import { workspaceSettingsService } from '../workspaceSettings';
 import { postsService } from '../posts';
 import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
-import { getRetrievalService } from '../kb/retrieval';
+import { getRetrievalService, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
@@ -23,10 +23,10 @@ import { detectBusinessActionFlags } from './urgentFlags';
  * playground/test-reply paths must use this — bypassing it caused the AI
  * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
-async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
+async function dispatchAiReply(request: AiGenerateRequest, logger: Logger): Promise<AiGenerateResponse> {
     if (request.context?.ecommerceStoreId) {
         const { generateReplyWithTools } = await import('../ecommerceToolLoop');
-        return generateReplyWithTools(request);
+        return generateReplyWithTools(request, logger);
     }
     return aiService.generateReply(request);
 }
@@ -747,7 +747,7 @@ export class ReplyGenerator {
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
-                const aiResponse = await dispatchAiReply(aiRequest);
+                const aiResponse = await dispatchAiReply(aiRequest, this.logger);
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
             }
@@ -823,7 +823,7 @@ export class ReplyGenerator {
             //   dual     → union(enriched, raw): keeps the vague-follow-up benefit AND lets a
             //              self-contained query recover its own chunk (primaryEmbeddingIndex=1 → raw
             //              query's embedding for the cache key).
-            const retrievalMode = process.env.RAG_RETRIEVAL_MODE || 'dual';
+            const retrievalMode = ragRetrievalMode();
             const { chunks, queryEmbedding } = await (
                 retrievalMode === 'off'
                     ? retrieval.retrieve(pageId, query, kbActiveVersion, undefined, userId)
@@ -980,7 +980,7 @@ export class ReplyGenerator {
             },
         };
 
-        const aiResponse = await dispatchAiReply(aiRequest);
+        const aiResponse = await dispatchAiReply(aiRequest, this.logger);
 
         // 5. Derive flags + intent — shared with processAiResponse (production), so the
         // test tool/eval can't drift from production. Playground skips the billing + gap

@@ -15,6 +15,7 @@ import {
     phonesMatch,
     executeToolCall,
 } from '../../src/services/ecommerceActions';
+import { captureError } from '../../src/utils/sentryHelpers';
 
 // ---------- Mocks ----------
 
@@ -81,10 +82,17 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: vi.fn(),
 }));
 
+// The once-per-store Sentry throttle on a failed live refresh.
+const mockClaimDailyOnce = vi.fn();
+vi.mock('../../src/lib/dailyCap', () => ({
+    claimDailyOnce: (...args: unknown[]) => mockClaimDailyOnce(...args),
+}));
+
 beforeEach(() => {
     vi.clearAllMocks();
     mockRedisGet.mockResolvedValue(null);
     mockRedisSet.mockResolvedValue('OK');
+    mockClaimDailyOnce.mockResolvedValue(true);
 });
 
 // ==========================================
@@ -619,7 +627,7 @@ describe('executeToolCall — check_inventory', () => {
         const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
 
         expect(mockGetProductById).toHaveBeenCalledWith(storeId, 'zid-42');
-        expect(mockWriteBackProductStock).toHaveBeenCalledWith(storeId, 'zid-42', 0);
+        expect(mockWriteBackProductStock).toHaveBeenCalledWith(storeId, 'zid-42', { totalInventory: 0, status: 'active' });
         expect(result.data).toMatchObject({
             platformProductId: 'zid-42', available: false, availability: 'out_of_stock', quantity: 0, source: 'live',
             variants: [{ name: 'Color: Black', available: false, quantity: 0 }],
@@ -638,6 +646,48 @@ describe('executeToolCall — check_inventory', () => {
         expect(result.success).toBe(true);
         expect(result.data).toMatchObject({ platformProductId: 'zid-42', quantity: 2, source: 'local' });
         expect(mockWriteBackProductStock).not.toHaveBeenCalled();
+    });
+
+    it('a failed live refresh reaches Sentry ONCE per store per window — the counter carries the volume', async () => {
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 2 }) });
+        mockGetProductById.mockRejectedValue(new Error('zid API HTTP error: 401'));
+        mockClaimDailyOnce.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+        await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+        await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(mockClaimDailyOnce).toHaveBeenCalledWith(`ecom:stock:failed:${storeId}`, expect.any(Number));
+        expect(vi.mocked(captureError)).toHaveBeenCalledTimes(1);
+    });
+
+    it('RESTOCK: the live status is written back WITH the count, so the row cannot say "out of stock" at 10 units', async () => {
+        // Row: sold out on the platform's say-so (Salla `out` / Zid `out_of_stock`),
+        // stale → risky → live read. The platform now reports active / 10.
+        mockGetStoreById.mockResolvedValue(staleStore());
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ status: 'out_of_stock', totalInventory: 0 }) });
+        mockGetProductById.mockResolvedValue({
+            platformProductId: 'zid-42', title: 'نظارة شمسية', status: 'active', priceRange: '250 SAR', currency: 'SAR',
+            totalInventory: 10, hasVariants: false, handle: 'sunglasses', imageUrl: null,
+        });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(result.data).toMatchObject({ availability: 'in_stock', quantity: 10, source: 'live' });
+        // Writing `totalInventory: 10` alone would leave `status = 'out_of_stock'` on a
+        // row that is no longer "risky" — every later local answer would deny it
+        // until the next sync. The status is part of the same write.
+        expect(mockWriteBackProductStock).toHaveBeenCalledWith(storeId, 'zid-42', { totalInventory: 10, status: 'active' });
+    });
+
+    it('a store that never synced carries NO asOf — never an epoch placeholder the model would read out', async () => {
+        mockGetStoreById.mockResolvedValue({ ...freshStore(), lastSyncAt: null });
+        mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow({ totalInventory: 20 }) });
+
+        const result = await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: 'zid-42' } });
+
+        expect(result.data).toMatchObject({ source: 'local', quantity: 20 });
+        expect(result.data).not.toHaveProperty('asOf');
     });
 
     it('a sold-out product (status out_of_stock) is answered as out of stock, not denied', async () => {

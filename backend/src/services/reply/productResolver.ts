@@ -136,9 +136,10 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
         if (hits.length > 0) {
             const lexical = decideTrigram(hits);
             if (lexical) {
-                const product = await validated(storeId, lexical.platformProductId);
+                const product = await getProductByPlatformId(storeId, lexical.platformProductId);
                 if (product) {
                     recordResolverOutcome('by_trigram');
+                    logDecision(log, normalizedQuery, hits, 'resolved', 'trigram', product.platformProductId);
                     return { kind: 'resolved', product, via: 'trigram' };
                 }
             }
@@ -147,7 +148,7 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
             if (hits.every(h => h.vecScore === null)) {
                 const embedded = await embedQuery(normalizedQuery, input.userId ?? undefined, log);
                 if (embedded) {
-                    recordResolverOutcome('resolved_embed');
+                    recordResolverOutcome('embedded');
                     hits = await retrieveProducts(input.pageId, input.kbActiveVersion, normalizedQuery, embedded);
                 }
             }
@@ -165,9 +166,10 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
                 const semantic = decideSemantic(remaining);
                 if (semantic.kind === 'not_found') break;
                 if (semantic.kind === 'resolved') {
-                    const product = await validated(storeId, semantic.platformProductId);
+                    const product = await getProductByPlatformId(storeId, semantic.platformProductId);
                     if (product) {
                         recordResolverOutcome('by_hybrid');
+                        logDecision(log, normalizedQuery, hits, 'resolved', 'hybrid', product.platformProductId);
                         return { kind: 'resolved', product, via: 'hybrid' };
                     }
                     remaining = remaining.filter(h => h.platformProductId !== semantic.platformProductId);
@@ -176,6 +178,7 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
                 const candidates = await candidatesFor(storeId, semantic.candidateIds);
                 if (candidates.length === semantic.candidateIds.length) {
                     recordResolverOutcome('ambiguous');
+                    logDecision(log, normalizedQuery, hits, 'ambiguous', null, semantic.candidateIds.join(','));
                     return { kind: 'ambiguous', candidates };
                 }
                 // At least one candidate row is gone: drop those and decide again.
@@ -183,6 +186,7 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
                 remaining = remaining.filter(h => alive.has(h.platformProductId) || !semantic.candidateIds.includes(h.platformProductId));
             }
             recordResolverOutcome('not_found');
+            logDecision(log, normalizedQuery, hits, 'not_found', null, null);
             return { kind: 'not_found', reason: 'below_floor' };
         }
         // No product chunks for this page/version: a just-added product, or an
@@ -200,7 +204,7 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
     }
     const lexical = decideTrigram(titleHits);
     if (lexical) {
-        const product = await validated(storeId, lexical.platformProductId);
+        const product = await getProductByPlatformId(storeId, lexical.platformProductId);
         if (product) {
             recordResolverOutcome('by_title_trigram');
             return { kind: 'resolved', product, via: 'title_trigram' };
@@ -252,9 +256,31 @@ export function decideSemantic(hits: ProductHit[]): SemanticDecision {
 
 // --- Helpers ---
 
-/** The index may lag the catalog: a hit is only a product if its row still exists and is sellable. */
-async function validated(storeId: string, platformProductId: string): Promise<EcommerceProduct | null> {
-    return getProductByPlatformId(storeId, platformProductId);
+/**
+ * One line per index-stage decision, at info: the counters say HOW OFTEN the
+ * resolver answered `ambiguous`, this says WHY for the one call a merchant is
+ * asking about — the phrase, the three best-scored products and the outcome.
+ * Low volume (tool calls only), so it is not gated behind debug, which is dark
+ * in production (Rule 17.6).
+ */
+function logDecision(
+    log: Logger,
+    query: string,
+    hits: ProductHit[],
+    outcome: ProductResolution['kind'],
+    via: ResolveVia | null,
+    chosen: string | null,
+): void {
+    log.info('[ProductResolver] decision', {
+        query,
+        outcome,
+        ...(via ? { via } : {}),
+        ...(chosen ? { chosen } : {}),
+        top: [...hits]
+            .sort((a, b) => Math.max(b.vecScore ?? 0, b.triScore) - Math.max(a.vecScore ?? 0, a.triScore))
+            .slice(0, MAX_CANDIDATES)
+            .map(h => ({ id: h.platformProductId, tri: Number(h.triScore.toFixed(3)), vec: h.vecScore === null ? null : Number(h.vecScore.toFixed(3)) })),
+    });
 }
 
 async function candidatesFor(storeId: string, ids: string[]): Promise<InventoryCandidate[]> {

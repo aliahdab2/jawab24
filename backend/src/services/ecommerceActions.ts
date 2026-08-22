@@ -29,7 +29,9 @@ import {
 import { isDemoStore } from './demoStore';
 import { resolveProduct, sanitizeProductId, recordResolverOutcome } from './reply/productResolver';
 import { redis } from '../lib/redis';
+import { claimDailyOnce } from '../lib/dailyCap';
 import { captureError } from '../utils/sentryHelpers';
+import type { Logger } from '../types/logger';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
 const VERIFICATION_TTL_SECONDS = 600; // 10 minutes — pending verification data
@@ -48,8 +50,11 @@ const STOCK_CACHE_TTL_SECONDS = STOCK_REFRESH_MIN * 60;
 export interface ToolExecutionContext {
     pageId?: string | null;
     kbActiveVersion?: number | null;
+    /** The customer's message's own embedding — never an enriched (history-laden) one; see ecommerceToolLoop. */
     queryEmbedding?: number[] | null;
     userId?: string | null;
+    /** The reply's request logger, so a resolver decision can be read back from the logs. */
+    logger?: Logger;
 }
 
 // --- Input Sanitization ---
@@ -395,6 +400,7 @@ async function executeInventoryCheck(
         productName,
         queryEmbedding: ctx.queryEmbedding,
         userId: ctx.userId,
+        logger: ctx.logger,
     });
 
     if (resolution.kind === 'not_found') {
@@ -448,7 +454,7 @@ async function readStock(store: StoreRow, product: EcommerceProduct, variant?: s
             return local;
         }
         const asOf = new Date().toISOString();
-        await writeBackProductStock(store.id, product.platformProductId, detail.totalInventory);
+        await writeBackProductStock(store.id, product.platformProductId, { totalInventory: detail.totalInventory, status: detail.status });
         try {
             await redis.set(cacheKey, JSON.stringify({ detail, asOf }), 'EX', STOCK_CACHE_TTL_SECONDS);
         } catch {
@@ -458,10 +464,15 @@ async function readStock(store: StoreRow, product: EcommerceProduct, variant?: s
         return inventoryFromDetail(store, product, detail, asOf, variant);
     } catch (err) {
         recordResolverOutcome('live_failed');
-        captureError(err, 'Live stock refresh failed — serving the synced figure', {
-            tags: { service: 'ecommerce-tools', platform: store.platform },
-            extra: { storeId: store.id, platformProductId: product.platformProductId },
-        });
+        // Once per store per refresh window: a store whose token has died fails
+        // this way on EVERY risky read, and the counter above already carries
+        // the volume — Sentry needs the first one, not the four-hundredth.
+        if (await claimDailyOnce(`ecom:stock:failed:${store.id}`, STOCK_CACHE_TTL_SECONDS)) {
+            captureError(err, 'Live stock refresh failed — serving the synced figure', {
+                tags: { service: 'ecommerce-tools', platform: store.platform },
+                extra: { storeId: store.id, platformProductId: product.platformProductId },
+            });
+        }
         return local;
     }
 }
@@ -482,7 +493,9 @@ function inventoryFromRow(store: StoreRow, product: EcommerceProduct): Inventory
         ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
         ...(product.handle ? { handle: product.handle } : {}),
         source: 'local',
-        asOf: store.lastSyncAt ? new Date(store.lastSyncAt).toISOString() : new Date(0).toISOString(),
+        // A store that never synced has no date for its figure — omit it rather
+        // than hand the model an epoch placeholder it would read out.
+        ...(store.lastSyncAt ? { asOf: new Date(store.lastSyncAt).toISOString() } : {}),
     };
 }
 

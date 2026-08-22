@@ -200,7 +200,7 @@ CRITICAL RULES:
 - check_inventory identifies the product for you. Pass product_id when the catalog entry shows "ID:"; otherwise pass the customer's own words as product_name.
 - If check_inventory returns error "ambiguous_product", its "candidates" are the products the customer may mean: name them (title and price) and ask which one. NEVER pick one yourself.
 - If check_inventory returns error "product_not_found", the store does not carry that product. Say so plainly; NEVER answer with a different product instead.
-- A check_inventory result has "source": "local" means the figure is from the store's last sync ("asOf"); "live" means the store was asked just now. Either is fine to state; do not mention the word "sync" to the customer.
+- In a check_inventory result, "source": "local" means the figure is from the store's last update (its time is "asOf", when present); "source": "live" means the store was asked just now. Either is fine to state; do not mention the word "sync" to the customer.
 `;
 
 /**

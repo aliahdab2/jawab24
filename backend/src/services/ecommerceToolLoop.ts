@@ -28,12 +28,13 @@ import { aiService } from './ai';
 import { aiWorkerHeaders } from './aiWorkerAuth';
 import { logAiUsage } from './aiUsageLog';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
-import { executeToolCall } from './ecommerceActions';
+import { executeToolCall, type ToolExecutionContext } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
+import { ragRetrievalMode } from './kb/retrieval';
 import { buildProductCardsFromToolResults, buildProductCardsFromReplyText } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { AiToolLoopExhaustedError } from '../utils/fbGraphErrors';
-import type { AiGenerateRequest, AiGenerateResponse } from '../types';
+import { noopLogger, type AiGenerateRequest, type AiGenerateResponse, type Logger } from '../types';
 import { VALID_TOOL_NAMES, type EcommerceToolCall, type EcommerceToolResult } from '@jawab24/shared';
 
 /** Response shape from ai-worker /generate-with-tools and /generate-with-tool-results */
@@ -116,6 +117,7 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
  */
 export async function generateReplyWithTools(
     request: AiGenerateRequest,
+    logger: Logger = noopLogger,
 ): Promise<AiGenerateResponse> {
     const storeId = request.context?.ecommerceStoreId;
 
@@ -213,11 +215,16 @@ export async function generateReplyWithTools(
             // Execute tool calls. The reply's own context rides along so the
             // product resolver can reuse its query embedding and scan the right
             // page index (D-092) instead of embedding again.
-            const toolCtx = {
+            // The embedding is reused ONLY when it is the customer's message's own
+            // (`dual` / `off`): in `enriched` mode it embeds the message plus recent
+            // history, and the resolver's thresholds were calibrated on the asked
+            // phrase alone — so there the resolver embeds the phrase itself instead.
+            const toolCtx: ToolExecutionContext = {
                 pageId: request.context?.pageId,
                 kbActiveVersion: request.context?.kbActiveVersion,
-                queryEmbedding: request.context?.queryEmbedding,
+                queryEmbedding: ragRetrievalMode() === 'enriched' ? null : request.context?.queryEmbedding,
                 userId: request.context?.userId,
+                logger,
             };
             lastToolResults = await Promise.all(
                 validToolCalls.map((tc) => executeToolCall(storeId, tc as EcommerceToolCall, toolCtx)),

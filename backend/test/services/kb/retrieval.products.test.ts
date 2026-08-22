@@ -61,6 +61,24 @@ describe('retrieveProducts', () => {
         expect(text).not.toMatch(/source_tier/);
     });
 
+    it('cuts the candidates as the UNION of top-N by trigram and top-N by cosine — never one cut by the greater score', async () => {
+        // One cut by GREATEST(vec, tri) drops a near-exact title (tri 0.33) as soon as
+        // more than N products sit above it on cosine — every "related" product in a
+        // single-category catalog does. The trigram stage then never sees it.
+        await retrieveProducts('page-1', 5, 'q', [0.1, 0.2]);
+        const text = sqlTextOf(mockExecute.mock.calls[0][0]);
+        expect(text).toMatch(/\(SELECT \* FROM grouped ORDER BY tri_score DESC LIMIT \?\)/);
+        expect(text).toMatch(/UNION \(SELECT \* FROM grouped ORDER BY vec_score DESC LIMIT \?\)/);
+        expect(text).toMatch(/ORDER BY GREATEST\(COALESCE\(vec_score, 0\), tri_score\) DESC\s*$/);
+    });
+
+    it('without an embedding there is only the trigram cut — no cosine branch to union', async () => {
+        await retrieveProducts('page-1', 5, 'q', null);
+        const text = sqlTextOf(mockExecute.mock.calls[0][0]);
+        expect(text).toMatch(/ORDER BY tri_score DESC LIMIT \?/);
+        expect(text).not.toMatch(/UNION/);
+    });
+
     it('works WITHOUT an embedding (trigram only) and reports vecScore as null', async () => {
         mockExecute.mockResolvedValue([{ platform_product_id: 'p1', title: 'T', vec_score: null, tri_score: '0.36' }]);
         const hits = await retrieveProducts('page-1', 5, 'q', null);

@@ -840,9 +840,13 @@ export async function buildProductSummary(storeId: string): Promise<string> {
 
     // Sold-out products stay in the block (D-092): "out of stock" is an answer,
     // "we don't sell that" for a product the merchant carries is a false denial.
+    // In-stock rows fill the 15 inline slots first: a sold-out product must stay
+    // VISIBLE, but it must not displace a product the customer can actually buy
+    // from the block. The id tiebreak keeps the output byte-stable for the
+    // prompt cache (see productSummary.determinism.test.ts).
     const products = await db.select().from(ecommerceProducts)
         .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), inArray(ecommerceProducts.status, [...SELLABLE_STATUSES])))
-        .orderBy(ecommerceProducts.id)
+        .orderBy(sql`CASE WHEN ${ecommerceProducts.status} = 'active' THEN 0 ELSE 1 END`, ecommerceProducts.id)
         .limit(15);
 
     if (products.length === 0) return '';
@@ -1104,14 +1108,23 @@ export async function getProductByPlatformId(
  * every linked page, which is the sync's job, not a single stock read's. The
  * catalog block may lag by one figure until the next sync; the tool answer the
  * customer just got is the fresh one.
+ *
+ * The STATUS rides along with the count, always. `availabilityOf` lets a
+ * platform `out_of_stock` status win over any count, and for Salla (`out`) and
+ * Zid that status — not the count — is the sold-out signal. Writing the count
+ * alone after a restock left the row at `out_of_stock / 10`: no longer "risky"
+ * (10 > LOW_STOCK_UNITS), so every later answer came from the row and said
+ * "out of stock" for a product the platform had just reported in stock — until
+ * the next sync. Both fields come from the same platform mapper the sync uses,
+ * so the vocabulary cannot differ.
  */
 export async function writeBackProductStock(
     storeId: string,
     platformProductId: string,
-    totalInventory: number | null,
+    stock: { totalInventory: number | null; status: string },
 ): Promise<void> {
     await db.update(ecommerceProducts)
-        .set({ totalInventory, updatedAt: new Date() })
+        .set({ totalInventory: stock.totalInventory, status: stock.status, updatedAt: new Date() })
         .where(and(
             eq(ecommerceProducts.ecommerceStoreId, storeId),
             eq(ecommerceProducts.platformProductId, platformProductId),

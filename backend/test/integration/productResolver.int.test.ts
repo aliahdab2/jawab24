@@ -12,6 +12,9 @@
  *   - drop `status IN (...)` from getProductByPlatformId → "hidden is not a candidate" fails
  *   - drop GROUP BY in retrieveProducts                 → "a split product is one candidate" fails
  *   - drop the store scope in trigramOverTitles          → "another store's catalog" fails
+ *   - drop `status` from writeBackProductStock's SET     → "RESTOCK write-back" fails
+ *   - replace the UNION cut in retrieveProducts with one
+ *     top-N by GREATEST(vec, tri)                        → "survives the candidate cut" fails
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
@@ -21,6 +24,8 @@ import { KbIngestionService } from '../../src/services/kb/ingestion';
 import { PgVectorStore } from '../../src/services/kb/pgvector-store';
 import { retrieveProducts } from '../../src/services/kb/retrieval';
 import { resolveProduct } from '../../src/services/reply/productResolver';
+import { getProductByPlatformId, writeBackProductStock } from '../../src/services/ecommerce';
+import { availabilityOf } from '@jawab24/shared';
 import type { EmbeddingProvider } from '../../src/services/kb/interfaces';
 import type { ProductData } from '../../src/services/kb/chunker';
 
@@ -149,5 +154,43 @@ describe('product resolver — real Postgres', () => {
         const r = await resolveProduct({ storeId, pageId: bare.id, kbActiveVersion: 1, productName: 'نظارة شمسية' });
 
         expect(r).toMatchObject({ kind: 'resolved', via: 'title_trigram', product: { platformProductId: 'glasses' } });
+    });
+
+    it('RESTOCK write-back: the live status lands on the row with the count, so the next LOCAL read says in stock', async () => {
+        // `shoes` is seeded sold out on the platform's say-so (status out_of_stock, 0).
+        // A live read reports active / 10. Written back without the status, the row
+        // would read out_of_stock at 10 units — not "risky", so every later answer
+        // would come from the row and deny a product the platform just restocked.
+        await writeBackProductStock(storeId, 'shoes', { totalInventory: 10, status: 'active' });
+
+        const row = await getProductByPlatformId(storeId, 'shoes');
+        expect(row).toMatchObject({ status: 'active', totalInventory: 10 });
+        expect(availabilityOf(row!)).toBe('in_stock');
+    });
+
+    it('a near-exact title survives the candidate cut when more than 20 products out-score it on cosine', async () => {
+        // 24 decoys whose chunks embed to e1 and a target that embeds to e0; the
+        // query vector is e1, so every decoy scores cosine 1.0 and the target 0.0.
+        // One top-20 cut by GREATEST(vec, tri) keeps twenty decoys and drops the
+        // target before the trigram stage can see its exact title (mutation check:
+        // replace the UNION in retrieveProducts with that single cut → `ambiguous`
+        // over three decoys).
+        const unit = (dim: number) => { const v = Array(512).fill(0); v[dim] = 1; return v; };
+        class SplitEmbedder implements EmbeddingProvider {
+            embed(): Promise<number[]> { return Promise.resolve(unit(1)); }
+            embedBatch(texts: string[]): Promise<number[][]> { return Promise.resolve(texts.map(t => (t.includes('ID: target') ? unit(0) : unit(1)))); }
+            getDimensions(): number { return 512; }
+        }
+        const target = product('target', 'معطف شتوي طويل');
+        const decoys = Array.from({ length: 24 }, (_, i) => product(`decoy-${i}`, `منتج رقم ${i}`));
+        await seedRows(storeId, [target, ...decoys]);
+        await new KbIngestionService(new SplitEmbedder(), new PgVectorStore()).ingestFullPage(pageId, undefined, [...CATALOG, target, ...decoys], 3);
+
+        const hits = await retrieveProducts(pageId, 3, 'معطف شتوي طويل', unit(1));
+        expect(hits.filter(h => h.vecScore !== null && h.vecScore > 0.99).length).toBeGreaterThan(20);
+        expect(hits.find(h => h.platformProductId === 'target')).toMatchObject({ vecScore: expect.closeTo(0, 3) });
+
+        const r = await resolveProduct({ storeId, pageId, kbActiveVersion: 3, productName: 'معطف شتوي طويل', queryEmbedding: unit(1) });
+        expect(r).toMatchObject({ kind: 'resolved', via: 'trigram', product: { platformProductId: 'target' } });
     });
 });

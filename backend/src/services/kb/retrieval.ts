@@ -261,6 +261,11 @@ export interface ProductHit {
  *   - grouped by `metadata->>'platformProductId'` taking the MAX of each score,
  *     because a long product becomes several chunks (chunker.ts splitLongText)
  *     and a product must be one candidate, not three;
+ *   - the cut is the UNION of the top-`limit` by trigram and the top-`limit` by
+ *     cosine, not one top-`limit` by the greater of the two: with an embedding
+ *     supplied, a large single-category catalog has more than `limit` products
+ *     at cosine 0.3–0.5 ("related"), and one cut by GREATEST would drop a
+ *     near-exact title at trigram 0.33 before the trigram stage ever saw it;
  *   - the embedding is OPTIONAL: the trigram stage runs without one, and the
  *     reply's own `queryEmbedding` is reused when the caller has it, so the
  *     common path costs no embedding call (Rule 17.2).
@@ -297,15 +302,20 @@ export async function retrieveProducts(
               AND embedding IS NOT NULL
               AND metadata->>'platformProductId' IS NOT NULL
         )
-        SELECT
-            platform_product_id,
-            MIN(title) AS title,
-            MAX(vec_score) AS vec_score,
-            MAX(tri_score) AS tri_score
-        FROM scored
-        GROUP BY platform_product_id
-        ORDER BY GREATEST(COALESCE(MAX(vec_score), 0), MAX(tri_score)) DESC
-        LIMIT ${limit}
+        , grouped AS (
+            SELECT
+                platform_product_id,
+                MIN(title) AS title,
+                MAX(vec_score) AS vec_score,
+                MAX(tri_score) AS tri_score
+            FROM scored
+            GROUP BY platform_product_id
+        )
+        SELECT * FROM (
+            (SELECT * FROM grouped ORDER BY tri_score DESC LIMIT ${limit})
+            ${vectorStr ? sql`UNION (SELECT * FROM grouped ORDER BY vec_score DESC LIMIT ${limit})` : sql``}
+        ) AS candidates
+        ORDER BY GREATEST(COALESCE(vec_score, 0), tri_score) DESC
     `);
 
     return (results as unknown as Array<Record<string, unknown>>).map(row => ({
@@ -316,6 +326,19 @@ export async function retrieveProducts(
         vecScore: row.vec_score === null || row.vec_score === undefined ? null : Number(row.vec_score),
         triScore: Number(row.tri_score ?? 0),
     }));
+}
+
+/**
+ * How the reply's RAG query is embedded (`RAG_RETRIEVAL_MODE`): `dual` (default)
+ * returns the RAW message's embedding, `enriched` the embedding of the message
+ * plus recent history, `off` the raw message's. Read here, once, because two
+ * callers depend on the answer: the generator chooses the retrieval call, and
+ * the product resolver may only reuse that embedding when it is the message's
+ * own (D-092) — an enriched vector carries earlier turns about other products.
+ */
+export function ragRetrievalMode(): 'off' | 'enriched' | 'dual' {
+    const raw = process.env.RAG_RETRIEVAL_MODE;
+    return raw === 'off' || raw === 'enriched' ? raw : 'dual';
 }
 
 /**
