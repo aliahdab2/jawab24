@@ -16,7 +16,7 @@ export const FALLBACK_PLANS: Plan[] = [
         id: 'fallback-basic',
         name: 'Basic',
         slug: 'basic',
-        description: 'For post replies',
+        description: 'For one page getting started',
         price: 800,
         yearlyPrice: 8000,
         yearlyAvailable: false,
