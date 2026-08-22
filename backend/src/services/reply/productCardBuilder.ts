@@ -20,7 +20,7 @@
  * Extension point: Phase 4a will add `recommend_products` — its results will also
  * flow through here. Add a new case in `extractCardsFromResult()` at that point.
  */
-import { and, asc, eq, ilike, inArray } from 'drizzle-orm';
+import { and, asc, eq, ilike } from 'drizzle-orm';
 import { db } from '../../db';
 import { redis } from '../../lib/redis';
 import { ecommerceProducts, ecommerceStores } from '../../db/schema';
@@ -285,7 +285,7 @@ export async function buildProductCardsFromReplyText(
                 totalInventory: ecommerceProducts.totalInventory,
             })
             .from(ecommerceProducts)
-            .where(inArray(ecommerceProducts.id, [mentioned[0].id]))
+            .where(eq(ecommerceProducts.id, mentioned[0].id))
             .limit(1);
         if (!p) {
             recordMentionOutcome('no_match');
