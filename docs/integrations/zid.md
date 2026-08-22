@@ -565,7 +565,9 @@ an entry gate idled this work for eight days.
    data integration with Zid."* The app returned to an editable state (verified 08-11).
    Addressed by the Embedded Apps work above; see `docs/testing/ZID_TEST_PLAN.md` §L.
 
-   ✅ **Superseded 2026-08-09 → the app is `In review` again** (portal read 2026-08-22).
+   ✅ **Superseded 2026-08-09 → the app went `In review` again**, then was deliberately
+   withdrawn to `Draft` on 2026-08-22 (both states portal-verified that day; see
+   "What's next" at the top for the current status and why the withdrawal changed nothing).
    Zid pointed out on 08-09 that the app had fallen back to `Draft`, which is why the
    rejection appeared to be the standing state for longer than it was — a `Draft` app is
    not under review and nobody is looking at it. Flipping it back is what restarted the

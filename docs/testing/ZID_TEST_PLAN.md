@@ -60,7 +60,7 @@ surprise.
 | P-1 | ⛔ **INVERTED 2026-08-11 — the agreement is NOT a precondition.** It is countersigned only AFTER Zid's technical review passes (Zid support, 08-08/09), so this run-book runs FIRST. Nothing here waits on partner.zid.sa. | Agreement state is an EXIT check in §K, not an entry one | n/a |
 | P-1b | App **7367 is `Draft`** (withdrawn 2026-08-22). ⚠️ **A Draft app is not queued and nobody is reviewing it**, and nothing notifies you — it can look like "waiting on Zid" for days. ⛔ But do NOT treat `Draft` as the thing standing between you and a dev-store install: `EC3` fires the same in both states. Re-read the status in the portal whenever the wait feels long. | partner.zid.sa → My Apps → row 7367 | ☑ verified 2026-08-22 |
 | P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures). Store email **`qwhfqfihvm@zam-partner.email`** — ✅ confirmed to have NO existing Jawab24 account (2026-08-22), so §L's account-takeover guard will not fire and the auto-provision path is genuinely exercised. Re-check that before every §L run; if it ever has one, §L-1 fails for the WRONG reason. | `https://h47p59.zid.store/` renders the storefront publicly | ☑ 200, verified 2026-08-22 |
-| P-3 | **Dev-redirect strategy: DECIDED 2026-08-22 — run against PRODUCTION, change nothing in the portal.** App 7367 (Client ID 7192) already points at `https://jawab24.com/zid/auth/callback` and prod answers (see the revised warning below). While 7367 is `In review` this is the only route that cannot disturb the review, and it exercises exactly what the reviewer walks. The ngrok and dedicated-DEV-app options stay documented for when the app is not under review. **On the production route, P-4, P-5, P-6 and P-10 do not apply.** | Partner Dashboard → app → General Settings shows the prod callback | ☑ |
+| P-3 | 🔴 **BLOCKED — no working dev-redirect strategy today.** The production route (app 7367 → `https://jawab24.com/zid/auth/callback`, prod answers with a correct 302) is the one that exercises what a reviewer walks, and it is the route to prefer *when it works*. It does not work right now: the install bounces at Zid with **`EC3`**, in `Draft` and `In review` alike, before reaching our code. Until EC3 is explained, §A–§I cannot run against 7367 at all. The dedicated-DEV-app + ngrok route (P-4/P-5/P-6/P-10) is the documented fallback, but it is **unproven against EC3** — a second app may bounce the same way, so probe it with a throwaway app before investing in the local setup. | `curl -sI https://jawab24.com/zid/auth` → 302 ✅, but completing it → `?error_code=EC3` ❌ | 🔴 |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
 | P-5 | ai-worker running — the KB-enrichment reply and agent-tool cases need it. Default port **3002** (`ai-worker/src/config.ts`); if you run it on 3005 per the worktree convention, you MUST also set `AI_SERVICE_URL=http://localhost:3005` on the backend or every reply dies `AiWorkerUnreachable` | `curl http://localhost:3002/health` (or 3005 + matching `AI_SERVICE_URL`) | ☐ |
 | P-6 | ngrok tunnel to the backend; inspector open at `127.0.0.1:4040` | `https://<ngrok>/health` OK | ☐ |
@@ -77,17 +77,19 @@ surprise.
 > installing against **production** does not dead-end; it is the *safest* route, and the
 > tunnel was never required for a first capture.
 >
-> ⚠️ **While app 7367 is `In review`, prefer the production route and change NOTHING in
-> the portal.** Editing the app to point at a tunnel risks two things at once: it may drop
-> 7367 back to `Draft` (a Draft app leaves the review queue silently — see P-1b), and if
-> Zid's reviewer installs during your tunnel window they reach your laptop or a dead URL,
-> costing a second review round. The ngrok route (P-3/P-6/P-10) is for when the app is NOT
-> under review.
+> ⚠️ **Whenever 7367 is back `In review`, prefer the production route and change NOTHING
+> in the portal.** Editing the app to point at a tunnel risks two things at once: it drops
+> 7367 back to `Draft` (leaving the review queue silently — see P-1b), and if Zid's
+> reviewer installs during your tunnel window they reach your laptop or a dead URL, costing
+> a second review round. The ngrok route (P-3/P-6/P-10) is for when the app is NOT under
+> review. ⛔ **This is not a reason to withdraw the app in order to test** — that was tried
+> on 2026-08-22 and `EC3` was unaffected.
 >
 > ⚠️ **If a production-route install fails halfway, it leaves an orphan account that will
 > block the reviewer's install** (same failure mode as 08-11 — see R-4 in
 > `docs/integrations/zid.md`). Re-check R-4 immediately after any failed attempt and clean
-> up before walking away.
+> up before walking away. Note the two 2026-08-22 EC3 bounces left **nothing** — Zid
+> rejects before reaching our code, so R-4 came back clean both times.
 >
 > ⚠️ Partner-dashboard Vue forms fight automation: v-model needs native-setter + events;
 > "Save disabled" usually means a hidden required field (e.g. scope justification,
@@ -317,9 +319,11 @@ webhooks re-registered 6/6.
 > most a six-hour delay, healed by the reconciler — and means an uncaptured envelope
 > cannot write wrong billing state, because nothing is read out of it.
 >
-> ⛔ **Still not captured against a live store**, though no longer blocked by `EC3`: app
-> 7367 is `In review` (portal-verified 2026-08-22), so an install is possible the moment
-> Zid's reviewer runs one — the capture simply has not happened yet.
+> ⛔ **Still not captured against a live store, and still blocked by `EC3`.** Verified
+> 2026-08-22: the install bounces at Zid with `error_code=EC3` before reaching our code, in
+> `Draft` and `In review` alike — so review state is not the cause and withdrawing the app
+> does not unblock it. Until EC3 is explained, the only way this section gets a live
+> capture is a Zid-side reviewer install.
 > H-1…H-9 below are covered at the UNIT level by
 > `backend/test/services/zidBilling.test.ts` (40 cases) and
 > `backend/test/controllers/zid.test.ts` (webhook wiring) against an envelope inferred
