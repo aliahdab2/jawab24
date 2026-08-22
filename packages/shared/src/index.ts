@@ -974,6 +974,20 @@ export interface UsageSummary {
     autoReply?: {
       allowed: boolean;
       code?: LimitCheckResult['code'];
+      /**
+       * Customer messages and comments that arrived AFTER coverage lapsed and
+       * were never answered — the cost of the block, in the merchant's own
+       * numbers. Present only while `allowed` is false and the boundary is
+       * known; computed at the same choke point as the verdict.
+       *
+       * It exists because "your subscription ended" is an accounting statement
+       * a merchant can defer, while "579 customers wrote to you this month and
+       * nobody answered" is not. The fleet audit that motivated it found 17
+       * blocked pages holding 1,513 unanswered messages in one week
+       * (2026-08-22), four of them with the dashboard still showing
+       * auto-reply ON.
+       */
+      unansweredSinceBlock?: number;
     };
     hasStripeCustomer?: boolean;
     /** 'shopify' = billing lives in Shopify admin: the frontend must route

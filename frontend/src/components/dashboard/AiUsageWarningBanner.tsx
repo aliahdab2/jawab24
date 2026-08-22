@@ -40,6 +40,12 @@ interface AiUsageWarningBannerProps {
      * is the whole reason the merchant read the cut-off as a day later than it was.
      */
     entitlementEndsAt?: string;
+    /**
+     * Customer messages and comments that arrived after coverage lapsed and were
+     * never answered (`usage.subscription.autoReply.unansweredSinceBlock`).
+     * Backend-computed, present only while the gate refuses.
+     */
+    unansweredSinceBlock?: number;
 }
 
 /**
@@ -70,7 +76,7 @@ interface AiUsageWarningBannerProps {
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
  * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance, autoReply, entitlementEndsAt }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, marketplaceBilled, userEmail, topupBalance, autoReply, entitlementEndsAt, unansweredSinceBlock }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
@@ -252,6 +258,15 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                             {coverageEndedDate && (
                                 <span className="block">
                                     {tSub('limitBanner.coverageEndedOn', { date: coverageEndedDate })}
+                                </span>
+                            )}
+                            {/* What the block has actually cost — in bold, because it is
+                                the only line here the merchant cannot defer. `> 0` and not
+                                just presence: "0 messages have gone unanswered" argues
+                                FOR waiting, which is the opposite of the point. */}
+                            {typeof unansweredSinceBlock === 'number' && unansweredSinceBlock > 0 && (
+                                <span className="block font-semibold mt-1">
+                                    {tSub('limitBanner.unansweredSinceBlock', { count: unansweredSinceBlock })}
                                 </span>
                             )}
                         </p>

@@ -24,6 +24,7 @@
     "billingPausedTitle": "Auto-replies are paused — your subscription has ended",
     "billingPausedBody": "Every auto-reply is stopped: Smart Replies, Post Replies, away and greeting messages. New comments and DMs are going unanswered until you renew.",
     "coverageEndedOn": "Coverage ended {date}",
+    "unansweredSinceBlock": "{count, plural, one {# customer message has arrived since then and gone unanswered} other {# customer messages have arrived since then and gone unanswered}}",
     "renewNow": "Renew subscription",
     "renewOnWebHint": "Renew from the Jawab24 website to resume replies.",
     "onTopupTitle": "You're now using your top-up balance",

@@ -1431,6 +1431,87 @@ describe('isSubscriptionActive', () => {
 
             expect(getUsageSpy).toHaveBeenCalledWith('owner-1');
         });
+
+        /**
+         * The cost of a block, carried on the same payload as the verdict.
+         *
+         * The dashboard can say "your subscription ended" — a merchant defers
+         * that. It could not say "579 customers wrote to you since and nobody
+         * answered", which is the same fact in the terms they decide on. The
+         * 2026-08-22 fleet read found 17 blocked pages holding 1,513 unanswered
+         * messages in one week, four of them still showing auto-reply ON.
+         */
+        describe('unansweredSinceBlock', () => {
+            const lapsedManual = {
+                ...mockSubscription,
+                paymentMethod: 'manual' as const,
+                // Snapped boundary is 2026-08-01T00:00:00Z, comfortably past.
+                currentPeriodEnd: new Date('2026-08-01T16:26:00.000Z'),
+            };
+
+            it('counts unanswered inbound since the boundary the gate enforces', async () => {
+                vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(lapsedManual);
+                vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+                vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+                const countSpy = vi.spyOn(subscriptionsService, 'countUnansweredSince').mockResolvedValue(579);
+                await mockWorkspaceOwner('owner-1');
+
+                const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+                expect(result!.subscription.autoReply).toMatchObject({ allowed: false, unansweredSinceBlock: 579 });
+                // Counted from the SNAPPED entitlement end, not `currentPeriodEnd`:
+                // the ~16h between them is time the merchant was already blocked,
+                // and messages that arrived in it are part of what the block cost.
+                expect(countSpy).toHaveBeenCalledWith('ws-1', new Date('2026-08-01T00:00:00.000Z'));
+            });
+
+            it('scopes the count to the VIEWED workspace, not the subscription owner', async () => {
+                // An owner with two workspaces must not see one workspace's
+                // silence reported on the other's dashboard.
+                vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(lapsedManual);
+                vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+                vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+                const countSpy = vi.spyOn(subscriptionsService, 'countUnansweredSince').mockResolvedValue(3);
+                await mockWorkspaceOwner('owner-1');
+
+                await subscriptionsService.getUsageSummary('member-1', 'ws-2');
+
+                expect(countSpy).toHaveBeenCalledWith('ws-2', expect.any(Date));
+            });
+
+            it('does not count — at all — while the gate allows', async () => {
+                // Three extra COUNT queries on every healthy dashboard load would
+                // be a real cost for a number nothing renders.
+                vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
+                vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+                vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+                const countSpy = vi.spyOn(subscriptionsService, 'countUnansweredSince').mockResolvedValue(99);
+                await mockWorkspaceOwner('owner-1');
+
+                const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+                expect(countSpy).not.toHaveBeenCalled();
+                expect(result!.subscription.autoReply?.unansweredSinceBlock).toBeUndefined();
+            });
+
+            it('omits the count when the block has no boundary to count from', async () => {
+                // canceled/paused are refused by STATUS, so resolveEntitlementEnd
+                // returns null — there is no "since" and inventing one (the row's
+                // period end) would count messages from before the block.
+                vi.spyOn(subscriptionsService, 'getUserSubscription')
+                    .mockResolvedValue({ ...mockSubscription, status: 'canceled' as const });
+                vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+                vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+                const countSpy = vi.spyOn(subscriptionsService, 'countUnansweredSince').mockResolvedValue(42);
+                await mockWorkspaceOwner('owner-1');
+
+                const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+                expect(result!.subscription.autoReply?.allowed).toBe(false);
+                expect(countSpy).not.toHaveBeenCalled();
+                expect(result!.subscription.autoReply?.unansweredSinceBlock).toBeUndefined();
+            });
+        });
     });
 });
 

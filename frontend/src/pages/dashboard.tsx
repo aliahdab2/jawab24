@@ -660,6 +660,7 @@ const DashboardPage: NextPageWithLayout = () => {
           topupBalance={usage.topup?.balance}
           autoReply={usage.subscription?.autoReply}
           entitlementEndsAt={usage.subscription?.entitlementEndsAt}
+          unansweredSinceBlock={usage.subscription?.autoReply?.unansweredSinceBlock}
         />
       )}
 

@@ -313,6 +313,32 @@ describe('AiUsageWarningBanner — billing paused (gate refuses)', () => {
         expect(screen.getByText(/renew from the jawab24 website/i)).toBeInTheDocument();
     });
 
+    it('states what the block has cost — the unanswered-message count', () => {
+        // The line that turns an accounting statement into a decision. The fleet
+        // audit behind it (2026-08-22) found four pages showing auto-reply ON
+        // while 1,204 customer messages went unanswered in a single week.
+        render(
+            <AiUsageWarningBanner aiReplies={lapsed()} autoReply={blocked} unansweredSinceBlock={579} />,
+        );
+        expect(screen.getByText(/579 customer messages have arrived since then and gone unanswered/i)).toBeInTheDocument();
+    });
+
+    it('says nothing about volume when nothing has gone unanswered', () => {
+        // "0 messages have gone unanswered" is an argument FOR waiting — the
+        // opposite of what this line exists to do.
+        render(
+            <AiUsageWarningBanner aiReplies={lapsed()} autoReply={blocked} unansweredSinceBlock={0} />,
+        );
+        expect(screen.queryByText(/gone unanswered/i)).not.toBeInTheDocument();
+        // The banner itself still fires — replies ARE frozen.
+        expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'billing-paused');
+    });
+
+    it('omits the count when the backend did not send one (older API build)', () => {
+        render(<AiUsageWarningBanner aiReplies={lapsed()} autoReply={blocked} />);
+        expect(screen.queryByText(/gone unanswered/i)).not.toBeInTheDocument();
+    });
+
     it('leaves quota behaviour untouched when the gate allows', () => {
         const { container } = render(
             <AiUsageWarningBanner aiReplies={lapsed()} autoReply={{ allowed: true }} />,

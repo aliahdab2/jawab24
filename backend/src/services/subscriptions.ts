@@ -1,6 +1,6 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases } from '../db/schema';
+import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases, messages, comments, instagramComments } from '../db/schema';
 import { plansService } from './plans';
 import { trialLedgerService, type TrialIdentity } from './trialLedger';
 import { redis } from '../lib/redis';
@@ -684,6 +684,19 @@ export const subscriptionsService = {
         const entitlement = this.checkSubscriptionStatus(subscription);
         const entitlementEnd = resolveEntitlementEnd(subscription);
 
+        // What the block has cost so far, counted only when there IS a block and
+        // a boundary to count from. "Your subscription ended" is a statement a
+        // merchant can put off; "579 customers wrote and nobody answered" is the
+        // same fact in the terms they actually decide on.
+        //
+        // Scoped to the WORKSPACE being viewed, not the subscription owner: the
+        // merchant is asking about the pages on this screen, and an owner with
+        // two workspaces would otherwise see one workspace's silence reported on
+        // the other's dashboard.
+        const unansweredSinceBlock = !entitlement.allowed && entitlementEnd
+            ? await this.countUnansweredSince(workspaceId, entitlementEnd)
+            : undefined;
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -710,7 +723,7 @@ export const subscriptionsService = {
                 // this can be ~24h earlier than `renewsAt`. Surfaces that tell a
                 // merchant "until when am I covered?" must read THIS, not renewsAt.
                 entitlementEndsAt: entitlementEnd?.toISOString(),
-                autoReply: { allowed: entitlement.allowed, code: entitlement.code },
+                autoReply: { allowed: entitlement.allowed, code: entitlement.code, unansweredSinceBlock },
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
                 // A CANCELED shopify mirror must NOT read as shopify-billed
                 // (isShopifyBilled carries the exemption): the merchant
@@ -1093,6 +1106,45 @@ export const subscriptionsService = {
             ));
 
         return Number(result?.count) || 0;
+    },
+
+    /**
+     * Customer messages and comments that arrived after `since` and were never
+     * answered — what a billing block actually cost this workspace.
+     *
+     * The three inbound surfaces are counted together because the merchant
+     * experiences one thing ("nobody answered my customers"), and a DM-only
+     * number would understate a comment-heavy page by an order of magnitude —
+     * the 2026-08-13 lesson that a predicate governing three tables must be
+     * measured on three tables. Each leg is served by that table's
+     * (workspace_id, created_at) index.
+     *
+     * Called ONLY when the gate refuses (getUsageSummary), so the healthy
+     * dashboard path pays nothing for it. `replied = false` is the same column
+     * the inbox's unanswered filters read, so the number the merchant is shown
+     * is the number they can go and work.
+     */
+    async countUnansweredSince(workspaceId: string, since: Date): Promise<number> {
+        const [dm, fb, ig] = await Promise.all([
+            db.select({ count: sql<number>`count(*)` }).from(messages).where(and(
+                eq(messages.workspaceId, workspaceId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                gte(messages.createdAt, since),
+            )),
+            db.select({ count: sql<number>`count(*)` }).from(comments).where(and(
+                eq(comments.workspaceId, workspaceId),
+                eq(comments.replied, false),
+                gte(comments.createdAt, since),
+            )),
+            db.select({ count: sql<number>`count(*)` }).from(instagramComments).where(and(
+                eq(instagramComments.workspaceId, workspaceId),
+                eq(instagramComments.replied, false),
+                gte(instagramComments.createdAt, since),
+            )),
+        ]);
+
+        return Number(dm[0]?.count ?? 0) + Number(fb[0]?.count ?? 0) + Number(ig[0]?.count ?? 0);
     },
 
     /**
