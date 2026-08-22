@@ -13,7 +13,6 @@ import { isDemoStore } from './demoStore';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { fitVarchar, wasDropped } from '../utils/columnText';
-import { redisScanDelete } from '../lib/redis';
 import { customerNotificationService } from './customerNotifications';
 import { workspaceSettingsService } from './workspaceSettings';
 
@@ -888,9 +887,19 @@ export async function buildProductSummary(storeId: string): Promise<string> {
  * Invalidate AI reply caches for all pages linked to an e-commerce store.
  *
  *   1. Computes next kbVersion per page (does NOT activate it yet)
- *   2. Flushes Redis exact-match AI cache keys
- *   3. Deletes semantic_cache rows for affected pages
- *   4. Re-ingests KB + products into RAG (ingestFullPage atomically activates the version after chunks are stored)
+ *   2. Deletes semantic_cache rows for affected pages
+ *   3. Re-ingests KB + products into RAG (ingestFullPage atomically activates the version after chunks are stored)
+ *
+ * The exact-match reply cache is NOT flushed here, deliberately. Its key carries
+ * `kbv:{kbActiveVersion}` (ai.ts buildCacheKey), so step 3 retires every linked page's
+ * entries the moment the new version activates — and the Postgres tier of that cache
+ * (`ai_cache`) was never flushed by this function at all, which means correctness has
+ * always rested on the key rotation, never on a flush. The flush that used to sit
+ * here was `redisScanDelete('cache:ai_reply:*')`: the key is a hash, so it cannot be
+ * scoped to a page, and it wiped the warm replies of EVERY workspace on every product
+ * webhook and every 6-hourly sync (Rule 17.1 — a cache hit turned into a miss is the
+ * most expensive change there is). A page whose ingest fails keeps its old version
+ * and therefore its old entries; `reingestDriftedPages` heals that drift.
  */
 export async function invalidateCachesForStore(storeId: string): Promise<number> {
     try {
@@ -912,14 +921,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
             nextVersionByPage[pageId] = (row?.kbActiveVersion ?? 0) + 1;
         }
 
-        // 2. Flush Redis exact AI cache entries
-        try {
-            await redisScanDelete('cache:ai_reply:*');
-        } catch {
-            // Redis unavailable — semantic cache version bump is sufficient
-        }
-
-        // 3. Delete semantic_cache rows for affected pages
+        // 2. Delete semantic_cache rows for affected pages
         for (const pageId of pageIds) {
             try {
                 await db.execute(sql`DELETE FROM semantic_cache WHERE page_id = ${pageId}`);
@@ -928,7 +930,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
             }
         }
 
-        // 4. Re-ingest linked pages into RAG with KB text + policies + ALL product chunks.
+        // 3. Re-ingest linked pages into RAG with KB text + policies + ALL product chunks.
         //    Policies are appended to KB text so they become searchable RAG chunks
         //    (otherwise they're lost when RAG overrides the static KB blob).
         const [storeInfo] = await db.select({

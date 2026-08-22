@@ -199,11 +199,17 @@ When a comment/message arrives for a page linked to a Salla store:
 
 ### Cache Invalidation
 
-When products are synced, caches are invalidated in 4 steps:
+When products are synced, caches are invalidated in 3 steps:
 1. Compute next `kbVersion` for all linked pages
-2. Flush Redis exact-match cache keys
-3. Delete semantic cache rows for affected pages
-4. Re-ingest KB + products via RAG (atomically activates new kbVersion)
+2. Delete semantic cache rows for affected pages
+3. Re-ingest KB + products via RAG (atomically activates the new `kbVersion`) — embeddings
+   are reused from the active version for chunks whose text is unchanged, so an unchanged
+   catalog costs no embedding calls
+
+The exact-match reply cache is **not** flushed: its key carries `kbv:{kbActiveVersion}`, so
+step 3 retires the linked pages' entries by rotation. Until 2026-08-22 step 2 was a
+`SCAN`/`DEL` of `cache:ai_reply:*` across the whole fleet (the hashed key cannot be scoped to
+one page) — removed under D-090.
 
 ### Security
 

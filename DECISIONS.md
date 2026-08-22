@@ -2265,3 +2265,42 @@ on "the modal feels long" grounds either.
 configurations only. There is no telemetry for "opened the modal and gave up", so nothing
 here bounds abandonment, and the per-page concentration of the 271 was not measured — they
 may be skewed toward a few heavy pages.
+
+## D-090 · A product sync never flushes the fleet's reply cache and never re-embeds unchanged text (2026-08-22)
+
+**Ruling.** `invalidateCachesForStore` (backend `ecommerce.ts`) no longer runs
+`redisScanDelete('cache:ai_reply:*')`, and `KbIngestionService.embedChunks` reuses the
+embedding stored under the page's active `kb_version` for every chunk whose embed text
+(`title\ncontentNormalized`) is byte-identical, sending only the misses to OpenAI. Both are
+Rule 17.1 items: a cache hit turned into a miss is the most expensive change there is, and a
+product webhook or the 6-hourly scheduled sync used to do it to **every workspace at once**.
+
+**What was happening, verified in source.** The exact reply cache's key is a SHA-256 over a
+list that includes `kbv:{kbActiveVersion}` (`ai.ts buildCacheKey`), so it cannot be
+pattern-deleted per page — the only SCAN possible was the whole `cache:ai_reply:*` namespace,
+which holds every page's warm replies, store-linked or not. It ran on every product
+`create/update/publish/delete` webhook and on every scheduled sync of every non-demo store.
+Meanwhile the same function never touched the Postgres tier of that cache (`ai_cache`), so
+correctness had always rested on the `kbv:` rotation that `ingestFullPage` performs when it
+activates the new version — the flush bought nothing and cost the fleet its hits. The
+embedding side: `embedChunks` called `embedBatch` on every chunk of every linked page on every
+ingest, with no reuse and no diff, so an unchanged catalog was re-embedded in full, once per
+linked page, several times a day.
+
+**Baseline captured before the change (prod Redis, 2026-08-22 ~16:45 UTC):** 15
+`cache:ai_reply:*` keys in the entire fleet — the flush had been keeping the exact cache
+near-empty — and `metrics:ai:attempts:embedding_ingestion:text-embedding-3-small = 1214`
+against `embedding_rag = 50378`. The after-numbers (key count surviving a product edit;
+ingestion attempts flat across an unchanged scheduled sync) are owed in the PR that ships
+this and must be read before the entry is cited as proven.
+
+**Consequences.** A page whose fire-and-forget ingest fails keeps its old version and
+therefore its old cache entries — that drift is `reingestDriftedPages`' job, unchanged. The
+per-page `semantic_cache` delete stays (it is scoped and cheap). `redisScanDelete` itself
+stays: the admin `clearCache` and `pipelineMetrics` still use it. Reuse is an optimisation
+only — a failed lookup embeds everything (pinned by test). D-088's "re-ingesting would spend
+embeddings on every catalog and fact write" trade-off is weakened by this, not reversed:
+unchanged text is now free, changed text still costs; that ruling's other reasons stand.
+Pinned by `backend/test/services/ecommerce-rag.test.ts` (no SCAN/DEL on invalidation) and
+`backend/test/services/kb/ingestion.test.ts` (reuse, all-reusable ⇒ zero provider calls,
+fail-open).

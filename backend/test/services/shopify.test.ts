@@ -855,20 +855,19 @@ describe('Shopify Service', () => {
             expect(mockUpdate).not.toHaveBeenCalled();
         });
 
-        it('should scan and delete Redis ai_reply cache keys', async () => {
+        it('should NOT scan or delete Redis ai_reply cache keys (D-090)', async () => {
             mockLinkedPages(['page-1']);
 
-            // Simulate Redis scan returning some cache keys
-            mockRedisScan
-                .mockResolvedValueOnce(['42', ['cache:ai_reply:abc123', 'cache:ai_reply:def456']])
-                .mockResolvedValueOnce(['0', ['cache:ai_reply:ghi789']]);
-
+            // If a flush were re-introduced, the real redisScanDelete would drive these two
+            // (this file mocks the redis CLIENT, not the helper), so the assertions below are
+            // load-bearing. Inverted 2026-08-22: the key carries `kbv:{kbActiveVersion}`, so
+            // activating the new version retires the linked pages' entries on its own — while
+            // the pattern `cache:ai_reply:*` is unscopeable and wiped every workspace's warm
+            // replies on every product webhook and every 6-hourly sync (Rule 17.1).
             await invalidateCachesForStore('store-1');
 
-            // Should have called scan with the right pattern
-            expect(mockRedisScan).toHaveBeenCalledWith('0', 'MATCH', 'cache:ai_reply:*', 'COUNT', 100);
-            // Should have deleted all found keys
-            expect(mockRedisDel).toHaveBeenCalledWith('cache:ai_reply:abc123', 'cache:ai_reply:def456', 'cache:ai_reply:ghi789');
+            expect(mockRedisScan).not.toHaveBeenCalled();
+            expect(mockRedisDel).not.toHaveBeenCalled();
         });
 
         it('should delete semantic_cache rows for affected pages', async () => {

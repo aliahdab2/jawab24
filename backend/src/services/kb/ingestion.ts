@@ -161,6 +161,13 @@ export class KbIngestionService {
 
     /**
      * Embed a batch of chunks, returning ChunkWithEmbedding[] ready for storage.
+     *
+     * Embeddings are reused from the page's ACTIVE version for every chunk whose
+     * embed text is byte-identical, and only the misses go to the provider. A
+     * product webhook re-ingests the whole catalog + KB for every linked page
+     * (ecommerce.invalidateCachesForStore), and the 6-hourly scheduled sync does
+     * the same with nothing changed — without reuse, each of those paid for every
+     * chunk again. Reuse is an optimisation only: a lookup failure embeds everything.
      */
     private async embedChunks(
         pageId: string,
@@ -168,16 +175,29 @@ export class KbIngestionService {
         kbVersion: number,
     ): Promise<ChunkWithEmbedding[]> {
         // Combine title + content for embedding (title gives extra context)
-        const textsToEmbed = chunks.map(c =>
-            c.title ? `${c.title}\n${c.contentNormalized}` : c.contentNormalized
-        );
+        const textsToEmbed = chunks.map(c => embedTextFor(c));
 
         // Resolve userId from pageId so the embedding cost is attributed to the merchant.
-        // Ingestion is rare (KB updates), so the extra round-trip is acceptable.
-        const [pageRow] = await db.select({ userId: pages.userId }).from(pages).where(eq(pages.id, pageId)).limit(1);
+        // Ingestion is rare (KB updates), so the extra round-trip is acceptable. The
+        // active version rides on the same read — it is the reuse source.
+        const [pageRow] = await db.select({ userId: pages.userId, kbActiveVersion: pages.kbActiveVersion })
+            .from(pages).where(eq(pages.id, pageId)).limit(1);
         const logCtx = pageRow?.userId ? { userId: pageRow.userId, pageId, pipeline: 'embedding_ingestion' as const } : undefined;
 
-        const embeddings = await this.embeddingProvider.embedBatch(textsToEmbed, logCtx);
+        const reusable = await this.loadReusableEmbeddings(pageId, pageRow?.kbActiveVersion ?? null);
+        const embeddings: Array<number[] | undefined> = textsToEmbed.map(text => reusable.get(text));
+        const missIndexes = embeddings.flatMap((e, i) => (e ? [] : [i]));
+
+        if (missIndexes.length > 0) {
+            const fresh = await this.embeddingProvider.embedBatch(missIndexes.map(i => textsToEmbed[i]), logCtx);
+            missIndexes.forEach((chunkIndex, j) => { embeddings[chunkIndex] = fresh[j]; });
+        }
+
+        this.logger.info('Chunk embeddings resolved', {
+            pageId, kbVersion,
+            reused: chunks.length - missIndexes.length,
+            embedded: missIndexes.length,
+        });
 
         return chunks.map((chunk, i) => ({
             pageId,
@@ -189,8 +209,47 @@ export class KbIngestionService {
             titleNormalized: chunk.titleNormalized,
             tokenCount: chunk.tokenCount,
             metadata: chunk.metadata,
-            embedding: embeddings[i],
+            embedding: embeddings[i] as number[],
             kbVersion,
         }));
     }
+
+    /**
+     * Embeddings of the page's active version, keyed by the exact text that was
+     * embedded — the same `embedTextFor` the caller uses, so a key hit means the
+     * vector is valid for the new chunk as-is. Empty when the page has no active
+     * version or the read fails (then everything is embedded afresh).
+     */
+    private async loadReusableEmbeddings(pageId: string, activeVersion: number | null): Promise<Map<string, number[]>> {
+        const reusable = new Map<string, number[]>();
+        if (activeVersion === null) return reusable;
+
+        try {
+            const result = await db.execute(sql`
+                SELECT title, content_normalized, embedding::text AS embedding
+                FROM kb_chunks
+                WHERE page_id = ${pageId} AND kb_version = ${activeVersion} AND embedding IS NOT NULL
+            `);
+            type Row = { title: string | null; content_normalized: string; embedding: string };
+            const rows = (result as unknown as { rows?: Row[] }).rows ?? (result as unknown as Row[]);
+            if (!Array.isArray(rows)) return reusable;
+
+            for (const row of rows) {
+                const key = embedTextFor({ title: row.title, contentNormalized: row.content_normalized });
+                // pgvector's text form is `[0.1,0.2,...]`, which is valid JSON.
+                reusable.set(key, JSON.parse(row.embedding) as number[]);
+            }
+        } catch (error) {
+            this.logger.warn('Embedding reuse lookup failed — embedding every chunk', {
+                pageId, activeVersion, error: error instanceof Error ? error.message : String(error),
+            });
+        }
+
+        return reusable;
+    }
+}
+
+/** The exact text a chunk is embedded as; reuse keys on this, so it must stay the single definition. */
+function embedTextFor(c: { title: string | null; contentNormalized: string }): string {
+    return c.title ? `${c.title}\n${c.contentNormalized}` : c.contentNormalized;
 }

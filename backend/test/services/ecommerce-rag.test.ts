@@ -21,11 +21,15 @@ vi.mock('../../src/db/schema', () => ({
     workspaceMembers: {},
 }));
 
+// `redisScanDelete` MUST be part of this mock. Without it the symbol is undefined at
+// runtime, so a re-introduced flush would throw inside its own try/catch and the
+// "never flushes" assertion below would pass vacuously — verified by mutation.
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         scan: vi.fn().mockResolvedValue(['0', []]),
         del: vi.fn().mockResolvedValue(0),
     },
+    redisScanDelete: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({
@@ -163,6 +167,28 @@ describe('invalidateCachesForStore — product RAG', () => {
         if (mockIngestFullPage.mock.calls.length > 0) {
             expect(mockIngestFullPage.mock.calls[0][1]).toBe('Raw KB only');
         }
+    });
+
+    it('never flushes the global exact reply cache (kbActiveVersion rotation retires linked pages\' keys)', async () => {
+        const { invalidateCachesForStore } = await import('../../src/services/ecommerce');
+        const { redis, redisScanDelete } = await import('../../src/lib/redis');
+
+        mockSelectChain({
+            pages: [{ id: 'page-1' }],
+            products: [],
+            pageDetails: { knowledgeBase: 'KB text', kbActiveVersion: 1 },
+        });
+
+        await invalidateCachesForStore('store-1');
+
+        // A scan-delete here is the fleet-wide `cache:ai_reply:*` wipe — every workspace's
+        // warm replies, on every product webhook and every 6-hourly sync. Per-page
+        // invalidation is the version bump; the ingestion call below is the only thing
+        // that must happen.
+        expect(redisScanDelete).not.toHaveBeenCalled();
+        expect(redis.scan).not.toHaveBeenCalled();
+        expect(redis.del).not.toHaveBeenCalled();
+        expect(mockIngestFullPage).toHaveBeenCalledTimes(1);
     });
 
     it('continues without throwing if ingestFullPage fails', async () => {
