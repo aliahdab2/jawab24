@@ -46,7 +46,8 @@ interface ProductInfo {
     title: string;
     priceRange: string;
     currency: string;
-    totalInventory: number;
+    /** `null` = untracked/unlimited (Zid `is_infinite: true`), NOT zero. */
+    totalInventory: number | null;
     status: string;
     hasVariants: boolean;
     variantSummary: string | null;
@@ -171,7 +172,7 @@ async function testProductSync(platform: string, prefix: string) {
         const products = data.products || [];
         log(`Found ${products.length} products:`);
         for (const p of products.slice(0, 5)) {
-            log(`  • ${p.title} — ${p.priceRange} — stock: ${p.totalInventory}`);
+            log(`  • ${p.title} — ${p.priceRange} — stock: ${p.totalInventory ?? 'unlimited'}`);
         }
         return {
             pass: products.length > 0,

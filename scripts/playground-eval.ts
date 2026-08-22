@@ -5491,6 +5491,51 @@ const TEST_CASES: TestCase[] = [
         notes: 'ATTRIBUTION CONTROL — a page with NO persona override at the same thread depth must still ask for order details (today\'s Ex-14 sales default). If this stops firing, that is a regression of the DEFAULT mode, and Cat 78\'s clean results can no longer be attributed to the override.',
     },
 
+    // --- Cat 79: E-commerce Catalog Stock (Rule 19 mirror for the F1 fix) ------
+    //
+    // DISTINCT FROM Cat 62 «Native Catalog», which runs on `catalog_items` (the
+    // manually-entered catalog) through its own renderer. These cases run on
+    // `ecommerce_products` — the Shopify/Salla/Zid sync path — which had NO eval
+    // coverage at all before the F1 fix, even though it feeds the same replies.
+    //
+    // `totalInventory: null` means untracked/unlimited (Zid `is_infinite: true`);
+    // it is NOT zero. The seeded «Apple TV 4K» carries it. Pre-fix, the Zid parser
+    // coerced it to 0 (→ "out of stock" in the catalog block) and `chunker.ts`
+    // evaluated `null <= 5` as true (→ "low stock" in the KB the reply is grounded
+    // on) — two different wrong answers about a product the merchant can always sell.
+    //
+    // These cases are only meaningful because the demo seed now GENERATES the store's
+    // catalog block from its product rows (seedData.ts). While it was a hand-written
+    // constant, a case reading that block measured the seed text and would have passed
+    // no matter what the code did.
+    {
+        id: 785, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'هل Apple TV 4K متوفر عندكم؟',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            replyNotContains: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'خلص', 'خلصت', 'مو متوفر', 'لا يوجد', 'كمية محدودة', 'أوشك', 'قارب على الانتهاء'],
+        },
+        notes: 'F1 REGRESSION PIN (PR #869). Unlimited stock (`totalInventory: null`) must read as available. The banned list covers BOTH pre-fix failure modes: the out-of-stock denial (the catalog block\'s `?? 0` coercion) and the scarcity phrasing that a "low stock" KB line produces (`null <= 5` in kb/chunker.ts). MUTATION-CHECKED 2026-08-22: with the fixture at 0, 785 and 786 both go PARTIAL on the banned substring and the category drops to 66.7%; 787 stays green. ⚠️ TO RE-RUN THAT CHECK, MINT THE ADMIN TOKEN FIRST — `POST /auth/demo` RE-SEEDS the fixtures, so fetching the token after mutating silently restores `totalInventory: null` and the mutation appears to survive (it did, twice, before this was spotted). Mutating the row alone is also not enough: the catalog block and the KB chunks are both derived, so rebuild `productSummary` and re-ingest, then confirm the page\'s ACTIVE kb_version is the one saying "out of stock" — stale versions linger by design.',
+    },
+    {
+        id: 786, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'Is the Apple TV 4K in stock?',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            replyNotContains: ['out of stock', 'sold out', 'unavailable', 'not available', 'running low', 'low stock', 'limited stock'],
+        },
+        notes: 'Same pin, EN over an AR-majority catalog — the prod capture answered both languages correctly («متوفرة حالياً» / "Yes, the Sony A7S III is in stock"), so both are pinned.',
+    },
+    {
+        id: 787, category: 79, categoryName: 'E-commerce Catalog Stock', channel: 'dm',
+        message: 'عندكم MacBook Air M3؟',
+        page: 'electronics',
+        expected: { confidence: ['high', 'medium'] },
+        notes: 'CONTROL for 785/786. A TRACKED low-stock product (`totalInventory: 5`, rendered "low stock") must still be answerable — the F1 fix must not flatten every product into "in stock". Without this control, 785 would also pass if a bug made the renderer stop reporting stock state at all.',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at
