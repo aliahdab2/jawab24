@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 // pre-deploy). Import it through createRequire so the TS test can exercise it.
 const require = createRequire(import.meta.url);
 
-interface Page { path: string; label: string; lastmod: string; changefreq: string; priority: string }
+interface Page { path: string; label: string; lastmod: string }
 
 const { generateSitemap, collectPages, buildSitemap } = require('../../scripts/generate-sitemap.js') as {
   generateSitemap: (pages: Page[], opts?: { prodOrigin?: string }) => string;
@@ -95,19 +95,21 @@ describe('generate-sitemap', () => {
   });
 
   it('emits an AR and an EN <url> per page with the full hreflang triplet', () => {
-    const xml = generateSitemap([
-      { path: '/compare/acme', label: 'Compare: acme', lastmod: '2026-08-14', changefreq: 'monthly', priority: '0.8' },
-    ]);
+    const xml = generateSitemap([{ path: '/compare/acme', label: 'Compare: acme', lastmod: '2026-08-14' }]);
     expect(xml).toContain('<loc>https://jawab24.com/compare/acme</loc>');
     expect(xml).toContain('<loc>https://jawab24.com/en/compare/acme</loc>');
     expect(xml.match(/<lastmod>2026-08-14<\/lastmod>/g)).toHaveLength(2);
     expect(xml.match(/hreflang="x-default" href="https:\/\/jawab24.com\/compare\/acme"/g)).toHaveLength(2);
   });
 
+  it('emits only <loc>, hreflang and <lastmod> — no changefreq / priority (ignored by Google) and no /login', () => {
+    expect(COMMITTED).not.toContain('<changefreq>');
+    expect(COMMITTED).not.toContain('<priority>');
+    expect(COMMITTED).not.toContain('/login</loc>');
+  });
+
   it('maps the homepage to / and /en (no trailing slash on the EN root)', () => {
-    const xml = generateSitemap([
-      { path: '/', label: 'Homepage', lastmod: '2026-07-28', changefreq: 'weekly', priority: '1.0' },
-    ]);
+    const xml = generateSitemap([{ path: '/', label: 'Homepage', lastmod: '2026-07-28' }]);
     expect(xml).toContain('<loc>https://jawab24.com/</loc>');
     expect(xml).toContain('<loc>https://jawab24.com/en</loc>');
     expect(xml).not.toContain('https://jawab24.com/en/</loc>');

@@ -408,9 +408,11 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     expect(body).toContain('Disallow: /comments');
     expect(body).toContain('Disallow: /messages');
 
-    // Blog and integrations should be explicitly allowed
-    expect(body).toContain('/blog');
-    expect(body).toContain('/integrations');
+    // The public site is allowed wholesale; no Disallow may shadow the public
+    // sections (a prefix rule like `Disallow: /integrations` would also block
+    // every /integrations/<platform> page).
+    expect(body).toContain('Allow: /');
+    expect(body).not.toMatch(/^Disallow: \/(en\/)?(blog|compare|integrations\/?)\s*$/m);
   });
 
   test('every AI crawler group repeats the auth-gated Disallow set', async ({ page }) => {

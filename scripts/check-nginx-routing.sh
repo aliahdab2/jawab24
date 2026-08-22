@@ -196,6 +196,40 @@ for entry in $ROUTES; do
     fi
 done
 
+# --- Legacy WordPress URLs must answer 410 (SEO) --------------------------------
+# The old French site's post slugs are removed from Bing/Google fastest with 410.
+# Rule 3c in nginx.conf matches any hyphenated single segment with a trailing
+# slash; the hyphenated CURRENT pages are excluded by name and must keep reaching
+# the frontend (which redirects the slashed form to the canonical URL).
+echo
+LEGACY_410="
+/villes-fantomes-celebres-au-canada/
+/quest-ce-quun-flux-perdant/
+/2022/04/21/la-catastrophe-de-tchernobyl/
+/les-pays-les-plus-riches-deurope-2/
+/sitemap_index.xml
+"
+for path in $LEGACY_410; do
+    [ -z "$path" ] && continue
+    code="$(docker exec "$CONTAINER" curl -sk --max-time 5 -o /dev/null -w '%{http_code}' \
+        -H 'Host: jawab24.com' "https://127.0.0.1${path}" 2>/dev/null)"
+    if [ "$code" = "410" ]; then
+        printf '%-56s %-40s %s\n' "$path" "410 Gone" "ok"
+    else
+        printf '%-56s %-40s %s\n' "$path" "HTTP ${code:-?}" "WRONG (expected 410)"
+        fails=$((fails + 1))
+    fi
+done
+for path in /what-is-jawab24/ /data-deletion/ /complete-profile/; do
+    body="$(docker exec "$CONTAINER" curl -sk --max-time 5 -H 'Host: jawab24.com' "https://127.0.0.1${path}" 2>/dev/null | head -n1 | tr -d '\r')"
+    if [ "$body" = "FRONTEND ${path}" ]; then
+        printf '%-56s %-40s %s\n' "$path" "$body" "ok (excluded from 410)"
+    else
+        printf '%-56s %-40s %s\n' "$path" "${body:-(no response)}" "WRONG (a current page is answering 410)"
+        fails=$((fails + 1))
+    fi
+done
+
 # --- Framing headers (Zid Embedded Apps) --------------------------------------
 # Asserted against the LIVE response, not the file: the Zid dashboard iframe is
 # blocked outright by X-Frame-Options (which has no allowlist form), so a

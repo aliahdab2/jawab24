@@ -10,8 +10,9 @@ target, and the **shape of the content** from a GEO (generative-engine) standpoi
 claim below was verified against production (`curl`, the nginx log over SSH, live web
 searches) and the code — not against a previous audit.
 
-**Shipped in this PR:** §A (freshness dates + generated sitemap). Everything else is
-recorded with its evidence and left open, in priority order, in §B–§D.
+**Shipped in this PR:** §A (freshness dates + generated sitemap) and §C (log retention,
+the crawler report, the legacy-URL 410 catch-all, robots.txt). §B (Arabic content) and §D
+(owner-manual) are recorded with their evidence and left open.
 
 ---
 
@@ -77,25 +78,25 @@ WhatsApp URL on the site is the launch post `/blog/whatsapp-auto-reply-jawab24`,
   `/trust`.
 - `validate-sitemap.js` checked `lastmod` for format and not-in-the-future only.
 
-### 1.5 AI-crawler reach cannot be measured (the §9.1 baseline from August 7)
+### 1.5 AI-crawler reach cannot be measured (the §9.1 baseline from August 7) — fixed in §C
 
 nginx logs to docker's `json-file` driver, `max-size: 10m × max-file: 3` — about two days —
 and the buffer is discarded on every `--force-recreate`. There is no week to count.
 
-### 1.6 Bing still crawls French legacy slugs that escape the 410 rules
+### 1.6 Bing still crawls French legacy slugs that escape the 410 rules — fixed in §C
 
 `/villes-…`, `/taux-…`, `/quest-ce-…`, `/pays-…`, `/garder-…`, `/nutrition-…`,
-`/laustralie-…` answer 308 → 404 instead of 410: rule #2 in `nginx/nginx.conf` is a
+`/laustralie-…` answered 308 → 404 instead of 410: rule #2 in `nginx/nginx.conf` is a
 prefix allow-list and these prefixes are not on it. `/sitemap_index.xml` (Yoast legacy)
-returns 404 and bingbot asked for it twice in the window.
+returned 404 and bingbot asked for it twice in the window.
 
-### 1.7 robots.txt drift
+### 1.7 robots.txt drift — fixed in §C
 
-`/trust` and `/instagram` are in the sitemap but not in the enumerated `Allow` list
-(harmless — `Allow: /` covers them). `Disallow` omits auth-walled routes that
-`validate-sitemap.js`'s `EXCLUDED_ROUTES` already knows — `business`, `catalog`, `leads`,
-`team`, `ecommerce-analytics`, `admin/*`, `checkout`, `complete-profile`, `*/onboarding`,
-`zid/embedded` — and the block is duplicated verbatim across 11 user-agent groups.
+`/trust` and `/instagram` were in the sitemap but not in the enumerated `Allow` list
+(harmless — `Allow: /` covered them). `Disallow` omitted auth-walled routes that
+`validate-sitemap.js`'s `EXCLUDED_ROUTES` already knew — `business`, `catalog`, `leads`,
+`team`, `ecommerce-analytics`, `admin/*`, `complete-profile`, `*/onboarding` — and the
+block was duplicated verbatim across 11 user-agent groups.
 
 ### 1.8 Content shape (GEO)
 
@@ -160,10 +161,24 @@ that disagrees with the data module fails — and `npm run sitemap:validate` run
 pre-deploy gate (step 0.55). The same `dataSlugs.js` helper both validators already shared
 now parses the dates too.
 
+Two conformance fixes landed with it: `<changefreq>` / `<priority>` are no longer emitted
+(Google documents that it ignores both; a value nobody reads is a value nobody maintains),
+and `/login` — a utility page the validator itself lists as not indexed — is no longer in the
+sitemap, which per the sitemaps.org guidance should carry only canonical, indexable URLs.
+
 Net effect on the first deploy: 17 AR URLs (and their EN twins) change `<lastmod>`, the five
 comparison pages and the money post move inside IndexNow's window, and the blog index goes
 from `2026-03-21` to `2026-08-14`. Three integration pages move *backwards* (05-30 → March):
 the old date was invented, the new one is when they were published.
+
+**Deliberately kept, and why.** (1) A repo-local generator rather than the `next-sitemap`
+package: the repo rule prefers built-ins over a new dependency, and the validators already
+read the data modules the same way. (2) Dates live in the data modules, not in the markdown
+frontmatter: `pages/index.tsx` and the generator consume them without a markdown parse, and
+comparison / integration pages have no markdown at all — one shape for all three. (3) The
+data modules are read by regex (the pre-existing `dataSlugs.js` pattern): brittle by nature,
+mitigated by the generator failing loudly on any entry it cannot read and by the test that
+pins committed == generated.
 
 **Tests.** `test/scripts/generate-sitemap.test.ts` (committed file == generated file; field
 extraction; `updated` precedence; blog-index max; fails on an undated or backwards entry),
@@ -186,17 +201,34 @@ three page types, with and without `updated`), `formatPlainDate.test.ts` (`alway
    «برد تلقائي ذكي».
 4. `/instagram`: mention the «انستقرام» spelling once in body copy.
 
-## C. Open — infrastructure (small, code)
+## C. Shipped — infrastructure
 
-1. **Log retention**, so §1.5 becomes measurable: nginx service logging `max-size: 50m`,
-   `max-file: 14` in `docker-compose.yml`, plus a weekly `scripts/ai-crawler-report.sh`
-   (user-agent → hits, paths, status) appended to `/var/log/jawab24-crawlers.log` from the
-   existing backup cron. Without it the effect of §A and §B can never be shown.
-2. `nginx/nginx.conf`: a catch-all for legacy WordPress slugs — hyphenated single-segment
-   path with a trailing slash, excluding current single-segment routes — → 410;
-   `/sitemap_index.xml` → 410.
-3. `robots.txt`: add the missing `Disallow`s once, and a check in `validate-sitemap.js` that
-   every auth-gated `EXCLUDED_ROUTES` entry is disallowed in every user-agent group.
+1. **Log retention** (`docker-compose.yml`, nginx service): `max-size: 50m`, `max-file: 14`
+   ≈ a month at current traffic (~100k lines per two days ≈ 20 MB). Applies only when the
+   nginx container is **recreated** — `nginx -s reload` does not change a log driver — so
+   the first deploy after this lands needs `docker compose … up -d --force-recreate --no-deps
+   nginx` (recipe in `reference_infra_gotchas`; ~2 s gap, Meta retries webhooks).
+2. **`scripts/ai-crawler-report.sh`** — hits / status / paths per AI user-agent from
+   `docker logs`, prints the earliest line it could read so a short retention is visible
+   instead of reading as "low traffic". Ran against production on 2026-08-22 (72 h window,
+   99,608 lines): the table in §1.1. Install the cron from the script header
+   (`0 4 * * 1 … >> /var/log/jawab24-crawlers.log`) — owner, on the server, like the backup
+   cron. This is the §9.1 measurement the August 7 document asked for.
+3. **nginx rule 3c / 3d**: any hyphenated single-segment path with a trailing slash now
+   answers 410 (the shape of every old WordPress post URL), with the hyphenated current
+   pages excluded by name; `/sitemap_index.xml` answers 410. `backend/test/nginxLegacy410.test.ts`
+   reads the regex out of `nginx.conf` and walks `frontend/src/pages`, so a new hyphenated
+   page that is not excluded fails the suite before it ships as a 410;
+   `scripts/check-nginx-routing.sh` (boots the real config in the production image) now
+   asserts the 410s and that the excluded pages still reach the frontend.
+4. **`robots.txt`** rewritten to the standard shape: one group whose eleven `User-agent`
+   lines share one directive block (RFC 9309 — no more eleven verbatim copies), `Allow: /`
+   instead of an enumerated allow-list, and a `Disallow` set that mirrors the **auth-gated**
+   entries of `EXCLUDED_ROUTES` in both locales. noindex pages (`/login`, the
+   `/integrations` hub, `/pricing/scale`, `/checkout`, `/unsubscribe`) are deliberately not
+   disallowed — a crawler must fetch a page to see its noindex. `validate-sitemap.js` check 8
+   fails when a group misses an auth-gated route or when a `Disallow` is a prefix of a
+   sitemap URL (`Disallow: /integrations` would silently block every integration page).
 
 ## D. Open — owner-manual (no code)
 

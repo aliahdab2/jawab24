@@ -16,12 +16,14 @@ const { validateSitemap } = require('../../scripts/validate-sitemap.js') as {
       pagesDir?: string;
       dataDir?: string;
       checkCoverage?: boolean;
+      robotsTxt?: string | null;
     },
   ) => { errors: string[]; entryCount: number };
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SITEMAP = readFileSync(resolve(here, '../../public/sitemap.xml'), 'utf-8');
+const ROBOTS = readFileSync(resolve(here, '../../public/robots.txt'), 'utf-8');
 
 // Far-future `today` so the real-file tests never flake on <lastmod> dates.
 const OPTS = { today: '2999-12-31' };
@@ -104,5 +106,31 @@ describe('validate-sitemap', () => {
     expect(bumped).not.toBe(SITEMAP);
     const { errors } = validateSitemap(bumped, OPTS);
     expect(errors.some(e => e.includes('disagrees'))).toBe(false);
+  });
+
+  // ── Check 8: robots.txt must agree with the route inventory ───────────────
+  it('the committed robots.txt passes', () => {
+    const { errors } = validateSitemap(SITEMAP, { ...OPTS, robotsTxt: ROBOTS });
+    expect(errors).toEqual([]);
+  });
+
+  it('fails when an auth-gated route is not disallowed', () => {
+    const broken = ROBOTS.replace(/^Disallow: \/dashboard\n/m, '');
+    expect(broken).not.toBe(ROBOTS);
+    const { errors } = validateSitemap(SITEMAP, { ...OPTS, robotsTxt: broken });
+    expect(errors.some(e => e.includes('does not disallow /dashboard'))).toBe(true);
+  });
+
+  it('fails per group — a second named group without the full set is caught (groups do not inherit from *)', () => {
+    const extraGroup = `${ROBOTS}\nUser-agent: SomeNewBot\nAllow: /\n`;
+    const { errors } = validateSitemap(SITEMAP, { ...OPTS, robotsTxt: extraGroup });
+    expect(errors.some(e => e.includes('[SomeNewBot]') && e.includes('does not disallow'))).toBe(true);
+  });
+
+  it('fails when a Disallow is a prefix of a sitemap URL', () => {
+    const shadowing = ROBOTS.replace('Disallow: /dashboard\n', 'Disallow: /dashboard\nDisallow: /integrations\n');
+    expect(shadowing).not.toBe(ROBOTS);
+    const { errors } = validateSitemap(SITEMAP, { ...OPTS, robotsTxt: shadowing });
+    expect(errors.some(e => e.includes('/integrations') && e.includes('prefix of the sitemap URL'))).toBe(true);
   });
 });

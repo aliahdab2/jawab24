@@ -1,51 +1,67 @@
 # Jawab24 جواب24 robots.txt
+#
+# ONE group, several user-agents. Per RFC 9309 consecutive User-agent lines share
+# the directive block that follows them, so the AI crawlers named here get exactly
+# the policy everyone else gets and there is ONE Disallow list to maintain — not
+# the eleven verbatim copies this file carried until 2026-08-22. (A named group
+# does NOT inherit from `*`; that is why they sit in the same group rather than
+# each getting their own.) Unnamed crawlers fall under `*`, so naming these
+# changes nothing functionally — it keeps the policy auditable at a glance.
+#
+# Disallow = routes behind a login wall only: they render nothing but a login
+# page, so crawling them is wasted budget. Pages that are public but `noindex`
+# (/login, the /integrations hub, /pricing/scale, /checkout, /unsubscribe, …) are
+# deliberately NOT listed — a crawler has to fetch a page to see its noindex.
+# The list mirrors the auth-gated entries of EXCLUDED_ROUTES in
+# frontend/scripts/validate-sitemap.js, which fails when the two disagree or
+# when a Disallow would shadow a URL in the sitemap.
+
 User-agent: *
-
-# Allow public pages (all locales)
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: OAI-SearchBot
+User-agent: PerplexityBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: meta-externalagent
+User-agent: CCBot
+User-agent: Bytespider
+User-agent: cohere-ai
 Allow: /
-Allow: /pricing
-Allow: /login
-Allow: /privacy
-Allow: /terms
-Allow: /data-deletion
-Allow: /contact
-Allow: /help
-Allow: /what-is-jawab24
-Allow: /compare/
-Allow: /blog
-Allow: /blog/
-Allow: /integrations/
-Allow: /llms.txt
-Allow: /llms-full.txt
-
-# Allow English locale pages
-Allow: /en
-Allow: /en/pricing
-Allow: /en/login
-Allow: /en/privacy
-Allow: /en/terms
-Allow: /en/data-deletion
-Allow: /en/contact
-Allow: /en/help
-Allow: /en/what-is-jawab24
-Allow: /en/compare/
-Allow: /en/blog
-Allow: /en/blog/
-Allow: /en/integrations/
-
-# Disallow dashboard pages (require auth)
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
+Disallow: /admin/
 Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
+Disallow: /business
+Disallow: /catalog
+Disallow: /comments
+Disallow: /complete-profile
+Disallow: /dashboard
+Disallow: /ecommerce-analytics
+Disallow: /leads
+Disallow: /messages
+Disallow: /pages
+Disallow: /partner
+Disallow: /salla/onboarding
+Disallow: /settings
+Disallow: /shopify/onboarding
+Disallow: /team
+Disallow: /zid/onboarding
+Disallow: /en/admin/
 Disallow: /en/auth/
+Disallow: /en/business
+Disallow: /en/catalog
+Disallow: /en/comments
+Disallow: /en/complete-profile
+Disallow: /en/dashboard
+Disallow: /en/ecommerce-analytics
+Disallow: /en/leads
+Disallow: /en/messages
+Disallow: /en/pages
+Disallow: /en/partner
+Disallow: /en/salla/onboarding
+Disallow: /en/settings
+Disallow: /en/shopify/onboarding
+Disallow: /en/team
+Disallow: /en/zid/onboarding
 
 # NOTE: Legacy WordPress / French paths (/2022/, /wp-*, /category/, etc.) are
 # intentionally NOT disallowed here. Nginx returns 410 Gone for those URLs,
@@ -54,168 +70,4 @@ Disallow: /en/auth/
 # (often as "Indexed, though blocked by robots.txt" in Search Console).
 # See: https://developers.google.com/search/docs/crawling-indexing/remove-information
 
-# AI Crawlers - Explicit Allow
-#
-# IMPORTANT: a named User-agent group FULLY REPLACES the `User-agent: *` group for
-# that crawler — directives are not merged. So every block below must repeat the
-# auth-gated Disallow set, or these crawlers would be invited to spend their crawl
-# budget on app routes that can only ever render a login wall. (Not a disclosure
-# risk — those routes are auth-gated server-side — but a wasteful and misleading
-# signal.) Keep the Disallow list here in sync with the `*` group above.
-#
-# Crawlers not named here inherit `User-agent: *`, which already allows the public
-# site — naming them changes nothing functionally, it just makes this file
-# auditable at a glance.
-
-User-agent: GPTBot
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: ChatGPT-User
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: OAI-SearchBot
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: PerplexityBot
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: ClaudeBot
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: Google-Extended
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: meta-externalagent
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: CCBot
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: Bytespider
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-User-agent: cohere-ai
-Allow: /
-Disallow: /dashboard
-Disallow: /pages
-Disallow: /comments
-Disallow: /messages
-Disallow: /settings
-Disallow: /auth/
-Disallow: /en/dashboard
-Disallow: /en/pages
-Disallow: /en/comments
-Disallow: /en/messages
-Disallow: /en/settings
-Disallow: /en/auth/
-
-# Sitemap
 Sitemap: https://jawab24.com/sitemap.xml

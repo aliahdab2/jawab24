@@ -148,6 +148,12 @@ enforced server-side), but a wasteful and misleading signal.
 file: unnamed crawlers already inherit `Allow: /` from `*`, so naming them changes nothing
 functionally — it makes the file auditable.
 
+> **Superseded 2026-08-22.** Eleven verbatim copies of the same block was the wrong fix:
+> RFC 9309 lets consecutive `User-agent` lines share one directive block, so the file is now
+> a single group naming all eleven agents, with one `Disallow` set that `validate-sitemap.js`
+> check 8 keeps in step with the auth-gated `EXCLUDED_ROUTES`. See
+> `SEO_ACTIONS_2026-08-22.md` §C.4.
+
 ---
 
 ## 6. Added: IndexNow

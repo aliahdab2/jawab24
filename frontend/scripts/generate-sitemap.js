@@ -28,31 +28,33 @@ const DATA_DIR = path.join(__dirname, '..', 'src', 'data');
 
 // Pages with no data module behind them. Their `lastmod` is hand-maintained
 // here — bump it when the page's CONTENT changes, not on every deploy.
+//
+// Only canonical, indexable URLs belong here (sitemaps.org / Google's sitemap
+// guidelines): /login is a utility page the validator itself excludes, so it is
+// deliberately absent. <changefreq> and <priority> are not emitted — Google
+// documents that it ignores both, and a value nobody reads is a value nobody
+// maintains.
 const STATIC_PAGES = [
-  { path: '/', label: 'Homepage', lastmod: '2026-07-28', changefreq: 'weekly', priority: '1.0' },
-  { path: '/pricing', label: 'Pricing', lastmod: '2026-07-28', changefreq: 'weekly', priority: '0.9' },
-  { path: '/login', label: 'Login', lastmod: '2026-05-08', changefreq: 'monthly', priority: '0.8' },
-  { path: '/privacy', label: 'Privacy', lastmod: '2026-05-08', changefreq: 'yearly', priority: '0.5' },
-  { path: '/terms', label: 'Terms', lastmod: '2026-05-08', changefreq: 'yearly', priority: '0.5' },
-  { path: '/contact', label: 'Contact', lastmod: '2026-05-08', changefreq: 'yearly', priority: '0.5' },
-  { path: '/help', label: 'Help Center', lastmod: '2026-07-01', changefreq: 'monthly', priority: '0.5' },
-  { path: '/what-is-jawab24', label: 'What is Jawab24', lastmod: '2026-03-08', changefreq: 'monthly', priority: '0.9' },
-  { path: '/trust', label: 'Trust & Reliability', lastmod: '2026-08-19', changefreq: 'monthly', priority: '0.7' },
-  { path: '/instagram', label: 'Instagram integration', lastmod: '2026-08-16', changefreq: 'monthly', priority: '0.9' },
-  { path: '/data-deletion', label: 'Data Deletion', lastmod: '2026-05-08', changefreq: 'yearly', priority: '0.3' },
-  { path: '/compare', label: 'Compare hub', lastmod: '2026-05-31', changefreq: 'monthly', priority: '0.8' },
+  { path: '/', label: 'Homepage', lastmod: '2026-07-28' },
+  { path: '/pricing', label: 'Pricing', lastmod: '2026-07-28' },
+  { path: '/privacy', label: 'Privacy', lastmod: '2026-05-08' },
+  { path: '/terms', label: 'Terms', lastmod: '2026-05-08' },
+  { path: '/contact', label: 'Contact', lastmod: '2026-05-08' },
+  { path: '/help', label: 'Help Center', lastmod: '2026-07-01' },
+  { path: '/what-is-jawab24', label: 'What is Jawab24', lastmod: '2026-03-08' },
+  { path: '/trust', label: 'Trust & Reliability', lastmod: '2026-08-19' },
+  { path: '/instagram', label: 'Instagram integration', lastmod: '2026-08-16' },
+  { path: '/data-deletion', label: 'Data Deletion', lastmod: '2026-05-08' },
+  { path: '/compare', label: 'Compare hub', lastmod: '2026-05-31' },
 ];
 
 // Sections whose URLs and dates come from a `src/data/*.ts` module. Order is
 // the order in the file; `indexPath` adds a listing page whose lastmod is the
 // newest of its entries (the blog index changes whenever any post does).
 const DATA_SECTIONS = [
-  { file: 'competitors.ts', base: '/compare', label: 'Compare', changefreq: 'monthly', priority: '0.8' },
-  { file: 'integrations.ts', base: '/integrations', label: 'Integration', changefreq: 'monthly', priority: '0.8' },
-  {
-    file: 'blog-posts.ts', base: '/blog', label: 'Blog', changefreq: 'monthly', priority: '0.7',
-    indexPath: '/blog', indexLabel: 'Blog Index', indexChangefreq: 'weekly', indexPriority: '0.8',
-  },
+  { file: 'competitors.ts', base: '/compare', label: 'Compare' },
+  { file: 'integrations.ts', base: '/integrations', label: 'Integration' },
+  { file: 'blog-posts.ts', base: '/blog', label: 'Blog', indexPath: '/blog', indexLabel: 'Blog Index' },
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -62,7 +64,7 @@ function escapeXml(s) {
 }
 
 /** One `<url>` block for one locale of a page, with the AR/EN/x-default hreflang triplet. */
-function urlBlock({ path: pagePath, label, lastmod, changefreq, priority }, locale, prodOrigin) {
+function urlBlock({ path: pagePath, label, lastmod }, locale, prodOrigin) {
   const ar = `${prodOrigin}${pagePath}`;
   const en = `${prodOrigin}/en${pagePath === '/' ? '' : pagePath}`;
   const loc = locale === 'en' ? en : ar;
@@ -74,8 +76,6 @@ function urlBlock({ path: pagePath, label, lastmod, changefreq, priority }, loca
     `    <xhtml:link rel="alternate" hreflang="en" href="${en}"/>`,
     `    <xhtml:link rel="alternate" hreflang="x-default" href="${ar}"/>`,
     `    <lastmod>${lastmod}</lastmod>`,
-    `    <changefreq>${changefreq}</changefreq>`,
-    `    <priority>${priority}</priority>`,
     '  </url>',
   ].join('\n');
 }
@@ -102,19 +102,11 @@ function collectPages(dataDir = DATA_DIR) {
         path: `${section.base}/${entry.slug}`,
         label: `${section.label}: ${entry.slug}`,
         lastmod,
-        changefreq: section.changefreq,
-        priority: section.priority,
       };
     });
     if (section.indexPath) {
       const newest = sectionPages.map(p => p.lastmod).sort().at(-1);
-      pages.push({
-        path: section.indexPath,
-        label: section.indexLabel,
-        lastmod: newest,
-        changefreq: section.indexChangefreq,
-        priority: section.indexPriority,
-      });
+      pages.push({ path: section.indexPath, label: section.indexLabel, lastmod: newest });
     }
     pages.push(...sectionPages);
   }

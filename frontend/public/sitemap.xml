@@ -12,8 +12,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/"/>
     <lastmod>2026-07-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
   </url>
 
   <!-- Homepage - English -->
@@ -23,8 +21,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/"/>
     <lastmod>2026-07-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
   </url>
 
   <!-- Pricing - Arabic -->
@@ -34,8 +30,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/pricing"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/pricing"/>
     <lastmod>2026-07-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
   </url>
 
   <!-- Pricing - English -->
@@ -45,30 +39,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/pricing"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/pricing"/>
     <lastmod>2026-07-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Login - Arabic -->
-  <url>
-    <loc>https://jawab24.com/login</loc>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/login"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/login"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/login"/>
-    <lastmod>2026-05-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <!-- Login - English -->
-  <url>
-    <loc>https://jawab24.com/en/login</loc>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/login"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/login"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/login"/>
-    <lastmod>2026-05-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Privacy - Arabic -->
@@ -78,8 +48,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/privacy"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/privacy"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Privacy - English -->
@@ -89,8 +57,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/privacy"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/privacy"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Terms - Arabic -->
@@ -100,8 +66,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/terms"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/terms"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Terms - English -->
@@ -111,8 +75,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/terms"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/terms"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Contact - Arabic -->
@@ -122,8 +84,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/contact"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/contact"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Contact - English -->
@@ -133,8 +93,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/contact"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/contact"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Help Center - Arabic -->
@@ -144,8 +102,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/help"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/help"/>
     <lastmod>2026-07-01</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- Help Center - English -->
@@ -155,8 +111,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/help"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/help"/>
     <lastmod>2026-07-01</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 
   <!-- What is Jawab24 - Arabic -->
@@ -166,8 +120,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/what-is-jawab24"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/what-is-jawab24"/>
     <lastmod>2026-03-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
   </url>
 
   <!-- What is Jawab24 - English -->
@@ -177,8 +129,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/what-is-jawab24"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/what-is-jawab24"/>
     <lastmod>2026-03-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
   </url>
 
   <!-- Trust &amp; Reliability - Arabic -->
@@ -188,8 +138,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/trust"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/trust"/>
     <lastmod>2026-08-19</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Trust &amp; Reliability - English -->
@@ -199,8 +147,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/trust"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/trust"/>
     <lastmod>2026-08-19</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Instagram integration - Arabic -->
@@ -210,8 +156,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/instagram"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/instagram"/>
     <lastmod>2026-08-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
   </url>
 
   <!-- Instagram integration - English -->
@@ -221,8 +165,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/instagram"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/instagram"/>
     <lastmod>2026-08-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
   </url>
 
   <!-- Data Deletion - Arabic -->
@@ -232,8 +174,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/data-deletion"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/data-deletion"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
   </url>
 
   <!-- Data Deletion - English -->
@@ -243,8 +183,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/data-deletion"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/data-deletion"/>
     <lastmod>2026-05-08</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
   </url>
 
   <!-- Compare hub - Arabic -->
@@ -254,8 +192,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare"/>
     <lastmod>2026-05-31</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare hub - English -->
@@ -265,8 +201,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare"/>
     <lastmod>2026-05-31</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: manychat - Arabic -->
@@ -276,8 +210,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/manychat"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/manychat"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: manychat - English -->
@@ -287,8 +219,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/manychat"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/manychat"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: chatfuel - Arabic -->
@@ -298,8 +228,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/chatfuel"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/chatfuel"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: chatfuel - English -->
@@ -309,8 +237,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/chatfuel"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/chatfuel"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: tidio - Arabic -->
@@ -320,8 +246,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/tidio"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/tidio"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: tidio - English -->
@@ -331,8 +255,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/tidio"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/tidio"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: botpress - Arabic -->
@@ -342,8 +264,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/botpress"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/botpress"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: botpress - English -->
@@ -353,8 +273,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/botpress"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/botpress"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: speedly - Arabic -->
@@ -364,8 +282,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/speedly"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/speedly"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Compare: speedly - English -->
@@ -375,8 +291,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/speedly"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/speedly"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: shopify - Arabic -->
@@ -386,8 +300,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/shopify"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/shopify"/>
     <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: shopify - English -->
@@ -397,8 +309,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/shopify"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/shopify"/>
     <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: salla - Arabic -->
@@ -408,8 +318,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/salla"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/salla"/>
     <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: salla - English -->
@@ -419,8 +327,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/salla"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/salla"/>
     <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: zid - Arabic -->
@@ -430,8 +336,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/zid"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/zid"/>
     <lastmod>2026-03-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Integration: zid - English -->
@@ -441,8 +345,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/zid"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/zid"/>
     <lastmod>2026-03-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Blog Index - Arabic -->
@@ -452,8 +354,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Blog Index - English -->
@@ -463,8 +363,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- Blog: jawab24-data-security - Arabic -->
@@ -474,8 +372,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-data-security"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-data-security"/>
     <lastmod>2026-08-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: jawab24-data-security - English -->
@@ -485,8 +381,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-data-security"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-data-security"/>
     <lastmod>2026-08-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: case-study-damascus-training-institute - Arabic -->
@@ -496,8 +390,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/case-study-damascus-training-institute"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/case-study-damascus-training-institute"/>
     <lastmod>2026-07-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: case-study-damascus-training-institute - English -->
@@ -507,8 +399,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/case-study-damascus-training-institute"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/case-study-damascus-training-institute"/>
     <lastmod>2026-07-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: whatsapp-auto-reply-jawab24 - Arabic -->
@@ -518,8 +408,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/whatsapp-auto-reply-jawab24"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/whatsapp-auto-reply-jawab24"/>
     <lastmod>2026-08-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: whatsapp-auto-reply-jawab24 - English -->
@@ -529,8 +417,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/whatsapp-auto-reply-jawab24"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/whatsapp-auto-reply-jawab24"/>
     <lastmod>2026-08-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: ai-auto-reply-customer-photos - Arabic -->
@@ -540,8 +426,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-customer-photos"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-customer-photos"/>
     <lastmod>2026-07-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: ai-auto-reply-customer-photos - English -->
@@ -551,8 +435,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-customer-photos"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-customer-photos"/>
     <lastmod>2026-07-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: social-commerce-ai-customer-service-statistics-2026 - Arabic -->
@@ -562,8 +444,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/social-commerce-ai-customer-service-statistics-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026"/>
     <lastmod>2026-03-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: social-commerce-ai-customer-service-statistics-2026 - English -->
@@ -573,8 +453,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/social-commerce-ai-customer-service-statistics-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026"/>
     <lastmod>2026-03-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: instagram-facebook-dm-selling-statistics-2026 - Arabic -->
@@ -584,8 +462,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-facebook-dm-selling-statistics-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026"/>
     <lastmod>2026-03-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: instagram-facebook-dm-selling-statistics-2026 - English -->
@@ -595,8 +471,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-facebook-dm-selling-statistics-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026"/>
     <lastmod>2026-03-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: auto-reply-facebook-setup-guide - Arabic -->
@@ -606,8 +480,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/auto-reply-facebook-setup-guide"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
     <lastmod>2026-07-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: auto-reply-facebook-setup-guide - English -->
@@ -617,8 +489,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/auto-reply-facebook-setup-guide"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
     <lastmod>2026-07-08</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: instagram-auto-reply-guide - Arabic -->
@@ -628,8 +498,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-auto-reply-guide"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
     <lastmod>2026-04-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: instagram-auto-reply-guide - English -->
@@ -639,8 +507,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-auto-reply-guide"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
     <lastmod>2026-04-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: best-auto-reply-tools-2026 - Arabic -->
@@ -650,8 +516,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/best-auto-reply-tools-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: best-auto-reply-tools-2026 - English -->
@@ -661,8 +525,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/best-auto-reply-tools-2026"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
     <lastmod>2026-08-14</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: salla-store-facebook-auto-reply - Arabic -->
@@ -672,8 +534,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-store-facebook-auto-reply"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: salla-store-facebook-auto-reply - English -->
@@ -683,8 +543,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-store-facebook-auto-reply"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: zid-store-facebook-auto-reply - Arabic -->
@@ -694,8 +552,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/zid-store-facebook-auto-reply"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/zid-store-facebook-auto-reply"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: zid-store-facebook-auto-reply - English -->
@@ -705,8 +561,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/zid-store-facebook-auto-reply"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/zid-store-facebook-auto-reply"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: shopify-facebook-auto-reply-arabic - Arabic -->
@@ -716,8 +570,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/shopify-facebook-auto-reply-arabic"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: shopify-facebook-auto-reply-arabic - English -->
@@ -727,8 +579,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/shopify-facebook-auto-reply-arabic"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
     <lastmod>2026-03-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: jawab24-setup-tutorial - Arabic -->
@@ -738,8 +588,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-setup-tutorial"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
     <lastmod>2026-07-31</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: jawab24-setup-tutorial - English -->
@@ -749,8 +597,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-setup-tutorial"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
     <lastmod>2026-07-31</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: reduce-facebook-response-time - Arabic -->
@@ -760,8 +606,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/reduce-facebook-response-time"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
     <lastmod>2026-04-01</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: reduce-facebook-response-time - English -->
@@ -771,8 +615,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/reduce-facebook-response-time"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
     <lastmod>2026-04-01</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: salla-vs-shopify-arabic-sellers - Arabic -->
@@ -782,8 +624,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-vs-shopify-arabic-sellers"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
     <lastmod>2026-04-15</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: salla-vs-shopify-arabic-sellers - English -->
@@ -793,8 +633,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-vs-shopify-arabic-sellers"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
     <lastmod>2026-04-15</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: ai-auto-reply-angry-customers - Arabic -->
@@ -804,8 +642,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-angry-customers"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
     <lastmod>2026-04-29</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: ai-auto-reply-angry-customers - English -->
@@ -815,8 +651,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-angry-customers"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
     <lastmod>2026-04-29</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: common-facebook-auto-reply-mistakes - Arabic -->
@@ -826,8 +660,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/common-facebook-auto-reply-mistakes"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
     <lastmod>2026-05-13</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: common-facebook-auto-reply-mistakes - English -->
@@ -837,8 +669,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/common-facebook-auto-reply-mistakes"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
     <lastmod>2026-05-13</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: turn-comments-into-sales - Arabic -->
@@ -848,8 +678,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/turn-comments-into-sales"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/turn-comments-into-sales"/>
     <lastmod>2026-07-29</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Blog: turn-comments-into-sales - English -->
@@ -859,7 +687,5 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/turn-comments-into-sales"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/turn-comments-into-sales"/>
     <lastmod>2026-07-29</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 </urlset>
