@@ -162,6 +162,7 @@ vi.mock('@/components/ui', () => ({
     Badge: ({ children }: { children: React.ReactNode }) => <span data-testid="badge">{children}</span>,
     WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
     FacebookIcon: () => <svg data-testid="facebook-icon" />,
+    InstagramIcon: () => <svg data-testid="instagram-icon" />,
     // One option in a pick-one modal — shared by the channel picker and the
     // WhatsApp onboarding-path question.
     ChoiceRow: ({ title, description, badge, onClick, disabled }: { title: React.ReactNode; description: React.ReactNode; badge?: React.ReactNode; onClick: () => void; disabled?: boolean }) => (
@@ -1232,6 +1233,11 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
         // entire code path (the aeb8c0a5 lesson, third flag edition). The
         // redirect-flow tests stub it 'true' explicitly per test.
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+        // Same lesson, fourth flag edition. Since the «صفحات»⇄«قنوات» wording
+        // moved onto `usesChannelWording`, Instagram-direct ALSO renames the
+        // title — so "dark deploy" here means both channels dark, and leaving
+        // this to the ambient shell would flip the assertions below.
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [FB_PAGE] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -1819,6 +1825,74 @@ describe('PagesPage - Instagram-only demand signal', () => {
             });
             vi.unstubAllEnvs();
         }
+    });
+});
+
+/**
+ * The connect button collapses straight to the Facebook dialog only when
+ * Facebook really is the sole option. It used to test WhatsApp alone, so a
+ * merchant without WhatsApp entitlement got a Facebook-only dialog from a
+ * button labelled «ربط قناة» — and the footer interest CTA was their ONLY
+ * route to Instagram-direct.
+ *
+ * Mutation-checked: restoring `if (whatsappVisible && whatsappEntitled === true)`
+ * fails the first case (no picker) and the third (title reads "My Pages").
+ */
+describe('PagesPage - connect entry point counts every available channel', () => {
+    beforeEach(() => {
+        // WhatsApp fully dark — Instagram-direct is the only non-Facebook channel.
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockUsagePlan(false);
+        mockedApi.post.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('opens the picker on Instagram-direct alone, with WhatsApp dark', async () => {
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.connectChannel)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getAllByText(enPages.connectChannel)[0]);
+
+        expect(screen.getByText(enPages.channelPickerTitle)).toBeInTheDocument();
+        expect(screen.getByText(enPages.channelInstagram)).toBeInTheDocument();
+        // WhatsApp is dark, so its row must NOT appear alongside it.
+        expect(screen.queryByText(enPages.channelWhatsApp)).not.toBeInTheDocument();
+    });
+
+    it('still collapses to the Facebook dialog when Facebook is the only channel', async () => {
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.connectPage)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getAllByText(enPages.connectPage)[0]);
+
+        expect(screen.queryByText(enPages.channelPickerTitle)).not.toBeInTheDocument();
+    });
+
+    it('renames the screen to "Channels" on Instagram-direct alone', async () => {
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.titleChannels)).toBeInTheDocument();
+        });
+        expect(screen.queryByText(enPages.title)).not.toBeInTheDocument();
     });
 });
 

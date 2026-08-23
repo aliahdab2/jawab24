@@ -31,6 +31,7 @@ import { computeFactCoverage, isStorePolicyKey, shouldShowProductsSection } from
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { useWorkspaceRole } from '@/hooks';
+import { usesChannelWording } from '@/lib/featureFlags';
 import { authorizationOutcome, AUTHORIZATION_MESSAGE_KEY } from '@/utils/authorizationOutcome';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -72,7 +73,11 @@ function BusinessPageInner() {
   const tCatalog = useTranslations('catalog');
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  // «صفحات» ⇄ «قنوات» — the same policy the sidebar item and /pages read, so
+  // the button here can never send a merchant to a screen that calls its own
+  // contents something else.
+  const channelWording = usesChannelWording(!!user?.isAdmin);
   // Every write on this page — catalog items, fact rows, fact lists, and the
   // Business Info text — is `requireRole('admin')` server-side. One flag feeds
   // all four sections so the page can never end up half-gated: a banner saying
@@ -467,11 +472,11 @@ function BusinessPageInner() {
         pages.length > 0 ? (
           <EmptyState
             icon={Store}
-            title={t('noConnectedPage')}
-            description={t('noConnectedPageHint')}
+            title={t(channelWording ? 'noConnectedPageChannels' : 'noConnectedPage')}
+            description={t(channelWording ? 'noConnectedPageHintChannels' : 'noConnectedPageHint')}
             action={
               <Link href="/pages">
-                <Button variant="primary">{t('goToPages')}</Button>
+                <Button variant="primary">{t(channelWording ? 'goToChannels' : 'goToPages')}</Button>
               </Link>
             }
           />
@@ -481,10 +486,10 @@ function BusinessPageInner() {
           // lost-connection state above.
           <EmptyState
             icon={Store}
-            title={t('noPage')}
+            title={t(channelWording ? 'noPageChannels' : 'noPage')}
             action={
               <Link href="/pages">
-                <Button variant="primary">{t('goToPages')}</Button>
+                <Button variant="primary">{t(channelWording ? 'goToChannels' : 'goToPages')}</Button>
               </Link>
             }
           />

@@ -3,6 +3,7 @@ import {
     isWhatsAppEnabled,
     isWhatsAppVisible,
     isWhatsAppMarketable,
+    usesChannelWording,
 } from '../featureFlags';
 
 /**
@@ -72,5 +73,46 @@ describe('isWhatsAppMarketable (public marketing surfaces)', () => {
     it('turns on at full launch', () => {
         enableWhatsApp();
         expect(isWhatsAppMarketable()).toBe(true);
+    });
+});
+
+/**
+ * The one policy point behind «صفحات» ⇄ «قنوات التواصل» on the nav item, the
+ * /pages screen, and the /business empty states. It exists because those three
+ * screens each branched on `isWhatsAppVisible` independently, which went stale
+ * the day Instagram-direct shipped: a merchant who can connect an Instagram
+ * account without a Facebook Page was still being told the screen holds "Pages".
+ *
+ * Each caller must keep reading THIS function — a screen that reverts to its
+ * own flag drifts out of step with the button that navigates to it.
+ */
+describe('usesChannelWording (صفحات ⇄ قنوات)', () => {
+    it('is false when Facebook Pages are the only channel', () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
+        expect(usesChannelWording(false)).toBe(false);
+        expect(usesChannelWording(true)).toBe(false);
+    });
+
+    it('is true on WhatsApp alone, honouring the admin-only canary', () => {
+        enableWhatsApp();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
+        expect(usesChannelWording(true)).toBe(true);
+        expect(usesChannelWording(false)).toBe(false);
+    });
+
+    it('is true on Instagram-direct alone, for every user', () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        expect(usesChannelWording(false)).toBe(true);
+        expect(usesChannelWording(true)).toBe(true);
+    });
+
+    it('does not let the WhatsApp canary suppress the Instagram-direct rename', () => {
+        enableWhatsApp();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        expect(usesChannelWording(false)).toBe(true);
     });
 });

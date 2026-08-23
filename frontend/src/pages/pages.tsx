@@ -37,7 +37,7 @@ import dynamic from 'next/dynamic';
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
-import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled } from '@/lib/featureFlags';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled, usesChannelWording } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -69,6 +69,10 @@ const PagesPage: NextPageWithLayout = () => {
   // the master switch. Actionable surfaces (picker, connect, add-card) gate on
   // this so no non-founder can reach the Meta signup during the canary window.
   const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
+  // WORDING only — never gate an actionable surface on this. It is true for
+  // Instagram-direct too, which `whatsappVisible` says nothing about; the
+  // sidebar item and the /business button read the same helper.
+  const channelWording = usesChannelWording(user?.isAdmin ?? false);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const isDemoUser = useIsDemoUser();
   const { canEdit, isOwner } = useWorkspaceRole();
@@ -974,11 +978,18 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
-  // Single "Connect channel" entry point. When WhatsApp isn't configured OR
-  // the plan doesn't include it, the picker would have one option, so it
-  // collapses to the Facebook dialog directly.
+  // Single "Connect channel" entry point. It collapses straight to the Facebook
+  // dialog only when Facebook really IS the sole option — otherwise the button
+  // labelled «ربط قناة» would open a Facebook-only dialog.
+  //
+  // The condition must name EVERY row the picker can render (see
+  // ChannelPickerModal). It used to count WhatsApp alone, which silently made
+  // the footer «أرغب بربط إنستغرام مباشرة» CTA the only route to Instagram-direct
+  // for a merchant without WhatsApp entitlement. Add a row there, add it here.
   const handleOpenConnect = () => {
-    if (whatsappVisible && whatsappEntitled === true) {
+    const hasWhatsAppOption = whatsappVisible && whatsappEntitled === true;
+    const hasInstagramOption = isInstagramDirectEnabled();
+    if (hasWhatsAppOption || hasInstagramOption) {
       setShowChannelPicker(true);
     } else {
       setShowConnectDialog(true);
@@ -1017,15 +1028,15 @@ const PagesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={whatsappVisible ? t('titleChannels') : t('title')}
-        description={whatsappVisible ? t('descriptionChannels') : t('description')}
+        title={channelWording ? t('titleChannels') : t('title')}
+        description={channelWording ? t('descriptionChannels') : t('description')}
         action={isOwner
           ? <Button
               onClick={handleOpenConnect}
               disabled={syncing}
               icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
             >
-              {syncing ? t('syncing') : (whatsappVisible ? t('connectChannel') : t('connectPage'))}
+              {syncing ? t('syncing') : (channelWording ? t('connectChannel') : t('connectPage'))}
             </Button>
           : undefined
         }
@@ -1614,10 +1625,10 @@ const PagesPage: NextPageWithLayout = () => {
           <EmptyState
             icon={FileText}
             title={t('noPages')}
-            description={whatsappVisible ? t('noPagesDescChannels') : t('noPagesDesc')}
+            description={channelWording ? t('noPagesDescChannels') : t('noPagesDesc')}
             action={isOwner
               ? <Button onClick={handleOpenConnect}>
-                  {whatsappVisible ? t('connectChannel') : t('connectPage')}
+                  {channelWording ? t('connectChannel') : t('connectPage')}
                 </Button>
               : undefined
             }

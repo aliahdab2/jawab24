@@ -36,7 +36,7 @@ import { NavCountBadge } from '@/components/ui/NavCountBadge';
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
-import { PHONE_AUTH_ENABLED, isWhatsAppVisible } from '@/lib/featureFlags';
+import { PHONE_AUTH_ENABLED, usesChannelWording } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -134,11 +134,13 @@ export function resolveNavKey(
     tPricing: (k: string) => string,
     isAdmin: boolean,
 ): string {
-    // "My Pages" becomes "Channels" only once WhatsApp is live (the screen then
-    // holds a channel beyond Facebook pages). Canary-aware (isWhatsAppVisible,
-    // not isWhatsAppEnabled) so the admin-only pilot window doesn't leak the
-    // rename to regular users. Covers sidebar + mobile nav (both callers).
-    if (key === 'nav.pages') return tNav(isWhatsAppVisible(isAdmin) ? 'channels' : 'pages');
+    // "My Pages" becomes "Channels" once the screen holds a channel beyond
+    // Facebook pages — WhatsApp (canary-aware, so the admin-only pilot window
+    // doesn't leak the rename) or Instagram-direct. `usesChannelWording` is the
+    // one policy point; /pages and /business read the same function so the nav
+    // label, the screen title, and the button that navigates here agree.
+    // Covers sidebar + mobile nav (both callers).
+    if (key === 'nav.pages') return tNav(usesChannelWording(isAdmin) ? 'channels' : 'pages');
     if (key.startsWith('nav.')) return tNav(key.replace('nav.', ''));
     if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', ''));
     return key;
