@@ -489,8 +489,8 @@ const DashboardPage: NextPageWithLayout = () => {
     return bannerItems.slice(0, 5);
   }, [needsActionComments, recentMessages]);
 
-  // Workspaces that actively run 2+ channels get a per-message channel ribbon on
-  // the needs-attention feed (a single active channel stays clean).
+  // Workspaces that actively run 2+ channels show the channel in place of the type
+  // icon on the needs-attention feed (a single active channel stays clean).
   const showChannelBadge = useMemo(() => hasMultipleActiveChannels(pages), [pages]);
 
   // Auto-sync if no pages found — only for existing users (onboarding already completed)

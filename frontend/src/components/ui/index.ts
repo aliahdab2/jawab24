@@ -13,7 +13,7 @@ export { DetailSheet } from './DetailSheet';
 export { SidePanel } from './SidePanel';
 export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';
-export { FacebookIcon, InstagramIcon, WhatsAppIcon, PlatformIcon, ChannelBadges, ChannelRibbon, PLATFORM_LABEL_KEYS, PLATFORM_TINT } from './BrandIcons';
+export { FacebookIcon, InstagramIcon, WhatsAppIcon, PlatformIcon, ChannelBadges, PLATFORM_LABEL_KEYS, PLATFORM_TINT, PLATFORM_TINT_ON_ALERT } from './BrandIcons';
 export { BrandLogo } from './BrandLogo';
 export { Toggle } from './Toggle';
 export { VersionBadge } from './VersionBadge';

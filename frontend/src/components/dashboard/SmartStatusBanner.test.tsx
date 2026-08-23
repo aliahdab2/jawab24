@@ -33,6 +33,20 @@ function makeCommentItem(overrides: Partial<NeedsAttentionItem> = {}): NeedsAtte
   };
 }
 
+function renderMultiChannelBanner(items: NeedsAttentionItem[]) {
+  const result = render(
+    <SmartStatusBanner
+      commentNeedsAction={items.filter(i => i.type === 'comment').length}
+      messageNeedsAction={items.filter(i => i.type === 'message').length}
+      items={items}
+      onItemClick={vi.fn()}
+      showChannelBadge
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+  return result;
+}
+
 function renderBanner(
   items: NeedsAttentionItem[],
   onClick = vi.fn(),
@@ -307,6 +321,69 @@ describe('SmartStatusBanner', () => {
       // comments and NOT the 19 leads (which have their own row and link).
       expect(screen.getByText(/View all 6 items/i)).toBeInTheDocument();
       expect(screen.queryByText(/View all 25/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // The channel REPLACES the type icon on message rows: the channel glyph already
+  // implies "message", and the banner is short on room. Comment rows keep
+  // MessageSquare, so the two row types still read apart.
+  describe('channel icon (multi-channel workspaces)', () => {
+    it('swaps the message row type icon for the channel', () => {
+      const { container } = renderMultiChannelBanner([
+        makeMessageItem({ platform: 'whatsapp' }),
+      ]);
+
+      expect(screen.getByRole('img', { name: 'WhatsApp' })).toBeInTheDocument();
+      expect(container.querySelector('.lucide-message-circle')).toBeNull();
+    });
+
+    it('leaves comment rows on MessageSquare with no channel icon', () => {
+      const { container } = renderMultiChannelBanner([makeCommentItem()]);
+
+      expect(container.querySelector('.lucide-message-square')).not.toBeNull();
+      expect(screen.queryByRole('img', { name: /WhatsApp|Facebook|Instagram/ })).toBeNull();
+    });
+
+    it('keeps MessageCircle on single-channel workspaces', () => {
+      const { container } = renderBanner([makeMessageItem({ platform: 'whatsapp' })]);
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+
+      expect(container.querySelector('.lucide-message-circle')).not.toBeNull();
+      expect(screen.queryByRole('img', { name: 'WhatsApp' })).toBeNull();
+    });
+
+    it('reserves no corner padding and carries no ribbon rotation', () => {
+      // The removed ChannelRibbon forced `relative overflow-hidden pe-14` on the row
+      // and needed `rtl:-rotate-45` to mirror. None of that may survive.
+      const { container } = renderMultiChannelBanner([
+        makeMessageItem({ platform: 'facebook' }),
+        makeMessageItem({ id: '2', platform: 'instagram' }),
+      ]);
+
+      const html = container.innerHTML;
+      expect(html).not.toMatch(/\bpe-14\b/);
+      expect(html).not.toMatch(/rotate-45/);
+      expect(html).not.toMatch(/\boverflow-hidden\b.*\bpe-/);
+    });
+
+    it('tints the channel for the rose panel in BOTH themes', () => {
+      // PLATFORM_TINT is built for a neutral card and lands at ~1.2:1 on the light
+      // rose-50 panel. The alert palette must carry a light value AND a dark: pair.
+      renderMultiChannelBanner([makeMessageItem({ platform: 'facebook' })]);
+
+      const cls = screen.getByRole('img', { name: 'Facebook' }).className;
+      expect(cls).toMatch(/text-blue-700/);
+      expect(cls).toMatch(/dark:text-blue-300/);
+    });
+
+    it('keeps Instagram off the panel\'s own rose hue', () => {
+      // rose-300 clears AA on the dark panel but IS the banner's hue, so it reads as
+      // chrome rather than a channel — the problem the icon swap exists to solve.
+      renderMultiChannelBanner([makeMessageItem({ platform: 'instagram' })]);
+
+      const cls = screen.getByRole('img', { name: 'Instagram' }).className;
+      expect(cls).toMatch(/fuchsia/);
+      expect(cls).not.toMatch(/rose/);
     });
   });
 });

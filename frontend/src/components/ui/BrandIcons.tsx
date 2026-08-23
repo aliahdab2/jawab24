@@ -78,6 +78,10 @@ interface PlatformIconProps {
   size?: 'sm' | 'md';
   /** Grey rendering — "connected but auto-reply off" in badge clusters */
   muted?: boolean;
+  /** Which palette the surface behind the icon calls for. `surface` = a neutral
+      card (the inbox rows, badge clusters). `alert` = the rose needs-attention
+      banner, whose panel PLATFORM_TINT is unreadable on. `muted` wins over both. */
+  tint?: 'surface' | 'alert';
   ariaLabel?: string;
   className?: string;
 }
@@ -92,21 +96,28 @@ export const PLATFORM_TINT = {
   whatsapp: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
 } as const;
 
-const PLATFORM_STYLES = {
-  instagram: { path: INSTAGRAM_PATH, classes: PLATFORM_TINT.instagram },
-  facebook: { path: FACEBOOK_PATH, classes: PLATFORM_TINT.facebook },
-  whatsapp: { path: WHATSAPP_PATH, classes: PLATFORM_TINT.whatsapp },
+/** Channel icon tint for use ON the rose needs-attention banner. PLATFORM_TINT
+    assumes a neutral card and goes invisible here — measured against the
+    composited 20%-opacity channel chip, its 300-level foregrounds land at
+    1.21–1.34:1 on the light `rose-50` panel, far under WCAG AA.
+
+    Two rules this map exists to hold:
+    - Both themes, always. The panel is `rose-50` in light and `rose-900` in dark;
+      a dark-only palette is the defect this map was written to fix.
+    - Instagram stays OFF the rose axis. `rose-300` clears the ratio on the dark
+      panel (4.25:1) but IS the panel's own hue, so it reads as banner chrome
+      rather than a channel — the exact problem the icon swap exists to solve.
+      Fuchsia separates. */
+export const PLATFORM_TINT_ON_ALERT = {
+  facebook: 'bg-channel-facebook/15 text-blue-700 dark:bg-channel-facebook/20 dark:text-blue-300',
+  instagram: 'bg-channel-instagram/15 text-fuchsia-700 dark:bg-channel-instagram/20 dark:text-fuchsia-300',
+  whatsapp: 'bg-channel-whatsapp/15 text-emerald-700 dark:bg-channel-whatsapp/20 dark:text-emerald-300',
 } as const;
 
-// Official brand colors (theme-independent) — used by the channel ribbon on inbox rows.
-// `channel.*` is a real theme color in tailwind.config.js, so these are ordinary utility
-// classes rather than arbitrary values carrying a duplicated hex. The config and
-// CHANNEL_BRAND_HEX (which non-Tailwind consumers like the social-image generator read)
-// are held together by test/constants/channelBrandColors.test.ts.
-const SOLID_CLASSES = {
-  instagram: 'bg-channel-instagram text-white',
-  facebook: 'bg-channel-facebook text-white',
-  whatsapp: 'bg-channel-whatsapp text-white',
+const PLATFORM_PATHS = {
+  instagram: INSTAGRAM_PATH,
+  facebook: FACEBOOK_PATH,
+  whatsapp: WHATSAPP_PATH,
 } as const;
 
 /** i18n keys (`comments` namespace) for localized platform names — the
@@ -119,11 +130,16 @@ export const PLATFORM_LABEL_KEYS = {
 
 const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-200';
 
-export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, className }: PlatformIconProps) {
-  const style = PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook;
-  const colorClasses = muted ? MUTED_CLASSES : style.classes;
+export function PlatformIcon({ platform, size = 'sm', muted = false, tint = 'surface', ariaLabel, className }: PlatformIconProps) {
+  const path = PLATFORM_PATHS[platform] ?? PLATFORM_PATHS.facebook;
+  const palette = tint === 'alert' ? PLATFORM_TINT_ON_ALERT : PLATFORM_TINT;
+  const colorClasses = muted ? MUTED_CLASSES : (palette[platform] ?? palette.facebook);
   return (
     <span
+      // role="img" is load-bearing, not decoration: `aria-label` on a bare span
+      // (role=generic) is ignored per ARIA, and on the inbox rows this icon is the
+      // ONLY channel conveyance a screen reader gets.
+      role="img"
       className={clsx(
         'inline-flex items-center justify-center rounded-full flex-shrink-0',
         size === 'sm' ? 'w-4 h-4' : 'w-5 h-5',
@@ -137,45 +153,8 @@ export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, 
         viewBox="0 0 24 24"
         aria-hidden="true"
       >
-        <path d={style.path} />
+        <path d={path} />
       </svg>
-    </span>
-  );
-}
-
-/**
- * Diagonal brand-colored corner ribbon that marks which channel a conversation is
- * on, without crowding the avatar. It's an absolutely-positioned corner overlay at
- * the row's top trailing (inline-end) corner, so the HOST row must be `relative`,
- * `overflow-hidden` (to clip the band to the rounded corner) and reserve end padding
- * (e.g. `pe-14`) so its content clears the corner. The band rotation mirrors for RTL
- * vs LTR. Reuses the shared brand colors + glyph paths (single source — no duplicated
- * SVG or color values).
- */
-export function ChannelRibbon({ platform, ariaLabel, className }: {
-  platform: 'instagram' | 'facebook' | 'whatsapp';
-  ariaLabel?: string;
-  className?: string;
-}) {
-  const path = (PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook).path;
-  const solid = SOLID_CLASSES[platform] ?? SOLID_CLASSES.facebook;
-  return (
-    <span
-      className={clsx('pointer-events-none absolute top-0 end-0 h-[54px] w-[54px] overflow-hidden', className)}
-      aria-label={ariaLabel}
-    >
-      <span
-        className={clsx(
-          // Band across the top-end corner: top-right in LTR, top-left in RTL —
-          // `end-[-18px]` mirrors on its own; only the rotation needs flipping.
-          'absolute top-[11px] end-[-18px] flex w-[80px] items-center justify-center py-[3px] shadow-sm rotate-45 rtl:-rotate-45',
-          solid,
-        )}
-      >
-        <svg className="h-[11px] w-[11px] fill-current -rotate-45 rtl:rotate-45" viewBox="0 0 24 24" aria-hidden="true">
-          <path d={path} />
-        </svg>
-      </span>
     </span>
   );
 }

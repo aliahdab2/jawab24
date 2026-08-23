@@ -400,6 +400,70 @@ describe('MessageCard', () => {
       }
     });
 
+    it('renders the channel as a labelled role=img, not a bare span', () => {
+      // `aria-label` on a bare span (role=generic) is ignored per ARIA, and here the
+      // icon is the ONLY channel conveyance a screen reader gets — the row carries no
+      // channel text and no avatar.
+      render(
+        <MessageCard
+          {...defaultProps}
+          showChannelBadge
+          conversation={makeConversation({
+            messages: [makeMessage({ platform: 'whatsapp' })],
+            lastMessage: makeMessage({ platform: 'whatsapp' }),
+          })}
+        />
+      );
+
+      expect(screen.getByRole('img', { name: 'WhatsApp' })).toBeInTheDocument();
+    });
+
+    it('leads the row with the channel and reserves no trailing corner padding', () => {
+      // The old marker was a diagonal corner ribbon: absolutely positioned, so the row
+      // had to be `relative overflow-hidden` and reserve `pe-14`. The leading icon is a
+      // flow child — padding is constant and symmetric.
+      const { container } = render(
+        <MessageCard
+          {...defaultProps}
+          showChannelBadge
+          conversation={makeConversation({
+            messages: [makeMessage({ platform: 'instagram' })],
+            lastMessage: makeMessage({ platform: 'instagram' }),
+          })}
+        />
+      );
+
+      const row = container.querySelector('[role="button"]')!;
+      expect(row.className).not.toMatch(/\bpe-14\b/);
+      expect(row.className).not.toMatch(/\boverflow-hidden\b/);
+      expect(row.className).toMatch(/\bpx-3\.5\b/);
+
+      // The channel icon precedes the content in DOM order — that is what puts it at
+      // the head of the row in BOTH directions, with no physical-side class involved.
+      const icon = screen.getByRole('img', { name: 'Instagram' });
+      expect(row.firstElementChild!.contains(icon)).toBe(true);
+    });
+
+    it('renders no initials avatar — initials do not survive Arabic', () => {
+      // `split(' ').slice(0,2).map(w => w[0])` gave «القحطاني» its article's alif, so
+      // nearly every Arabic customer shared the same second letter (نا / سا / ما / أا).
+      // The name beside the icon carries identity; the disc carried nothing.
+      render(
+        <MessageCard
+          {...defaultProps}
+          showChannelBadge
+          conversation={makeConversation({
+            senderName: 'نورة القحطاني',
+            messages: [makeMessage({ platform: 'whatsapp', senderName: 'نورة القحطاني' })],
+            lastMessage: makeMessage({ platform: 'whatsapp', senderName: 'نورة القحطاني' }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('نورة القحطاني')).toBeInTheDocument();
+      expect(screen.queryByText('نا')).not.toBeInTheDocument();
+    });
+
     it('prefers whatsapp over a legacy defaulted-facebook outgoing row', () => {
       const legacyOutgoing = makeMessage({
         id: '1',

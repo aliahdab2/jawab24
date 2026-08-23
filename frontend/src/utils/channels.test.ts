@@ -17,7 +17,7 @@ describe('hasMultipleActiveChannels', () => {
 
   it('is FALSE when Facebook is on but a linked Instagram is paused (off)', () => {
     // The common case: an IG business account is linked to the FB page but the
-    // merchant only runs Facebook — the ribbon must stay hidden.
+    // merchant only runs Facebook — the channel icon must stay hidden.
     expect(hasMultipleActiveChannels([
       page({ facebookPageId: 'fb', autoReplyEnabled: true, instagramAccountId: 'ig', instagramAutoReplyEnabled: false }),
     ])).toBe(false);
