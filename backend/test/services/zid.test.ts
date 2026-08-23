@@ -1186,7 +1186,9 @@ describe('Zid Service', () => {
             expectDualHeaders(call);
 
             expect(result).not.toBeNull();
-            expect(result?.orderNumber).toBe('ORD-100'); // code preferred over id
+            // invoice_number is the customer-facing number; `code` (ORD-100 here) is
+            // only the invoice URL slug and must never be shown back to a customer.
+            expect(result?.orderNumber).toBe('555');
             expect(result?.customerFirstName).toBe('Ahmed');
             expect(result?.customerPhone).toBe('+966591555966');
             expect(result?.status).toBe('shipped'); // inDelivery, case-insensitive
@@ -1212,9 +1214,11 @@ describe('Zid Service', () => {
         it('matches by internal id and by invoice number, and strips a leading #', async () => {
             mockFetch.mockResolvedValue(jsonResponse({ orders: [order] }));
 
-            expect((await lookupOrder('store-1', '9001'))?.orderNumber).toBe('ORD-100');
-            expect((await lookupOrder('store-1', '555'))?.orderNumber).toBe('ORD-100');
-            expect((await lookupOrder('store-1', '#ORD-100'))?.orderNumber).toBe('ORD-100');
+            // Any of the three identifiers FINDS the order (a merchant may paste a slug),
+            // but what comes back is always the invoice number.
+            expect((await lookupOrder('store-1', '9001'))?.orderNumber).toBe('555');
+            expect((await lookupOrder('store-1', '555'))?.orderNumber).toBe('555');
+            expect((await lookupOrder('store-1', '#ORD-100'))?.orderNumber).toBe('555');
         });
 
         it('falls back to order_total when order_total_string is absent', async () => {
@@ -1234,7 +1238,7 @@ describe('Zid Service', () => {
 
             expect(mockFetch).toHaveBeenCalledTimes(2);
             expect(mockFetch.mock.calls[1][0]).toContain('page=2');
-            expect(result?.orderNumber).toBe('ORD-100');
+            expect(result?.orderNumber).toBe('555');
         });
 
         it('gives up after 3 full pages without a match', async () => {
@@ -1263,6 +1267,69 @@ describe('Zid Service', () => {
     });
 
     describe('getShipmentTracking [provisional — pending Zid live captures]', () => {
+        // Zid's REAL shape, captured 2026-08-23 from a live order: carrier data hangs
+        // off shipping.method. The flat/nested fallbacks below were never sent by Zid.
+        it("reads Zid's real shipping.method.tracking block, including the tracking URL", async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                orders: [{
+                    id: 72524870, invoice_number: 72524870, code: 'mdXMlMYYBt',
+                    order_status: { code: 'indelivery' },
+                    customer: { name: 'Zid Customer', mobile: '966500000009' },
+                    shipping: {
+                        method: {
+                            code: 'aramex',
+                            tracking: {
+                                number: 'SA1234567890',
+                                status: 'in_transit',
+                                url: 'https://track.example/SA1234567890',
+                            },
+                            waybill_tracking_id: 'WB-1',
+                            courier: { name: 'Aramex' },
+                        },
+                        address: { city: { name: 'الرياض' } },
+                    },
+                }],
+            }));
+
+            const result = await getShipmentTracking('store-1', '72524870');
+
+            expect(result).toMatchObject({
+                orderNumber: '72524870',
+                trackingNumber: 'SA1234567890',
+                courierName: 'Aramex',
+                trackingUrl: 'https://track.example/SA1234567890',
+                shippingCity: 'الرياض',
+            });
+        });
+
+        // «مندوب المتجر» — merchant self-delivery, every carrier field null. This is
+        // the dev store's actual configuration, and it must not surface "null" strings.
+        it('returns no tracking data when the merchant self-delivers (method.code custom)', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                orders: [{
+                    id: 72524870, invoice_number: 72524870, code: 'mdXMlMYYBt',
+                    order_status: { code: 'indelivery' },
+                    customer: { name: 'Zid Customer', mobile: '966500000009' },
+                    shipping: {
+                        method: {
+                            code: 'custom',
+                            tracking: { number: null, status: null, url: null },
+                            waybill_tracking_id: null,
+                            courier: null,
+                        },
+                        address: { city: { name: 'الرياض' } },
+                    },
+                }],
+            }));
+
+            const result = await getShipmentTracking('store-1', '72524870');
+
+            expect(result?.trackingNumber).toBeUndefined();
+            expect(result?.courierName).toBeUndefined();
+            expect(result?.trackingUrl).toBeUndefined();
+            expect(result?.shippingCity).toBe('الرياض');
+        });
+
         it('reads flat tracking fields', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({
                 orders: [{
@@ -1278,7 +1345,7 @@ describe('Zid Service', () => {
             const result = await getShipmentTracking('store-1', 'ORD-7');
 
             expect(result).toMatchObject({
-                orderNumber: 'ORD-7',
+                orderNumber: '1', // no invoice_number on this fixture -> falls back to id
                 customerFirstName: 'Ahmed',
                 customerPhone: '+966591555966',
                 status: 'shipped',

@@ -479,6 +479,40 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 - Order status codes: `new`, `preparing`, `ready`, `indelivery`, `delivered`, `canceled`
   (webhook conditions docs also show `inDelivery`/`cancelled` — mapping is case-insensitive
   and tolerates both spellings). `indelivery` → shipped, `delivered` → delivered.
+  ✅ **Live-confirmed 2026-08-23**: the Zid admin's own status select offers exactly
+  `new` / `preparing` / `ready` / `indelivery` / `delivered` / `cancelled`, and a real
+  delivery carried `order_status.code` `indelivery`.
+- ⛔ **The order number is `id` (= `invoice_number`), NOT `code`.** `code` is the invoice
+  **URL slug** — it appears only inside `order_url`
+  (`https://<store>.zid.store/o/<code>/inv`) and is never shown to the customer. The Zid
+  admin order list, the order-detail heading, and the customer's own invoice page all
+  display `id`. Quoting `code` in a customer message sends them a string they have never
+  seen; that shipped and was fixed on 2026-08-23. Observed live: `id` `72524870`,
+  `invoice_number` `72524870`, `code` `"mdXMlMYYBt"`.
+- **Shipping/tracking hangs off `shipping.method`**, live-captured 2026-08-23:
+
+  ```jsonc
+  "shipping": {
+    "method": {
+      "code": "custom",                 // «مندوب المتجر» = merchant self-delivery
+      "tracking": { "number": null, "status": null, "url": null },
+      "waybill_tracking_id": null,
+      "courier": null
+    },
+    "address": { "city": { "name": "الرياض" }, "country": { "name": "السعودية" } }
+  }
+  ```
+
+  Read the tracking number from `shipping.method.tracking.number`, falling back to
+  `shipping.method.waybill_tracking_id`. The flat `tracking_number` and
+  `shipping.tracking_number` shapes were **guesses that Zid never sends** — they are
+  retained only as tolerant fallbacks. Every carrier field is `null` when the merchant
+  self-delivers (`method.code === 'custom'`), which is the dev store's configuration.
+  ⚠️ `shipping.method.tracking.url` is a customer-facing tracking link we do **not**
+  currently use; adding it to an SMS needs the KSA URL-registration step for the sender
+  ID (a carrier domain is a third party's), so it is an owner decision, not a code one.
+- `payment_status` **does exist** on orders (live: `"pending"` on an unpaid bank-transfer
+  order), so the `'unknown'` mapping can be narrowed.
 
 ### Webhooks
 - Registered per-store via `POST /v1/managers/webhooks` with `original_id` = the Partner

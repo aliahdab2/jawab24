@@ -701,8 +701,13 @@ interface ZidOrderProduct {
 
 interface ZidOrder {
     id: number | string;
-    /** Order reference shown to the customer (e.g. on the confirmation page). */
+    /**
+     * NOT the customer-facing number — the invoice URL slug, seen only inside
+     * `order_url` (`https://<store>.zid.store/o/<code>/inv`). Kept for `findOrderByCode`
+     * so a merchant pasting a slug still resolves; never display it.
+     */
     code?: string | number;
+    /** The number the Zid admin and the customer's invoice page both show; equals `id`. */
     invoice_number?: number | string;
     order_status?: { name?: string; code?: string };
     /** [provisional] Some responses may carry a flat status string instead. */
@@ -720,19 +725,44 @@ interface ZidOrder {
     created_at?: string;
     products?: ZidOrderProduct[];
     shipping_method_code?: string;
-    // Tracking fields unconfirmed for Zid [provisional] — read tolerantly.
+    /**
+     * Zid's real shipping shape (captured 2026-08-23 from a live order). Carrier data
+     * hangs off `shipping.method`; all of it is null when the merchant self-delivers
+     * (`method.code === 'custom'`, «مندوب المتجر»).
+     */
+    shipping?: {
+        method?: {
+            code?: string;
+            tracking?: { number?: string | null; status?: string | null; url?: string | null };
+            waybill_tracking_id?: string | null;
+            courier?: { name?: string } | string | null;
+        };
+        address?: { city?: { name?: string } };
+        /** [provisional] flat fallbacks — never observed live, kept for tolerance. */
+        tracking_number?: string;
+        tracking_url?: string;
+        courier?: string;
+    };
+    /** [provisional] flat fallbacks — never observed live, kept for tolerance. */
     tracking_number?: string;
     tracking_url?: string;
     courier_name?: string;
-    shipping?: { tracking_number?: string; tracking_url?: string; courier?: string };
 }
 
 interface ZidOrdersResponse {
     orders?: ZidOrder[];
 }
 
+/**
+ * The order number to SHOW a customer: `invoice_number` (= `id`). Never `code` —
+ * that is the invoice URL slug and the customer has never seen it. Verified
+ * 2026-08-23 against a live order: id/invoice_number 72524870, code "mdXMlMYYBt",
+ * and the customer's own invoice page renders «الطلبات #72524870».
+ */
 function zidOrderNumber(order: ZidOrder): string {
-    if (order.code !== undefined && order.code !== null) return String(order.code);
+    if (order.invoice_number !== undefined && order.invoice_number !== null) {
+        return String(order.invoice_number);
+    }
     return String(order.id);
 }
 
@@ -792,12 +822,40 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
         customerFirstName: order.customer?.name?.split(' ')[0] || '',
         customerPhone: normalizeZidPhone(order.customer?.mobile),
         status: mapZidOrderStatus(zidOrderStatusCode(order)),
-        trackingNumber: order.tracking_number || order.shipping?.tracking_number || undefined,
-        courierName: order.courier_name || order.shipping?.courier || undefined,
-        trackingUrl: order.tracking_url || order.shipping?.tracking_url || undefined,
+        // Zid keeps carrier data under `shipping.method`; the flat fields below were
+        // guesses no live payload has carried. All null for `custom` self-delivery.
+        trackingNumber: zidTracking(order)?.number
+            || order.shipping?.method?.waybill_tracking_id
+            || order.tracking_number
+            || order.shipping?.tracking_number
+            || undefined,
+        courierName: zidCourierName(order)
+            || order.courier_name
+            || order.shipping?.courier
+            || undefined,
+        trackingUrl: zidTracking(order)?.url
+            || order.tracking_url
+            || order.shipping?.tracking_url
+            || undefined,
+        // `shipping.method.estimated_delivery_time` is merchant free text
+        // ("Custom shipping description"), not a date — never pipe it in as one.
         estimatedDelivery: undefined,
-        shippingCity: undefined,
+        shippingCity: order.shipping?.address?.city?.name || undefined,
     };
+}
+
+/** Zid's carrier tracking block, `null`-normalized to undefined. */
+function zidTracking(order: ZidOrder): { number?: string; url?: string } | undefined {
+    const t = order.shipping?.method?.tracking;
+    if (!t) return undefined;
+    return { number: t.number ?? undefined, url: t.url ?? undefined };
+}
+
+/** `shipping.method.courier` is an object on some responses and a bare string on others. */
+function zidCourierName(order: ZidOrder): string | undefined {
+    const c = order.shipping?.method?.courier;
+    if (!c) return undefined;
+    return typeof c === 'string' ? c : c.name || undefined;
 }
 
 /**
