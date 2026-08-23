@@ -979,9 +979,14 @@ describe('Salla Service', () => {
                 'https://api.salla.dev/admin/v2/webhooks/1069900204',
                 'https://api.salla.dev/admin/v2/webhooks/445433511',
             ].sort());
-            for (const [, init] of puts) {
+            // The live API rejects an update without `event` (422 «حقل event غير صالح»,
+            // measured 2026-08-23) even though the docs omit it — so every PUT must
+            // name the event of the row it repairs, or the row stays unsigned.
+            const expectedEventById: Record<string, string> = { '1069900204': 'order.created', '445433511': 'order.status.updated' };
+            for (const [url, init] of puts) {
                 const body = JSON.parse(init.body);
-                expect(body).toMatchObject({ url: WEBHOOK_URL, security_strategy: 'signature', secret: 'test_webhook_secret', version: 2 });
+                const id = url.split('/').pop() as string;
+                expect(body).toMatchObject({ event: expectedEventById[id], url: WEBHOOK_URL, security_strategy: 'signature', secret: 'test_webhook_secret', version: 2 });
             }
             // The other 9 events are subscribed fresh — including product.created, whose
             // only existing subscription belongs to a different URL.
