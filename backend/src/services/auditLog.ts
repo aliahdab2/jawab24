@@ -97,8 +97,14 @@ export interface AutoReplyToggleEvent {
  *
  * Fire-and-forget (delegates to {@link auditLog}) — never blocks or throws.
  */
-export function logAutoReplyToggle(event: AutoReplyToggleEvent): void {
-    void auditLog({
+/**
+ * Returns the insert's promise. Production callers let it run in the
+ * background (`auditLog` never throws); the integration test awaits it
+ * instead of sleeping a guessed 100 ms — which lost a race on 2026-08-23
+ * under a 10-minute suite and reddened a deploy for nothing.
+ */
+export function logAutoReplyToggle(event: AutoReplyToggleEvent): Promise<void> {
+    return auditLog({
         userId: event.userId,
         workspaceId: event.workspaceId,
         pageId: event.pageId,
