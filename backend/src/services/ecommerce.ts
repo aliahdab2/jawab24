@@ -10,6 +10,7 @@ import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import { isDemoStore } from './demoStore';
+import { storeBaseUrl } from './storeDomain';
 import { SELLABLE_STATUSES, availabilityOf, type EcommerceStore, type EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { fitVarchar, wasDropped } from '../utils/columnText';
@@ -134,11 +135,64 @@ export async function registerWebhooksWithPersist(
  * matches the long-standing pattern here. The only concurrent overlap is
  * webhook-status vs token-health writes to the same store within a sub-millisecond
  * window — bidirectional and self-healing (each is re-derived next cycle), blast
- * radius one store. If a higher-frequency writer is ever added, switch this single
- * function to an atomic `coalesce(platform_data,'{}'::jsonb) || $patch::jsonb`.
+ * radius one store. The one higher-frequency writer — the category list, rewritten
+ * on every product sync/webhook — uses the atomic form instead (`saveStoreCategories`).
  */
 async function mergeStorePlatformData(storeId: string, patch: Record<string, unknown>): Promise<void> {
     await applySyncedStoreInfo(storeId, {}, patch);
+}
+
+/** A storefront category the platform exposes with its own customer URL. */
+export interface StoreCategory {
+    name: string;
+    url: string;
+}
+
+/** Key under `platformData` holding the synced `StoreCategory[]`. */
+export const PLATFORM_DATA_CATEGORIES_KEY = 'categories';
+/** Upper bound on stored categories — the catalog block lists at most this many. */
+export const STORE_CATEGORIES_MAX = 10;
+
+/**
+ * Persist the store's category links, gathered from the products the sync just
+ * fetched (Salla products each carry `categories[].urls.customer`). Written as
+ * ONE atomic jsonb merge — no SELECT, so a concurrent webhook-status or
+ * token-health write on the same row cannot be lost, and product webhooks can
+ * call this as often as they fire. Sorted and capped HERE so the catalog block
+ * that reads it is byte-stable for the prompt cache.
+ *
+ * An empty list is a no-op, never a wipe: one sparse page of a paginated fetch
+ * must not erase the links the customer was given a minute ago.
+ */
+export async function saveStoreCategories(storeId: string, categories: StoreCategory[]): Promise<void> {
+    const byName = new Map<string, StoreCategory>();
+    for (const c of categories) {
+        const name = c.name?.trim();
+        const url = c.url?.trim();
+        if (!name || !url || byName.has(name)) continue;
+        byName.set(name, { name, url });
+    }
+    // Code-point order, not localeCompare: the latter follows the runtime's ICU
+    // default and could order differently between dev and prod.
+    const sorted = [...byName.values()]
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .slice(0, STORE_CATEGORIES_MAX);
+    if (sorted.length === 0) return;
+    const patch = JSON.stringify({ [PLATFORM_DATA_CATEGORIES_KEY]: sorted });
+    await db.update(ecommerceStores).set({
+        platformData: sql`coalesce(${ecommerceStores.platformData}, '{}'::jsonb) || ${patch}::jsonb`,
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
+}
+
+/** Read the synced categories back off a store row's `platformData` (defensive: model-facing). */
+export function storeCategoriesOf(platformData: unknown): StoreCategory[] {
+    const raw = (platformData as Record<string, unknown> | null | undefined)?.[PLATFORM_DATA_CATEGORIES_KEY];
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .filter((c): c is StoreCategory => typeof c === 'object' && c !== null
+            && typeof (c as StoreCategory).name === 'string' && typeof (c as StoreCategory).url === 'string')
+        .slice(0, STORE_CATEGORIES_MAX);
 }
 
 /**
@@ -309,8 +363,8 @@ export const KB_MAX_CHARS = 8000;
 // from this so a catalog can't be silently truncated below the cap by pagination limits.
 export const PRODUCT_SAFETY_CAP = 5000;
 
-// Rows per multi-row insert. toProductRow has 15 columns; Postgres caps a statement at
-// 65535 bind params, so keep batches well under 65535/15 ≈ 4369.
+// Rows per multi-row insert. toProductRow has 16 columns; Postgres caps a statement at
+// 65535 bind params, so keep batches well under 65535/16 ≈ 4095.
 const PRODUCT_INSERT_BATCH_SIZE = 1000;
 
 // --- Store CRUD ---
@@ -837,22 +891,60 @@ export async function unlinkStoreFromPage(pageId: string, workspaceId: string) {
 
 // --- Product Summary ---
 
-/** Build the public product URL from platform + domain + handle/slug */
+/**
+ * Derive a public product URL from platform + domain + handle — for the platforms
+ * whose storefront URL IS derivable (Shopify and Zid: `/products/{handle}`).
+ * Salla is deliberately absent: it has no slug field and its real URLs are not
+ * derivable; the `/p/{slug}` branch that used to live here was an invented shape
+ * that never matched a real store. Prefer `productUrlFor`, which uses the
+ * platform-canonical URL when the row carries one.
+ */
 export function buildProductUrl(platform: string | undefined, storeDomain: string, handle: string): string {
-    if (platform === 'salla') return `https://${storeDomain}/p/${handle}`;
-    if (platform === 'zid') return `https://${storeDomain}/products/${handle}`;
-    // shopify + default
-    return `https://${storeDomain}/products/${handle}`;
+    // Shopify and Zid share the `/products/{handle}` shape; `platform` stays in
+    // the signature so a platform-specific path is a one-line change here only.
+    return `${storeBaseUrl(storeDomain)}/products/${handle}`;
 }
 
 /**
- * Build a structured product summary for AI consumption (~1200 chars max).
- * Includes store URL and per-product links when handles are available.
+ * The ONE way to get a product's storefront URL from a row: the platform's own
+ * canonical URL when it supplied one (`productUrl` — Salla `urls.customer`,
+ * Zid `html_url` on the live read), else derived from the handle, else none.
+ * Every reader — the catalog block, RAG chunk metadata, `check_inventory`,
+ * product cards — goes through here so they can never disagree.
+ */
+export function productUrlFor(
+    store: { platform?: string | null; storeDomain?: string | null } | null | undefined,
+    p: { productUrl?: string | null; handle?: string | null },
+): string | undefined {
+    if (p.productUrl) return p.productUrl;
+    if (p.handle && store?.storeDomain && store.platform !== 'salla') {
+        return buildProductUrl(store.platform ?? undefined, store.storeDomain, p.handle);
+    }
+    return undefined;
+}
+
+/** Character budget for the `Top Products:` section of the catalog block. */
+const PRODUCT_SUMMARY_PRODUCTS_MAX_CHARS = 1200;
+/** Character budget for the one-line `Categories:` section (exempt from the products cap). */
+const PRODUCT_SUMMARY_CATEGORIES_MAX_CHARS = 600;
+
+/**
+ * Build a structured product summary for AI consumption.
+ * Includes store URL, the category links the platform exposes, and per-product
+ * links when the row carries one (`productUrlFor`).
+ *
+ * Two independent caps: the `Top Products:` section keeps its historical
+ * ~1200-char budget; `Categories:` has its own 600-char line. They are NOT
+ * pooled — a Salla product URL is ~90 chars, so counting categories against
+ * the products budget would cut the listed products to four.
  */
 export async function buildProductSummary(storeId: string): Promise<string> {
+    // `platformData` rides along on the SELECT this function already makes — the
+    // query count here is pinned by mocks (shopify-install-bugs.test.ts).
     const [store] = await db.select({
         storeDomain: ecommerceStores.storeDomain,
         platform: ecommerceStores.platform,
+        platformData: ecommerceStores.platformData,
     }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
 
     // Sold-out products stay in the block (D-092): "out of stock" is an answer,
@@ -871,7 +963,7 @@ export async function buildProductSummary(storeId: string): Promise<string> {
     const lines: string[] = [];
 
     if (store?.storeDomain) {
-        lines.push(`Store: https://${store.storeDomain}`);
+        lines.push(`Store: ${storeBaseUrl(store.storeDomain)}`);
     }
 
     lines.push('Top Products:');
@@ -884,21 +976,42 @@ export async function buildProductSummary(storeId: string): Promise<string> {
         // The shared null-first ladder (`availabilityOf`): null = untracked/unlimited → in stock.
         parts.push(availabilityOf(p).replace(/_/g, ' '));
 
-        if (p.handle && store?.storeDomain) {
-            parts.push(buildProductUrl(store.platform, store.storeDomain, p.handle));
-        }
+        const url = productUrlFor(store, p);
+        if (url) parts.push(url);
 
         lines.push(parts.join(' — '));
     }
 
     let summary = lines.join('\n');
-    if (summary.length > 1200) {
-        const truncated = summary.slice(0, 1200);
+    if (summary.length > PRODUCT_SUMMARY_PRODUCTS_MAX_CHARS) {
+        const truncated = summary.slice(0, PRODUCT_SUMMARY_PRODUCTS_MAX_CHARS);
         const lastNewline = truncated.lastIndexOf('\n');
-        summary = lastNewline > 0 ? truncated.slice(0, lastNewline) + '\n...' : truncated.slice(0, 1197) + '...';
+        summary = lastNewline > 0 ? truncated.slice(0, lastNewline) + '\n...' : truncated.slice(0, PRODUCT_SUMMARY_PRODUCTS_MAX_CHARS - 3) + '...';
+    }
+
+    // Category links sit between `Store:` and `Top Products:` — the answer to
+    // "send me the skirts link", which the model otherwise invents.
+    const categoriesLine = buildCategoriesLine(storeCategoriesOf(store?.platformData));
+    if (categoriesLine) {
+        const firstBreak = summary.indexOf('\n');
+        summary = store?.storeDomain && firstBreak > 0
+            ? `${summary.slice(0, firstBreak)}\n${categoriesLine}${summary.slice(firstBreak)}`
+            : `${categoriesLine}\n${summary}`;
     }
 
     return summary;
+}
+
+/** `Categories: name — url | name — url`, cut at the last separator that fits the line budget. */
+function buildCategoriesLine(categories: StoreCategory[]): string {
+    if (categories.length === 0) return '';
+    const entries = categories.map(c => `${c.name} — ${c.url}`);
+    let line = `Categories: ${entries.join(' | ')}`;
+    while (line.length > PRODUCT_SUMMARY_CATEGORIES_MAX_CHARS && entries.length > 1) {
+        entries.pop();
+        line = `Categories: ${entries.join(' | ')}`;
+    }
+    return line;
 }
 
 // --- Cache Invalidation ---
@@ -971,9 +1084,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         const productData = allProducts.map(p => ({
             platformProductId: p.platformProductId,
             handle: p.handle,
-            productUrl: (p.handle && storeInfo?.storeDomain)
-                ? buildProductUrl(storeInfo.platform, storeInfo.storeDomain, p.handle)
-                : null,
+            productUrl: productUrlFor(storeInfo, p) ?? null,
             title: p.title,
             description: p.description,
             productType: p.productType,
@@ -1154,6 +1265,7 @@ function mapProductRow(r: typeof ecommerceProducts.$inferSelect): EcommerceProdu
         ecommerceStoreId: r.ecommerceStoreId,
         platformProductId: r.platformProductId,
         handle: r.handle,
+        productUrl: r.productUrl,
         title: r.title,
         description: r.description,
         productType: r.productType,
@@ -1586,6 +1698,8 @@ export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): E
 export interface NormalizedProduct {
     platformProductId: string;
     handle?: string | null;
+    /** The platform's canonical storefront URL when it provides one (Salla `urls.customer`). */
+    productUrl?: string | null;
     title: string;
     description?: string | null;
     productType?: string | null;
@@ -1618,6 +1732,7 @@ function toProductRow(storeId: string, p: NormalizedProduct) {
         ecommerceStoreId: storeId,
         platformProductId: p.platformProductId,
         handle: p.handle ?? null,
+        productUrl: p.productUrl ?? null,
         title: p.title,
         description: p.description ?? null,
         productType: p.productType ?? null,
@@ -1642,6 +1757,7 @@ function toProductRow(storeId: string, p: NormalizedProduct) {
 function productUpsertSetClause() {
     return {
         handle: sql`excluded.handle`,
+        productUrl: sql`excluded.product_url`,
         title: sql`excluded.title`,
         description: sql`excluded.description`,
         productType: sql`excluded.product_type`,

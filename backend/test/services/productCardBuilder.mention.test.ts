@@ -47,11 +47,11 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: (...args: unknown[]) => mockCaptureError(...args),
 }));
 
-// The URL builder is production's — imported, not copied (Rule 19.3 / 10.8).
-vi.mock('../../src/services/ecommerce', () => ({
-    buildProductUrl: (platform: string, domain: string, handle: string) =>
-        platform === 'salla' ? `https://${domain}/p/${handle}` : `https://${domain}/products/${handle}`,
-}));
+// The URL helpers are production's — imported, not copied (Rule 19.3 / 10.8).
+vi.mock('../../src/services/ecommerce', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../src/services/ecommerce')>();
+    return { buildProductUrl: real.buildProductUrl, productUrlFor: real.productUrlFor };
+});
 
 import {
     buildProductCardsFromReplyText,

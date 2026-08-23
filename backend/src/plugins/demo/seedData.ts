@@ -2025,13 +2025,36 @@ const DEMO_SALLA_STORE = {
     storeEmail: 'info@gulf-fashion.salla.sa',
     storeCurrency: 'SAR',
     storeTimezone: 'Asia/Riyadh',
-    platformData: { merchant_id: 'demo_salla_merchant', demo: true },
+    // `categories` mirrors what a real Salla product sync persists
+    // (saveStoreCategories): the storefront's category links, which the catalog
+    // block lists so «ابغى رابط العبايات» gets a real URL instead of an invented one.
+    platformData: {
+        merchant_id: 'demo_salla_merchant',
+        demo: true,
+        categories: [
+            { name: 'أحذية', url: 'https://gulf-fashion.salla.sa/footwear/c1001' },
+            { name: 'أطفال', url: 'https://gulf-fashion.salla.sa/kids/c1002' },
+            { name: 'ثياب رجالية', url: 'https://gulf-fashion.salla.sa/thobes/c1003' },
+            { name: 'حقائب', url: 'https://gulf-fashion.salla.sa/bags/c1004' },
+            { name: 'شيل ونقاب', url: 'https://gulf-fashion.salla.sa/shaylas/c1005' },
+            { name: 'عبايات', url: 'https://gulf-fashion.salla.sa/abayas/c1006' },
+            { name: 'عطور وبخور', url: 'https://gulf-fashion.salla.sa/perfumes/c1007' },
+            { name: 'مجوهرات', url: 'https://gulf-fashion.salla.sa/jewelry/c1008' },
+        ],
+    },
     productCount: 40,
     productSummary: `Store: https://gulf-fashion.salla.sa\nTop Products:\nعباية كلاسيك سوداء — 450 SAR — S، M، L، XL — أسود — in stock — https://gulf-fashion.salla.sa/products/classic-black-abaya\nعباية مطرزة فاخرة — 750 - 950 SAR — S، M، L، XL، XXL — أسود، كحلي — in stock — https://gulf-fashion.salla.sa/products/embroidered-luxury-abaya\nثوب رجالي قطن مصري — 280 - 450 SAR — 52، 54، 56، 58، 60 — أبيض — in stock — https://gulf-fashion.salla.sa/products/egyptian-cotton-thobe\nبشت رجالي فاخر — 1,200 - 2,500 SAR — 56، 58، 60 — بيج، بني — low stock — https://gulf-fashion.salla.sa/products/luxury-bisht\nعطر عود ملكي — 350 SAR — 100ml — in stock — https://gulf-fashion.salla.sa/products/royal-oud-perfume\nطقم أطفال عيد — 180 - 250 SAR — 4-6، 7-9، 10-12 سنة — أبيض، بيج — in stock — https://gulf-fashion.salla.sa/products/kids-eid-set`,
     policiesSummary: `استبدال واسترجاع: 14 يوم من تاريخ الاستلام\nتوصيل: 3-5 أيام عمل لجميع مناطق المملكة\nتوصيل مجاني: للطلبات فوق 300 ريال\nطرق الدفع: بطاقة ائتمان، مدى، Apple Pay، الدفع عند الاستلام`,
 };
 
-const DEMO_SALLA_PRODUCTS = [
+/**
+ * Salla fixtures are authored with a `handle` for readability, then shaped like
+ * a REAL synced Salla row below: Salla exposes no slug, so the row carries
+ * `handle: null` and the platform's canonical `productUrl` (`urls.customer`).
+ * A fixture that kept a handle would pass through code paths a real Salla
+ * store never reaches (2026-08-23: every real row had handle = NULL and no link).
+ */
+const DEMO_SALLA_PRODUCT_FIXTURES = [
     {
         platformProductId: 'demo_salla_prod_1',
         handle: 'classic-black-abaya',
@@ -2101,6 +2124,9 @@ const DEMO_SALLA_PRODUCTS = [
         hasVariants: false,
         variantSummary: null,
         tags: 'عطر,عود,ملكي',
+        // The ONLY Salla fixture with an image — so a product card on this store
+        // can exist only if the card gate accepts a handle-less Salla row (D-097).
+        imageUrl: 'https://cdn.salla.sa/demo/royal-oud-perfume.jpg',
     },
     {
         platformProductId: 'demo_salla_prod_6',
@@ -2176,6 +2202,12 @@ const DEMO_SALLA_PRODUCTS = [
         ...(status ? { status } : {}),
     })),
 ];
+
+const DEMO_SALLA_PRODUCTS = DEMO_SALLA_PRODUCT_FIXTURES.map(({ handle, ...product }, i) => ({
+    ...product,
+    handle: null as string | null,
+    productUrl: `https://gulf-fashion.salla.sa/${handle}/p${1000 + i}`,
+}));
 
 const DEMO_SHOPIFY_PRODUCTS = [
     {

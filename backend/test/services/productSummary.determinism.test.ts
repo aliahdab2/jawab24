@@ -58,13 +58,20 @@ interface ProductRow {
     variantSummary: string | null;
     totalInventory: number | null;
     handle: string | null;
+    productUrl?: string | null;
 }
 
-const STORE_ROW = { storeDomain: 'demo.myshopify.com', platform: 'shopify' };
+interface StoreRow {
+    storeDomain: string;
+    platform: string;
+    platformData?: unknown;
+}
 
-function setupQueryMocks(products: ProductRow[]) {
-    // First select: store row → .where().limit() resolves to [STORE_ROW]
-    const storeLimit = vi.fn().mockResolvedValue([STORE_ROW]);
+const STORE_ROW: StoreRow = { storeDomain: 'demo.myshopify.com', platform: 'shopify' };
+
+function setupQueryMocks(products: ProductRow[], storeRow: StoreRow = STORE_ROW) {
+    // First select: store row → .where().limit() resolves to [storeRow]
+    const storeLimit = vi.fn().mockResolvedValue([storeRow]);
     const storeWhere = vi.fn().mockReturnValue({ limit: storeLimit });
     // Second select: products → .where().orderBy().limit() resolves to products
     // The orderBy is the determinism guard under test.
@@ -186,5 +193,97 @@ describe('buildProductSummary — stock vocabulary', () => {
         const summary = await buildProductSummary('store-1');
 
         expect(summary).toContain('low stock');
+    });
+});
+
+/**
+ * Links (2026-08-23). The Salla test store's catalog block read
+ * `Store: https://https://demostore.salla.sa/…`, listed no product link at all
+ * (Salla has no slug, so `handle` was always null) and no category link — so the
+ * model invented `?category=تنورة` for a customer who asked for the skirts page.
+ */
+describe('buildProductSummary — links', () => {
+    const SALLA_STORE: StoreRow = {
+        storeDomain: 'demostore.salla.sa/dev-jkgsyu3w6pzzfrzw',
+        platform: 'salla',
+        platformData: {
+            merchantId: '1',
+            categories: [
+                { name: 'تنانير', url: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنانير/c101' },
+                { name: 'فساتين', url: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/فساتين/c102' },
+            ],
+        },
+    };
+    const SALLA_ROWS: ProductRow[] = [
+        { id: 'p-1', title: 'تنورة', priceRange: '79 SAR', variantSummary: null, totalInventory: 3, handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900' },
+        { id: 'p-2', title: 'فستان', priceRange: '94 SAR', variantSummary: null, totalInventory: 12, handle: null, productUrl: null },
+        // A Salla row that somehow carries a handle (the old demo seed did) must NOT get a
+        // derived `/products/{handle}` — no such page exists on a Salla storefront.
+        { id: 'p-3', title: 'بلوزة', priceRange: '59 SAR', variantSummary: null, totalInventory: 8, handle: 'stale-handle', productUrl: null },
+    ];
+
+    it('never doubles the scheme, even on a row stored with one', async () => {
+        setupQueryMocks(PRODUCTS, { storeDomain: 'https://demostore.salla.sa/dev-x', platform: 'salla' });
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+        expect(summary).toContain('Store: https://demostore.salla.sa/dev-x\n');
+        expect(summary).not.toContain('https://https://');
+    });
+
+    it('uses the platform-canonical product URL and lists NO link when the row has none (never a derived Salla URL)', async () => {
+        setupQueryMocks(SALLA_ROWS, SALLA_STORE);
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+        const lines = summary.split('\n');
+        expect(lines.find(l => l.startsWith('تنورة'))).toBe('تنورة — 79 SAR — low stock — https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900');
+        expect(lines.find(l => l.startsWith('فستان'))).toBe('فستان — 94 SAR — in stock');
+        expect(lines.find(l => l.startsWith('بلوزة'))).toBe('بلوزة — 59 SAR — in stock');
+        expect(summary).not.toContain('/p/');
+        expect(summary).not.toContain('stale-handle');
+    });
+
+    it('lists the category links between Store: and Top Products:', async () => {
+        setupQueryMocks(SALLA_ROWS, SALLA_STORE);
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+        expect(summary.split('\n').slice(0, 3)).toEqual([
+            'Store: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw',
+            'Categories: تنانير — https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنانير/c101 | فساتين — https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/فساتين/c102',
+            'Top Products:',
+        ]);
+    });
+
+    it('omits the Categories line when the store has none', async () => {
+        setupQueryMocks(SALLA_ROWS, { ...SALLA_STORE, platformData: { merchantId: '1' } });
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const summary = await buildProductSummary('store-1');
+        expect(summary).not.toContain('Categories:');
+        expect(summary.split('\n')[1]).toBe('Top Products:');
+    });
+
+    it('keeps the product budget independent of the categories line (categories never crowd out products)', async () => {
+        const many: ProductRow[] = Array.from({ length: 15 }, (_, i) => ({
+            id: `p-${i}`, title: `منتج ${i}`, priceRange: '100 SAR', variantSummary: 'المقاس: 44 - XL, 42 - L, 40 - M', totalInventory: 10, handle: null,
+            productUrl: `https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/منتج-${i}/p${1000 + i}`,
+        }));
+        const categories = Array.from({ length: 10 }, (_, i) => ({ name: `قسم ${i}`, url: `https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/قسم-${i}/c${i}` }));
+
+        setupQueryMocks(many, { ...SALLA_STORE, platformData: { categories: [] } });
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        const withoutCategories = await buildProductSummary('store-1');
+
+        setupQueryMocks(many, { ...SALLA_STORE, platformData: { categories } });
+        const withCategories = await buildProductSummary('store-1');
+
+        const productLines = (s: string) => s.split('\n').filter(l => l.startsWith('منتج '));
+        expect(productLines(withCategories)).toEqual(productLines(withoutCategories));
+        expect(withCategories.split('\n')[1].startsWith('Categories: ')).toBe(true);
+        expect(withCategories.split('\n')[1].length).toBeLessThanOrEqual(600);
+    });
+
+    it('ignores a malformed categories value rather than rendering it', async () => {
+        setupQueryMocks(SALLA_ROWS, { ...SALLA_STORE, platformData: { categories: 'not-a-list' } });
+        const { buildProductSummary } = await import('../../src/services/ecommerce');
+        expect(await buildProductSummary('store-1')).not.toContain('Categories:');
     });
 });

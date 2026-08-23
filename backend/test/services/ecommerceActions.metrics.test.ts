@@ -31,11 +31,16 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 const mockGetStoreById = vi.fn();
-vi.mock('../../src/services/ecommerce', () => ({
-    getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
-    writeBackProductStock: vi.fn(),
-    buildProductUrl: (_p: string, domain: string, handle: string) => `https://${domain}/products/${handle}`,
-}));
+// URL helpers are production's own pure functions (Rule 10.8 — never a copy that can drift).
+vi.mock('../../src/services/ecommerce', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../src/services/ecommerce')>();
+    return {
+        getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+        writeBackProductStock: vi.fn(),
+        buildProductUrl: real.buildProductUrl,
+        productUrlFor: real.productUrlFor,
+    };
+});
 
 // check_inventory resolves in code (D-092); here the resolver is a seam.
 const mockResolveProduct = vi.fn();

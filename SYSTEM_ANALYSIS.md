@@ -735,8 +735,10 @@ The system prompt sent to gpt-4.1-mini is approximately **3,000+ words** and con
 │  │ </business_knowledge>                                    │   │
 │  │                                                          │   │
 │  │ <product_catalog>                                        │   │
-│  │   [Top 15 products, ~800 chars]                          │   │
-│  │   Product Name — Price — Variants — Stock Status          │   │
+│  │   Store: https://<domain>  (canonical, D-097)            │   │
+│  │   Categories: name — url | …  (≤10, own 600-char cap)    │   │
+│  │   Top Products: [15 rows, 1,200-char cap]                │   │
+│  │   Name — Price — Variants — Stock — product URL          │   │
 │  │ </product_catalog>                                       │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │

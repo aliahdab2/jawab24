@@ -271,6 +271,41 @@ describe('generateReplyWithTools', () => {
         expect(result.reply).toBe('fallback reply');
     });
 
+    it('an EMPTY Phase-2 reply (typed AiEmptyReplyError on the wire) propagates — never regenerated without the tool data (D-097)', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'salla' });
+        // Round 1: the model asks for a tool. Round 2: the ai-worker answered but the
+        // reply was empty → its route serialises the typed error as a 500 body.
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'verify_and_get_order', arguments: { order_number: '1234', provided_name: 'Sara' } }], tokensUsed: 50 } })
+            .mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), {
+                response: { status: 500, data: { error: { name: 'AiEmptyReplyError', message: 'empty' } } },
+            }));
+        mockExecuteToolCall.mockResolvedValue({ tool_name: 'verify_and_get_order', success: true, data: { order_number: '1234', status: 'shipped' } });
+
+        const { AiEmptyReplyError } = await import('../../src/utils/fbGraphErrors');
+        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
+
+        await expect(generateReplyWithTools(request)).rejects.toBeInstanceOf(AiEmptyReplyError);
+        // The verified order data only existed in the failed call's context — a
+        // plain regeneration could not answer, so it must not be attempted.
+        expect(mockAiServiceGenerateReply).not.toHaveBeenCalled();
+    });
+
+    it('any OTHER typed error on the tool-results hop keeps the pre-existing graceful fallback', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'salla' });
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'lookup_order', arguments: { order_number: '1234' } }], tokensUsed: 50 } })
+            .mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 500'), {
+                response: { status: 500, data: { error: { name: 'AiTimeoutError', message: 'timeout' } } },
+            }));
+        mockExecuteToolCall.mockResolvedValue({ tool_name: 'lookup_order', success: true, data: { orderFound: true } });
+
+        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
+        const result = await generateReplyWithTools(request);
+        expect(mockAiServiceGenerateReply).toHaveBeenCalled();
+        expect(result.reply).toBe('fallback reply');
+    });
+
     it('filters out invalid tool names from AI response', async () => {
         mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
 

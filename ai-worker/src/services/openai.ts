@@ -20,6 +20,8 @@ import {
     buildUserPrompt,
 } from './reply/promptBuilder';
 import { validateReply as runValidateReply, isHeldEmptyReply } from './reply/replyValidator';
+import { AI_REPLY_RESPONSE_FORMAT } from './reply/replySchema';
+import { parseReplyContent } from './reply/parseReplyContent';
 import type { GenerateRequest, GenerateResponse, ParsedReply, ValidatedReply, TokenInfo } from './reply/types';
 
 // Re-export the request/response contract so existing importers keep using
@@ -103,6 +105,49 @@ export function wrapAssistantHistoryForRetry(
             ? { ...m, content: JSON.stringify({ reply: m.content }) }
             : m
     ));
+}
+
+/**
+ * The single arbiter of what an EMPTY validated reply means. Shared by the plain
+ * path and both phases of the e-commerce tool path — a call site that decides
+ * this on its own has, every time, got it wrong (the tool path substituted a
+ * hard-coded English "Thank you for your patience!" or the raw model text).
+ *
+ * Empty reply has THREE distinct meanings, and only one is a failure:
+ *
+ *   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt explicitly
+ *      instructs GPT to return reply:"" for these intents. Downstream
+ *      `shouldSkipReply` in generator.ts handles them silently. Returning an
+ *      empty reply is the contract — not an error.
+ *
+ *   2. HELD — Check 6 stripped the ENTIRE reply (all reveal talk) and the
+ *      validator raised `self_identification_exhausted`. Also the contract:
+ *      the empty reply + that flag ARE the hold signal, and the backend flags
+ *      the row for merchant review (held_self_identification). Throwing here
+ *      would swallow the flag before it crosses the wire and book the event as
+ *      a generic ai_empty_reply — which is exactly what happened when the
+ *      canned-fallback pool was deleted: the pool had kept this branch
+ *      unreachable, and removing it silently routed every exhausted strip
+ *      into meaning 3.
+ *
+ *   3. FAILURE — GPT failed to produce content for a normal intent, or the
+ *      reply was truncated at the model cap / arrived as a broken envelope.
+ *      Throw so the merchant gets needs_attention with the specific reason.
+ *
+ * PR B (#139) initially threw for ALL empty replies, which spammed Sentry and
+ * merchant notifications with every legitimate "ignore the troll" case (107
+ * events in 3h on a single page after deploy). Intent-aware.
+ */
+export function assertDeliverableOrThrow(
+    validated: Pick<ValidatedReply, 'reply' | 'intent' | 'flags'>,
+    pipeline: string | undefined,
+    failureMessage?: string,
+): void {
+    const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
+    if (!validated.reply && !isIntentionalEmpty && !isHeldEmptyReply(validated.flags)) {
+        recordAiFailedBeforeLog(pipeline, config.openai.model, 'AiEmptyReplyError');
+        throw new AiEmptyReplyError(failureMessage);
+    }
 }
 
 export class OpenAIService {
@@ -252,76 +297,23 @@ export class OpenAIService {
             const content = completion.choices[0]?.message?.content?.trim() || '';
             const detectedLanguage = detectLanguage(request.comment);
 
-            // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: ParsedReply;
-            try {
-                parsed = JSON.parse(content);
-            } catch {
-                // JSON parse failed. Two very different cases:
-                //   1. A broken/partial JSON blob (the model tried to emit the schema but it
-                //      didn't parse — doubled JSON, or a reply whose text broke the string). This
-                //      must NEVER be sent raw: it looks like `{"reply":"..."}` and, when a
-                //      merchant's Business Info contains prompt-like text, leaks internal config
-                //      to the customer (observed in prod). Treat as a failed generation (reply:''
-                //      → the empty-reply guard below throws → backend flags needs_attention).
-                //   2. A genuine plain-text reply (model answered without wrapping in JSON) — safe
-                //      to use as-is, preserving the long-standing fallback.
-                const looksLikeBrokenJson = content.trimStart().startsWith('{') || content.includes('"reply"');
-                if (looksLikeBrokenJson) {
-                    console.log(JSON.stringify({
-                        event: 'invalid_json_reply',
-                        pipeline: request.context?.pipeline,
-                        finishReason,
-                        raw: content.slice(0, 300),
-                    }));
-                }
-                parsed = {
-                    reply: looksLikeBrokenJson ? '' : content,
-                    intent: 'UNKNOWN',
-                    confidence: 'low',
-                    flags: ['invalid_json'],
-                };
-            }
+            // Parse the envelope — or salvage / empty / pass through plain prose.
+            // The four outcomes and why a broken envelope must never be sent raw
+            // are documented on parseReplyContent (shared by every reply call site).
+            const { parsed } = parseReplyContent(content, {
+                site: 'plain', pipeline: request.context?.pipeline, finishReason,
+            });
 
             // Post-reply validation: catch issues the prompt alone can't prevent
             const validated = this.validateReply(parsed, request);
 
-            // Empty reply has THREE distinct meanings, and only one is a failure.
-            // This guard is the single arbiter between them:
-            //
-            //   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt explicitly
-            //      instructs GPT to return reply:"" for these intents (see L99-100
-            //      and the few-shot example at L187). Downstream `shouldSkipReply`
-            //      in generator.ts handles them silently. Returning empty reply here
-            //      is the contract — not an error.
-            //
-            //   2. HELD — Check 6 stripped the ENTIRE reply (all reveal talk) and the
-            //      validator raised `self_identification_exhausted`. Also the contract:
-            //      the empty reply + that flag ARE the hold signal, and the backend
-            //      flags the row for merchant review (held_self_identification).
-            //      Throwing here would swallow the flag before it crosses the wire and
-            //      book the event as a generic ai_empty_reply — which is exactly what
-            //      happened when the canned-fallback pool was deleted: the pool had
-            //      kept this branch unreachable, and removing it silently routed every
-            //      exhausted strip into meaning 3.
-            //
-            //   3. FAILURE — GPT failed to produce content for a normal intent, or the
-            //      reply was truncated at the model cap / arrived as broken JSON. Throw
-            //      so the merchant gets needs_attention with the specific reason.
-            //
-            // PR B (#139) initially threw for ALL empty replies, which spammed Sentry
-            // and merchant notifications with every legitimate "ignore the troll"
-            // case (107 events in 3h on a single page after deploy). Intent-aware.
-            const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
-            if (!validated.reply && !isIntentionalEmpty && !isHeldEmptyReply(validated.flags)) {
-                recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiEmptyReplyError');
-                // The truncation-specific message reaches the backend's flag_meta
-                // (reconstructed from the wire), so a recurrence is diagnosable
-                // without replaying the pipeline.
-                throw new AiEmptyReplyError(finishReason === 'length'
-                    ? 'Reply truncated at the model output limit even after a brevity retry'
-                    : undefined);
-            }
+            // Empty reply has three meanings and only one is a failure — see
+            // assertDeliverableOrThrow. The truncation-specific message reaches the
+            // backend's flag_meta (reconstructed from the wire), so a recurrence is
+            // diagnosable without replaying the pipeline.
+            assertDeliverableOrThrow(validated, request.context?.pipeline, finishReason === 'length'
+                ? 'Reply truncated at the model output limit even after a brevity retry'
+                : undefined);
 
             // Mark replies that only exist thanks to the truncation retry — the
             // backend strips this into a quiet informational badge (never an
@@ -412,91 +404,7 @@ export class OpenAIService {
                         // here and a real downside.
                         frequency_penalty: 0,
                         presence_penalty: 0,
-                        response_format: {
-                            type: 'json_schema',
-                            json_schema: {
-                                name: 'ai_reply',
-                                strict: true,
-                                schema: {
-                                    type: 'object',
-                                    properties: {
-                                        reply: { type: 'string' },
-                                        intent: {
-                                            type: 'string',
-                                            enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
-                                                   'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
-                                        },
-                                        confidence: {
-                                            type: 'string',
-                                            enum: ['high', 'medium', 'low'],
-                                        },
-                                        flags: {
-                                            type: 'array',
-                                            items: { type: 'string' },
-                                        },
-                                        hedging: { type: 'boolean' },
-                                        // Gender self-report (v53): lets the backend learn a
-                                        // name→gender consensus map and gender-bucket the DM
-                                        // exact cache. Grammar-enforced on every call; only
-                                        // meaningful for Arabic DMs (see promptBuilder).
-                                        gender: {
-                                            type: 'string',
-                                            enum: ['m', 'f', 'unknown'],
-                                        },
-                                        gender_basis: {
-                                            type: 'string',
-                                            enum: ['self', 'name', 'unclear'],
-                                        },
-                                        used_name: { type: 'boolean' },
-                                        // Price-math self-report (v56): when the reply quotes a
-                                        // COMPUTED total (cart items + delivery, quantity × unit
-                                        // price), the model lists the breakdown so the validator
-                                        // can verify each unit price against Business Info and
-                                        // the arithmetic (replyValidator Check 1b). null when the
-                                        // reply quotes no computed total. Strict mode: nullable
-                                        // union + listed in `required`.
-                                        price_math: {
-                                            type: ['array', 'null'],
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    total: { type: 'number' },
-                                                    terms: {
-                                                        type: 'array',
-                                                        items: {
-                                                            type: 'object',
-                                                            properties: {
-                                                                unit: { type: 'number' },
-                                                                qty: { type: 'number' },
-                                                            },
-                                                            required: ['unit', 'qty'],
-                                                            additionalProperties: false,
-                                                        },
-                                                    },
-                                                },
-                                                required: ['total', 'terms'],
-                                                additionalProperties: false,
-                                            },
-                                        },
-                                        language: {
-                                            type: 'string',
-                                            // ISO 639-1 codes. Includes scripts the detector now
-                                            // recognizes via Unicode properties: my (Burmese),
-                                            // th (Thai), zh (Chinese), ja (Japanese), ko (Korean),
-                                            // ru (Russian), hi (Hindi), he (Hebrew). With the
-                                            // prompt instructed to mirror the customer's language
-                                            // rather than fall back to English, strict-mode
-                                            // structured outputs need the enum to actually allow
-                                            // those values — otherwise GPT is forced to lie about
-                                            // what it wrote.
-                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
-                                        },
-                                    },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'price_math', 'language'] as const,
-                                    additionalProperties: false,
-                                },
-                            },
-                        },
+                        response_format: AI_REPLY_RESPONSE_FORMAT,
                     }, { signal: controller.signal }),
                 ),
                 // Timeouts and quota exhaustion get distinct error_classes so the
