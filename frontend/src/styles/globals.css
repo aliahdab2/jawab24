@@ -945,6 +945,32 @@
     background: none;
   }
 
+  /* --- Admin chrome ---------------------------------------------------------
+     The admin bar is DELIBERATELY dark in both themes: it is chrome, not page
+     content, and the contrast against a light admin body is what marks "you are
+     in the admin area". So it must NOT be converted to bg-card / bg-background,
+     and it must NOT use the surface-* scale — that scale inverts between themes
+     (see reference: dark surface scale inverts), which would turn the bar light
+     in dark mode and lose the signal entirely.
+
+     It is a fixed slate rather than a theme token for that reason, but it lives
+     here so the colour is changeable from ONE place instead of being spelled
+     out as raw zinc steps inside the component. */
+  .admin-bar {
+    @apply sticky top-0 z-40 bg-zinc-900 text-white shadow-lg;
+  }
+
+  /* Icon/back affordance inside the bar. */
+  .admin-bar-action {
+    @apply rounded-lg transition-colors hover:bg-zinc-800;
+  }
+
+  /* Nav item, inactive. The active state is the brand fill (bg-brand-600),
+     applied in the component since it is already an anchored token. */
+  .admin-bar-nav-item {
+    @apply text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white;
+  }
+
   /* RTL-aware page header */
   .page-header {
     @apply flex flex-col sm:flex-row sm:items-center gap-4 mb-8;

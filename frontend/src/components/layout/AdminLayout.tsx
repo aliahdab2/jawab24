@@ -71,7 +71,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 className="h-full min-h-0 overflow-y-auto bg-surface-50"
             >
                 {/* Admin Header */}
-                <header className="sticky top-0 z-40 bg-zinc-900 text-white shadow-lg">
+                <header className="admin-bar">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between gap-2 h-16">
                             {/* Left: Back + Title — shrinks and truncates so it never
@@ -79,7 +79,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                                 <Link
                                     href="/dashboard"
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors shrink-0"
+                                    className="p-2 admin-bar-action shrink-0"
                                     title={tAdmin('backToDashboard')}
                                 >
                                     <ArrowLeft className={clsx('w-5 h-5', isRTL && 'rotate-180')} />
@@ -103,10 +103,10 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                             key={item.href}
                                             href={item.href}
                                             className={clsx(
-                                                'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0',
+                                                'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium shrink-0',
                                                 isActive
                                                     ? 'bg-brand-600 text-white'
-                                                    : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                                                    : 'admin-bar-nav-item'
                                             )}
                                         >
                                             <item.icon className="w-4 h-4" />
