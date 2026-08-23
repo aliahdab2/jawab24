@@ -18,6 +18,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, assertDeliverableOrThrow, type GenerateRequest, type GenerateResponse } from './openai';
 import { parseReplyContent } from './reply/parseReplyContent';
+import { AI_REPLY_RESPONSE_FORMAT } from './reply/replySchema';
 import { AiEmptyReplyError } from '../lib/errors';
 import type { ParsedReply, ValidatedReply } from './reply/types';
 import type { EcommerceToolResult } from '@jawab24/shared';
@@ -170,6 +171,38 @@ export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
     },
 ];
 
+/**
+ * The final reply as a STRICT function call.
+ *
+ * This is the documented shape for "data tools + a structured final answer" in
+ * one request: every reply the customer receives is the argument object of
+ * `respond`, generated under the SAME grammar as the plain path's
+ * `response_format` (`AI_REPLY_RESPONSE_FORMAT`) — so it is valid JSON by
+ * construction, and there is no text envelope to parse, salvage, or leak.
+ *
+ * Why not `response_format` on this path: it suppresses tool calling
+ * (measured 10/10 → 3/10, see replySchema.ts). A function the model must
+ * choose BETWEEN data tools and `respond` (`tool_choice: 'required'`) has no
+ * such conflict — the model picks a data tool when it needs data, `respond`
+ * when it has the answer. The text-content branch below is kept only as a
+ * guard for an API response that ignores `tool_choice`; it is counted
+ * (`tool_path_final.via`) so that can be seen, never silently relied on.
+ */
+export const RESPOND_TOOL_NAME = 'respond';
+
+export const RESPOND_TOOL: OpenAI.ChatCompletionTool = {
+    type: 'function',
+    function: {
+        name: RESPOND_TOOL_NAME,
+        description: 'Deliver your reply to the customer. Call this for EVERY answer: right away when no data tool is needed, or after the tool results have come back. The arguments are the reply envelope — every field is required.',
+        strict: true,
+        parameters: AI_REPLY_RESPONSE_FORMAT.json_schema.schema,
+    },
+};
+
+/** What the model chooses between: the data tools, or delivering the reply. */
+const TOOLS_WITH_RESPOND: OpenAI.ChatCompletionTool[] = [...ECOMMERCE_TOOLS, RESPOND_TOOL];
+
 // --- Tool-specific system prompt additions ---
 
 export const TOOL_PROMPT_ADDITION = `
@@ -195,6 +228,10 @@ IDENTITY VERIFICATION FLOW (CRITICAL — you MUST follow this exactly):
 4. After the customer responds with their name or phone, call verify_and_get_order or verify_and_get_shipment with their answer.
 5. If verification succeeds, share the order details from the response.
 6. If verification fails (error: "verification_failed"), say: "The information doesn't match our records. Please check your order confirmation email or contact us directly."
+
+DELIVERING YOUR REPLY:
+- Send EVERY reply to the customer by calling the "respond" function with the complete reply envelope. Never put the reply in the message text, and never write the envelope as JSON text.
+- Call a data tool first when you need data; call "respond" once its results are in — or right away when no tool is needed.
 
 CRITICAL RULES:
 - NEVER skip the verification step. NEVER make up order details.
@@ -241,7 +278,8 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
                         messages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
-                        tools: ECOMMERCE_TOOLS,
+                        tools: TOOLS_WITH_RESPOND,
+                        tool_choice: 'required',
                     }, { signal: controller.signal }),
                 ),
                 // Without a classifier withAiMetrics defaults to 'OpenAIApiError',
@@ -255,17 +293,11 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
         }
 
         const choice = completion.choices[0];
+        const { dataCalls, respondArgs } = splitToolCalls(choice);
 
-        if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-            const toolCalls = choice.message.tool_calls
-                .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => tc.type === 'function')
-                .map(tc => ({
-                    name: tc.function.name,
-                    arguments: safeParseArgs(tc.function.arguments),
-                }));
-
+        if (dataCalls.length > 0) {
             return {
-                toolCalls,
+                toolCalls: dataCalls,
                 model: config.openai.model,
                 tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
@@ -274,8 +306,7 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
             };
         }
 
-        const content = choice?.message?.content?.trim() || '';
-        return parseDirectReply(content, request, completion);
+        return parseDirectReply(respondArgs, choice?.message?.content?.trim() || '', request, completion);
     } catch (error) {
         Sentry.captureException(error instanceof Error ? error : new Error('OpenAI tool call error'), {
             tags: { service: 'openai', feature: 'ecommerce-tools' },
@@ -346,12 +377,12 @@ export async function generateWithToolResults(
                         messages: allMessages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
-                        // Include tools so AI can call verify_and_get_* in Phase 2.
-                        // Deliberately NO response_format on either tool call: the API
-                        // accepts it alongside tools, but it suppresses tool calling
-                        // (measured 10/10 → 3/10, see reply/replySchema.ts). The envelope
-                        // is parsed by parseReplyContent, which never passes raw text.
-                        tools: ECOMMERCE_TOOLS,
+                        // The model chooses between verify_and_get_* (Phase 2) and
+                        // `respond`. No response_format on either tool call — it
+                        // suppresses tool calling (see replySchema.ts); `respond` gives
+                        // the same strict grammar without the conflict.
+                        tools: TOOLS_WITH_RESPOND,
+                        tool_choice: 'required',
                     }, { signal: controller.signal }),
                 ),
                 // See the note on the Phase-1 tool call above — same reasoning.
@@ -362,21 +393,15 @@ export async function generateWithToolResults(
         }
 
         const choice = completion.choices[0];
+        const { dataCalls, respondArgs } = splitToolCalls(choice);
 
         // Phase 2: AI might call verify_and_get_* tools after Phase 1 results
-        if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-            const toolCalls = choice.message.tool_calls
-                .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => tc.type === 'function')
-                .map(tc => ({
-                    name: tc.function.name,
-                    arguments: safeParseArgs(tc.function.arguments),
-                }));
-
+        if (dataCalls.length > 0) {
             // Return tool calls for the backend to execute (Phase 2 verification)
             return {
                 reply: '',
                 language: request.language || 'en',
-                toolCalls,
+                toolCalls: dataCalls,
                 model: config.openai.model,
                 tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
@@ -385,12 +410,9 @@ export async function generateWithToolResults(
             } as GenerateResponse & { toolCalls: Array<{ name: string; arguments: Record<string, string> }> };
         }
 
-        const content = choice?.message?.content?.trim() || '';
         const detectedLanguage = request.language || 'en';
 
-        const { parsed } = parseReplyContent(content, {
-            site: 'tools_final', envelopeEnforced: false, pipeline: request.context?.pipeline, finishReason: choice?.finish_reason,
-        });
+        const parsed = parseFinalReply(respondArgs, choice?.message?.content?.trim() || '', 'tools_final', request, choice?.finish_reason);
 
         // Validate the final reply. Skip the price check: prices here are from
         // verified tool results (the ground truth), and a computed total would
@@ -426,6 +448,48 @@ export async function generateWithToolResults(
 }
 
 // --- Utilities ---
+
+/**
+ * Separate the model's DATA tool calls from its `respond` call. When both
+ * appear in one message the data calls win — the final answer must be formed
+ * after their results, and the backend loop comes back for it.
+ */
+function splitToolCalls(choice: OpenAI.ChatCompletion.Choice | undefined): {
+    dataCalls: Array<{ name: string; arguments: Record<string, string> }>;
+    respondArgs: string | null;
+} {
+    const calls = (choice?.message?.tool_calls ?? [])
+        .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => tc.type === 'function');
+    const dataCalls = calls
+        .filter(tc => tc.function.name !== RESPOND_TOOL_NAME)
+        .map(tc => ({ name: tc.function.name, arguments: safeParseArgs(tc.function.arguments) }));
+    const respond = calls.filter(tc => tc.function.name === RESPOND_TOOL_NAME).at(-1);
+    return { dataCalls, respondArgs: respond?.function.arguments ?? null };
+}
+
+/**
+ * The reply envelope from the `respond` call — or, when the API answered with
+ * text despite `tool_choice: 'required'`, from the content (the pre-`respond`
+ * shape, kept as a guard). Either way the shared parser decides; the `respond`
+ * arguments are enforced by the strict grammar, the content is not.
+ */
+function parseFinalReply(
+    respondArgs: string | null,
+    content: string,
+    site: 'tools_direct' | 'tools_final',
+    request: GenerateRequest,
+    finishReason: string | undefined,
+): ParsedReply {
+    const via = respondArgs !== null ? 'respond' : 'content';
+    console.log(JSON.stringify({ event: 'tool_path_final', site, via, pipeline: request.context?.pipeline }));
+    const { parsed } = parseReplyContent(respondArgs ?? content, {
+        site: via === 'respond' ? `${site}_respond` : site,
+        envelopeEnforced: via === 'respond',
+        pipeline: request.context?.pipeline,
+        finishReason,
+    });
+    return parsed;
+}
 
 /** Safely parse tool call arguments from OpenAI */
 function safeParseArgs(argsString: string): Record<string, string> {
@@ -474,13 +538,12 @@ function validateToolReply(
  * which is a fine answer for a direct turn — no tool context is lost.
  */
 function parseDirectReply(
+    respondArgs: string | null,
     content: string,
     request: GenerateRequest,
     completion: OpenAI.ChatCompletion,
 ): ToolEnabledResponse {
-    const { parsed } = parseReplyContent(content, {
-        site: 'tools_direct', envelopeEnforced: false, pipeline: request.context?.pipeline, finishReason: completion.choices[0]?.finish_reason,
-    });
+    const parsed = parseFinalReply(respondArgs, content, 'tools_direct', request, completion.choices[0]?.finish_reason);
 
     // Phase-1 direct reply (model answered without calling a tool) → no tool
     // results, standard KB/catalog grounding.
