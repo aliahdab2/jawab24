@@ -10,10 +10,15 @@
  * `check_inventory` calls to 3/10 (the model answered from the catalog block
  * instead), an order question from 10/10 to 5/10. The API accepts both together —
  * the old "cannot coexist" comment was wrong about the mechanism, right about the
- * outcome. So the tool path keeps the grammar unconstrained and relies on
- * `parseReplyContent` (which salvages an embedded envelope and never passes raw
- * content through) to guarantee that nothing but the `reply` field reaches a
- * customer. Re-measure before ever wiring this constant into that path.
+ * outcome.
+ *
+ * Since 2026-08-23 (D-099) the tool path gets the SAME grammar a different way:
+ * this schema is the `parameters` of a strict `respond` function
+ * (`ecommerceToolHandler.RESPOND_TOOL`) the model must choose between the data
+ * tools and the answer (`tool_choice: 'required'`). Measured on Cat 80/81/82 at
+ * temperature 0: every final reply arrived as a `respond` call (31/31 across two
+ * arms), zero text fallbacks, scores equal or better than the text-envelope
+ * baseline. Edit the schema HERE and both paths move together.
  */
 // No `openai` import on purpose: the ai-worker lint rule reserves that module
 // for call sites that surface token usage. This is data, structurally checked

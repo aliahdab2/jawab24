@@ -56,6 +56,13 @@ describe('e-commerce order tools are scoped to a SPECIFIC order', () => {
  * ask, never pick; say so, never substitute. A refactor that loosens either
  * wording re-opens "we don't sell that" for an in-stock item.
  */
+describe('the reply is delivered through the `respond` function', () => {
+    it('the tool-path prompt tells the model to deliver every reply via `respond`, never as message text', () => {
+        expect(TOOL_PROMPT_ADDITION).toMatch(/calling the "respond" function/);
+        expect(TOOL_PROMPT_ADDITION).toMatch(/Never put the reply in the message text/);
+    });
+});
+
 describe('check_inventory hands product identity to the backend (D-092)', () => {
     const tool = ECOMMERCE_TOOLS.find(t => t.type === 'function' && t.function.name === 'check_inventory');
     const params = (tool && tool.type === 'function' ? tool.function.parameters : undefined) as

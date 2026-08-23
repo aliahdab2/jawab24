@@ -2715,3 +2715,43 @@ three live stores are ours), but every store-linked page's tool path was affecte
 **Evidence.** Prod rows 2026-08-23 15:32–15:36Z on page `eb06462a-…`; fleet count before/after
 the 14:55Z deploy; unit tests pin both sites (`parseReplyContent.test.ts`,
 `ecommerceToolHandler.reply.test.ts`) and the strip (`generator.test.ts`), each mutation-checked.
+
+## D-099 · On the e-commerce tool path the final reply is a strict `respond` function call — never a text envelope (2026-08-23)
+
+**Context.** Store-linked pages run the reply through OpenAI function calling (D-092 tools:
+`check_inventory`, `lookup_order`, `track_shipment`, `verify_and_get_*`). The final answer was
+asked for as a JSON envelope *written as message text*, because `response_format` beside
+`tools` suppresses tool calling (10/10 → 3/10, `replySchema.ts`). That produced the whole
+2026-08-23 family of defects: the envelope leaking to a customer (D-097), the salvage/broken/
+plain parser outcomes, and the false «خطأ في معالجة الرد» alarms on prose (D-098). Each fix was
+a patch on a non-standard design.
+
+**Ruling.**
+1. The final reply is delivered as a **strict function call**: `respond`, whose `parameters`
+   ARE `AI_REPLY_RESPONSE_FORMAT.json_schema.schema` — the plain path's grammar, one constant.
+   Both tool-path requests (Phase 1 and the post-results call) send the data tools plus
+   `respond` with `tool_choice: 'required'`. The model chooses between fetching data and
+   answering; there is no text to parse. When a data tool and `respond` appear in one
+   message, the data tool wins and the answer is formed after its results.
+2. The shared parser keeps the text-content branch only as a guard for an API response that
+   ignores `tool_choice`; every final reply logs `tool_path_final` with `via: respond|content`
+   so the guard's use is visible in production, never silently relied upon.
+3. This touches **only** `TOOL_PROMPT_ADDITION` — appended on store-linked pages at request
+   time, outside the `PROMPT_VERSION`-guarded static prefix. The main prompt, every non-store
+   page, and the semantic cache (comment-only) are untouched. No `PROMPT_VERSION` bump.
+
+**Measured (eval Cat 80/81/82, temperature 0, same fixtures, same backend).** Baseline (two
+runs, identical): 80 = 6 PASS/3 XGAP, 81 = 3 PASS 1 PARTIAL (#803 missing the tracking
+number), 82 = 5 PASS. `respond` + `required`: 80 = 6/3 XGAP, 81 = **4 PASS**, 82 = 5 PASS;
+13/13 replies via `respond`, 0 text fallbacks, 0 `invalid_json_reply`. `respond` + `auto`:
+18/18 via `respond`, 82 dropped one card (PARTIAL) — `required` is kept.
+**Trade-off, stated:** `check_inventory` calls rose from 1 to 10–11 over the 15 cases
+(7 ok, 2 `ambiguous_product`, 1–2 `product_not_found`) and Cat 80's mean latency from 2.1 s
+to ~2.7–3.1 s. The prompt has said «stock question → check_inventory» since D-092; in text
+mode the model ignored it, in function mode it obeys it — so the resolver-in-code (D-092)
+now decides those answers instead of the model reading the catalog block. That is the more
+grounded behaviour at roughly one extra round trip; whether small catalogs should answer
+from the block without a call is a prompt-policy choice for the owner, not made here.
+
+**Next (not in this ruling).** `products_to_show` ids in the same schema so cards stop being
+inferred from reply text; order lookup by phone.

@@ -1635,7 +1635,7 @@ Customer question arrives
 | Low confidence + hold | confidence=low + setting on | Don't send, flag for review | Yes |
 | Angry customer | `angry_customer` flag | Send reply + notify merchant | Yes |
 | AI worker down | Circuit breaker open | Lightweight fallback reply | No |
-| Invalid JSON from AI | Parse error | Salvage an embedded envelope, else use the prose — flagged `invalid_json` only where the envelope was enforced (D-098); a broken envelope is emptied, never sent | No |
+| Invalid JSON from AI | Parse error | Plain path: strict `response_format`. Store tool path: the reply is a strict `respond` function call (D-099) — no text envelope exists. The parser's salvage/empty/prose outcomes remain as the guard for a text answer, flagged `invalid_json` only where the envelope was enforced (D-098) | No |
 | Rate limit exceeded | >5/min (comments) or >10/min (messages) | Skip silently | No |
 
 ### Circuit Breaker
