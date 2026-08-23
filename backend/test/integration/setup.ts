@@ -239,6 +239,27 @@ export async function createTestPage(
     return page;
 }
 
+export async function createTestEcommerceStore(
+    userId: string,
+    overrides: Partial<typeof schema.ecommerceStores.$inferInsert> = {},
+) {
+    const [store] = await testDb
+        .insert(schema.ecommerceStores)
+        .values({
+            userId,
+            platform: overrides.platform ?? 'salla',
+            storeDomain: overrides.storeDomain ?? `test-store-${uniqueSuffix()}.salla.sa`,
+            // Plaintext fixture tokens ride the legacy-passthrough read path;
+            // service write paths (updateStoreTokens / createStore) overwrite
+            // them with real enc:v1: ciphertext.
+            accessToken: overrides.accessToken ?? 'fixture-access-token',
+            accessTokenIv: overrides.accessTokenIv ?? '',
+            ...overrides,
+        })
+        .returning();
+    return store;
+}
+
 export async function insertMessage(
     pageId: string,
     senderId: string,

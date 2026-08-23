@@ -432,14 +432,25 @@ export async function getAllActiveStores(platform?: EcommercePlatform): Promise<
  * Used as a fallback when a webhook sends a numeric merchant ID instead of a domain.
  * Example: Zid webhooks send { store_id: "12345" } — we match against platformData->>'merchantId'.
  */
-export async function getStoreByMerchantId(platform: EcommercePlatform, merchantId: string) {
-    const result = await db.select().from(ecommerceStores).where(
-        and(
-            eq(ecommerceStores.platform, platform),
-            eq(ecommerceStores.isActive, true),
-            sql`${ecommerceStores.platformData}->>'merchantId' = ${merchantId}`,
-        )
-    ).limit(1);
+export async function getStoreByMerchantId(
+    platform: EcommercePlatform,
+    merchantId: string,
+    opts?: {
+        /**
+         * Also match a DISCONNECTED (isActive=false) store. Only the credential
+         * re-delivery path (`app.store.authorize` → reconnectStore) wants this —
+         * a disconnected store is exactly the one it must repair. Event webhooks
+         * must keep the default: an inactive store processes no events.
+         */
+        includeInactive?: boolean;
+    },
+) {
+    const conditions = [
+        eq(ecommerceStores.platform, platform),
+        sql`${ecommerceStores.platformData}->>'merchantId' = ${merchantId}`,
+    ];
+    if (!opts?.includeInactive) conditions.push(eq(ecommerceStores.isActive, true));
+    const result = await db.select().from(ecommerceStores).where(and(...conditions)).limit(1);
     return result[0] || null;
 }
 
@@ -650,6 +661,18 @@ export async function createStore(opts: CreateStoreOptions) {
         });
     }
 
+    // A reconnect through this upsert (returning merchant, same domain) also
+    // restores the page links a prior disconnect severed. No-op unless the row
+    // carries platformData.relinkPageIds. Never fatal to the connect.
+    try {
+        await restorePageLinks(result[0]);
+    } catch (err) {
+        captureError(err, 'Failed to restore page links on store reconnect', {
+            tags: { service: 'ecommerce', action: 'restore-page-links' },
+            extra: { storeId: result[0].id, platform: opts.platform },
+        });
+    }
+
     return result[0];
 }
 
@@ -794,16 +817,105 @@ export async function deactivateStore(platform: EcommercePlatform, storeDomain: 
 }
 
 export async function disconnectStore(storeId: string) {
-    // Unlink any pages connected to this store
-    await db.update(pages).set({ ecommerceStoreId: null, updatedAt: new Date() })
-        .where(eq(pages.ecommerceStoreId, storeId));
-    // Deactivate the store
+    await db.transaction(async (tx) => {
+        // Record which pages were linked BEFORE severing them, so a later
+        // reconnect (Reauthorize App / reinstall) can restore them via
+        // restorePageLinks. Without this record the links are unrecoverable
+        // and every reply on those pages silently degrades to store-less
+        // answers — bit us in production on 2026-08-23.
+        const linked = await tx.select({ id: pages.id }).from(pages)
+            .where(eq(pages.ecommerceStoreId, storeId));
+        await tx.update(pages).set({ ecommerceStoreId: null, updatedAt: new Date() })
+            .where(eq(pages.ecommerceStoreId, storeId));
+        await tx.update(ecommerceStores).set({
+            isActive: false,
+            uninstalledAt: new Date(),
+            updatedAt: new Date(),
+            ...BLANKED_TOKEN_FIELDS,
+            ...(linked.length > 0 ? {
+                platformData: sql`coalesce(${ecommerceStores.platformData}, '{}'::jsonb) || ${JSON.stringify({ relinkPageIds: linked.map(p => p.id) })}::jsonb`,
+            } : {}),
+        }).where(eq(ecommerceStores.id, storeId));
+    });
+}
+
+/**
+ * Relink the pages `disconnectStore` unlinked, once their store reconnects.
+ *
+ * Reads `platformData.relinkPageIds` (written at disconnect time), relinks the
+ * pages that are still eligible, and clears the record. Eligibility mirrors
+ * linkStoreToPage's ownership validation: the page must still be in the store's
+ * own workspace and must currently be unlinked — a page the merchant meanwhile
+ * linked to another store is never stolen back.
+ *
+ * Called from BOTH reconnect paths — createStore's upsert (OAuth / claim /
+ * reinstall, all platforms) and reconnectStore (credential re-delivery on an
+ * existing row) — so every way a store comes back also brings its pages back.
+ * No-op when the record is absent.
+ */
+export async function restorePageLinks(store: {
+    id: string;
+    workspaceId: string | null;
+    platformData: unknown;
+}): Promise<string[]> {
+    const pd = (store.platformData as Record<string, unknown>) || {};
+    const ids = Array.isArray(pd.relinkPageIds)
+        ? pd.relinkPageIds.filter((v): v is string => typeof v === 'string')
+        : [];
+    if (ids.length === 0) return [];
+
+    const relinked = store.workspaceId
+        ? await db.update(pages).set({ ecommerceStoreId: store.id, updatedAt: new Date() })
+            .where(and(
+                inArray(pages.id, ids),
+                isNull(pages.ecommerceStoreId),
+                eq(pages.workspaceId, store.workspaceId),
+            )).returning({ id: pages.id })
+        : [];
+
+    // Clear the record even when nothing was eligible — it describes the moment
+    // of THAT disconnect and must not replay on a later, unrelated reconnect.
     await db.update(ecommerceStores).set({
-        isActive: false,
-        uninstalledAt: new Date(),
+        platformData: sql`coalesce(${ecommerceStores.platformData}, '{}'::jsonb) - 'relinkPageIds'`,
         updatedAt: new Date(),
-        ...BLANKED_TOKEN_FIELDS,
+    }).where(eq(ecommerceStores.id, store.id));
+
+    return relinked.map(r => r.id);
+}
+
+/**
+ * Repair a DISCONNECTED store in place when the platform re-delivers
+ * credentials for it — Salla Easy-Mode `app.store.authorize` after the
+ * merchant clicks "Reauthorize App", or any future platform equivalent.
+ *
+ * A disconnect severs four things (tokens, activation, page links, webhooks);
+ * this restores all four, mirroring what a fresh install does, without
+ * creating a new row or requiring a re-claim. `createStore` is not usable
+ * here: its upsert needs the full install payload (store info, workspace/user
+ * resolution) that a bare token re-delivery does not carry.
+ *
+ * Webhook registration reuses registerWebhooksWithPersist, so partial
+ * failures persist status and enqueue retries exactly like an install.
+ */
+export async function reconnectStore(
+    storeId: string,
+    platform: EcommercePlatform,
+    tokens: { accessToken: string; refreshToken?: string; tokenExpiresAt?: Date },
+    registerFn: () => Promise<WebhookRegistrationResult>,
+): Promise<{ relinkedPageIds: string[] }> {
+    // updateStoreTokens also self-heals platformData.tokenHealth, same as the
+    // createStore reconnect branch — no need to touch it here.
+    await updateStoreTokens(storeId, tokens);
+    await db.update(ecommerceStores).set({
+        isActive: true,
+        uninstalledAt: null,
+        updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
+
+    const store = await getStoreById(storeId);
+    const relinkedPageIds = store ? await restorePageLinks(store) : [];
+    await registerWebhooksWithPersist(storeId, platform, registerFn);
+    return { relinkedPageIds };
 }
 
 /**

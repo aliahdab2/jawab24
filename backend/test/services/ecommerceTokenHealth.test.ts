@@ -19,6 +19,8 @@ process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY = 'test-encryption-key-must-be-32-cha
 
 const state = vi.hoisted(() => ({
     selectResult: [] as unknown[],
+    /** Rows disconnectStore's in-transaction "which pages were linked?" read returns. */
+    txSelectResult: [] as unknown[],
     capturedUpdateSet: undefined as Record<string, unknown> | undefined,
     capturedConflict: undefined as { set?: Record<string, unknown> } | undefined,
     capturedInsertValues: undefined as Record<string, unknown> | undefined,
@@ -38,6 +40,29 @@ vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 vi.mock('../../src/db', () => ({
     db: {
+        // disconnectStore wraps its writes in a transaction (it reads the linked
+        // pages before severing them, so the record and the unlink can't diverge).
+        // The tx exposes the same select/update surface as `db`; its select().where()
+        // is awaited WITHOUT .limit(), so it resolves to an array directly while
+        // still carrying .limit() for callers that chain it.
+        transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+            const rows = state.txSelectResult;
+            const awaitableRows = Object.assign(Promise.resolve(rows), {
+                limit: vi.fn(() => Promise.resolve(rows)),
+            });
+            return cb({
+                select: vi.fn().mockReturnValue({
+                    from: vi.fn().mockReturnValue({ where: vi.fn(() => awaitableRows) }),
+                }),
+                update: vi.fn().mockReturnValue({
+                    set: vi.fn().mockImplementation((set: Record<string, unknown>) => {
+                        state.capturedUpdateSet = set;
+                        state.updateCalls++;
+                        return { where: vi.fn().mockResolvedValue(undefined) };
+                    }),
+                }),
+            });
+        }),
         delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
         select: vi.fn().mockReturnValue({
             from: vi.fn().mockReturnValue({

@@ -61,6 +61,7 @@ const mockClaimPendingInstall = vi.fn();
 const mockClaimPendingInstallByMerchantId = vi.fn();
 const mockListPendingInstalls = vi.fn().mockResolvedValue([]);
 const mockSaveWebhookStatus = vi.fn().mockResolvedValue(undefined);
+const mockReconnectStore = vi.fn().mockResolvedValue({ relinkedPageIds: [] });
 
 // Real-shaped error classes so the controller's instanceof mapping is exercised.
 // vi.hoisted: the mock factory evaluates these at import-interception time, which runs
@@ -95,6 +96,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
     updateStoreTokens: (...args: any[]) => mockUpdateStoreTokens(...args),
+    reconnectStore: (...args: any[]) => mockReconnectStore(...args),
     claimPendingInstall: (...args: any[]) => mockClaimPendingInstall(...args),
     claimPendingInstallByMerchantId: (...args: any[]) => mockClaimPendingInstallByMerchantId(...args),
     listPendingInstalls: (...args: any[]) => mockListPendingInstalls(...args),
@@ -998,9 +1000,9 @@ describe('Salla Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('re-fire for an existing store → refreshes tokens in place (no new pending install)', async () => {
+        it('re-fire for an existing ACTIVE store → refreshes tokens in place (no new pending install)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-existing' });
+            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-existing', isActive: true });
             const body = authorizeBody({ access_token: 'rotated_access', refresh_token: 'rotated_refresh' });
             const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
             const rep = mockReply();
@@ -1011,6 +1013,41 @@ describe('Salla Controller', () => {
                 accessToken: 'rotated_access',
                 refreshToken: 'rotated_refresh',
             }));
+            expect(mockReconnectStore).not.toHaveBeenCalled();
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(mockFetchStoreInfo).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('re-fire for a DISCONNECTED store → repairs it in place (Reauthorize App), no pending install', async () => {
+            // The 2026-08-23 incident branch: the merchant disconnected (tokens
+            // blanked, pages unlinked), then clicked "Reauthorize App". The
+            // lookup must SEE the inactive store (includeInactive) and repair it
+            // via reconnectStore — before the fix this fell through to a pending
+            // install nobody would ever claim, so the reauthorize returned 200
+            // and silently fixed nothing.
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-disconnected', isActive: false });
+            const body = authorizeBody({ access_token: 'redelivered_access', refresh_token: 'redelivered_refresh' });
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            // The lookup must opt in to inactive stores — without this flag the
+            // disconnected store is invisible and the repair can never trigger.
+            expect(mockGetStoreByMerchantId).toHaveBeenCalledWith('salla', '671738424', { includeInactive: true });
+            expect(mockReconnectStore).toHaveBeenCalledWith(
+                'store-disconnected',
+                'salla',
+                expect.objectContaining({
+                    accessToken: 'redelivered_access',
+                    refreshToken: 'redelivered_refresh',
+                    tokenExpiresAt: new Date(1893456000 * 1000),
+                }),
+                expect.any(Function),
+            );
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
             expect(mockCreatePendingInstall).not.toHaveBeenCalled();
             expect(mockFetchStoreInfo).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
