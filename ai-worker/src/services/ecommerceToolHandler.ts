@@ -42,6 +42,8 @@ export interface ToolEnabledResponse {
     /** When no tools are needed, this is the normal reply */
     reply?: string;
     language?: string;
+    /** Products the reply presents, by platform ID (see ParsedReply.product_ids). */
+    productIds?: string[];
     /** Model name actually used by the worker — surfaced so the backend logs the correct unit price. */
     model?: string;
     tokensUsed?: number;
@@ -190,15 +192,53 @@ export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
  */
 export const RESPOND_TOOL_NAME = 'respond';
 
+/**
+ * The reply grammar plus ONE store-only field: the products the reply presents,
+ * by platform ID (the `ID:` printed in the catalog block and in tool results).
+ * The backend turns them into product cards — explicitly, instead of guessing
+ * from the prose. Scoped to this function so the plain path's grammar, the main
+ * prompt and PROMPT_VERSION are untouched.
+ */
+const RESPOND_PARAMETERS = (() => {
+    const base = AI_REPLY_RESPONSE_FORMAT.json_schema.schema;
+    return {
+        ...base,
+        properties: {
+            ...base.properties,
+            product_ids: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Platform product IDs (the "ID:" values shown in the catalog or returned by check_inventory) of the products this reply presents to the customer, in the order mentioned, so they receive the product cards. Empty when the reply presents no specific product.',
+            },
+        },
+        required: [...base.required, 'product_ids'],
+    };
+})();
+
 export const RESPOND_TOOL: OpenAI.ChatCompletionTool = {
     type: 'function',
     function: {
         name: RESPOND_TOOL_NAME,
         description: 'Deliver your reply to the customer. Call this for EVERY answer: right away when no data tool is needed, or after the tool results have come back. The arguments are the reply envelope — every field is required.',
         strict: true,
-        parameters: AI_REPLY_RESPONSE_FORMAT.json_schema.schema,
+        parameters: RESPOND_PARAMETERS,
     },
 };
+
+/** Bound on product cards a reply may name — the Generic Template carousel limit. */
+const MAX_PRODUCT_IDS = 10;
+
+/** The model's `product_ids`, cleaned: strings only, de-duplicated, capped. */
+function productIdsOf(parsed: ParsedReply): string[] | undefined {
+    if (!Array.isArray(parsed.product_ids)) return undefined;
+    const ids: string[] = [];
+    for (const id of parsed.product_ids) {
+        const v = typeof id === 'string' ? id.trim() : '';
+        if (v && !ids.includes(v)) ids.push(v);
+        if (ids.length >= MAX_PRODUCT_IDS) break;
+    }
+    return ids;
+}
 
 /** What the model chooses between: the data tools, or delivering the reply. */
 const TOOLS_WITH_RESPOND: OpenAI.ChatCompletionTool[] = [...ECOMMERCE_TOOLS, RESPOND_TOOL];
@@ -232,6 +272,7 @@ IDENTITY VERIFICATION FLOW (CRITICAL — you MUST follow this exactly):
 DELIVERING YOUR REPLY:
 - Send EVERY reply to the customer by calling the "respond" function with the complete reply envelope. Never put the reply in the message text, and never write the envelope as JSON text.
 - Call a data tool first when you need data; call "respond" once its results are in — or right away when no tool is needed.
+- In "respond", list in product_ids the "ID:" values of the specific products your reply presents (from the catalog or a check_inventory result), in the order you mention them — the customer then receives their product cards. Leave it empty when you present no specific product.
 
 CRITICAL RULES:
 - NEVER skip the verification step. NEVER make up order details.
@@ -426,6 +467,7 @@ export async function generateWithToolResults(
         return {
             reply: v.reply,
             language: detectedLanguage,
+            productIds: productIdsOf(parsed),
             model: config.openai.model,
             tokensUsed: completion.usage?.total_tokens,
             tokensIn: completion.usage?.prompt_tokens,
@@ -552,6 +594,7 @@ function parseDirectReply(
     return {
         reply: v.reply,
         language: request.language || 'en',
+        productIds: productIdsOf(parsed),
         model: config.openai.model,
         tokensUsed: completion.usage?.total_tokens,
         tokensIn: completion.usage?.prompt_tokens,

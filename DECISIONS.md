@@ -2755,3 +2755,28 @@ from the block without a call is a prompt-policy choice for the owner, not made 
 
 **Next (not in this ruling).** `products_to_show` ids in the same schema so cards stop being
 inferred from reply text; order lookup by phone.
+
+## D-100 · The model NAMES the products it presents (`respond.product_ids`); cards are never inferred when it does (2026-08-23)
+
+**Context.** Product cards were inferred from the reply's prose — exact-one title match
+(D-092), then linked URLs (#926). Both are heuristics reading the model's text for an identity
+the model already had. D-099's `respond` function gives a place to say it outright.
+
+**Ruling.**
+1. `respond.parameters` = the shared reply grammar **plus `product_ids`** (required, may be
+   empty): the platform product IDs of the products the reply presents, in order. Scoped to
+   the store tool path's function — the plain path's grammar, the main prompt and
+   `PROMPT_VERSION` are untouched.
+2. The catalog block prints each product's id in the chunker's existing form —
+   `title (ID: x) — price — …` — so the id the model passes to `check_inventory` and the one
+   it names in `respond` are the same vocabulary. Stored blocks pick the ids up on the
+   store's next product sync (the demo seeder rebuilds on seed).
+3. Card sources, in order: **model-named ids → tool result → linked URL → exactly-one
+   title**. Named ids resolve by `platform_product_id` within the store; unknown ids are
+   counted (`metrics:product_card:model:unknown_id`) and skipped, never guessed. Outcomes at
+   `metrics:product_card:model:*`. The ai-worker cleans the list (strings, de-duplicated,
+   capped at the 10-card carousel).
+
+**Measured (eval Cat 80/81/82, temp 0, on top of D-099).** 15/15 scored PASS (81 = 4/4,
+82 = 5/5 with both card cases fired via `model`), 18/18 replies via `respond`, 0 unknown ids.
+The prose heuristics stay as fallback for a reply that names nothing.

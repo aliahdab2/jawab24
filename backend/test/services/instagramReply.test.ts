@@ -30,6 +30,10 @@ vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id' },
     messages: { id: 'id', platformMessageId: 'platformMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', message: 'message' },
     posts: { id: 'id', message: 'message', createdTime: 'createdTime' },
+    // productCardBuilder builds its column map at module load (CARD_ROW_COLUMNS),
+    // so these two tables must exist on the mock even though no card is built here.
+    ecommerceProducts: { id: 'id', platformProductId: 'platformProductId', title: 'title', handle: 'handle', productUrl: 'productUrl', imageUrl: 'imageUrl', priceRange: 'priceRange', totalInventory: 'totalInventory', ecommerceStoreId: 'ecommerceStoreId', status: 'status' },
+    ecommerceStores: { id: 'id', platform: 'platform', storeDomain: 'storeDomain' },
 }));
 
 // messageProcessor imports conversationsService for origin-post lookup. These tests

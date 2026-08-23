@@ -43,9 +43,11 @@ vi.mock('../../src/services/kb/retrieval', () => ({
 // here we only pin WHEN the loop asks for which kind of card.
 const mockCardsFromTools = vi.fn();
 const mockCardsFromText = vi.fn();
+const mockCardsFromIds = vi.fn();
 vi.mock('../../src/services/reply/productCardBuilder', () => ({
     buildProductCardsFromToolResults: (...args: unknown[]) => mockCardsFromTools(...args),
     buildProductCardsFromReplyText: (...args: unknown[]) => mockCardsFromText(...args),
+    buildProductCardsFromIds: (...args: unknown[]) => mockCardsFromIds(...args),
 }));
 
 const mockAxiosPost = vi.fn();
@@ -75,6 +77,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     mockCardsFromTools.mockResolvedValue([]);
     mockCardsFromText.mockResolvedValue([]);
+    mockCardsFromIds.mockResolvedValue([]);
     mockAiServiceGenerateReply.mockResolvedValue({
         reply: 'fallback reply',
         language: 'en',
@@ -145,6 +148,54 @@ describe('generateReplyWithTools', () => {
 
         expect(mockCardsFromText).toHaveBeenCalledWith('store-1', 'تقدر تطلب كاميرا Sony A7S III من متجرنا', 'ar');
         expect(result.productCards).toEqual([card]);
+        expect(mockCardsFromTools).not.toHaveBeenCalled();
+    });
+
+    // D-099: the model names the products it presents (`respond.product_ids`).
+    // Those cards come FIRST — nothing is inferred from the prose when the reply
+    // names products; the text builder is the fallback for a reply that names none.
+    it('cards the products the model NAMED by id, ahead of reading the prose (direct-reply path)', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'salla' });
+        mockAxiosPost.mockResolvedValue({
+            data: { reply: 'هذي التنورة 👇', language: 'ar', productIds: ['812874023'], tokensUsed: 50 },
+        });
+        const named = { title: 'تنورة', subtitle: '79 SAR', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromIds.mockResolvedValue([named]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(mockCardsFromIds).toHaveBeenCalledWith('store-1', ['812874023'], 'ar');
+        expect(result.productCards).toEqual([named]);
+        expect(mockCardsFromText).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the prose when every named id resolved to no card (unknown / sold out)', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'salla' });
+        mockAxiosPost.mockResolvedValue({
+            data: { reply: 'تقدر تطلب كاميرا Sony A7S III من متجرنا', language: 'ar', productIds: ['nope'], tokensUsed: 50 },
+        });
+        mockCardsFromIds.mockResolvedValue([]);
+        const mention = { title: 'Sony A7S III', subtitle: 's', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromText.mockResolvedValue([mention]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(result.productCards).toEqual([mention]);
+    });
+
+    it('on the tool path, model-named ids win over the tool-result card', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'zid' });
+        mockAxiosPost
+            .mockResolvedValueOnce({ data: { toolCalls: [{ name: 'check_inventory', arguments: { product_name: 'Sony' } }], tokensUsed: 10 } })
+            .mockResolvedValueOnce({ data: { reply: 'Sony A7S III متوفرة', language: 'ar', productIds: ['sony-1'], tokensUsed: 20 } });
+        mockExecuteToolCall.mockResolvedValue({ tool_name: 'check_inventory', success: true, data: { productName: 'Sony A7S III', available: true } });
+        const named = { title: 'Sony A7S III', subtitle: 'named', imageUrl: 'i', productUrl: 'u' };
+        mockCardsFromIds.mockResolvedValue([named]);
+
+        const result = await generateReplyWithTools({ ...baseRequest, context: { ecommerceStoreId: 'store-1' } });
+
+        expect(mockCardsFromIds).toHaveBeenCalledWith('store-1', ['sony-1'], 'ar');
+        expect(result.productCards).toEqual([named]);
         expect(mockCardsFromTools).not.toHaveBeenCalled();
     });
 

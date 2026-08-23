@@ -90,7 +90,14 @@ describe('e-commerce tool path — reply contract', () => {
             expect(req.tools).toHaveLength(ECOMMERCE_TOOLS.length + 1);
             expect(req.tools.at(-1)).toBe(RESPOND_TOOL);
             expect(RESPOND_TOOL.type === 'function' && RESPOND_TOOL.function.strict).toBe(true);
-            expect(RESPOND_TOOL.type === 'function' && RESPOND_TOOL.function.parameters).toBe(AI_REPLY_RESPONSE_FORMAT.json_schema.schema);
+            // The shared grammar, plus the one store-only field — every base field
+            // and `product_ids` required, nothing else allowed (strict mode).
+            const params = (RESPOND_TOOL.type === 'function' ? RESPOND_TOOL.function.parameters : undefined) as { properties: Record<string, unknown>; required: string[]; additionalProperties: boolean };
+            const base = AI_REPLY_RESPONSE_FORMAT.json_schema.schema;
+            for (const key of Object.keys(base.properties)) expect(params.properties[key]).toBe((base.properties as Record<string, unknown>)[key]);
+            expect(params.properties.product_ids).toMatchObject({ type: 'array', items: { type: 'string' } });
+            expect(params.required).toEqual([...base.required, 'product_ids']);
+            expect(params.additionalProperties).toBe(false);
         });
 
         it('Phase 1: a `respond` call IS the reply — its fields, no flag, no parsing of message text', async () => {
@@ -103,6 +110,22 @@ describe('e-commerce tool path — reply contract', () => {
             expect(r.confidence).toBe('high');
             expect(r.flags ?? []).not.toContain('invalid_json');
             expect(r.flags ?? []).not.toContain('json_salvaged');
+        });
+
+        it('the `product_ids` the model names ride out as productIds — strings only, de-duplicated, capped at the carousel limit', async () => {
+            const envelope = JSON.parse(PROD_ENVELOPE);
+            const withIds = JSON.stringify({ ...envelope, product_ids: ['812874023', ' 348732197 ', '812874023', 7, '', ...Array.from({ length: 12 }, (_, i) => `x${i}`)] });
+            createMock.mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: withIds }]));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.productIds).toEqual(['812874023', '348732197', 'x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7']);
+        });
+
+        it('an envelope without product_ids (a text fallback) yields no productIds', async () => {
+            createMock.mockResolvedValueOnce(completion(PROD_ENVELOPE));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.productIds).toBeUndefined();
         });
 
         it('a data tool call beside `respond` wins — the answer must be formed after the results', async () => {
