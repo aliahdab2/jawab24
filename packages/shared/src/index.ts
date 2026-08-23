@@ -115,6 +115,9 @@ export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFi
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
 
+// --- Markdown link/image syntax → plain text (customer channels render none of it) ---
+export { stripMarkdownLinks } from './markdownLinks';
+
 // --- SSE Event Types ---
 export * from './sse-events';
 

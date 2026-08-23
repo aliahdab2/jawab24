@@ -5759,6 +5759,17 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'SALLA PRODUCT CARD — impossible before D-097: the card gate keyed on `handle`, which every real Salla row lacks, so no Salla store ever showed a card. «عطر عود ملكي» is the only Salla fixture with an image; the card carries its platform-canonical productUrl.',
     },
+    {
+        id: 808, category: 82, categoryName: 'Salla Store Links', channel: 'dm',
+        message: 'ابغى صورة عطر العود الملكي',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            productCardTitles: ['عطر عود ملكي'],
+            replyNotContains: ['![', ']('],
+        },
+        notes: 'PHOTO REQUEST (prod 2026-08-23 «بدي صورة»): the picture is the CARD — the model has no image URLs in context, and on the live Salla page it answered with `![فستان](<product page>)`, markdown pointing at a page, rendered literally by Messenger. The reply must carry the card and no markdown; whether the model names the product or links it, the card resolves (link-first, then the one-title rule).',
+    },
 
     // --- Cat 81: order tracking — the two-phase identity flow ---------------------
     //
@@ -5866,6 +5877,16 @@ const SCRIPT_COUNTERS: Record<string, RegExp> = {
  */
 const ENVELOPE_MARKERS = ['{"reply"', '{ "reply"', '"intent":', '"confidence":', '"gender_basis"'];
 
+/**
+ * Second harness-wide INVARIANT: no markdown link/image syntax in a delivered
+ * reply. Messenger/Instagram/WhatsApp render `[label](url)` and `![alt](url)`
+ * literally. The model began emitting them the day real storefront links entered
+ * its catalog block (D-097, 2026-08-23 — 4 of 82 replies on the Salla page, 0 in
+ * the other 40k of the month); the backend strips them at dispatch, and this
+ * checks the strip held on every case.
+ */
+const MARKDOWN_LINK_RE = /!?\[[^\]]*\]\(\s*https?:\/\/[^\s)]+\s*\)/;
+
 function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict; reasons: string[] } {
     const d = resp.data;
     const checks: { field: string; pass: boolean; detail: string }[] = [];
@@ -5878,6 +5899,11 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
         if (leaked.length > 0) {
             checks.push({ field: 'invariant:no-json-envelope', pass: false, detail: `reply contains ${leaked.join(', ')} — raw model envelope reached the customer` });
         }
+    }
+
+    // Invariant: no markdown link/image syntax in the delivered text.
+    if (MARKDOWN_LINK_RE.test(d.reply || '')) {
+        checks.push({ field: 'invariant:no-markdown-links', pass: false, detail: 'reply contains [label](url) / ![alt](url) — a customer channel renders that literally' });
     }
 
     // replyMethod

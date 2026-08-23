@@ -305,6 +305,104 @@ describe('buildProductCardsFromReplyText', () => {
     });
 });
 
+/**
+ * Link cards — the reply's own storefront URL is an exact product identity.
+ *
+ * PROD 2026-08-23, Salla demo store («Jawab24 Salla Test»): the catalog holds
+ * 9 × «فستان» and 5 × «تنورة», so every reply about a skirt was `several_matches`
+ * and text-only — while the reply itself linked one specific row
+ * (`…/تنورة/p812874023`) whose image and URL were both synced. The customer
+ * asked «بدي صورة» and got a markdown "image" of a product page instead of the
+ * card that carries the real picture.
+ *
+ * Salla rows are shaped like the real sync: `handle: null`, canonical
+ * `productUrl` (D-097). The builder reads: store → catalog scan → linked rows.
+ */
+describe('buildProductCardsFromReplyText — link cards', () => {
+    const SALLA = { platform: 'salla', storeDomain: 'demostore.salla.sa/dev-jkgsyu3w6pzzfrzw' };
+    const SKIRT_79 = { id: 'p-812874023', title: 'تنورة', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p812874023', imageUrl: 'https://salla-dev.s3.eu-central-1.amazonaws.com/nWzD/a.jpg', priceRange: '79 SAR', totalInventory: 2 };
+    const SKIRT_83 = { id: 'p-1437926444', title: 'تنورة', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p1437926444', imageUrl: 'https://salla-dev.s3.eu-central-1.amazonaws.com/nWzD/b.jpg', priceRange: '83 SAR', totalInventory: 4 };
+    const SKIRT_SOLD_OUT = { id: 'p-771999266', title: 'تنورة', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p771999266', imageUrl: 'https://salla-dev.s3.eu-central-1.amazonaws.com/nWzD/c.jpg', priceRange: '124 SAR', totalInventory: 0 };
+    const DRESS = { id: 'p-348732197', title: 'فستان', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/فستان/p348732197', imageUrl: 'https://salla-dev.s3.eu-central-1.amazonaws.com/nWzD/d.jpg', priceRange: '83 SAR', totalInventory: 7 };
+    const SALLA_CATALOG = [SKIRT_79, SKIRT_83, SKIRT_SOLD_OUT, DRESS];
+
+    /** store → scan (id/title/handle/productUrl) → the linked rows, by id. */
+    function primeSalla(products = SALLA_CATALOG) {
+        mockLimit.mockReset();
+        mockLimit
+            .mockResolvedValueOnce([SALLA])
+            .mockResolvedValueOnce(products.map(p => ({ id: p.id, title: p.title, handle: p.handle, productUrl: p.productUrl })))
+            .mockImplementation(async () => products);
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(db.select).mockImplementation(() => defaultSelectChain() as never);
+        mockRedisIncr.mockResolvedValue(1);
+    });
+
+    it('PROD 2026-08-23: a reply that links one of five same-titled products cards THAT one', async () => {
+        primeSalla();
+        const cards = await buildProductCardsFromReplyText(
+            'store-1',
+            'عذرًا على الخطأ، التنورة المتوفرة عندنا بسعر 79 ريال ومقاسات من XS إلى XL، مع مخزون قليل. هذا رابطها: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p812874023',
+            'ar',
+        );
+        expect(cards).toEqual([{
+            title: 'تنورة',
+            subtitle: `79 SAR · ${arMessages.cardLowStock}`,
+            imageUrl: SKIRT_79.imageUrl,
+            productUrl: SKIRT_79.productUrl,
+            buttons: [{ type: 'web_url', title: arMessages.cardViewProduct, url: SKIRT_79.productUrl }],
+        }]);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:link:fired');
+        expect(mockRedisIncr).not.toHaveBeenCalledWith('metrics:product_card:mention:several_matches');
+    });
+
+    it('two linked products → two cards, in the order the reply links them (a carousel)', async () => {
+        primeSalla();
+        const cards = await buildProductCardsFromReplyText(
+            'store-1',
+            'أكيد، هذي التنانير اللي ذكرتها:\nتنورة 83 ريال: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p1437926444\nتنورة 79 ريال: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p812874023',
+            'ar',
+        );
+        expect(cards.map(c => c.productUrl)).toEqual([SKIRT_83.productUrl, SKIRT_79.productUrl]);
+    });
+
+    it('matches the percent-encoded form of an Arabic path the model sometimes emits', async () => {
+        primeSalla();
+        const cards = await buildProductCardsFromReplyText(
+            'store-1',
+            'رابط الفستان: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/%D9%81%D8%B3%D8%AA%D8%A7%D9%86/p348732197.',
+            'ar',
+        );
+        expect(cards.map(c => c.productUrl)).toEqual([DRESS.productUrl]);
+    });
+
+    it('never cards a linked product that is sold out', async () => {
+        primeSalla();
+        const cards = await buildProductCardsFromReplyText(
+            'store-1',
+            'هذه التنورة حالياً غير متوفرة: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p771999266',
+            'ar',
+        );
+        expect(cards).toEqual([]);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:link:out_of_stock');
+    });
+
+    it('a link that is not a catalog product leaves the title rule in charge (here: «تنورة» is under the single-token floor → no card)', async () => {
+        primeSalla();
+        const cards = await buildProductCardsFromReplyText(
+            'store-1',
+            'عندنا تنانير كثيرة، تقدر تشوفها هنا: https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/search?q=تنورة',
+            'ar',
+        );
+        expect(cards).toEqual([]);
+        expect(mockRedisIncr).not.toHaveBeenCalledWith('metrics:product_card:link:fired');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:mention:no_match');
+    });
+});
+
 describe('card cooldown', () => {
     const card = (url: string): ProductCard => ({ title: 't', subtitle: 's', imageUrl: 'i', productUrl: url });
 
