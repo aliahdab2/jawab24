@@ -2531,3 +2531,32 @@ an unknown future type must fail closed.
 *their own* Jawab24 workspace without an email match — which is exactly the intended use, and
 yields a store with no real customers. A reviewer who installs onto their own test store instead
 of using ours now succeeds rather than hitting `email_mismatch`.
+---
+
+## D-095 · Zid App Market prices match the website: 146 / 296 SAR ex-VAT — the D-072 gross-up is withdrawn (2026-08-23, owner ruling)
+
+**Context.** D-072 listed the Zid plans above the website price (189 / 379 SAR) so that the
+net after Zid's 20% commission and withholding tax would land on the Stripe USD price. The
+owner reported that the resulting sticker — 217.35 / 435.85 SAR with VAT — is what makes the
+product hard to sell, while the measured cost per reply is ~$0.002
+(`backend/src/config/plans.ts` margins 75–80% at full quota use, see
+`project_pricing_economics`). The direct competitor on the same shelf (Radad, app 5668) lists
+10,000 replies at 113.85 SAR displayed.
+
+**Ruling.** The Zid plans are priced at the website's USD price converted at 3.75 SAR/USD,
+entered ex-VAT in the Partner Dashboard: **الأعمال (3740) = 146 SAR** (= $39, 167.90 SAR
+displayed) and **الاحترافي (3741) = 296 SAR** (= $79, 340.40 SAR displayed). Trial stays 14
+days. Applied in the Partner Dashboard on 2026-08-23 and verified on a fresh load; the app is
+still `Draft`, so the numbers remain editable until publication.
+
+**Consequences.** Jawab24 absorbs Zid's commission and the withholding tax instead of
+passing them to the merchant: net per Business subscription ≈ $29–31 against a maximum AI
+cost of $9, net per Pro ≈ $60–63 against $20. A marketplace merchant now sees the same
+price as a website merchant plus KSA VAT, which Zid adds for every app. The quotas are
+unchanged; a quota increase is a separate decision. The WHT rate is still unconfirmed — it
+moves the net by 5–15%, not the ruling.
+
+**Rejected.** (a) Matching Radad's per-reply price (≈99 SAR ex-VAT for 10,000) — the net
+≈ $21 sits under the $20 full-quota AI cost, so any heavy merchant is sold at a loss.
+(b) Keeping the gross-up and cutting the website price instead — gives up revenue on the
+direct channel, which has no commission, to fix a marketplace-only problem.
