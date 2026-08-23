@@ -13,6 +13,7 @@ vi.mock('../../src/config', () => ({
 
 import * as T from '../../src/utils/emailTemplates';
 import { htmlToPlainText } from '../../src/utils/htmlUtils';
+import { t } from '../../src/utils/i18n';
 
 /**
  * Every template that renders through the shared shell, in both locales.
@@ -143,8 +144,12 @@ describe('footer language', () => {
         // The invite sets lang:'ar' to pick a layout direction while rendering
         // both languages in its body. Inferring one footer language from that is
         // how it ended up Arabic-only.
-        expect(html).toContain('ردود تلقائية على فيسبوك وإنستغرام وواتساب');
-        expect(html).toContain('Automatic replies for Facebook, Instagram and WhatsApp');
+        // Read from i18n rather than pinning the copy: the assertion is about
+        // BOTH locales being present, not about what the identity line says, and
+        // a hardcoded string here fails every time marketing rewords it.
+        expect(html).toContain(t('emailFooterIdentity', 'ar'));
+        expect(html).toContain(t('emailFooterIdentity', 'en'));
+        expect(t('emailFooterIdentity', 'ar')).not.toBe(t('emailFooterIdentity', 'en'));
         // An invitee has no account, so the auth-gated preferences link is a
         // login wall sent inside a sign-up invitation.
         expect(html).not.toContain('/settings');

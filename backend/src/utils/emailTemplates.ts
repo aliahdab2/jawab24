@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { t, tPlural } from './i18n';
 import { escapeHtml } from './htmlUtils';
-import { formatDateTimeShort } from './formatDate';
+import { formatDateTimeShort, formatCount } from './formatDate';
 
 /**
  * Detect if text is primarily Arabic/RTL script.
@@ -94,6 +94,25 @@ function ctaButton(url: string, label: string, opts: { margin?: string; paddingX
 }
 
 /**
+ * Secondary action, paired with `ctaButton` when an email has two destinations
+ * and one of them is clearly the point. An outline rather than a second filled
+ * button: two teal blocks read as equals and the merchant has to stop and
+ * choose, which is the opposite of what a one-lead digest wants.
+ *
+ * Same shrink-to-fit table as the primary for the Outlook reason documented
+ * there. The border is drawn on the `<td>`, not the `<a>` — Word-engine Outlook
+ * ignores a border on an inline-block anchor.
+ */
+function secondaryButton(url: string, label: string, opts: { margin?: string; paddingX?: number } = {}): string {
+    const { margin = '0', paddingX = 24 } = opts;
+    return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:${margin};">
+                <tr><td class="ghost" style="background-color:#ffffff;border:1px solid #cfdcdc;border-radius:8px;">
+                  <a href="${escapeHtml(url)}" style="display:inline-block;padding:12px ${paddingX}px;color:#33474b;text-decoration:none;font-weight:600;font-size:14.5px;">${label}</a>
+                </td></tr>
+              </table>`;
+}
+
+/**
  * The "good to know" panel used by the lifecycle emails.
  *
  * Neutral ground with the brand colour spent only on the leading edge. It was
@@ -149,6 +168,14 @@ const SHELL_STYLE = `<style>
      * #e6efef — a white bar with invisible text. Every element that can paint
      * a background in this subtree must be named. */
     .ld-head, .ld-head tr, .ld-head th, .ld-head td { background-color:#0d1719 !important; }
+    /* Both of these paint a background, so they must re-assert it here for the
+     * same reason .ld-head does — the .card td sweep only recolours text, but a
+     * white/near-white ground left standing under recoloured text is the
+     * white-bar bug in a different place. */
+    .ghost, .ghost td { background-color:#16262a !important; border-color:#2c4145 !important; }
+    .ghost a { color:#c3d4d4 !important; }
+    .pill, .pill td { background-color:#3a2a12 !important; }
+    .pill, .pill td, .pill span { color:#f0c274 !important; }
     .foot, .foot p, .foot td { color:#8fa4a3 !important; }
     .foot a { color:#8fa4a3 !important; }
     .cta, .cta a { color:#ffffff !important; }
@@ -839,6 +866,8 @@ const DIGEST_MAX_ROWS = 20;
 interface LeadDigestCells {
     name: string;
     phone: string;
+    /** `+` and digits only — what a `tel:` href can actually dial. */
+    telHref: string;
     reason: string;
     source: string;
     date: string;
@@ -910,8 +939,12 @@ function leadDigestTable(rows: LeadDigestCells[], labels: string[], rtl: boolean
  * value, full width — in the standard 600px shell. Same five labels as the
  * table, so the two layouts never drift in vocabulary.
  */
-function leadDigestSingleLead(lead: LeadDigestCells, labels: string[], rtl: boolean, rawPhone: string): LeadDigestLayout {
-    const phoneLink = `<a href="tel:${escapeHtml(rawPhone.replace(/[^\d+]/g, ''))}" dir="ltr" style="color:#0d7a86;text-decoration:underline;">${lead.phone}</a>`;
+function leadDigestSingleLead(lead: LeadDigestCells, labels: string[], rtl: boolean, waitingPill: string): LeadDigestLayout {
+    // The phone is the one field a merchant acts on, so it is the only value
+    // rendered as a link and it is repeated as the primary button below. Kept
+    // in Latin digits and stripped to `+` and digits in the href — an
+    // Arabic-Indic numeral is not dialable.
+    const phoneLink = `<a href="tel:${escapeHtml(lead.telHref)}" dir="ltr" style="color:#0d7a86;text-decoration:none;font-weight:600;">${lead.phone}</a>`;
     const values = [lead.name, phoneLink, lead.reason, lead.source, lead.date];
 
     const fieldRows = labels.map((label, i) => `<tr>
@@ -923,9 +956,43 @@ function leadDigestSingleLead(lead: LeadDigestCells, labels: string[], rtl: bool
 
     return {
         maxWidth: 600,
-        bodyHtml: calloutPanel(rtl, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${fieldRows}
-              </table>`, 16),
+        bodyHtml: `${waitingPill}${calloutPanel(rtl, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${fieldRows}
+              </table>`, 16)}`,
     };
+}
+
+/**
+ * "Waiting 3 hours" — the fact the email exists to convey.
+ *
+ * A bare timestamp makes the reader do the subtraction, and the digest's whole
+ * premise is that this customer has been waiting too long. Hours up to a day,
+ * then days.
+ *
+ * Under an hour takes its OWN key rather than a `_zero` plural variant:
+ * `Intl.PluralRules('en').select(0)` returns `other`, never `zero`, so the
+ * variant is unreachable in English and the pill read "Waiting 0 hours".
+ *
+ * Amber, not red: the lead is going cold, not lost, and a red email about a
+ * customer who did nothing wrong overstates it.
+ */
+function leadDigestWaitingPill(createdAt: Date, now: Date, lang: 'ar' | 'en'): string {
+    const hours = Math.max(0, Math.floor((now.getTime() - createdAt.getTime()) / 3_600_000));
+    const useDays = hours >= 24;
+    const count = useDays ? Math.floor(hours / 24) : hours;
+    const text = hours < 1
+        ? t('leadDigestWaitingUnderHour', lang)
+        : tPlural(
+            useDays ? 'leadDigestWaitingDays' : 'leadDigestWaitingHours',
+            count,
+            lang,
+            { count: formatCount(count, lang) },
+        );
+
+    return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+                <tr><td class="pill" bgcolor="#fdf3e3" style="background-color:#fdf3e3;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;color:#8a5a12;">
+                  <span style="color:#8a5a12;">${escapeHtml(text)}</span>
+                </td></tr>
+              </table>`;
 }
 
 export function leadDigestEmailTemplate(params: {
@@ -933,6 +1000,8 @@ export function leadDigestEmailTemplate(params: {
     leadCount: number;
     leads: LeadDigestRow[];
     dashboardUrl: string;
+    /** Injected by tests so the waiting pill is not wall-clock dependent. */
+    now?: Date;
 }): { subject: string; html: string } {
     const lang = params.lang === 'ar' ? 'ar' : 'en';
     const { rtl, dir, align, fontFamily } = langPresentation(lang);
@@ -954,17 +1023,28 @@ export function leadDigestEmailTemplate(params: {
     const cells: LeadDigestCells[] = rows.map(lead => ({
         name: escapeHtml(lead.name?.trim() || '—'),
         phone: escapeHtml(lead.phone),
+        telHref: lead.phone.replace(/[^\d+]/g, ''),
         reason: escapeHtml(lead.summary?.trim() || noSummary),
         source: escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg),
         date: escapeHtml(formatDateTimeShort(lead.createdAt, lang)),
     }));
 
-    const layout = cells.length === 1
-        ? leadDigestSingleLead(cells[0], labels, rtl, rows[0].phone)
+    const single = cells.length === 1;
+    const layout = single
+        ? leadDigestSingleLead(cells[0], labels, rtl, leadDigestWaitingPill(rows[0].createdAt, params.now ?? new Date(), lang))
         : leadDigestTable(cells, labels, rtl);
 
+    // One lead: the action is to phone that person, so the dashboard becomes the
+    // secondary destination. Many leads: there is no single number to call, and
+    // the dashboard is the only sensible action — so it stays primary and the
+    // email keeps exactly one button.
+    const actions = single
+        ? `${ctaButton(`tel:${cells[0].telHref}`, escapeHtml(t('leadDigestCallNow', lang, { phone: cells[0].telHref })), { margin: '24px 0 10px 0', paddingX: 26 })}
+              ${secondaryButton(params.dashboardUrl, escapeHtml(t('leadDigestOpenDashboard', lang)))}`
+        : ctaButton(params.dashboardUrl, escapeHtml(cta), { margin: '28px 0 0 0', paddingX: 28 });
+
     const andMore = remaining > 0
-        ? `<p style="margin:16px 0 0 0;color:#71717a;font-size:14px;">${escapeHtml(t('leadDigestAndMore', lang, { count: String(remaining) }))}</p>`
+        ? `<p style="margin:16px 0 0 0;color:#71717a;font-size:14px;">${escapeHtml(t('leadDigestAndMore', lang, { count: formatCount(remaining, lang) }))}</p>`
         : '';
 
     return {
@@ -982,7 +1062,7 @@ export function leadDigestEmailTemplate(params: {
               <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
               ${layout.bodyHtml}
               ${andMore}
-              ${ctaButton(params.dashboardUrl, escapeHtml(cta), { margin: '28px 0 0 0', paddingX: 28 })}`,
+              ${actions}`,
         }),
     };
 }

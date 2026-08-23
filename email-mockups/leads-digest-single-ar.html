@@ -31,6 +31,14 @@
      * #e6efef — a white bar with invisible text. Every element that can paint
      * a background in this subtree must be named. */
     .ld-head, .ld-head tr, .ld-head th, .ld-head td { background-color:#0d1719 !important; }
+    /* Both of these paint a background, so they must re-assert it here for the
+     * same reason .ld-head does — the .card td sweep only recolours text, but a
+     * white/near-white ground left standing under recoloured text is the
+     * white-bar bug in a different place. */
+    .ghost, .ghost td { background-color:#16262a !important; border-color:#2c4145 !important; }
+    .ghost a { color:#c3d4d4 !important; }
+    .pill, .pill td { background-color:#3a2a12 !important; }
+    .pill, .pill td, .pill span { color:#f0c274 !important; }
     .foot, .foot p, .foot td { color:#8fa4a3 !important; }
     .foot a { color:#8fa4a3 !important; }
     .cta, .cta a { color:#ffffff !important; }
@@ -62,7 +70,11 @@
             <td class="pad ink" style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:right;font-family:'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
               <h1 class="ink" style="margin:0 0 8px 0;font-size:25px;line-height:1.25;font-weight:700;letter-spacing:-0.02em;color:#0b1f24;">عملاء بانتظار التواصل</h1>
               <p style="margin:0 0 20px 0;color:#3f3f46;">عميل واحد ترك رقمه ولا يزال بانتظار التواصل. اضغط للعرض والمتابعة.</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+                <tr><td class="pill" bgcolor="#fdf3e3" style="background-color:#fdf3e3;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;color:#8a5a12;">
+                  <span style="color:#8a5a12;">بانتظار التواصل منذ ٣ ساعات</span>
+                </td></tr>
+              </table><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
                 <tr><td class="panel" style="background-color:#f5f8f8;border-right:3px solid #0d9488;border-radius:6px;padding:14px 16px;color:#33474b;font-size:14.5px;line-height:1.6;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
                   <td style="padding:0px 0 0 0;">
                     <span class="soft" style="display:block;font-size:12.5px;font-weight:600;color:#52525b;margin:0 0 3px 0;">الاسم</span>
@@ -71,7 +83,7 @@
                 </tr><tr>
                   <td style="padding:12px 0 0 0;">
                     <span class="soft" style="display:block;font-size:12.5px;font-weight:600;color:#52525b;margin:0 0 3px 0;">الهاتف</span>
-                    <span style="display:block;font-size:15px;line-height:1.55;color:#18181b;word-break:break-word;"><a href="tel:01229554912" dir="ltr" style="color:#0d7a86;text-decoration:underline;">01229554912</a></span>
+                    <span style="display:block;font-size:15px;line-height:1.55;color:#18181b;word-break:break-word;"><a href="tel:01229554912" dir="ltr" style="color:#0d7a86;text-decoration:none;font-weight:600;">01229554912</a></span>
                   </td>
                 </tr><tr>
                   <td style="padding:12px 0 0 0;">
@@ -86,15 +98,20 @@
                 </tr><tr>
                   <td style="padding:12px 0 0 0;">
                     <span class="soft" style="display:block;font-size:12.5px;font-weight:600;color:#52525b;margin:0 0 3px 0;">التاريخ</span>
-                    <span style="display:block;font-size:15px;line-height:1.55;color:#18181b;word-break:break-word;">20 أغسطس، 07:31 ص</span>
+                    <span style="display:block;font-size:15px;line-height:1.55;color:#18181b;word-break:break-word;">٢٠ أغسطس، ٠٧:٣١ ص</span>
                   </td>
                 </tr>
               </table></td></tr>
               </table>
               
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 10px 0;">
                 <tr><td class="cta" bgcolor="#0d9488" style="background-color:#0d9488;border-radius:8px;">
-                  <a href="https://jawab24.com/ar/leads" style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">عرض العملاء المحتملين</a>
+                  <a href="tel:01229554912" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">اتصل الآن بـ 01229554912</a>
+                </td></tr>
+              </table>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0;">
+                <tr><td class="ghost" style="background-color:#ffffff;border:1px solid #cfdcdc;border-radius:8px;">
+                  <a href="https://jawab24.com/ar/leads" style="display:inline-block;padding:12px 24px;color:#33474b;text-decoration:none;font-weight:600;font-size:14.5px;">فتح صفحة العملاء المحتملين</a>
                 </td></tr>
               </table>
             </td>
@@ -105,7 +122,7 @@
           <tr>
             <td class="foot" style="padding:20px 34px 24px 34px;text-align:right;color:#728486;font-size:13px;line-height:1.65;">
               <p style="margin:0 0 6px 0;">للتواصل: <a href="mailto:info@jawab24.com" style="color:#0d7a86;text-decoration:underline;">info@jawab24.com</a></p>
-              <p style="margin:0 0 6px 0;">Jawab24 &middot; ردود تلقائية على فيسبوك وإنستغرام وواتساب</p>
+              <p style="margin:0 0 6px 0;">Jawab24 &middot; موظف مبيعاتك الذكي على واتساب وفيسبوك وإنستغرام</p>
               <p style="margin:0;"><a href="http://localhost:3001/ar/settings" style="color:#728486;text-decoration:underline;">إعدادات الحساب</a></p>
             </td>
           </tr>
