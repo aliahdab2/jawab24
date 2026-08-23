@@ -217,7 +217,7 @@ async function listOwnSubscriptions(accessToken: string, webhookUrl: string): Pr
  * it; a missing one is subscribed. A plain re-subscribe of an existing event
  * answers 422 and would leave an unsigned subscription unsigned forever — which
  * is exactly the state every pre-2026-08-23 store is in, and what the per-store
- * "Re-register" button and scripts/reregister-webhooks.ts now fix.
+ * "Re-register" button and src/scripts/reregister-webhooks.ts now fix.
  *
  * Single endpoint receives all events — dispatches by event type in body. Topics
  * are written in parallel because each is an independent REST call; serial

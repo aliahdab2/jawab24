@@ -237,7 +237,7 @@ Source of truth: `SHOPIFY_WEBHOOK_TOPIC_DEFS` / `SHOPIFY_WEBHOOK_EVENTS` in `ser
 
 Registration goes through the Admin **GraphQL** API (`webhookSubscriptions` query + `webhookSubscriptionCreate`/`webhookSubscriptionUpdate` mutations) as a **list-then-upsert**: existing subscriptions are matched by topic; a subscription whose callback URL drifted (hostname change, dev tunnel) is updated in place instead of left stale. Deliveries still carry the REST-style topic name in `X-Shopify-Topic`, and `webhookStatus.registered` keeps that format — handlers and the integrations UI are unchanged.
 
-> **New topics only register at install/claim.** After deploying a topic change, run `npx ts-node scripts/reregister-webhooks.ts shopify` once so already-connected stores subscribe to it (idempotent — already-registered topics with a matching callback URL are skipped, drifted ones updated). Per-workspace, the admin "Re-register" button hits `POST /shopify/store/webhooks/reregister`.
+> **New topics only register at install/claim.** After deploying a topic change, run `node dist/scripts/reregister-webhooks.js shopify` in the backend container once so already-connected stores subscribe to it (idempotent — already-registered topics with a matching callback URL are skipped, drifted ones updated). Per-workspace, the admin "Re-register" button hits `POST /shopify/store/webhooks/reregister`.
 
 ---
 
