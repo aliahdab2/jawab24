@@ -72,6 +72,21 @@ describe('e-commerce tool path — reply contract', () => {
             expect(createMock).toHaveBeenCalledTimes(1);
         });
 
+        // PROD 2026-08-23 15:32–15:36Z, page «Jawab24 Salla Test»: the model answered
+        // the product/order turns in plain prose (this site runs without
+        // response_format), the customer got the right text — and every such row
+        // was flagged invalid_json + low → «خطأ في معالجة الرد» + a flagged_reply
+        // push. 10 rows in 3 hours vs 0 in the 12,297 AI replies of the prior week.
+        it('REGRESSION 2026-08-23: plain prose on the tool path is a normal answer — no invalid_json, not low confidence', async () => {
+            createMock.mockResolvedValueOnce(completion('بدون رقم طلب، ما أقدر أتحقق من الشحنة مباشرة. ممكن تعطيني اسمك أو رقم جوالك اللي استخدمته بالطلب؟'));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.reply).toBe('بدون رقم طلب، ما أقدر أتحقق من الشحنة مباشرة. ممكن تعطيني اسمك أو رقم جوالك اللي استخدمته بالطلب؟');
+            expect(r.flags ?? []).not.toContain('invalid_json');
+            expect(r.confidence).not.toBe('low');
+            expect(createMock).toHaveBeenCalledTimes(1);
+        });
+
         it('a clean envelope is returned as before (no salvage flag)', async () => {
             createMock.mockResolvedValueOnce(completion(PROD_ENVELOPE));
             const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
@@ -116,6 +131,15 @@ describe('e-commerce tool path — reply contract', () => {
             expect(r.reply).toBe(FRENCH_REPLY);
             expect(r.reply).not.toContain('{"reply"');
             expect(r.flags).toContain('json_salvaged');
+        });
+
+        it('plain prose after verified tool results is a normal answer too — no invalid_json, not low confidence', async () => {
+            createMock.mockResolvedValueOnce(completion('طلبك رقم 1234 تم شحنه.'));
+            const { generateWithToolResults } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithToolResults(request, toolResults, toolCalls);
+            expect(r.reply).toBe('طلبك رقم 1234 تم شحنه.');
+            expect(r.flags ?? []).not.toContain('invalid_json');
+            expect(r.confidence).not.toBe('low');
         });
 
         it('an empty reply is a FAILURE the merchant sees — never a hard-coded thank-you, never a regeneration without the tool data', async () => {

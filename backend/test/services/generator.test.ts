@@ -1260,6 +1260,26 @@ describe('computeReplyFlags', () => {
             expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
         });
 
+        // json_salvaged (D-097, 2026-08-23) is the parser's marker for "the
+        // envelope was embedded in prose and its reply was delivered" — the
+        // customer got the right answer. Same class as reply_shortened: never
+        // an alarm, never a flag_reason (its i18n label does not even exist).
+        it('strips json_salvaged — a salvaged QUESTION reply needs no attention and carries no flag reason', () => {
+            const { flags, normalizedIntent } = computeReplyFlags({
+                ...baseOpts, intent: 'QUESTION', aiFlags: ['json_salvaged'],
+            });
+            expect(flags).toEqual([]);
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(false);
+        });
+
+        it('json_salvaged does not shield the real flags next to it', () => {
+            const { flags, normalizedIntent } = computeReplyFlags({
+                ...baseOpts, intent: 'QUESTION', aiFlags: ['json_salvaged', 'info_not_in_kb'],
+            });
+            expect(flags).toEqual(['info_not_in_kb']);
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
+        });
+
         // Check 6 identity flags (v59, #495 review H2): merchant visibility is
         // DELIBERATE — a reply the validator swapped (or a model-reported reveal
         // our vocabulary missed) is exactly what a merchant should review. These

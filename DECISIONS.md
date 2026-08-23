@@ -2684,3 +2684,34 @@ history-format change held back as a separate, owner-approved step.
 third-person voice («their support»), Gulf replies to a Levantine customer, and
 accent-less French reading as the Latin floor are model/detector behaviour with existing
 rulings — none of it is a prompt change, which this PR does not make.
+
+## D-098 · Plain prose is an anomaly only where the envelope was enforced; `json_salvaged` is informational, never an alarm (2026-08-23)
+
+**Context.** Three hours after D-097's shared parser reached production, the Salla review page
+carried «خطأ في معالجة الرد» on 10 correct replies (`flag_reason = invalid_json,low_confidence`),
+each with a `flagged_reply` push — against **0** such flags in the 12,297 AI replies of the
+previous week. The customer had received the right text every time. The parser's `plain`
+outcome (`invalid_json` + `low`) was the plain path's long-standing fallback, where the model
+is made to emit the envelope (`response_format` json_schema) and prose therefore means
+something broke. D-097 routed the two e-commerce tool sites through the same parser — and
+those sites run **without** `response_format` (it suppresses tool calling, 10/10 → 3/10),
+so prose there is a normal, correct answer. Before D-097 that site had accepted prose quietly
+(`confidence: medium`, no flag) for months. Blast radius today: our own test page only (the
+three live stores are ours), but every store-linked page's tool path was affected.
+
+**Ruling.**
+1. The parser's context carries `envelopeEnforced: boolean` — **required**, so a new call
+   site must say which it is. Plain prose is `invalid_json` + `low` only where it is `true`
+   (plain path, failover providers). Where it is `false` (both tool phases) prose is used
+   as-is with `medium` confidence and no flag. The envelope outcomes (`json`, `salvaged`,
+   `broken`) are about the envelope, not the grammar, and do not change.
+2. `json_salvaged` is the same class of marker as `reply_shortened`: the reply delivered was
+   correct. It is stripped at `computeReplyFlags` — the one choke point production and the
+   playground share — so it never reaches `flag_reason` (it has no i18n label) and never
+   trips `needsAttention` or the push. It stays countable in the ai-worker's
+   `invalid_json_reply` log line (`salvaged: true`).
+3. Refines D-097 ruling 1 ("passes envelope-free prose through"); reverses nothing.
+
+**Evidence.** Prod rows 2026-08-23 15:32–15:36Z on page `eb06462a-…`; fleet count before/after
+the 14:55Z deploy; unit tests pin both sites (`parseReplyContent.test.ts`,
+`ecommerceToolHandler.reply.test.ts`) and the strip (`generator.test.ts`), each mutation-checked.

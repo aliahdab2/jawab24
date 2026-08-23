@@ -389,7 +389,7 @@ export async function generateWithToolResults(
         const detectedLanguage = request.language || 'en';
 
         const { parsed } = parseReplyContent(content, {
-            site: 'tools_final', pipeline: request.context?.pipeline, finishReason: choice?.finish_reason,
+            site: 'tools_final', envelopeEnforced: false, pipeline: request.context?.pipeline, finishReason: choice?.finish_reason,
         });
 
         // Validate the final reply. Skip the price check: prices here are from
@@ -479,7 +479,7 @@ function parseDirectReply(
     completion: OpenAI.ChatCompletion,
 ): ToolEnabledResponse {
     const { parsed } = parseReplyContent(content, {
-        site: 'tools_direct', pipeline: request.context?.pipeline, finishReason: completion.choices[0]?.finish_reason,
+        site: 'tools_direct', envelopeEnforced: false, pipeline: request.context?.pipeline, finishReason: completion.choices[0]?.finish_reason,
     });
 
     // Phase-1 direct reply (model answered without calling a tool) → no tool

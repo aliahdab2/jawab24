@@ -170,9 +170,15 @@ export function computeReplyFlags(opts: {
     // computeNeedsAttention) and from there the flagged_reply push. Strip it
     // here, the single choke point shared by production and playground, and
     // surface it separately for the quiet inbox/test-page badge.
+    // `json_salvaged` is the same kind of marker: the ai-worker's parser found
+    // the model's envelope embedded in stray prose and delivered the envelope's
+    // reply — the customer got the right answer. It exists so the shape stays
+    // countable (the ai-worker logs it as `invalid_json_reply` with
+    // `salvaged: true`); as a flag it would put «خطأ في معالجة الرد» on a
+    // correct reply and fire a flagged_reply push, so it is stripped here too.
     const rawFlags = aiFlags || [];
     const replyShortened = rawFlags.includes('reply_shortened');
-    const flags = rawFlags.filter(f => f !== 'reply_shortened');
+    const flags = rawFlags.filter(f => f !== 'reply_shortened' && f !== 'json_salvaged');
     if (confidence === 'low' && !flags.includes('low_confidence')) {
         flags.push('low_confidence');
     }

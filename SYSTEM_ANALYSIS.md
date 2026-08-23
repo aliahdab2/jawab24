@@ -793,7 +793,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 | `redirect_to_human` | Advised customer to contact human |
 | `language_mismatch` | Reply language differs from input |
 | `comment_too_long` | Public comment exceeded 50 words |
-| `invalid_json` | AI returned non-JSON (parsing fallback) |
+| `invalid_json` | AI returned non-JSON **where the envelope was enforced** (`response_format`: plain path, failover providers), or an envelope that could not be parsed. On the e-commerce tool path — which runs without `response_format` by design — prose is a normal answer and is NOT flagged (D-098). `json_salvaged` (envelope found inside prose, its reply delivered) is informational and stripped before `flag_reason`, like `reply_shortened` |
 
 ### Prompt Version History
 
@@ -1635,7 +1635,7 @@ Customer question arrives
 | Low confidence + hold | confidence=low + setting on | Don't send, flag for review | Yes |
 | Angry customer | `angry_customer` flag | Send reply + notify merchant | Yes |
 | AI worker down | Circuit breaker open | Lightweight fallback reply | No |
-| Invalid JSON from AI | Parse error | Use raw text + `invalid_json` flag | No |
+| Invalid JSON from AI | Parse error | Salvage an embedded envelope, else use the prose — flagged `invalid_json` only where the envelope was enforced (D-098); a broken envelope is emptied, never sent | No |
 | Rate limit exceeded | >5/min (comments) or >10/min (messages) | Skip silently | No |
 
 ### Circuit Breaker
