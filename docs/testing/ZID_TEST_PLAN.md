@@ -345,6 +345,14 @@ webhooks re-registered 6/6.
   scoped to workspace A's store → 403 or correctly-scoped empty result.
 - **G-2.** Webhook spoofing: valid-shaped body, wrong Basic credentials → 401, no writes.
 - **G-3.** Workspace B's AI replies never surface workspace A's Zid catalog (DM test).
+- **G-4.** ✅ **pinned 2026-08-23** — Cross-workspace `:storeId` routes: workspace B hits
+  `/notification-templates/<A's store>` (GET/PUT/reset), `/notification-log/<A's store>`
+  (+`/stats`) and `/ecommerce-analytics/<A's store>` → **403**, rows untouched. Found live on
+  THIS dev store (`e3deb6f2…`) from the owner's account: the five notification routes trusted
+  the URL's `storeId` and returned full template bodies. Closed by the shared
+  `requireOwnedStore` preHandler (`backend/src/middleware/storeOwnership.ts`); HTTP regression
+  in `backend/test/integration/storeOwnershipRoutes.test.ts`. Any new `:storeId` route must
+  mount that guard — see SHOPIFY_TEST_PLAN L-4 for the full row.
 
 ---
 

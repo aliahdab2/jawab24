@@ -455,6 +455,22 @@ For each test, send the listed message as a real DM to the linked FB test page a
 
 **Expected:** Backend uses the global Shopify webhook secret; HMAC verification rejects mismatched payloads. (If we have per-store secrets — verify the matching logic).
 
+### L-4. Cross-workspace notification endpoints — ✅ pinned 2026-08-23
+**Steps:** Authenticate as a user in workspace B, hit every `:storeId` route with workspace A's
+store id: `GET /notification-templates/:storeId`, `PUT …/:storeId/:type`, `POST …/:storeId/reset`,
+`GET /notification-log/:storeId`, `GET /notification-log/:storeId/stats`.
+
+**Expected:** 403 on all five; A's template rows untouched after the PUT and the reset; an unknown
+id is 404. (H-4 covers the analytics route; this row exists because until 2026-08-23 these five
+trusted the URL's `storeId` outright — proven live against the Zid dev store from a second account,
+full template bodies returned. The notification log carries customer phone numbers, so this was a
+cross-merchant data leak waiting for the first real store.)
+
+**Pinned by:** `backend/test/integration/storeOwnershipRoutes.test.ts` (HTTP, two real workspaces,
+mutation-checked: removing the guard fails 6/7) and `backend/test/middleware/storeOwnership.test.ts`.
+The guard is the shared `requireOwnedStore` preHandler in `backend/src/middleware/storeOwnership.ts` —
+any new route that takes a `:storeId` must mount it.
+
 ---
 
 ## M. Edge Cases & Error Paths
