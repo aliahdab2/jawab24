@@ -4,6 +4,7 @@ import {
     getStoreByMerchantId,
     resolveStoreByDomainOrMerchant,
     deactivateStore,
+    reconnectStore,
     updateStoreTokens,
     createPendingInstall,
     claimPendingInstall,
@@ -160,8 +161,25 @@ export async function handleStoreAuthorize(
     const tokenExpiresAt = typeof data?.expires === 'number' ? new Date(data.expires * 1000) : undefined;
     const merchantId = String(merchant);
 
-    const existing = await getStoreByMerchantId('salla', merchantId);
+    const existing = await getStoreByMerchantId('salla', merchantId, { includeInactive: true });
     if (existing) {
+        if (!existing.isActive) {
+            // The merchant disconnected (tokens blanked, pages unlinked) and Salla
+            // is re-delivering credentials — "Reauthorize App", or a reinstall on a
+            // store whose row survived. Repair the row in place: tokens, activation,
+            // page links, webhooks. Before 2026-08-23 this case fell through to a
+            // pending install nobody would ever claim, so a reauthorize returned
+            // 200 and silently fixed nothing.
+            const { relinkedPageIds } = await reconnectStore(
+                existing.id,
+                'salla',
+                { accessToken, refreshToken, tokenExpiresAt },
+                () => sallaService.registerWebhooks(accessToken),
+            );
+            log.info({ merchant, storeId: existing.id, relinkedPageIds },
+                'Salla store reconnected via app.store.authorize');
+            return;
+        }
         await updateStoreTokens(existing.id, { accessToken, refreshToken, tokenExpiresAt });
         return;
     }
