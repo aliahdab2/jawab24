@@ -83,8 +83,8 @@ type MentionOutcome =
 /** Why a TOOL-result card was or wasn't produced — this path emitted nothing until D-092. */
 type ToolCardOutcome = 'fired' | 'no_identity' | 'no_image' | 'no_url' | 'error';
 
-/** Why a LINK card was or wasn't produced (per linked product). */
-type LinkCardOutcome = 'fired' | 'out_of_stock' | 'no_image' | 'capped';
+/** Why a LINK or MODEL-named card was or wasn't produced (per product). */
+type LinkCardOutcome = 'fired' | 'out_of_stock' | 'no_image' | 'capped' | 'unknown_id';
 
 /**
  * Fire-and-forget diagnostic counter — never blocks or fails a reply.
@@ -93,8 +93,8 @@ type LinkCardOutcome = 'fired' | 'out_of_stock' | 'no_image' | 'capped';
  */
 function recordCardOutcome(source: 'mention', outcome: MentionOutcome): void;
 function recordCardOutcome(source: 'tool', outcome: ToolCardOutcome): void;
-function recordCardOutcome(source: 'link', outcome: LinkCardOutcome): void;
-function recordCardOutcome(source: 'mention' | 'tool' | 'link', outcome: string): void {
+function recordCardOutcome(source: 'link' | 'model', outcome: LinkCardOutcome): void;
+function recordCardOutcome(source: 'mention' | 'tool' | 'link' | 'model', outcome: string): void {
     try {
         redis.incr(`metrics:product_card:${source}:${outcome}`).catch(() => { });
     } catch {
@@ -430,6 +430,71 @@ function linkedProductIds(
     return ids;
 }
 
+/**
+ * Cards for the products the MODEL named (`respond.product_ids`, D-099) — by
+ * platform product ID, the identity the catalog block and tool results print.
+ * Explicit and first in line: when the reply names products, nothing is
+ * inferred from its prose. Unknown ids are counted and skipped, never guessed.
+ */
+export async function buildProductCardsFromIds(
+    storeId: string,
+    platformProductIds: string[],
+    lang: string,
+): Promise<ProductCard[]> {
+    if (platformProductIds.length === 0) return [];
+    try {
+        const [store] = await db
+            .select({ platform: ecommerceStores.platform, storeDomain: ecommerceStores.storeDomain })
+            .from(ecommerceStores)
+            .where(eq(ecommerceStores.id, storeId))
+            .limit(1);
+        if (!store) return [];
+        const rows = await db
+            .select(CARD_ROW_COLUMNS)
+            .from(ecommerceProducts)
+            .where(and(
+                eq(ecommerceProducts.ecommerceStoreId, storeId),
+                inArray(ecommerceProducts.platformProductId, platformProductIds),
+            ))
+            .limit(platformProductIds.length);
+        const byPlatformId = new Map(rows.map(r => [r.platformProductId, r]));
+        const ordered: CardRow[] = [];
+        for (const id of platformProductIds) {
+            const row = byPlatformId.get(id);
+            if (row) ordered.push(row);
+            else recordCardOutcome('model', 'unknown_id');
+        }
+        return cardsForRows(ordered, store, lang, 'model');
+    } catch (error) {
+        captureError(error, 'Failed to build product cards from model-named ids', {
+            tags: { service: 'product-card-builder', source: 'model' },
+        });
+        return [];
+    }
+}
+
+const CARD_ROW_COLUMNS = {
+    id: ecommerceProducts.id,
+    platformProductId: ecommerceProducts.platformProductId,
+    title: ecommerceProducts.title,
+    handle: ecommerceProducts.handle,
+    productUrl: ecommerceProducts.productUrl,
+    imageUrl: ecommerceProducts.imageUrl,
+    priceRange: ecommerceProducts.priceRange,
+    totalInventory: ecommerceProducts.totalInventory,
+} as const;
+
+type CardRow = {
+    id: string;
+    platformProductId: string;
+    title: string;
+    handle: string | null;
+    productUrl: string | null;
+    imageUrl: string | null;
+    priceRange: string | null;
+    totalInventory: number | null;
+};
+
 /** One card per linked, sellable, imaged product — reply order, carousel-capped. */
 async function buildCardsForLinkedProducts(
     ids: string[],
@@ -437,39 +502,43 @@ async function buildCardsForLinkedProducts(
     lang: string,
 ): Promise<ProductCard[]> {
     const rows = await db
-        .select({
-            id: ecommerceProducts.id,
-            title: ecommerceProducts.title,
-            handle: ecommerceProducts.handle,
-            productUrl: ecommerceProducts.productUrl,
-            imageUrl: ecommerceProducts.imageUrl,
-            priceRange: ecommerceProducts.priceRange,
-            totalInventory: ecommerceProducts.totalInventory,
-        })
+        .select(CARD_ROW_COLUMNS)
         .from(ecommerceProducts)
         .where(inArray(ecommerceProducts.id, ids))
         .limit(ids.length);
     const byId = new Map(rows.map(r => [r.id, r]));
-
-    const cards: ProductCard[] = [];
+    const ordered: CardRow[] = [];
     for (const id of ids) {
-        const p = byId.get(id);
-        if (!p) continue;
+        const row = byId.get(id);
+        if (row) ordered.push(row);
+    }
+    return cardsForRows(ordered, store, lang, 'link');
+}
+
+/** The ONE row → card loop for identity-keyed sources (link, model). */
+function cardsForRows(
+    rows: CardRow[],
+    store: { platform: string | null; storeDomain: string | null },
+    lang: string,
+    source: 'link' | 'model',
+): ProductCard[] {
+    const cards: ProductCard[] = [];
+    for (const p of rows) {
         if (cards.length >= META_TEMPLATE_LIMITS.maxCards) {
-            recordCardOutcome('link', 'capped');
+            recordCardOutcome(source, 'capped');
             break;
         }
         // Same sellability rule as the title path: null = untracked/unlimited.
         if (p.totalInventory !== null && p.totalInventory <= 0) {
-            recordCardOutcome('link', 'out_of_stock');
+            recordCardOutcome(source, 'out_of_stock');
             continue;
         }
         const productUrl = productUrlFor(store, p);
         if (!p.imageUrl || !productUrl) {
-            recordCardOutcome('link', 'no_image');
+            recordCardOutcome(source, 'no_image');
             continue;
         }
-        recordCardOutcome('link', 'fired');
+        recordCardOutcome(source, 'fired');
         cards.push(buildCard({
             title: p.title,
             price: p.priceRange,

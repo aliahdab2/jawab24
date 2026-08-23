@@ -969,7 +969,9 @@ export async function buildProductSummary(storeId: string): Promise<string> {
     lines.push('Top Products:');
 
     for (const p of products) {
-        const parts = [p.title];
+        // `(ID: …)` in the same form the RAG chunker prints it — the identity
+        // the model passes to check_inventory and names in respond.product_ids.
+        const parts = [`${p.title} (ID: ${p.platformProductId})`];
         if (p.priceRange) parts.push(p.priceRange);
         if (p.variantSummary) parts.push(p.variantSummary);
 

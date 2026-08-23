@@ -53,6 +53,7 @@ vi.mock('../../src/services/customerNotifications', () => ({
 
 interface ProductRow {
     id: string;
+    platformProductId?: string;
     title: string;
     priceRange: string | null;
     variantSummary: string | null;
@@ -215,11 +216,11 @@ describe('buildProductSummary — links', () => {
         },
     };
     const SALLA_ROWS: ProductRow[] = [
-        { id: 'p-1', title: 'تنورة', priceRange: '79 SAR', variantSummary: null, totalInventory: 3, handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900' },
-        { id: 'p-2', title: 'فستان', priceRange: '94 SAR', variantSummary: null, totalInventory: 12, handle: null, productUrl: null },
+        { id: 'p-1', platformProductId: '900', title: 'تنورة', priceRange: '79 SAR', variantSummary: null, totalInventory: 3, handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900' },
+        { id: 'p-2', platformProductId: '901', title: 'فستان', priceRange: '94 SAR', variantSummary: null, totalInventory: 12, handle: null, productUrl: null },
         // A Salla row that somehow carries a handle (the old demo seed did) must NOT get a
         // derived `/products/{handle}` — no such page exists on a Salla storefront.
-        { id: 'p-3', title: 'بلوزة', priceRange: '59 SAR', variantSummary: null, totalInventory: 8, handle: 'stale-handle', productUrl: null },
+        { id: 'p-3', platformProductId: '902', title: 'بلوزة', priceRange: '59 SAR', variantSummary: null, totalInventory: 8, handle: 'stale-handle', productUrl: null },
     ];
 
     it('never doubles the scheme, even on a row stored with one', async () => {
@@ -235,9 +236,11 @@ describe('buildProductSummary — links', () => {
         const { buildProductSummary } = await import('../../src/services/ecommerce');
         const summary = await buildProductSummary('store-1');
         const lines = summary.split('\n');
-        expect(lines.find(l => l.startsWith('تنورة'))).toBe('تنورة — 79 SAR — low stock — https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900');
-        expect(lines.find(l => l.startsWith('فستان'))).toBe('فستان — 94 SAR — in stock');
-        expect(lines.find(l => l.startsWith('بلوزة'))).toBe('بلوزة — 59 SAR — in stock');
+        // Each line carries the platform id in the chunker's `(ID: …)` form — the
+        // identity the model passes to check_inventory and names in respond.product_ids.
+        expect(lines.find(l => l.startsWith('تنورة'))).toBe('تنورة (ID: 900) — 79 SAR — low stock — https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p900');
+        expect(lines.find(l => l.startsWith('فستان'))).toBe('فستان (ID: 901) — 94 SAR — in stock');
+        expect(lines.find(l => l.startsWith('بلوزة'))).toBe('بلوزة (ID: 902) — 59 SAR — in stock');
         expect(summary).not.toContain('/p/');
         expect(summary).not.toContain('stale-handle');
     });
