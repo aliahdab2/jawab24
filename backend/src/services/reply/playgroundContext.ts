@@ -1,4 +1,5 @@
 import { settingsService } from '../settings';
+import type { ReplyRenderTarget } from '@jawab24/shared';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
@@ -40,6 +41,8 @@ export const PLAYGROUND_PAGE_COLUMNS = {
     businessProfile: pages.businessProfile,
     brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
     replyMode: pages.replyMode,
+    facebookPageId: pages.facebookPageId,
+    whatsappPhoneNumberId: pages.whatsappPhoneNumberId,
 } as const;
 
 export interface PlaygroundPageData {
@@ -58,6 +61,16 @@ export interface PlaygroundPageData {
      *  ⚠️ Callers must SELECT this column — a page object without it silently
      *  resolves to the workspace default while production honors the override. */
     replyMode?: string | null;
+    /** Channel identity — a page row can carry Facebook, Instagram and WhatsApp at
+     *  once, so the renderer is picked as: WhatsApp-only row → WhatsApp markup,
+     *  anything else → plain text (what Messenger/Instagram show). */
+    facebookPageId?: string | null;
+    whatsappPhoneNumberId?: string | null;
+}
+
+/** The renderer the playground applies — mirrors which adapter would deliver. */
+export function playgroundRenderTarget(page: Pick<PlaygroundPageData, 'facebookPageId' | 'whatsappPhoneNumberId'>): ReplyRenderTarget {
+    return page.whatsappPhoneNumberId && !page.facebookPageId ? 'whatsapp' : 'plain';
 }
 
 interface PlaygroundContextOptions {
@@ -251,6 +264,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         // dual/private merchant (flattened to effectiveChannel='dm' above) still mirrors
         // the post language instead of falling back to the raw comment's script.
         requestedChannel: channel,
+        renderTarget: playgroundRenderTarget(page),
         knowledgeBase: pageKB,
         kbActiveVersion: page.kbActiveVersion,
         pageName: page.name ?? undefined,

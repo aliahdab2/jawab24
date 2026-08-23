@@ -62,17 +62,20 @@ vi.mock('../../src/services/demoStore', () => ({ isDemoStore: vi.fn(() => false)
 const mockLookupOrder = vi.fn();
 const mockGetShipmentTracking = vi.fn();
 const mockGetProductById = vi.fn();
+const mockFindOrdersByPhone = vi.fn();
 
 vi.mock('../../src/services/shopify', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
     getProductById: (...args: unknown[]) => mockGetProductById(...args),
+    findOrdersByPhone: (...args: unknown[]) => mockFindOrdersByPhone(...args),
 }));
 
 vi.mock('../../src/services/salla', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
     getProductById: (...args: unknown[]) => mockGetProductById(...args),
+    findOrdersByPhone: (...args: unknown[]) => mockFindOrdersByPhone(...args),
 }));
 
 // Zid was never mocked here before D-092 — a zid-platform test silently loaded
@@ -81,6 +84,7 @@ vi.mock('../../src/services/zid', () => ({
     lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
     getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
     getProductById: (...args: unknown[]) => mockGetProductById(...args),
+    findOrdersByPhone: (...args: unknown[]) => mockFindOrdersByPhone(...args),
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({
@@ -99,6 +103,7 @@ beforeEach(() => {
     // queues two and consumes one would hand the other to the next test.
     mockLookupOrder.mockReset();
     mockGetShipmentTracking.mockReset();
+    mockFindOrdersByPhone.mockReset();
     mockRedisGet.mockResolvedValue(null);
     mockRedisSet.mockResolvedValue('OK');
     mockClaimDailyOnce.mockResolvedValue(true);
@@ -1046,5 +1051,145 @@ describe('executeToolCall — Phase 1 challenge', () => {
         expect(message).toContain('verify_and_get_shipment');
         expect(message).not.toContain('verify_and_get_order');
         expect(mockRedisSet).toHaveBeenCalledWith(`ecom:pending:${storeId}:shipment:1234`, expect.any(String), 'EX', 600);
+    });
+});
+
+// ==========================================
+// find_order_by_phone (D-101)
+// ==========================================
+/**
+ * The customer has no order number. The gate is phone AND name, compared HERE
+ * against the order — the platform's own phone search is a suggestion, not proof
+ * (Zid's `search_term` also matches names and order codes; Salla's customer
+ * `keyword` matches name and email).
+ */
+describe('executeToolCall — find_order_by_phone', () => {
+    const storeId = 'store-123';
+    const ORDER = {
+        orderNumber: '73285179',
+        customerFirstName: 'أحمد',
+        customerPhone: '+966500000009',
+        status: 'shipped',
+        orderDate: '2026-08-20',
+        items: [],
+        totalAmount: '100',
+        currency: 'SAR',
+        paymentStatus: 'paid',
+    };
+
+    beforeEach(() => {
+        mockGetStoreById.mockResolvedValue({ id: storeId, isActive: true, platform: 'zid' });
+    });
+
+    it('returns the order when phone AND name both match, with PII stripped', async () => {
+        mockFindOrdersByPhone.mockResolvedValue([ORDER]);
+
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'أحمد' },
+        });
+
+        expect(result.success).toBe(true);
+        expect((result.data as { orderNumber: string }).orderNumber).toBe('73285179');
+        expect(JSON.stringify(result.data)).not.toContain('966500000009');
+        expect(JSON.stringify(result.data)).not.toContain('customerFirstName');
+    });
+
+    // THE gate. A platform hit is not a verification: Zid's search_term matches
+    // names and order codes too, so a wrong name must still be refused.
+    it('refuses when the platform returned an order but the NAME does not match', async () => {
+        mockFindOrdersByPhone.mockResolvedValue([ORDER]);
+
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'خالد' },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('order_not_found');
+        expect(JSON.stringify(result)).not.toContain('73285179');
+    });
+
+    it('refuses when the returned order\'s phone is not the one asked about (a name/code hit)', async () => {
+        mockFindOrdersByPhone.mockResolvedValue([{ ...ORDER, customerPhone: '+966511111111' }]);
+
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'أحمد' },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('order_not_found');
+    });
+
+    it('answers a wrong name and an unknown phone IDENTICALLY — never confirms a phone belongs to a customer', async () => {
+        mockFindOrdersByPhone.mockResolvedValueOnce([ORDER]);
+        const wrongName = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'خالد' },
+        });
+        mockFindOrdersByPhone.mockResolvedValueOnce([]);
+        const unknownPhone = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0509999999', provided_name: 'أحمد' },
+        });
+        expect(wrongName).toEqual(unknownPhone);
+    });
+
+    it('requires BOTH halves — a phone with no name never reaches the platform', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('phone_and_name_required');
+        expect(mockFindOrdersByPhone).not.toHaveBeenCalled();
+    });
+
+    it('requires BOTH halves — a name with no phone never reaches the platform', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_name: 'أحمد' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('phone_and_name_required');
+        expect(mockFindOrdersByPhone).not.toHaveBeenCalled();
+    });
+
+    it('rejects a phone too short to be an identity claim', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '12345', provided_name: 'أحمد' },
+        });
+        expect(result.error).toBe('phone_and_name_required');
+        expect(mockFindOrdersByPhone).not.toHaveBeenCalled();
+    });
+
+    it('returns the NEWEST matching order when the customer has several', async () => {
+        mockFindOrdersByPhone.mockResolvedValue([
+            { ...ORDER, orderNumber: 'old', orderDate: '2026-01-01' },
+            { ...ORDER, orderNumber: 'new', orderDate: '2026-08-20' },
+        ]);
+
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'أحمد' },
+        });
+
+        expect((result.data as { orderNumber: string }).orderNumber).toBe('new');
+    });
+
+    // Identity-dependent: a passed check must never be replayable from a cache key.
+    it('is never served from, or written to, the tool cache', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({ tool_name: 'find_order_by_phone', success: true, data: { orderNumber: 'CACHED' } }));
+        mockFindOrdersByPhone.mockResolvedValue([ORDER]);
+
+        const result = await executeToolCall(storeId, {
+            name: 'find_order_by_phone',
+            arguments: { provided_phone: '0500000009', provided_name: 'أحمد' },
+        });
+
+        expect((result.data as { orderNumber: string }).orderNumber).toBe('73285179');
+        expect(mockRedisSet).not.toHaveBeenCalled();
     });
 });

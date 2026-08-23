@@ -41,6 +41,7 @@ function createMockAdapter(
                 isNew,
             };
         }),
+        renderReply: vi.fn((text: string) => text),
         sendReply: vi.fn().mockResolvedValue({ success: true }),
         markAsReplied: vi.fn(async (commentId, replyText, replyMethod, detectedLanguage, needsAttention, flagReason, aiIntent, aiOriginalReply) => {
             await commentsService.markAsReplied(

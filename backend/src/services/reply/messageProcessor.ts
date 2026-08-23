@@ -852,6 +852,11 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'No reply generated' };
             }
 
+            // 12d. Render the canonical reply for THIS channel (markdown → what it
+            // can display), before the length cap so the cap measures what is sent.
+            // Persisted as-is at step 15: the stored row is what the customer saw.
+            replyText = adapter.renderReply(replyText);
+
             // 12e. Platform max message length (Facebook=2000, Instagram=1000).
             const maxReplyChars = adapter.maxReplyLength ?? 2000;
 

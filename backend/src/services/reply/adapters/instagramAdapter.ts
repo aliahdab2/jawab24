@@ -10,7 +10,7 @@ import {
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
 import { sendMetaProductCards } from '../../metaMessaging';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
-import type { ProductCard } from '@jawab24/shared';
+import { renderReplyForChannel, type ProductCard } from '@jawab24/shared';
 
 /**
  * Instagram Platform Adapter
@@ -93,6 +93,10 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
     async sendTypingOff(page: PlatformPage, senderId: string): Promise<void> {
         if (!page.platformAccountId) return;
         await instagramService.sendTypingOff(page.platformAccountId, senderId, instagramCredentialOf(page));
+    }
+
+    renderReply(text: string): string {
+        return renderReplyForChannel(text, 'plain');
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {

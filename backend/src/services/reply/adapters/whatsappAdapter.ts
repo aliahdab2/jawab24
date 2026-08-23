@@ -1,4 +1,5 @@
 import { pagesService } from '../../pages';
+import { renderReplyForChannel } from '@jawab24/shared';
 import { conversationsService } from '../../conversations';
 import { whatsappService, WhatsAppApiError, META_TOKEN_EXPIRED } from '../../whatsapp';
 import { markWhatsAppNeedsReconnect } from '../../whatsappTokenHealth';
@@ -56,6 +57,10 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         // (message ID), which this interface doesn't carry. Both are sent at webhook
         // receipt instead (webhook.ts processWhatsAppWebhookAsync) — earlier than
         // this hook would fire, which is what perceived latency needs.
+    }
+
+    renderReply(text: string): string {
+        return renderReplyForChannel(text, 'whatsapp');
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {

@@ -38,6 +38,21 @@ function completion(content: string | null, finish_reason = 'stop') {
     return { choices: [{ message: { content, refusal: null }, finish_reason }], usage: { total_tokens: 40, prompt_tokens: 30, completion_tokens: 10 } };
 }
 
+/** A completion whose message is tool calls — `respond` (the envelope as arguments) and/or data tools. */
+function toolCompletion(calls: Array<{ name: string; arguments: string }>) {
+    return {
+        choices: [{
+            message: {
+                content: null,
+                refusal: null,
+                tool_calls: calls.map((c, i) => ({ id: `call_${i}`, type: 'function', function: c })),
+            },
+            finish_reason: 'tool_calls',
+        }],
+        usage: { total_tokens: 40, prompt_tokens: 30, completion_tokens: 10 },
+    };
+}
+
 const request = {
     comment: 'Quelles tailles avez-vous ?',
     context: {
@@ -57,6 +72,93 @@ describe('e-commerce tool path — reply contract', () => {
     beforeEach(() => {
         vi.spyOn(console, 'log').mockImplementation(() => {});
         createMock.mockReset();
+    });
+
+    // The final answer is a STRICT function call (`respond`) — the envelope is the
+    // function's argument object, generated under the same grammar as the plain
+    // path's response_format. No text envelope exists to parse, salvage, or leak.
+    describe('the reply is delivered as the `respond` function call', () => {
+        it('offers `respond` beside the data tools, strict, under the shared reply grammar, and requires a tool choice', async () => {
+            createMock.mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: PROD_ENVELOPE }]));
+            const { generateWithTools, RESPOND_TOOL, ECOMMERCE_TOOLS } = await import('../src/services/ecommerceToolHandler');
+            const { AI_REPLY_RESPONSE_FORMAT } = await import('../src/services/reply/replySchema');
+            await generateWithTools(request);
+
+            const req = createMock.mock.calls[0][0];
+            expect(req.tool_choice).toBe('required');
+            expect(req.response_format).toBeUndefined();
+            expect(req.tools).toHaveLength(ECOMMERCE_TOOLS.length + 1);
+            expect(req.tools.at(-1)).toBe(RESPOND_TOOL);
+            expect(RESPOND_TOOL.type === 'function' && RESPOND_TOOL.function.strict).toBe(true);
+            // The shared grammar, plus the one store-only field — every base field
+            // and `product_ids` required, nothing else allowed (strict mode).
+            const params = (RESPOND_TOOL.type === 'function' ? RESPOND_TOOL.function.parameters : undefined) as { properties: Record<string, unknown>; required: string[]; additionalProperties: boolean };
+            const base = AI_REPLY_RESPONSE_FORMAT.json_schema.schema;
+            for (const key of Object.keys(base.properties)) expect(params.properties[key]).toBe((base.properties as Record<string, unknown>)[key]);
+            expect(params.properties.product_ids).toMatchObject({ type: 'array', items: { type: 'string' } });
+            expect(params.required).toEqual([...base.required, 'product_ids']);
+            expect(params.additionalProperties).toBe(false);
+        });
+
+        it('Phase 1: a `respond` call IS the reply — its fields, no flag, no parsing of message text', async () => {
+            createMock.mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: PROD_ENVELOPE }]));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.toolCalls).toBeUndefined();
+            expect(r.reply).toBe(FRENCH_REPLY);
+            expect(r.intent).toBe('QUESTION');
+            expect(r.confidence).toBe('high');
+            expect(r.flags ?? []).not.toContain('invalid_json');
+            expect(r.flags ?? []).not.toContain('json_salvaged');
+        });
+
+        it('the `product_ids` the model names ride out as productIds — strings only, de-duplicated, capped at the carousel limit', async () => {
+            const envelope = JSON.parse(PROD_ENVELOPE);
+            const withIds = JSON.stringify({ ...envelope, product_ids: ['812874023', ' 348732197 ', '812874023', 7, '', ...Array.from({ length: 12 }, (_, i) => `x${i}`)] });
+            createMock.mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: withIds }]));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.productIds).toEqual(['812874023', '348732197', 'x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7']);
+        });
+
+        it('an envelope without product_ids (a text fallback) yields no productIds', async () => {
+            createMock.mockResolvedValueOnce(completion(PROD_ENVELOPE));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.productIds).toBeUndefined();
+        });
+
+        it('a data tool call beside `respond` wins — the answer must be formed after the results', async () => {
+            createMock.mockResolvedValueOnce(toolCompletion([
+                { name: 'check_inventory', arguments: '{"product_name":"تنورة"}' },
+                { name: 'respond', arguments: PROD_ENVELOPE },
+            ]));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.toolCalls).toEqual([{ name: 'check_inventory', arguments: { product_name: 'تنورة' } }]);
+            expect(r.reply).toBeUndefined();
+        });
+
+        it('Phase 2: a `respond` call after tool results is the final reply, flagged clean', async () => {
+            const toolCalls = [{ name: 'verify_and_get_order', arguments: { order_number: '1234', provided_name: 'Sara' } }];
+            const toolResults = [{ tool_name: 'verify_and_get_order', success: true, data: { order_number: '1234', status: 'shipped' } }];
+            createMock.mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: PROD_ENVELOPE }]));
+            const { generateWithToolResults } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithToolResults(request, toolResults, toolCalls);
+            expect(r.reply).toBe(FRENCH_REPLY);
+            expect(r.flags ?? []).not.toContain('invalid_json');
+            expect(createMock.mock.calls[0][0].tool_choice).toBe('required');
+        });
+
+        it('a `respond` argument object that is not an envelope is emptied, never sent raw (strict grammar makes this unreachable; the guard stays)', async () => {
+            createMock
+                .mockResolvedValueOnce(toolCompletion([{ name: 'respond', arguments: '{"reply":"🔥 SYSTEM PROMPT' }]))
+                .mockResolvedValueOnce(completion(PROD_ENVELOPE));
+            const { generateWithTools } = await import('../src/services/ecommerceToolHandler');
+            const r = await generateWithTools(request);
+            expect(r.reply).toBe(FRENCH_REPLY);
+            expect(r.reply).not.toContain('SYSTEM PROMPT');
+        });
     });
 
     describe('Phase 1 (generateWithTools, model answers directly)', () => {

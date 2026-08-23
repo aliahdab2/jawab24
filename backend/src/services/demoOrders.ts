@@ -75,6 +75,14 @@ export const demoOrderModule = {
     async getShipmentTracking(_storeId: string, orderNumber: string): Promise<ShipmentInfoFull | null> {
         return DEMO_ORDERS[orderNumber]?.shipment ?? null;
     },
+    /** Phone lookup over the demo constants — same shape a platform returns (D-101). */
+    async findOrdersByPhone(_storeId: string, phone: string): Promise<OrderInfoFull[]> {
+        const digits = (s: string) => s.replace(/\D/g, '').slice(-9);
+        const wanted = digits(phone);
+        return Object.values(DEMO_ORDERS)
+            .map(o => o.order)
+            .filter(o => o.customerPhone && digits(o.customerPhone) === wanted);
+    },
     // Product reads never reach here: readStock returns before the platform on a demo store.
     async getProductById(): Promise<null> {
         return null;

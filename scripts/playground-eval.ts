@@ -5840,6 +5840,35 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Order number + identity in ONE message. Measured pre-fix: PARTIAL — the model skipped Phase 1 and called the verify tool straight away, which the old code could only answer with verification_expired. Pins that Phase 2 stands on its own (live read + identity check) whether or not a Phase 1 ran.',
     },
+    {
+        id: 804, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'ما معي رقم الطلب، اسمي أحمد وجوالي 0500000001',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'وين وصل طلبي؟' },
+            { role: 'assistant', content: 'ممكن تعطيني رقم طلبك عشان أتحقق لك؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['1001', '1002'],
+            toolOutcomes: [{ name: 'find_order_by_phone', outcome: 'success' }],
+        },
+        notes: 'PROD DEAD END 2026-08-23 (Salla review page): a customer with no order number gave name + phone and was told «ما وصلني رقم طلب منك» — there was no path. D-101 adds find_order_by_phone (phone AND name, re-verified server-side). Pins that the customer gets their order, not a second demand for the number.',
+    },
+    {
+        id: 805, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'ما معي رقم الطلب، اسمي خالد وجوالي 0500000001',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'وين وصل طلبي؟' },
+            { role: 'assistant', content: 'ممكن تعطيني رقم طلبك عشان أتحقق لك؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['1001', '1002', 'DEMO-SMSA-784512'],
+        },
+        notes: 'THE SECURITY HALF of D-101: the phone belongs to أحمد, the name given is خالد. Both must match, so nothing about the order may reach the customer — no order number, no tracking. The tool itself is unit-tested (ecommerceActions.test.ts); this pins that a refusal survives all the way to the delivered reply.',
+    },
 
 ];
 

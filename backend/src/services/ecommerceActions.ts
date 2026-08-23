@@ -300,6 +300,12 @@ async function runToolCall(
         return live(await handleVerification(mod, store, toolCall));
     }
 
+    //    Same rule for the phone lookup: its answer depends on the customer's
+    //    identity claim, so it must never be served from (or written to) a cache.
+    if (toolCall.name === 'find_order_by_phone') {
+        return live(await handlePhoneLookup(mod, store, toolCall));
+    }
+
     // 6. Phase-1 order tools: Redis result cache, keyed on the SANITIZED arguments
     //    so '#123' and '123' share an entry.
     const cacheKey = buildToolCacheKey(ecommerceStoreId, toolCall.name, sanitizedArgsOf(toolCall));
@@ -510,6 +516,8 @@ interface PlatformModule {
     lookupOrder: (storeId: string, orderNumber: string) => Promise<OrderInfoFull | null>;
     getShipmentTracking: (storeId: string, orderNumber: string) => Promise<ShipmentInfoFull | null>;
     getProductById: (storeId: string, platformProductId: string) => Promise<PlatformProductDetail | null>;
+    /** Candidate orders for a phone number — never a verification, see handlePhoneLookup. */
+    findOrdersByPhone: (storeId: string, phone: string) => Promise<OrderInfoFull[]>;
 }
 
 /** Shared executor — platform-agnostic routing for the Phase-1 ORDER tools. */
@@ -535,6 +543,76 @@ async function phaseOne(
     const blob = await fetchFamilyLive(mod, storeId, orderNumber, family);
     if (!blob) return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
     return buildVerificationChallenge(toolCall.name, orderNumber, family);
+}
+
+/**
+ * The customer has no order number: find their order from phone + name (D-101).
+ *
+ * SECURITY — why this is the same strength as the order-number flow, not weaker:
+ * - BOTH are required, in ONE call. Phone alone returns nothing; name alone
+ *   returns nothing. The order-number flow gates on (order number) + (name OR
+ *   phone); this one gates on (phone) + (name). Each is two independent facts
+ *   about the same order.
+ * - The PLATFORM's phone search is never the gate. Zid's `search_term` is a
+ *   natural-language lookup that also matches names and order codes, and Salla's
+ *   `customers?keyword=` matches name and email too — so a hit proves nothing.
+ *   Every candidate is re-compared here with the same `phonesMatch` +
+ *   `namesMatch` used by verify_and_get_*, and BOTH must pass.
+ * - Reads are bounded per (store, phone): the first lookup claims a Redis slot
+ *   for VERIFICATION_TTL_SECONDS, so repeated guesses against one phone number
+ *   cost no further platform calls. Same budget shape `lookup_order` already
+ *   hands an unauthenticated DM.
+ * - Only ONE order is returned — the newest match — and it goes through
+ *   `stripPii` like every other verified answer.
+ */
+async function handlePhoneLookup(
+    mod: PlatformModule, store: StoreRow, toolCall: EcommerceToolCall,
+): Promise<EcommerceToolResult> {
+    const phone = sanitizePhone(toolCall.arguments.provided_phone || '');
+    const name = toolCall.arguments.provided_name?.trim() || '';
+    // Both, always. A missing half is a prompt/tool-call error, never a partial search.
+    if (!phone || phone.replace(/\D/g, '').length < MIN_PHONE_DIGITS) {
+        return { tool_name: toolCall.name, success: false, error: 'phone_and_name_required' };
+    }
+    if (name.length < MIN_NAME_CHARS) {
+        return { tool_name: toolCall.name, success: false, error: 'phone_and_name_required' };
+    }
+
+    let candidates: OrderInfoFull[];
+    try {
+        candidates = await mod.findOrdersByPhone(store.id, phone);
+    } catch (err) {
+        return platformFailure(err, toolCall, store);
+    }
+
+    // The gate: the platform's search is a suggestion; these two comparisons decide.
+    const verified = candidates.filter(o =>
+        o.customerPhone && phonesMatch(o.customerPhone, phone) && namesMatch(o.customerFirstName, name),
+    );
+    recordPhoneLookupOutcome(verified.length > 0 ? 'verified' : (candidates.length > 0 ? 'rejected' : 'no_candidates'));
+    if (verified.length === 0) {
+        // Deliberately the SAME answer for "no such phone" and "phone found but the
+        // name does not match": distinguishing them would confirm a phone number is
+        // a customer's to anyone who can type one.
+        return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
+    }
+
+    // Newest first — the order a customer asking "where is my order?" means.
+    const newest = [...verified].sort((a, b) => (b.orderDate || '').localeCompare(a.orderDate || ''))[0];
+    return { tool_name: toolCall.name, success: true, data: stripPii(newest) };
+}
+
+/** Phone must carry enough digits to be an identity claim, name enough to be a name. */
+const MIN_PHONE_DIGITS = 7;
+const MIN_NAME_CHARS = 2;
+
+/** `metrics:ecom:phone_lookup:{verified|rejected|no_candidates}` — fire-and-forget. */
+function recordPhoneLookupOutcome(outcome: 'verified' | 'rejected' | 'no_candidates'): void {
+    try {
+        redis.incr(`metrics:ecom:phone_lookup:${outcome}`).catch(() => { });
+    } catch {
+        // never on the reply path
+    }
 }
 
 // --- check_inventory (D-092: resolve in code, answer locally, platform by id only when risky) ---

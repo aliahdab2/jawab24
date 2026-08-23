@@ -2715,3 +2715,106 @@ three live stores are ours), but every store-linked page's tool path was affecte
 **Evidence.** Prod rows 2026-08-23 15:32–15:36Z on page `eb06462a-…`; fleet count before/after
 the 14:55Z deploy; unit tests pin both sites (`parseReplyContent.test.ts`,
 `ecommerceToolHandler.reply.test.ts`) and the strip (`generator.test.ts`), each mutation-checked.
+
+## D-099 · On the e-commerce tool path the final reply is a strict `respond` function call — never a text envelope (2026-08-23)
+
+**Context.** Store-linked pages run the reply through OpenAI function calling (D-092 tools:
+`check_inventory`, `lookup_order`, `track_shipment`, `verify_and_get_*`). The final answer was
+asked for as a JSON envelope *written as message text*, because `response_format` beside
+`tools` suppresses tool calling (10/10 → 3/10, `replySchema.ts`). That produced the whole
+2026-08-23 family of defects: the envelope leaking to a customer (D-097), the salvage/broken/
+plain parser outcomes, and the false «خطأ في معالجة الرد» alarms on prose (D-098). Each fix was
+a patch on a non-standard design.
+
+**Ruling.**
+1. The final reply is delivered as a **strict function call**: `respond`, whose `parameters`
+   ARE `AI_REPLY_RESPONSE_FORMAT.json_schema.schema` — the plain path's grammar, one constant.
+   Both tool-path requests (Phase 1 and the post-results call) send the data tools plus
+   `respond` with `tool_choice: 'required'`. The model chooses between fetching data and
+   answering; there is no text to parse. When a data tool and `respond` appear in one
+   message, the data tool wins and the answer is formed after its results.
+2. The shared parser keeps the text-content branch only as a guard for an API response that
+   ignores `tool_choice`; every final reply logs `tool_path_final` with `via: respond|content`
+   so the guard's use is visible in production, never silently relied upon.
+3. This touches **only** `TOOL_PROMPT_ADDITION` — appended on store-linked pages at request
+   time, outside the `PROMPT_VERSION`-guarded static prefix. The main prompt, every non-store
+   page, and the semantic cache (comment-only) are untouched. No `PROMPT_VERSION` bump.
+
+**Measured (eval Cat 80/81/82, temperature 0, same fixtures, same backend).** Baseline (two
+runs, identical): 80 = 6 PASS/3 XGAP, 81 = 3 PASS 1 PARTIAL (#803 missing the tracking
+number), 82 = 5 PASS. `respond` + `required`: 80 = 6/3 XGAP, 81 = **4 PASS**, 82 = 5 PASS;
+13/13 replies via `respond`, 0 text fallbacks, 0 `invalid_json_reply`. `respond` + `auto`:
+18/18 via `respond`, 82 dropped one card (PARTIAL) — `required` is kept.
+**Trade-off, stated:** `check_inventory` calls rose from 1 to 10–11 over the 15 cases
+(7 ok, 2 `ambiguous_product`, 1–2 `product_not_found`) and Cat 80's mean latency from 2.1 s
+to ~2.7–3.1 s. The prompt has said «stock question → check_inventory» since D-092; in text
+mode the model ignored it, in function mode it obeys it — so the resolver-in-code (D-092)
+now decides those answers instead of the model reading the catalog block. That is the more
+grounded behaviour at roughly one extra round trip; whether small catalogs should answer
+from the block without a call is a prompt-policy choice for the owner, not made here.
+
+**Next (not in this ruling).** `products_to_show` ids in the same schema so cards stop being
+inferred from reply text; order lookup by phone.
+
+## D-100 · The model NAMES the products it presents (`respond.product_ids`); cards are never inferred when it does (2026-08-23)
+
+**Context.** Product cards were inferred from the reply's prose — exact-one title match
+(D-092), then linked URLs (#926). Both are heuristics reading the model's text for an identity
+the model already had. D-099's `respond` function gives a place to say it outright.
+
+**Ruling.**
+1. `respond.parameters` = the shared reply grammar **plus `product_ids`** (required, may be
+   empty): the platform product IDs of the products the reply presents, in order. Scoped to
+   the store tool path's function — the plain path's grammar, the main prompt and
+   `PROMPT_VERSION` are untouched.
+2. The catalog block prints each product's id in the chunker's existing form —
+   `title (ID: x) — price — …` — so the id the model passes to `check_inventory` and the one
+   it names in `respond` are the same vocabulary. Stored blocks pick the ids up on the
+   store's next product sync (the demo seeder rebuilds on seed).
+3. Card sources, in order: **model-named ids → tool result → linked URL → exactly-one
+   title**. Named ids resolve by `platform_product_id` within the store; unknown ids are
+   counted (`metrics:product_card:model:unknown_id`) and skipped, never guessed. Outcomes at
+   `metrics:product_card:model:*`. The ai-worker cleans the list (strings, de-duplicated,
+   capped at the 10-card carousel).
+
+**Measured (eval Cat 80/81/82, temp 0, on top of D-099).** 15/15 scored PASS (81 = 4/4,
+82 = 5/5 with both card cases fired via `model`), 18/18 replies via `respond`, 0 unknown ids.
+The prose heuristics stay as fallback for a reply that names nothing.
+
+## D-101 · A customer without their order number can be found by phone AND name, re-verified server-side (2026-08-23)
+
+**Context.** The order flow required the order number. Live on the Salla review page
+(2026-08-23): «مامعي رقم طلب» → the assistant asked for name and phone, got both, and answered
+«ما وصلني رقم طلب منك» — a dead end for every customer who deleted the confirmation. Owner
+ruling the same day: «نعم نسمح بالبحث عن الطلب برقم الجوال هذا منطقي».
+
+**Ruling.**
+1. New tool `find_order_by_phone`, requiring **`provided_phone` AND `provided_name` in the
+   same call** (both `required` in the schema; a call with one half is refused
+   `phone_and_name_required` and never reaches the platform). One call, no challenge round:
+   the identity claim and the search are the same act.
+2. **The platform's phone search is never the gate.** Zid's `search_term` is documented as a
+   natural-language lookup across phone, email, order code *and customer name*; Salla has no
+   order phone filter at all (`customers?keyword=` → `orders?customer_id=`, and `keyword`
+   matches name and email too). Every candidate is re-compared in `handlePhoneLookup` with the
+   same `phonesMatch` + `namesMatch` used by `verify_and_get_*`, and **both** must pass.
+   Only the newest verified order is returned, through `stripPii`.
+3. **"No such phone" and "wrong name" return the identical error** (`order_not_found`).
+   Distinguishing them would confirm a phone number belongs to a customer to anyone who can
+   type one.
+4. Identity-dependent ⇒ **never cached**, on the same branch as `verify_and_get_*`. Platform
+   fan-out is bounded (Salla ≤3 customers × 10 orders, Zid/Shopify ≤10).
+   Counters `metrics:ecom:phone_lookup:{verified|rejected|no_candidates}` beside the existing
+   per-tool outcome counters.
+
+**Strength, stated plainly.** The order-number flow gates on (order number) + (name OR phone);
+this gates on (phone) + (name) — two independent facts about the same order in both cases.
+Someone who knows a customer's phone *and* the name on their order can read that order's
+status; that is the same class of exposure the existing flow accepts for someone who knows an
+order number and one of the two, and the owner accepted it explicitly.
+
+**Measured (eval Cat 81, temp 0).** 6/6 PASS. #804 (name + phone, no order number) → the
+customer receives their order, `find_order_by_phone:success`. #805 (same phone, WRONG name) →
+nothing about the order reaches the reply, `find_order_by_phone:order_not_found`. Unit gate
+in `ecommerceActions.test.ts` (9 cases); mutation-checked both ways — trusting the platform
+search fails 3, making the name optional fails 1.

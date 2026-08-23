@@ -933,66 +933,43 @@ export async function getOrderNotificationTarget(
  * Look up an order by order number via Shopify GraphQL.
  * Returns normalized OrderInfo or null if not found.
  */
-export async function lookupOrder(storeId: string, orderNumber: string): Promise<OrderInfoFull | null> {
-    const creds = await resolveStoreCredentials(storeId);
-    if (!creds) return null;
-
-    // Shopify order names include '#' prefix (e.g. "#1234")
-    const cleanNumber = orderNumber.replace(/^#/, '');
-
-    const data = await shopifyGraphQL<{
-        data: {
-            orders: {
-                edges: Array<{
-                    node: {
-                        name: string;
-                        createdAt: string;
-                        displayFinancialStatus: string;
-                        displayFulfillmentStatus: string;
-                        totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
-                        lineItems: { edges: Array<{ node: { title: string; quantity: number; originalUnitPriceSet: { shopMoney: { amount: string; currencyCode: string } } } }> };
-                        shippingAddress: { city: string; province: string } | null;
-                        customer: { firstName: string; phone: string | null } | null;
-                        refunds: Array<{ totalRefundedSet: { shopMoney: { amount: string; currencyCode: string } } }>;
-                    };
-                }>;
-            };
-        };
-    }>(creds.storeDomain, creds.accessToken, `{
-        orders(first: 1, query: "name:#${cleanNumber}") {
-            edges {
-                node {
-                    name
-                    createdAt
-                    displayFinancialStatus
-                    displayFulfillmentStatus
-                    totalPriceSet { shopMoney { amount currencyCode } }
-                    lineItems(first: 20) {
-                        edges {
-                            node {
-                                title
-                                quantity
-                                originalUnitPriceSet { shopMoney { amount currencyCode } }
-                            }
-                        }
-                    }
-                    shippingAddress { city province }
-                    customer { firstName phone }
-                    refunds {
-                        totalRefundedSet { shopMoney { amount currencyCode } }
-                    }
-                }
+/** The order fields both order reads select — one string, so they cannot drift. */
+const ORDER_NODE_FIELDS = `
+    name
+    createdAt
+    displayFinancialStatus
+    displayFulfillmentStatus
+    totalPriceSet { shopMoney { amount currencyCode } }
+    lineItems(first: 20) {
+        edges {
+            node {
+                title
+                quantity
+                originalUnitPriceSet { shopMoney { amount currencyCode } }
             }
         }
-    }`);
+    }
+    shippingAddress { city province }
+    customer { firstName phone }
+    refunds { totalRefundedSet { shopMoney { amount currencyCode } } }
+`;
 
-    const order = data.data.orders.edges[0]?.node;
-    if (!order) return null;
+interface ShopifyOrderNode {
+    name: string;
+    createdAt: string;
+    displayFinancialStatus: string;
+    displayFulfillmentStatus: string;
+    totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+    lineItems: { edges: Array<{ node: { title: string; quantity: number; originalUnitPriceSet: { shopMoney: { amount: string; currencyCode: string } } } }> };
+    shippingAddress: { city: string; province: string } | null;
+    customer: { firstName: string; phone: string | null } | null;
+    refunds: Array<{ totalRefundedSet: { shopMoney: { amount: string; currencyCode: string } } }>;
+}
 
+function mapShopifyOrderNode(order: ShopifyOrderNode): OrderInfoFull {
     const totalRefund = order.refunds.reduce(
         (sum, r) => sum + parseFloat(r.totalRefundedSet.shopMoney.amount || '0'), 0,
     );
-
     return {
         orderNumber: order.name.replace(/^#/, ''),
         customerFirstName: order.customer?.firstName || '',
@@ -1012,6 +989,48 @@ export async function lookupOrder(storeId: string, orderNumber: string): Promise
         shippingDistrict: order.shippingAddress?.province || undefined,
     };
 }
+
+/** Orders matching a Shopify search query, newest first, bounded. */
+async function fetchOrdersByQuery(
+    creds: { storeDomain: string; accessToken: string },
+    query: string,
+    first: number,
+): Promise<OrderInfoFull[]> {
+    const data = await shopifyGraphQL<{ data: { orders: { edges: Array<{ node: ShopifyOrderNode }> } } }>(
+        creds.storeDomain,
+        creds.accessToken,
+        `{
+        orders(first: ${first}, query: ${JSON.stringify(query)}, sortKey: CREATED_AT, reverse: true) {
+            edges { node { ${ORDER_NODE_FIELDS} } }
+        }
+    }`,
+    );
+    return (data.data?.orders?.edges ?? []).map(e => mapShopifyOrderNode(e.node));
+}
+
+export async function lookupOrder(storeId: string, orderNumber: string): Promise<OrderInfoFull | null> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return null;
+    // Shopify order names include '#' prefix (e.g. "#1234")
+    const orders = await fetchOrdersByQuery(creds, `name:#${orderNumber.replace(/^#/, '')}`, 1);
+    return orders[0] ?? null;
+}
+
+/**
+ * Orders matching this phone number (D-101). Shopify's order search supports a
+ * customer phone term; a hit is a CANDIDATE — the caller re-compares phone and
+ * name against the order itself.
+ */
+export async function findOrdersByPhone(storeId: string, phone: string): Promise<OrderInfoFull[]> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return [];
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7) return [];
+    return fetchOrdersByQuery(creds, `phone:${digits}`, PHONE_LOOKUP_MAX_ORDERS);
+}
+
+/** A customer has one recent order, not a catalogue of them. */
+const PHONE_LOOKUP_MAX_ORDERS = 10;
 
 /**
  * Get shipment tracking info for an order via Shopify GraphQL.

@@ -8,7 +8,7 @@ import { detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
 import { isDemoPlatformId } from '../../../utils/demo';
 import { t } from '../../../utils/i18n';
-import { buildReadMorePayload } from '@jawab24/shared';
+import { buildReadMorePayload, renderReplyForChannel } from '@jawab24/shared';
 import { buildPostReplyImageUrl } from '../postReplyImageLink';
 import { mapToPlatformPage } from './shared';
 import type {
@@ -71,6 +71,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             comment: { id: comment.id, replied: comment.replied ?? false, needsAttention: comment.needsAttention ?? false },
             isNew,
         };
+    }
+
+    renderReply(text: string): string {
+        return renderReplyForChannel(text, 'plain');
     }
 
     async sendReply(opts: {
