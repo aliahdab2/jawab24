@@ -90,7 +90,7 @@ export async function generateReplyWithProvider(
         // Parse the envelope through the same parser as the production path
         // (salvage / empty-on-broken / plain passthrough — never raw envelope text).
         const { parsed } = parseReplyContent(result.content, {
-            site: 'provider', pipeline: request.context?.pipeline,
+            site: 'provider', envelopeEnforced: true, pipeline: request.context?.pipeline,
         });
 
         // Normalize intent (GPT and Claude both may invent non-standard intents)

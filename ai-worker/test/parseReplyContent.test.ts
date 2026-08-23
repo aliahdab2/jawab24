@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseReplyContent } from '../src/services/reply/parseReplyContent';
 
-const CTX = { site: 'test', pipeline: 'dm_reply' };
+const CTX = { site: 'test', envelopeEnforced: true, pipeline: 'dm_reply' };
 
 /** The exact text that reached a customer on 2026-08-23 10:28 UTC (Salla test page). */
 const FRENCH_REPLY = 'Nous avons plusieurs tailles disponibles pour nos articles, notamment 36 (XS), 38 (S), 40 (M), 42 (L) et 44 (XL). Pour quel produit souhaitez-vous connaître la disponibilité des tailles ?';
@@ -74,7 +74,7 @@ describe('parseReplyContent', () => {
         expect(r.parsed.reply).toBe('');
     });
 
-    it('plain prose with no envelope passes through with the invalid_json flag', () => {
+    it('plain prose where the envelope was ENFORCED is an anomaly: invalid_json + low', () => {
         const r = parseReplyContent('Nous proposons les tailles 36 à 44.', CTX);
         expect(r.outcome).toBe('plain');
         expect(r.parsed.reply).toBe('Nous proposons les tailles 36 à 44.');
@@ -82,6 +82,26 @@ describe('parseReplyContent', () => {
         expect(r.parsed.confidence).toBe('low');
         expect(r.parsed.flags).toEqual(['invalid_json']);
         expect(logSpy).not.toHaveBeenCalled();
+    });
+
+    // 2026-08-23 regression: the tool sites run WITHOUT response_format, so prose
+    // is a normal correct answer there. Flagging it put «خطأ في معالجة الرد» on
+    // 10 correct Salla replies within three hours of the parser shipping.
+    it('plain prose where the envelope was NOT enforced (tool sites) is a normal answer: no flag, medium confidence', () => {
+        const r = parseReplyContent('Nous proposons les tailles 36 à 44.', { ...CTX, site: 'tools_direct', envelopeEnforced: false });
+        expect(r.outcome).toBe('plain');
+        expect(r.parsed.reply).toBe('Nous proposons les tailles 36 à 44.');
+        expect(r.parsed.confidence).toBe('medium');
+        expect(r.parsed.flags).toEqual([]);
+        expect(logSpy).not.toHaveBeenCalled();
+    });
+
+    it('an un-enforced site still gets the strict outcomes for envelopes — salvage and broken are about the envelope, not the grammar', () => {
+        const loose = { ...CTX, site: 'tools_final', envelopeEnforced: false };
+        expect(parseReplyContent(`prose first\n\n${PROD_ENVELOPE}`, loose).outcome).toBe('salvaged');
+        const broken = parseReplyContent('{"reply":"Votre commande 1234 est', loose);
+        expect(broken.outcome).toBe('broken');
+        expect(broken.parsed.reply).toBe('');
     });
 
     it('an empty completion is plain-empty (the caller\'s empty-reply arbitration decides)', () => {

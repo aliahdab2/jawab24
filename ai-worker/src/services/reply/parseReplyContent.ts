@@ -22,8 +22,23 @@
  *               parses: reply is EMPTIED (flag `invalid_json`). The caller's
  *               empty-reply arbitration then throws, and the merchant is flagged
  *               — a half-envelope can carry prompt text and must not be sent.
- *   plain     — ordinary prose with no envelope at all: used as the reply with
- *               flag `invalid_json`, the long-standing fallback.
+ *   plain     — ordinary prose with no envelope at all: used as the reply. What
+ *               it MEANS depends on whether the call site enforced the envelope
+ *               (`envelopeEnforced` on the context):
+ *                 · enforced (plain path, failover providers — `response_format`
+ *                   json_schema): prose is impossible unless something is wrong,
+ *                   so it is flagged `invalid_json` + `low`, the long-standing
+ *                   fallback.
+ *                 · NOT enforced (both e-commerce tool sites — no
+ *                   `response_format`, because it suppresses tool calling, see
+ *                   replySchema.ts): prose is a normal, correct answer. It is
+ *                   used as-is with `medium` confidence and NO flag. Flagging it
+ *                   was the regression of 2026-08-23: the shared parser shipped
+ *                   with the strict fallback for every site, and within three
+ *                   hours 10 correct Salla replies carried «خطأ في معالجة الرد»
+ *                   + a needs_attention push (0 such flags in the 12,297 AI
+ *                   replies of the week before). Pre-parser, that site had
+ *                   accepted prose quietly for months.
  */
 import type { ParsedReply } from './types';
 
@@ -84,6 +99,12 @@ export interface ParseReplyContext {
     pipeline?: string;
     /** `site` names the call site (`plain`, `tools_direct`, `tools_final`, `provider`). */
     site: string;
+    /**
+     * Did this call site make the model emit the envelope (`response_format`
+     * json_schema)? Decides what plain prose means — see the `plain` outcome
+     * above. Required, not defaulted: a new call site must say which it is.
+     */
+    envelopeEnforced: boolean;
     finishReason?: string;
 }
 
@@ -126,7 +147,9 @@ export function parseReplyContent(content: string, ctx: ParseReplyContext): Pars
     }
 
     return {
-        parsed: { reply: content, intent: 'UNKNOWN', confidence: 'low', flags: ['invalid_json'] },
+        parsed: ctx.envelopeEnforced
+            ? { reply: content, intent: 'UNKNOWN', confidence: 'low', flags: ['invalid_json'] }
+            : { reply: content, intent: 'UNKNOWN', confidence: 'medium', flags: [] },
         outcome: 'plain',
     };
 }

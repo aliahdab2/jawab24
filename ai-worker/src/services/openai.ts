@@ -301,7 +301,7 @@ export class OpenAIService {
             // The four outcomes and why a broken envelope must never be sent raw
             // are documented on parseReplyContent (shared by every reply call site).
             const { parsed } = parseReplyContent(content, {
-                site: 'plain', pipeline: request.context?.pipeline, finishReason,
+                site: 'plain', envelopeEnforced: true, pipeline: request.context?.pipeline, finishReason,
             });
 
             // Post-reply validation: catch issues the prompt alone can't prevent
