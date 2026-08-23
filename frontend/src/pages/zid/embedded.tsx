@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { setEmbeddedSession } from '@/lib/embeddedSession';
 import { captureError } from '@/lib/sentryHelpers';
-import type { WorkspaceSummary } from '@jawab24/shared';
+import type { Page, WorkspaceSummary } from '@jawab24/shared';
 
 type Status = 'loading' | 'error';
 
@@ -51,12 +51,14 @@ export default function ZidEmbedded() {
 
     const authHeader = { headers: { Authorization: `Bearer ${accessToken}` } };
 
-    // /auth/me and /workspaces are independent — fetch them together so the
-    // frame is not blocked on two sequential round trips before first paint.
-    // The session is pinned to one workspace, so /workspaces is best-effort.
-    const [userRes, wsRes] = await Promise.all([
+    // /auth/me, /workspaces and /pages are independent — fetch them together so
+    // the frame is not blocked on sequential round trips before first paint.
+    // The session is pinned to one workspace, so /workspaces is best-effort; so
+    // is /pages, which only decides where to land (see `onboardingDone`).
+    const [userRes, wsRes, pagesRes] = await Promise.all([
       axios.get(`${apiUrl}/auth/me`, authHeader),
       axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, authHeader).catch(() => null),
+      axios.get<Page[]>(`${apiUrl}/pages`, authHeader).catch(() => null),
     ]);
 
     const user = userRes.data;
@@ -65,7 +67,15 @@ export default function ZidEmbedded() {
     if (wsRes?.data?.length) setWorkspaces(wsRes.data, { defaultWorkspaceId: workspaceId });
 
     setAuth(user, accessToken, '');
-    return user;
+
+    // The onboarding wizard's last step is linking a page to the store
+    // (`pages.ecommerceStoreId`). Once any page carries that link the merchant
+    // has finished it, and every later open must land in the app — until
+    // 2026-08-23 this entry sent a fully connected store back to «let's connect
+    // your Zid store» on EVERY open. A failed /pages read falls back to the
+    // wizard: showing it once too often is recoverable, hiding it is not.
+    const onboardingDone = (pagesRes?.data ?? []).some((p) => Boolean(p.ecommerceStoreId));
+    return { user, onboardingDone };
   }, [setAuth, setWorkspaces]);
 
   useEffect(() => {
@@ -98,10 +108,14 @@ export default function ZidEmbedded() {
     }
 
     establishSession(token)
-      .then(() => {
-        // Straight into the app. The merchant is authenticated and inside the
-        // Zid dashboard iframe; onboarding self-skips once a page is linked.
-        router.replace('/zid/onboarding', undefined, locale ? { locale } : undefined);
+      .then(({ onboardingDone }) => {
+        // The merchant is authenticated and inside the Zid dashboard iframe.
+        // First open: the wizard (store → product sync → link a page). Every
+        // open after the page is linked: straight into the app. The wizard
+        // itself has no notion of "already done" — this entry is the only
+        // place that decides, so the decision must be made here.
+        const destination = onboardingDone ? '/dashboard' : '/zid/onboarding';
+        router.replace(destination, undefined, locale ? { locale } : undefined);
       })
       .catch((err) => {
         captureError(err, 'Zid embedded session failed', { tags: { page: 'zid-embedded' } });
