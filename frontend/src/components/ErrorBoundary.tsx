@@ -71,7 +71,7 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
 
       return (
         <div
-          className="flex-1 bg-zinc-900 flex items-center justify-center p-4"
+          className="flex-1 bg-background flex items-center justify-center p-4"
           style={{
             // dvh, not vh: vh includes the mobile URL bar / keyboard area.
             // Inline (not Tailwind) so the error UI renders even if CSS broke.
@@ -82,12 +82,12 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
         >
           <div
             dir={isRTL ? 'rtl' : 'ltr'}
-            className="max-w-md w-full bg-zinc-800 rounded-2xl p-8 text-center shadow-xl border border-zinc-700"
+            className="max-w-md w-full bg-card rounded-2xl p-8 text-center shadow-xl border border-theme-border"
           >
             {/* Error Icon */}
-            <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-500/10 flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-6 rounded-full icon-bg-red flex items-center justify-center">
               <svg
-                className="w-8 h-8 text-red-500"
+                className="w-8 h-8"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -102,15 +102,15 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
             </div>
 
             {/* Error Message */}
-            <h1 className="text-xl font-semibold text-white mb-2">
+            <h1 className="text-xl font-semibold text-foreground mb-2">
               {t('title')}
             </h1>
-            <p className="text-zinc-400 mb-6">{t('description')}</p>
+            <p className="text-muted-foreground mb-6">{t('description')}</p>
 
             {/* Error Details (only in development) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <div className="mb-6 p-3 bg-zinc-900 rounded-lg text-start overflow-auto max-h-32">
-                <code className="text-xs text-red-400 break-all">
+              <div className="mb-6 p-3 bg-background rounded-lg text-start overflow-auto max-h-32">
+                <code className="text-xs text-red-600 dark:text-red-400 break-all">
                   {this.state.error.message}
                 </code>
               </div>
@@ -120,13 +120,13 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.handleReload}
-                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                className="btn-primary"
               >
                 {t('refreshButton')}
               </button>
               <button
                 onClick={this.handleGoHome}
-                className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
+                className="btn-secondary"
               >
                 {t('homeButton')}
               </button>

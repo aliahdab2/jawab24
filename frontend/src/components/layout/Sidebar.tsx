@@ -245,7 +245,7 @@ function NavItem({ href, icon: Icon, label, isActive, sidebarOpen, badge }: NavI
         'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
         isActive
           ? 'bg-brand-400/10 text-brand-400 shadow-xl shadow-brand-400/20'
-          : 'text-zinc-400 hover:bg-white/5 hover:text-white',
+          : 'sidebar-nav-item',
         !sidebarOpen && 'justify-center'
       )}
     >
@@ -304,7 +304,7 @@ function WorkspaceSwitcher({ workspaces, activeWorkspaceId, sidebarOpen, onSwitc
         {sidebarOpen && (
           <>
             <span className="text-sm font-bold text-white truncate flex-1">{activeWorkspace?.name}</span>
-            <ChevronDownIcon className={clsx('w-4 h-4 text-zinc-400 flex-shrink-0 transition-transform', open && 'rotate-180')} />
+            <ChevronDownIcon className={clsx('w-4 h-4 sidebar-chrome-muted flex-shrink-0 transition-transform', open && 'rotate-180')} />
           </>
         )}
       </button>
@@ -489,7 +489,7 @@ export const Sidebar = memo(function Sidebar() {
         {navigationGroups.map((group, groupIndex) => (
           <div key={group.labelKey} className={groupIndex > 0 ? 'mt-5' : ''}>
             {sidebarOpen && (
-              <p className="px-3 mb-2 text-[11px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
+              <p className="px-3 mb-2 text-[11px] font-bold sidebar-section-label uppercase tracking-[0.15em]">
                 {tSidebar(group.labelKey.replace('sidebar.', '') as Parameters<typeof tSidebar>[0])}
               </p>
             )}
@@ -525,7 +525,7 @@ export const Sidebar = memo(function Sidebar() {
                 'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
                 router.pathname.startsWith('/admin')
                   ? 'bg-amber-600 text-white shadow-xl shadow-amber-600/20'
-                  : 'text-zinc-400 hover:bg-white/5 hover:text-white',
+                  : 'sidebar-nav-item',
                 !sidebarOpen && 'justify-center'
               )}
             >
@@ -579,7 +579,7 @@ export const Sidebar = memo(function Sidebar() {
         <button
           onClick={handleLogout}
           className={clsx(
-            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-zinc-200 hover:bg-red-500 hover:text-white transition-all duration-300 group/nav relative",
+            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl sidebar-nav-danger group/nav relative",
             !sidebarOpen && "justify-center"
           )}
         >

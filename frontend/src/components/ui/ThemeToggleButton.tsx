@@ -30,7 +30,7 @@ export function ThemeToggleButton({ variant = 'nav', sidebarOpen = true }: Theme
       <button
         onClick={handleToggle}
         aria-label={label}
-        className="ms-auto p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all flex-shrink-0"
+        className="ms-auto p-1.5 rounded-lg sidebar-nav-action flex-shrink-0"
       >
         <Icon className="w-4 h-4" aria-hidden="true" />
       </button>
@@ -43,7 +43,7 @@ export function ThemeToggleButton({ variant = 'nav', sidebarOpen = true }: Theme
         onClick={handleToggle}
         aria-label={label}
         className={clsx(
-          'w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-zinc-400 hover:bg-white/5 hover:text-white transition-all duration-300 group/nav relative',
+          'w-full flex items-center gap-3 px-3 py-3 rounded-2xl sidebar-nav-item group/nav relative',
           !sidebarOpen && 'justify-center'
         )}
       >
