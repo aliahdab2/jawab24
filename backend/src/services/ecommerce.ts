@@ -579,6 +579,23 @@ export async function createStore(opts: CreateStoreOptions) {
         }
     }
 
+    // Seed the customer-notification templates HERE, on the one path every
+    // store creation funnels through (logged-in OAuth callback, auto-provisioned
+    // embedded install, pending-install claim, Shopify, and every reinstall).
+    // Until 2026-08-23 only the claim path seeded, so an OAuth/auto-provisioned
+    // store had no template rows at all and `schedule()` returned silently on
+    // every order — the rail looked broken when it had simply never been set
+    // up. Idempotent (seedDefaults skips types that already exist), so a
+    // reinstall keeps the merchant's edits. Never fatal to the connect.
+    try {
+        await customerNotificationService.seedDefaults(result[0].id);
+    } catch (err) {
+        captureError(err, 'Failed to seed customer notification templates', {
+            tags: { service: 'ecommerce', action: 'seed-notification-templates' },
+            extra: { storeId: result[0].id, platform: opts.platform },
+        });
+    }
+
     return result[0];
 }
 
@@ -1445,13 +1462,7 @@ async function finalizeClaim(
         workspaceId,
     });
 
-    // Seed default notification templates for the new store (non-blocking, safe to retry)
-    customerNotificationService.seedDefaults(store.id).catch(err => {
-        captureError(err, 'Failed to seed customer notification templates', {
-            tags: { service: 'ecommerce' },
-            extra: { storeId: store.id, platform },
-        });
-    });
+    // Notification templates are seeded inside createStore (every creation path).
 
     // Mark pending as claimed
     await db.update(pendingEcommerceInstalls).set({
