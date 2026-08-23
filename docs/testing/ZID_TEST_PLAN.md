@@ -393,8 +393,8 @@ webhooks re-registered 6/6.
 > from Zid's docs. **Unit-green is NOT the live validation this section asks for** — the
 > rows below stay open until they are run against a real dev store.
 
-Plans as configured (PROVISIONAL — owner defers final pricing until WHT confirmed):
-Business/الأعمال id 3740 = 189 SAR · Pro/الاحترافي id 3741 = 379 SAR · Recurring,
+Plans as configured (D-095, website parity, set 2026-08-23):
+Business/الأعمال id 3740 = 146 SAR · Pro/الاحترافي id 3741 = 296 SAR (ex-VAT) · Recurring,
 1 month, 14-day trial. Editable until publish.
 
 | ID | Test | Expected |
@@ -497,8 +497,8 @@ If throttling appears, verify the sync retries rather than truncating (the old s
    with Zid UI before publish (`docs/store-listing/` pipeline pattern).
 2. Clean install on a FRESH store (not the seeded dev store) as a new merchant; time
    install → first grounded AI reply. Target <10 min.
-3. Pricing final check with the owner (189/379 SAR are provisional; WHT answer
-   outstanding) — plans are editable until publish, NOT after.
+3. Pricing is settled (D-095: 146/296 SAR ex-VAT, website parity). Re-read the two plan
+   rows in the Partner Dashboard right before publish — editable until then, NOT after.
 4. Support obligations rehearsal: the agreement binds to 48h support response with
    invoice penalties — confirm `info@jawab24.com` is monitored.
 
