@@ -39,6 +39,14 @@ describe('e-commerce order tools are scoped to a SPECIFIC order', () => {
         expect(descriptionOf('lookup_order')).toMatch(/verify_and_get_order/);
         expect(descriptionOf('track_shipment')).toMatch(/verify_and_get_shipment/);
     });
+
+    it('each Phase-1 tool names ONLY its own family\'s verify tool', () => {
+        // The backend tolerates a crossed pair (it verifies against whichever blob
+        // exists and reads the rest live), but every cross costs a platform call —
+        // the description must not be the thing that teaches the model to cross.
+        expect(descriptionOf('lookup_order')).not.toMatch(/verify_and_get_shipment/);
+        expect(descriptionOf('track_shipment')).not.toMatch(/verify_and_get_order/);
+    });
 });
 
 /**
