@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
 import noMixedSemanticPalette from './eslint-rules/no-mixed-semantic-palette.mjs';
+import noUnanchoredChromePalette from './eslint-rules/no-unanchored-chrome-palette.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -33,7 +34,12 @@ const eslintConfig = [
     {
         files: ['**/*.{js,jsx,ts,tsx}'],
         plugins: {
-            jawab24: { rules: { 'no-mixed-semantic-palette': noMixedSemanticPalette } },
+            jawab24: {
+                rules: {
+                    'no-mixed-semantic-palette': noMixedSemanticPalette,
+                    'no-unanchored-chrome-palette': noUnanchoredChromePalette,
+                },
+            },
         },
         rules: {
             // Next.js specific
@@ -47,6 +53,7 @@ const eslintConfig = [
             // Design system: a semantic status/alert/icon-bg/notif class must
             // own its hue alone. See frontend/eslint-rules/ and CONVENTIONS.md.
             'jawab24/no-mixed-semantic-palette': 'error',
+            'jawab24/no-unanchored-chrome-palette': 'error',
 
             // General best practices
             'no-console': ['warn', { allow: ['warn', 'error'] }],

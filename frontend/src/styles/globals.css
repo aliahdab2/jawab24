@@ -971,6 +971,48 @@
     @apply text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white;
   }
 
+  /* --- Sidebar chrome -------------------------------------------------------
+     Same reasoning as .admin-bar: the sidebar is dark in BOTH themes, so these
+     are fixed values rather than theme tokens, and the surface-* scale is wrong
+     here for the same inversion reason.
+
+     Separate from the admin-bar family on purpose — the sidebar is a dark glass
+     panel (hover lifts with white/5), the admin bar is a solid zinc-900 slab
+     (hover darkens to zinc-800). Sharing one class would force one of the two
+     surfaces to look wrong.
+
+     Extracted because the identical string
+     `text-zinc-400 hover:bg-white/5 hover:text-white` was written out three
+     times across Sidebar.tsx and ThemeToggleButton.tsx. Active states stay in
+     the components: they are already anchored tokens (brand-400, amber-600). */
+  .sidebar-nav-item {
+    @apply text-zinc-400 transition-all duration-300 hover:bg-white/5 hover:text-white;
+  }
+
+  /* Small icon affordance in the sidebar rail (theme toggle). Same hue as the
+     nav item; a heavier hover because it is a smaller hit area. */
+  .sidebar-nav-action {
+    @apply text-zinc-400 transition-all hover:bg-white/10 hover:text-white;
+  }
+
+  /* Decorative icon tint inside the rail (chevrons). Colour only — layout and
+     transitions stay in the component, which animates them per state. */
+  .sidebar-chrome-muted {
+    @apply text-zinc-400;
+  }
+
+  /* Group heading in the rail — one step dimmer than a nav item on purpose, so
+     labels recede behind the items they head. */
+  .sidebar-section-label {
+    @apply text-zinc-500;
+  }
+
+  /* Sign-out. Brighter at rest than a nav item (it must be findable) and turns
+     destructive on hover, which is why it cannot reuse .sidebar-nav-item. */
+  .sidebar-nav-danger {
+    @apply text-zinc-200 transition-all duration-300 hover:bg-red-500 hover:text-white;
+  }
+
   /* RTL-aware page header */
   .page-header {
     @apply flex flex-col sm:flex-row sm:items-center gap-4 mb-8;
