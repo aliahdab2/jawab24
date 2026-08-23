@@ -39,6 +39,7 @@ Run every row. All must pass before a single Tier-3 step.
 | 0.5 | Article-5 Stripe guard live (D-065) | `docker exec jawab24-backend-<colour> sh -c "ls /app/backend/dist/config/sallaBilling.js"` | file present |
 | 0.6 | Container healthy after any recreate | `docker ps` + `scripts/health-check.sh` | all healthy; **`nginx -s reload` after `--force-recreate`** — recreate changes the container IP and nginx 502s until reloaded |
 | 0.8 | **Webhook Security Strategy = Signature** | Salla Partners portal → app → Webhooks/Notifications | radio **Signature** selected. ⛔ *Token* makes Salla send `Authorization: <secret>` with **no** `X-Salla-Signature`, and `controllers/salla.ts` verifies the signature only ⇒ **every delivery 401s** regardless of the secret. This is what the first real install hit on 2026-08-23; the secret itself was correct. ✅ Set 2026-08-23 (flip persists across reload; the secret is not regenerated) |
+| 0.9 | **API-registered subscriptions are SIGNED** | `GET https://api.salla.dev/admin/v2/webhooks` with the store token (or from the merchant dashboard's own session) | every row for `https://jawab24.com/salla/webhooks` shows `security.strategy = "signature"` and a non-null secret. ⛔ `strategy: ""` / `secret: null` ⇒ Salla delivers WITHOUT `X-Salla-Signature` and every order/product event 401s — the state all ten demo-store subscriptions were in on 2026-08-23 (registered by the pre-fix `registerWebhooks`, which sent `{name, event, url}` only). Fix = the store's *Re-register* button or `scripts/reregister-webhooks.ts salla` on a build that carries the signed upsert; a plain re-subscribe 422s and changes nothing |
 | 0.7 | ✅ **Is the production app in Easy Mode?** | Salla Partners portal → app → OAuth Mode | **Answered 2026-08-20: YES.** See the resolved note below. Portal state must be read by a human — Turnstile blocks chrome-devtools MCP; use the Claude-in-Chrome extension |
 
 ### ✅ 0.7 — RESOLVED 2026-08-20: Easy Mode confirmed, dead end confirmed, now guarded
@@ -185,18 +186,20 @@ has cost production defects before. Run in order — later rows depend on earlie
 > (an account problem, not an integration one). A `failed` row still proves 3.6/3.7's
 > webhook and dedup behaviour; only the "SMS arrives" half of the pass criteria is blocked.
 
-> ⚠️ **On the Salla DEMO store, measured 2026-08-23, none of the admin paths above fired.**
-> The storefront refuses checkout outright («لا يمكنك انهاء الطلب من متجر المعاينة»), and
-> that is not a maintenance-mode toggle we missed — the store's maintenance setting does not
-> exist (`GET /admin/v2/settings/fields/store.maintenance` → 404, twice). *New order* in the
-> admin produces a **Draft / Unpaid** order (#279531515) that fires nothing. Flipping a June
-> order (#264861210) to «تم الشحن» did not apply — the page carries an *"Order Editing —
-> Available on your plan"* banner, so a plan gate is the likely cause (unproven). Zero
-> deliveries reached `/salla/webhooks` all session. Until Salla answers how a
-> Development-status app gets an orderable store, 3.5–3.7 are proven by
-> `backend/scripts/replay-salla-webhooks.ts` — real captured payload shapes, signed with the
-> prod secret, posted to prod — and recorded as **"code path PASS, delivery shape assumed"**,
-> never as a Salla delivery.
+>  ⚠️ **On the Salla DEMO store, measured 2026-08-23: the admin paths DO fire — and were all refused by us.**
+> First reading was wrong on two counts, both corrected the same day. (1) The storefront
+> refuses checkout («لا يمكنك انهاء الطلب من متجر المعاينة»), but the admin *New order* works
+> once the draft is completed: set **Shipping & delivery** with a full National Address (a
+> courier — *Dev Company* — then appears), then **Payment → Fully paid → Cash on delivery**
+> with a non-zero fee, then *Create order* → a **"Confirm new order"** dialog; only that dialog
+> turns the Draft into a real order. The earlier «Draft / nothing fired» and «status flip did
+> not apply» readings were incomplete forms and a sidebar filter click, not platform limits.
+> (2) The resulting `order.created` (and the 13:26 `order.status.updated`) DID reach
+> `POST /salla/webhooks` — and got **401**, because the API-registered subscriptions were
+> unsigned (Tier 0.9). The portal Webhooks Log shows the same events for the old
+> `Jawab24-Dev` app too (dead ngrok URL → 404); that app still holds subscriptions on the
+> demo store and should be uninstalled from it.
+
 
 | # | Step | Pass criteria | On failure |
 |---|------|---------------|------------|
@@ -265,9 +268,13 @@ already tell us. This is a standing rule, not a one-off caution.
 - **Templates were ALL OFF** on the store (the schema default) — switched `order_confirmed` +
   `order_shipped` ON at 10:14 UTC via the merchant API, verified in the DB. Without that step
   every later row would have produced zero log rows and read as a dedup pass.
-- **3.5–3.7 ⏸ blocked on Salla's side** (see the caveat above the table): storefront checkout
-  refused, no maintenance setting, admin order stays Draft, status flip did not apply. Zero
-  deliveries to `/salla/webhooks`. ⏭ replay harness + the support question.
+- **3.5–3.7 🔴 reached Salla's side and were refused by OURS.** Admin order #279531515
+  (`order_id 1622777182`, COD, Dev Company) created at 11:46 UTC → Salla delivered
+  `order.created` to `/salla/webhooks` → **401**: the subscription was unsigned (Tier 0.9 —
+  every API-registered subscription was `strategy: ""`, secret null, since the integration
+  was built). Fix = signed list-then-upsert in `registerWebhooks`; after deploy, press
+  *Re-register* on the store and re-fire by flipping #279531515 to «تم الشحن» and creating
+  its shipment. The replay harness is now the fallback, not the path.
 - **3.8 🔴 defect found instead of a result.** `test-reply` on the review page against
   #264861210: the model called `lookup_order` every time (`track_shipment` 0 calls) and then
   `verify_and_get_shipment` → `verification_expired` **4 of 4** — a customer who answers the

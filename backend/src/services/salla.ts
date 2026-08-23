@@ -160,27 +160,93 @@ export function isOrderEvent(event: string): boolean {
     return event.startsWith('order.') || event === 'abandoned.cart';
 }
 
+/** Webhook payload version 2 — the shape `controllers/salla.ts` parses (v1 differs). */
+const SALLA_WEBHOOK_VERSION = 2;
+
+/**
+ * The security fields every subscription we own must carry.
+ *
+ * A subscription registered WITHOUT these delivers with no `X-Salla-Signature`
+ * at all (Merchant API `GET /admin/v2/webhooks` showed `security: { strategy: "",
+ * secret: null }` on all ten of the demo store's subscriptions, 2026-08-23), and
+ * `verifyWebhookHmac` correctly refuses every such delivery with 401. That is why
+ * no order or product event had ever been accepted while the portal-configured
+ * app events (`app.installed`, `app.store.authorize`) — signed with the App's
+ * Webhook Secret Key — passed. The same key is used here so the verifier stays
+ * one function for both sources.
+ */
+function webhookSecurityFields(): { version: number; security_strategy: 'signature'; secret: string } {
+    return { version: SALLA_WEBHOOK_VERSION, security_strategy: 'signature', secret: config.salla.webhookSecret };
+}
+
+interface SallaWebhookSubscription {
+    id: number;
+    event: string;
+    url: string;
+    security?: { strategy?: string | null; secret?: string | null } | null;
+}
+
+/**
+ * Subscriptions Salla already holds for OUR endpoint, keyed by event. A listing
+ * failure is reported and treated as "none known" — the subscribe path below
+ * then answers 422 for duplicates, which it tolerates as before.
+ */
+async function listOwnSubscriptions(accessToken: string, webhookUrl: string): Promise<Map<string, SallaWebhookSubscription>> {
+    const own = new Map<string, SallaWebhookSubscription>();
+    try {
+        const data = await sallaApiGet<{ data: SallaWebhookSubscription[] }>('https://api.salla.dev/admin/v2/webhooks', accessToken);
+        for (const sub of data.data ?? []) {
+            if (sub.url === webhookUrl) own.set(sub.event, sub);
+        }
+    } catch (err) {
+        captureError(err, 'Salla webhook listing failed — registering blind (existing unsigned subscriptions cannot be repaired this pass)', {
+            tags: { service: 'salla' },
+        });
+    }
+    return own;
+}
+
+/**
+ * Register (or repair) our subscription for every event in SALLA_WEBHOOK_EVENTS.
+ *
+ * List-then-upsert, like the Shopify path: an event Salla already has for our
+ * URL is UPDATED in place (`PUT /webhooks/{id}`) so the security fields land on
+ * it; a missing one is subscribed. A plain re-subscribe of an existing event
+ * answers 422 and would leave an unsigned subscription unsigned forever — which
+ * is exactly the state every pre-2026-08-23 store is in, and what the per-store
+ * "Re-register" button and scripts/reregister-webhooks.ts now fix.
+ *
+ * Single endpoint receives all events — dispatches by event type in body. Topics
+ * are written in parallel because each is an independent REST call; serial
+ * registration exceeded the OAuth-callback budget for merchants on slower
+ * networks (~11 topics × ~500ms = 5.5s p95).
+ */
 export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
-    // Single endpoint receives all events — dispatches by event type in body.
-    // Topics are subscribed in parallel because each is an independent REST call;
-    // serial subscription on Salla's REST endpoint exceeded the OAuth-callback
-    // budget for merchants on slower networks (~11 topics × ~500ms = 5.5s p95).
     const webhookUrl = `https://${config.salla.hostName}/salla/webhooks`;
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` };
+    const security = webhookSecurityFields();
 
-    const results = await Promise.allSettled(SALLA_WEBHOOK_EVENTS.map(event =>
-        tracedExternalCall('salla', 'registerWebhook', () =>
-            fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
+    const existing = await listOwnSubscriptions(accessToken, webhookUrl);
+
+    const results = await Promise.allSettled(SALLA_WEBHOOK_EVENTS.map(event => {
+        const current = existing.get(event);
+        const request = current
+            ? fetch(`https://api.salla.dev/admin/v2/webhooks/${current.id}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ name: event, url: webhookUrl, ...security }),
+            })
+            : fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({ name: event, event, url: webhookUrl }),
-            }).then(async response => ({ event, response, body: response.ok ? '' : await response.text() })),
-        ),
-    ));
+                headers,
+                body: JSON.stringify({ name: event, event, url: webhookUrl, ...security }),
+            });
+        return tracedExternalCall('salla', current ? 'updateWebhook' : 'registerWebhook', () =>
+            request.then(async response => ({ event, response, body: response.ok ? '' : await response.text() })),
+        );
+    }));
 
     for (let i = 0; i < results.length; i++) {
         const event = SALLA_WEBHOOK_EVENTS[i];
@@ -194,8 +260,10 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
         const { response, body } = result.value;
         if (response.ok) {
             registered.push(event);
-        } else if (response.status === 422) {
-            // 422 = webhook already exists, treat as success (mirrors Shopify)
+        } else if (response.status === 422 && !existing.has(event)) {
+            // 422 on SUBSCRIBE = the event exists but the listing did not show it
+            // (listing failed). Treat as registered, as before; the next
+            // re-registration with a working listing repairs its security fields.
             registered.push(event);
         } else {
             failed.push({ topic: event, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
