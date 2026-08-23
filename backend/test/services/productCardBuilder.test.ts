@@ -17,10 +17,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { EcommerceToolResult, InventoryInfo } from '@jawab24/shared';
 
 const mockGetProductByPlatformId = vi.fn();
-vi.mock('../../src/services/ecommerce', () => ({
-    getProductByPlatformId: (...args: unknown[]) => mockGetProductByPlatformId(...args),
-    buildProductUrl: (_p: string, domain: string, handle: string) => `https://${domain}/products/${handle}`,
-}));
+// URL helpers are production's own pure functions (Rule 10.8 — never a copy that can drift).
+vi.mock('../../src/services/ecommerce', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../src/services/ecommerce')>();
+    return {
+        getProductByPlatformId: (...args: unknown[]) => mockGetProductByPlatformId(...args),
+        buildProductUrl: real.buildProductUrl,
+        productUrlFor: real.productUrlFor,
+    };
+});
 
 // The mention path (other suite) needs db; the tool path must not touch it.
 const mockSelect = vi.fn();

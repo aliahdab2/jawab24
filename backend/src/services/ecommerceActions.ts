@@ -25,7 +25,7 @@ import {
     type InventoryInfo, type EcommerceProduct,
 } from '@jawab24/shared';
 import {
-    getStoreById, writeBackProductStock, buildProductUrl,
+    getStoreById, writeBackProductStock, productUrlFor,
     type PlatformProductDetail,
 } from './ecommerce';
 import { isDemoStore } from './demoStore';
@@ -649,7 +649,7 @@ function inventoryFromRow(store: StoreRow, product: EcommerceProduct): Inventory
         ...(product.variantSummary ? { variantSummary: product.variantSummary } : {}),
         ...(product.priceRange ? { price: product.priceRange } : {}),
         ...(product.currency ? { currency: product.currency } : {}),
-        ...(productUrlOf(store, product.handle) ? { productUrl: productUrlOf(store, product.handle) } : {}),
+        ...(productUrlFor(store, product) ? { productUrl: productUrlFor(store, product) } : {}),
         ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
         ...(product.handle ? { handle: product.handle } : {}),
         source: 'local',
@@ -678,9 +678,7 @@ function inventoryFromDetail(
         ...(variants ? { variants } : {}),
         ...(detail.priceRange ? { price: detail.priceRange } : {}),
         ...(detail.currency ? { currency: detail.currency } : {}),
-        ...((detail.productUrl ?? productUrlOf(store, detail.handle ?? product.handle))
-            ? { productUrl: detail.productUrl ?? productUrlOf(store, detail.handle ?? product.handle) }
-            : {}),
+        ...(liveProductUrl(store, product, detail) ? { productUrl: liveProductUrl(store, product, detail) } : {}),
         ...((detail.imageUrl ?? product.imageUrl) ? { imageUrl: (detail.imageUrl ?? product.imageUrl) as string } : {}),
         ...((detail.handle ?? product.handle) ? { handle: (detail.handle ?? product.handle) as string } : {}),
         source: 'live',
@@ -688,8 +686,10 @@ function inventoryFromDetail(
     };
 }
 
-function productUrlOf(store: { platform: string; storeDomain: string | null }, handle: string | null | undefined): string | undefined {
-    return handle && store.storeDomain ? buildProductUrl(store.platform, store.storeDomain, handle) : undefined;
+/** The live read's URL first (it may carry the platform's canonical one), then the synced row's. */
+function liveProductUrl(store: StoreRow, product: EcommerceProduct, detail: PlatformProductDetail): string | undefined {
+    return productUrlFor(store, { productUrl: detail.productUrl, handle: detail.handle })
+        ?? productUrlFor(store, product);
 }
 
 /** Variant filtering happens ONCE, here — it used to be re-implemented per platform on unsanitized input. */

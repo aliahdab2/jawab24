@@ -25,7 +25,7 @@ import { db } from '../../db';
 import { redis } from '../../lib/redis';
 import { ecommerceProducts, ecommerceStores } from '../../db/schema';
 import { captureError } from '../../utils/sentryHelpers';
-import { buildProductUrl, getProductByPlatformId } from '../ecommerce';
+import { productUrlFor, getProductByPlatformId } from '../ecommerce';
 import { t } from '../../utils/i18n';
 import { normalizeArabic, availabilityOf } from '@jawab24/shared';
 import type { EcommerceToolResult, InventoryInfo, ProductCard, StockAvailability } from '@jawab24/shared';
@@ -302,6 +302,7 @@ export async function buildProductCardsFromReplyText(
             .select({
                 title: ecommerceProducts.title,
                 handle: ecommerceProducts.handle,
+                productUrl: ecommerceProducts.productUrl,
                 imageUrl: ecommerceProducts.imageUrl,
                 priceRange: ecommerceProducts.priceRange,
                 totalInventory: ecommerceProducts.totalInventory,
@@ -321,7 +322,11 @@ export async function buildProductCardsFromReplyText(
             recordMentionOutcome('out_of_stock');
             return [];
         }
-        if (!p.imageUrl || !p.handle) {
+        // A card needs somewhere to send the customer. `productUrlFor` is the
+        // platform-canonical URL or one derived from the handle — Salla rows have
+        // no handle, so gating on `handle` alone suppressed every Salla card.
+        const productUrl = productUrlFor(store, p);
+        if (!p.imageUrl || !productUrl) {
             recordMentionOutcome('no_image_or_handle');
             return [];
         }
@@ -335,7 +340,7 @@ export async function buildProductCardsFromReplyText(
             // shelf is never overstated as a full one. (The scan above admits
             // only `active` rows, so the status branch of the ladder cannot fire.)
             availability: cardAvailability(availabilityOf(p)),
-            productUrl: buildProductUrl(store.platform, store.storeDomain, p.handle),
+            productUrl,
             imageUrl: p.imageUrl,
             lang,
         })];

@@ -1233,6 +1233,13 @@
       "when": 1787423125373,
       "tag": "0176_ga4_mirrored_at",
       "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1787488717573,
+      "tag": "0177_salla_product_url_and_domain",
+      "breakpoints": true
     }
   ]
 }

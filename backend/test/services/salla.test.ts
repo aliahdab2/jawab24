@@ -7,6 +7,7 @@ const {
     mockGetStoreById,
     mockUpdateStoreTokens,
     mockReplaceProductsAndRebuildSummary,
+    mockSaveStoreCategories,
     mockDecrypt,
     mockCaptureError,
     mockRedisSet,
@@ -15,6 +16,7 @@ const {
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
     mockReplaceProductsAndRebuildSummary: vi.fn(),
+    mockSaveStoreCategories: vi.fn(),
     mockDecrypt: vi.fn(),
     mockCaptureError: vi.fn(),
     mockRedisSet: vi.fn(),
@@ -71,6 +73,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
     applySyncedStoreInfo: vi.fn().mockResolvedValue(undefined),
+    saveStoreCategories: (...args: unknown[]) => mockSaveStoreCategories(...args),
     PRODUCT_SAFETY_CAP: 5000,
 }));
 
@@ -674,7 +677,8 @@ describe('Salla Service', () => {
                 status: 'sale',
                 price: { amount: 299.99, currency: 'SAR' },
                 quantity: 25,
-                categories: [{ name: 'Gadgets' }],
+                categories: [{ name: 'Gadgets', urls: { customer: 'https://mystore.salla.sa/gadgets/c77' } }],
+                urls: { customer: 'https://mystore.salla.sa/premium-widget/p42' },
                 options: [
                     {
                         name: 'Size',
@@ -702,7 +706,47 @@ describe('Salla Service', () => {
                 hasVariants: true,
                 variantSummary: 'Size: Small, Large',
                 tags: null,
+                // Salla has no slug: the link is the platform's own customer URL.
+                handle: null,
+                productUrl: 'https://mystore.salla.sa/premium-widget/p42',
             }));
+        });
+
+        it('persists the category links the products carry (distinct, before the summary rebuild)', async () => {
+            const gadgets = { name: 'Gadgets', urls: { customer: 'https://mystore.salla.sa/gadgets/c77' } };
+            const audio = { name: 'Audio', urls: { customer: 'https://mystore.salla.sa/audio/c78' } };
+            setupProductFetch([{
+                data: [
+                    makeSallaProduct({ id: 1, categories: [gadgets] }),
+                    makeSallaProduct({ id: 2, categories: [gadgets, audio] }),
+                    makeSallaProduct({ id: 3, categories: [{ name: 'No link' }] }),
+                    makeSallaProduct({ id: 4, status: 'deleted', categories: [{ name: 'Gone', urls: { customer: 'https://x/c1' } }] }),
+                ],
+                currentPage: 1, totalPages: 1,
+            }]);
+
+            await syncProducts('store-1');
+
+            expect(mockSaveStoreCategories).toHaveBeenCalledTimes(1);
+            const [storeId, categories] = mockSaveStoreCategories.mock.calls[0];
+            expect(storeId).toBe('store-1');
+            // Raw gather: duplicates and link-less entries are the saver's job to drop;
+            // a DELETED product contributes nothing.
+            expect(categories).toEqual([
+                { name: 'Gadgets', url: 'https://mystore.salla.sa/gadgets/c77' },
+                { name: 'Gadgets', url: 'https://mystore.salla.sa/gadgets/c77' },
+                { name: 'Audio', url: 'https://mystore.salla.sa/audio/c78' },
+            ]);
+            expect(mockSaveStoreCategories.mock.invocationCallOrder[0])
+                .toBeLessThan(mockReplaceProductsAndRebuildSummary.mock.invocationCallOrder[0]);
+        });
+
+        it('a product without urls.customer is stored without a link — never an invented one', async () => {
+            setupProductFetch([{ data: [makeSallaProduct({ id: 5 })], currentPage: 1, totalPages: 1 }]);
+            await syncProducts('store-1');
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped.handle).toBeNull();
+            expect(mapped.productUrl).toBeNull();
         });
 
         it('should handle products with no categories', async () => {
@@ -812,6 +856,10 @@ describe('Salla Service', () => {
 
             const result = await fetchStoreInfo('token');
             expect(result.storeType).toBe('demo');
+            // Salla hands the domain over as a full URL, with a path for demo stores.
+            // The column is an identity key: scheme stripped, path kept, never
+            // `https://https://` downstream (the 2026-08-23 catalog-block defect).
+            expect(result.storeDomain).toBe('demostore.salla.sa/dev-jkgsyu3w6pzzfrzw');
         });
 
         it('should convert numeric merchant id to string', async () => {
@@ -1386,7 +1434,10 @@ describe('Salla Service', () => {
 
         it('GETs /admin/v2/products/{id} and maps through the SAME mapper the sync uses', async () => {
             const product = makeSallaProduct({
-                id: 1001, name: 'Phone Case', quantity: 15, status: 'sale', slug: 'phone-case', thumbnail: 'https://cdn/case.jpg',
+                id: 1001, name: 'Phone Case', quantity: 15, status: 'sale', thumbnail: 'https://cdn/case.jpg',
+                // Salla's real link field. There is NO slug — the `/p/{slug}` URL this
+                // test used to assert was an invented shape (2026-08-23).
+                urls: { customer: 'https://mystore.salla.sa/phone-case/p1001', admin: 'https://s.salla.sa/products/1001' },
                 options: [{ name: 'Color', values: [{ name: 'Black' }, { name: 'Blue' }] }],
             });
             mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: product }) });
@@ -1400,9 +1451,9 @@ describe('Salla Service', () => {
                 status: 'active',
                 priceRange: '100 SAR',
                 totalInventory: 15,
-                handle: 'phone-case',
+                handle: null,
                 imageUrl: 'https://cdn/case.jpg',
-                productUrl: 'https://mystore.salla.sa/p/phone-case',
+                productUrl: 'https://mystore.salla.sa/phone-case/p1001',
                 // Salla reports stock per product; the per-option figure is the product's, labelled as such.
                 variants: [
                     { name: 'Color: Black', available: true, quantity: 15 },

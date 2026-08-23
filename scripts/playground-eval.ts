@@ -5700,6 +5700,66 @@ const TEST_CASES: TestCase[] = [
         notes: 'XGAP — the resolver\'s NOT_FOUND outcome through the model. Same gate as 797.',
     },
 
+    // --- Cat 82: Salla store links (prod replay, 2026-08-23) ------------------------
+    //
+    // The Salla test store's catalog block carried NO product links (Salla has no
+    // slug; the mapper read one) and no category links, and its store URL was
+    // `https://https://…`. Asked for «رابط التنانير» the model invented
+    // `?category=تنورة`. The demo fashion store is seeded the way a real Salla
+    // sync now writes rows: `productUrl` from `urls.customer`, categories on
+    // `platformData` → a `Categories:` line in the block. Links in these cases are
+    // the seed's (`backend/src/plugins/demo/seedData.ts`, DEMO_SALLA_STORE).
+    {
+        id: 804, category: 82, categoryName: 'Salla Store Links', channel: 'dm',
+        message: 'ابغى رابط العبايات',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['https://gulf-fashion.salla.sa/abayas/c1006'],
+            replyNotContains: ['https://https://', '?category='],
+        },
+        notes: 'CATEGORY LINK — the turn the prod customer repeated three times. The Categories line gives the model a real URL; a missing or invented one fails here.',
+    },
+    {
+        id: 805, category: 82, categoryName: 'Salla Store Links', channel: 'dm',
+        message: 'رابط العباية الكلاسيك السوداء لو سمحت',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['https://gulf-fashion.salla.sa/classic-black-abaya/p1000'],
+            replyNotContains: ['https://https://', '/products/classic-black-abaya', '/p/classic-black-abaya'],
+        },
+        notes: 'PRODUCT LINK — the platform-canonical `productUrl`, never a URL derived from a handle (no `/products/` or `/p/` page exists on a Salla storefront).',
+    },
+    {
+        id: 806, category: 82, categoryName: 'Salla Store Links', channel: 'dm',
+        message: 'Quelles tailles avez-vous ?',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'can i order today ?' },
+            { role: 'assistant', content: "Yes, you can order today. Just let me know which items you're interested in, and I can help you with the details." },
+            { role: 'user', content: 'Quelles tailles avez-vous ?' },
+            { role: 'assistant', content: 'We have sizes S, M, L and XL available for most of our abayas. Which product are you interested in?' },
+            { role: 'user', content: 'Oui, c’est bien du français.' },
+            { role: 'assistant', content: 'Parfait, je continuerai en français alors. Si vous avez d’autres questions sur nos produits ou tailles, n’hésitez pas.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['{"reply"', '"intent"'],
+        },
+        notes: 'PROD REPLAY of the JSON-envelope leak turn (Salla-linked DM, plain-text assistant history, tool path). The harness-wide no-envelope invariant covers every case; this one keeps the exact thread shape on record. Language is NOT asserted: accent-less French reads as the Latin floor and defers to history by design.',
+    },
+    {
+        id: 807, category: 82, categoryName: 'Salla Store Links', channel: 'dm',
+        message: 'كم سعر عطر العود الملكي؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            productCardTitles: ['عطر عود ملكي'],
+        },
+        notes: 'SALLA PRODUCT CARD — impossible before D-097: the card gate keyed on `handle`, which every real Salla row lacks, so no Salla store ever showed a card. «عطر عود ملكي» is the only Salla fixture with an image; the card carries its platform-canonical productUrl.',
+    },
+
     // --- Cat 81: order tracking — the two-phase identity flow ---------------------
     //
     // Demo stores answer the order tools from constants (services/demoOrders.ts):

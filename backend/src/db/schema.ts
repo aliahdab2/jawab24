@@ -1429,7 +1429,12 @@ export const ecommerceProducts = pgTable('ecommerce_products', {
 
     // Metadata
     tags: text('tags'),
-    handle: varchar('handle', { length: 500 }),  // URL slug: Shopify 'handle', Salla 'slug'
+    handle: varchar('handle', { length: 500 }),  // URL slug: Shopify 'handle', Zid 'slug'. Salla has none.
+    // The platform's own canonical storefront URL (Salla `urls.customer`). Preferred
+    // over a URL derived from `handle` — Salla's real product URLs cannot be
+    // derived at all (no slug field; `/p/{slug}` was an invented shape). Null for
+    // platforms that expose only a handle; `productUrlFor` then derives one.
+    productUrl: text('product_url'),
     imageUrl: text('image_url'),                  // Main product image URL (future use)
 
     createdAt: timestamp('created_at').defaultNow(),

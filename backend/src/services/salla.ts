@@ -13,15 +13,18 @@
 import { tracedExternalCall } from '../utils/tracing';
 import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
+import { normalizeStoreDomain } from './storeDomain';
 import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
     applySyncedStoreInfo,
+    saveStoreCategories,
     PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
     type NormalizedProduct,
     type PlatformProductDetail,
+    type StoreCategory,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
@@ -307,7 +310,9 @@ export async function fetchStoreInfo(accessToken: string) {
         storeName: s.name,
         storeEmail: s.email,
         storeCurrency: s.currency,
-        storeDomain: s.domain,
+        // Salla sends `domain` as a full URL — with a path for demo/development
+        // stores. The column is an identity key; canonicalise at the border.
+        storeDomain: normalizeStoreDomain(s.domain),
         merchantId: String(s.id),
         storeType: s.type ?? null,
     };
@@ -315,9 +320,14 @@ export async function fetchStoreInfo(accessToken: string) {
 
 // --- Products (REST, page-based) ---
 
+/** Customer/admin links Salla attaches to products AND categories (docs.salla.dev List Products). */
+interface SallaUrls {
+    customer?: string;
+    admin?: string;
+}
+
 interface SallaProduct {
     id: number;
-    slug?: string;
     name: string;
     description?: string; // HTML — stripped to plain text before storage
     type: string;
@@ -329,8 +339,26 @@ interface SallaProduct {
         name: string;
         values: Array<{ name: string }>;
     }>;
-    categories: Array<{ name: string }>;
+    categories: Array<{ name: string; urls?: SallaUrls }>;
     sku: string | null;
+    /**
+     * The product's real storefront URL. Salla has NO `slug` field — the
+     * `/p/{slug}` URL the mapper used to build never matched a real store, and
+     * every real Salla row was stored without a link (20/20 on the test store,
+     * 2026-08-23). `urls.customer` is the only source of a product link.
+     */
+    urls?: SallaUrls;
+}
+
+/** Distinct category links across a product list, for `saveStoreCategories`. */
+export function collectSallaCategories(products: ReadonlyArray<Pick<SallaProduct, 'categories'>>): StoreCategory[] {
+    const out: StoreCategory[] = [];
+    for (const p of products) {
+        for (const c of p.categories ?? []) {
+            if (c?.name && c.urls?.customer) out.push({ name: c.name, url: c.urls.customer });
+        }
+    }
+    return out;
 }
 
 
@@ -398,9 +426,12 @@ export async function syncProducts(storeId: string) {
     const accessToken = decrypt(store.accessToken, store.accessTokenIv);
     const products = await fetchAllProducts(accessToken);
 
-    const mapped = products
-        .filter(p => p.status !== 'deleted')
-        .map(mapSallaProduct);
+    const live = products.filter(p => p.status !== 'deleted');
+    const mapped = live.map(mapSallaProduct);
+
+    // Category links come from the same payload; persisted before the summary
+    // is rebuilt so the catalog block that this sync produces already lists them.
+    await saveStoreCategories(storeId, collectSallaCategories(live));
 
     return replaceProductsAndRebuildSummary(storeId, mapped);
 }
@@ -415,7 +446,8 @@ export function mapSallaProduct(p: SallaProduct): NormalizedProduct {
     const variantSummary = buildSallaVariantSummary(p.options);
     return {
         platformProductId: String(p.id),
-        handle: p.slug || null,
+        handle: null,
+        productUrl: p.urls?.customer || null,
         title: p.name,
         description: p.description ? stripHtml(p.description) : null,
         productType: p.categories?.[0]?.name || null,
@@ -678,7 +710,6 @@ export async function getProductById(storeId: string, platformProductId: string)
     if (!product || String(product.id) !== platformProductId || product.status === 'deleted') return null;
 
     const base = mapSallaProduct(product);
-    const storeDomain = await getStoreDomainForProduct(storeId);
     const productAvailable = (product.quantity ?? 0) > 0;
     const variants = (product.options || []).flatMap(opt =>
         opt.values.map(v => ({
@@ -690,7 +721,7 @@ export async function getProductById(storeId: string, platformProductId: string)
 
     return {
         ...base,
-        productUrl: product.slug && storeDomain ? `https://${storeDomain}/p/${product.slug}` : undefined,
+        productUrl: product.urls?.customer || undefined,
         variants: variants.length > 0 ? variants : undefined,
     };
 }
@@ -742,8 +773,3 @@ function mapSallaOrderStatus(slug: string): string {
     return map[slug] || slug;
 }
 
-/** Get store domain for building product URLs */
-async function getStoreDomainForProduct(storeId: string): Promise<string | null> {
-    const store = await getStoreById(storeId);
-    return store?.storeDomain || null;
-}

@@ -1695,6 +1695,8 @@ export interface EcommerceProduct {
   ecommerceStoreId: string;
   platformProductId: string;
   handle: string | null;
+  /** Platform-canonical storefront URL (Salla `urls.customer`); null where only a handle exists. */
+  productUrl: string | null;
   title: string;
   description: string | null;
   productType: string | null;

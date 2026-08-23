@@ -2627,3 +2627,60 @@ endpoint needs `shipping.read`; Shopify's fulfilment is a separate GraphQL selec
 merging them doubles every Phase-1 call for the common case. (c) *Use the pending blob as
 the Phase-1 cache and drop `ecom:tool:*` for order tools* — simpler, but it changes the
 `cached` counter's meaning and three pinned tests; recorded as a later simplification.
+
+## D-097 · Salla storefront links come from the platform's `urls.customer`, the store domain is canonicalised at ingest, and a model reply envelope is parsed in ONE place that can never pass raw text (2026-08-23)
+
+**Context.** The first real conversation on a Salla-linked page (the «Jawab24 Salla Test»
+page, demo store `demostore.salla.sa/dev-jkgsyu3w6pzzfrzw`, 26 messages) surfaced three
+defects with three separate causes. (1) The last reply reached the customer as the French
+answer **followed by the raw `{"reply":…,"intent":…}` envelope**, flagged clean: the
+e-commerce tool path runs without `response_format`, and its two inline parsers — plus the
+failover provider's — fell back to the raw content on a parse failure (one of them with no
+flag at all). (2) The store link rendered `https://https://demostore…`: Salla's
+`store/info.domain` is a full URL, with a path for demo stores, stored verbatim, and every
+reader prefixed `https://`. (3) No product or category link existed, so the model invented
+`?category=تنورة` for a customer who asked for the skirts page three times: the mapper read
+`p.slug`, which Salla does not have (20/20 real rows `handle = NULL`), while the real links
+— `urls.customer` on products and on `categories[]` — were in every payload and discarded.
+The same class as the invented Zid tracking fields (D-095 era): an integration written
+against assumed field names, verified only by a demo seed that hand-typed the "right" data.
+
+**Measurement that shaped the ruling.** Forcing the strict reply grammar on the tool path
+would have made the leak grammatically impossible — but `response_format` alongside `tools`
+**suppresses tool calling** (gpt-4.1-mini, 10 runs per arm: a stock question 10/10 →
+3/10 `check_inventory` calls, an order question 10/10 → 5/10). The API accepts both; the
+old "cannot coexist" comment was wrong about the mechanism and right about the outcome. On
+the real tool prompt the leak shape is rare (0/12 on the replayed thread; 1/12 bare prose),
+and JSON-wrapping the assistant history (the #773 mechanism) took that to 12/12 clean — a
+history-format change held back as a separate, owner-approved step.
+
+**Ruling.**
+1. **One parser.** `ai-worker/src/services/reply/parseReplyContent.ts` serves every reply
+   call site (plain, provider, both tool phases). It parses, else **salvages** an embedded
+   envelope (its `reply` IS the answer; flag `json_salvaged`), else **empties** a broken one
+   (flag `invalid_json`), else passes envelope-free prose through. Raw content carrying an
+   envelope is never the reply. The empty-reply arbitration (`assertDeliverableOrThrow`) is
+   shared too; the tool path's hard-coded English "Thank you for your patience!" is gone,
+   and a Phase-2 empty reply propagates (the verified order data exists only in that call)
+   rather than regenerating without it. The eval harness fails ANY case whose delivered
+   reply contains an envelope marker. The tool path keeps `response_format` off, for the
+   measured reason above, recorded beside the shared schema constant (`replySchema.ts`).
+2. **Canonical domain.** `services/storeDomain.ts:normalizeStoreDomain` — scheme stripped,
+   host lower-cased, **path kept**, no trailing slash — applied in `fetchStoreInfo`;
+   `storeBaseUrl` is the only way to build a URL from the column. Migration `0177` rewrote
+   existing Salla rows in `ecommerce_stores` and `pending_ecommerce_installs` (collisions
+   skipped with a WARNING, never resolved in SQL). Zid keeps hostname-only (its stores have
+   no path; re-keying would change a unique key); Shopify already validates a bare host.
+3. **Links from the platform.** New `ecommerce_products.product_url` holds the platform's
+   canonical URL (Salla `urls.customer`); `productUrlFor` is the one resolver — canonical
+   URL first, handle-derived `/products/{handle}` for Shopify/Zid, **nothing** for a Salla
+   row without one. The `/p/{slug}` branch is deleted. Category links are gathered per sync
+   and stored atomically on `platform_data.categories` (`saveStoreCategories`), rendered as
+   a `Categories:` line with its own budget. Product cards gate on `productUrlFor`, so Salla
+   cards fire. The demo fashion store is seeded in the real row shape.
+
+**Out of scope, on record.** Return policy / contact unknown (Salla never syncs
+`policiesSummary`; `storeEmail` is the merchant's login, not customer-facing); the
+third-person voice («their support»), Gulf replies to a Levantine customer, and
+accent-less French reading as the Latin floor are model/detector behaviour with existing
+rulings — none of it is a prompt change, which this PR does not make.
