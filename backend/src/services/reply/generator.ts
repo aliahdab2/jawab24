@@ -9,7 +9,7 @@ import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
 import { getRetrievalService, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta, stripMarkdownLinks } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta, renderReplyForChannel, type ReplyRenderTarget } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
@@ -24,15 +24,11 @@ import { detectBusinessActionFlags } from './urgentFlags';
  * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
 async function dispatchAiReply(request: AiGenerateRequest, logger: Logger): Promise<AiGenerateResponse> {
-    const response = request.context?.ecommerceStoreId
-        ? await (await import('../ecommerceToolLoop')).generateReplyWithTools(request, logger)
-        : await aiService.generateReply(request);
-    // No channel we deliver to renders markdown. The model only started emitting
-    // `[label](url)` / `![alt](url)` once real storefront links entered its
-    // catalog block (D-097) — deterministic at the one dispatch point both
-    // production and the playground/eval share, so it holds for any model.
-    const reply = stripMarkdownLinks(response.reply);
-    return reply === response.reply ? response : { ...response, reply };
+    if (request.context?.ecommerceStoreId) {
+        const { generateReplyWithTools } = await import('../ecommerceToolLoop');
+        return generateReplyWithTools(request, logger);
+    }
+    return aiService.generateReply(request);
 }
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
@@ -398,6 +394,9 @@ export interface PlaygroundInput {
     /** Effective channel after applying commentReplyMode (dual/private → dm).
      *  Drives RAG retrieval, the dual-DM punctuation rewrite, and the AI context channel. */
     channel: 'comment' | 'dm';
+    /** Which channel renderer to apply to the reply (plain text vs WhatsApp markup) —
+     *  the same step the live pipeline takes in the adapter before sending. Defaults to plain. */
+    renderTarget?: ReplyRenderTarget;
     /** The channel the user actually tested (comment/dm) BEFORE the dual/private → dm
      *  flattening. Comment-specific steps — preprocessing (friend-tag/spam skip) and
      *  `resolveCommentLanguage` (post-language mirroring) — must key off this, not the
@@ -1031,7 +1030,10 @@ export class ReplyGenerator {
             gapRecorded = true;
         }
 
-        let finalReply: string | null = aiResponse.reply;
+        // Rendered exactly as the live adapter would render it before sending
+        // (MessagePlatformAdapter.renderReply), so the test surface and the eval
+        // see what the customer sees — not the canonical markdown-capable text.
+        let finalReply: string | null = aiResponse.reply ? renderReplyForChannel(aiResponse.reply, input.renderTarget ?? 'plain') : aiResponse.reply;
         if (skipped) {
             finalReply = null;
         } else if (useFallback) {

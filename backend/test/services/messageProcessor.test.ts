@@ -173,6 +173,7 @@ function createMockAdapter(overrides: Partial<MessagePlatformAdapter> = {}): Mes
         fetchSenderName: vi.fn().mockResolvedValue('Alice'),
         storeIncomingMessage: vi.fn().mockResolvedValue({ message: mockMessage, isNew: true }),
         getInternalMessageId: vi.fn((id: string) => id),
+        renderReply: vi.fn((text: string) => text),
         sendReply: vi.fn().mockResolvedValue(undefined),
         sendAwayMessage: vi.fn().mockResolvedValue(undefined),
         markAsReplied: vi.fn().mockResolvedValue(undefined),
@@ -361,6 +362,34 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         expect(result.success).toBe(true);
         expect(result.replyText).toBe('We are open 9-6!');
         expect(adapter.sendReply).toHaveBeenCalled();
+    });
+
+    // PROD 2026-08-23 (Salla page, Messenger): once real storefront links entered
+    // the catalog block the model wrote `![فستان](<product page>)` and Messenger
+    // showed it literally. Rendering is the ADAPTER's job (it knows its channel);
+    // the pipeline must call it before sending AND persist the rendered text, so
+    // the stored row is what the customer saw.
+    it('renders the reply through the adapter before sending, and persists the rendered text', async () => {
+        const { renderReplyForChannel } = await import('@jawab24/shared');
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'هذه صورة الفستان:\n![فستان](https://demostore.salla.sa/dev-x/فستان/p348732197)',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+        const adapter = createMockAdapter({
+            renderReply: vi.fn((text: string) => renderReplyForChannel(text, 'plain')),
+        });
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'بدي صورة', 'msg-1');
+
+        const rendered = 'هذه صورة الفستان:\nhttps://demostore.salla.sa/dev-x/فستان/p348732197';
+        expect(adapter.renderReply).toHaveBeenCalledTimes(1);
+        expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', rendered);
+        expect(result.replyText).toBe(rendered);
+        // The persisted outgoing row carries the rendered text, never the markdown.
+        const stored = vi.mocked(messagesService.storeOutgoingMessage).mock.calls.at(-1) ?? [];
+        expect(stored).toContain(rendered);
+        expect(stored.some(a => typeof a === 'string' && a.includes(']('))).toBe(false);
     });
 });
 

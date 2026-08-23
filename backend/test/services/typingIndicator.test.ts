@@ -44,6 +44,7 @@ function makeAdapter(overrides: Partial<MessagePlatformAdapter> = {}): MessagePl
         fetchSenderName: vi.fn(),
         storeIncomingMessage: vi.fn(),
         getInternalMessageId: vi.fn(),
+        renderReply: vi.fn((text: string) => text),
         sendReply: vi.fn(),
         sendAwayMessage: vi.fn(),
         markAsReplied: vi.fn(),

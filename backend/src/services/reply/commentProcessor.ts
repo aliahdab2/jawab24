@@ -816,6 +816,9 @@ export class CommentProcessor {
                 }
             }
 
+            // 9a. Render the canonical reply for this channel (see MessagePlatformAdapter.renderReply).
+            replyText = adapter.renderReply(replyText);
+
             // 9b. Enforce max length for public comment replies (280 chars, tweet-length)
             // Skip truncation for dual/private modes — the reply is sent as a DM where length is fine.
             if (commentReplyMode === 'public') {

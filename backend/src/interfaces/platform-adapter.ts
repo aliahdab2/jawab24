@@ -118,6 +118,15 @@ export interface MessagePlatformAdapter {
      * against, the echo handler would read our own replies as "a human answered"
      * and pause the bot after every message it sent.
      */
+    /**
+     * Render the canonical (markdown-capable) reply text into what THIS channel
+     * can display. Pure, synchronous, no I/O. The pipeline calls it immediately
+     * before `sendReply` and persists the result, so the stored row is what the
+     * customer saw. Messenger/Instagram render nothing → plain; WhatsApp has its
+     * own `*bold*` markup → translated. See `renderReplyForChannel`.
+     */
+    renderReply(text: string): string;
+
     sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined>;
 
     /**

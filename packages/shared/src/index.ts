@@ -117,6 +117,8 @@ export type { ExtractedPhone } from './utils/validation';
 
 // --- Markdown link/image syntax → plain text (customer channels render none of it) ---
 export { stripMarkdownLinks } from './markdownLinks';
+export { renderReplyForChannel } from './replyFormatting';
+export type { ReplyRenderTarget } from './replyFormatting';
 
 // --- SSE Event Types ---
 export * from './sse-events';

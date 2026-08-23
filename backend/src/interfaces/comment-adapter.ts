@@ -126,6 +126,15 @@ export interface CommentPlatformAdapter {
     ): Promise<{ comment: StoredComment; isNew: boolean }>;
 
     /** Send the reply to the platform */
+    /**
+     * Render the canonical (markdown-capable) reply text into what THIS channel
+     * can display. Pure, synchronous, no I/O. The pipeline calls it immediately
+     * before `sendReply` and persists the result, so the stored row is what the
+     * customer saw. Messenger/Instagram render nothing → plain; WhatsApp has its
+     * own `*bold*` markup → translated. See `renderReplyForChannel`.
+     */
+    renderReply(text: string): string;
+
     sendReply(opts: {
         platformCommentId: string;
         platformPageId: string;

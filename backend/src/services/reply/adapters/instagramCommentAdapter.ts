@@ -1,4 +1,5 @@
 import { pagesService } from '../../pages';
+import { renderReplyForChannel } from '@jawab24/shared';
 import { postsService } from '../../posts';
 import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
@@ -104,6 +105,10 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             comment: { id: created.id, replied: false },
             isNew: true,
         };
+    }
+
+    renderReply(text: string): string {
+        return renderReplyForChannel(text, 'plain');
     }
 
     async sendReply(opts: {
