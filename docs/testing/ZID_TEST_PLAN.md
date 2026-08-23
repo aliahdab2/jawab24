@@ -695,16 +695,22 @@ this gate than any amount of further code work.** Nothing in §A–§F can be cl
 > ✅ 2026-08-23 evening: that order was placed — from the Zid admin's manual-order wizard,
 > no phone and no storefront needed (recipe in E-1). The line above is kept as history.
 
-**Two defects found by the 2026-08-23 stress run — both block resubmission:**
+**Two defects found by the 2026-08-23 stress run — one closed, one still open:**
 
-1. **🔴 JSON envelope leaks to the customer on the order-lookup path (D-097).** Asking
+1. **✅ JSON envelope leaked to the customer on the order-lookup path (D-097) — FIXED and
+   verified live.** #916 reached production at 14:55Z (`94a6ca4`). Replayed at ~17:00Z from
+   the embedded merchant session against the same page: turn 1 (the message below) → a plain
+   Arabic identity challenge; turn 2 (name «Zid Customer» + phone, with `conversationHistory`)
+   → «طلبك رقم 73285179 تم توصيله في الرياض.» No envelope on either turn. ⚠️ Stored replies
+   cannot prove this either way — `messages` + `comments` hold 0 JSON-shaped outbound rows
+   over 7 days, because the leak only ever surfaced through `test-reply`, which is not
+   persisted; the replay is the evidence. Original finding, kept as history: asking
    «ابي اتابع طلبي، رقمه 73285179 وجوالي 966500000009» through `POST /pages/:id/test-reply`
    returned TWO raw `{"reply":…,"intent":"QUESTION",…}` envelopes back-to-back and **no human
    text at all**. Not Zid-specific — Salla and Zid share `ecommerceToolHandler`. The proper
    fix is **PR #916** (one shared `parseReplyContent` for all four call sites; the exact
-   doubled-envelope shape is pinned by `ai-worker/test/parseReplyContent.test.ts`), **merged
-   but NOT deployed** — prod was `6ee8126` (#914) at test time. ⛔ Do not resubmit before a
-   deploy that carries #916: a reviewer asking about their order gets raw JSON.
+   doubled-envelope shape is pinned by `ai-worker/test/parseReplyContent.test.ts`); prod was
+   `6ee8126` (#914) at test time, which is why the leak was still visible then.
 2. **🟠 Onboarding never self-skips.** Every open of app 7367 from the Zid dashboard —
    store connected, 4 products synced, a page linked — lands on «مرحباً بك في Jawab24 /
    لنربط متجر زد الخاص بك». Verified at the read path (reload → same screen) and at the
@@ -758,6 +764,6 @@ code change before publish.
   invoice number, which is #911 verified at the read path. L-3/L-10/L-11/L-12 and the #900
   IDOR guard re-verified live from the embedded merchant session. Exit-gate row for bullet 3
   flips 🟠 → 🟢. Two defects recorded under the gate table: the **D-097 JSON-envelope leak on
-  the order-lookup path** (fix #916 merged, NOT deployed — a deploy gate), and **onboarding
+  the order-lookup path** (fix #916 — deployed 14:55Z and verified clean at ~17:00Z), and **onboarding
   that never self-skips** (the `embedded.tsx` comment describes a mechanism that does not
   exist). F-2/F-3 and L-7/L-8 deliberately not run — destructive days before resubmit.
