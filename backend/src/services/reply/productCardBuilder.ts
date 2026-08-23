@@ -20,7 +20,7 @@
  * Extension point: Phase 4a will add `recommend_products` — its results will also
  * flow through here. Add a new case in `extractCardsFromResult()` at that point.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db';
 import { redis } from '../../lib/redis';
 import { ecommerceProducts, ecommerceStores } from '../../db/schema';
@@ -28,6 +28,7 @@ import { captureError } from '../../utils/sentryHelpers';
 import { productUrlFor, getProductByPlatformId } from '../ecommerce';
 import { t } from '../../utils/i18n';
 import { normalizeArabic, availabilityOf } from '@jawab24/shared';
+import { META_TEMPLATE_LIMITS } from '../metaMessaging';
 import type { EcommerceToolResult, InventoryInfo, ProductCard, StockAvailability } from '@jawab24/shared';
 
 /**
@@ -82,6 +83,9 @@ type MentionOutcome =
 /** Why a TOOL-result card was or wasn't produced — this path emitted nothing until D-092. */
 type ToolCardOutcome = 'fired' | 'no_identity' | 'no_image' | 'no_url' | 'error';
 
+/** Why a LINK card was or wasn't produced (per linked product). */
+type LinkCardOutcome = 'fired' | 'out_of_stock' | 'no_image' | 'capped';
+
 /**
  * Fire-and-forget diagnostic counter — never blocks or fails a reply.
  * `metrics:product_card:{source}:{outcome}`; the mention keys are unchanged
@@ -89,7 +93,8 @@ type ToolCardOutcome = 'fired' | 'no_identity' | 'no_image' | 'no_url' | 'error'
  */
 function recordCardOutcome(source: 'mention', outcome: MentionOutcome): void;
 function recordCardOutcome(source: 'tool', outcome: ToolCardOutcome): void;
-function recordCardOutcome(source: 'mention' | 'tool', outcome: string): void {
+function recordCardOutcome(source: 'link', outcome: LinkCardOutcome): void;
+function recordCardOutcome(source: 'mention' | 'tool' | 'link', outcome: string): void {
     try {
         redis.incr(`metrics:product_card:${source}:${outcome}`).catch(() => { });
     } catch {
@@ -236,6 +241,15 @@ function buildCard(input: {
  * card, while every ingredient for one (image, URL, stock) sat in the DB.
  *
  * Contract — deliberately strict, because a wrong card is worse than none:
+ *   - A LINKED product is resolved first (2026-08-23). Since D-097 the model's
+ *     catalog block carries each product's real storefront URL, and a reply
+ *     that links one names it with no ambiguity at all — which is exactly what
+ *     title matching cannot do on a catalog with repeated titles (the Salla
+ *     demo store: 9 × «فستان», 5 × «تنورة» → `several_matches` on every turn,
+ *     while the reply's own link pointed at one specific row). Every in-stock
+ *     linked product with an image gets a card, in reply order, up to the
+ *     Generic Template's carousel limit. Only when the reply links nothing
+ *     does the title rule below apply.
  *   - EXACTLY ONE catalog product title appears in the reply → card. Zero or
  *     several → [] (the reply is a comparison, a list, or about something else).
  *     The decision is taken over the whole active catalog or not at all: a
@@ -276,7 +290,12 @@ export async function buildProductCardsFromReplyText(
         // plan change), and the extra row tells us the decision below would be
         // taken on a partial catalog.
         const titles = await db
-            .select({ id: ecommerceProducts.id, title: ecommerceProducts.title })
+            .select({
+                id: ecommerceProducts.id,
+                title: ecommerceProducts.title,
+                handle: ecommerceProducts.handle,
+                productUrl: ecommerceProducts.productUrl,
+            })
             .from(ecommerceProducts)
             .where(and(
                 eq(ecommerceProducts.ecommerceStoreId, storeId),
@@ -289,6 +308,16 @@ export async function buildProductCardsFromReplyText(
             // Cannot decide "exactly one" over a catalog we only partly read.
             recordMentionOutcome('scan_capped');
             return [];
+        }
+
+        // Link-first: the reply's own product URLs are an exact identity.
+        const linkedIds = linkedProductIds(replyText, store, titles);
+        if (linkedIds.length > 0) {
+            const linked = await buildCardsForLinkedProducts(linkedIds, store, lang);
+            if (linked.length > 0) return linked;
+            // Every linked product was unsellable or image-less — fall through to
+            // the title rule rather than return nothing on a reply that still
+            // names one product in prose.
         }
 
         const haystack = foldForMatch(replyText);
@@ -351,6 +380,106 @@ export async function buildProductCardsFromReplyText(
         });
         return [];
     }
+}
+
+/**
+ * Storefront URLs a reply carries, each in the ONE canonical form the catalog
+ * stores them in: percent-decoded (the model sometimes emits the encoded form of
+ * an Arabic path), scheme-normalised, no trailing punctuation or slash. Bounded
+ * by the carousel limit — a reply is not a sitemap.
+ */
+const REPLY_URL_RE = /https?:\/\/[^\s<>"'()[\]،؛]+/g;
+const TRAILING_PUNCT_RE = /[.,;:!?»\u060C\u061B]+$/;
+
+function replyUrls(replyText: string): string[] {
+    const found = new Set<string>();
+    for (const raw of replyText.match(REPLY_URL_RE) ?? []) {
+        const trimmed = raw.replace(TRAILING_PUNCT_RE, '');
+        let decoded = trimmed;
+        try { decoded = decodeURIComponent(trimmed); } catch { /* malformed escape — keep as written */ }
+        const canon = canonicalUrl(decoded);
+        if (canon) found.add(canon);
+        if (found.size >= META_TEMPLATE_LIMITS.maxCards) break;
+    }
+    return [...found];
+}
+
+function canonicalUrl(url: string): string | null {
+    if (!/^https?:\/\//i.test(url)) return null;
+    return url.replace(/\/+$/, '');
+}
+
+/** Catalog ids whose canonical storefront URL appears in the reply, in reply order. */
+function linkedProductIds(
+    replyText: string,
+    store: { platform: string | null; storeDomain: string | null },
+    catalog: Array<{ id: string; handle: string | null; productUrl: string | null }>,
+): string[] {
+    const urls = replyUrls(replyText);
+    if (urls.length === 0) return [];
+    const byUrl = new Map<string, string>();
+    for (const p of catalog) {
+        const canon = canonicalUrl(productUrlFor(store, p) ?? '');
+        if (canon && !byUrl.has(canon)) byUrl.set(canon, p.id);
+    }
+    const ids: string[] = [];
+    for (const u of urls) {
+        const id = byUrl.get(u);
+        if (id && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
+}
+
+/** One card per linked, sellable, imaged product — reply order, carousel-capped. */
+async function buildCardsForLinkedProducts(
+    ids: string[],
+    store: { platform: string | null; storeDomain: string | null },
+    lang: string,
+): Promise<ProductCard[]> {
+    const rows = await db
+        .select({
+            id: ecommerceProducts.id,
+            title: ecommerceProducts.title,
+            handle: ecommerceProducts.handle,
+            productUrl: ecommerceProducts.productUrl,
+            imageUrl: ecommerceProducts.imageUrl,
+            priceRange: ecommerceProducts.priceRange,
+            totalInventory: ecommerceProducts.totalInventory,
+        })
+        .from(ecommerceProducts)
+        .where(inArray(ecommerceProducts.id, ids))
+        .limit(ids.length);
+    const byId = new Map(rows.map(r => [r.id, r]));
+
+    const cards: ProductCard[] = [];
+    for (const id of ids) {
+        const p = byId.get(id);
+        if (!p) continue;
+        if (cards.length >= META_TEMPLATE_LIMITS.maxCards) {
+            recordCardOutcome('link', 'capped');
+            break;
+        }
+        // Same sellability rule as the title path: null = untracked/unlimited.
+        if (p.totalInventory !== null && p.totalInventory <= 0) {
+            recordCardOutcome('link', 'out_of_stock');
+            continue;
+        }
+        const productUrl = productUrlFor(store, p);
+        if (!p.imageUrl || !productUrl) {
+            recordCardOutcome('link', 'no_image');
+            continue;
+        }
+        recordCardOutcome('link', 'fired');
+        cards.push(buildCard({
+            title: p.title,
+            price: p.priceRange,
+            availability: cardAvailability(availabilityOf(p)),
+            productUrl,
+            imageUrl: p.imageUrl,
+            lang,
+        }));
+    }
+    return cards;
 }
 
 function foldForMatch(text: string): string {

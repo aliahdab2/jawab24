@@ -89,6 +89,29 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.replyMethod).toBe('ai');
         });
 
+        // PROD 2026-08-23 (Salla page, Messenger DM): once real storefront links
+        // entered the catalog block (D-097) the model began writing them as
+        // markdown — `![فستان](…/p348732197)` for a "picture" — which Messenger
+        // shows literally. The strip lives at the ONE dispatch point production and
+        // the playground share, so this is the test that proves it runs.
+        it('strips markdown link/image syntax from the delivered reply at dispatch', async () => {
+            const { aiService } = await import('../../src/services/ai');
+
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'هذه صورة الفستان المتوفر حالياً بسعر 83 ريال:\n![فستان](https://demostore.salla.sa/dev-x/فستان/p348732197)',
+                language: 'ar',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.replyText).toBe('هذه صورة الفستان المتوفر حالياً بسعر 83 ريال:\nhttps://demostore.salla.sa/dev-x/فستان/p348732197');
+            expect(result.replyText).not.toContain('](');
+        });
+
         it('should flag when AI response has COMPLAINT intent', async () => {
             const { aiService } = await import('../../src/services/ai');
 

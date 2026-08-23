@@ -9,7 +9,7 @@ import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
 import { getRetrievalService, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta, stripMarkdownLinks } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
@@ -24,11 +24,15 @@ import { detectBusinessActionFlags } from './urgentFlags';
  * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
 async function dispatchAiReply(request: AiGenerateRequest, logger: Logger): Promise<AiGenerateResponse> {
-    if (request.context?.ecommerceStoreId) {
-        const { generateReplyWithTools } = await import('../ecommerceToolLoop');
-        return generateReplyWithTools(request, logger);
-    }
-    return aiService.generateReply(request);
+    const response = request.context?.ecommerceStoreId
+        ? await (await import('../ecommerceToolLoop')).generateReplyWithTools(request, logger)
+        : await aiService.generateReply(request);
+    // No channel we deliver to renders markdown. The model only started emitting
+    // `[label](url)` / `![alt](url)` once real storefront links entered its
+    // catalog block (D-097) — deterministic at the one dispatch point both
+    // production and the playground/eval share, so it holds for any model.
+    const reply = stripMarkdownLinks(response.reply);
+    return reply === response.reply ? response : { ...response, reply };
 }
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
@@ -621,8 +625,10 @@ export class ReplyGenerator {
 
             const resolvedLang = resolveCommentLanguage(commentForAI, postMessage, effectiveKB);
 
-            // Model is resolved inside aiService.generateReply via userId.
-            const aiResponse = await aiService.generateReply({
+            // Model is resolved inside aiService.generateReply via userId. Comments
+            // carry no store id, so dispatch routes to the plain service — going
+            // through it anyway keeps the reply post-processing in ONE place.
+            const aiResponse = await dispatchAiReply({
                 comment: commentForAI,
                 // A DEFAULT, not an assertion: resolvedLang may have mirrored the post's/KB's
                 // language for a low-signal token ("ICDL" on an Arabic post). The ai-worker
@@ -630,7 +636,7 @@ export class ReplyGenerator {
                 // words (resolveChain.currentMessageIsIdentifiable) — nothing to pass here.
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
-            });
+            }, this.logger);
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
         }
