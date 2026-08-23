@@ -318,9 +318,19 @@ to Zid.
 **Still open on E-2:** an end-to-end SMS *arrival* (blocked on Vonage, not on Zid), and
 a carrier-backed order that actually carries a tracking number.
 
-### E-3. Status → delivered → order_delivered SMS
-**Capture — C7**: the delivered payload. Expected: delivered SMS (+ review request if
-configured). Order 72524870 is parked at `indelivery` and is the natural candidate.
+### E-3. Status → delivered → order_delivered SMS — ✅ **PASSED 2026-08-23** (webhook half)
+**Result:** Order 72524870 flipped `indelivery` → «مُكتمل» (`delivered`) straight after
+E-2. A second `order.status.update` arrived and wrote a second
+`customer_notifications_log` row (`order_delivered`, `zid:order_delivered:72524870`).
+SMS again blocked by the same Vonage quota rejection.
+
+**Capture — C7 — RESOLVED**: `delivered` is the status code (admin label «مُكتمل», which
+does NOT mean the code is `completed`). ✅ The `review_request` companion correctly did
+**not** fire — it is disabled on this store, so `also` was skipped rather than scheduled.
+Two rows, two distinct dedupe keys, no cross-talk between the shipped and delivered paths.
+
+**Still open on E-3:** SMS arrival (Vonage), and a `review_request` run with the template
+enabled.
 
 ### E-4. Payment field — ✅ **RESOLVED 2026-08-23**
 **Capture — C8**: `payment_status` **does exist** on Zid orders — value `pending` on
@@ -655,7 +665,7 @@ response time, test-account credentials).
 | Gate term | State | What is left |
 |---|---|---|
 | §L — bullet 1 | ✅ **green** | L-1/L-2 (the rejected scenario) + L-3/L-4/L-5/L-10/L-12 live; 7 pinned. L-6/L-9/L-14/L-15 are hardening |
-| §A–§F — bullet 3 | 🟠 **§E 1/6 + C6/C8 resolved, §F 0/3** | E-2 PASSED 2026-08-23 — the first Zid order webhook round-trip, proving we ingest their order data correctly (the ingestion half of bullet 2). Still owed: E-1 needs a real **storefront** order (`order.create` has never fired), and F-2/F-3 uninstall/reinstall |
+| §A–§F — bullet 3 | 🟠 **§E 2/6 + C6/C7/C8 resolved, §F 0/3** | E-2 and E-3 PASSED 2026-08-23 — the first Zid order webhooks ever to round-trip, proving we ingest their order data correctly (the ingestion half of bullet 2). Still owed: E-1 needs a real **storefront** order (`order.create` has never fired), and F-2/F-3 uninstall/reinstall |
 | §H — bullet 2 | 🔴 **0/11 live** | Paid checkout refuses while the app is `Draft`. Expect the reviewer to produce the first paid envelope |
 | Listing | 🔴 **all five open** | Gallery is still the **Salla** screenshots; no video, no reviewer credentials, no activation steps, no support SLA. The video is the longest-lead item and also clears Salla's blocker |
 
