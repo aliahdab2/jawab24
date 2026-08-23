@@ -172,7 +172,11 @@ export async function saveStoreCategories(storeId: string, categories: StoreCate
         if (!name || !url || byName.has(name)) continue;
         byName.set(name, { name, url });
     }
-    const sorted = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, STORE_CATEGORIES_MAX);
+    // Code-point order, not localeCompare: the latter follows the runtime's ICU
+    // default and could order differently between dev and prod.
+    const sorted = [...byName.values()]
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .slice(0, STORE_CATEGORIES_MAX);
     if (sorted.length === 0) return;
     const patch = JSON.stringify({ [PLATFORM_DATA_CATEGORIES_KEY]: sorted });
     await db.update(ecommerceStores).set({

@@ -640,6 +640,7 @@ async function readStock(store: StoreRow, product: EcommerceProduct, variant?: s
 /** InventoryInfo from the synced catalog row. `asOf` is the store's last sync. */
 function inventoryFromRow(store: StoreRow, product: EcommerceProduct): InventoryInfo {
     const availability = availabilityOf(product);
+    const productUrl = productUrlFor(store, product);
     return {
         platformProductId: product.platformProductId,
         productName: product.title,
@@ -649,7 +650,7 @@ function inventoryFromRow(store: StoreRow, product: EcommerceProduct): Inventory
         ...(product.variantSummary ? { variantSummary: product.variantSummary } : {}),
         ...(product.priceRange ? { price: product.priceRange } : {}),
         ...(product.currency ? { currency: product.currency } : {}),
-        ...(productUrlFor(store, product) ? { productUrl: productUrlFor(store, product) } : {}),
+        ...(productUrl ? { productUrl } : {}),
         ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
         ...(product.handle ? { handle: product.handle } : {}),
         source: 'local',
@@ -669,6 +670,7 @@ function inventoryFromDetail(
 ): InventoryInfo {
     const availability = availabilityOf(detail);
     const variants = filterVariants(detail.variants, variant);
+    const productUrl = liveProductUrl(store, product, detail);
     return {
         platformProductId: product.platformProductId,
         productName: detail.title || product.title,
@@ -678,7 +680,7 @@ function inventoryFromDetail(
         ...(variants ? { variants } : {}),
         ...(detail.priceRange ? { price: detail.priceRange } : {}),
         ...(detail.currency ? { currency: detail.currency } : {}),
-        ...(liveProductUrl(store, product, detail) ? { productUrl: liveProductUrl(store, product, detail) } : {}),
+        ...(productUrl ? { productUrl } : {}),
         ...((detail.imageUrl ?? product.imageUrl) ? { imageUrl: (detail.imageUrl ?? product.imageUrl) as string } : {}),
         ...((detail.handle ?? product.handle) ? { handle: (detail.handle ?? product.handle) as string } : {}),
         source: 'live',

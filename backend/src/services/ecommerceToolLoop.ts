@@ -23,7 +23,7 @@
 import axios from 'axios';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
-import { captureError } from '../utils/sentryHelpers';
+import { captureError, tagError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
 import { aiWorkerHeaders } from './aiWorkerAuth';
 import { logAiUsage } from './aiUsageLog';
@@ -33,7 +33,8 @@ import { getStoreById } from './ecommerce';
 import { ragRetrievalMode } from './kb/retrieval';
 import { buildProductCardsFromToolResults, buildProductCardsFromReplyText } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
-import { AiToolLoopExhaustedError } from '../utils/fbGraphErrors';
+import { AiToolLoopExhaustedError, AiEmptyReplyError } from '../utils/fbGraphErrors';
+import { typedAiErrorFromWire } from './aiWireErrors';
 import { noopLogger, type AiGenerateRequest, type AiGenerateResponse, type Logger } from '../types';
 import { VALID_TOOL_NAMES, type EcommerceToolCall, type EcommerceToolResult } from '@jawab24/shared';
 
@@ -311,6 +312,17 @@ export async function generateReplyWithTools(
         // generation (no tools).
         if (error instanceof AiToolLoopExhaustedError) {
             throw error;
+        }
+        // An EMPTY Phase-2 reply is not a hop failure: the ai-worker answered
+        // (typed AiEmptyReplyError on the wire, D-097) after the verified order /
+        // shipment data was already in its context. Regenerating here would run
+        // WITHOUT that data and hide the failure behind a generic answer, and
+        // booking it as AiWorkerUnreachable would lie to the breakdown script.
+        // Propagate the typed class so the processor flags the row
+        // (ai_empty_reply), exactly as the plain path does.
+        const wire = typedAiErrorFromWire(error);
+        if (wire?.error instanceof AiEmptyReplyError) {
+            throw tagError(wire.error, { aiErrorClass: wire.name });
         }
         // Hop-level failure (axios error, tool execution failure). Tag with
         // the same error_class as other hop failures so the breakdown script

@@ -350,7 +350,7 @@ interface SallaProduct {
     urls?: SallaUrls;
 }
 
-/** Distinct category links across a product list, for `saveStoreCategories`. */
+/** Every category link across a product list, raw — `saveStoreCategories` de-duplicates, sorts and caps. */
 export function collectSallaCategories(products: ReadonlyArray<Pick<SallaProduct, 'categories'>>): StoreCategory[] {
     const out: StoreCategory[] = [];
     for (const p of products) {

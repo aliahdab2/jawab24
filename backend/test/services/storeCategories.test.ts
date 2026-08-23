@@ -64,7 +64,7 @@ describe('saveStoreCategories', () => {
         const patch = patchOf(state.capturedUpdateSet);
         const categories = patch.categories as Array<{ name: string; url: string }>;
         expect(categories).toHaveLength(STORE_CATEGORIES_MAX);
-        expect(categories.map(c => c.name)).toEqual([...categories.map(c => c.name)].sort((a, b) => a.localeCompare(b)));
+        expect(categories.map(c => c.name)).toEqual([...categories.map(c => c.name)].sort());
         expect(categories.find(c => c.name === 'تنانير')?.url).toBe('https://s.salla.sa/c1');
         expect(categories.some(c => c.name.trim() === '' || c.url === '')).toBe(false);
         // Only the categories key is in the patch — merchantId/webhookStatus/tokenHealth are untouched by construction.
