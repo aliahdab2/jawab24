@@ -89,18 +89,19 @@ for the Partners portal *and* the `s.salla.sa` store admin; only the human check
 - ✅ **Tier 3.1 verified at the read path**: `pending_ecommerce_installs` row staged — platform
   `salla`, merchant `2108580704`, encrypted access + refresh tokens, `token_expires_at` = +14 days,
   scopes incl. `shipping.read`, `status = pending`, unclaimed.
-- ⏸ **Tier 3.2 (claim) is blocked on an account decision, not on code.** The claim binds the
-  store's registered email to the signed-in user's email (D-031). Every portal demo store carries a
-  synthetic `<slug>@email.partners` address, the demo store's admin settings pages 404 (email cannot
-  be changed), Jawab24 has **no password login** (Facebook / phone-OTP / Demo Mode), and Facebook
-  login **rewrites `users.email` on every sign-in** (`services/auth.ts`) — so a one-off DB edit of
-  a reviewer user's email does not survive their first login. Recommended path: a **real Salla
-  store registered with the Facebook review account's email** (the one already shared with Meta and
-  Apple review), which then serves Tier 3 *and* the Service Trial fields. Open questions for the
-  founder: can a *Development*-status app be installed on a non-demo store, and is the store
-  signup free. ⚠️ Parked risk: a Salla reviewer who installs onto *their own* test store hits
-  `email_mismatch` by design — the Service Trial instructions deliberately point at the
-  pre-connected store instead.
+- ✅ **Tier 3.2 (claim) was blocked by our own rule — resolved in code (D-093).** The claim binds
+  the store's registered email to the signed-in user's email (D-031). Every portal demo store
+  carries a synthetic `<slug>@email.partners` address, the demo store's admin settings pages 404
+  (email cannot be changed), the portal's Demo/Ready Store forms take no email, Jawab24 has **no
+  password login** (Facebook / phone-OTP / Demo Mode), and Facebook login **rewrites `users.email`
+  on every sign-in** (`services/auth.ts`) — so a one-off DB edit of a reviewer user's email does
+  not survive their first login. A real store is no way out either: **an app in Development
+  status can only be installed on demo stores** (docs.salla.dev/421410m0). So before publication
+  no claimable store could exist under D-031 as written. **Fix:** `verifyOwnership` now skips the
+  email match when `store/info.type` is `demo` or `development` (allow-list; `live`, missing and
+  unknown types keep the full proof) — same authoritative read, no new persistence. Consequence
+  worth knowing: a Salla reviewer who installs onto *their own* test store now binds it to the
+  review account instead of hitting `email_mismatch`.
 
 ### The Connect dead end — confirmed, now guarded
 
@@ -278,7 +279,7 @@ submission happens on the production app.
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
 - [ ] A real Salla store connected end-to-end — install + token push ✅ 2026-08-23 (demo store);
-      **claim ⏸ blocked on the reviewer-account/email decision** (see the 2026-08-23 update)
+      **claim unblocked by D-093 — run after the deploy that carries it** (see the 2026-08-23 update)
 - [ ] **Tier 3 green — including `track_shipment`, which has never once been run**
 - [ ] The three Easy-Mode env vars set, incl. `SALLA_APP_STORE_URL` (only knowable post-publish
       — see the ordering note in Phase 2.5)

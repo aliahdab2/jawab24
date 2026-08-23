@@ -155,7 +155,7 @@ has cost production defects before. Run in order — later rows depend on earlie
 | # | Step | Pass criteria | On failure |
 |---|------|---------------|------------|
 | 3.1 | Install the app onto a real store from the listing | `app.store.authorize` webhook 200; pending install staged with encrypted token + `token_expires_at` ≈14 days | **401 on every delivery ⇒ Tier 0.8 first** (strategy ≠ Signature — the 2026-08-23 failure), then *Reauthorize App* in the store admin re-fires the push; only then suspect the secret + `printenv`; do not publish |
-| 3.2 | Claim it | sign in as the account whose email matches the store's registered email → binds; wrong account → 403 `email_mismatch` | `SALLA_EASY_MODE_CLAIM_ENABLED` off is the usual cause |
+| 3.2 | Claim it | **live store:** sign in as the account whose email matches the store's registered email → binds; wrong account → 403 `email_mismatch`. **demo/development store (D-093):** binds for any signed-in account that has an email — its `@email.partners` address can never match | `SALLA_EASY_MODE_CLAIM_ENABLED` off is the usual cause; 403 on a demo store ⇒ prod predates D-093 |
 | 3.3 | Catalog sync | products land; count matches the store; `product_summary` populated | |
 | 3.4 | Test reply quoting a real product | correct name **and price** from the live catalog | |
 | 3.5 | `order.created` | **exactly one** customer SMS (dedup holds) | duplicate ⇒ stop; dedup key regression |
@@ -206,9 +206,13 @@ already tell us. This is a standing rule, not a one-off caution.
   row staged with encrypted access + refresh tokens, `token_expires_at` = +14 d, scopes incl.
   `shipping.read`. Before the fix: 4 × `401` (two events, one retry each); a demo-store "You are
   not authorized for this request" flash on the install redirect is cosmetic.
-- **3.2 ⏸ BLOCKED** — not by code: no Jawab24 account can carry the demo store's synthetic
-  `@email.partners` address (no password login; Facebook login rewrites `users.email` each
-  sign-in; demo-store settings 404). Decision pending — see the runbook's 2026-08-23 update.
+- **3.2 — blocked by D-031 on a demo store, then unblocked by D-093** (same day): no Jawab24
+  account can carry the demo store's synthetic `@email.partners` address (no password login;
+  Facebook login rewrites `users.email` each sign-in; demo-store settings 404), and a Development
+  app installs on demo stores only, so the email proof now applies to `store/info.type = live`
+  stores only. ⏭ Re-run 3.2 after the deploy that carries D-093; the pass criterion for a demo
+  store is "binds for any signed-in account with an email"; the `email_mismatch` branch is still
+  the expectation for a `live` store.
 - 3.3–3.10 not reached.
 
 ## Results — 2026-07-19 run (branch `feat/salla-easy-mode-claim-binding` @ `dc61723b`)

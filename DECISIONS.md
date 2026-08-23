@@ -2494,3 +2494,40 @@ D-088 had meanwhile been taken by the Business-Info presence ruling. The "free l
 argument it originally leaned on is superseded by the 2026-08-23 wizard measurement (no free
 pricing type exists for public apps); the pricing point stands only in its weaker form, that the
 wizard prices per plan, not per country.
+
+## D-093 · Salla Easy-Mode claim: the owner-email proof applies to LIVE stores only; demo/development stores bind to whoever claims them
+
+> Numbered before D-094 but recorded after it: D-094 was drafted on 2026-08-20 as "D-088" and
+> renumbered on its rebase the same hour this entry was written; both landed 2026-08-23.
+
+**Decided:** 2026-08-23 · **Status:** Active (amends D-031; D-031's proof is unchanged for live stores)
+
+**Ruling.** `claimStoreHandler`'s `verifyOwnership` reads `store/info` (as it already did for the
+email) and returns `true` without the email comparison when `type` is `demo` or `development`.
+`live`, a missing field, and any unknown value keep the full D-031 proof — the exemption is an
+allow-list of the two documented non-live values (docs.salla.dev/5394261e0), never "anything that
+is not live". The `no_email` gate on the Jawab24 account stays in front of the verifier.
+
+**Why.** The first real token push against the production app (2026-08-23, demo store
+`2108580704`) exposed a lock-out the dry-run never reached: a Salla demo store's registered email
+is a synthetic `<slug>@email.partners` that nobody can sign in with — Jawab24 has no
+email/password signup, Facebook login rewrites `users.email` from the profile on every sign-in
+(so a one-off DB edit dies at the next login), the demo store's settings pages 404 (the email
+cannot be changed), and the Partners portal's Demo/Ready Store forms take no email at all. At the
+same time, **an app in Development status can only be installed on demo stores**
+(docs.salla.dev/421410m0). So under D-031 as written, no store that exists before publication
+could ever be claimed — not by the Tier 3 rehearsal (`docs/SALLA_TEST_PLAN.md`) and not by Salla's
+reviewer using the Service Trial credentials. The proof exists to stop a stranger attaching a real
+merchant's store to their workspace; a demo store has no merchant, no customers and no orders of
+value, so for it the match was never a proof, only a lock-out. Real merchants' path is untouched.
+
+**Rejected.** (a) A real Salla store registered with the review account's email — unusable
+pre-publication (demo-only installs). (b) Editing the reviewer user's `users.email` — overwritten
+at their first Facebook login. (c) An env allow-list of merchant ids — a second, hand-maintained
+source of truth for something `store/info` already states. (d) Exempting everything not `live` —
+an unknown future type must fail closed.
+
+**Residual risk, stated.** Anyone who installs the app on *their own* demo store can bind it to
+*their own* Jawab24 workspace without an email match — which is exactly the intended use, and
+yields a store with no real customers. A reviewer who installs onto their own test store instead
+of using ours now succeeds rather than hitting `email_mismatch`.

@@ -229,6 +229,8 @@ export async function fetchStoreInfo(accessToken: string) {
             currency: string;
             domain: string;
             id: number;
+            /** Store environment — `demo` | `development` | `live` (docs.salla.dev/5394261e0). */
+            type?: string;
         };
     }>('https://api.salla.dev/admin/v2/store/info', accessToken);
 
@@ -239,6 +241,7 @@ export async function fetchStoreInfo(accessToken: string) {
         storeCurrency: s.currency,
         storeDomain: s.domain,
         merchantId: String(s.id),
+        storeType: s.type ?? null,
     };
 }
 
