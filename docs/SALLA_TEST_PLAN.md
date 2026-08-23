@@ -185,6 +185,19 @@ has cost production defects before. Run in order — later rows depend on earlie
 > (an account problem, not an integration one). A `failed` row still proves 3.6/3.7's
 > webhook and dedup behaviour; only the "SMS arrives" half of the pass criteria is blocked.
 
+> ⚠️ **On the Salla DEMO store, measured 2026-08-23, none of the admin paths above fired.**
+> The storefront refuses checkout outright («لا يمكنك انهاء الطلب من متجر المعاينة»), and
+> that is not a maintenance-mode toggle we missed — the store's maintenance setting does not
+> exist (`GET /admin/v2/settings/fields/store.maintenance` → 404, twice). *New order* in the
+> admin produces a **Draft / Unpaid** order (#279531515) that fires nothing. Flipping a June
+> order (#264861210) to «تم الشحن» did not apply — the page carries an *"Order Editing —
+> Available on your plan"* banner, so a plan gate is the likely cause (unproven). Zero
+> deliveries reached `/salla/webhooks` all session. Until Salla answers how a
+> Development-status app gets an orderable store, 3.5–3.7 are proven by
+> `backend/scripts/replay-salla-webhooks.ts` — real captured payload shapes, signed with the
+> prod secret, posted to prod — and recorded as **"code path PASS, delivery shape assumed"**,
+> never as a Salla delivery.
+
 | # | Step | Pass criteria | On failure |
 |---|------|---------------|------------|
 | 3.1 | Install the app onto a real store from the listing | `app.store.authorize` webhook 200; pending install staged with encrypted token + `token_expires_at` ≈14 days | **401 on every delivery ⇒ Tier 0.8 first** (strategy ≠ Signature — the 2026-08-23 failure), then *Reauthorize App* in the store admin re-fires the push; only then suspect the secret + `printenv`; do not publish |
@@ -194,7 +207,7 @@ has cost production defects before. Run in order — later rows depend on earlie
 | 3.5 | `order.created` | **exactly one** customer SMS (dedup holds) | duplicate ⇒ stop; dedup key regression |
 | 3.6 | `order.status.updated` → `shipped` | shipped SMS held for the grace window, then sent | |
 | 3.7 | `order.shipment.created` | tracking upgraded **in place** — still exactly one SMS total, now carrying the tracking number | two SMS ⇒ `upgradePendingOnDuplicate` regression |
-| 3.8 | **`track_shipment` on a real shipped order** — NEW, never yet run live | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing |
+| 3.8 | **`track_shipment` on a real shipped order** — NEW, never yet run live | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link. **Prove the shipments call was actually made** before reading anything into a silent Sentry: after the 2026-08-23 fix the verify step reads the shipment live whenever the model's Phase-1 tool was `lookup_order`, so `metrics:ecom:verify:sibling` or `…:live` > 0 in prod Redis is the evidence the endpoint was hit | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing. ⛔ 2026-08-23: "no `Salla shipments lookup failed` in Sentry" was misread as 200 when the model had never called `track_shipment` (0 calls) — silence is not a result |
 | 3.9 | `app.uninstalled` | store row deactivates; no further webhook processing | |
 | 3.10 | Sentry + health | quiet; `scripts/health-check.sh` green | |
 
@@ -246,7 +259,24 @@ already tell us. This is a standing rule, not a one-off caution.
   stores only. ⏭ Re-run 3.2 after the deploy that carries D-093; the pass criterion for a demo
   store is "binds for any signed-in account with an email"; the `email_mismatch` branch is still
   the expectation for a `live` store.
-- 3.3–3.10 not reached.
+- **3.2 ✅ PASS** after the D-093 deploy (08:18 UTC) — the review account bound the demo store;
+  **3.3 ✅** 20 products, 11 webhooks registered, `failed: []`; **3.4 ✅** the reply quoted the
+  in-stock «تنورة» range 79–114 SAR and excluded the sold-out 124 SAR row, 2.1 s.
+- **Templates were ALL OFF** on the store (the schema default) — switched `order_confirmed` +
+  `order_shipped` ON at 10:14 UTC via the merchant API, verified in the DB. Without that step
+  every later row would have produced zero log rows and read as a dedup pass.
+- **3.5–3.7 ⏸ blocked on Salla's side** (see the caveat above the table): storefront checkout
+  refused, no maintenance setting, admin order stays Draft, status flip did not apply. Zero
+  deliveries to `/salla/webhooks`. ⏭ replay harness + the support question.
+- **3.8 🔴 defect found instead of a result.** `test-reply` on the review page against
+  #264861210: the model called `lookup_order` every time (`track_shipment` 0 calls) and then
+  `verify_and_get_shipment` → `verification_expired` **4 of 4** — a customer who answers the
+  identity question correctly was told «انتهت صلاحية التحقق». Root cause and fix: **D-096**
+  (Phase 2 verifies against any family's blob or a live read). The 200-vs-403 question on
+  `/admin/v2/shipments` is **still open**: the endpoint was never reached, so the silent
+  Sentry proved nothing. ⏭ Re-run 3.8 after the D-096 deploy and read
+  `metrics:ecom:verify:*` first.
+- 3.9–3.10 not reached.
 
 ## Results — 2026-07-19 run (branch `feat/salla-easy-mode-claim-binding` @ `dc61723b`)
 
