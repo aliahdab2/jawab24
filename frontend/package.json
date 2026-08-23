@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "rm -rf .next && npm run lint && next build",
-    "build:mobile": "rm -rf .next .next-mobile out && NEXT_PUBLIC_BUILD_TIME=$(date +%s%3N) NEXT_PUBLIC_API_URL=https://jawab24.com/api NEXT_PUBLIC_PHONE_AUTH_ENABLED=true IS_MOBILE_BUILD=true next build && cp -R .next-mobile out",
+    "build:mobile": "rm -rf .next .next-mobile out && node scripts/build-mobile.js && cp -R .next-mobile out",
     "build:mobile:clean": "rm -rf .next-mobile out && cd android && ./gradlew clean && cd .. && npm run build:mobile && npx cap sync android && cd android && ./gradlew assembleDebug",
     "build:android:release": "rm -rf .next-mobile out && npm run build:mobile && node scripts/strip-mobile-assets.js && npx cap sync android && cd android && ./gradlew bundleRelease",
     "build:ios:payment-guard": "node scripts/neutralize-ios-payment-routes.js",

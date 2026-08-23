@@ -42,6 +42,15 @@ cd frontend && npm run build:mobile
 ```
 
 If this fails:
+- **«Mobile build refused: NEXT_PUBLIC_SENTRY_DSN is not set»** — the guard in
+  `frontend/scripts/build-mobile.js`. `NEXT_PUBLIC_*` values are inlined by
+  `next build` and baked into the APK/IPA, so a missing one cannot be repaired
+  at runtime: the store binary ships without it. A DSN-less build produces an
+  app that reports **no crashes at all** — which is how a merchant-visible
+  crash went unnoticed for 90 days (zero Sentry events from `app.jawab24.com`).
+  Fix by putting the DSN in `frontend/.env.local` (the same value the web image
+  gets as a Docker build arg), then re-run. Do **not** work around the guard.
+  ⚠️ A fresh worktree has no `.env.local` — copy it from the main checkout.
 - Check TypeScript errors: `cd frontend && npx tsc --noEmit`
 - Check lint errors: `cd frontend && npm run lint`
 
