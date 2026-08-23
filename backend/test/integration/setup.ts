@@ -64,7 +64,39 @@ process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_
 process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-test-integration-dummy';
 
 // Dedicated connection for integration test helpers (direct DB reads/writes in assertions).
-const testClient = postgres(connectionString, { prepare: false, max: 3 });
+//
+// ⚠️ THIS FILE IS A `setupFiles` ENTRY, so it runs ONCE PER TEST FILE, and vitest
+// gives each file a fresh module instance. A bare `postgres(...)` here therefore
+// builds a NEW POOL PER FILE — ~55 of them in one run — and the only teardown is
+// the `beforeExit` handler at the very bottom, which fires once at the end of the
+// process. Nothing released a connection in between.
+//
+// That is invisible while this suite is the only thing touching the server: the
+// pools sit idle and the run finishes. It becomes a failure the moment ANOTHER
+// checkout runs its own integration suite at the same time — the per-checkout
+// test databases (2026-08-09) stopped the two suites from truncating each other's
+// fixtures, but a separate database is still the SAME Postgres server and the same
+// `max_connections = 100`. On 2026-08-23 a pre-deploy died at file 53 of 55 with
+// `53300 sorry, too many clients already`, while a second worktree's suite held 27
+// connections; measured live in `pg_stat_activity`, the idle ones were ~2 minutes
+// old. It reads as a flaky failure in whatever file happened to be running
+// (`flagMeta.test.ts`), which is nowhere near the actual cause.
+//
+// So the pool is cached on `globalThis` and shared by every file in the fork
+// (`singleFork: true`, so there is exactly one). Total connections are now bounded
+// at `max` for the whole run instead of `max × file count`.
+//
+// `idle_timeout` is the complementary net, not the fix: if a pool is ever orphaned
+// anyway, it releases itself rather than holding until process exit. The app client
+// in `src/db` has carried one from the start — this one simply never did.
+const CACHED_CLIENT = Symbol.for('jawab24.integrationTestClient');
+type ClientCache = typeof globalThis & { [CACHED_CLIENT]?: ReturnType<typeof postgres> };
+const globalCache = globalThis as ClientCache;
+
+const testClient = globalCache[CACHED_CLIENT]
+    ?? postgres(connectionString, { prepare: false, max: 3, idle_timeout: 20 });
+globalCache[CACHED_CLIENT] = testClient;
+
 export const testDb = drizzle(testClient, { schema });
 // drizzle(client) replaces date/timestamp serializers with identity fns — raw sql
 // fragments with Date params would crash. Same restoration the app client gets.
@@ -121,13 +153,25 @@ afterEach(async () => {
 });
 
 // Close DB pools on process exit so the pre-deploy script can DROP the database.
-process.once('beforeExit', async () => {
-    await testClient.end().catch(() => {});
-    try {
-        const { client } = await import('../../src/db');
-        await client.end().catch(() => {});
-    } catch { /* app module may not have been imported */ }
-});
+//
+// Registered once for the whole fork, not once per file: `process.once` de-dupes
+// nothing here — each file's module instance passes a DIFFERENT closure, so this
+// used to install ~55 identical handlers. Harmless in effect, but it made the
+// per-file re-execution above easy to miss when reading this file.
+const EXIT_HOOK_INSTALLED = Symbol.for('jawab24.integrationTestExitHook');
+type ExitHookCache = typeof globalThis & { [EXIT_HOOK_INSTALLED]?: true };
+const exitHookCache = globalThis as ExitHookCache;
+
+if (!exitHookCache[EXIT_HOOK_INSTALLED]) {
+    exitHookCache[EXIT_HOOK_INSTALLED] = true;
+    process.once('beforeExit', async () => {
+        await testClient.end().catch(() => {});
+        try {
+            const { client } = await import('../../src/db');
+            await client.end().catch(() => {});
+        } catch { /* app module may not have been imported */ }
+    });
+}
 
 // ===================== Helpers =====================
 
