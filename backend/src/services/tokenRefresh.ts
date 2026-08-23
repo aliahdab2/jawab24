@@ -19,31 +19,56 @@ import { noopLogger } from '../types/logger';
  * They only become invalid when the user changes their Facebook password, revokes
  * app permissions, or the app loses approval.
  *
- * This service periodically verifies tokens are still valid using Facebook's
- * debug_token API, and notifies users to reconnect when tokens are found invalid.
- * If the user's long-lived token is still valid, it also re-fetches fresh page
- * tokens via /me/accounts to keep them up to date.
+ * This service periodically verifies tokens are still valid and notifies users
+ * to reconnect when tokens are found invalid, in two passes:
+ *
+ *   1. Every stale PAGE token is checked directly against its own page
+ *      (`facebookService.verifyPageToken`). This is the only check that sees a
+ *      page-level revocation — Meta dropping the app's access to ONE page while
+ *      the user token stays valid (a later Facebook Login that ticked a
+ *      different subset of pages). A confirmed revoke clears the token and
+ *      notifies; a transport error leaves it for the next sweep.
+ *   2. Where the owning user still has a long-lived token, `/me/accounts`
+ *      re-fetches fresh page tokens as before.
+ *
+ * Until 2026-08-23 only pass 2 existed. It could not see a page-level revoke
+ * (a page missing from `/me/accounts` is deliberately left intact — the
+ * false-clear loop), and a user with NO Facebook token had every page
+ * disconnected even when the page tokens themselves were valid — which is
+ * exactly the shape of a store-provisioned account whose page was linked
+ * through the embedded break-out. «Jawab24 Test» sat "connected" with a
+ * code-190 token for 7+ hours, ignoring every customer.
  */
 
 /** Re-verify tokens that haven't been checked in this window. */
 const VERIFY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** How often the cron sweeps. */
 const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+/**
+ * First sweep shortly after boot. A bare `setInterval` restarts its clock on
+ * every deploy, and with several deploys a day (four on 2026-08-23 alone) the
+ * six-hour mark was never reached — the monitor had not run in over a day.
+ */
+const INITIAL_SWEEP_DELAY_MS = 2 * 60 * 1000; // 2 minutes
 /** Delay between per-user checks to avoid hammering Facebook's API. */
 const PER_USER_DELAY_MS = 2000;
+/** Delay between per-page direct checks — one Graph read each, bounded by the stale set. */
+const PER_PAGE_DELAY_MS = 250;
 
 let logger: Logger = noopLogger;
 export function setTokenRefreshLogger(l: Logger): void { logger = l; }
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let initialSweepHandle: ReturnType<typeof setTimeout> | null = null;
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Find pages whose tokens haven't been verified recently and check
- * they're still valid via Facebook's debug_token + /me/accounts APIs.
+ * Find pages whose tokens haven't been verified recently and check they are
+ * still valid — each page token against its own page, then /me/accounts on
+ * the owner's user token where one exists.
  */
 export async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: number; invalid: number }> {
     const staleThreshold = new Date(Date.now() - VERIFY_INTERVAL_MS);
@@ -87,10 +112,62 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
 
     logger.info(`[TokenHealth] ${stalePages.length} page(s) need token verification`);
 
-    // Group by userId for efficient batch processing
+    // Pass 1 — each page token against its own page. Definitive for a
+    // page-level revoke, and independent of whether the owner still has a
+    // user token at all.
+    const revokedPageIds = new Set<string>();
+    let pageIndex = 0;
+    for (const page of stalePages) {
+        if (pageIndex > 0) await sleep(PER_PAGE_DELAY_MS);
+        pageIndex++;
+
+        let pageToken: string;
+        try {
+            pageToken = maybeDecryptToken(page.accessToken);
+        } catch (decryptErr) {
+            // Corrupt row / wrong key — a config-or-data problem, not a revoke.
+            captureError(decryptErr, 'Page token decryption failed — skipping verification this sweep (token NOT cleared)', {
+                tags: { service: 'token-health', entity: 'page' },
+                extra: { pageId: page.id },
+            });
+            continue;
+        }
+
+        try {
+            await facebookService.verifyPageToken(page.facebookPageId as string, pageToken);
+            await db
+                .update(pages)
+                .set({ tokenLastVerifiedAt: new Date(), disconnectReason: null, updatedAt: new Date() })
+                .where(eq(pages.id, page.id));
+            verified++;
+        } catch (error) {
+            if (isTokenRevoked(error)) {
+                const fbErr = error as FacebookApiError;
+                logger.warn(`[TokenHealth] Page "${page.name}" (${page.facebookPageId}) token revoked by Graph — disconnecting`, {
+                    pageId: page.id,
+                    code: fbErr.code,
+                    subcode: fbErr.subcode,
+                });
+                revokedPageIds.add(page.id);
+                invalid++;
+                if (page.userId) await notifyReconnectNeeded(page.userId, [page], 'token_revoked');
+            } else {
+                // Transport blip or an unrecognised shape — never a revoke.
+                // Left intact; the next sweep retries.
+                logger.warn(`[TokenHealth] Page "${page.name}" (${page.facebookPageId}) could not be verified (transient) — token left intact`, {
+                    pageId: page.id,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+    }
+
+    // Pass 2 — refresh via the owner's user token where one exists. Pages
+    // already found revoked are out: their tokens are cleared and a stale
+    // /me/accounts entry must not resurrect them.
     const pagesByUser = new Map<string, typeof stalePages>();
     for (const page of stalePages) {
-        if (!page.userId) continue;
+        if (!page.userId || revokedPageIds.has(page.id)) continue;
         const group = pagesByUser.get(page.userId) || [];
         group.push(page);
         pagesByUser.set(page.userId, group);
@@ -114,9 +191,12 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                 .limit(1);
 
             if (!user?.facebookAccessToken) {
-                logger.warn(`[TokenHealth] User ${userId} has no Facebook token — marking ${userPages.length} page(s) as unverifiable`);
-                invalid += userPages.length;
-                await notifyReconnectNeeded(userId, userPages, 'no_user_token');
+                // No user token to refresh from — but the page tokens were just
+                // checked directly in pass 1, and a page token does not need a
+                // user token to keep working (page tokens from a long-lived
+                // user token never expire by time). Disconnecting here used to
+                // kill every valid page of a store-provisioned account.
+                logger.info(`[TokenHealth] User ${userId} has no Facebook token — ${userPages.length} page(s) verified directly only, no refresh`);
                 continue;
             }
 
@@ -208,7 +288,7 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                 }
             }
 
-            verified += userPages.length;
+            // `verified` was counted per page in pass 1; pass 2 only refreshes.
         } catch (error) {
             // /me/accounts failed even after retries.
             //
@@ -251,7 +331,7 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
  * `pages.disconnect_reason` so support can answer "why isn't this customer
  * replying?" with one SQL query instead of cross-referencing logs.
  */
-export type DisconnectReason = 'token_revoked' | 'no_user_token' | 'user_revoked';
+export type DisconnectReason = 'token_revoked' | 'user_revoked';
 
 /** Notify user that they need to reconnect their page(s). */
 async function notifyReconnectNeeded(
@@ -286,17 +366,30 @@ async function notifyReconnectNeeded(
     }
 }
 
+function runSweep(): void {
+    verifyAndRefreshTokens().catch(err => {
+        captureError(err, 'Token health cron failed', { tags: { service: 'token-health' } });
+    });
+}
+
 export function startTokenRefreshCron(): void {
     if (intervalHandle) return;
-    logger.info(`[TokenHealth] Cron started — verifies every ${SWEEP_INTERVAL_MS / 3600000}h, re-checks tokens older than ${VERIFY_INTERVAL_MS / 3600000}h`);
-    intervalHandle = setInterval(() => {
-        verifyAndRefreshTokens().catch(err => {
-            captureError(err, 'Token health cron failed', { tags: { service: 'token-health' } });
-        });
-    }, SWEEP_INTERVAL_MS);
+    logger.info(`[TokenHealth] Cron started — first sweep in ${INITIAL_SWEEP_DELAY_MS / 60000}min, then every ${SWEEP_INTERVAL_MS / 3600000}h, re-checks tokens older than ${VERIFY_INTERVAL_MS / 3600000}h`);
+    // The interval alone never fired on a day with four deploys — each restart
+    // reset its clock. The early first sweep makes the 24h staleness window
+    // the real cadence, independent of how often the process is replaced.
+    initialSweepHandle = setTimeout(() => {
+        initialSweepHandle = null;
+        runSweep();
+    }, INITIAL_SWEEP_DELAY_MS);
+    intervalHandle = setInterval(runSweep, SWEEP_INTERVAL_MS);
 }
 
 export function stopTokenRefreshCron(): void {
+    if (initialSweepHandle) {
+        clearTimeout(initialSweepHandle);
+        initialSweepHandle = null;
+    }
     if (intervalHandle) {
         clearInterval(intervalHandle);
         intervalHandle = null;

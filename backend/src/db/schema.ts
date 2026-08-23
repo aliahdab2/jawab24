@@ -220,8 +220,10 @@ export const pages = pgTable('pages', {
     tokenLastVerifiedAt: timestamp('token_last_verified_at'),
     // Why the page is currently disconnected (access_token = ''). Null when connected.
     // Lets support answer "why isn't this customer replying?" with a single SQL query.
-    //   - 'token_revoked':  FB returned a real OAuth-revoked code/subcode (e.g. 190/460 password changed)
-    //   - 'no_user_token':  user has no facebook_access_token at all (incomplete onboarding or wiped)
+    //   - 'token_revoked':  FB returned a real OAuth-revoked code/subcode — on the user token
+    //                       (e.g. 190/460 password changed) or on the PAGE token itself (code 190
+    //                       on a page-level revoke). A page is judged by its own token, so an
+    //                       account with no user token keeps its valid pages.
     //   - 'user_revoked':   reserved for future Deauthorize Callback (user removed app from FB)
     disconnectReason: varchar('disconnect_reason', { length: 30 }),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),

@@ -905,6 +905,36 @@ export class FacebookService {
      * Subscribe a page to receive webhook events (feed + messages)
      * Must be called after connecting a page so Facebook sends events to our webhook
      */
+    /**
+     * Verify a PAGE token against the page it was issued for.
+     *
+     * This is the only check that sees a page-level revocation. `/me/accounts`
+     * on the USER token cannot: when Meta drops the app's access to one page
+     * (a later Facebook Login that ticked a different subset of pages — the
+     * page-picker gap), the user token stays valid and the page merely goes
+     * missing from the list, which `tokenRefresh` deliberately leaves intact.
+     * On 2026-08-23 «Jawab24 Test» sat "connected" for 7+ hours with a token
+     * Graph rejected as code 190 on every call, ignoring every customer —
+     * nothing outbound ran to notice, because nothing inbound arrived.
+     *
+     * Throws `FacebookApiError`; the caller classifies with `isTokenRevoked()`
+     * and MUST treat `isTransport` as "unknown, retry later", never as revoked.
+     */
+    async verifyPageToken(pageId: string, pageAccessToken: string): Promise<void> {
+        try {
+            await traced('verifyPageToken', () =>
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}`, {
+                    params: { fields: 'id', access_token: pageAccessToken },
+                }),
+            );
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                throw FacebookApiError.fromAxios(error, 'Page token verification failed');
+            }
+            throw error;
+        }
+    }
+
     async subscribePageToWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {
         try {
             this.logger.info('[Facebook] Subscribing page to webhooks', { pageId });
