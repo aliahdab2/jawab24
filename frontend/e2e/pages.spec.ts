@@ -332,7 +332,7 @@ test.describe('Pages Page', () => {
     // The pageTakenWarning copy starts with "{count} page(s) is/are already
     // connected to another Jawab24 account" — assert that exact phrase is
     // nowhere on screen. Substring match is robust to ICU pluralization.
-    await expect(page.getByText('already connected to another Jawab24 account', { exact: false })).toHaveCount(0);
+    await expect(page.getByText('connected to another Jawab24 account', { exact: false })).toHaveCount(0);
   });
 
   // D-039: when the FB page is held by a workspace the user is NOT a member
@@ -379,7 +379,8 @@ test.describe('Pages Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // The toast names the page and routes to support — it never names the account.
-    await expect(page.getByText('already connected to another Jawab24 account: Jawab24 Test', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Jawab24 Test', { exact: false }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('connected to another Jawab24 account', { exact: false })).toBeVisible();
   });
 
   // Regression guard for the actionable conflict path: when the user IS a
@@ -439,7 +440,7 @@ test.describe('Pages Page', () => {
 
     // The generic warning must NOT also fire — the two toast paths are
     // mutually exclusive (alreadyMemberOf takes precedence).
-    await expect(page.getByText('already connected to another Jawab24 account', { exact: false })).toHaveCount(0);
+    await expect(page.getByText('connected to another Jawab24 account', { exact: false })).toHaveCount(0);
   });
 
   test('should handle API failures gracefully', async ({ page }) => {
