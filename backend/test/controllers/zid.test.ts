@@ -1100,9 +1100,14 @@ describe('Zid Controller', () => {
             mockGetStoreById.mockResolvedValue({ id: 'store-1', platform: 'zid', isActive: true });
         });
 
+        // Shape captured from a live Zid order.status.update on dev store 3195980
+        // (2026-08-23). `invoice_number` === `id` is the number the Zid admin and the
+        // storefront invoice page both display; `code` is the invoice URL slug
+        // (order_url https://<store>.zid.store/o/<code>/inv) and is NOT an order number.
         const orderPayload = (overrides: Record<string, unknown> = {}) => ({
-            id: 9001,
-            code: 'ORD-100',
+            id: 72524870,
+            invoice_number: 72524870,
+            code: 'mdXMlMYYBt',
             customer: { name: 'Ahmed Ali', mobile: '966591555966' },
             ...overrides,
         });
@@ -1123,12 +1128,42 @@ describe('Zid Controller', () => {
                     type: 'order_confirmed',
                     customerPhone: '+966591555966',
                     customerName: 'Ahmed Ali',
-                    orderId: '9001',
-                    orderNumber: 'ORD-100',
+                    orderId: '72524870',
+                    orderNumber: '72524870',
                 }),
                 req.log,
             );
             expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        // Regression: the customer's SMS quoted `code` ("mdXMlMYYBt"), the invoice URL
+        // slug, instead of the order number the merchant and customer both see. Caught
+        // live on 2026-08-23 by a real order.status.update on dev store 3195980.
+        it('quotes the invoice number, never the `code` URL slug, as the order number', async () => {
+            const req = webhookRequest({
+                query: { e: 'order.create', sid: 'store-1' },
+                body: { data: orderPayload() },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            const event = mockDispatchOrderNotification.mock.calls[0][0];
+            expect(event.orderNumber).toBe('72524870');
+            expect(event.orderNumber).not.toBe('mdXMlMYYBt');
+        });
+
+        it('falls back to the order id when the payload carries no invoice_number', async () => {
+            const req = webhookRequest({
+                query: { e: 'order.create', sid: 'store-1' },
+                body: { data: orderPayload({ invoice_number: undefined }) },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ orderNumber: '72524870', orderId: '72524870' }),
+                req.log,
+            );
         });
 
         it('does NOT dispatch when the order has no customer mobile', async () => {
@@ -1162,9 +1197,87 @@ describe('Zid Controller', () => {
                 expect.objectContaining({
                     type: 'order_shipped',
                     customerPhone: '+966591555966',
-                    orderNumber: 'ORD-100',
+                    orderNumber: '72524870',
                     trackingNumber: 'TRK-1',
                 }),
+                req.log,
+            );
+        });
+
+        // Regression: the mapper only knew `tracking_number` / `shipping.tracking_number`,
+        // neither of which Zid sends. The real path is `shipping.method.tracking.number`
+        // (captured live 2026-08-23), so a genuinely tracked order shipped with an empty
+        // tracking number in the customer's SMS.
+        it('reads the tracking number from Zid\'s real shipping.method.tracking.number', async () => {
+            const req = webhookRequest({
+                query: { e: 'order.status.update', sid: 'store-1' },
+                body: {
+                    data: orderPayload({
+                        order_status: { code: 'indelivery' },
+                        shipping: {
+                            method: {
+                                tracking: { number: 'SA1234567890', status: 'in_transit', url: 'https://track.example/SA1234567890' },
+                                waybill_tracking_id: null,
+                            },
+                        },
+                    }),
+                },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'order_shipped', trackingNumber: 'SA1234567890' }),
+                req.log,
+            );
+        });
+
+        it('falls back to shipping.method.waybill_tracking_id when tracking.number is null', async () => {
+            const req = webhookRequest({
+                query: { e: 'order.status.update', sid: 'store-1' },
+                body: {
+                    data: orderPayload({
+                        order_status: { code: 'indelivery' },
+                        shipping: {
+                            method: {
+                                tracking: { number: null, status: null, url: null },
+                                waybill_tracking_id: 'WB-9988',
+                            },
+                        },
+                    }),
+                },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'order_shipped', trackingNumber: 'WB-9988' }),
+                req.log,
+            );
+        });
+
+        // «مندوب المتجر» (method.code 'custom') — the merchant delivers themselves, so
+        // every carrier field is null. This is the shape the dev store actually sends.
+        it('dispatches order_shipped with no tracking number when the merchant self-delivers', async () => {
+            const req = webhookRequest({
+                query: { e: 'order.status.update', sid: 'store-1' },
+                body: {
+                    data: orderPayload({
+                        order_status: { code: 'indelivery' },
+                        shipping: {
+                            method: {
+                                tracking: { number: null, status: null, url: null },
+                                waybill_tracking_id: null,
+                            },
+                        },
+                    }),
+                },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'order_shipped', trackingNumber: undefined }),
                 req.log,
             );
         });
@@ -1199,7 +1312,7 @@ describe('Zid Controller', () => {
             await webhookHandler(req, rep);
 
             expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
-                expect.objectContaining({ type: 'order_delivered', orderNumber: 'ORD-100' }),
+                expect.objectContaining({ type: 'order_delivered', orderNumber: '72524870' }),
                 req.log,
             );
         });
@@ -1230,7 +1343,7 @@ describe('Zid Controller', () => {
             await webhookHandler(req, rep);
 
             expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
-                expect.objectContaining({ type: 'order_confirmed', orderNumber: 'ORD-100' }),
+                expect.objectContaining({ type: 'order_confirmed', orderNumber: '72524870' }),
                 req.log,
             );
         });
@@ -1246,21 +1359,6 @@ describe('Zid Controller', () => {
 
             expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
                 expect.objectContaining({ type: 'order_confirmed', customerPhone: '+966591555966' }),
-                req.log,
-            );
-        });
-
-        it('falls back to the order id as orderNumber when there is no code', async () => {
-            const req = webhookRequest({
-                query: { e: 'order.create', sid: 'store-1' },
-                body: { data: orderPayload({ code: undefined }) },
-            });
-            const rep = mockReply();
-
-            await webhookHandler(req, rep);
-
-            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
-                expect.objectContaining({ orderId: '9001', orderNumber: '9001' }),
                 req.log,
             );
         });

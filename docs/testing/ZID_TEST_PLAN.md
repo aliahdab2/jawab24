@@ -280,21 +280,62 @@ verification fails closed on `basic …`), envelope (`data` vs `order` vs root),
 `customer.mobile` format (confirm full-intl-without-`+` → `normalizeZidPhone`),
 `code`/`id` fields.
 
-### E-2. Status → in-delivery → order_shipped SMS
-**Steps:** Flip the order to in-delivery in the Zid admin (may need carrier config on
-the dev store — Salla's shipment event needed a real shipment object).
+### E-2. Status → in-delivery → order_shipped SMS — ✅ **PASSED 2026-08-23** (webhook half)
+**Steps:** Flip the order to in-delivery in the Zid admin. No carrier config needed —
+the dev store's «مندوب المتجر» (`method.code` `custom`) self-delivery option is enough
+to move the status, it just carries no tracking data.
 
-**Expected:** `order.status.update` maps to shipped → SMS with tracking.
-**Capture — C6**: status spelling (`indelivery` vs `inDelivery`), tracking field
-location (`tracking_number` vs `shipping.*`).
+**Result:** Order 72524870 flipped new → «جاري التوصيل» at 09:25:33Z. Zid delivered
+`order.status.update` to prod within ~90s; Basic-auth verified, envelope parsed, phone
+normalized, and `customer_notifications_log` row `9a0dec7c…` written
+(`order_shipped`, `zid:order_shipped:72524870`). **This is the first Zid order webhook
+ever to round-trip**, and it closes the ingestion half of Zid rejection bullet 2 for
+order events. SMS delivery itself failed — `Vonage delivery error: Quota Exceeded -
+rejected`, the unverified-account spending limit of Vonage ticket #3002710, unrelated
+to Zid.
 
-### E-3. Status → delivered → order_delivered SMS
-**Capture — C7**: the delivered payload. Expected: delivered SMS (+ review request if
-configured).
+**Capture — C6 — RESOLVED** (`zid_live_payloads.jsonl`):
+- **Status spelling is `indelivery`** — lowercase, one word. Zid's admin select offers
+  exactly `new` / `preparing` / `ready` / `indelivery` / `delivered` / `cancelled`. The
+  `inDelivery` camelCase in the webhook-conditions doc did not appear; the mapper's
+  lowercased compare covers both.
+- **Tracking lives at `shipping.method.tracking.{number,status,url}`**, with
+  `shipping.method.waybill_tracking_id` and `shipping.method.courier` alongside. The
+  previously-assumed `tracking_number` and `shipping.tracking_number` **do not exist**
+  — the mapper read neither real field and was fixed on
+  `fix/zid-order-number-from-id`. All are `null` for `custom` (self-delivery) shipping.
+- ⚠️ Zid exposes a customer-facing **tracking URL** (`shipping.method.tracking.url`)
+  that we do not use. Putting it in an SMS is an owner decision: KSA requires every URL
+  in an SMS body to be pre-registered with the sender ID, and a carrier tracking domain
+  is a third party's.
 
-### E-4. Payment field
-**Capture — C8**: does `payment_status` exist on orders? Finalize the `'unknown'`
-mapping either way.
+**Two defects found by this one test** (both fixed on `fix/zid-order-number-from-id`):
+1. The SMS quoted `code` — «طلبك #mdXMlMYYBt» — which is the invoice **URL slug**
+   (`order_url` `https://<store>.zid.store/o/<code>/inv`), not an order number. The
+   number the merchant and the customer both see is `id` = `invoice_number` = 72524870.
+2. The tracking field paths above were invented and never matched Zid.
+
+**Still open on E-2:** an end-to-end SMS *arrival* (blocked on Vonage, not on Zid), and
+a carrier-backed order that actually carries a tracking number.
+
+### E-3. Status → delivered → order_delivered SMS — ✅ **PASSED 2026-08-23** (webhook half)
+**Result:** Order 72524870 flipped `indelivery` → «مُكتمل» (`delivered`) straight after
+E-2. A second `order.status.update` arrived and wrote a second
+`customer_notifications_log` row (`order_delivered`, `zid:order_delivered:72524870`).
+SMS again blocked by the same Vonage quota rejection.
+
+**Capture — C7 — RESOLVED**: `delivered` is the status code (admin label «مُكتمل», which
+does NOT mean the code is `completed`). ✅ The `review_request` companion correctly did
+**not** fire — it is disabled on this store, so `also` was skipped rather than scheduled.
+Two rows, two distinct dedupe keys, no cross-talk between the shipped and delivered paths.
+
+**Still open on E-3:** SMS arrival (Vonage), and a `review_request` run with the template
+enabled.
+
+### E-4. Payment field — ✅ **RESOLVED 2026-08-23**
+**Capture — C8**: `payment_status` **does exist** on Zid orders — value `pending` on
+order 72524870 (unpaid bank transfer). The `'unknown'` mapping can be narrowed to
+Zid's real vocabulary.
 
 ### E-5. Dedupe on redelivery
 **Steps:** Redeliver the same `order.create` (Zid dashboard redelivery if available;
@@ -624,7 +665,7 @@ response time, test-account credentials).
 | Gate term | State | What is left |
 |---|---|---|
 | §L — bullet 1 | ✅ **green** | L-1/L-2 (the rejected scenario) + L-3/L-4/L-5/L-10/L-12 live; 7 pinned. L-6/L-9/L-14/L-15 are hardening |
-| §A–§F — bullet 3 | 🔴 **§E 0/6, §F 0/3** | **No order has ever been placed on the dev store.** One real order unblocks §E, §D's order tools, C5–C8, and (via F-2/F-3) L-6 |
+| §A–§F — bullet 3 | 🟠 **§E 2/6 + C6/C7/C8 resolved, §F 0/3** | E-2 and E-3 PASSED 2026-08-23 — the first Zid order webhooks ever to round-trip, proving we ingest their order data correctly (the ingestion half of bullet 2). Still owed: E-1 needs a real **storefront** order (`order.create` has never fired), and F-2/F-3 uninstall/reinstall |
 | §H — bullet 2 | 🔴 **0/11 live** | Paid checkout refuses while the app is `Draft`. Expect the reviewer to produce the first paid envelope |
 | Listing | 🔴 **all five open** | Gallery is still the **Salla** screenshots; no video, no reviewer credentials, no activation steps, no support SLA. The video is the longest-lead item and also clears Salla's blocker |
 

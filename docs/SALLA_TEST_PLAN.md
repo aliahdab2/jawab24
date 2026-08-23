@@ -152,6 +152,39 @@ condition that exposed the hydration race below.
 Requires a **real Salla store** and a **real order**. Nothing here is simulable; every row
 has cost production defects before. Run in order — later rows depend on earlier state.
 
+> ### ⭐ You do not need a NEW purchase to reach 3.6–3.8 — an EXISTING order is enough
+>
+> Proven on Zid 2026-08-23 (ZID_TEST_PLAN.md §E-2/E-3): **`order.status.updated` is a
+> subscribed webhook in its own right**, so changing an existing order's status in the
+> store admin fires a real delivery through the whole ingestion path — signature check,
+> envelope parse, phone normalize, template render, `customer_notifications_log` row.
+> Nothing is faked; the only thing skipped is the act of buying.
+>
+> This matters because a storefront checkout is the step most likely to block you: on Zid
+> it died on a Cloudflare managed challenge, and the standing advice is never to drive or
+> disguise such a challenge. If the demo store already carries orders (Zid's shipped with
+> five seeded ones), you can start here instead of waiting on someone to place one.
+>
+> | Row | Reachable from an existing order? |
+> |---|---|
+> | 3.5 `order.created` | ❌ **No.** Only a real purchase fires it. This row genuinely needs the checkout. |
+> | 3.6 `order.status.updated` → shipped | ✅ Flip the order to *shipped* in the admin. |
+> | 3.7 `order.shipment.created` | ✅ Create a shipment with a tracking number in the admin. |
+> | 3.8 `track_shipment` live | ✅ Once 3.7 has produced a real shipment. |
+>
+> ⚠️ Run 3.6 → 3.7 in that order on the SAME order — 3.7's whole point is that it upgrades
+> 3.6's still-pending row in place rather than sending a second SMS, so flipping the status
+> after creating the shipment tests nothing.
+>
+> **Verify at the read path**, not at the webhook: `GET /api/notification-log/<storeId>`
+> and `…/stats` with the merchant's own session. Record the row in the captures file the
+> same way Zid's §E rows are recorded.
+>
+> ⚠️ **SMS delivery is a separate question from ingestion.** On Zid both rows landed
+> correctly and then failed to send with `Vonage delivery error: Quota Exceeded - rejected`
+> (an account problem, not an integration one). A `failed` row still proves 3.6/3.7's
+> webhook and dedup behaviour; only the "SMS arrives" half of the pass criteria is blocked.
+
 | # | Step | Pass criteria | On failure |
 |---|------|---------------|------------|
 | 3.1 | Install the app onto a real store from the listing | `app.store.authorize` webhook 200; pending install staged with encrypted token + `token_expires_at` ≈14 days | **401 on every delivery ⇒ Tier 0.8 first** (strategy ≠ Signature — the 2026-08-23 failure), then *Reauthorize App* in the store admin re-fires the push; only then suspect the secret + `printenv`; do not publish |

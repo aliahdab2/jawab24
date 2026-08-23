@@ -327,7 +327,9 @@ function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): 
 }
 
 // fulfillments/update carries the delivery signal (`shipment_status`) that orders/* lacks.
-// Payload: { order_id, shipment_status, tracking_number, destination: { first_name, phone } }.
+// Payload fields we rely on: { order_id, shipment_status, destination: { first_name, phone } }.
+// (An earlier version of this comment also listed `tracking_number`; nothing here reads it,
+// and the delivered template carries no tracking placeholder.)
 interface ShopifyFulfillmentBody {
     order_id?: number;
     shipment_status?: string | null;

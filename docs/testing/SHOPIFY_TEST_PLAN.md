@@ -222,6 +222,33 @@ For each test, send the listed message as a real DM to the linked FB test page a
 
 > Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `sent` (the enum is pending/sent/failed/cancelled — there is no `delivered` status) and an actual SMS lands.
 
+> ### ⭐ E-2/E-3 do not depend on E-1 — any EXISTING order will do
+>
+> Proven on Zid 2026-08-23 (ZID_TEST_PLAN.md §E-2/E-3): a status/fulfilment change made in
+> the store admin fires a real webhook through the whole ingestion path, so **if the dev
+> store already carries an order you can run the shipped/delivered rows without placing a
+> new one**. Nothing is faked — the only step skipped is the purchase itself. Useful
+> because the storefront checkout is the most blockable step (on Zid it hit a Cloudflare
+> managed challenge, which must never be driven or disguised).
+>
+> Shopify's lever is fulfilment rather than a status dropdown, because its order-level
+> `fulfillment_status` enum is only `null|partial|fulfilled|restocked` — it has no
+> `delivered` value:
+>
+> | Row | Reachable from an existing order? | Lever |
+> |---|---|---|
+> | E-1 `orders/create` | ❌ **No.** Only a real purchase fires it. | the checkout |
+> | E-2 `orders/fulfilled` | ✅ Yes | fulfil the order in admin, with a tracking number |
+> | E-3 delivered | ✅ Yes | `fulfillments/update` carrying `shipment_status` — see E-3 |
+>
+> **Verify at the read path**: `GET /api/notification-log/<storeId>` and `…/stats` with the
+> merchant's own session, not by watching for the webhook.
+>
+> ⚠️ **Ingestion and SMS delivery fail independently.** On Zid the rows landed correctly and
+> then failed to send with `Vonage delivery error: Quota Exceeded - rejected` — an account
+> problem, not an integration one. A `failed` row still proves the webhook, mapping and
+> dedup behaviour; only the "SMS arrives" clause is blocked.
+
 ### E-1. New order → order_confirmed SMS
 **Steps:** Place a test order on the dev store with the test phone number.
 
@@ -237,8 +264,19 @@ For each test, send the listed message as a real DM to the linked FB test page a
 - `orders/fulfilled` webhook received
 - `order_shipped` notification logged + SMS arrives
 
-### E-3. Order delivered → order_delivered SMS (if status mapping triggers)
-**Steps:** Update order to `delivered` status (varies by Shopify shipping app).
+### E-3. Order delivered → order_delivered SMS
+**Steps:** Move the fulfilment to delivered (varies by Shopify shipping app). ⚠️ Delivery
+is **not** an `orders/*` event — the order-level `fulfillment_status` enum is only
+`null|partial|fulfilled|restocked` and never `delivered`. The signal arrives on
+**`fulfillments/update`** via `fulfillment.shipment_status`, handled by
+`webhookFulfillments` (fields used: `order_id`, `shipment_status`,
+`destination.{first_name,phone}`).
+
+⚠️ **Only `shipment_status === 'delivered'` dispatches.** The same topic fires repeatedly
+for `in_transit`, `out_for_delivery`, `attempted_delivery`, `failure` and friends, and all
+of those are 200'd and ignored by design — so "the webhook arrived but no SMS" is the
+expected result until the carrier reports delivered, not a bug. If nothing fires at all,
+confirm the topic is subscribed before suspecting the mapping.
 
 **Expected:** `order_delivered` notification + SMS.
 

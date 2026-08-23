@@ -324,12 +324,32 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 /** [provisional] Order payload fields pending live captures — read tolerantly. */
 interface ZidOrderPayload {
     id?: string | number;
+    /** The number shown to the merchant and the customer; equals `id` in every observed payload. */
+    invoice_number?: string | number;
+    /**
+     * NOT an order number — a storefront URL slug (`order_url`
+     * `https://<store>.zid.store/o/<code>/inv`). Never quote it to a customer.
+     */
     code?: string | number;
     order_status?: { name?: string; code?: string };
     status?: string | { name?: string; code?: string };
     customer?: { name?: string; mobile?: string | number };
+    /**
+     * Zid's real shipping shape (captured 2026-08-23 from a live order): the carrier
+     * data hangs off `shipping.method`, and `tracking` carries `number`, `status` and
+     * a customer-facing `url`. All null when the merchant self-delivers
+     * (`method.code === 'custom'`, «مندوب المتجر») — there is no carrier to track.
+     */
+    shipping?: {
+        method?: {
+            tracking?: { number?: string | null; status?: string | null; url?: string | null };
+            waybill_tracking_id?: string | null;
+        };
+        /** [provisional] flat fallback — never observed live, kept for tolerance. */
+        tracking_number?: string;
+    };
+    /** [provisional] flat fallback — never observed live, kept for tolerance. */
     tracking_number?: string;
-    shipping?: { tracking_number?: string };
 }
 
 /**
@@ -349,7 +369,13 @@ function buildZidOrderEvent(storeId: string, event: string, body: ZidWebhookBody
     if (!phone) return null;
 
     const orderId = data.id !== undefined && data.id !== null ? String(data.id) : '';
-    const orderNumber = data.code !== undefined && data.code !== null ? String(data.code) : orderId;
+    // The customer-facing number is `invoice_number` (= `id`); `code` is the invoice
+    // URL slug and means nothing to the customer. Verified 2026-08-23 against a live
+    // order.status.update: id/invoice_number 72524870 — the number both the Zid admin
+    // and the storefront invoice page display — while code was "mdXMlMYYBt".
+    const orderNumber = data.invoice_number !== undefined && data.invoice_number !== null
+        ? String(data.invoice_number)
+        : orderId;
     const customerName = data.customer?.name;
 
     if (event === 'order.create') {
@@ -364,7 +390,13 @@ function buildZidOrderEvent(storeId: string, event: string, body: ZidWebhookBody
         ).toLowerCase();
 
         if (statusCode === 'indelivery') {
-            const trackingNumber = data.tracking_number || data.shipping?.tracking_number;
+            // `shipping.method.tracking.number` is Zid's real location; the flat
+            // fields below were guesses that no live payload has ever carried.
+            const trackingNumber = data.shipping?.method?.tracking?.number
+                || data.shipping?.method?.waybill_tracking_id
+                || data.tracking_number
+                || data.shipping?.tracking_number
+                || undefined;
             return orderShippedEvent('zid', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
         }
         if (statusCode === 'delivered') {
