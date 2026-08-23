@@ -1,10 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyReply } from 'fastify';
-import type { WorkspaceRequest } from '../../src/middleware/workspace';
+import type { StoreRequest } from '../../src/middleware/storeOwnership';
 
-vi.mock('../../src/services/ecommerce', () => ({
-    getStoreById: vi.fn(),
-}));
 vi.mock('../../src/services/ecommerceAnalytics', () => ({
     getStoreAnalytics: vi.fn(),
 }));
@@ -12,17 +9,29 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: vi.fn(),
 }));
 
-import * as ecommerceService from '../../src/services/ecommerce';
 import * as analyticsService from '../../src/services/ecommerceAnalytics';
 import { getAnalytics } from '../../src/controllers/ecommerceAnalytics';
 
-function buildRequest(overrides: Partial<WorkspaceRequest> = {}): WorkspaceRequest {
+const STORE = {
+    id: 'store-1',
+    workspaceId: 'ws-1',
+    isActive: true,
+    platform: 'shopify' as const,
+};
+
+/**
+ * The controller runs behind `resolveWorkspace` + `requireOwnedStore`, so by
+ * the time it executes `request.store` is loaded and owned. Ownership denials
+ * (401 / 404 / 403) are covered in test/middleware/storeOwnership.test.ts.
+ */
+function buildRequest(overrides: Partial<StoreRequest> = {}): StoreRequest {
     return {
         params: { storeId: 'store-1' },
         query: {},
         workspaceId: 'ws-1',
+        store: STORE,
         ...overrides,
-    } as unknown as WorkspaceRequest;
+    } as unknown as StoreRequest;
 }
 
 function buildReply() {
@@ -41,41 +50,12 @@ function buildReply() {
     return reply as unknown as FastifyReply & { statusCode: number; payload: unknown };
 }
 
-const STORE = {
-    id: 'store-1',
-    workspaceId: 'ws-1',
-    isActive: true,
-    platform: 'shopify' as const,
-};
-
 describe('getAnalytics controller', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('returns 401 when no workspace is resolved', async () => {
-        const reply = buildReply();
-        await getAnalytics(buildRequest({ workspaceId: undefined }), reply);
-        expect(reply.statusCode).toBe(401);
-    });
-
-    it('returns 404 when the store does not exist', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(null);
-        const reply = buildReply();
-        await getAnalytics(buildRequest(), reply);
-        expect(reply.statusCode).toBe(404);
-    });
-
-    it('returns 403 when the store belongs to a different workspace', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue({ ...STORE, workspaceId: 'other-ws' } as never);
-        const reply = buildReply();
-        await getAnalytics(buildRequest(), reply);
-        expect(reply.statusCode).toBe(403);
-        expect(analyticsService.getStoreAnalytics).not.toHaveBeenCalled();
-    });
-
     it('defaults to 30d range when query omits it', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(STORE as never);
         vi.mocked(analyticsService.getStoreAnalytics).mockResolvedValue({} as never);
         const reply = buildReply();
         await getAnalytics(buildRequest(), reply);
@@ -83,7 +63,6 @@ describe('getAnalytics controller', () => {
     });
 
     it('passes a valid range through to the service', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(STORE as never);
         vi.mocked(analyticsService.getStoreAnalytics).mockResolvedValue({} as never);
         const reply = buildReply();
         await getAnalytics(buildRequest({ query: { range: '90d' } }), reply);
@@ -91,15 +70,22 @@ describe('getAnalytics controller', () => {
     });
 
     it('coerces invalid ranges to 30d (not 400)', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(STORE as never);
         vi.mocked(analyticsService.getStoreAnalytics).mockResolvedValue({} as never);
         const reply = buildReply();
         await getAnalytics(buildRequest({ query: { range: 'forever' } }), reply);
         expect(analyticsService.getStoreAnalytics).toHaveBeenCalledWith('store-1', '30d');
     });
 
+    it('queries the store the middleware attached, not the raw URL param', async () => {
+        // If a handler ever re-read :storeId from params it would bypass the
+        // ownership proof; the attached store is the only trustworthy source.
+        vi.mocked(analyticsService.getStoreAnalytics).mockResolvedValue({} as never);
+        const reply = buildReply();
+        await getAnalytics(buildRequest({ params: { storeId: 'someone-elses-store' } }), reply);
+        expect(analyticsService.getStoreAnalytics).toHaveBeenCalledWith('store-1', '30d');
+    });
+
     it('returns 500 with generic error when aggregator throws', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(STORE as never);
         vi.mocked(analyticsService.getStoreAnalytics).mockRejectedValue(new Error('db down'));
         const reply = buildReply();
         await getAnalytics(buildRequest(), reply);
@@ -108,7 +94,6 @@ describe('getAnalytics controller', () => {
     });
 
     it('returns the analytics payload on success', async () => {
-        vi.mocked(ecommerceService.getStoreById).mockResolvedValue(STORE as never);
         const overview = { storeId: 'store-1', recovery: { cartsRecovered: 4 } };
         vi.mocked(analyticsService.getStoreAnalytics).mockResolvedValue(overview as never);
         const reply = buildReply();

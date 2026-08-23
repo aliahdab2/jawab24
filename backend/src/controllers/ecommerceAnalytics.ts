@@ -1,31 +1,23 @@
 import { FastifyReply } from 'fastify';
-import { getStoreById } from '../services/ecommerce';
 import { getStoreAnalytics, type AnalyticsRange } from '../services/ecommerceAnalytics';
 import { captureError } from '../utils/sentryHelpers';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { StoreRequest, ResolvedStoreRequest } from '../middleware/storeOwnership';
 
 const VALID_RANGES: ReadonlySet<AnalyticsRange> = new Set(['30d', '90d']);
 
-/** GET /api/ecommerce-analytics/:storeId?range=30d|90d */
-export async function getAnalytics(request: WorkspaceRequest, reply: FastifyReply) {
-    const { storeId } = request.params as { storeId: string };
+/**
+ * GET /api/ecommerce-analytics/:storeId?range=30d|90d
+ * Workspace resolution and store ownership are enforced by the route's
+ * preHandlers (`resolveWorkspace`, `requireOwnedStore`); by the time this
+ * runs, `request.store` is loaded and proven to belong to the caller.
+ */
+export async function getAnalytics(request: StoreRequest, reply: FastifyReply) {
+    const storeId = (request as ResolvedStoreRequest).store.id;
     const { range: rawRange } = request.query as { range?: string };
 
     const range: AnalyticsRange = VALID_RANGES.has(rawRange as AnalyticsRange)
         ? (rawRange as AnalyticsRange)
         : '30d';
-
-    if (!request.workspaceId) {
-        return reply.status(401).send({ error: 'Workspace context required' });
-    }
-
-    const store = await getStoreById(storeId);
-    if (!store) {
-        return reply.status(404).send({ error: 'Store not found' });
-    }
-    if (store.workspaceId !== request.workspaceId) {
-        return reply.status(403).send({ error: 'Store does not belong to this workspace' });
-    }
 
     try {
         const overview = await getStoreAnalytics(storeId, range);
