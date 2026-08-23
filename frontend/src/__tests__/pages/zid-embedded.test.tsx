@@ -41,6 +41,8 @@ describe('Zid embedded entry page', () => {
         mockedAxios.get.mockImplementation(async (url: string) => {
             if (url.endsWith('/auth/me')) return { data: USER };
             if (url.endsWith('/workspaces')) return { data: [{ id: 'ws-1' }] };
+            // A fresh install: a page may exist, but none is linked to the store yet.
+            if (url.endsWith('/pages')) return { data: [{ id: 'page-1', ecommerceStoreId: null }] };
             throw new Error(`Unexpected GET ${url}`);
         });
         mockedAxios.post.mockResolvedValue({
@@ -154,5 +156,63 @@ describe('Zid embedded entry page', () => {
 
         await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding', undefined, undefined));
         expect(mockSetWorkspaces).not.toHaveBeenCalled();
+    });
+
+    // Until 2026-08-23 every open of the app from the Zid dashboard — store
+    // connected, products synced, page linked — landed on «let's connect your
+    // Zid store». The wizard is for the first open only; a page linked to the
+    // store is the proof it was completed.
+    it('lands a merchant whose page is already linked to the store in the app, not the wizard', async () => {
+        routerState.query = { token: 'uuid-from-zid', language: 'ar' };
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.endsWith('/auth/me')) return { data: USER };
+            if (url.endsWith('/workspaces')) return { data: [{ id: 'ws-1' }] };
+            if (url.endsWith('/pages')) {
+                return { data: [
+                    { id: 'page-1', ecommerceStoreId: null },
+                    { id: 'page-2', ecommerceStoreId: 'store-1' },
+                ] };
+            }
+            throw new Error(`Unexpected GET ${url}`);
+        });
+
+        render(<ZidEmbedded />);
+
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/dashboard', undefined, { locale: 'ar' }));
+        expect(mockRouterReplace).not.toHaveBeenCalledWith('/zid/onboarding', expect.anything(), expect.anything());
+    });
+
+    it('reads the pages in parallel with the profile, as a Bearer call, and never before the session is persisted', async () => {
+        routerState.query = { token: 'uuid-from-zid' };
+        const order: string[] = [];
+        vi.mocked(setEmbeddedSession).mockImplementation(() => { order.push('persist'); });
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            order.push(String(url).split('/').pop() ?? '');
+            if (url.endsWith('/auth/me')) return { data: USER };
+            return { data: [] };
+        });
+
+        render(<ZidEmbedded />);
+
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+        expect(order[0]).toBe('persist');
+        expect(mockedAxios.get).toHaveBeenCalledWith(
+            expect.stringContaining('/pages'),
+            { headers: { Authorization: 'Bearer session-token' } },
+        );
+    });
+
+    it('falls back to the wizard when the pages read fails — shown once too often is recoverable, hidden is not', async () => {
+        routerState.query = { token: 'uuid-from-zid' };
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.endsWith('/auth/me')) return { data: USER };
+            if (url.endsWith('/workspaces')) return { data: [{ id: 'ws-1' }] };
+            throw new Error('pages 500');
+        });
+
+        render(<ZidEmbedded />);
+
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/zid/onboarding', undefined, undefined));
+        expect(mockCaptureError).not.toHaveBeenCalled();
     });
 });
