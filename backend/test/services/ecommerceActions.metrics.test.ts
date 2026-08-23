@@ -138,10 +138,45 @@ describe('executeToolCall outcome counter', () => {
         await executeToolCall(STORE, call('check_inventory', { product_name: 'Sony' }));
         expect(mockRedisIncr).toHaveBeenLastCalledWith('metrics:ecom:tool:check_inventory:store_not_connected');
 
+        // No Phase-1 blob: Phase 2 reads the order live; the zid mock answers nothing.
+        mockLookupOrder.mockResolvedValue(null);
         await executeToolCall(STORE, call('verify_and_get_order', { order_number: '1234', provided_name: 'Ali' }));
-        expect(mockRedisIncr).toHaveBeenLastCalledWith('metrics:ecom:tool:verify_and_get_order:verification_expired');
+        expect(mockRedisIncr).toHaveBeenLastCalledWith('metrics:ecom:tool:verify_and_get_order:order_not_found');
 
         expect(mockRedisIncr).toHaveBeenCalledTimes(3);
+    });
+
+    it('counts HOW a passed verification was satisfied, in its own family, once — next to ONE tool success', async () => {
+        const blob = {
+            orderNumber: '1234', status: 'paid', customerFirstName: 'Ali', orderDate: '2026-01-01',
+            items: [], totalAmount: '100', currency: 'SAR', paymentStatus: 'paid',
+        };
+        const key = (family: string) => `ecom:pending:${STORE}:${family}:1234`;
+
+        // own: the requesting family's blob is there
+        mockRedisGet.mockImplementation(async (k: string) => (k === key('order') ? JSON.stringify(blob) : null));
+        await executeToolCall(STORE, call('verify_and_get_order', { order_number: '1234', provided_name: 'Ali' }));
+        expect(mockRedisIncr.mock.calls.map(c => c[0])).toEqual([
+            'metrics:ecom:verify:own',
+            'metrics:ecom:tool:verify_and_get_order:success',
+        ]);
+
+        // live: no blob at all
+        mockRedisIncr.mockClear();
+        mockRedisGet.mockResolvedValue(null);
+        mockLookupOrder.mockResolvedValue(blob);
+        await executeToolCall(STORE, call('verify_and_get_order', { order_number: '1234', provided_name: 'Ali' }));
+        expect(mockRedisIncr.mock.calls.map(c => c[0])).toEqual([
+            'metrics:ecom:verify:live',
+            'metrics:ecom:tool:verify_and_get_order:success',
+        ]);
+
+        // a failed check counts under the tool family only — no verify source
+        mockRedisIncr.mockClear();
+        await executeToolCall(STORE, call('verify_and_get_order', { order_number: '1234', provided_name: 'Someone' }));
+        expect(mockRedisIncr.mock.calls.map(c => c[0])).toEqual([
+            'metrics:ecom:tool:verify_and_get_order:verification_failed',
+        ]);
     });
 
     it('counts an api_error without masking the result', async () => {

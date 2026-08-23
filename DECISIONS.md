@@ -2560,3 +2560,70 @@ moves the net by 5–15%, not the ruling.
 ≈ $21 sits under the $20 full-quota AI cost, so any heavy merchant is sold at a loss.
 (b) Keeping the gross-up and cutting the website price instead — gives up revenue on the
 direct channel, which has no commission, to fix a marketplace-only problem.
+
+---
+
+## D-096 · Order-tracking identity verification is self-healing: Phase 2 verifies against whichever Phase-1 blob exists or a live read — the pending blob is a saved platform call, never a gate (2026-08-23)
+
+**Context.** The e-commerce order tools are two-phase: `lookup_order` / `track_shipment`
+confirm the order exists, park its data in Redis under
+`ecom:pending:<store>:<order|shipment>:<n>` (10 min), and return an identity challenge;
+`verify_and_get_order` / `verify_and_get_shipment` compare the customer's name or phone
+against that blob and only then return the data. Phase 2 arrives on the customer's **next**
+message — a fresh request whose history is text only — so the model re-decides which verify
+tool to call with no memory of the Phase-1 tool, and often calls it with no Phase 1 in that
+request at all. Measured on the Salla review page 2026-08-23: `lookup_order` 7 calls,
+`track_shipment` 0, `verify_and_get_shipment:verification_expired` **4 of 4**. The backend
+read only the requesting family's key and its own challenge text said "call
+verify_and_get_order **or** verify_and_get_shipment". Two smaller cliffs shared the error: a
+cache-served Phase 1 never wrote a blob, and a customer answering after 10 minutes had none.
+The customer-visible result was a correct identity answer met with «انتهت صلاحية التحقق».
+
+**Ruling.** `handleVerification` finds something to verify against in this order — the
+requesting family's blob, the sibling family's blob, then a **live platform read of the
+requested family** — and the identity comparison (`namesMatch` / `phonesMatch`, unchanged)
+always runs **before** any read of the data the customer asked for. Once it passes, a
+sibling-only blob triggers a live read of the requested family so a tracking question gets
+tracking, degrading to the order summary rather than an error if that read fails. A live
+Phase-2 read parks its blob, so a retry inside the TTL is free. The Phase-1 challenge names
+the verify tool of its own family. `verification_expired` is retired as unreachable.
+Counters: the tool outcome stays `success`/`<error>`; `metrics:ecom:verify:{own|sibling|
+live|requested_empty|requested_live_failed}` records how each pass was satisfied. The last
+two are deliberately separate: `requested_empty` is a successful read of a family the
+platform has nothing for (an unshipped order asked about by tracking — the commonest
+cross-family case, and healthy), `requested_live_failed` is a throw. Folding them together
+would report the healthy path as a platform failure and bury the 403 that SALLA_TEST_PLAN
+3.8 uses these counters to find. Demo stores route the order tools to
+`services/demoOrders.ts` so the eval can reach them (Cat 81, measured same-day: pre-fix
+2/4, fixed 4/4).
+
+**Security, assessed.** The pending blob never gated anything — both phases already run in
+one request when the customer supplies number and name together, and `lookup_order` already
+answered the "does this order exist" question. Guesses per message rise from ≤3 to ≤6
+(`MAX_TOOL_CALLS_PER_ROUND` 3 × `MAX_TOOL_ROUNDS` 2) inside the DM limiter's 10
+messages/min/sender/page, against a full first-name token or a 9-digit phone.
+
+What the identity check gates, precisely — the two halves are easy to conflate and an
+earlier draft of this ruling stated the stronger one wrongly:
+- It gates every BYTE returned. No order or shipment field reaches the model on any path
+  before `namesMatch`/`phonesMatch` passes; PII is stripped from what it then returns.
+- It does NOT gate the platform READ on the no-blob path — there the order must be fetched
+  to have anything to compare against, so a wrong guess against an order number that exists
+  costs one platform call and parks that blob. Measured, not assumed (probe, 2026-08-23:
+  wrong name + empty Redis ⇒ 1 `lookupOrder`, 1 `SET ecom:pending:…`). It is bounded rather
+  than free: the park means further guesses against the same order number cost no read, so
+  the ceiling is one extra call per (order number, family) per 600 s — the same shape of
+  budget `lookup_order` already hands an unauthenticated DM, which is why it is accepted.
+  Once any blob is held, a failed guess causes no read at all.
+
+A per-order daily cap on failed checks is a cheap follow-up if the counters ever show
+guessing; it is not needed to make this change safe.
+
+**Rejected.** (a) *Fix it in the prompt / tool descriptions* — cannot work: at Phase-2 time
+the model has no record of the Phase-1 tool, so no wording can make it pair correctly;
+the description change shipped only to stop teaching the cross. (b) *Make one family a
+superset of the other* — they come from different platform calls (Salla's shipments
+endpoint needs `shipping.read`; Shopify's fulfilment is a separate GraphQL selection), so
+merging them doubles every Phase-1 call for the common case. (c) *Use the pending blob as
+the Phase-1 cache and drop `ecom:tool:*` for order tools* — simpler, but it changes the
+`cached` counter's meaning and three pinned tests; recorded as a later simplification.

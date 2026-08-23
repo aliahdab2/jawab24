@@ -90,6 +90,10 @@ vi.mock('../../src/lib/dailyCap', () => ({
 
 beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps queued `mockResolvedValueOnce` answers; a test that
+    // queues two and consumes one would hand the other to the next test.
+    mockLookupOrder.mockReset();
+    mockGetShipmentTracking.mockReset();
     mockRedisGet.mockResolvedValue(null);
     mockRedisSet.mockResolvedValue('OK');
     mockClaimDailyOnce.mockResolvedValue(true);
@@ -726,29 +730,41 @@ describe('executeToolCall — check_inventory', () => {
 describe('executeToolCall — verification', () => {
     const storeId = 'store-123';
 
-    it('returns verification_expired when no pending data in Redis', async () => {
-        mockRedisGet.mockResolvedValue(null);
+    // Phase 1 parks its blob under ecom:pending:<store>:<family>:<order>. Every
+    // test here answers Redis PER KEY — a mock that returns the same blob for any
+    // key is exactly what hid the production defect (the wrong family's key was
+    // read and the mock said yes anyway).
+    const pendingKey = (family: 'order' | 'shipment', n = '1234') => `ecom:pending:${storeId}:${family}:${n}`;
+    const answerOnly = (entries: Record<string, unknown>) =>
+        mockRedisGet.mockImplementation(async (key: string) => (key in entries ? JSON.stringify(entries[key]) : null));
 
-        const result = await executeToolCall(storeId, {
-            name: 'verify_and_get_order',
-            arguments: { order_number: '1234', provided_name: 'محمد' },
-        });
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('verification_expired');
+    const orderBlob = {
+        orderNumber: '1234',
+        status: 'paid',
+        customerFirstName: 'محمد العلي',
+        customerPhone: '+966501234567',
+        orderDate: '2026-01-01',
+        items: [{ name: 'عطر', quantity: 1, price: '100' }],
+        totalAmount: '100',
+        currency: 'SAR',
+        paymentStatus: 'paid',
+    };
+    const shipmentBlob = {
+        orderNumber: '1234',
+        status: 'in_transit',
+        trackingNumber: 'TRACK123',
+        courierName: 'Aramex',
+        customerFirstName: 'محمد العلي',
+        customerPhone: '+966501234567',
+    };
+
+    beforeEach(() => {
+        mockGetStoreById.mockResolvedValue({ id: storeId, isActive: true, platform: 'shopify' });
+        answerOnly({});
     });
 
     it('returns verification_failed when name does not match', async () => {
-        mockRedisGet.mockResolvedValue(JSON.stringify({
-            orderNumber: '1234',
-            status: 'paid',
-            customerFirstName: 'محمد',
-            customerPhone: '+966501234567',
-            orderDate: '2026-01-01',
-            items: [],
-            totalAmount: '100',
-            currency: 'SAR',
-            paymentStatus: 'paid',
-        }));
+        answerOnly({ [pendingKey('order')]: orderBlob });
 
         const result = await executeToolCall(storeId, {
             name: 'verify_and_get_order',
@@ -758,18 +774,8 @@ describe('executeToolCall — verification', () => {
         expect(result.error).toBe('verification_failed');
     });
 
-    it('returns order data when name matches', async () => {
-        mockRedisGet.mockResolvedValue(JSON.stringify({
-            orderNumber: '1234',
-            status: 'paid',
-            customerFirstName: 'محمد العلي',
-            customerPhone: '+966501234567',
-            orderDate: '2026-01-01',
-            items: [{ name: 'عطر', quantity: 1, price: '100' }],
-            totalAmount: '100',
-            currency: 'SAR',
-            paymentStatus: 'paid',
-        }));
+    it('returns order data when name matches — read from the OWN family key', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
 
         const result = await executeToolCall(storeId, {
             name: 'verify_and_get_order',
@@ -781,20 +787,12 @@ describe('executeToolCall — verification', () => {
         // PII must be stripped
         expect(result.data).not.toHaveProperty('customerFirstName');
         expect(result.data).not.toHaveProperty('customerPhone');
+        expect(mockRedisGet).toHaveBeenCalledWith(pendingKey('order'));
+        expect(mockLookupOrder).not.toHaveBeenCalled();
     });
 
     it('returns data when phone matches', async () => {
-        mockRedisGet.mockResolvedValue(JSON.stringify({
-            orderNumber: '1234',
-            status: 'shipped',
-            customerFirstName: 'محمد',
-            customerPhone: '+966501234567',
-            orderDate: '2026-01-01',
-            items: [],
-            totalAmount: '200',
-            currency: 'SAR',
-            paymentStatus: 'paid',
-        }));
+        answerOnly({ [pendingKey('order')]: { ...orderBlob, status: 'shipped' } });
 
         const result = await executeToolCall(storeId, {
             name: 'verify_and_get_order',
@@ -823,21 +821,225 @@ describe('executeToolCall — verification', () => {
     });
 
     it('handles shipment verification the same way', async () => {
-        mockRedisGet.mockResolvedValue(JSON.stringify({
-            orderNumber: '5678',
-            status: 'in_transit',
-            trackingNumber: 'TRACK123',
-            courierName: 'Aramex',
-            customerFirstName: 'سارة',
-            customerPhone: '+966509876543',
-        }));
+        answerOnly({ [pendingKey('shipment')]: shipmentBlob });
 
         const result = await executeToolCall(storeId, {
             name: 'verify_and_get_shipment',
-            arguments: { order_number: '5678', provided_name: 'سارة' },
+            arguments: { order_number: '1234', provided_name: 'محمد' },
         });
         expect(result.success).toBe(true);
         expect(result.data).toHaveProperty('trackingNumber', 'TRACK123');
         expect(result.data).not.toHaveProperty('customerFirstName');
+        expect(mockGetShipmentTracking).not.toHaveBeenCalled();
+    });
+
+    it('returns store_not_connected for a disconnected store', async () => {
+        mockGetStoreById.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(result.error).toBe('store_not_connected');
+    });
+
+    // ---- The cross-family repair (production: lookup_order then verify_and_get_shipment, 4/4 expired) ----
+
+    it('verify_and_get_shipment verifies against the ORDER blob when only lookup_order ran, then reads the shipment live', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        mockGetShipmentTracking.mockResolvedValue(shipmentBlob);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(mockRedisGet).toHaveBeenCalledWith(pendingKey('shipment'));
+        expect(mockRedisGet).toHaveBeenCalledWith(pendingKey('order'));
+        expect(mockGetShipmentTracking).toHaveBeenCalledWith(storeId, '1234');
+        expect(mockLookupOrder).not.toHaveBeenCalled();
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('trackingNumber', 'TRACK123');
+        expect(result.data).not.toHaveProperty('customerFirstName');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:sibling');
+    });
+
+    it('verified from the sibling blob but the requested read fails → returns the sibling data, never a dead end', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        mockGetShipmentTracking.mockRejectedValue(new Error('502 Bad Gateway'));
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('status', 'paid');
+        expect(result.data).not.toHaveProperty('trackingNumber');
+        expect(mockClaimDailyOnce).toHaveBeenCalledWith(`ecom:verify:live_failed:${storeId}`, 600);
+        expect(captureError).toHaveBeenCalledTimes(1);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:requested_live_failed');
+    });
+
+    // An unshipped order asked about by TRACKING is the commonest cross-family
+    // case, and it is not a failure: the platform answered, it just has no
+    // shipment yet. Counting it as `requested_live_failed` would report the
+    // healthy path as a platform failure and bury the 403 that SALLA_TEST_PLAN
+    // 3.8 uses these counters to find.
+    it('sibling blob + the requested family is EMPTY (not shipped yet) counts as requested_empty, never as a failure', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        mockGetShipmentTracking.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(mockGetShipmentTracking).toHaveBeenCalledWith(storeId, '1234');
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('status', 'paid');
+        expect(result.data).not.toHaveProperty('trackingNumber');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:requested_empty');
+        expect(mockRedisIncr).not.toHaveBeenCalledWith('metrics:ecom:verify:requested_live_failed');
+        // Nothing threw, so nothing is reported.
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('a wrong name against the sibling blob fails WITHOUT reading the requested family', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        mockGetShipmentTracking.mockResolvedValue(shipmentBlob);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'فاطمة' },
+        });
+
+        expect(result.error).toBe('verification_failed');
+        expect(mockGetShipmentTracking).not.toHaveBeenCalled();
+        expect(mockLookupOrder).not.toHaveBeenCalled();
+    });
+
+    // ---- No blob at all (cache-served Phase 1, or the customer answered after the TTL) ----
+
+    it('with NO pending blob, reads the requested family live and verifies against it', async () => {
+        mockLookupOrder.mockResolvedValue(orderBlob);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(mockLookupOrder).toHaveBeenCalledWith(storeId, '1234');
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('status', 'paid');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:live');
+    });
+
+    it('a live Phase-2 read parks the blob (600 s) so a retry costs no platform call', async () => {
+        mockLookupOrder.mockResolvedValue(orderBlob);
+
+        await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(mockRedisSet).toHaveBeenCalledWith(pendingKey('order'), expect.any(String), 'EX', 600);
+    });
+
+    // The exact residual the docstring on handleVerification states: with nothing
+    // parked, the order MUST be fetched to have anything to compare against, so a
+    // wrong guess does cost one platform call and does park the blob. What the
+    // check gates is every byte returned, not the read. Asserted rather than
+    // described, so the claim in the docstring cannot drift from the code.
+    it('with NO pending blob and a wrong name: the live read DOES happen and parks, and still nothing is returned', async () => {
+        mockLookupOrder.mockResolvedValue(orderBlob);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'فاطمة' },
+        });
+
+        expect(mockLookupOrder).toHaveBeenCalledWith(storeId, '1234');
+        expect(mockRedisSet).toHaveBeenCalledWith(pendingKey('order'), expect.any(String), 'EX', 600);
+        expect(result.error).toBe('verification_failed');
+        expect(result).not.toHaveProperty('data');
+        // ...and the park is what bounds it: a second guess reads no platform.
+        mockLookupOrder.mockClear();
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'سارة' },
+        });
+        expect(mockLookupOrder).not.toHaveBeenCalled();
+    });
+
+    it('live Phase 2 on an unknown order → order_not_found (not verification_expired)', async () => {
+        mockLookupOrder.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(result.error).toBe('order_not_found');
+    });
+
+    it('live Phase 2: a 403 → insufficient_permissions, any other throw → api_error', async () => {
+        mockGetShipmentTracking.mockRejectedValueOnce(new Error('403 Forbidden'));
+        const denied = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(denied.error).toBe('insufficient_permissions');
+
+        mockGetShipmentTracking.mockRejectedValueOnce(new Error('network timeout'));
+        const failed = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(failed.error).toBe('api_error');
+    });
+
+    it('Redis down in Phase 2 still verifies via the live read', async () => {
+        mockRedisGet.mockRejectedValue(new Error('Redis down'));
+        mockLookupOrder.mockResolvedValue(orderBlob);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(result.success).toBe(true);
+    });
+});
+
+// ==========================================
+// Phase 1 challenge names the verify tool of ITS family
+// ==========================================
+describe('executeToolCall — Phase 1 challenge', () => {
+    const storeId = 'store-123';
+    const blob = {
+        orderNumber: '1234', status: 'paid', customerFirstName: 'محمد', orderDate: '2026-01-01',
+        items: [], totalAmount: '100', currency: 'SAR', paymentStatus: 'paid',
+    };
+
+    beforeEach(() => {
+        mockGetStoreById.mockResolvedValue({ id: storeId, isActive: true, platform: 'shopify' });
+    });
+
+    it('lookup_order tells the model to call verify_and_get_order — and only that', async () => {
+        mockLookupOrder.mockResolvedValue(blob);
+        const result = await executeToolCall(storeId, { name: 'lookup_order', arguments: { order_number: '1234' } });
+        const message = String((result.data as { message: string }).message);
+        expect(message).toContain('verify_and_get_order');
+        expect(message).not.toContain('verify_and_get_shipment');
+        expect(mockRedisSet).toHaveBeenCalledWith(`ecom:pending:${storeId}:order:1234`, expect.any(String), 'EX', 600);
+    });
+
+    it('track_shipment tells the model to call verify_and_get_shipment — and only that', async () => {
+        mockGetShipmentTracking.mockResolvedValue({ ...blob, status: 'in_transit', trackingNumber: 'T1' });
+        const result = await executeToolCall(storeId, { name: 'track_shipment', arguments: { order_number: '1234' } });
+        const message = String((result.data as { message: string }).message);
+        expect(message).toContain('verify_and_get_shipment');
+        expect(message).not.toContain('verify_and_get_order');
+        expect(mockRedisSet).toHaveBeenCalledWith(`ecom:pending:${storeId}:shipment:1234`, expect.any(String), 'EX', 600);
     });
 });

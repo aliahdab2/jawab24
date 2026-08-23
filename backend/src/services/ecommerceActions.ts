@@ -8,7 +8,9 @@
  * SECURITY:
  * - Two-phase verification: lookup_order/track_shipment return only a
  *   verification challenge. verify_and_get_* does server-side comparison
- *   and only then returns sensitive data.
+ *   and only then returns sensitive data. The comparison (namesMatch /
+ *   phonesMatch) is the gate; the Phase-1 pending blob in Redis is only a
+ *   saved platform call, never a precondition — see handleVerification.
  * - Input sanitization: order numbers must be numeric, product names are
  *   length-limited and special chars stripped.
  * - Store ownership checked by caller (ecommerceToolLoop.ts).
@@ -27,6 +29,7 @@ import {
     type PlatformProductDetail,
 } from './ecommerce';
 import { isDemoStore } from './demoStore';
+import { demoOrderModule } from './demoOrders';
 import { resolveProduct, sanitizeProductId, recordResolverOutcome } from './reply/productResolver';
 import { redis } from '../lib/redis';
 import { claimDailyOnce } from '../lib/dailyCap';
@@ -34,7 +37,13 @@ import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
-const VERIFICATION_TTL_SECONDS = 600; // 10 minutes — pending verification data
+/**
+ * How long a Phase-1 blob waits in Redis for the customer's identity answer.
+ * Expiry is NOT customer-facing: a Phase-2 call that finds no blob re-reads the
+ * order from the platform (handleVerification), so a reply that arrives after
+ * this window costs one platform call instead of failing.
+ */
+const VERIFICATION_TTL_SECONDS = 600;
 const PRODUCT_NAME_MAX_LENGTH = 200;
 const VARIANT_MAX_LENGTH = 60;
 /**
@@ -137,9 +146,29 @@ export function phonesMatch(stored: string, provided: string): boolean {
     return s === p;
 }
 
+/**
+ * The two shapes an order question can take. `lookup_order` / `verify_and_get_order`
+ * work in the `order` family, `track_shipment` / `verify_and_get_shipment` in the
+ * `shipment` family. The model does not reliably stay inside one family across the
+ * two customer turns a verification spans (Phase 2 is a new request with only text
+ * history), so every Phase-2 read must tolerate the other family's blob.
+ */
+type OrderFamily = 'order' | 'shipment';
+type OrderBlob = OrderInfoFull | ShipmentInfoFull;
+
+const SIBLING_FAMILY: Record<OrderFamily, OrderFamily> = { order: 'shipment', shipment: 'order' };
+const VERIFY_TOOL_OF: Record<OrderFamily, EcommerceToolCall['name']> = {
+    order: 'verify_and_get_order',
+    shipment: 'verify_and_get_shipment',
+};
+
+function familyOfVerifyTool(toolName: EcommerceToolCall['name']): OrderFamily {
+    return toolName === 'verify_and_get_order' ? 'order' : 'shipment';
+}
+
 /** Redis key for pending verification data */
-function pendingVerificationKey(storeId: string, orderNumber: string, toolType: 'order' | 'shipment'): string {
-    return `ecom:pending:${storeId}:${toolType}:${orderNumber}`;
+function pendingVerificationKey(storeId: string, orderNumber: string, family: OrderFamily): string {
+    return `ecom:pending:${storeId}:${family}:${orderNumber}`;
 }
 
 // --- Outcome counter ---
@@ -164,6 +193,35 @@ function recordToolOutcome(toolName: string, outcome: string): void {
     } catch {
         // A client that throws synchronously (disconnected, or a partial mock) is
         // still not allowed to touch the reply.
+    }
+}
+
+/**
+ * HOW a passed verification was satisfied — `metrics:ecom:verify:{source}`, next
+ * to the tool counter the way `recordResolverOutcome` sits next to check_inventory.
+ * `own`: the requesting family's Phase-1 blob was there. `sibling`: only the other
+ * family's blob was, and the requested data was then read live. `live`: no blob at
+ * all (cache-only Phase 1, or the customer answered after the TTL) — read live.
+ *
+ * The two sibling-fallback outcomes are counted SEPARATELY, because they are
+ * different facts about the platform and the plan that reads these numbers
+ * (SALLA_TEST_PLAN 3.8) turns on telling them apart:
+ * `requested_empty`: the requested family was read and the platform answered
+ * NOTHING — an order with no shipment yet. That is the ordinary case for a
+ * tracking question on an unshipped order, NOT an error; the customer gets the
+ * order summary. `requested_live_failed`: the read THREW (403, 5xx, timeout).
+ * Folding the empty case into the failure counter would report the commonest
+ * healthy path as a platform failure and hide the 403 that 3.8 exists to find.
+ *
+ * These are the numbers that say whether the cross-family repair is carrying
+ * real traffic — in production before it existed, 4 of 4 Phase-2 calls expired.
+ */
+type VerificationSource = 'own' | 'sibling' | 'live' | 'requested_empty' | 'requested_live_failed';
+function recordVerificationSource(source: VerificationSource): void {
+    try {
+        redis.incr(`metrics:ecom:verify:${source}`).catch(() => { });
+    } catch {
+        // never on the reply path
     }
 }
 
@@ -202,22 +260,19 @@ async function runToolCall(
         return live({ tool_name: toolCall.name, success: false, error: 'unknown_tool' });
     }
 
-    // 2. Handle verification tools (Phase 2) — no store API call needed
-    if (toolCall.name === 'verify_and_get_order' || toolCall.name === 'verify_and_get_shipment') {
-        return live(await handleVerification(ecommerceStoreId, toolCall));
-    }
-
-    // 3. Look up store to determine platform
+    // 2. Look up store to determine platform. Every remaining tool needs it —
+    //    including Phase-2 verification, which may have to re-read the order live.
     const store = await getStoreById(ecommerceStoreId);
     if (!store || !store.isActive) {
         return live({ tool_name: toolCall.name, success: false, error: 'store_not_connected' });
     }
 
-    // 4. check_inventory resolves and answers LOCALLY (D-092): no result cache.
+    // 3. check_inventory resolves and answers LOCALLY (D-092): no result cache.
     //    The old raw-args cache keyed on the model's free text and pinned whatever
     //    the platform matcher returned — including a wrong product — for five
     //    minutes. The only cache on this path now is the per-product LIVE stock
-    //    read inside readStock, keyed by platform product id.
+    //    read inside readStock, keyed by platform product id. Stays ahead of the
+    //    module resolution below so an unknown platform still answers from the row.
     if (toolCall.name === 'check_inventory') {
         try {
             return live(await executeInventoryCheck(store, toolCall, ctx));
@@ -230,8 +285,23 @@ async function runToolCall(
         }
     }
 
-    // 5. Order tools: Redis result cache, keyed on the SANITIZED arguments so
-    //    '#123' and '123' share an entry.
+    // 4. Resolve the platform module once. A demo store answers from constants —
+    //    its token is a placeholder that cannot reach any platform (see demoOrders).
+    let mod: PlatformModule;
+    try {
+        mod = isDemoStore(store) ? demoOrderModule : await platformModule(store.platform);
+    } catch {
+        return live({ tool_name: toolCall.name, success: false, error: 'unsupported_platform' });
+    }
+
+    // 5. Phase-2 verification: never cached — the answer depends on the customer's
+    //    identity claim, and a passed check must not be replayable from a cache key.
+    if (toolCall.name === 'verify_and_get_order' || toolCall.name === 'verify_and_get_shipment') {
+        return live(await handleVerification(mod, store, toolCall));
+    }
+
+    // 6. Phase-1 order tools: Redis result cache, keyed on the SANITIZED arguments
+    //    so '#123' and '123' share an entry.
     const cacheKey = buildToolCacheKey(ecommerceStoreId, toolCall.name, sanitizedArgsOf(toolCall));
     try {
         const cached = await redis.get(cacheKey);
@@ -242,36 +312,15 @@ async function runToolCall(
         // Redis unavailable — proceed without cache
     }
 
-    // 6. Route to platform-specific executor
+    // 7. Execute against the platform
     let result: EcommerceToolResult;
     try {
-        switch (store.platform) {
-            case 'shopify':
-                result = await executeShopifyTool(ecommerceStoreId, toolCall);
-                break;
-            case 'salla':
-                result = await executeSallaTool(ecommerceStoreId, toolCall);
-                break;
-            case 'zid':
-                result = await executeZidTool(ecommerceStoreId, toolCall);
-                break;
-            default:
-                return live({ tool_name: toolCall.name, success: false, error: 'unsupported_platform' });
-        }
+        result = await executePlatformTool(mod, ecommerceStoreId, toolCall);
     } catch (err) {
-        if (isPermissionError(err)) {
-            return live({ tool_name: toolCall.name, success: false, error: 'insufficient_permissions' });
-        }
-
-        captureError(err, `E-commerce tool execution failed: ${toolCall.name}`, {
-            tags: { service: 'ecommerce-tools', platform: store.platform },
-            extra: { storeId: ecommerceStoreId, tool: toolCall.name },
-        });
-
-        return live({ tool_name: toolCall.name, success: false, error: 'api_error' });
+        return live(platformFailure(err, toolCall, store));
     }
 
-    // 7. Cache successful results
+    // 8. Cache successful results
     if (result.success) {
         try {
             await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS);
@@ -283,10 +332,53 @@ async function runToolCall(
     return live(result);
 }
 
+/** Map a platform throw to the tool error the model understands; api_error is reported. */
+function platformFailure(err: unknown, toolCall: EcommerceToolCall, store: StoreRow): EcommerceToolResult {
+    if (isPermissionError(err)) {
+        return { tool_name: toolCall.name, success: false, error: 'insufficient_permissions' };
+    }
+    captureError(err, `E-commerce tool execution failed: ${toolCall.name}`, {
+        tags: { service: 'ecommerce-tools', platform: store.platform },
+        extra: { storeId: store.id, tool: toolCall.name },
+    });
+    return { tool_name: toolCall.name, success: false, error: 'api_error' };
+}
+
 // --- Phase 2: Server-Side Verification ---
 
+/**
+ * Verify the customer's identity claim and return the order or shipment they asked for.
+ *
+ * The Phase-1 blob is looked for in the requesting family first, then in the sibling
+ * family, and when neither exists the requested family is read live from the
+ * platform. That order matters for two reasons that both shipped as defects:
+ *
+ * - Phase 2 runs on the customer's NEXT message, a fresh request whose history is
+ *   text only, so the model re-decides which verify tool to call with no memory of
+ *   the Phase-1 tool. In production it paired lookup_order with
+ *   verify_and_get_shipment every time; reading only the requesting family's key
+ *   turned every correct identity answer into "verification expired" (4 of 4).
+ * - The blob is a saved platform call, not a gate. A cache-served Phase 1 never
+ *   writes one, and a customer who answers after VERIFICATION_TTL_SECONDS has none;
+ *   both used to dead-end on the same error.
+ *
+ * What the identity comparison does and does NOT gate, stated exactly, because the
+ * two are easy to conflate:
+ * - It gates every BYTE returned. No order or shipment field reaches the model on
+ *   any path until namesMatch/phonesMatch passes.
+ * - It does NOT gate the platform READ on the no-blob path. There the order has to
+ *   be fetched to have anything to compare against, so a wrong guess for an order
+ *   number that exists costs one platform call and parks that blob for the rest of
+ *   the TTL. That is bounded, not free: the park means repeat guesses against the
+ *   same order number cost nothing further, so the worst case is one extra call per
+ *   (order number, family) per VERIFICATION_TTL_SECONDS — the same shape of budget
+ *   `lookup_order` already hands an unauthenticated DM, which is why it is accepted.
+ *   Once a blob IS held (own or sibling), the comparison runs first and a failed
+ *   guess causes no read at all.
+ */
 async function handleVerification(
-    storeId: string,
+    mod: PlatformModule,
+    store: StoreRow,
     toolCall: EcommerceToolCall,
 ): Promise<EcommerceToolResult> {
     const orderNumber = sanitizeOrderNumber(toolCall.arguments.order_number || '');
@@ -301,40 +393,109 @@ async function handleVerification(
         return { tool_name: toolCall.name, success: false, error: 'name_or_phone_required' };
     }
 
-    const toolType = toolCall.name === 'verify_and_get_order' ? 'order' : 'shipment';
-    const redisKey = pendingVerificationKey(storeId, orderNumber, toolType);
+    const requested = familyOfVerifyTool(toolCall.name);
 
-    // Retrieve the full data stored during Phase 1
-    let storedJson: string | null;
-    try {
-        storedJson = await redis.get(redisKey);
-    } catch (error) {
-        captureError(error, 'Redis unavailable during order verification Phase 2', {
-            tags: { service: 'ecommerce-tools' },
-            extra: { storeId, orderNumber, toolType },
-        });
-        return { tool_name: toolCall.name, success: false, error: 'verification_expired' };
+    // Find something to verify against: own blob → sibling blob → live read.
+    const parked = await loadPendingBlob(store.id, orderNumber, requested);
+    let held = parked;
+    if (!held) {
+        let blob: OrderBlob | null;
+        try {
+            blob = await fetchFamilyLive(mod, store.id, orderNumber, requested);
+        } catch (err) {
+            return platformFailure(err, toolCall, store);
+        }
+        if (!blob) {
+            return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
+        }
+        held = { blob, family: requested };
     }
+    // Derived from what was PARKED, not from `held` — a live read yields the
+    // requested family too, so after the fallback the two are indistinguishable.
+    let source: VerificationSource = parked
+        ? (parked.family === requested ? 'own' : 'sibling')
+        : 'live';
 
-    if (!storedJson) {
-        return { tool_name: toolCall.name, success: false, error: 'verification_expired' };
-    }
-
-    const storedData = JSON.parse(storedJson) as OrderInfoFull | ShipmentInfoFull;
-
-    // Server-side comparison
-    const nameOk = providedName ? namesMatch(storedData.customerFirstName, providedName) : false;
-    const phoneOk = providedPhone && storedData.customerPhone
-        ? phonesMatch(storedData.customerPhone, providedPhone)
+    // Server-side comparison — the gate.
+    const nameOk = providedName ? namesMatch(held.blob.customerFirstName, providedName) : false;
+    const phoneOk = providedPhone && held.blob.customerPhone
+        ? phonesMatch(held.blob.customerPhone, providedPhone)
         : false;
-
     if (!nameOk && !phoneOk) {
         return { tool_name: toolCall.name, success: false, error: 'verification_failed' };
     }
 
-    // Verification passed — return data WITHOUT PII fields
-    const { customerFirstName: _n, customerPhone: _p, ...safeData } = storedData;
-    return { tool_name: toolCall.name, success: true, data: safeData as unknown as Record<string, unknown> };
+    // Verified. If the blob is the other family's, the customer still wants the
+    // requested one (tracking, not an order summary) — read it now. On failure the
+    // sibling data is a real answer about their order; an error code is not.
+    let answer = held.blob;
+    if (held.family !== requested) {
+        try {
+            const wanted = await fetchFamilyLive(mod, store.id, orderNumber, requested);
+            if (wanted) {
+                answer = wanted;
+            } else {
+                // Read succeeded, platform has nothing yet (an unshipped order asked
+                // about by tracking). Healthy — never counted as a failure.
+                source = 'requested_empty';
+            }
+        } catch (err) {
+            source = 'requested_live_failed';
+            if (await claimDailyOnce(`ecom:verify:live_failed:${store.id}`, VERIFICATION_TTL_SECONDS)) {
+                captureError(err, 'Verified from the sibling blob but the requested family could not be read live — returning the sibling data', {
+                    tags: { service: 'ecommerce-tools', platform: store.platform },
+                    extra: { storeId: store.id, orderNumber, requested },
+                });
+            }
+        }
+    }
+
+    recordVerificationSource(source);
+    return { tool_name: toolCall.name, success: true, data: stripPii(answer) };
+}
+
+/** Own family's blob first, then the sibling's. A Redis failure is a miss (reported), not a refusal. */
+async function loadPendingBlob(
+    storeId: string,
+    orderNumber: string,
+    requested: OrderFamily,
+): Promise<{ blob: OrderBlob; family: OrderFamily } | null> {
+    for (const family of [requested, SIBLING_FAMILY[requested]]) {
+        try {
+            const json = await redis.get(pendingVerificationKey(storeId, orderNumber, family));
+            if (json) return { blob: JSON.parse(json) as OrderBlob, family };
+        } catch (error) {
+            captureError(error, 'Redis unavailable during order verification Phase 2 — falling back to a live read', {
+                tags: { service: 'ecommerce-tools' },
+                extra: { storeId, orderNumber, family },
+            });
+            return null;
+        }
+    }
+    return null;
+}
+
+/**
+ * Read ONE family from the platform and park it for Phase 2. Used by Phase 1 and by
+ * a Phase 2 that has nothing to verify against, so a retry inside the TTL is free.
+ */
+async function fetchFamilyLive(
+    mod: PlatformModule,
+    storeId: string,
+    orderNumber: string,
+    family: OrderFamily,
+): Promise<OrderBlob | null> {
+    const blob = family === 'order'
+        ? await mod.lookupOrder(storeId, orderNumber)
+        : await mod.getShipmentTracking(storeId, orderNumber);
+    if (blob) await storePendingVerification(storeId, orderNumber, family, blob);
+    return blob;
+}
+
+/** Verification passed — the model gets the data WITHOUT the fields it was verified against. */
+function stripPii(blob: OrderBlob): Record<string, unknown> {
+    const { customerFirstName: _n, customerPhone: _p, ...safeData } = blob;
+    return safeData as unknown as Record<string, unknown>;
 }
 
 // --- Phase 1: Platform-Specific Executors ---
@@ -351,30 +512,29 @@ interface PlatformModule {
     getProductById: (storeId: string, platformProductId: string) => Promise<PlatformProductDetail | null>;
 }
 
-/** Shared executor — platform-agnostic routing for the ORDER tools. */
+/** Shared executor — platform-agnostic routing for the Phase-1 ORDER tools. */
 async function executePlatformTool(
     mod: PlatformModule, storeId: string, toolCall: EcommerceToolCall,
 ): Promise<EcommerceToolResult> {
     switch (toolCall.name) {
-        case 'lookup_order': {
-            const orderNumber = sanitizeOrderNumber(toolCall.arguments.order_number || '');
-            if (!orderNumber) return { tool_name: toolCall.name, success: false, error: 'invalid_order_number' };
-            const fullData = await mod.lookupOrder(storeId, orderNumber);
-            if (!fullData) return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
-            await storePendingVerification(storeId, orderNumber, 'order', fullData);
-            return buildVerificationChallenge(toolCall.name, orderNumber);
-        }
-        case 'track_shipment': {
-            const orderNumber = sanitizeOrderNumber(toolCall.arguments.order_number || '');
-            if (!orderNumber) return { tool_name: toolCall.name, success: false, error: 'invalid_order_number' };
-            const fullData = await mod.getShipmentTracking(storeId, orderNumber);
-            if (!fullData) return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
-            await storePendingVerification(storeId, orderNumber, 'shipment', fullData);
-            return buildVerificationChallenge(toolCall.name, orderNumber);
-        }
+        case 'lookup_order':
+            return phaseOne(mod, storeId, toolCall, 'order');
+        case 'track_shipment':
+            return phaseOne(mod, storeId, toolCall, 'shipment');
         default:
             return { tool_name: toolCall.name, success: false, error: 'unknown_tool' };
     }
+}
+
+/** Confirm the order exists, park its data for Phase 2, and hand back the identity challenge. */
+async function phaseOne(
+    mod: PlatformModule, storeId: string, toolCall: EcommerceToolCall, family: OrderFamily,
+): Promise<EcommerceToolResult> {
+    const orderNumber = sanitizeOrderNumber(toolCall.arguments.order_number || '');
+    if (!orderNumber) return { tool_name: toolCall.name, success: false, error: 'invalid_order_number' };
+    const blob = await fetchFamilyLive(mod, storeId, orderNumber, family);
+    if (!blob) return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
+    return buildVerificationChallenge(toolCall.name, orderNumber, family);
 }
 
 // --- check_inventory (D-092: resolve in code, answer locally, platform by id only when risky) ---
@@ -553,47 +713,36 @@ async function platformModule(platform: string): Promise<PlatformModule> {
     }
 }
 
-async function executeShopifyTool(storeId: string, toolCall: EcommerceToolCall): Promise<EcommerceToolResult> {
-    const mod = await import('./shopify');
-    return executePlatformTool(mod, storeId, toolCall);
-}
-
-async function executeSallaTool(storeId: string, toolCall: EcommerceToolCall): Promise<EcommerceToolResult> {
-    const mod = await import('./salla');
-    return executePlatformTool(mod, storeId, toolCall);
-}
-
-async function executeZidTool(storeId: string, toolCall: EcommerceToolCall): Promise<EcommerceToolResult> {
-    const mod = await import('./zid');
-    return executePlatformTool(mod, storeId, toolCall);
-}
-
 // --- Utilities ---
 
-/** Store full data in Redis for Phase 2 verification (with TTL so it auto-expires) */
+/** Park full order/shipment data in Redis so Phase 2 can verify without a second platform call. */
 async function storePendingVerification(
     storeId: string,
     orderNumber: string,
-    toolType: 'order' | 'shipment',
-    data: OrderInfoFull | ShipmentInfoFull,
+    family: OrderFamily,
+    data: OrderBlob,
 ): Promise<void> {
-    const key = pendingVerificationKey(storeId, orderNumber, toolType);
+    const key = pendingVerificationKey(storeId, orderNumber, family);
     try {
         await redis.set(key, JSON.stringify(data), 'EX', VERIFICATION_TTL_SECONDS);
     } catch (error) {
-        captureError(error, 'Redis unavailable: failed to store pending verification (Phase 2 will fail)', {
+        captureError(error, 'Redis unavailable: failed to store pending verification (Phase 2 will re-read live)', {
             tags: { service: 'ecommerce-tools' },
-            extra: { storeId, orderNumber, toolType },
+            extra: { storeId, orderNumber, family },
         });
     }
 }
 
-/** Build a Phase 1 verification challenge response (no sensitive data) */
-function buildVerificationChallenge(toolName: string, orderNumber: string): EcommerceToolResult {
+/**
+ * Build a Phase 1 verification challenge response (no sensitive data). It names the
+ * verify tool of the SAME family — the old text offered both, which is the wording
+ * that taught the model to cross families.
+ */
+function buildVerificationChallenge(toolName: string, orderNumber: string, family: OrderFamily): EcommerceToolResult {
     const challenge: PendingVerification = {
         orderFound: true,
         orderNumber,
-        message: 'Order found. Ask the customer for the name on the order or the phone number used when ordering to verify their identity. Then call verify_and_get_order or verify_and_get_shipment with their answer.',
+        message: `Order found. Ask the customer for the name on the order or the phone number used when ordering to verify their identity. Then call ${VERIFY_TOOL_OF[family]} with their answer.`,
     };
     return { tool_name: toolName, success: true, data: challenge as unknown as Record<string, unknown> };
 }

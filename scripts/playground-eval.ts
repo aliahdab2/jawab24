@@ -5700,6 +5700,76 @@ const TEST_CASES: TestCase[] = [
         notes: 'XGAP — the resolver\'s NOT_FOUND outcome through the model. Same gate as 797.',
     },
 
+    // --- Cat 81: order tracking — the two-phase identity flow ---------------------
+    //
+    // Demo stores answer the order tools from constants (services/demoOrders.ts):
+    // order 1001 is shipped with tracking DEMO-SMSA-784512, customer «أحمد» /
+    // +966500000001. Each case is one request with no Redis state from a previous
+    // case, which is the production shape too — Phase 2 arrives on the customer's
+    // NEXT message. Before 2026-08-23 that shape dead-ended: the model paired
+    // lookup_order with verify_and_get_shipment, the backend read only the requested
+    // family's key, and every correct identity answer came back "expired" (4/4 in
+    // prod). The Phase-1 tool the model picks is not deterministic, so these pin what
+    // the CUSTOMER sees — the tracking number before and after verification — not
+    // the tool sequence (toolOutcomes is an exact-sequence compare; see 797–799).
+    //
+    // MEASURED 2026-08-23, same day, temp 0, serial, Redis `ecom:*` flushed between
+    // arms: pre-fix Phase 2 → 801 + 803 PARTIAL (no tracking number), 800 + 802 PASS;
+    // fixed → 4/4. The baseline also showed the sharper mechanism: on the next
+    // message the model calls verify_and_get_shipment DIRECTLY — no Phase 1 in that
+    // request at all — so pre-fix there was no blob of either family to find.
+    // ⚠️ Flush `ecom:pending:*` before any baseline arm: the fixed arm parks both
+    // families for 10 minutes, and a stale blob makes the old code pass (it did).
+    {
+        id: 800, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'وين وصل طلبي رقم 1001؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['DEMO-SMSA-784512', 'SMSA'],
+            replyContainsAny: ['اسم', 'الجوال', 'الهاتف', 'رقم'],
+        },
+        notes: 'Phase 1: the order exists, so the reply asks for the name or phone on the order and reveals NOTHING about it — no tracking number, no courier — until identity is verified.',
+    },
+    {
+        id: 801, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'اسمي أحمد',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'وين وصل طلبي رقم 1001؟' },
+            { role: 'assistant', content: 'للتأكد من هويتك، ممكن تعطيني الاسم المسجل على الطلب أو رقم الجوال المستخدم عند الطلب؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['DEMO-SMSA-784512'],
+        },
+        notes: 'Phase 2 on the NEXT message with a correct name: the customer gets their tracking number. PARTIAL before the 2026-08-23 fix (the model called verify_and_get_shipment with no Phase 1 in the request → no blob → verification_expired), PASS after — the backend verifies against whatever blob exists or a live read, then serves the requested family.',
+    },
+    {
+        id: 802, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'اسمي فاطمة',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'وين وصل طلبي رقم 1001؟' },
+            { role: 'assistant', content: 'للتأكد من هويتك، ممكن تعطيني الاسم المسجل على الطلب أو رقم الجوال المستخدم عند الطلب؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['DEMO-SMSA-784512', 'SMSA', 'الرياض'],
+        },
+        notes: 'Phase 2 with a WRONG name: nothing about the order leaks — no tracking, no courier, no city. The identity check runs before any read of the requested data (security pin of the same fix).',
+    },
+    {
+        id: 803, category: 81, categoryName: 'Order Tracking', channel: 'dm',
+        message: 'ابغى رقم التتبع لطلبي 1001، اسمي أحمد ورقمي 0500000001',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['DEMO-SMSA-784512'],
+        },
+        notes: 'Order number + identity in ONE message. Measured pre-fix: PARTIAL — the model skipped Phase 1 and called the verify tool straight away, which the old code could only answer with verification_expired. Pins that Phase 2 stands on its own (live read + identity check) whether or not a Phase 1 ran.',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at

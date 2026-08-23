@@ -202,6 +202,25 @@ Both platforms follow the same policy; the decision lives in one place
 "Get Started" / «بدء الاستخدام» openers are system phrases: they fire the greeting when
 enabled and are silently suppressed otherwise — they never reach the AI.
 
+## Order-notification SMS to the CUSTOMER (per connected store, not per workspace)
+
+Not a `UserSettings` field: six rows per store in `customer_notification_templates`
+(`abandoned_cart`, `order_confirmed`, `order_shipped`, `order_delivered`, `review_request`,
+`digital_delivery`), each with AR + EN text, a delay, and `is_enabled`. Written by
+`PUT /notification-templates/:storeId/:type` (admin role + `requireOwnedStore`); read by
+`customerNotificationService.schedule()` on every order webhook (Salla / Zid / Shopify).
+
+| Fact | Value | Why it matters |
+|------|-------|----------------|
+| Seeded | by `createStore` for every platform and every reinstall, idempotent (#908, 2026-08-23). Before that only the Easy-Mode claim path seeded them, so an OAuth or embedded install had no rows at all | a store with no rows cannot send: `getTemplate()` → null → `schedule()` returns before writing anything |
+| **Default `is_enabled`** | **`false` for all six** (`schema.ts` `customer_notification_templates.is_enabled`); `seedDefaults` never sets it | a freshly connected store sends NO order SMS until the merchant switches each type on in `/integrations` → the store card → «إشعارات الطلبات». Measured 2026-08-23: the Salla demo store had every row OFF, so a rehearsal order would have produced zero log rows and read as a dedup pass — check this FIRST when "the order SMS didn't fire" |
+| Dedup | unique index `(store, type, platform_event_id)`; a duplicate delivery inserts nothing; `upgradePendingOnDuplicate` rewrites a still-`pending` row's text in place (Salla `order.shipment.created` upgrading the tracking-less `order.status.updated` row, held `SHIPPED_NO_TRACKING_GRACE_MS` = 5 min) | a second SMS for one event is a regression of this index, not of the template |
+| Delivery | `smsService.send` → Vonage. Rows land `failed` with the provider text when the account cannot send (2026-08-23: «Quota Exceeded - rejected» — the unverified-account ticket #3002710) | the log row is the evidence; its `status`/`error_message` separate "our code didn't fire" from "the provider refused" |
+
+The merchant-facing toggles are the whole on-switch — there is no workspace-level master
+toggle and no per-page override. Whether to seed `order_confirmed` / `order_shipped` ON for
+new stores is an open product decision, parked until the SMS provider can deliver.
+
 ## Test reply («اختبار الرد الذكي») — settings it applies
 
 `POST /pages/:id/test-reply` (`controllers/pages.ts` → `buildPlaygroundContext` →
