@@ -1,7 +1,7 @@
-import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
+import { normalizeAiIntent } from '@jawab24/shared';
 import { config } from '../../config';
-import { openaiService, type GenerateRequest, type GenerateResponse } from '../openai';
-import type { ParsedReply } from '../reply/types';
+import { openaiService, assertDeliverableOrThrow, type GenerateRequest, type GenerateResponse } from '../openai';
+import { parseReplyContent } from '../reply/parseReplyContent';
 import type { LLMProvider } from './types';
 import { OpenAIAdapter } from './openai-adapter';
 import { ClaudeAdapter } from './claude-adapter';
@@ -87,18 +87,11 @@ export async function generateReplyWithProvider(
             pipeline: request.context?.pipeline,
         });
 
-        // Parse structured JSON response
-        let parsed: ParsedReply;
-        try {
-            parsed = JSON.parse(result.content);
-        } catch {
-            parsed = {
-                reply: result.content,
-                intent: 'UNKNOWN',
-                confidence: 'low',
-                flags: ['invalid_json'],
-            };
-        }
+        // Parse the envelope through the same parser as the production path
+        // (salvage / empty-on-broken / plain passthrough — never raw envelope text).
+        const { parsed } = parseReplyContent(result.content, {
+            site: 'provider', pipeline: request.context?.pipeline,
+        });
 
         // Normalize intent (GPT and Claude both may invent non-standard intents)
         if (parsed.intent) {
@@ -107,6 +100,7 @@ export async function generateReplyWithProvider(
 
         // Run the same post-reply validation as the production path
         const validated = openaiService.validateReply(parsed, request);
+        assertDeliverableOrThrow(validated, request.context?.pipeline);
 
         return {
             reply: validated.reply,

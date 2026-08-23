@@ -16,7 +16,10 @@ import { withAiMetrics } from '../lib/aiMetrics';
 import { classifyTimeoutAbort } from '@jawab24/shared';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
-import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
+import { openaiService, assertDeliverableOrThrow, type GenerateRequest, type GenerateResponse } from './openai';
+import { parseReplyContent } from './reply/parseReplyContent';
+import { AiEmptyReplyError } from '../lib/errors';
+import type { ParsedReply, ValidatedReply } from './reply/types';
 import type { EcommerceToolResult } from '@jawab24/shared';
 
 // --- Singleton OpenAI client (reuses config, avoids per-request instantiation) ---
@@ -343,8 +346,11 @@ export async function generateWithToolResults(
                         messages: allMessages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
-                        // Include tools so AI can call verify_and_get_* in Phase 2
-                        // NOTE: Cannot use response_format: json_schema with tools — parse JSON manually
+                        // Include tools so AI can call verify_and_get_* in Phase 2.
+                        // Deliberately NO response_format on either tool call: the API
+                        // accepts it alongside tools, but it suppresses tool calling
+                        // (measured 10/10 → 3/10, see reply/replySchema.ts). The envelope
+                        // is parsed by parseReplyContent, which never passes raw text.
                         tools: ECOMMERCE_TOOLS,
                     }, { signal: controller.signal }),
                 ),
@@ -382,21 +388,19 @@ export async function generateWithToolResults(
         const content = choice?.message?.content?.trim() || '';
         const detectedLanguage = request.language || 'en';
 
-        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
-        try {
-            parsed = JSON.parse(content);
-        } catch {
-            parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: ['invalid_json'] };
-        }
+        const { parsed } = parseReplyContent(content, {
+            site: 'tools_final', pipeline: request.context?.pipeline, finishReason: choice?.finish_reason,
+        });
 
         // Validate the final reply. Skip the price check: prices here are from
         // verified tool results (the ground truth), and a computed total would
         // false-flag against the static KB → destructive fallback swap.
-        const v = validateToolReply(
-            { ...parsed, reply: parsed.reply || 'Thank you for your patience!' },
-            request,
-            { skipPriceCheck: true },
-        );
+        const v = validateToolReply(parsed, request, { skipPriceCheck: true });
+        // An empty reply here is a failure the merchant must see: the verified
+        // order/shipment data only exists in THIS call's context, so the plain
+        // regeneration in the catch below could not answer the question — it
+        // would only hide the failure behind a generic reply. Rethrown below.
+        assertDeliverableOrThrow(v, request.context?.pipeline);
         return {
             reply: v.reply,
             language: detectedLanguage,
@@ -410,6 +414,10 @@ export async function generateWithToolResults(
             flags: v.flags,
         };
     } catch (error) {
+        // Not a transport failure: the model answered and the answer was empty.
+        // Propagate so the backend flags the row (ai_empty_reply) instead of
+        // regenerating without the tool results (see assertDeliverableOrThrow above).
+        if (error instanceof AiEmptyReplyError) throw error;
         Sentry.captureException(error instanceof Error ? error : new Error('OpenAI tool results error'), {
             tags: { service: 'openai', feature: 'ecommerce-tools' },
         });
@@ -442,10 +450,10 @@ function safeParseArgs(argsString: string): Record<string, string> {
  * (no tool called → answered from static KB/catalog) keeps the full check.
  */
 function validateToolReply(
-    parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string },
+    parsed: ParsedReply,
     request: GenerateRequest,
     opts?: { skipPriceCheck?: boolean },
-): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
+): Pick<ValidatedReply, 'reply' | 'intent' | 'confidence' | 'flags'> {
     const validated = openaiService.validateReply(parsed, request, opts);
     return {
         reply: validated.reply,
@@ -455,22 +463,29 @@ function validateToolReply(
     };
 }
 
-/** Parse a direct (non-tool) reply from OpenAI content string */
+/**
+ * Parse a direct (non-tool) reply from OpenAI content string.
+ *
+ * This is the site that leaked on 2026-08-23: the model answered the prod turn
+ * as prose FOLLOWED by the JSON envelope, `JSON.parse` threw, and the old
+ * fallback sent the whole content — with no flag, so the row read as clean.
+ * Now the shared parser salvages the envelope's `reply`, and an empty result
+ * throws: the caller's catch regenerates on the plain path (strict grammar),
+ * which is a fine answer for a direct turn — no tool context is lost.
+ */
 function parseDirectReply(
     content: string,
     request: GenerateRequest,
     completion: OpenAI.ChatCompletion,
 ): ToolEnabledResponse {
-    let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
-    try {
-        parsed = JSON.parse(content);
-    } catch {
-        parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: [] };
-    }
+    const { parsed } = parseReplyContent(content, {
+        site: 'tools_direct', pipeline: request.context?.pipeline, finishReason: completion.choices[0]?.finish_reason,
+    });
 
     // Phase-1 direct reply (model answered without calling a tool) → no tool
     // results, standard KB/catalog grounding.
-    const v = validateToolReply({ ...parsed, reply: parsed.reply || content }, request);
+    const v = validateToolReply(parsed, request);
+    assertDeliverableOrThrow(v, request.context?.pipeline);
     return {
         reply: v.reply,
         language: request.language || 'en',

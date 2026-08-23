@@ -5797,10 +5797,28 @@ const SCRIPT_COUNTERS: Record<string, RegExp> = {
     bengali: /\p{Script=Bengali}/gu,
 };
 
+/**
+ * Harness-wide INVARIANT, checked on every case regardless of its `expected`:
+ * a delivered reply must never carry the model's JSON envelope. On 2026-08-23
+ * the e-commerce tool path sent a customer `<prose>\n\n{"reply":…,"intent":…}`
+ * verbatim (the parser there fell back to the raw content). No single case can
+ * own this — any case, on any page, that returns an envelope is a failure.
+ */
+const ENVELOPE_MARKERS = ['{"reply"', '{ "reply"', '"intent":', '"confidence":', '"gender_basis"'];
+
 function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict; reasons: string[] } {
     const d = resp.data;
     const checks: { field: string; pass: boolean; detail: string }[] = [];
     const e = test.expected;
+
+    // Invariant: no JSON envelope in the delivered text (see ENVELOPE_MARKERS).
+    {
+        const reply = d.reply || '';
+        const leaked = ENVELOPE_MARKERS.filter(m => reply.includes(m));
+        if (leaked.length > 0) {
+            checks.push({ field: 'invariant:no-json-envelope', pass: false, detail: `reply contains ${leaked.join(', ')} — raw model envelope reached the customer` });
+        }
+    }
 
     // replyMethod
     if (e.replyMethod) {
