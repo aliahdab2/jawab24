@@ -56,6 +56,37 @@ describe('resolveNavKey — nav.pages rename is canary-aware', () => {
         enableWhatsApp();
         expect(resolveNavKey('nav.pages', tNav, tPricing, false)).toBe('nav:channels');
     });
+
+    /**
+     * Instagram-DIRECT is the second channel that is not a Facebook Page, and
+     * it shipped after the WhatsApp-only gate above was written. A merchant who
+     * can connect an Instagram account without a Page must not be told the
+     * screen holds "Pages" — least of all while /business links to it with a
+     * button reading «إدارة القنوات».
+     */
+    it('Instagram-direct alone renames it, with WhatsApp still dark', () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        expect(resolveNavKey('nav.pages', tNav, tPricing, false)).toBe('nav:channels');
+        expect(resolveNavKey('nav.pages', tNav, tPricing, true)).toBe('nav:channels');
+    });
+
+    it('Instagram-direct dark AND WhatsApp dark: still "Pages"', () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
+        expect(resolveNavKey('nav.pages', tNav, tPricing, false)).toBe('nav:pages');
+    });
+
+    /**
+     * The canary is a WhatsApp-only guard. It must not suppress a rename that
+     * Instagram-direct has independently earned for every user.
+     */
+    it('WhatsApp canary does not hold back the Instagram-direct rename', () => {
+        enableWhatsApp();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', 'true');
+        expect(resolveNavKey('nav.pages', tNav, tPricing, false)).toBe('nav:channels');
+    });
 });
 
 describe('resolveNavKey — other keys unaffected', () => {

@@ -127,9 +127,13 @@
     "hint": "For anything the fields above don't cover: FAQs, special details, whatever else Jawab should know."
   },
   "noPage": "Connect a page to set up your business information.",
+  "noPageChannels": "Connect a channel to set up your business information.",
   "noConnectedPage": "No connected pages right now",
+  "noConnectedPageChannels": "No connected channels right now",
   "noConnectedPageHint": "You have pages that lost their connection and need reconnecting. Reconnect them to manage their business info here.",
+  "noConnectedPageHintChannels": "You have channels that lost their connection and need reconnecting. Reconnect them to manage their business info here.",
   "goToPages": "Manage pages",
+  "goToChannels": "Manage channels",
   "loading": "Loading your business…",
   "detail": {
     "loadFailed": "Couldn't load your business info. Nothing has been lost — try again."

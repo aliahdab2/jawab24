@@ -76,6 +76,25 @@ export function isWhatsAppVisible(isAdmin: boolean): boolean {
 }
 
 /**
+ * "Does this merchant have more than Facebook Pages to connect?" — the single
+ * policy point behind the «صفحات» ⇄ «قنوات التواصل» wording on /pages, the
+ * sidebar item, and the /business empty states.
+ *
+ * It is deliberately BROADER than `isWhatsAppVisible`, which is what all three
+ * screens used to branch on. That predicate predates Instagram-DIRECT going
+ * live: once a merchant can connect an Instagram account without a Facebook
+ * Page, "pages" is the wrong noun for them even when WhatsApp is hidden. Keep
+ * the three screens reading THIS function rather than a flag of their own —
+ * a /business button labelled «إدارة القنوات» that lands on a screen titled
+ * «إدارة الصفحات» is exactly the drift this centralisation prevents.
+ *
+ * @param isAdmin the ACTING user's platform-admin flag (useAuthStore user.isAdmin)
+ */
+export function usesChannelWording(isAdmin: boolean): boolean {
+  return isWhatsAppVisible(isAdmin) || isInstagramDirectEnabled();
+}
+
+/**
  * Gates the PUBLIC marketing surfaces (pricing plan cards, scale page,
  * checkout summary). Stricter than `isWhatsAppEnabled()`: the launch runbook
  * sets the config env DURING the admin-only canary, and the pricing page must
