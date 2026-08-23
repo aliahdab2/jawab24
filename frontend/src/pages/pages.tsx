@@ -244,6 +244,7 @@ const PagesPage: NextPageWithLayout = () => {
       setSyncing(true);
       type SyncResponse = {
         takenCount?: number;
+        takenPages?: { pageName: string }[];
         alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
         trialBlockedCount?: number;
         skippedCount?: number;
@@ -274,7 +275,11 @@ const PagesPage: NextPageWithLayout = () => {
           },
         });
       } else if (data?.takenCount && data.takenCount > 0) {
-        toast.warning(t('pageTakenWarning', { count: data.takenCount }), { duration: Infinity });
+        // Held by a workspace the user is NOT in. Name the pages so the merchant
+        // knows exactly what was withheld — never the holding account (D-039).
+        const takenNames = (data.takenPages ?? []).map(p => p.pageName);
+        const pageNames = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(takenNames);
+        toast.warning(t('pageTakenWarning', { count: data.takenCount, pageNames }), { duration: Infinity });
       }
 
       // Page(s) connected but auto-reply kept off because the channel already

@@ -148,7 +148,7 @@
   "enableWithoutInfoConfirm": "Turn on anyway",
   "businessInfoRequiredToEnable": "Add your Business Info first — Jawab has nothing to answer your customers from.",
   "whatsappConnectedAddBusinessInfo": "Number connected. Add your Business Info to switch Smart Replies on.",
-  "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member.",
+  "pageTakenWarning": "Not connected — already connected to another Jawab24 account: {pageNames}. If {count, plural, one {this page is} other {these pages are}} yours and you don't know which account holds {count, plural, one {it} other {them}}, contact support.",
   "pageTakenInWorkspace": "{count, plural, one {# page is} other {# pages are}} already in workspace ‹{workspaceName}› where you're already a member. Switch to that workspace to manage them.",
   "switchWorkspaceCta": "Switch to {workspaceName}",
   "pageTrialUsedWarning": "{count, plural, one {# page} other {# pages}} connected, but auto-reply stays off because the free trial has already been used on {count, plural, one {it} other {them}}. Subscribe to enable auto-reply.",

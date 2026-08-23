@@ -1167,7 +1167,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
+            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, takenPages: [] as { pageName: string }[], trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -1283,6 +1283,9 @@ export class PagesService {
         // was refused and why (instead of a silently disabled shadow page).
         const skippedPages: { pageName: string }[] = [];
         let takenCount = 0;
+        // Pages withheld because another workspace holds them — named so the client
+        // can say WHICH page was not connected (D-039: the page, never the holder).
+        const takenPages: { pageName: string }[] = [];
         // Pages connected but kept OFF because the channel already used its free
         // trial under another account and this account isn't paying (abuse guard).
         let trialBlockedCount = 0;
@@ -1519,6 +1522,14 @@ export class PagesService {
                 } else if (globalExisting) {
                     // Page is active under another workspace — skip to avoid stealing it.
                     logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
+                    // Every withheld page counts as taken, member of the holding
+                    // workspace or not — the merchant just granted it in the Facebook
+                    // dialog and must learn it was NOT connected (D-039: say a page is
+                    // taken, never who holds it). Counting only members (the state
+                    // before 2026-08-23) dropped the stranger case into the "No pages
+                    // found" reply, which told an admin of one page that they had none.
+                    takenCount++;
+                    takenPages.push({ pageName: fbPage.name });
                     if (globalExisting.workspaceId) {
                         const holdingWorkspaceId = globalExisting.workspaceId;
                         const [memberOfHolding] = await db
@@ -1538,7 +1549,6 @@ export class PagesService {
                         if (memberOfHolding) {
                             // Syncing user is already a member of the holding workspace —
                             // surface a one-tap "switch workspace" CTA on the client.
-                            takenCount++;
                             alreadyMemberOf.push({
                                 workspaceId: holdingWorkspaceId,
                                 workspaceName: memberOfHolding.workspaceName,
@@ -1625,7 +1635,7 @@ export class PagesService {
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+        return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
     /**

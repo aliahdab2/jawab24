@@ -754,7 +754,7 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, skippedPages, skipReason, pageLimit, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, skippedPages, skipReason, pageLimit, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
             // Activation funnel: the user has connected at least one page.
             if (syncedPages.length > 0) {
@@ -799,7 +799,10 @@ export class PagesController {
             }
 
             if (takenCount > 0) {
+                // Withheld because another workspace holds them. Names only — never
+                // the holding account (D-039); the client lists them by name.
                 response.takenCount = takenCount;
+                response.takenPages = takenPages;
             }
 
             // Pages connected but auto-reply kept OFF because the channel already
