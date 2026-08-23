@@ -175,9 +175,11 @@ Not addressed anywhere in the brief. Recommended narrow, for three reasons:
 
 ## 2. App Configuration
 
-✅ Already mirrors live config (scopes, webhook URL `https://jawab24.com/salla/webhooks`, Security
-Strategy = Token). **One gap:** `shipping.read` is not ticked — see the runbook, Phase 2.5. The
-portal is the whole grant; `config.salla.scopes` has zero effect in Easy Mode.
+✅ Mirrors live config (scopes incl. `shipping.read` — ticked 2026-08-20 — and webhook URL
+`https://jawab24.com/salla/webhooks`). **Security Strategy = Signature** — flipped 2026-08-23:
+it had been *Token*, which the backend does not verify (it checks `X-Salla-Signature` only), so
+the first real install got 401 on every delivery. The portal is the whole grant;
+`config.salla.scopes` has zero effect in Easy Mode.
 
 ## 3. Features & Media
 

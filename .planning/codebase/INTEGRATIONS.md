@@ -422,7 +422,10 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
 - **Webhook Integration**:
   - Endpoint: `/salla/webhooks` (POST) — single endpoint, dispatched by `event` field in body
   - Events (11): `product.{created,deleted,price.updated,status.updated,quantity.low}`, `app.uninstalled`, `order.{created,updated,status.updated,shipment.created}`, `abandoned.cart`. Salla has NO `order.completed` and NO `order.shipping.update`: completion/delivery is a status VALUE inside `order.status.updated` (`data.customized.slug` ∈ {shipped,delivered,completed}); tracking arrives via `order.shipment.created` (payload `data` is the shipment: `ship_to.phone` + top-level `tracking_number`).
-  - Verification: HMAC-SHA256 hex signature in `X-Salla-Signature` header (timing-safe compare)
+  - Verification: HMAC-SHA256 hex signature in `X-Salla-Signature` header (timing-safe compare).
+    ⚠️ The Partners portal's *Webhook Security Strategy* must be **Signature** — on *Token* Salla
+    sends `Authorization: <secret>` with no signature header and every delivery 401s (hit live
+    2026-08-23, fixed in the portal)
   - Source-of-truth topic list: `SALLA_WEBHOOK_EVENTS` in `services/salla.ts`
   - No GDPR endpoints required (Salla policy)
 

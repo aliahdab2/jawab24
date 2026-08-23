@@ -66,6 +66,41 @@ review.** Conflating the two is what put "APPROVED" in this file. Three conseque
    whose secrets prod does not hold. Repoint Client ID **and** Client Secret **and** the webhook
    token together — fixing one and leaving another leaves the same failure.
 
+### ✅ Update — 2026-08-23: first real token push against the production app — Tier 3.1 PASS, one portal defect found and fixed
+
+Done in the founder's real Chrome via the `authenticated-browser` skill (`mcp__chrome-real__*`) —
+the founder cleared Turnstile and signed in; the agent drove the session afterwards. That works
+for the Partners portal *and* the `s.salla.sa` store admin; only the human check itself is manual.
+
+- ✅ **Installed `665811310` onto `Jawab24 Dev Store 4`** (merchant `2108580704`) from the portal's
+  *App Testing → Install App* link. The store admin flashes "You are not authorized for this
+  request" on the redirect — **cosmetic**: the install lands (install id `e-118007999`, plan Free),
+  and the portal Webhooks Log confirms `app.installed` + `app.store.authorize` fired.
+- 🔴→✅ **Every delivery got 401 — a strategy mismatch, not a typo.** The portal's *Webhook
+  Security Strategy* was **Token** (Salla sends `Authorization: <secret>` and **no**
+  `X-Salla-Signature`), while `controllers/salla.ts` verifies the **Signature** strategy only
+  (`x-salla-signature` HMAC-SHA256 of the raw body). The 08-20 transcription was byte-exact — the
+  portal's secret hashes identically to prod's `SALLA_WEBHOOK_SECRET` (SHA-256 prefix `5622e42a`).
+  **Fix = portal only**: strategy flipped to **Signature** (persists across reload; the secret is
+  NOT regenerated), then *Reauthorize App* in the store admin → `200`/`200`, Webhooks Log 100%.
+  ⛔ Nothing in this runbook had ever stated the strategy, which is how it was set wrong — it is
+  now a Tier 0 row (0.8) and a Phase 1 precondition.
+- ✅ **Tier 3.1 verified at the read path**: `pending_ecommerce_installs` row staged — platform
+  `salla`, merchant `2108580704`, encrypted access + refresh tokens, `token_expires_at` = +14 days,
+  scopes incl. `shipping.read`, `status = pending`, unclaimed.
+- ⏸ **Tier 3.2 (claim) is blocked on an account decision, not on code.** The claim binds the
+  store's registered email to the signed-in user's email (D-031). Every portal demo store carries a
+  synthetic `<slug>@email.partners` address, the demo store's admin settings pages 404 (email cannot
+  be changed), Jawab24 has **no password login** (Facebook / phone-OTP / Demo Mode), and Facebook
+  login **rewrites `users.email` on every sign-in** (`services/auth.ts`) — so a one-off DB edit of
+  a reviewer user's email does not survive their first login. Recommended path: a **real Salla
+  store registered with the Facebook review account's email** (the one already shared with Meta and
+  Apple review), which then serves Tier 3 *and* the Service Trial fields. Open questions for the
+  founder: can a *Development*-status app be installed on a non-demo store, and is the store
+  signup free. ⚠️ Parked risk: a Salla reviewer who installs onto *their own* test store hits
+  `email_mismatch` by design — the Service Trial instructions deliberately point at the
+  pre-connected store instead.
+
 ### The Connect dead end — confirmed, now guarded
 
 Easy Mode is confirmed, so `connectStore` had no working destination: the OAuth authorize URL 404s
@@ -196,7 +231,11 @@ submission happens on the production app.
         tool answers with order status but no tracking number (order payloads never carry
         tracking; see `docs/integrations/salla.md`). Any store connected before the scope was
         added must **reconnect** to pick up the new grant.
-      - Webhook secret in the portal == prod `SALLA_WEBHOOK_SECRET`.
+      - Webhook secret in the portal == prod `SALLA_WEBHOOK_SECRET` **and Webhook Security
+        Strategy = Signature**. The handler verifies `X-Salla-Signature` only; on *Token* Salla
+        sends an `Authorization` header and no signature, so **every** delivery answers 401
+        (`Invalid HMAC`) — this is exactly what the first real install hit on 2026-08-23.
+        ✅ Set to Signature 2026-08-23.
       - Switch the production app to **Easy Mode** (mandatory for published apps).
         ✅ **Confirmed already selected** — portal read 2026-08-20.
 - [ ] **Prod env flips** → **executed in Phase 2.5** (backend.env, then container recreate —
@@ -232,10 +271,13 @@ submission happens on the production app.
 
 ### Readiness gate — every line must be ticked before Submit
 
-- [ ] Prod creds repointed at `665811310` (client id + secret + webhook token) and verified
-- [ ] `shipping.read` ticked in the portal
+- [x] Prod creds repointed at `665811310` (client id + secret + webhook token) and verified
+      (2026-08-20; secret proven byte-exact 2026-08-23 by a 200 in the portal Webhooks Log)
+- [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
+- [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
-- [ ] A real Salla store connected end-to-end (partner demo store)
+- [ ] A real Salla store connected end-to-end — install + token push ✅ 2026-08-23 (demo store);
+      **claim ⏸ blocked on the reviewer-account/email decision** (see the 2026-08-23 update)
 - [ ] **Tier 3 green — including `track_shipment`, which has never once been run**
 - [ ] The three Easy-Mode env vars set, incl. `SALLA_APP_STORE_URL` (only knowable post-publish
       — see the ordering note in Phase 2.5)

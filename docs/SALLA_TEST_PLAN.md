@@ -38,6 +38,7 @@ Run every row. All must pass before a single Tier-3 step.
 | 0.4 | `shipping.read` granted | Salla Partners portal → app → scopes | ticked. ⛔ Without it `track_shipment` returns status with no tracking (403 → degrade). Config alone does **not** grant it — Easy Mode never calls `buildAuthUrl` |
 | 0.5 | Article-5 Stripe guard live (D-065) | `docker exec jawab24-backend-<colour> sh -c "ls /app/backend/dist/config/sallaBilling.js"` | file present |
 | 0.6 | Container healthy after any recreate | `docker ps` + `scripts/health-check.sh` | all healthy; **`nginx -s reload` after `--force-recreate`** — recreate changes the container IP and nginx 502s until reloaded |
+| 0.8 | **Webhook Security Strategy = Signature** | Salla Partners portal → app → Webhooks/Notifications | radio **Signature** selected. ⛔ *Token* makes Salla send `Authorization: <secret>` with **no** `X-Salla-Signature`, and `controllers/salla.ts` verifies the signature only ⇒ **every delivery 401s** regardless of the secret. This is what the first real install hit on 2026-08-23; the secret itself was correct. ✅ Set 2026-08-23 (flip persists across reload; the secret is not regenerated) |
 | 0.7 | ✅ **Is the production app in Easy Mode?** | Salla Partners portal → app → OAuth Mode | **Answered 2026-08-20: YES.** See the resolved note below. Portal state must be read by a human — Turnstile blocks chrome-devtools MCP; use the Claude-in-Chrome extension |
 
 ### ✅ 0.7 — RESOLVED 2026-08-20: Easy Mode confirmed, dead end confirmed, now guarded
@@ -153,7 +154,7 @@ has cost production defects before. Run in order — later rows depend on earlie
 
 | # | Step | Pass criteria | On failure |
 |---|------|---------------|------------|
-| 3.1 | Install the app onto a real store from the listing | `app.store.authorize` webhook 200; pending install staged with encrypted token + `token_expires_at` ≈14 days | check webhook secret + `printenv`; do not publish |
+| 3.1 | Install the app onto a real store from the listing | `app.store.authorize` webhook 200; pending install staged with encrypted token + `token_expires_at` ≈14 days | **401 on every delivery ⇒ Tier 0.8 first** (strategy ≠ Signature — the 2026-08-23 failure), then *Reauthorize App* in the store admin re-fires the push; only then suspect the secret + `printenv`; do not publish |
 | 3.2 | Claim it | sign in as the account whose email matches the store's registered email → binds; wrong account → 403 `email_mismatch` | `SALLA_EASY_MODE_CLAIM_ENABLED` off is the usual cause |
 | 3.3 | Catalog sync | products land; count matches the store; `product_summary` populated | |
 | 3.4 | Test reply quoting a real product | correct name **and price** from the live catalog | |
@@ -196,6 +197,19 @@ already tell us. This is a standing rule, not a one-off caution.
 | Many stores | N stores on the 6h refresh cadence | cadence doesn't stampede; Easy-Mode stores skipped when `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` |
 
 ---
+
+## Results — 2026-08-23 (production app `665811310`, demo store `2108580704`)
+
+- **Tier 0**: 0.1–0.7 carried from 2026-08-20; **0.8 FAILED then FIXED** (Token → Signature).
+- **3.1 ✅ PASS** after the fix — install from the portal's *App Testing* link; `app.installed`
+  + `app.store.authorize` both `200` (portal Webhooks Log 100%); `pending_ecommerce_installs`
+  row staged with encrypted access + refresh tokens, `token_expires_at` = +14 d, scopes incl.
+  `shipping.read`. Before the fix: 4 × `401` (two events, one retry each); a demo-store "You are
+  not authorized for this request" flash on the install redirect is cosmetic.
+- **3.2 ⏸ BLOCKED** — not by code: no Jawab24 account can carry the demo store's synthetic
+  `@email.partners` address (no password login; Facebook login rewrites `users.email` each
+  sign-in; demo-store settings 404). Decision pending — see the runbook's 2026-08-23 update.
+- 3.3–3.10 not reached.
 
 ## Results — 2026-07-19 run (branch `feat/salla-easy-mode-claim-binding` @ `dc61723b`)
 
