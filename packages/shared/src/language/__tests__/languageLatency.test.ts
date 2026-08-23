@@ -14,6 +14,15 @@
  * threshold is machine-dependent, fails randomly on a loaded CI box, and trains everyone
  * to ignore the suite — which is worse than having no test at all.
  *
+ * ⚠️ That rule was violated in practice and it cost a false deploy-gate red on
+ * 2026-08-23: 568 µs against a 300 µs ceiling, on code identical to main.
+ * Every threat named below is guarded machine-independently — sync/not-a-Promise for
+ * the network threat, pass-counting for redundancy, a RATIO for quadratic growth. The
+ * single remaining timing assertion is now best-of-N with an I/O-scale ceiling, which
+ * is the only shape that honours the paragraph above. Do not tighten it back toward
+ * "what the CPU costs today": a number that tracks local CPU cost will fail on load
+ * again, and it guards nothing the ratio test does not already guard.
+ *
  * What they DO guard are the two changes that would cost real time:
  *
  *   1. Making detection asynchronous or network-backed. This is the realistic threat:
@@ -135,13 +144,48 @@ describe('no redundant detection passes', () => {
 });
 
 describe('algorithmic blow-up ceiling (NOT a benchmark)', () => {
-    it('resolves a realistic message well inside a loose per-call ceiling', () => {
-        // 300 µs is ~30x the measured cost (~9 µs on a 2026 laptop). It is intentionally
-        // absurd headroom: this must NEVER fail because CI is busy. It fails only if the
-        // path gains a network hop, a sleep, or quadratic behaviour — the things that
-        // would actually cost a customer real waiting time.
-        const CEILING_US = 300;
+    it('resolves a realistic message without doing I/O-scale work per call', () => {
+        // ⚠️ This is the ONLY machine-dependent assertion in the file, so it is written
+        // to survive a busy box. It failed the deploy gate on 2026-08-23 at 568 µs/call
+        // against a 300 µs ceiling, on code identical to main.
+        //
+        // ⛔ The 568 µs was NEVER REPRODUCED — four attempts, including the full 40-file
+        // shared suite under 4x CPU oversubscription (48 busy workers on 12 cores),
+        // where even the ORIGINAL 300 µs assertion passed. Idle cost measured
+        // ~23–29 µs/call, ~161 µs under that load. So the trigger is unexplained; a
+        // loaded machine is the hypothesis, not a finding. Do not write it up as one.
+        // The response is therefore to make the assertion robust to a 20–40x excursion
+        // rather than to chase a cause we cannot summon — and because the shape itself
+        // is what the header comment forbids.
+        //
+        // TWO changes make it robust:
+        //
+        //   1. BEST-OF-N, not a single mean. Scheduler preemption can only ever make a
+        //      sample SLOWER, never faster, so the minimum across batches approximates
+        //      the true cost no matter what else the machine is doing. Same best-of-N
+        //      method the repo already mandates for detector/latency measurement
+        //      (AI_INSTRUCTIONS Rule 17.5).
+        //
+        //   2. A ceiling set where I/O separates from CPU, not where CPU happens to sit
+        //      today. The threat this test uniquely owns is a blocking call the
+        //      not-a-Promise checks above cannot see — an execSync, a busy-wait, a
+        //      synchronous HTTP hop. Those cost MILLISECONDS. Local work here measures
+        //      ~23–29 µs/call on an idle 2026 laptop (re-measured 2026-08-23; the
+        //      previous comment's "~9 µs" was stale, which is how a 300 µs ceiling came
+        //      to look like 30x headroom when it was really ~11x).
+        //
+        // So: 1 ms is ~35x the real local cost and still fails a network hop by 5–50x.
+        // Quadratic blow-up is NOT this test's job — the ratio test below owns that,
+        // machine-independently.
+        const CEILING_US = 1000;
         const ITERATIONS = 2000;
+        const BATCHES = 5;
+        // Caps a batch by TIME, not just iteration count, and stops as soon as one batch
+        // comes in under the ceiling. Without both, a caught regression turns into a
+        // hang rather than a failure: at 50 ms/call, 5 x 2000 calls is eight minutes of
+        // apparent silence. With them, the pass path is one ~50 ms batch and the worst
+        // case is BATCHES x BUDGET = 500 ms.
+        const BATCH_BUDGET_MS = 100;
         const comment = 'Quels cours proposez-vous pour la formation en informatique ?';
 
         // Warm-up so JIT compilation is not billed to the measurement.
@@ -149,13 +193,30 @@ describe('algorithmic blow-up ceiling (NOT a benchmark)', () => {
             resolveInputLanguageWithSource({ comment, conversationHistory: HISTORY, kbText: 'نص عربي' });
         }
 
-        const started = process.hrtime.bigint();
-        for (let i = 0; i < ITERATIONS; i++) {
-            resolveInputLanguageWithSource({ comment, conversationHistory: HISTORY, kbText: 'نص عربي' });
+        let bestPerCallUs = Infinity;
+        let batchesRun = 0;
+        for (let batch = 0; batch < BATCHES; batch++) {
+            const started = process.hrtime.bigint();
+            let done = 0;
+            while (done < ITERATIONS) {
+                resolveInputLanguageWithSource({ comment, conversationHistory: HISTORY, kbText: 'نص عربي' });
+                done++;
+                if (Number(process.hrtime.bigint() - started) / 1e6 > BATCH_BUDGET_MS) break;
+            }
+            batchesRun++;
+            bestPerCallUs = Math.min(bestPerCallUs, Number(process.hrtime.bigint() - started) / 1000 / done);
+            // One clean batch is enough: a single sample under the ceiling already proves
+            // the work is CPU-scale, and more batches can only add noise. Extra batches
+            // exist to give a CONTENDED run more chances, not to average anything.
+            if (bestPerCallUs < CEILING_US) break;
         }
-        const perCallUs = Number(process.hrtime.bigint() - started) / 1000 / ITERATIONS;
 
-        expect(perCallUs).toBeLessThan(CEILING_US);
+        // Reports the batches actually run, not BATCHES — early exit means a healthy run
+        // is usually best-of-1, and a message claiming otherwise would misdescribe it.
+        expect(
+            bestPerCallUs,
+            `best of ${batchesRun} batch(es): ${bestPerCallUs.toFixed(2)} µs/call — at this scale the path is doing I/O-scale work (blocking call, sleep, or sync network hop), not local CPU`,
+        ).toBeLessThan(CEILING_US);
     });
 
     it('is linear in message length, not quadratic', () => {
