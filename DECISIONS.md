@@ -2588,15 +2588,34 @@ tracking, degrading to the order summary rather than an error if that read fails
 Phase-2 read parks its blob, so a retry inside the TTL is free. The Phase-1 challenge names
 the verify tool of its own family. `verification_expired` is retired as unreachable.
 Counters: the tool outcome stays `success`/`<error>`; `metrics:ecom:verify:{own|sibling|
-live|requested_live_failed}` records how each pass was satisfied. Demo stores route the
-order tools to `services/demoOrders.ts` so the eval can reach them (Cat 81, measured
-same-day: pre-fix 2/4, fixed 4/4).
+live|requested_empty|requested_live_failed}` records how each pass was satisfied. The last
+two are deliberately separate: `requested_empty` is a successful read of a family the
+platform has nothing for (an unshipped order asked about by tracking — the commonest
+cross-family case, and healthy), `requested_live_failed` is a throw. Folding them together
+would report the healthy path as a platform failure and bury the 403 that SALLA_TEST_PLAN
+3.8 uses these counters to find. Demo stores route the order tools to
+`services/demoOrders.ts` so the eval can reach them (Cat 81, measured same-day: pre-fix
+2/4, fixed 4/4).
 
 **Security, assessed.** The pending blob never gated anything — both phases already run in
 one request when the customer supplies number and name together, and `lookup_order` already
-answered the "does this order exist" question. Guesses per message rise from ≤3 to ≤6 inside
-the DM limiter's 10 messages/min/sender/page, against a full first-name token or a 9-digit
-phone; data exposure is unchanged (PII stripped, nothing fetched before the check passes).
+answered the "does this order exist" question. Guesses per message rise from ≤3 to ≤6
+(`MAX_TOOL_CALLS_PER_ROUND` 3 × `MAX_TOOL_ROUNDS` 2) inside the DM limiter's 10
+messages/min/sender/page, against a full first-name token or a 9-digit phone.
+
+What the identity check gates, precisely — the two halves are easy to conflate and an
+earlier draft of this ruling stated the stronger one wrongly:
+- It gates every BYTE returned. No order or shipment field reaches the model on any path
+  before `namesMatch`/`phonesMatch` passes; PII is stripped from what it then returns.
+- It does NOT gate the platform READ on the no-blob path — there the order must be fetched
+  to have anything to compare against, so a wrong guess against an order number that exists
+  costs one platform call and parks that blob. Measured, not assumed (probe, 2026-08-23:
+  wrong name + empty Redis ⇒ 1 `lookupOrder`, 1 `SET ecom:pending:…`). It is bounded rather
+  than free: the park means further guesses against the same order number cost no read, so
+  the ceiling is one extra call per (order number, family) per 600 s — the same shape of
+  budget `lookup_order` already hands an unauthenticated DM, which is why it is accepted.
+  Once any blob is held, a failed guess causes no read at all.
+
 A per-order daily cap on failed checks is a cheap follow-up if the counters ever show
 guessing; it is not needed to make this change safe.
 

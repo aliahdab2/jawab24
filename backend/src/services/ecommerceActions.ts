@@ -202,12 +202,21 @@ function recordToolOutcome(toolName: string, outcome: string): void {
  * `own`: the requesting family's Phase-1 blob was there. `sibling`: only the other
  * family's blob was, and the requested data was then read live. `live`: no blob at
  * all (cache-only Phase 1, or the customer answered after the TTL) — read live.
- * `requested_live_failed`: verified from the sibling blob but the live read of the
- * requested family failed, so the sibling data was returned instead of a dead end.
+ *
+ * The two sibling-fallback outcomes are counted SEPARATELY, because they are
+ * different facts about the platform and the plan that reads these numbers
+ * (SALLA_TEST_PLAN 3.8) turns on telling them apart:
+ * `requested_empty`: the requested family was read and the platform answered
+ * NOTHING — an order with no shipment yet. That is the ordinary case for a
+ * tracking question on an unshipped order, NOT an error; the customer gets the
+ * order summary. `requested_live_failed`: the read THREW (403, 5xx, timeout).
+ * Folding the empty case into the failure counter would report the commonest
+ * healthy path as a platform failure and hide the 403 that 3.8 exists to find.
+ *
  * These are the numbers that say whether the cross-family repair is carrying
  * real traffic — in production before it existed, 4 of 4 Phase-2 calls expired.
  */
-type VerificationSource = 'own' | 'sibling' | 'live' | 'requested_live_failed';
+type VerificationSource = 'own' | 'sibling' | 'live' | 'requested_empty' | 'requested_live_failed';
 function recordVerificationSource(source: VerificationSource): void {
     try {
         redis.incr(`metrics:ecom:verify:${source}`).catch(() => { });
@@ -353,8 +362,19 @@ function platformFailure(err: unknown, toolCall: EcommerceToolCall, store: Store
  *   writes one, and a customer who answers after VERIFICATION_TTL_SECONDS has none;
  *   both used to dead-end on the same error.
  *
- * The identity comparison always runs BEFORE any live read of the requested family,
- * so a failed guess never causes a platform call for data it will not receive.
+ * What the identity comparison does and does NOT gate, stated exactly, because the
+ * two are easy to conflate:
+ * - It gates every BYTE returned. No order or shipment field reaches the model on
+ *   any path until namesMatch/phonesMatch passes.
+ * - It does NOT gate the platform READ on the no-blob path. There the order has to
+ *   be fetched to have anything to compare against, so a wrong guess for an order
+ *   number that exists costs one platform call and parks that blob for the rest of
+ *   the TTL. That is bounded, not free: the park means repeat guesses against the
+ *   same order number cost nothing further, so the worst case is one extra call per
+ *   (order number, family) per VERIFICATION_TTL_SECONDS — the same shape of budget
+ *   `lookup_order` already hands an unauthenticated DM, which is why it is accepted.
+ *   Once a blob IS held (own or sibling), the comparison runs first and a failed
+ *   guess causes no read at all.
  */
 async function handleVerification(
     mod: PlatformModule,
@@ -376,8 +396,8 @@ async function handleVerification(
     const requested = familyOfVerifyTool(toolCall.name);
 
     // Find something to verify against: own blob → sibling blob → live read.
-    let held = await loadPendingBlob(store.id, orderNumber, requested);
-    let source: VerificationSource = held?.family === requested ? 'own' : 'sibling';
+    const parked = await loadPendingBlob(store.id, orderNumber, requested);
+    let held = parked;
     if (!held) {
         let blob: OrderBlob | null;
         try {
@@ -389,8 +409,12 @@ async function handleVerification(
             return { tool_name: toolCall.name, success: false, error: 'order_not_found' };
         }
         held = { blob, family: requested };
-        source = 'live';
     }
+    // Derived from what was PARKED, not from `held` — a live read yields the
+    // requested family too, so after the fallback the two are indistinguishable.
+    let source: VerificationSource = parked
+        ? (parked.family === requested ? 'own' : 'sibling')
+        : 'live';
 
     // Server-side comparison — the gate.
     const nameOk = providedName ? namesMatch(held.blob.customerFirstName, providedName) : false;
@@ -411,7 +435,9 @@ async function handleVerification(
             if (wanted) {
                 answer = wanted;
             } else {
-                source = 'requested_live_failed';
+                // Read succeeded, platform has nothing yet (an unshipped order asked
+                // about by tracking). Healthy — never counted as a failure.
+                source = 'requested_empty';
             }
         } catch (err) {
             source = 'requested_live_failed';

@@ -881,6 +881,30 @@ describe('executeToolCall — verification', () => {
         expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:requested_live_failed');
     });
 
+    // An unshipped order asked about by TRACKING is the commonest cross-family
+    // case, and it is not a failure: the platform answered, it just has no
+    // shipment yet. Counting it as `requested_live_failed` would report the
+    // healthy path as a platform failure and bury the 403 that SALLA_TEST_PLAN
+    // 3.8 uses these counters to find.
+    it('sibling blob + the requested family is EMPTY (not shipped yet) counts as requested_empty, never as a failure', async () => {
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        mockGetShipmentTracking.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+
+        expect(mockGetShipmentTracking).toHaveBeenCalledWith(storeId, '1234');
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('status', 'paid');
+        expect(result.data).not.toHaveProperty('trackingNumber');
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:ecom:verify:requested_empty');
+        expect(mockRedisIncr).not.toHaveBeenCalledWith('metrics:ecom:verify:requested_live_failed');
+        // Nothing threw, so nothing is reported.
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
     it('a wrong name against the sibling blob fails WITHOUT reading the requested family', async () => {
         answerOnly({ [pendingKey('order')]: orderBlob });
         mockGetShipmentTracking.mockResolvedValue(shipmentBlob);
@@ -922,7 +946,12 @@ describe('executeToolCall — verification', () => {
         expect(mockRedisSet).toHaveBeenCalledWith(pendingKey('order'), expect.any(String), 'EX', 600);
     });
 
-    it('with NO pending blob and a wrong name, the live read happens but nothing is returned', async () => {
+    // The exact residual the docstring on handleVerification states: with nothing
+    // parked, the order MUST be fetched to have anything to compare against, so a
+    // wrong guess does cost one platform call and does park the blob. What the
+    // check gates is every byte returned, not the read. Asserted rather than
+    // described, so the claim in the docstring cannot drift from the code.
+    it('with NO pending blob and a wrong name: the live read DOES happen and parks, and still nothing is returned', async () => {
         mockLookupOrder.mockResolvedValue(orderBlob);
 
         const result = await executeToolCall(storeId, {
@@ -930,8 +959,18 @@ describe('executeToolCall — verification', () => {
             arguments: { order_number: '1234', provided_name: 'فاطمة' },
         });
 
+        expect(mockLookupOrder).toHaveBeenCalledWith(storeId, '1234');
+        expect(mockRedisSet).toHaveBeenCalledWith(pendingKey('order'), expect.any(String), 'EX', 600);
         expect(result.error).toBe('verification_failed');
         expect(result).not.toHaveProperty('data');
+        // ...and the park is what bounds it: a second guess reads no platform.
+        mockLookupOrder.mockClear();
+        answerOnly({ [pendingKey('order')]: orderBlob });
+        await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'سارة' },
+        });
+        expect(mockLookupOrder).not.toHaveBeenCalled();
     });
 
     it('live Phase 2 on an unknown order → order_not_found (not verification_expired)', async () => {
