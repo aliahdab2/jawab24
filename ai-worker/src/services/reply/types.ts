@@ -117,6 +117,8 @@ export interface GenerateResponse {
     reply: string;
     language: string;
     model?: string;
+    /** Store tool path: product IDs the reply presents (see ParsedReply.product_ids). */
+    productIds?: string[];
     tokensUsed?: number;
     tokensIn?: number;
     tokensInCached?: number;
@@ -169,6 +171,12 @@ export interface ParsedReply {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    /**
+     * Store tool path only (D-099 `respond`): the platform product IDs of the
+     * products this reply presents, in order — the backend sends their cards.
+     * Explicit, so a card is never inferred from the reply's prose.
+     */
+    product_ids?: string[];
     hedging?: boolean;
     language?: string;
     gender?: 'm' | 'f' | 'unknown';

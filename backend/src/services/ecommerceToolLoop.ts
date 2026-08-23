@@ -31,7 +31,7 @@ import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { executeToolCall, type ToolExecutionContext } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
 import { ragRetrievalMode } from './kb/retrieval';
-import { buildProductCardsFromToolResults, buildProductCardsFromReplyText } from './reply/productCardBuilder';
+import { buildProductCardsFromToolResults, buildProductCardsFromReplyText, buildProductCardsFromIds } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { AiToolLoopExhaustedError, AiEmptyReplyError } from '../utils/fbGraphErrors';
 import { typedAiErrorFromWire } from './aiWireErrors';
@@ -43,6 +43,8 @@ interface AiWorkerToolResponse {
     toolCalls?: Array<{ name: string; arguments: Record<string, string> }>;
     reply?: string;
     language?: string;
+    /** Products the reply presents, by platform product ID (D-099 `respond.product_ids`). */
+    productIds?: string[];
     /** Model used by the worker — surfaced so cost is computed against the right unit price. */
     model?: string;
     tokensUsed?: number;
@@ -175,7 +177,11 @@ export async function generateReplyWithTools(
             // The card follows the reply into the same thread, so it carries the
             // reply's OWN language — not the request hint, which may differ.
             const language = data.language || request.language || 'en';
-            const productCards = await buildProductCardsFromReplyText(storeId, reply, language);
+            // The model names the products it presents (D-099 `product_ids`);
+            // reading the prose for links/titles is the fallback for a reply
+            // that names none.
+            const namedCards = data.productIds?.length ? await buildProductCardsFromIds(storeId, data.productIds, language) : [];
+            const productCards = namedCards.length ? namedCards : await buildProductCardsFromReplyText(storeId, reply, language);
             return {
                 reply,
                 language,
@@ -276,7 +282,8 @@ export async function generateReplyWithTools(
             // referenced a product. When no tool carried product data (e.g. only
             // lookup_order ran), fall back to the one product the reply names.
             const language = roundData.language || request.language || 'en';
-            const toolCards = await buildProductCardsFromToolResults(storeId, allToolResults, language);
+            const namedCards = roundData.productIds?.length ? await buildProductCardsFromIds(storeId, roundData.productIds, language) : [];
+            const toolCards = namedCards.length ? namedCards : await buildProductCardsFromToolResults(storeId, allToolResults, language);
             const productCards = toolCards.length
                 ? toolCards
                 : await buildProductCardsFromReplyText(storeId, roundData.reply, language);

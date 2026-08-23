@@ -55,6 +55,7 @@ vi.mock('../../src/services/ecommerce', async (importOriginal) => {
 
 import {
     buildProductCardsFromReplyText,
+    buildProductCardsFromIds,
     filterRecentlySentCards,
     markCardsSent,
 } from '../../src/services/reply/productCardBuilder';
@@ -462,5 +463,54 @@ describe('card cooldown', () => {
         await markCardsSent('page-1', 'psid-1', []);
         expect(mockRedisMget).not.toHaveBeenCalled();
         expect(mockPipelineSet).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Model-named cards (D-099 `respond.product_ids`) — keyed on the platform
+ * product id the catalog block prints as `(ID: …)`. Reads: store → the rows
+ * for those ids (one query). Order is the model's; unknown ids are counted.
+ */
+describe('buildProductCardsFromIds', () => {
+    const SALLA = { platform: 'salla', storeDomain: 'demostore.salla.sa/dev-jkgsyu3w6pzzfrzw' };
+    const SKIRT = { id: 'p-1', platformProductId: '812874023', title: 'تنورة', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p812874023', imageUrl: 'https://cdn/a.jpg', priceRange: '79 SAR', totalInventory: 2 };
+    const DRESS = { id: 'p-2', platformProductId: '348732197', title: 'فستان', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/فستان/p348732197', imageUrl: 'https://cdn/d.jpg', priceRange: '83 SAR', totalInventory: 7 };
+    const SOLD_OUT = { id: 'p-3', platformProductId: '771999266', title: 'تنورة', handle: null, productUrl: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw/تنورة/p771999266', imageUrl: 'https://cdn/c.jpg', priceRange: '124 SAR', totalInventory: 0 };
+
+    function primeRows(rows: Array<typeof SKIRT>) {
+        mockLimit.mockReset();
+        mockLimit.mockResolvedValueOnce([SALLA]).mockResolvedValueOnce(rows);
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(db.select).mockImplementation(() => defaultSelectChain() as never);
+        mockRedisIncr.mockResolvedValue(1);
+    });
+
+    it('cards the named products in the MODEL\'s order, whatever order the rows came back in', async () => {
+        primeRows([SKIRT, DRESS]);
+        const cards = await buildProductCardsFromIds('store-1', ['348732197', '812874023'], 'ar');
+        expect(cards.map(c => c.productUrl)).toEqual([DRESS.productUrl, SKIRT.productUrl]);
+        expect(cards[0].subtitle).toBe(`83 SAR · ${arMessages.cardInStock}`);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:model:fired');
+    });
+
+    it('an id the catalog does not hold is counted and skipped — never guessed', async () => {
+        primeRows([SKIRT]);
+        const cards = await buildProductCardsFromIds('store-1', ['nope', '812874023'], 'ar');
+        expect(cards.map(c => c.productUrl)).toEqual([SKIRT.productUrl]);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:model:unknown_id');
+    });
+
+    it('never cards a named product that is sold out', async () => {
+        primeRows([SOLD_OUT]);
+        expect(await buildProductCardsFromIds('store-1', ['771999266'], 'ar')).toEqual([]);
+        expect(mockRedisIncr).toHaveBeenCalledWith('metrics:product_card:model:out_of_stock');
+    });
+
+    it('no ids → no reads, no cards', async () => {
+        expect(await buildProductCardsFromIds('store-1', [], 'ar')).toEqual([]);
+        expect(db.select).not.toHaveBeenCalled();
     });
 });
