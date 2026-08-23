@@ -853,16 +853,36 @@ describe('Salla Service', () => {
     // ============================================================
 
     describe('registerWebhooks', () => {
-        it('should register all 11 webhook events', async () => {
-            mockFetch.mockResolvedValue({ ok: true });
+        const WEBHOOK_URL = 'https://jawab24.com/salla/webhooks';
+        const LIST_URL = 'https://api.salla.dev/admin/v2/webhooks';
+        const SUBSCRIBE_URL = 'https://api.salla.dev/admin/v2/webhooks/subscribe';
+
+        /** Route fetch by call: the listing GET answers with `existing`, every write with `write`. */
+        const routeFetch = (
+            existing: Array<{ id: number; event: string; url: string }>,
+            write: { ok: boolean; status?: number; text?: () => Promise<string> } = { ok: true },
+        ) => {
+            mockFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+                if (url === LIST_URL && (!init?.method || init.method === 'GET')) {
+                    return { ok: true, status: 200, json: async () => ({ data: existing }) };
+                }
+                return write;
+            });
+        };
+        const writeCalls = () => mockFetch.mock.calls.filter(
+            (call: [string, { method?: string }]) => call[1]?.method === 'POST' || call[1]?.method === 'PUT',
+        ) as Array<[string, { method: string; body: string }]>;
+
+        it('should register all 11 webhook events after listing what Salla already holds', async () => {
+            routeFetch([]);
 
             await registerWebhooks('access_token');
 
-            expect(mockFetch).toHaveBeenCalledTimes(11);
+            // 1 listing GET + 11 subscribes
+            expect(mockFetch).toHaveBeenCalledTimes(12);
+            expect(mockFetch.mock.calls[0][0]).toBe(LIST_URL);
 
-            const events = mockFetch.mock.calls.map(
-                (call: [string, { body: string }]) => JSON.parse(call[1].body).event,
-            );
+            const events = writeCalls().map(call => JSON.parse(call[1].body).event);
             expect(events).toEqual([
                 'product.created',
                 'product.deleted',
@@ -878,24 +898,85 @@ describe('Salla Service', () => {
             ]);
         });
 
-        it('should not report error on 422 (webhook already exists)', async () => {
-            mockFetch.mockResolvedValue({
-                ok: false,
-                status: 422,
-                text: async () => 'already exists',
-            });
+        // The defect this pins (2026-08-23): subscriptions registered without these
+        // fields delivered with NO X-Salla-Signature, and the HMAC check refused every
+        // order and product event with 401 — none had ever been accepted.
+        it('every subscription carries the signature strategy, the configured secret and payload version 2', async () => {
+            routeFetch([]);
 
             await registerWebhooks('token');
 
+            for (const [url, init] of writeCalls()) {
+                expect(url).toBe(SUBSCRIBE_URL);
+                const body = JSON.parse(init.body);
+                expect(body.security_strategy).toBe('signature');
+                expect(body.secret).toBe('test_webhook_secret');
+                expect(body.version).toBe(2);
+            }
+        });
+
+        it('UPDATES an existing subscription for our URL in place instead of re-subscribing (a re-subscribe 422s and leaves it unsigned)', async () => {
+            routeFetch([
+                { id: 1069900204, event: 'order.created', url: WEBHOOK_URL },
+                { id: 445433511, event: 'order.status.updated', url: WEBHOOK_URL },
+                // Someone else's subscription for the same event — not ours, must not be touched.
+                { id: 999, event: 'product.created', url: 'https://other.example/hook' },
+            ]);
+
+            const result = await registerWebhooks('token');
+
+            const writes = writeCalls();
+            const puts = writes.filter(c => c[1].method === 'PUT');
+            expect(puts.map(c => c[0]).sort()).toEqual([
+                'https://api.salla.dev/admin/v2/webhooks/1069900204',
+                'https://api.salla.dev/admin/v2/webhooks/445433511',
+            ].sort());
+            for (const [, init] of puts) {
+                const body = JSON.parse(init.body);
+                expect(body).toMatchObject({ url: WEBHOOK_URL, security_strategy: 'signature', secret: 'test_webhook_secret', version: 2 });
+            }
+            // The other 9 events are subscribed fresh — including product.created, whose
+            // only existing subscription belongs to a different URL.
+            expect(writes.filter(c => c[1].method === 'POST')).toHaveLength(9);
+            expect(result.registered).toHaveLength(11);
+            expect(result.failed).toEqual([]);
+        });
+
+        it('should not report error on 422 (webhook already exists) when the listing could not see it', async () => {
+            routeFetch([], { ok: false, status: 422, text: async () => 'already exists' });
+
+            const result = await registerWebhooks('token');
+
             expect(mockCaptureError).not.toHaveBeenCalled();
+            expect(result.registered).toHaveLength(11);
+        });
+
+        it('a 422 on an UPDATE is a real failure, not "already exists"', async () => {
+            routeFetch(
+                [{ id: 1069900204, event: 'order.created', url: WEBHOOK_URL }],
+                { ok: false, status: 422, text: async () => 'invalid' },
+            );
+
+            const result = await registerWebhooks('token');
+
+            expect(result.failed).toEqual(expect.arrayContaining([expect.objectContaining({ topic: 'order.created', status: 422 })]));
+        });
+
+        it('falls back to blind subscribes (still signed) when the listing fails, and reports the listing once', async () => {
+            mockFetch.mockImplementation(async (url: string) => {
+                if (url === LIST_URL) return { ok: false, status: 403 };
+                return { ok: true };
+            });
+
+            const result = await registerWebhooks('token');
+
+            expect(writeCalls().every(([url, init]) => url === SUBSCRIBE_URL && JSON.parse(init.body).security_strategy === 'signature')).toBe(true);
+            expect(result.registered).toHaveLength(11);
+            expect(mockCaptureError).toHaveBeenCalledTimes(1);
         });
 
         it('should capture error on non-422 failure but not throw', async () => {
-            mockFetch.mockResolvedValue({
-                ok: false,
-                status: 500,
-                text: async () => 'server error',
-            });
+            routeFetch([], { ok: false, status: 500, text: async () => 'server error' });
 
             // Should not throw
             await registerWebhooks('token');
@@ -912,17 +993,14 @@ describe('Salla Service', () => {
         });
 
         it('should register all events to a single webhook URL', async () => {
-            mockFetch.mockResolvedValue({ ok: true });
+            routeFetch([]);
 
             await registerWebhooks('token');
 
-            const urls = mockFetch.mock.calls.map(
-                (call: [string, { body: string }]) => JSON.parse(call[1].body).url,
-            );
+            const urls = writeCalls().map(call => JSON.parse(call[1].body).url);
 
             // All events point to the same single endpoint
-            const expectedUrl = 'https://jawab24.com/salla/webhooks';
-            expect(urls.every((u: string) => u === expectedUrl)).toBe(true);
+            expect(urls.every((u: string) => u === WEBHOOK_URL)).toBe(true);
         });
     });
 
