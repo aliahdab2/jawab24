@@ -5,7 +5,7 @@ import { sendMetaProductCards } from '../../metaMessaging';
 import { redis } from '../../../lib/redis';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
-import type { ProductCard } from '@jawab24/shared';
+import { renderReplyForChannel, type ProductCard } from '@jawab24/shared';
 
 const SENDER_NAME_CACHE_TTL = 86400; // 24 hours
 const senderNameCacheKey = (senderId: string) => `sender_name:${senderId}`;
@@ -82,6 +82,10 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
 
     async sendTypingOff(page: PlatformPage, senderId: string): Promise<void> {
         await facebookService.sendTypingOff(page.accessToken, senderId);
+    }
+
+    renderReply(text: string): string {
+        return renderReplyForChannel(text, 'plain');
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {

@@ -177,6 +177,7 @@ function createMockAdapter(overrides: Partial<CommentPlatformAdapter> = {}): Com
         getPage: vi.fn().mockResolvedValue(mockPage),
         findOrCreateContent: vi.fn().mockResolvedValue(mockContent),
         storeComment: vi.fn().mockResolvedValue({ comment: mockComment, isNew: true }),
+        renderReply: vi.fn((text: string) => text),
         sendReply: vi.fn().mockResolvedValue({ success: true }),
         markAsReplied: vi.fn().mockResolvedValue(undefined),
         buildGeneratorContext: vi.fn().mockReturnValue({
@@ -239,6 +240,29 @@ describe('CommentProcessor', () => {
             undefined, // flagMeta — none for this happy-path reply
         );
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
+    });
+
+    // Mirror of the DM pipeline's rendering test: a public comment renders nothing
+    // either, and the adapter owns that decision. Sent AND persisted as rendered.
+    it('renders the reply through the adapter before sending, and persists the rendered text', async () => {
+        const { renderReplyForChannel } = await import('@jawab24/shared');
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: '**متوفر** — [اطلبه من هنا](https://gulf-fashion.salla.sa/classic-black-abaya/p1000)',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+        const adapter = createMockAdapter({
+            renderReply: vi.fn((text: string) => renderReplyForChannel(text, 'plain')),
+        });
+
+        const result = await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1', 'متوفر؟', 'user-1', 'Alice',
+        );
+
+        const rendered = 'متوفر — اطلبه من هنا: https://gulf-fashion.salla.sa/classic-black-abaya/p1000';
+        expect(result.replyText).toBe(rendered);
+        expect(vi.mocked(adapter.sendReply).mock.calls[0][0].replyText).toBe(rendered);
+        expect(vi.mocked(adapter.markAsReplied).mock.calls[0][1]).toBe(rendered);
     });
 
     describe('exhausted self-identification strip (8c-bis)', () => {

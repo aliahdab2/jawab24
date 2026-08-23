@@ -25,6 +25,7 @@ function createMockAdapter(page: PlatformPage, overrides: Partial<MessagePlatfor
             return { message: { id: message.id, replied: message.replied }, isNew };
         }),
         getInternalMessageId: vi.fn((id: string) => id),
+        renderReply: vi.fn((text: string) => text),
         sendReply: vi.fn().mockResolvedValue(undefined),
         sendAwayMessage: vi.fn().mockResolvedValue(undefined),
         // Note: markAsReplied is required by the interface but the pipeline
