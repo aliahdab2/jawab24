@@ -4,7 +4,7 @@ import { eq, and, or, ne, desc, sql, count, isNotNull, isNull, inArray } from 'd
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, SELLABLE_STATUSES, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
-import { storeAnswersPolicies } from './ecommerce';
+import { storeAnswersPolicies, type EcommercePlatform } from './ecommerce';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { pageLinkedInstagramCredential } from './instagramCredential';
@@ -494,6 +494,7 @@ export class PagesService {
         const triggerPageIds = new Set<string>();
         const catalogCountByPage = new Map<string, number>();
         const storesAnsweringPolicies = new Set<string>();
+        const storePlatformById = new Map<string, EcommercePlatform>();
         await Promise.all([
             // Which pages have at least one Post Reply configured (either mode →
             // trigger_reply set). Fresh so the dashboard "try Post Reply" nudge
@@ -554,12 +555,19 @@ export class PagesService {
                 try {
                     const rows = await db.select({
                         id: ecommerceStores.id,
+                        platform: ecommerceStores.platform,
                         isActive: ecommerceStores.isActive,
                         policiesSummary: ecommerceStores.policiesSummary,
                     })
                         .from(ecommerceStores)
                         .where(inArray(ecommerceStores.id, linkedStoreIds));
-                    for (const r of rows) if (storeAnswersPolicies(r)) storesAnsweringPolicies.add(r.id);
+                    for (const r of rows) {
+                        if (storeAnswersPolicies(r)) storesAnsweringPolicies.add(r.id);
+                        // The page card names the platform ("powered by your Zid
+                        // store"); without this the UI had one hardcoded brand and
+                        // told every Salla/Zid merchant they were on Shopify.
+                        storePlatformById.set(r.id, r.platform as EcommercePlatform);
+                    }
                 } catch (err) {
                     captureError(err, 'Pages store-policy query failed', { level: 'warning', tags: { service: 'pages' } });
                 }
@@ -581,6 +589,7 @@ export class PagesService {
                 hasPostReplyTrigger: triggerPageIds.has(page.id),
                 catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
                 storeAnswersPolicies: !!page.ecommerceStoreId && storesAnsweringPolicies.has(page.ecommerceStoreId),
+                ecommerceStorePlatform: (page.ecommerceStoreId && storePlatformById.get(page.ecommerceStoreId)) || null,
             };
         });
     }

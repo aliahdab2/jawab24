@@ -425,6 +425,13 @@ export interface Page {
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
   /**
+   * Platform of the linked store, resolved server-side on the list shape so
+   * the page card can name it. Null when no store is linked. UI must never
+   * assume a platform from `ecommerceStoreId` alone — the card said "Shopify"
+   * to every Salla/Zid merchant until 2026-08-23.
+   */
+  ecommerceStorePlatform?: 'shopify' | 'salla' | 'zid' | null;
+  /**
    * Whether the linked store ACTUALLY answers policy questions (delivery,
    * payment, returns) in replies — i.e. it is still active AND has synced
    * policy text. Derived server-side to mirror `getStoreContextForAI`, which

@@ -56,6 +56,7 @@ import type { NextPageWithLayout } from './_app';
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');
   const tc = useTranslations('common');
+  const tInt = useTranslations('integrations');
   const locale = useLocale();
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
@@ -1472,13 +1473,25 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                 </div>
 
-                {/* E-commerce Connected Badge — hidden on mobile when no store, invisible on desktop to keep card heights equal */}
+                {/* E-commerce Connected Badge — hidden on mobile when no store, invisible on desktop to keep card heights equal.
+                    Named from the server-resolved platform: the badge used to hardcode "Shopify" and
+                    told every Salla/Zid merchant they were on the wrong platform (found 2026-08-23). */}
                 <div
-                  className={`w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 bg-gradient-to-br from-[#96BF48] to-[#5A8A1F] shadow-md ${page.ecommerceStoreId ? 'visible' : 'hidden lg:flex lg:invisible'}`}
+                  className={clsx(
+                    'w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 shadow-md bg-gradient-to-br',
+                    page.ecommerceStorePlatform === 'shopify'
+                      ? 'from-[#96BF48] to-[#5A8A1F]'
+                      : 'from-brand-500 to-brand-700',
+                    page.ecommerceStoreId ? 'visible' : 'hidden lg:flex lg:invisible',
+                  )}
                   aria-hidden={!page.ecommerceStoreId}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
-                  <span className="text-white text-[12px] font-semibold">{t('shopifyConnectedBadge')}</span>
+                  <span className="text-white text-[12px] font-semibold">
+                    {page.ecommerceStorePlatform
+                      ? t('storeConnectedBadge', { platform: tInt(`platformPicker.${page.ecommerceStorePlatform}`) })
+                      : ''}
+                  </span>
                 </div>
 
                 {/* Business Info CTA — the card's persistent entry point, and the

@@ -122,7 +122,7 @@
   "sessionExpired": "انتهت صلاحية الجلسة. يرجى إعادة الاتصال بفيسبوك.",
   "connectedToday": "تم الربط اليوم",
   "connectedAgo": "تم الربط {count, plural, zero {اليوم} one {منذ يوم} two {منذ يومين} few {منذ # أيام} many {منذ # يوم} other {منذ # يوم}}",
-  "shopifyConnectedBadge": "ردود ذكية مدعومة بمتجرك على Shopify",
+  "storeConnectedBadge": "ردود ذكية مدعومة بمتجرك على {platform}",
   "totalIncoming": "الوارد",
   "repliesSent": "الردود التلقائية",
   "repliesBreakdownTitle": "تفصيل الردود التلقائية",
