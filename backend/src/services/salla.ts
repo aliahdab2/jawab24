@@ -235,11 +235,16 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
 
     const results = await Promise.allSettled(SALLA_WEBHOOK_EVENTS.map(event => {
         const current = existing.get(event);
+        // `event` is REQUIRED on the update too. docs.salla.dev (Update Webhook)
+        // lists only name/url/version/rule/headers/security_*, but the live API
+        // answers 422 «حقل event غير صالح» when it is absent — measured 2026-08-23
+        // on the demo store: PUT without `event` → 422, the same body with it →
+        // 200. Without it every pre-fix (unsigned) subscription stayed unsigned.
         const request = current
             ? fetch(`https://api.salla.dev/admin/v2/webhooks/${current.id}`, {
                 method: 'PUT',
                 headers,
-                body: JSON.stringify({ name: event, url: webhookUrl, ...security }),
+                body: JSON.stringify({ name: event, event, url: webhookUrl, ...security }),
             })
             : fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
                 method: 'POST',
