@@ -11,6 +11,12 @@
  *            → Backend compares server-side → returns data only if match
  *
  * The AI never sees sensitive data until the backend confirms identity.
+ *
+ * `find_order_by_phone` is the same model in ONE call for the customer who does
+ * not have their order number (D-101): it REQUIRES phone AND name together, and
+ * the backend re-verifies both against the order it found. The platform's own
+ * phone search is never the gate — Zid's `search_term` also matches names and
+ * order codes, so an unverified hit there is not proof of anything.
  */
 
 // --- Tool Call Types ---
@@ -20,7 +26,8 @@ export type EcommerceToolName =
     | 'track_shipment'
     | 'check_inventory'
     | 'verify_and_get_order'
-    | 'verify_and_get_shipment';
+    | 'verify_and_get_shipment'
+    | 'find_order_by_phone';
 
 /** Whitelist of valid tool names for validation */
 export const VALID_TOOL_NAMES: readonly EcommerceToolName[] = [
@@ -29,6 +36,7 @@ export const VALID_TOOL_NAMES: readonly EcommerceToolName[] = [
     'check_inventory',
     'verify_and_get_order',
     'verify_and_get_shipment',
+    'find_order_by_phone',
 ];
 
 export interface EcommerceToolCall {

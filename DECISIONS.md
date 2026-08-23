@@ -2780,3 +2780,41 @@ the model already had. D-099's `respond` function gives a place to say it outrig
 **Measured (eval Cat 80/81/82, temp 0, on top of D-099).** 15/15 scored PASS (81 = 4/4,
 82 = 5/5 with both card cases fired via `model`), 18/18 replies via `respond`, 0 unknown ids.
 The prose heuristics stay as fallback for a reply that names nothing.
+
+## D-101 · A customer without their order number can be found by phone AND name, re-verified server-side (2026-08-23)
+
+**Context.** The order flow required the order number. Live on the Salla review page
+(2026-08-23): «مامعي رقم طلب» → the assistant asked for name and phone, got both, and answered
+«ما وصلني رقم طلب منك» — a dead end for every customer who deleted the confirmation. Owner
+ruling the same day: «نعم نسمح بالبحث عن الطلب برقم الجوال هذا منطقي».
+
+**Ruling.**
+1. New tool `find_order_by_phone`, requiring **`provided_phone` AND `provided_name` in the
+   same call** (both `required` in the schema; a call with one half is refused
+   `phone_and_name_required` and never reaches the platform). One call, no challenge round:
+   the identity claim and the search are the same act.
+2. **The platform's phone search is never the gate.** Zid's `search_term` is documented as a
+   natural-language lookup across phone, email, order code *and customer name*; Salla has no
+   order phone filter at all (`customers?keyword=` → `orders?customer_id=`, and `keyword`
+   matches name and email too). Every candidate is re-compared in `handlePhoneLookup` with the
+   same `phonesMatch` + `namesMatch` used by `verify_and_get_*`, and **both** must pass.
+   Only the newest verified order is returned, through `stripPii`.
+3. **"No such phone" and "wrong name" return the identical error** (`order_not_found`).
+   Distinguishing them would confirm a phone number belongs to a customer to anyone who can
+   type one.
+4. Identity-dependent ⇒ **never cached**, on the same branch as `verify_and_get_*`. Platform
+   fan-out is bounded (Salla ≤3 customers × 10 orders, Zid/Shopify ≤10).
+   Counters `metrics:ecom:phone_lookup:{verified|rejected|no_candidates}` beside the existing
+   per-tool outcome counters.
+
+**Strength, stated plainly.** The order-number flow gates on (order number) + (name OR phone);
+this gates on (phone) + (name) — two independent facts about the same order in both cases.
+Someone who knows a customer's phone *and* the name on their order can read that order's
+status; that is the same class of exposure the existing flow accepts for someone who knows an
+order number and one of the two, and the owner accepted it explicitly.
+
+**Measured (eval Cat 81, temp 0).** 6/6 PASS. #804 (name + phone, no order number) → the
+customer receives their order, `find_order_by_phone:success`. #805 (same phone, WRONG name) →
+nothing about the order reaches the reply, `find_order_by_phone:order_not_found`. Unit gate
+in `ecommerceActions.test.ts` (9 cases); mutation-checked both ways — trusting the platform
+search fails 3, making the name optional fails 1.

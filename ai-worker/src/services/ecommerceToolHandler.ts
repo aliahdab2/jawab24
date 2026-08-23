@@ -171,6 +171,27 @@ export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'find_order_by_phone',
+            description: 'Find a customer\'s most recent order when they do NOT have their order number. Requires BOTH their phone number and the name on the order, together, in this one call — ask for whichever you are missing before calling. Returns the order only when both match our records. Use this only after the customer has said they do not have the order number; when they do have it, use lookup_order.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    provided_phone: {
+                        type: 'string',
+                        description: 'The phone number the customer used when ordering, as they gave it',
+                    },
+                    provided_name: {
+                        type: 'string',
+                        description: 'The name on the order, as the customer gave it',
+                    },
+                },
+                required: ['provided_phone', 'provided_name'],
+            },
+        },
+    },
 ];
 
 /**
@@ -266,6 +287,7 @@ IDENTITY VERIFICATION FLOW (CRITICAL — you MUST follow this exactly):
 2. The tool will confirm the order exists but will NOT return order details.
 3. You MUST then ask the customer: "To verify your identity, could you tell me the name on the order or the phone number used when ordering?" (adapt to conversation language)
 4. After the customer responds with their name or phone, call verify_and_get_order or verify_and_get_shipment with their answer.
+4b. NO ORDER NUMBER: if the customer says they do not have it, ask for BOTH the phone number used when ordering AND the name on the order, then call find_order_by_phone with both together. Never call it with only one of them. If it answers "order_not_found", tell the customer the details do not match any order and offer to check with the order number instead — never say which of the two did not match.
 5. If verification succeeds, share the order details from the response.
 6. If verification fails (error: "verification_failed"), say: "The information doesn't match our records. Please check your order confirmation email or contact us directly."
 

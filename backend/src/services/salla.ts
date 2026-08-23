@@ -613,6 +613,42 @@ export async function lookupOrder(storeId: string, orderNumber: string): Promise
 }
 
 /**
+ * Orders belonging to the customer holding this phone number (D-101).
+ *
+ * Salla's List Orders has no phone filter, so this is the documented two-step:
+ * `customers?keyword=<phone>` (keyword matches `customer.mobile`) → each match's
+ * `orders?customer_id=`. `keyword` also matches name and email, so a hit is a
+ * CANDIDATE, never a verification — the caller re-compares phone and name
+ * against the order itself.
+ */
+export async function findOrdersByPhone(storeId: string, phone: string): Promise<OrderInfoFull[]> {
+    const accessToken = await resolveStoreCredentials(storeId);
+    if (!accessToken) return [];
+
+    const customers = await sallaApiGet<{ data?: Array<{ id?: number | string }> }>(
+        `https://api.salla.dev/admin/v2/customers?keyword=${encodeURIComponent(phone)}`,
+        accessToken,
+    );
+    const ids = (customers.data ?? []).map(c => c.id).filter((id): id is number | string => id !== undefined && id !== null);
+    if (ids.length === 0) return [];
+
+    const orders: OrderInfoFull[] = [];
+    for (const id of ids.slice(0, PHONE_LOOKUP_MAX_CUSTOMERS)) {
+        const page = await sallaApiGet<SallaOrdersResponse>(
+            `https://api.salla.dev/admin/v2/orders?customer_id=${encodeURIComponent(String(id))}&per_page=${PHONE_LOOKUP_MAX_ORDERS}`,
+            accessToken,
+        );
+        for (const order of page.data ?? []) orders.push(mapSallaOrderToOrderInfo(order));
+        if (orders.length >= PHONE_LOOKUP_MAX_ORDERS) break;
+    }
+    return orders.slice(0, PHONE_LOOKUP_MAX_ORDERS);
+}
+
+/** Bounds on the phone-lookup fan-out — a customer has one recent order, not a catalogue of them. */
+const PHONE_LOOKUP_MAX_CUSTOMERS = 3;
+const PHONE_LOOKUP_MAX_ORDERS = 10;
+
+/**
  * Fetch the order's shipment from the dedicated List Shipments endpoint.
  *
  * Tracking is NOT available on the order payload (see the light-response note above), so

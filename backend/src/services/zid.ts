@@ -779,6 +779,19 @@ function zidOrderStatusCode(order: ZidOrder): string {
  * customer phone — .planning/ECOMMERCE_POWER_FEATURES_PLAN.md open question #3)
  * and this helper is the single seam to swap it into.
  */
+/**
+ * Orders Zid's own search returns for a term. `search_term` is documented as a
+ * natural-language lookup across customer phone, email, order code AND customer
+ * name — so every hit is a CANDIDATE, never a verification.
+ */
+async function searchOrders(creds: ZidCredentials, term: string, limit: number): Promise<ZidOrder[]> {
+    const data = await zidApiGet<ZidOrdersResponse>(
+        `https://api.zid.sa/v1/managers/store/orders?search_term=${encodeURIComponent(term)}&per_page=${limit}&payload_type=default`,
+        creds,
+    );
+    return (data.orders || []).slice(0, limit);
+}
+
 async function findOrderByCode(creds: ZidCredentials, orderNumber: string): Promise<ZidOrder | null> {
     const needle = orderNumber.trim().replace(/^#/, '');
 
@@ -809,6 +822,23 @@ export async function lookupOrder(storeId: string, orderNumber: string): Promise
 
     return mapZidOrderToOrderInfo(order);
 }
+
+/**
+ * Orders matching this phone number (D-101).
+ *
+ * `search_term` is documented as a natural-language lookup across customer
+ * phone, email, order code AND customer name — so a hit is a CANDIDATE, never a
+ * verification. The caller re-compares phone and name against the order itself.
+ */
+export async function findOrdersByPhone(storeId: string, phone: string): Promise<OrderInfoFull[]> {
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) return [];
+    const orders = await searchOrders(creds, phone, PHONE_LOOKUP_MAX_ORDERS);
+    return orders.map(mapZidOrderToOrderInfo);
+}
+
+/** A customer has one recent order, not a catalogue of them. */
+const PHONE_LOOKUP_MAX_ORDERS = 10;
 
 export async function getShipmentTracking(storeId: string, orderNumber: string): Promise<ShipmentInfoFull | null> {
     const creds = await resolveZidCredentials(storeId);
