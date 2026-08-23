@@ -2,6 +2,7 @@ import { db } from '../../db';
 import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts, catalogItems, factCollections } from '../../db/schema';
 import { eq, and, ne, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
+import { isDemoStore } from '../../services/demoStore';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 // factCollectionsService is imported LAZILY inside its seeder (see
 // seedDistributorFactCollections). It reaches pagesService → facebook/instagram/
@@ -2340,9 +2341,34 @@ export async function seedDemoData(
     // pages (pages.ecommerceStoreId is a set-null back-reference), so the page cascade
     // above doesn't reach them — and (platform, store_domain) is globally unique, so a
     // stranded store 23505s the insert in seedDemoStore. Products cascade with the store.
+    //
+    // Matching the domain is NOT enough to call a row a demo fixture. These
+    // fixture domains sit in a namespace real merchants draw from — a real Salla
+    // store may legitimately be `gulf-fashion.salla.sa` — so "this domain + not
+    // the demo user" also describes exactly that merchant's row, which this
+    // statement would delete (products cascading) on every demo login. Confirming
+    // the row actually IS a fixture makes deleting a real store impossible rather
+    // than merely unlikely (Rule 14: prevention over detection).
+    //
+    // The check runs on the HYDRATED row via isDemoStore, not as a
+    // `platform_data->>'demo'` SQL filter: postgres-js double-serializes some
+    // jsonb writes into string scalars, where `->>` yields NULL and the filter
+    // silently matches nothing — which would leave the stranded fixture in place
+    // and 23505 the seed insert. Drizzle's read path parses both encodings back
+    // to an object, so the predicate is reliable (see services/demoStore.ts).
     const demoStoreDomains = [DEMO_SHOPIFY_STORE.storeDomain, DEMO_SALLA_STORE.storeDomain];
-    await db.delete(ecommerceStores)
-        .where(and(inArray(ecommerceStores.storeDomain, demoStoreDomains), ne(ecommerceStores.userId, userId)));
+    const strandedOnDemoDomains = await db.select({
+        id: ecommerceStores.id,
+        platformData: ecommerceStores.platformData,
+    }).from(ecommerceStores)
+        .where(and(
+            inArray(ecommerceStores.storeDomain, demoStoreDomains),
+            ne(ecommerceStores.userId, userId),
+        ));
+    const strandedFixtureIds = strandedOnDemoDomains.filter(isDemoStore).map(s => s.id);
+    if (strandedFixtureIds.length > 0) {
+        await db.delete(ecommerceStores).where(inArray(ecommerceStores.id, strandedFixtureIds));
+    }
 
     // Check if demo pages already exist for this user
     const existingPages = await db
@@ -2770,6 +2796,29 @@ async function seedDemoStore(
     await db.delete(ecommerceStores).where(
         and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.platform, storeConfig.platform))
     );
+
+    // (platform, store_domain) is globally unique and these fixture domains are
+    // ordinary, claimable subdomains. If a REAL merchant owns this one, the
+    // insert below would 23505 and take down every demo login — and the fix is
+    // emphatically not to delete their store. Skip the demo store instead: the
+    // demo degrades to "no e-commerce store on this page", which is cosmetic,
+    // while the merchant's data and every other demo fixture are untouched.
+    const [domainOwner] = await db.select({
+        userId: ecommerceStores.userId,
+        platformData: ecommerceStores.platformData,
+    }).from(ecommerceStores)
+        .where(and(
+            eq(ecommerceStores.platform, storeConfig.platform),
+            eq(ecommerceStores.storeDomain, storeConfig.storeDomain),
+        ))
+        .limit(1);
+    if (domainOwner && !isDemoStore(domainOwner)) {
+        logger.warn(
+            '[DemoData] Skipping demo store — a real store already owns this fixture domain',
+            { platform: storeConfig.platform, storeDomain: storeConfig.storeDomain },
+        );
+        return;
+    }
 
     const lastSyncAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
     const [store] = await db.insert(ecommerceStores).values({

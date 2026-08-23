@@ -26,11 +26,22 @@ import {
     resolveSlotDates,
 } from '../../src/plugins/demo/damascusLists';
 
-// Helper to build a chainable select mock
-function mockSelectChain(result: any[]) {
+// Helper to build a chainable select mock.
+//
+// `.where()` both RESOLVES to the rows (callers that await it directly) and
+// carries `.limit()` (seedDemoStore's "does a real store already own this
+// fixture domain?" probe chains one). Returning a plain promise with the extra
+// method keeps both shapes working from a single stub.
+// `limitResult` defaults to [] — the only `.limit()` caller here is that probe,
+// and "no existing store owns the fixture domain" is the normal case these tests
+// exercise. Pass rows explicitly to simulate a domain already taken.
+function mockSelectChain(result: any[], limitResult: any[] = []) {
+    const whereResult = Object.assign(Promise.resolve(result), {
+        limit: vi.fn().mockResolvedValue(limitResult),
+    });
     return {
         from: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue(result),
+            where: vi.fn().mockReturnValue(whereResult),
         }),
     };
 }
