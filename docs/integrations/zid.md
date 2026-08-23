@@ -513,6 +513,11 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
   ID (a carrier domain is a third party's), so it is an owner decision, not a code one.
 - `payment_status` **does exist** on orders (live: `"pending"` on an unpaid bank-transfer
   order), so the `'unknown'` mapping can be narrowed.
+- ⭐ **This defect class was Zid-only — Salla and Shopify were audited the same day and were
+  already correct** (`reference_id` + `shipment.*` / `order.name` + `tracking.*`, both with
+  shipping city). The tell was in the source: 14 `[provisional]` markers in the Zid order
+  code, **zero** in the other two. Zid's order path was the one written from documentation
+  and never exercised live. Don't re-audit the other two.
 
 ### Webhooks
 - Registered per-store via `POST /v1/managers/webhooks` with `original_id` = the Partner
