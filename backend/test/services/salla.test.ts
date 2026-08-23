@@ -798,7 +798,20 @@ describe('Salla Service', () => {
                 storeCurrency: 'SAR',
                 storeDomain: 'mystore.salla.sa',
                 merchantId: '98765',
+                storeType: null,
             });
+        });
+
+        it('should surface the store environment type (demo | development | live) for the claim gate', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: { name: 'متجر تجريبي', email: 'jkgsyu3w6pzzfrzw@email.partners', currency: 'SAR', domain: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw', id: 2108580704, type: 'demo' },
+                }),
+            });
+
+            const result = await fetchStoreInfo('token');
+            expect(result.storeType).toBe('demo');
         });
 
         it('should convert numeric merchant id to string', async () => {

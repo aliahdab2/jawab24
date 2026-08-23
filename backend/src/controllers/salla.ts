@@ -217,6 +217,8 @@ export async function listPendingHandler(request: FastifyRequest, reply: Fastify
  * email (Facebook-OAuth-verified; Jawab24 has no unverified-email signup). The
  * client-supplied pendingId/merchantId only SELECTS the pending row; it is never trusted
  * as proof. Users without an email (phone-OTP accounts) cannot claim (403 `no_email`).
+ * Demo/development stores (`store/info.type`, D-093) skip the email match — see
+ * `isNonLiveSallaStore`; they are the only stores an unpublished app can install on.
  */
 export async function claimStoreHandler(request: FastifyRequest, reply: FastifyReply) {
     // Dormant until the published app is switched to Easy Mode (submission day).
@@ -248,6 +250,14 @@ export async function claimStoreHandler(request: FastifyRequest, reply: FastifyR
             // fresh token via "Reauthorize App" in the Salla store admin and retry.
             throw new ClaimVerificationUnavailableError(err);
         }
+        // The owner-email proof exists to stop a stranger attaching a real merchant's store.
+        // Salla's demo/development stores carry a synthetic `<slug>@email.partners` address
+        // nobody can sign in with, and they are the ONLY stores an unpublished app can be
+        // installed on — so for them the match is not a proof, it is a lock-out of the
+        // live rehearsal and of Salla's reviewer (D-093). The type comes from the same
+        // authoritative `store/info` read; anything but the two known non-live values
+        // (including a missing field) keeps the full proof.
+        if (isNonLiveSallaStore(storeInfo.storeType)) return true;
         return normalizeEmail(storeInfo.storeEmail) === userEmail;
     };
 
@@ -283,6 +293,16 @@ export async function claimStoreHandler(request: FastifyRequest, reply: FastifyR
         request.log.error({ err }, 'Failed to claim Salla install');
         return reply.status(500).send({ error: 'Failed to claim Salla install' });
     }
+}
+
+/**
+ * Salla store environments that never belong to a real merchant (`store/info.type`).
+ * `live` — and any unknown or missing value — must still pass the owner-email proof.
+ */
+const NON_LIVE_SALLA_STORE_TYPES: ReadonlySet<string> = new Set(['demo', 'development']);
+
+function isNonLiveSallaStore(storeType: string | null | undefined): boolean {
+    return !!storeType && NON_LIVE_SALLA_STORE_TYPES.has(storeType);
 }
 
 /** Case/whitespace-insensitive email comparison key; null when absent. */

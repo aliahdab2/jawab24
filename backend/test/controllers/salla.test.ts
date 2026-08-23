@@ -1164,6 +1164,34 @@ describe('Salla Controller', () => {
             await expect(verifier('pushed-token')).resolves.toBe(false);
         });
 
+        // --- D-093: demo/development stores skip the email match. A Salla demo store's
+        // registered email is a synthetic `<slug>@email.partners` nobody can sign in with,
+        // and an unpublished app can ONLY be installed on demo stores — so without this
+        // the live rehearsal and Salla's reviewer can never connect a store.
+        const storeInfoWith = (storeType: string | null | undefined) => ({
+            storeEmail: 'jkgsyu3w6pzzfrzw@email.partners', storeName: 'متجر تجريبي', storeCurrency: 'SAR',
+            storeDomain: 'https://demostore.salla.sa/dev-jkgsyu3w6pzzfrzw', merchantId: '2108580704', storeType,
+        });
+
+        it.each(['demo', 'development'])('ownership verifier: true for a %s store even when the email differs (D-093)', async (storeType) => {
+            mockUserRows.mockResolvedValueOnce([{ email: 'reviewer@gmail.com' }]);
+            mockFetchStoreInfo.mockResolvedValueOnce(storeInfoWith(storeType));
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).resolves.toBe(true);
+        });
+
+        it.each([
+            ['live', 'live'],
+            ['missing', undefined],
+            ['null', null],
+            ['unknown', 'staging'],
+        ])('ownership verifier: a %s store type keeps the full email proof (fails closed)', async (_label, storeType) => {
+            mockUserRows.mockResolvedValueOnce([{ email: 'reviewer@gmail.com' }]);
+            mockFetchStoreInfo.mockResolvedValueOnce(storeInfoWith(storeType));
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).resolves.toBe(false);
+        });
+
         it('ownership verifier: wraps a Salla API failure as verification-unavailable (not a mismatch)', async () => {
             mockFetchStoreInfo.mockRejectedValueOnce(new Error('salla 500'));
             const verifier = await captureVerifier();
