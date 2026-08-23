@@ -690,12 +690,14 @@ describe('PagesService', () => {
             ]);
         });
 
-        // Product rule: when the conflict workspace belongs to a stranger (the
-        // user is NOT a member — e.g. they were removed from the team or
-        // deleted their old account and re-signed up), the page must be
-        // silently skipped: no `takenCount`, no `alreadyMemberOf`. The user
-        // can't act on it from their own account, so surfacing it is noise.
-        it('silently skips when user is not a member of the conflict workspace', async () => {
+        // D-039: when the conflict workspace belongs to a stranger (the user is
+        // NOT a member — e.g. they were removed from the team or deleted their
+        // old account and re-signed up), the page is withheld AND counted as
+        // taken, with no `alreadyMemberOf` (nothing to switch to) and nothing
+        // naming the holder. Until 2026-08-23 this case was silent: the merchant
+        // granted the page in Facebook and got "No pages found" — measured live
+        // on the Salla review account, whose only page sat in another workspace.
+        it('counts the page as taken (but offers no switch) when the user is not a member of the conflict workspace', async () => {
             const workspaceId = 'ws-stranger';
             const userId = 'user-stranger';
             const accessToken = 'stranger-fb-token';
@@ -743,7 +745,7 @@ describe('PagesService', () => {
 
             const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
-            expect(result.takenCount).toBe(0);
+            expect(result.takenCount).toBe(1);
             expect(result.alreadyMemberOf).toEqual([]);
             expect(result.syncedPages).toEqual([]);
         });
@@ -841,9 +843,10 @@ describe('PagesService', () => {
 
         // Mixed-case regression guard for the silent-skip rule:
         // when one of the user's FB pages is fresh and another is held by a
-        // stranger workspace, the fresh page MUST still sync — silent-skip
-        // applies only to the conflict, not to siblings.
-        it('syncs the fresh page and silently skips the stranger-held one in a mixed batch', async () => {
+        // stranger workspace, the fresh page MUST still sync — the withhold
+        // applies only to the conflict, not to siblings, and the conflict is
+        // still reported as taken (D-039).
+        it('syncs the fresh page and withholds-but-counts the stranger-held one in a mixed batch', async () => {
             const workspaceId = 'ws-noor-solo';
             const userId = 'user-noor';
             const accessToken = 'noor-fb-token';
@@ -912,7 +915,7 @@ describe('PagesService', () => {
 
             expect(result.syncedPages).toHaveLength(1);
             expect(result.syncedPages[0].facebookPageId).toBe('fb-page-fresh');
-            expect(result.takenCount).toBe(0);
+            expect(result.takenCount).toBe(1);
             expect(result.alreadyMemberOf).toEqual([]);
         });
 

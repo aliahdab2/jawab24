@@ -281,12 +281,11 @@ test.describe('Pages Page', () => {
     await expect(page2FbToggle).toHaveAttribute('aria-checked', 'false');
   });
 
-  // Regression guard for the silent-skip rule on /pages/sync:
-  // when a user re-signs up after deleting their account (or is removed
-  // from a team), the FB pages still held by the ex-team workspace must
-  // NOT trigger the "ask the owner to invite you" warning toast. The
-  // backend returns the friendly empty response, and the UI must stay
-  // quiet — no warning, no error.
+  // The genuinely-empty response ("/me/accounts returned nothing") must stay
+  // quiet — no warning, no error. (Until 2026-08-23 the backend also answered
+  // this way for pages HELD BY A STRANGER'S WORKSPACE, which hid the withhold
+  // from the merchant; that case now returns takenCount/takenPages and is
+  // covered by the test after the next one.)
   test('should not show pageTakenWarning toast when sync returns no actionable conflicts', async ({ page }) => {
     const toastSpy: string[] = [];
     page.on('console', (msg) => toastSpy.push(msg.text()));
@@ -334,6 +333,53 @@ test.describe('Pages Page', () => {
     // connected to another Jawab24 account" — assert that exact phrase is
     // nowhere on screen. Substring match is robust to ICU pluralization.
     await expect(page.getByText('already connected to another Jawab24 account', { exact: false })).toHaveCount(0);
+  });
+
+  // D-039: when the FB page is held by a workspace the user is NOT a member
+  // of, the sync reports it as taken and names the PAGE (never the holder);
+  // the UI must say so instead of staying silent. Measured live 2026-08-23:
+  // the Salla review account granted «Jawab24 Test», held by the Zid test
+  // workspace, and saw nothing at all.
+  test('should name the withheld page when sync returns takenPages without alreadyMemberOf', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+
+      if (method === 'POST' && url.includes('/pages/sync')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            synced: 0,
+            pages: [],
+            takenCount: 1,
+            takenPages: [{ pageName: 'Jawab24 Test' }],
+          }),
+        });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/pages');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('pages.titleChannels') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // The toast names the page and routes to support — it never names the account.
+    await expect(page.getByText('already connected to another Jawab24 account: Jawab24 Test', { exact: false })).toBeVisible({ timeout: 10000 });
   });
 
   // Regression guard for the actionable conflict path: when the user IS a

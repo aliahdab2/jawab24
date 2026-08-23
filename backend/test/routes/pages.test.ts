@@ -272,7 +272,7 @@ describe('Pages Routes', () => {
         // Exactly the shape syncFromFacebook returns when /me/accounts is empty.
         const EMPTY_SYNC = {
             syncedPages: [], skippedCount: 0, skippedPages: [], skipReason: undefined,
-            pageLimit: null, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [],
+            pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [],
             revokedCount: 0, alreadyMemberOf: [],
         };
 
