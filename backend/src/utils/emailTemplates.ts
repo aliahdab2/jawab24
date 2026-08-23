@@ -143,7 +143,12 @@ const SHELL_STYLE = `<style>
     .soft, .soft p { color:#9db2b1 !important; }
     .panel, .panel td { background-color:#16262a !important; color:#c3d4d4 !important; }
     .rule, .ld-cell, .ld-row, .card th { border-color:#223335 !important; }
-    .ld-head, .ld-head td { background-color:#0d1719 !important; }
+    /* The digest header is thead.ld-head > tr[style=background:#fafafa] > th.
+     * Naming only the thead and td here left that inline #fafafa on the tr
+     * standing, while the .card th sweep above had already turned the labels
+     * #e6efef — a white bar with invisible text. Every element that can paint
+     * a background in this subtree must be named. */
+    .ld-head, .ld-head tr, .ld-head th, .ld-head td { background-color:#0d1719 !important; }
     .foot, .foot p, .foot td { color:#8fa4a3 !important; }
     .foot a { color:#8fa4a3 !important; }
     .cta, .cta a { color:#ffffff !important; }
@@ -830,66 +835,47 @@ export interface LeadDigestRow {
 
 const DIGEST_MAX_ROWS = 20;
 
-export function leadDigestEmailTemplate(params: {
-    lang: 'ar' | 'en';
-    leadCount: number;
-    leads: LeadDigestRow[];
-    dashboardUrl: string;
-}): { subject: string; html: string } {
-    const lang = params.lang === 'ar' ? 'ar' : 'en';
-    const rtl = lang === 'ar';
-    const dir = rtl ? 'rtl' : 'ltr';
+/** One digest row's display strings, HTML-escaped once for both layouts. */
+interface LeadDigestCells {
+    name: string;
+    phone: string;
+    reason: string;
+    source: string;
+    date: string;
+}
+
+const DIGEST_FIELD_LABELS = ['leadDigestTableName', 'leadDigestTablePhone', 'leadDigestTableReason', 'leadDigestTableSource', 'leadDigestTableDate'] as const;
+
+interface LeadDigestLayout {
+    bodyHtml: string;
+    headExtra?: string;
+    maxWidth: number;
+}
+
+/**
+ * The multi-lead layout: a five-column table in a 720px card, collapsing to
+ * stacked label/value cells under 600px via the `ld-*` responsive rules.
+ */
+function leadDigestTable(rows: LeadDigestCells[], labels: string[], rtl: boolean): LeadDigestLayout {
     const align = rtl ? 'right' : 'left';
-    const fontFamily = rtl
-        ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-        : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
-
-    // Plural-aware: the digest can now fire on a single waiting lead (age flush),
-    // so "1 new leads" / «لديك 1 عميل» is reachable copy, not a hypothetical.
-    const subject = tPlural('leadDigestSubject', params.leadCount, lang);
-    const heading = t('leadDigestHeading', lang);
-    const intro = tPlural('leadDigestIntro', params.leadCount, lang);
-    const cta = t('leadDigestCta', lang);
-    const thName = t('leadDigestTableName', lang);
-    const thPhone = t('leadDigestTablePhone', lang);
-    const thReason = t('leadDigestTableReason', lang);
-    const thSource = t('leadDigestTableSource', lang);
-    const thDate = t('leadDigestTableDate', lang);
-    const srcMsg = t('leadDigestSourceMessage', lang);
-    const srcCmt = t('leadDigestSourceComment', lang);
-    const noSummary = t('leadDigestNoSummary', lang);
-
-    const rows = params.leads.slice(0, DIGEST_MAX_ROWS);
-    const remaining = Math.max(0, params.leadCount - rows.length);
-
-    const lblName = escapeHtml(thName);
-    const lblPhone = escapeHtml(thPhone);
-    const lblReason = escapeHtml(thReason);
-    const lblSource = escapeHtml(thSource);
-    const lblDate = escapeHtml(thDate);
     const mobileLabel = (label: string) =>
         `<span class="ld-mlabel" style="display:none;font-weight:600;color:#71717a;font-size:12px;margin-${rtl ? 'left' : 'right'}:8px;">${label}:</span>`;
+    const [lblName, lblPhone, lblReason, lblSource, lblDate] = labels;
 
-    const tableRows = rows.map(lead => {
-        const name = escapeHtml(lead.name?.trim() || '—');
-        const phone = escapeHtml(lead.phone);
-        const reason = escapeHtml(lead.summary?.trim() || noSummary);
-        const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
-        const date = escapeHtml(formatDateTimeShort(lead.createdAt, lang));
-        return `<tr class="ld-row">
-          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${mobileLabel(lblName)}${name}</td>
-          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${mobileLabel(lblPhone)}${phone}</td>
-          <td class="ld-cell" dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;word-break:break-word;">${mobileLabel(lblReason)}${reason}</td>
-          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${mobileLabel(lblSource)}${source}</td>
-          <td class="ld-cell ld-cell-last" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${mobileLabel(lblDate)}${date}</td>
-        </tr>`;
-    }).join('');
+    const tableRows = rows.map(lead => `<tr class="ld-row">
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${mobileLabel(lblName)}${lead.name}</td>
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${mobileLabel(lblPhone)}${lead.phone}</td>
+          <td class="ld-cell" dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;word-break:break-word;">${mobileLabel(lblReason)}${lead.reason}</td>
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${mobileLabel(lblSource)}${lead.source}</td>
+          <td class="ld-cell ld-cell-last" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${mobileLabel(lblDate)}${lead.date}</td>
+        </tr>`).join('');
 
-    const andMore = remaining > 0
-        ? `<p style="margin:16px 0 0 0;color:#71717a;font-size:14px;">${escapeHtml(t('leadDigestAndMore', lang, { count: String(remaining) }))}</p>`
-        : '';
+    const th = (label: string) =>
+        `<th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${label}</th>`;
 
-    const headExtra = `  <style>
+    return {
+        maxWidth: 720,
+        headExtra: `  <style>
     @media only screen and (max-width: 600px) {
       .ld-table { table-layout: auto !important; }
       .ld-thead { display: none !important; }
@@ -897,22 +883,8 @@ export function leadDigestEmailTemplate(params: {
       .ld-cell { display: block !important; width: 100% !important; padding: 4px 8px !important; border-bottom: none !important; white-space: normal !important; }
       .ld-mlabel { display: inline !important; }
     }
-  </style>`;
-
-    return {
-        subject,
-        html: emailShell({
-            lang,
-            dir,
-            bodyFontFamily: fontFamily,
-            title: subject,
-            preheader: escapeHtml(intro),
-            headExtra,
-            maxWidth: 720,
-            bodyCellAttrs: ` class="pad ink" style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
-            bodyHtml: `${pageHeading(escapeHtml(heading), 8)}
-              <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
-              <table class="ld-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
+  </style>`,
+        bodyHtml: `<table class="ld-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
                 <colgroup>
                   <col style="width:18%;">
                   <col style="width:18%;">
@@ -922,15 +894,93 @@ export function leadDigestEmailTemplate(params: {
                 </colgroup>
                 <thead class="ld-thead ld-head">
                   <tr style="background-color:#fafafa;">
-                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thName)}</th>
-                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thPhone)}</th>
-                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thReason)}</th>
-                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thSource)}</th>
-                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thDate)}</th>
+                    ${labels.map(th).join('\n                    ')}
                   </tr>
                 </thead>
                 <tbody>${tableRows}</tbody>
-              </table>
+              </table>`,
+    };
+}
+
+/**
+ * The single-lead layout. The age flush (see `leadDigest.ts`) sends the digest
+ * for ONE waiting lead, and the five-column `table-layout:fixed` grid is the
+ * wrong tool for that: at 720px the reason column wraps to three lines and
+ * the date clips at the card edge. One lead reads as a card — label over
+ * value, full width — in the standard 600px shell. Same five labels as the
+ * table, so the two layouts never drift in vocabulary.
+ */
+function leadDigestSingleLead(lead: LeadDigestCells, labels: string[], rtl: boolean, rawPhone: string): LeadDigestLayout {
+    const phoneLink = `<a href="tel:${escapeHtml(rawPhone.replace(/[^\d+]/g, ''))}" dir="ltr" style="color:#0d7a86;text-decoration:underline;">${lead.phone}</a>`;
+    const values = [lead.name, phoneLink, lead.reason, lead.source, lead.date];
+
+    const fieldRows = labels.map((label, i) => `<tr>
+                  <td style="padding:${i === 0 ? 0 : 12}px 0 0 0;">
+                    <span class="soft" style="display:block;font-size:12.5px;font-weight:600;color:#52525b;margin:0 0 3px 0;">${label}</span>
+                    <span${i === 2 ? ' dir="auto"' : ''} style="display:block;font-size:15px;line-height:1.55;color:#18181b;word-break:break-word;">${values[i]}</span>
+                  </td>
+                </tr>`).join('');
+
+    return {
+        maxWidth: 600,
+        bodyHtml: calloutPanel(rtl, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${fieldRows}
+              </table>`, 16),
+    };
+}
+
+export function leadDigestEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    leadCount: number;
+    leads: LeadDigestRow[];
+    dashboardUrl: string;
+}): { subject: string; html: string } {
+    const lang = params.lang === 'ar' ? 'ar' : 'en';
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    // Plural-aware: the digest can now fire on a single waiting lead (age flush),
+    // so "1 new leads" / «لديك 1 عميل» is reachable copy, not a hypothetical.
+    const subject = tPlural('leadDigestSubject', params.leadCount, lang);
+    const heading = t('leadDigestHeading', lang);
+    const intro = tPlural('leadDigestIntro', params.leadCount, lang);
+    const cta = t('leadDigestCta', lang);
+    const srcMsg = t('leadDigestSourceMessage', lang);
+    const srcCmt = t('leadDigestSourceComment', lang);
+    const noSummary = t('leadDigestNoSummary', lang);
+    const labels = DIGEST_FIELD_LABELS.map(key => escapeHtml(t(key, lang)));
+
+    const rows = params.leads.slice(0, DIGEST_MAX_ROWS);
+    const remaining = Math.max(0, params.leadCount - rows.length);
+
+    const cells: LeadDigestCells[] = rows.map(lead => ({
+        name: escapeHtml(lead.name?.trim() || '—'),
+        phone: escapeHtml(lead.phone),
+        reason: escapeHtml(lead.summary?.trim() || noSummary),
+        source: escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg),
+        date: escapeHtml(formatDateTimeShort(lead.createdAt, lang)),
+    }));
+
+    const layout = cells.length === 1
+        ? leadDigestSingleLead(cells[0], labels, rtl, rows[0].phone)
+        : leadDigestTable(cells, labels, rtl);
+
+    const andMore = remaining > 0
+        ? `<p style="margin:16px 0 0 0;color:#71717a;font-size:14px;">${escapeHtml(t('leadDigestAndMore', lang, { count: String(remaining) }))}</p>`
+        : '';
+
+    return {
+        subject,
+        html: emailShell({
+            lang,
+            dir,
+            bodyFontFamily: fontFamily,
+            title: subject,
+            preheader: escapeHtml(intro),
+            headExtra: layout.headExtra,
+            maxWidth: layout.maxWidth,
+            bodyCellAttrs: ` class="pad ink" style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+            bodyHtml: `${pageHeading(escapeHtml(heading), 8)}
+              <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
+              ${layout.bodyHtml}
               ${andMore}
               ${ctaButton(params.dashboardUrl, escapeHtml(cta), { margin: '28px 0 0 0', paddingX: 28 })}`,
         }),
