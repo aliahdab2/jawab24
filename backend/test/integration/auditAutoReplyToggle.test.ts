@@ -15,18 +15,13 @@ import './setup';
 import { testDb, createTestUser, createTestWorkspace, createTestPage } from './setup';
 import { logAutoReplyToggle } from '../../src/services/auditLog';
 
-// logAutoReplyToggle is fire-and-forget; give the delegated insert a beat.
-async function settle() {
-    await new Promise((r) => setTimeout(r, 100));
-}
-
 describe('page.auto_reply_toggled audit trail (integration)', () => {
     it('is queryable by the typed page_id column (NOT metadata->>)', async () => {
         const user = await createTestUser();
         const workspace = await createTestWorkspace(user.id);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        logAutoReplyToggle({
+        await logAutoReplyToggle({
             pageId: page.id,
             workspaceId: workspace.id,
             userId: user.id,
@@ -34,7 +29,6 @@ describe('page.auto_reply_toggled audit trail (integration)', () => {
             previous: false,
             reason: 'user',
         });
-        await settle();
 
         // The query support/ops will actually run.
         const rows = await testDb.execute<{
@@ -70,7 +64,7 @@ describe('page.auto_reply_toggled audit trail (integration)', () => {
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // A system auto-pause: no userId → actor derives to 'system'.
-        logAutoReplyToggle({
+        await logAutoReplyToggle({
             pageId: page.id,
             workspaceId: workspace.id,
             enabled: false,
@@ -78,7 +72,6 @@ describe('page.auto_reply_toggled audit trail (integration)', () => {
             reason: 'auto_pause',
             extra: { bucket: 'our_fault' },
         });
-        await settle();
 
         const rows = await testDb.execute<{ user_id: string | null; metadata: unknown }>(sql`
             SELECT user_id, metadata FROM logs
