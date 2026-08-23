@@ -1413,6 +1413,25 @@ describe('PagesService', () => {
             expect(result[0].storeAnswersPolicies).toBe(false);
         });
 
+        it.each(['shopify', 'salla', 'zid'] as const)('ships the linked store platform (%s) so the card can name it', async (platform) => {
+            // The page card used to hardcode "Shopify"; a Zid merchant saw
+            // «مدعومة بمتجرك على Shopify». The platform must come from the
+            // store row, never be assumed from the presence of an id.
+            mockSelect(linkedPage, [{ id: 'store-1', platform, isActive: true, policiesSummary: null }]);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(result[0].ecommerceStorePlatform).toBe(platform);
+        });
+
+        it('ships a null platform for a page with no store', async () => {
+            mockSelect([{ id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1', ecommerceStoreId: null }], []);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(result[0].ecommerceStorePlatform).toBeNull();
+        });
+
         it('is false for a page with no store, without querying stores at all', async () => {
             const selectSpy = vi.mocked(db.select);
             mockSelect([{ id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1', ecommerceStoreId: null }], []);

@@ -122,7 +122,7 @@
   "sessionExpired": "Session expired. Please reconnect with Facebook.",
   "connectedToday": "Connected today",
   "connectedAgo": "Connected {count, plural, one {# day} other {# days}} ago",
-  "shopifyConnectedBadge": "Smart replies powered by your Shopify store",
+  "storeConnectedBadge": "Smart replies powered by your {platform} store",
   "totalIncoming": "Incoming",
   "repliesSent": "Auto-replies",
   "repliesBreakdownTitle": "Auto-replies breakdown",
