@@ -75,8 +75,8 @@ const MessagesPage: NextPageWithLayout = () => {
   const pages = pagesData as Page[];
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
-  // Channel ribbons only make sense when the workspace actively runs more than one
-  // channel — a single active channel (e.g. just Facebook) keeps a clean list.
+  // A leading channel icon only makes sense when the workspace actively runs more
+  // than one channel — a single active channel (e.g. just Facebook) keeps a clean list.
   const showChannelBadge = useMemo(() => hasMultipleActiveChannels(pages), [pages]);
 
   // Sync Filter to URL

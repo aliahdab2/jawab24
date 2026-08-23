@@ -2,13 +2,12 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { FlagTag, ReplySourceBadge, InfoPopover, ChannelRibbon, PLATFORM_LABEL_KEYS } from '@/components/ui';
+import { FlagTag, ReplySourceBadge, InfoPopover, PlatformIcon, PLATFORM_LABEL_KEYS } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import {
   Clock,
   AlertTriangle,
   CheckCheck,
-  User,
   PauseCircle,
   Mic,
   Image as ImageIcon,
@@ -35,8 +34,9 @@ export interface MessageCardProps {
   onUnresolve?: () => void;
   animationDelay?: number;
   className?: string;
-  /** Show the channel badge on the avatar corner. Only true when the
-      workspace has more than one channel connected (multi-channel inbox). */
+  /** Lead the row with the channel icon. Only true when the workspace has more
+      than one channel connected — on a single-channel inbox the channel is not
+      information, so the row opens on the customer's name instead. */
   showChannelBadge?: boolean;
 }
 
@@ -65,12 +65,7 @@ export const MessageCard = React.memo(function MessageCard({
   const lastIncoming = [...sorted].reverse().find(m => m.direction === 'incoming');
   const lastOutgoing = [...sorted].reverse().find(m => m.direction === 'outgoing');
 
-  // Avatar initials from sender name
-  const initials = conv.senderName
-    ? conv.senderName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-    : null;
-
-  // Channel identity for the avatar-corner badge. Priority scan instead of
+  // Channel identity for the row's leading icon. Priority scan instead of
   // reading lastMessage.platform because legacy outgoing rows may carry a
   // defaulted 'facebook' — any whatsapp/instagram message wins over that.
   const platform = conv.messages.some(m => m.platform === 'whatsapp')
@@ -119,9 +114,7 @@ export const MessageCard = React.memo(function MessageCard({
       tabIndex={0}
       aria-label={tMessages('openConversation', { name: displayLabel })}
       className={clsx(
-        'group relative flex items-start gap-3 sm:gap-4 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
-        // Reserve corner space + clip the diagonal channel ribbon when it's shown.
-        showChannelBadge ? 'overflow-hidden ps-3.5 sm:ps-5 pe-14' : 'px-3.5 sm:px-5',
+        'group flex items-start gap-2.5 sm:gap-3 py-3 sm:py-4 px-3.5 sm:px-5 bg-card rounded-2xl cursor-pointer',
         'border border-transparent hover:border-theme-border',
         'hover:shadow-md hover:shadow-surface-200/30 dark:hover:shadow-surface-900/20',
         'transition-all duration-200',
@@ -134,22 +127,23 @@ export const MessageCard = React.memo(function MessageCard({
       onKeyDown={handleKeyDown}
       style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
-      {/* Avatar (the channel is shown as an edge ribbon at the row's trailing side) */}
-      <div className="flex-shrink-0 mt-0.5">
-        <div className={clsx(
-          'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center',
-          'text-sm font-bold',
-          conv.needsHumanAttention
-            ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-            : 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
-        )}>
-          {initials || <User className="w-5 h-5" />}
+      {/* Channel — a quiet 16px mark at the head of the row, where the eye enters
+          every line. It sits here rather than at the trailing edge because that is
+          what makes a scannable colour column down a long inbox; a 3px rail at the
+          far end was neither legible on one row nor scannable across many.
+          Deliberately NOT an avatar: the customer's name carries identity on the
+          line beside it, and initials do not survive Arabic — most surnames open
+          with «ال», so `split(' ')` gave nearly every customer the same second
+          letter (نا / سا / ما / أا). Nothing renders on a single-channel workspace. */}
+      {showChannelBadge && (
+        <div className="flex-shrink-0 mt-1">
+          <PlatformIcon platform={platform} size="sm" ariaLabel={platformLabel} />
         </div>
-      </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        {/* Row 1: Name (+ channel badge) + time */}
+        {/* Row 1: Name + time */}
         <div className="flex items-center gap-2">
           <span className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <span className="min-w-0 truncate" dir={labelIsNumber ? 'ltr' : undefined}>{displayLabel}</span>
@@ -197,12 +191,6 @@ export const MessageCard = React.memo(function MessageCard({
           </div>
         )}
       </div>
-
-      {/* Channel ribbon — a diagonal brand corner marker at the row's top trailing
-          corner, clear of the avatar. Only on multi-channel workspaces. */}
-      {showChannelBadge && (
-        <ChannelRibbon platform={platform} ariaLabel={platformLabel} />
-      )}
     </div>
   );
 }, (prev, next) => {

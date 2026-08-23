@@ -12,7 +12,9 @@ const tailwindConfig = require('../../tailwind.config.js') as {
  *
  *  - `tailwind.config.js`, because Tailwind's JIT scans SOURCE TEXT for class names. A class
  *    built from a variable (`bg-[${hex}]`) is never generated — that was tried, and it
- *    silently dropped the inbox channel ribbon's color.
+ *    silently dropped the inbox channel marker's color. (That marker was a corner ribbon
+ *    when this test was written; it is now the leading PlatformIcon chip, which reaches the
+ *    same `channel.*` colors through PLATFORM_TINT_ON_ALERT's `bg-channel-*` utilities.)
  *  - `CHANNEL_BRAND_HEX`, because the social-image generator runs outside Tailwind entirely
  *    and needs raw hex to fill an SVG.
  *

@@ -12,7 +12,7 @@ import {
   Phone,
   X,
 } from 'lucide-react';
-import { Card, ChannelRibbon, PLATFORM_LABEL_KEYS } from '@/components/ui';
+import { Card, PlatformIcon, PLATFORM_LABEL_KEYS } from '@/components/ui';
 import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -23,7 +23,7 @@ import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 export interface NeedsAttentionItem {
   id: string;
   type: 'comment' | 'message';
-  /** Channel a message conversation is on — drives the channel ribbon on the row.
+  /** Channel a message conversation is on — replaces the row's type icon.
    *  Only set for message items on multi-channel workspaces. */
   platform?: 'facebook' | 'instagram' | 'whatsapp' | null;
   senderName: string | null;
@@ -64,7 +64,7 @@ interface SmartStatusBannerProps {
   items: NeedsAttentionItem[];
   /** Called when an item is clicked (opens inline modal instead of navigating) */
   onItemClick?: (item: NeedsAttentionItem) => void;
-  /** Show the per-message channel ribbon (multi-channel workspaces only). */
+  /** Swap the type icon for the channel on message rows (multi-channel only). */
   showChannelBadge?: boolean;
 }
 
@@ -330,11 +330,27 @@ export function SmartStatusBanner({
                         ? tDash('smartBanner.waitingSince', { time: formatRelativeTime(item.earliestAt, tTime) })
                         : formatRelativeTime(item.createdAt, tTime);
 
+                      // On a multi-channel workspace the channel REPLACES the type icon for
+                      // message rows — the channel glyph already implies "message", so rendering
+                      // both would say the same thing twice in a panel that is short on room.
+                      // Comment rows keep MessageSquare (no per-row channel here), so the two
+                      // row types still read apart.
+                      const showChannelIcon = showChannelBadge && item.type === 'message' && item.platform;
+
                       const itemContent = (
                         <>
-                          {/* Type icon */}
+                          {/* Type icon — or the channel, which implies it */}
                           <div className="shrink-0 mt-0.5">
-                            <ItemIcon className="w-4 h-4 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+                            {showChannelIcon && item.platform ? (
+                              <PlatformIcon
+                                platform={item.platform}
+                                size="sm"
+                                tint="alert"
+                                ariaLabel={tComments(PLATFORM_LABEL_KEYS[item.platform])}
+                              />
+                            ) : (
+                              <ItemIcon className="w-4 h-4 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+                            )}
                           </div>
 
                           {/* Content */}
@@ -364,21 +380,7 @@ export function SmartStatusBanner({
                         </>
                       );
 
-                      // Channel ribbon at the row's top trailing corner — same marker
-                      // as the Messages inbox, shown for message items on multi-channel
-                      // workspaces (comments carry no per-row channel here).
-                      const channelRibbon = showChannelBadge && item.type === 'message' && item.platform ? (
-                        <ChannelRibbon
-                          platform={item.platform}
-                          ariaLabel={tComments(PLATFORM_LABEL_KEYS[item.platform])}
-                        />
-                      ) : null;
-
-                      const sharedClassName = clsx(
-                        "flex items-start gap-3 py-3 sm:py-3.5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start",
-                        // Reserve corner space + clip the diagonal ribbon when present.
-                        channelRibbon ? "relative overflow-hidden ps-4 sm:ps-5 pe-14" : "px-4 sm:px-5",
-                      );
+                      const sharedClassName = "flex items-start gap-3 py-3 sm:py-3.5 px-4 sm:px-5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start";
 
                       return (
                         <li key={`${item.type}-${item.id}`}>
@@ -389,7 +391,6 @@ export function SmartStatusBanner({
                               onClick={() => onItemClick?.(item)}
                             >
                               {itemContent}
-                              {channelRibbon}
                             </button>
                           ) : (
                             <Link
@@ -397,7 +398,6 @@ export function SmartStatusBanner({
                               className={sharedClassName}
                             >
                               {itemContent}
-                              {channelRibbon}
                             </Link>
                           )}
                         </li>
