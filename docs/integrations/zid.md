@@ -844,6 +844,15 @@ an entry gate idled this work for eight days.
 5. Full round-trip: connect → product sync → KB enrichment → place order →
    `order.create` SMS → status `indelivery` → shipped SMS → `delivered` → delivered SMS →
    uninstall → store deactivated.
+
+   ✅ **Webhook half PROVEN 2026-08-23 on order 73285179** — `order.create` (the first
+   ever) → `order_confirmed` row, then `indelivery` → `order_shipped`, then `delivered`
+   → `order_delivered`, all three quoting the real invoice number. ⭐ The order came from
+   the Zid admin's **manual-order wizard** (الطلبات → إنشاء), which fires `order.create`
+   without the Cloudflare-challenged storefront; recipe in `docs/testing/ZID_TEST_PLAN.md`
+   §E-1. Still owed on this step: SMS *arrival* (Vonage ticket #3002710, not Zid) and the
+   uninstall → deactivation leg (deliberately not run pre-resubmit — it disconnects the
+   store).
 6. Only then: remove the `coming_soon` badge (`frontend/src/pages/integrations.tsx`),
    flip the status tables in `INTEGRATIONS.md` / `SYSTEM_ANALYSIS.md`, and append the
    D-NNN closing D-020's gate.

@@ -267,18 +267,38 @@ confirmed**. From the live API, resolve:
 
 ## E. Order Webhook Loop → SMS (captures C5–C8) — the round-trip that closes D-020
 
-### E-1. `order.create` → order_confirmed SMS
-**Steps:** Place a REAL order on the dev storefront with the test phone as customer.
+### E-1. `order.create` → order_confirmed SMS — ✅ **PASSED 2026-08-23** (webhook half)
 
-**Expected:** Delivery Basic-auth verified → `customer_notifications_log` row
-(`notification_type='order_confirmed'`, `status='sent'` — the enum is
-pending/sent/failed/cancelled; there is no `delivered` status) → **SMS arrives on the
-test phone**.
+⭐⭐ **You do NOT need the storefront checkout — or a phone — to fire `order.create`.**
+The Zid admin's **manual-order wizard** creates a genuine order that fires the event:
+الطلبات → «إنشاء» (this drops a draft into الطلبات اليدوية) → open the draft → 4 steps:
+products → customer (pick `Zid Customer`; it needs a delivery **address**, add one) →
+shipping «التوصيل إلى عنوان العميل» + a payment method → «تأكيد». The summary step
+states it outright: «سيتم حفظ كطلب جديد، وسيتم إشعار العميل عبر رسالة نصية (SMS)».
+This retires the eight-day block on §E: the storefront checkout is Cloudflare-challenged
+for a debugger-attached browser, and the owner's phone was believed to be the only route.
+⚠️ The store's 5 seeded orders all pre-date the webhook subscription (created 2026-08-01),
+so flipping THEIR status can never produce `order_confirmed` — only a new order can.
 
-**Capture — C5**: headers (is `Authorization: Basic` present? exact scheme casing —
-verification fails closed on `basic …`), envelope (`data` vs `order` vs root),
-`customer.mobile` format (confirm full-intl-without-`+` → `normalizeZidPhone`),
-`code`/`id` fields.
+**Result:** Order **73285179** created 14:28:20Z (Sony A7, 10,015 SAR, Riyadh address,
+bank transfer, status «جديد», source «لوحة التحكم»). `order.create` reached prod
+~97s later and wrote `customer_notifications_log` row `zid:order_confirmed:73285179`
+at 14:29:57Z — **the first `order.create` ever to fire in this integration**. Basic-auth
+verified, envelope parsed, phone normalized to `+966500000009`, message
+«Zid Customer، تم تأكيد طلبك #73285179 بنجاح ✅ شكراً لتسوقك». `order_number` is the
+**invoice number**, not the slug — #911 confirmed live at the read path (the 09:50Z row
+still reads `mdXMlMYYBt`; every row after it reads the real number).
+
+E-2 and E-3 were then re-run on this same order, giving the **complete lifecycle on one
+order for the first time**: confirmed 14:29:57Z → shipped 14:32:55Z (~48s) → delivered
+14:34:24Z (~42s), all three quoting 73285179.
+
+**Capture — C5 — PARTIALLY RESOLVED (from the effect, not the envelope).** The controller
+does not log raw bodies, so header casing and the `data`/`order`/root envelope shape are
+still unobserved. What the written row proves: Basic-auth verification passed, the phone
+parsed from `customer.mobile` full-intl-without-`+` → `+966500000009` as designed, and
+`invoice_number` resolved. **Still open on E-1:** SMS *arrival* (blocked on Vonage
+ticket #3002710, not on Zid — all 6 rows read `Vonage delivery error: Quota Exceeded`).
 
 ### E-2. Status → in-delivery → order_shipped SMS — ✅ **PASSED 2026-08-23** (webhook half)
 **Steps:** Flip the order to in-delivery in the Zid admin. No carrier config needed —
@@ -587,7 +607,7 @@ cannot regress; they do not prove Zid's reviewer walks the flow successfully.
 **§L is now green for the rejection bullet it answers**: L-1 and L-2 — the exact scenario Zid
 rejected us on — ran live on 2026-08-22, alongside L-3/L-4/L-5/L-10/L-12. The four owed cases
 are hardening (reinstall, takeover, invite, no-pages), not the rejection itself. ⚠️ What §L
-being green does NOT do is make the app resubmittable: §E/§F are still at zero and the listing
+being green does NOT do is make the app resubmittable: §F is still at zero and the listing
 assets are still Salla's. Do not read this heading as "ready".
 
 | ID | Test | Expected | Capture |
@@ -660,17 +680,41 @@ scenarios and features sync") + the listing gaps closed (5–12 min video, Arabi
 screenshots, activation steps in the description, in-app support channel with a stated
 response time, test-account credentials).
 
-**Where that gate actually stands (2026-08-22):**
+**Where that gate actually stands (2026-08-23, evening):**
 
 | Gate term | State | What is left |
 |---|---|---|
 | §L — bullet 1 | ✅ **green** | L-1/L-2 (the rejected scenario) + L-3/L-4/L-5/L-10/L-12 live; 7 pinned. L-6/L-9/L-14/L-15 are hardening |
-| §A–§F — bullet 3 | 🟠 **§E 2/6 + C6/C7/C8 resolved, §F 0/3** | E-2 and E-3 PASSED 2026-08-23 — the first Zid order webhooks ever to round-trip, proving we ingest their order data correctly (the ingestion half of bullet 2). Still owed: E-1 needs a real **storefront** order (`order.create` has never fired), and F-2/F-3 uninstall/reinstall |
+| §A–§F — bullet 3 | 🟢 **§E 4/6 (E-1…E-4, C5–C8), §F 0/3** | The **full order lifecycle round-tripped on one order** (73285179) on 2026-08-23: `order.create` → confirmed → shipped → delivered, all quoting the real invoice number. The ingestion half of bullet 2 is proven end-to-end. Still owed: E-5 dedupe, E-6, SMS *arrival* (Vonage, not Zid), and F-2/F-3 uninstall/reinstall (deliberately NOT run on 08-23 — it disconnects the store and can recreate the R-4 orphan days before resubmit) |
 | §H — bullet 2 | 🔴 **0/11 live** | Paid checkout refuses while the app is `Draft`. Expect the reviewer to produce the first paid envelope |
 | Listing | 🔴 **all five open** | Gallery is still the **Salla** screenshots; no video, no reviewer credentials, no activation steps, no support SLA. The video is the longest-lead item and also clears Salla's blocker |
 
 ⛔ **Read this honestly: one owner action — placing a single real order — is worth more to
 this gate than any amount of further code work.** Nothing in §A–§F can be closed by a test.
+
+> ✅ 2026-08-23 evening: that order was placed — from the Zid admin's manual-order wizard,
+> no phone and no storefront needed (recipe in E-1). The line above is kept as history.
+
+**Two defects found by the 2026-08-23 stress run — both block resubmission:**
+
+1. **🔴 JSON envelope leaks to the customer on the order-lookup path (D-097).** Asking
+   «ابي اتابع طلبي، رقمه 73285179 وجوالي 966500000009» through `POST /pages/:id/test-reply`
+   returned TWO raw `{"reply":…,"intent":"QUESTION",…}` envelopes back-to-back and **no human
+   text at all**. Not Zid-specific — Salla and Zid share `ecommerceToolHandler`. The proper
+   fix is **PR #916** (one shared `parseReplyContent` for all four call sites; the exact
+   doubled-envelope shape is pinned by `ai-worker/test/parseReplyContent.test.ts`), **merged
+   but NOT deployed** — prod was `6ee8126` (#914) at test time. ⛔ Do not resubmit before a
+   deploy that carries #916: a reviewer asking about their order gets raw JSON.
+2. **🟠 Onboarding never self-skips.** Every open of app 7367 from the Zid dashboard —
+   store connected, 4 products synced, a page linked — lands on «مرحباً بك في Jawab24 /
+   لنربط متجر زد الخاص بك». Verified at the read path (reload → same screen) and at the
+   source: `frontend/src/pages/zid/onboarding.tsx` hard-inits `step = useState(0)` with no
+   connection-aware skip anywhere, while the comment in `zid/embedded.tsx` claims
+   «onboarding self-skips once a page is linked» — **that mechanism does not exist**. Not a
+   rejection bullet, but a reviewer reads "connect your store" on a connected store on every
+   open. Fix: route a connected-and-linked merchant straight into the app and correct the
+   comment.
+
 
 **Effort estimate:** 1–2 focused sessions for §A–§F (Salla's equivalent took one
 evening); §L ~half a session; §I adds ~half a session.
@@ -706,3 +750,14 @@ code change before publish.
   the install claimed it, and a repeat install of this store reactivates it for its owner
   (`reinstallPolicy`) rather than re-running L-1 — so L-1 and L-9 both need a second store. Exit gates now carry a per-term state table whose
   honest reading is that one owner action — a single real order — outweighs further code.
+- 2026-08-23 (evening): **§E closed on the webhook half — `order.create` fired for the first
+  time ever.** The eight-day block ("needs a storefront order, which Cloudflare refuses and only
+  the owner's phone can place") fell to the Zid admin's **manual-order wizard**, which creates a
+  genuine order and fires the event — recipe in E-1. Order 73285179 then ran the complete
+  lifecycle on one order (confirmed → shipped → delivered, 97s/48s/42s), all quoting the real
+  invoice number, which is #911 verified at the read path. L-3/L-10/L-11/L-12 and the #900
+  IDOR guard re-verified live from the embedded merchant session. Exit-gate row for bullet 3
+  flips 🟠 → 🟢. Two defects recorded under the gate table: the **D-097 JSON-envelope leak on
+  the order-lookup path** (fix #916 merged, NOT deployed — a deploy gate), and **onboarding
+  that never self-skips** (the `embedded.tsx` comment describes a mechanism that does not
+  exist). F-2/F-3 and L-7/L-8 deliberately not run — destructive days before resubmit.
