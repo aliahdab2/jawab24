@@ -10,11 +10,13 @@ const {
     mockDbUpdate,
     mockDbSelect,
     mockGetUserPages,
+    mockVerifyPageToken,
     mockSendNotification,
 } = vi.hoisted(() => ({
     mockDbUpdate: vi.fn(),
     mockDbSelect: vi.fn(),
     mockGetUserPages: vi.fn(),
+    mockVerifyPageToken: vi.fn(),
     mockSendNotification: vi.fn().mockResolvedValue('notif-id'),
 }));
 
@@ -28,7 +30,7 @@ vi.mock('../../src/db', () => ({
 // schema: drizzle needs these to exist; the mock content doesn't affect behavior
 // because we mock the query builders below.
 vi.mock('../../src/db/schema', () => ({
-    pages: { id: 'id', userId: 'user_id', accessToken: 'access_token', tokenLastVerifiedAt: 'token_last_verified_at', updatedAt: 'updated_at', facebookPageId: 'facebook_page_id', name: 'name' },
+    pages: { id: 'id', userId: 'user_id', accessToken: 'access_token', tokenLastVerifiedAt: 'token_last_verified_at', updatedAt: 'updated_at', facebookPageId: 'facebook_page_id', name: 'name', disconnectReason: 'disconnect_reason' },
     users: { id: 'id', facebookAccessToken: 'facebook_access_token', facebookTokenExpiresAt: 'facebook_token_expires_at' },
 }));
 
@@ -46,6 +48,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getUserPages: (...args: unknown[]) => mockGetUserPages(...args),
+        verifyPageToken: (...args: unknown[]) => mockVerifyPageToken(...args),
         setLogger: vi.fn(),
     },
 }));
@@ -121,6 +124,11 @@ function buildUpdateChain() {
     return { set: setMock, _setMock: setMock };
 }
 
+/** The writes that disconnect a page — the only writes the regressions below guard against. */
+function tokenClearWrites(setMock: ReturnType<typeof vi.fn>) {
+    return setMock.mock.calls.filter(([v]) => (v as { accessToken?: string }).accessToken === '');
+}
+
 function pageRow(overrides: Partial<{ id: string; facebookPageId: string; name: string; accessToken: string; userId: string }> = {}) {
     return {
         id: overrides.id ?? 'page-1',
@@ -136,6 +144,9 @@ function pageRow(overrides: Partial<{ id: string; facebookPageId: string; name: 
 describe('tokenRefresh.verifyAndRefreshTokens', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // Default: every page token is valid against its own page (pass 1), so
+        // the pre-existing cases keep exercising the /me/accounts refresh (pass 2).
+        mockVerifyPageToken.mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -158,10 +169,13 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
             new FacebookApiError('Facebook API error: Service Unavailable', { isTransport: true }),
         );
 
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+
         const result = await verifyAndRefreshTokens();
 
-        // No clear, no notification sent
-        expect(mockDbUpdate).not.toHaveBeenCalled();
+        // No clear, no notification sent (pass 1 only stamped tokenLastVerifiedAt)
+        expect(tokenClearWrites(updateChain._setMock)).toHaveLength(0);
         expect(mockSendNotification).not.toHaveBeenCalled();
         expect(result.invalid).toBe(0);
     });
@@ -189,7 +203,7 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
         const result = await verifyAndRefreshTokens();
 
         // notifyReconnectNeeded was called → tokens cleared + notification sent
-        expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+        expect(tokenClearWrites(updateChain._setMock)).toHaveLength(1);
         expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
             accessToken: '',
             disconnectReason: 'token_revoked',
@@ -201,7 +215,11 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
         expect(result.invalid).toBe(2);
     });
 
-    it('uses disconnect_reason="no_user_token" when user has no stored facebook token', async () => {
+    // 2026-08-23: a store-provisioned account (Zid/Salla install) has no user
+    // token at all — its page was linked through the embedded break-out and its
+    // PAGE token is perfectly valid. The old sweep disconnected every such page
+    // on its first visit. A page is judged by its own token.
+    it('a user with no facebook token keeps a page whose own token is valid', async () => {
         const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1' })];
         const updateChain = buildUpdateChain();
         mockDbUpdate.mockReturnValue(updateChain);
@@ -211,11 +229,76 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
 
         const result = await verifyAndRefreshTokens();
 
+        expect(tokenClearWrites(updateChain._setMock)).toHaveLength(0);
         expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
-            accessToken: '',
-            disconnectReason: 'no_user_token',
+            tokenLastVerifiedAt: expect.any(Date),
+            disconnectReason: null,
         }));
-        expect(result.invalid).toBe(1);
+        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(mockGetUserPages).not.toHaveBeenCalled();
+        expect(result).toEqual({ verified: 1, refreshed: 0, invalid: 0 });
+    });
+
+    it('PROD 2026-08-23: a page-level revoke (page token → code 190, user token untouched) disconnects THAT page only', async () => {
+        // «Jawab24 Test»: Meta dropped the app's access to one page after a later
+        // Facebook Login ticked a different subset. The user token still works and
+        // /me/accounts simply no longer lists the page — which the old sweep left
+        // intact, so the page ignored every customer for 7+ hours.
+        const stalePages = [
+            pageRow({ id: 'p-dead', facebookPageId: 'fb-dead', name: 'Jawab24 Test' }),
+            pageRow({ id: 'p-ok', facebookPageId: 'fb-ok', name: 'Healthy' }),
+        ];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: 'user-token' }));
+        mockVerifyPageToken.mockImplementation(async (fbPageId: string) => {
+            if (fbPageId === 'fb-dead') {
+                throw new FacebookApiError('Page token verification failed', { code: 190, isTransport: false });
+            }
+        });
+        mockGetUserPages.mockResolvedValue({ data: [{ id: 'fb-ok', access_token: 'fresh-ok' }] });
+
+        const result = await verifyAndRefreshTokens();
+
+        // Exactly one clear, for the dead page, with the definitive reason.
+        const clears = tokenClearWrites(updateChain._setMock);
+        expect(clears).toHaveLength(1);
+        expect(clears[0][0]).toMatchObject({ accessToken: '', disconnectReason: 'token_revoked' });
+        expect(mockSendNotification).toHaveBeenCalledTimes(1);
+        expect(mockSendNotification).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ type: 'page_disconnected' }));
+        // The healthy sibling was verified directly AND refreshed from /me/accounts.
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({ accessToken: 'fresh-ok' }));
+        expect(result).toEqual({ verified: 1, refreshed: 1, invalid: 1 });
+    });
+
+    it('a transport failure on the direct page check leaves the token intact (never a revoke)', async () => {
+        const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1' })];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: null }));
+        mockVerifyPageToken.mockRejectedValue(new FacebookApiError('Facebook API error: timeout', { isTransport: true }));
+
+        const result = await verifyAndRefreshTokens();
+
+        expect(mockDbUpdate).not.toHaveBeenCalled();
+        expect(mockSendNotification).not.toHaveBeenCalled();
+        expect(result).toEqual({ verified: 0, refreshed: 0, invalid: 0 });
+    });
+
+    it('sends the DECRYPTED page token to Graph, not the enc:v1: blob', async () => {
+        const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1', accessToken: 'enc:v1:plain-page-token' })];
+        mockDbUpdate.mockReturnValue(buildUpdateChain());
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: null }));
+
+        await verifyAndRefreshTokens();
+
+        expect(mockVerifyPageToken).toHaveBeenCalledWith('fb-1', 'plain-page-token');
     });
 
     it('clears disconnect_reason on successful token refresh (recovered page)', async () => {
@@ -261,12 +344,11 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
         const result = await verifyAndRefreshTokens();
 
         // Each page got a fresh token written + tokenLastVerifiedAt updated
-        expect(mockDbUpdate).toHaveBeenCalledTimes(2);
-        expect(updateChain._setMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
             accessToken: 'fresh-token-1',
             tokenLastVerifiedAt: expect.any(Date),
         }));
-        expect(updateChain._setMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
             accessToken: 'fresh-token-2',
         }));
         expect(mockSendNotification).not.toHaveBeenCalled();
@@ -299,6 +381,8 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
 
     it('regression: retry-exhaustion on transient errors does NOT clear tokens', async () => {
         const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1', name: 'Page 1' })];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
         mockDbSelect
             .mockReturnValueOnce(buildStalePagesQuery(stalePages))
             .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: 'user-token' }));
@@ -315,7 +399,7 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
         // withRetry called the inner fn 3 times (max attempts)
         expect(mockGetUserPages).toHaveBeenCalledTimes(3);
         // But pages were NEVER cleared — that's the regression we're guarding against
-        expect(mockDbUpdate).not.toHaveBeenCalled();
+        expect(tokenClearWrites(updateChain._setMock)).toHaveLength(0);
         expect(mockSendNotification).not.toHaveBeenCalled();
         expect(result.invalid).toBe(0);
     });
@@ -343,11 +427,12 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
 
         const result = await verifyAndRefreshTokens();
 
-        // Only user-2's page got refreshed (one update call total)
-        expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+        // Only user-2's page got refreshed; nobody was cleared
         expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
             accessToken: 'fresh-u2',
         }));
+        expect(updateChain._setMock).not.toHaveBeenCalledWith(expect.objectContaining({ accessToken: 'fresh-u1' }));
+        expect(tokenClearWrites(updateChain._setMock)).toHaveLength(0);
         // No tokens cleared — user-1's transient failure must NOT cascade
         expect(mockSendNotification).not.toHaveBeenCalled();
         expect(result.refreshed).toBe(1);
