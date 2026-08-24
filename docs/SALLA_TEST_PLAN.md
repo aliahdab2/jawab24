@@ -244,6 +244,33 @@ throttling or being flagged at exactly the wrong moment, and measures *their*
 infrastructure, not ours. There is nothing to learn that their published rate limits don't
 already tell us. This is a standing rule, not a one-off caution.
 
+### ✅ Built 2026-08-24 — `npm run test:stress:local` (from `backend/`)
+
+`backend/test/stress/ecommerceStress.test.ts` + `vitest.stress.config.ts`. Real Postgres,
+real Redis, mocked platform HTTP — **deliberately outside the pre-deploy gate** (it is slow
+by construction and must never make a deploy wait). Covers Salla AND Zid.
+
+| Scenario | Measured 2026-08-24 |
+|---|---|
+| S1 webhook burst | 60 concurrent deliveries of one event → **1 row**; 200 concurrent across 40 orders → **40 rows**, every loser rejecting quietly (a thrown loser would 500 the webhook and earn a redelivery) |
+| S2 catalog cap | Salla capped at 5000 after 77 pages, Zid after 50; a mid-catalogue failure leaves the PREVIOUS catalogue intact |
+| S3 token refresh race | 25 concurrent refreshes → **exactly 1** token exchange on both platforms. The single-use refresh token is never spent twice |
+| S4 agent tool latency | `getShipmentTracking` = 3 reads; the order-detail/shipment pair runs in parallel. Floor is 2 sequential hops — the keyword search must resolve first to yield the order id, so that hop is a real data dependency, not a defect |
+
+**⚠️ Open finding from S3, not yet fixed.** When a refresh outlives `LOCK_WAIT_DELAY_MS`
+(2 s), the lock LOSERS return without re-checking and proceed on the **old** token —
+measured at 2 of 3 callers returning at 2002 ms against a 3500 ms refresh. The safety
+property still holds (one exchange), so this is a transient-401 window during a slow
+refresh, not a disconnect. The fix (re-read after the wait, bounded retry) touches shared
+token-refresh infrastructure used by all three platforms and is therefore a deliberate
+decision, not a drive-by.
+
+**Found and fixed by this suite:** `fetchAllProducts` read `data.pagination.totalPages`
+unguarded. Failing is correct there — `syncProducts` REPLACES the catalogue, so treating an
+unknown page count as "done" silently deletes everything past page 1 (the mutation test
+proves it: the sync resolves `{synced: 1}`) — but it failed as `Cannot read properties of
+undefined`, naming neither Salla nor the store. Now a named error.
+
 ### What to load-test instead — our own side
 
 | Scenario | Method | Watch for |

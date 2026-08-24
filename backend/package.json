@@ -30,6 +30,8 @@
     "test": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:local": "DATABASE_URL=${TEST_DATABASE_URL:-$(../scripts/test-db-url.sh)} vitest run --config vitest.integration.config.ts",
+    "test:stress": "vitest run --config vitest.stress.config.ts",
+    "test:stress:local": "DATABASE_URL=${TEST_DATABASE_URL:-$(../scripts/test-db-url.sh)} vitest run --config vitest.stress.config.ts",
     "test:coverage": "vitest run --coverage",
     "precommit": "npm run lint && npm run type-check && npm run db:check",
     "openapi:export": "tsx scripts/export-openapi.ts"
