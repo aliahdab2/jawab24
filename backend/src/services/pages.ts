@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores, postSuggestions } from '../db/schema';
 import { eq, and, or, ne, desc, sql, count, isNotNull, isNull, inArray } from 'drizzle-orm';
-import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours, NoPagesDiagnosis } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, SELLABLE_STATUSES, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { storeAnswersPolicies, type EcommercePlatform } from './ecommerce';
@@ -25,6 +25,7 @@ export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
 import { isUniqueViolation } from '../utils/dbErrors';
 import { clearReconnectAlertClaims } from './pageTokenRecovery';
+import { recordActivationEvent } from './activation';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
@@ -1167,7 +1168,26 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, takenPages: [] as { pageName: string }[], trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
+            // Classify WHY (declined permission / Instagram-only / genuinely no
+            // pages) so the drop-off cohort is segmentable, and record it on the
+            // no_fb_pages milestone — but only for merchants with nothing
+            // connected yet: an established workspace whose re-sync comes back
+            // empty is a token/permission incident, not a prospect to classify.
+            // This is the single canonical emit site for no_fb_pages — every
+            // login/sync path funnels through here.
+            let noPagesDiagnosis: NoPagesDiagnosis | null = null;
+            const existingPages = await this.getPages(workspaceId);
+            if (existingPages.length === 0) {
+                noPagesDiagnosis = await facebookService.diagnoseNoPages(userAccessToken);
+                logger.info(`[Pages] Zero-page diagnosis: ${noPagesDiagnosis.reason} (igTargets=${noPagesDiagnosis.igTargetCount}, pageTargets=${noPagesDiagnosis.pageTargetCount})`);
+                void recordActivationEvent(userId, 'no_fb_pages', {
+                    reason: noPagesDiagnosis.reason,
+                    igTargetCount: noPagesDiagnosis.igTargetCount,
+                    pageTargetCount: noPagesDiagnosis.pageTargetCount,
+                    grantedScopes: noPagesDiagnosis.grantedScopes,
+                });
+            }
+            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, takenPages: [] as { pageName: string }[], trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[], noPagesDiagnosis };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);

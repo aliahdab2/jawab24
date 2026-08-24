@@ -924,7 +924,7 @@ Voice-to-text for KB content via microphone:
   | `kb_filled` | `recordActivationEvent` | |
   | `autoreply_enabled` | `recordActivationEvent` | |
   | `first_autoreply_sent` | `recordActivationEvent` | strongest "became a customer" signal |
-  | `no_fb_pages`, `ig_direct_interest` | `recordActivationEvent` | demand signals, not funnel steps |
+  | `no_fb_pages`, `ig_direct_interest` | `recordActivationEvent` | demand signals, not funnel steps; `no_fb_pages` metadata carries a `reason` classification (declined permission / Instagram-only / no pages / unknown) from `facebookService.diagnoseNoPages` |
   | `purchase` (+ `value`, `currency`) | Stripe `checkout.session.completed` **or** `invoice.payment_succeeded` | the money event — see **Two paths to the money** below |
 - **⭐ Two paths to the money, and for most merchants it is the second one.**
   Starter is the only plan carrying `trialDays: 30` and it is `isDefault: true`,

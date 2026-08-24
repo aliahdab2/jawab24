@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
-import type { Page } from '@jawab24/shared';
+import type { Page, NoPagesReason } from '@jawab24/shared';
 import dynamic from 'next/dynamic';
 
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
@@ -79,6 +79,16 @@ const PagesPage: NextPageWithLayout = () => {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [igInterestSent, setIgInterestSent] = useState(false);
+  // Why the last sync returned zero pages (null until a zero-sync answers, or
+  // after any sync that found pages) — drives the tailored empty-state copy.
+  const [noPagesReason, setNoPagesReason] = useState<NoPagesReason | null>(null);
+  const noPagesReasonKey =
+    noPagesReason === 'permissions_declined' ? 'noPagesPermissionsDeclined'
+    : noPagesReason === 'pages_unreachable' ? 'noPagesUnreachable'
+    : noPagesReason === 'instagram_only' ? 'noPagesInstagramOnly'
+    : noPagesReason === 'no_pages' ? 'noPagesNoAdminAccount'
+    : noPagesReason === 'unknown' ? 'sessionExpired'
+    : null;
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
@@ -247,6 +257,7 @@ const PagesPage: NextPageWithLayout = () => {
     try {
       setSyncing(true);
       type SyncResponse = {
+        reason?: NoPagesReason | null;
         takenCount?: number;
         takenPages?: { pageName: string }[];
         alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
@@ -257,6 +268,10 @@ const PagesPage: NextPageWithLayout = () => {
         pageLimit?: number | null;
       };
       const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
+
+      // Zero-page syncs carry the WHY; any other outcome clears it so stale
+      // guidance never outlives a successful connect.
+      setNoPagesReason(data?.reason ?? null);
 
       // If any of the conflicting pages live in workspaces the user is already
       // a member of, surface a one-tap switch instead of the generic "ask the
@@ -1624,8 +1639,10 @@ const PagesPage: NextPageWithLayout = () => {
         <Card>
           <EmptyState
             icon={FileText}
-            title={t('noPages')}
-            description={channelWording ? t('noPagesDescChannels') : t('noPagesDesc')}
+            title={noPagesReasonKey ? t('noPagesFoundTitle') : t('noPages')}
+            description={noPagesReasonKey
+              ? t(noPagesReasonKey)
+              : channelWording ? t('noPagesDescChannels') : t('noPagesDesc')}
             action={isOwner
               ? <Button onClick={handleOpenConnect}>
                   {channelWording ? t('connectChannel') : t('connectPage')}

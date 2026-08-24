@@ -543,6 +543,34 @@ describe('Pages Controller', () => {
             expect(mockReply.status).toHaveBeenCalledWith(400);
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Access token is required' }));
         });
+
+        it('surfaces the zero-page diagnosis reason so the client can tailor its empty state', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
+                syncedPages: [], skippedCount: 0, takenCount: 0, trialBlockedCount: 0,
+                noPagesDiagnosis: { reason: 'instagram_only', igTargetCount: 1, pageTargetCount: 0, grantedScopes: ['instagram_basic'] },
+            } as any);
+            mockRequest.body = { accessToken: 'fb-token-abc' };
+
+            await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent.synced).toBe(0);
+            expect(sent.reason).toBe('instagram_only');
+        });
+
+        it('returns reason null on a zero sync without a diagnosis (established workspace)', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
+                syncedPages: [], skippedCount: 0, takenCount: 0, trialBlockedCount: 0,
+                noPagesDiagnosis: null,
+            } as any);
+            mockRequest.body = { accessToken: 'fb-token-abc' };
+
+            await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+            const sent = (mockReply.send as any).mock.calls[0][0];
+            expect(sent.synced).toBe(0);
+            expect(sent.reason).toBeNull();
+        });
     });
 
     // ---- updateBrandVoice (PATCH /pages/:id/brand-voice, D-084) ----

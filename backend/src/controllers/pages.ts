@@ -754,7 +754,7 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, skippedPages, skipReason, pageLimit, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, skippedPages, skipReason, pageLimit, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf, noPagesDiagnosis } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
             // Activation funnel: the user has connected at least one page.
             if (syncedPages.length > 0) {
@@ -763,17 +763,16 @@ export class PagesController {
 
             if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0 && skippedCount === 0) {
                 // /me/accounts came back empty — every non-empty Facebook response
-                // increments one of the counters above. Count the drop-off only for
-                // merchants with no previously-connected pages either: a revoked-
-                // permission re-sync of an established workspace is not an
-                // "Instagram-only merchant" prospect.
-                const existingPages = await pagesService.getPages(workspaceId);
-                if (existingPages.length === 0) {
-                    void recordActivationEvent(userId, 'no_fb_pages');
-                }
+                // increments one of the counters above. The WHY (declined
+                // permission / Instagram-only / no pages) was classified and
+                // recorded on the no_fb_pages milestone inside syncFromFacebook;
+                // `reason` lets the client show the matching guidance instead of
+                // a generic empty state. Null for established workspaces whose
+                // re-sync came back empty (their pages stay rendered).
                 return reply.send({
                     synced: 0,
                     pages: [],
+                    reason: noPagesDiagnosis?.reason ?? null,
                     message: 'No pages found. Make sure you are an admin of at least one Facebook page and have granted the required permissions.'
                 });
             }

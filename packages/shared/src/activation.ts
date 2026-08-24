@@ -22,6 +22,19 @@ export type ActivationEvent =
     | 'ig_direct_interest';
 
 /**
+ * Why /me/accounts came back empty for a fresh workspace — the classification
+ * carried in the no_fb_pages event metadata AND returned by POST /pages/sync
+ * as `reason`, so the empty state can show matching guidance. Shared so the
+ * backend emit vocabulary and the frontend rendering can't drift.
+ */
+export type NoPagesReason =
+    | 'permissions_declined' // pages_show_list not granted — re-consent fixes it
+    | 'pages_unreachable'    // page target_ids authorized but no page could be fetched
+    | 'instagram_only'       // no pages, but instagram_basic has authorized IG accounts
+    | 'no_pages'             // all scopes granted, no page/IG targets — account manages nothing
+    | 'unknown';             // /debug_token failed (usually an expired/invalid token)
+
+/**
  * Minimum knowledge-base length (trimmed chars) for a page to count as having
  * its business info "filled". Single source of truth shared by the backend
  * activation funnel (`kb_filled` emit) and the frontend dashboard checklist /
