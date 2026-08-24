@@ -1176,13 +1176,16 @@ describe('Zid Service', () => {
             products: [{ name: { ar: 'منتج' }, quantity: 2, price: 150 }],
         };
 
-        it('scans /v1/managers/store/orders with dual headers and maps a match by code', async () => {
+        /** Queue a search that returns nothing, so the test exercises the fallback scan. */
+        const searchMiss = () => mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [] }));
+
+        it('asks Zid search FIRST, with dual headers, and maps a match by code', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [order] }));
 
             const result = await lookupOrder('store-1', 'ORD-100');
 
             const call = mockFetch.mock.calls[0] as [string, RequestInit];
-            expect(call[0]).toBe('https://api.zid.sa/v1/managers/store/orders?page=1&per_page=100&payload_type=default');
+            expect(call[0]).toBe('https://api.zid.sa/v1/managers/store/orders?search_term=ORD-100&per_page=10&payload_type=default');
             expectDualHeaders(call);
 
             expect(result).not.toBeNull();
@@ -1228,34 +1231,80 @@ describe('Zid Service', () => {
             expect(result?.totalAmount).toBe('300.5');
         });
 
+        // The defect this pins: the scan sees only MAX_ORDER_PAGES_TO_SCAN ×
+        // ORDERS_PAGE_SIZE = the 300 most recent orders, so a customer asking about
+        // an older one was told it does not exist — to them, indistinguishable from
+        // us having lost it. A busy store crosses 300 orders in days.
+        it('finds an order older than the 300-order scan window, without scanning at all', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+
+            expect(result?.orderNumber).toBe('555');
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+            // `?page=`, not `page=` — the search URL carries `per_page=10`.
+            expect(mockFetch.mock.calls.some(c => String(c[0]).includes('?page='))).toBe(false);
+        });
+
+        // search_term is a fuzzy natural-language lookup across customer name, phone
+        // and email too. Returning its first hit would answer a customer with SOMEONE
+        // ELSE'S order — every hit must clear the same predicate the scan uses.
+        it('never trusts a fuzzy search hit that does not carry the requested number', async () => {
+            const someoneElse = { ...order, id: 4242, code: 'ORD-999', invoice_number: 777 };
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({ orders: [someoneElse] }))
+                .mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+
+            // Fell through to the scan and returned the RIGHT order, not the search hit.
+            expect(mockFetch.mock.calls[1][0]).toContain('?page=1');
+            expect(result?.orderNumber).toBe('555');
+        });
+
+        it('falls back to the scan when the search call fails, and reports it', async () => {
+            mockFetch
+                .mockRejectedValueOnce(new Error('search exploded'))
+                .mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+
+            expect(result?.orderNumber).toBe('555');
+            expect(mockCaptureError).toHaveBeenCalled();
+            expect(mockFetch.mock.calls[1][0]).toContain('?page=1');
+        });
+
         it('scans subsequent pages when the first full page has no match', async () => {
             const fullPage = Array.from({ length: 100 }, (_, i) => ({ ...order, id: i, code: `X-${i}`, invoice_number: undefined }));
+            searchMiss();
             mockFetch
                 .mockResolvedValueOnce(jsonResponse({ orders: fullPage }))
                 .mockResolvedValueOnce(jsonResponse({ orders: [order] }));
 
             const result = await lookupOrder('store-1', 'ORD-100');
 
-            expect(mockFetch).toHaveBeenCalledTimes(2);
-            expect(mockFetch.mock.calls[1][0]).toContain('page=2');
+            expect(mockFetch).toHaveBeenCalledTimes(3);
+            expect(mockFetch.mock.calls[2][0]).toContain('page=2');
             expect(result?.orderNumber).toBe('555');
         });
 
         it('gives up after 3 full pages without a match', async () => {
             const fullPage = Array.from({ length: 100 }, (_, i) => ({ ...order, id: i, code: `X-${i}`, invoice_number: undefined }));
+            searchMiss();
             mockFetch.mockResolvedValue(jsonResponse({ orders: fullPage }));
 
             const result = await lookupOrder('store-1', 'ORD-100');
 
             expect(result).toBeNull();
-            expect(mockFetch).toHaveBeenCalledTimes(3);
+            expect(mockFetch).toHaveBeenCalledTimes(4); // 1 search + 3 pages
         });
 
         it('returns null when the order is not found on a short page', async () => {
+            searchMiss();
             mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [] }));
 
             expect(await lookupOrder('store-1', '99999')).toBeNull();
-            expect(mockFetch).toHaveBeenCalledTimes(1);
+            expect(mockFetch).toHaveBeenCalledTimes(2); // 1 search + 1 short page
         });
 
         it('returns null when the store cannot be resolved', async () => {

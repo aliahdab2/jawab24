@@ -48,10 +48,12 @@ import {
 const PRODUCTS_PAGE_SIZE = 100;
 // Derived from the shared product cap (like Salla) — never a silent hard truncation.
 const MAX_PRODUCT_PAGES_TO_FETCH = Math.ceil(PRODUCT_SAFETY_CAP / PRODUCTS_PAGE_SIZE);
-// lookupOrder scans recent orders client-side until a search/filter param is
-// confirmed against a live store [provisional — see findOrderByCode].
+// lookupOrder asks Zid's `search_term` first; these bound the FALLBACK scan of
+// recent orders, which is why they are not a ceiling on findable orders anymore.
 const ORDERS_PAGE_SIZE = 100;
 const MAX_ORDER_PAGES_TO_SCAN = 3;
+/** A number identifies ONE order; the rest of a fuzzy search hit is noise. */
+const CODE_LOOKUP_MAX_CANDIDATES = 10;
 const ERROR_TEXT_MAX_LENGTH = 200;
 
 /** Fixed username for the Basic-auth pair on webhook subscriptions (password = ZID_WEBHOOK_SECRET). */
@@ -771,15 +773,6 @@ function zidOrderStatusCode(order: ZidOrder): string {
 }
 
 /**
- * Find an order by its customer-facing number (code) or internal id.
- *
- * [provisional] No search/filter query param for /v1/managers/store/orders is
- * confirmed yet, so this scans the most recent pages client-side. The live
- * validation phase resolves the real filter (incl. whether search indexes the
- * customer phone — .planning/ECOMMERCE_POWER_FEATURES_PLAN.md open question #3)
- * and this helper is the single seam to swap it into.
- */
-/**
  * Orders Zid's own search returns for a term. `search_term` is documented as a
  * natural-language lookup across customer phone, email, order code AND customer
  * name — so every hit is a CANDIDATE, never a verification.
@@ -792,8 +785,51 @@ async function searchOrders(creds: ZidCredentials, term: string, limit: number):
     return (data.orders || []).slice(0, limit);
 }
 
+/**
+ * Does this order actually carry the number the customer asked about?
+ *
+ * The ONLY place an order is matched to a requested number. `search_term` is a
+ * fuzzy natural-language lookup — it also matches customer name, phone and
+ * email — so a search hit is a candidate that MUST come back through here. The
+ * page scan uses the same predicate, which is what keeps the two paths from
+ * disagreeing about what "found" means.
+ */
+function orderMatchesNumber(order: ZidOrder, needle: string): boolean {
+    return String(order.code ?? '') === needle
+        || String(order.id) === needle
+        || String(order.invoice_number ?? '') === needle;
+}
+
+/**
+ * Find an order by its customer-facing number (code) or internal id.
+ *
+ * Zid's own `search_term` first, then the recent-pages scan as a fallback.
+ *
+ * The scan alone was a real defect: at `MAX_ORDER_PAGES_TO_SCAN` × `ORDERS_PAGE_SIZE`
+ * it can only see the 300 most recent orders, so a customer asking about an older
+ * one was told it does not exist — indistinguishable, to them, from us having lost
+ * it. A busy store crosses 300 orders in days. Shopify and Salla both query the
+ * platform's own search; this brings Zid in line.
+ *
+ * The scan is KEPT rather than replaced: `search_term`'s exact indexing behaviour
+ * per field is documented but not yet confirmed against a live store, so a store
+ * whose code is not indexed still resolves through the old path. A search failure
+ * is reported and treated as "no candidates" (same posture as Salla's
+ * `listOwnSubscriptions`) — the scan then runs, and if credentials are genuinely
+ * broken its own error propagates rather than being masked here.
+ */
 async function findOrderByCode(creds: ZidCredentials, orderNumber: string): Promise<ZidOrder | null> {
     const needle = orderNumber.trim().replace(/^#/, '');
+
+    try {
+        const candidates = await searchOrders(creds, needle, CODE_LOOKUP_MAX_CANDIDATES);
+        const hit = candidates.find(o => orderMatchesNumber(o, needle));
+        if (hit) return hit;
+    } catch (err) {
+        captureError(err, 'Zid order search failed — falling back to the recent-orders scan', {
+            tags: { service: 'zid' },
+        });
+    }
 
     for (let page = 1; page <= MAX_ORDER_PAGES_TO_SCAN; page++) {
         const data = await zidApiGet<ZidOrdersResponse>(
@@ -801,11 +837,7 @@ async function findOrderByCode(creds: ZidCredentials, orderNumber: string): Prom
             creds,
         );
         const orders = data.orders || [];
-        const match = orders.find(o =>
-            String(o.code ?? '') === needle ||
-            String(o.id) === needle ||
-            String(o.invoice_number ?? '') === needle,
-        );
+        const match = orders.find(o => orderMatchesNumber(o, needle));
         if (match) return match;
         if (orders.length < ORDERS_PAGE_SIZE) break;
     }
