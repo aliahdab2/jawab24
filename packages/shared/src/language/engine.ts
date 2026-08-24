@@ -26,26 +26,47 @@
  * only when the text passes gates that structurally exclude the dangerous
  * classes:
  *
- *   - NON-ASCII LETTER REQUIRED: the gate strips every non-letter first, then
- *     requires a non-ASCII letter. Arabizi, English, and acronyms have only
- *     ASCII letters — they can never be overridden, by construction, EVEN when
- *     decorated with emoji / currency signs / curly quotes (which are non-ASCII
- *     but carry no language signal — an earlier codepoint-based gate let
- *     "kam el se3r 😍" through to a wrong Spanish guess; review-caught). Only
- *     diacritic-bearing European/Vietnamese text (ä, ö, é, ı, đ …) — the class
- *     legacy mis-floors — opens the gate.
  *   - ≥2 words: bare tokens stay context-deferred (the "icdl" contract).
  *   - Allowlist: only well-resourced Latin-script languages; blocks tinyld's
  *     low-resource junk guesses (Kirundi, Esperanto, Klingon, Berber …).
- *   - Confidence: accept a clear call (accuracy >= 0.5), or for >=3 words a
- *     moderate call with a clear margin over the runner-up
- *     (accuracy >= 0.10 && >= 1.5× second place).
+ *
+ * The letters are then split by script, TWO branches with separate bars:
+ *
+ *   - NON-ASCII LETTER PRESENT (diacritic-bearing European/Vietnamese text —
+ *     ä, ö, é, ı, đ …, the class legacy mis-floors): accept a clear call
+ *     (accuracy >= 0.5), or for >=3 words a moderate call with a clear margin
+ *     over the runner-up (accuracy >= 0.10 && >= 1.5× second place). The split
+ *     strips every non-letter first, so emoji / currency signs / curly quotes
+ *     (non-ASCII but carrying no language signal) cannot open this branch —
+ *     an earlier codepoint-based gate let "kam el se3r 😍" through to a wrong
+ *     Spanish guess; review-caught.
+ *   - PURE-ASCII LETTERS (accent-free French/Spanish — «Quelles tailles
+ *     avez-vous ?» detects fr@1.00 yet carries not one non-ASCII letter; a
+ *     paying merchant's French customers were answered in Arabic for a whole
+ *     conversation, prod 2026-08-09 + replayed 2026-08-24): promoted only for
+ *     ASCII_OVERRIDE_LANGS (fr/es — see its docstring for the corpus evidence
+ *     that every other language's ASCII promotions are junk-dominated), and
+ *     only behind STRUCTURAL guards that exclude the dangerous classes first —
+ *     no Arabizi digit-fusion (se3r/3ayez read es@0.15–0.23, which would pass
+ *     any numeric bar), not name-shaped (transliterated names read at 1.00) —
+ *     then a clear-margin call (>= 1.5× second place) at a length-keyed tier:
+ *     >=3 words need the corpus-measured 0.12 floor ("Donne moi hotel a
+ *     tartous" fr@0.14 clears; cs@0.04/pl@0.09 junk residue does not), while
+ *     2-word texts must be UNAMBIGUOUS at 1.00 ("c'est combien" fr@1.00
+ *     clears; "Hw much" es@0.17 and "Main courses" fr@0.18 — real prod
+ *     traffic — keep deferring). The margin term is what keeps Scandinavian
+ *     near-ties safe: "var bor du manen ?" reads no@0.21/da@0.20 and must
+ *     keep deferring to its (Swedish) thread rather than be asserted
+ *     Norwegian.
  *
  * Net contract (the flip-safety argument): with LANG_ENGINE=tinyld, the ONLY
- * DETECTOR outputs that differ from legacy are for text containing a non-ASCII
- * letter that every legacy branch missed — precisely the broken class. ASCII
- * input (incl. emoji/punctuation-decorated Arabizi) is bit-identical in both
- * modes. NOTE this is about detector OUTPUT; the prompt-directive LABEL also
+ * DETECTOR outputs that differ from legacy are Latin-script sentences that
+ * every legacy branch mis-floored to en@0.5 AND that name an allowlisted
+ * language with a clear margin — the broken class. Arabizi (digit-fused, or
+ * junk-coded, or below the floor), names, acronyms, emoji decoration, and
+ * ASCII text of every non-fr/es language keep legacy behavior by
+ * construction. NOTE this is about detector OUTPUT; the prompt-directive
+ * LABEL also
  * changes at flip for already-named non-Latin scripts (ru/ja/… render
  * "Russian"/"Japanese" instead of "English") — see promptBuilder + D-017; that
  * is intended (all-languages) but is a separate, larger blast radius the
@@ -59,13 +80,38 @@ export type LangEngineMode = 'legacy' | 'tinyld';
  * default) tinyld is never called — eagerly parsing its language-profile data
  * would tax every cold start (and test-worker spawn) for an inert feature.
  */
-type DetectAllFn = (text: string) => { lang: string; accuracy: number }[];
+type Guess = { lang: string; accuracy: number };
+type DetectAllFn = (text: string) => Guess[];
 let detectAllFn: DetectAllFn | undefined;
 function getDetectAll(): DetectAllFn {
     if (!detectAllFn) {
         detectAllFn = (require('tinyld') as { detectAll: DetectAllFn }).detectAll;
     }
     return detectAllFn;
+}
+
+/**
+ * Single-slot memo of the last tinyld call. `detectLanguage` asks tinyld the
+ * SAME question about the SAME string twice in immediate succession on the
+ * ASCII floor path — once through tinyldLatinOverride, then again through
+ * isConfidentAsciiEnglish — and tinyld dominates this path's cost (measured
+ * 2026-08-24 over 14,710 real prod texts: the second pass alone was +16 µs
+ * per message, an 88% increase on detector time). One slot is all that is
+ * needed: the two calls are adjacent, so nothing else can evict between them.
+ *
+ * Safe because detectAll is a pure function of its input — this is a
+ * memoization, not a cache with an invalidation story. It never grows (one
+ * entry) and never crosses a request boundary in a way that could matter,
+ * since the value depends on nothing but the text.
+ */
+let lastText: string | undefined;
+let lastGuesses: Guess[] | undefined;
+function guessesFor(text: string): Guess[] {
+    if (lastText === text && lastGuesses) return lastGuesses;
+    const guesses = getDetectAll()(text);
+    lastText = text;
+    lastGuesses = guesses;
+    return guesses;
 }
 
 /**
@@ -100,38 +146,95 @@ const OVERRIDE_LANGS = new Set([
 export const OVERRIDE_CONFIDENCE = 0.75;
 
 /**
+ * Languages the PURE-ASCII branch may name — deliberately far narrower than
+ * OVERRIDE_LANGS. Measured over 14,710 real Latin-script prod texts
+ * (60 days, 2026-08-24): fr and es flips were ~90% genuine customers
+ * (French from the Libya/Cameroon audience, Latin-American Spanish), while
+ * EVERY other language's ASCII promotions were dominated by junk — romanized
+ * Arabic greetings read lv/et/nl/de/fi at 1.00 («Asalam aleikum warahmatullahi
+ * wabarakatu» → lv@1.00 ×23), Tagalog read ro/vi/cs, typo'd English read es/fr.
+ * This is the promotion-allowlist mechanism the Taglish note below already
+ * prescribes: keyed on languages we actually see genuine ASCII traffic in,
+ * not a threshold (tinyld's accuracy is a ranking — junk scores 1.00).
+ */
+const ASCII_OVERRIDE_LANGS = new Set(['fr', 'es']);
+
+/**
+ * Minimum tinyld accuracy for naming a foreign language on PURE-ASCII text of
+ * ≥3 words. The 2026-08-09 shootout floor: at 0.12 (with the 1.5× margin) the
+ * low-conf junk residue (cs@0.04, pl@0.09, fi@0.09) stays deferred while the
+ * degraded-French class ("Donne moi hotel a tartous" fr@0.14) clears it.
+ * Two-word ASCII texts get no such leniency — they must score top-of-scale
+ * (see ASCII_TWO_WORD_MIN_ACCURACY): "Hw much" reads es@0.17 and "Main
+ * courses" fr@0.18, and both must keep deferring.
+ */
+export const ASCII_FOREIGN_MIN_ACCURACY = 0.12;
+
+/** Two-word ASCII texts must be unambiguous: "c'est combien" reads fr@1.00. */
+export const ASCII_TWO_WORD_MIN_ACCURACY = 1;
+
+/**
+ * Arabizi orthography: a digit adjacent to a letter INSIDE a token, where the
+ * digit stands in for an Arabic letter — se3r (ع), 3ayez, 2ana, 7abibi. A
+ * structural property of the text, NOT a word list (the banned approach).
+ * Plain numbers ("Sun 4 o'clock", "Year 2027") are untouched — separate
+ * tokens, no fusion.
+ */
+export function hasArabiziDigitFusion(text: string): boolean {
+    return /[a-zA-Z][0-9]|[0-9][a-zA-Z]/.test(text);
+}
+
+/**
  * The raw override rule. Exported for direct unit testing; production code
  * goes through maybeLatinOverride (which is flag-aware).
  */
 export function tinyldLatinOverride(text: string): string | null {
     const trimmed = text.trim();
-    // Gate on a non-ASCII LETTER — not any non-ASCII codepoint. Emoji, symbols,
+    // Split on a non-ASCII LETTER — not any non-ASCII codepoint. Emoji, symbols,
     // currency signs, curly quotes and non-ASCII punctuation are all non-ASCII
-    // but carry NO language signal; if they opened the gate, emoji-laden Arabizi
-    // ("kam el se3r 😍" — extremely common in real Arabic social traffic) would
-    // slip through to tinyld and get mislabeled Spanish. Strip everything that
-    // isn't a letter, THEN require a non-ASCII letter (ä, é, ı, đ, …). This is
-    // what makes "ASCII Arabizi/English/acronyms are never overridden" true by
-    // construction: their letters are all ASCII, so noise codepoints can't help.
+    // but carry NO language signal; if they picked the branch, emoji-laden
+    // Arabizi ("kam el se3r 😍" — extremely common in real Arabic social
+    // traffic) would take the lenient diacritic bar and get mislabeled Spanish.
+    // Strip everything that isn't a letter, THEN branch on a non-ASCII letter
+    // (ä, é, ı, đ, …): only its presence buys the lower confidence bar below.
     const letters = trimmed.replace(/[^\p{L}]/gu, '');
+    if (!letters) return null;
     // eslint-disable-next-line no-control-regex
-    if (!/[^\x00-\x7F]/.test(letters)) return null;
+    const hasNonAsciiLetter = /[^\x00-\x7F]/.test(letters);
     const words = trimmed.split(/\s+/).length;
     if (words < 2) return null;
 
+    // Pure-ASCII text gets no diacritic corroboration, so the dangerous classes
+    // are excluded STRUCTURALLY before tinyld is even consulted: digit-fused
+    // Arabizi reads es@0.15–0.23 (would pass any numeric bar), and transliterated
+    // names read at 1.00 (tinyld's accuracy is a ranking, not a probability —
+    // no threshold separates them; same rationale as isConfidentAsciiEnglish).
+    if (!hasNonAsciiLetter && (hasArabiziDigitFusion(trimmed) || isNameShaped(trimmed))) return null;
+
     let guesses: { lang: string; accuracy: number }[];
     try {
-        guesses = getDetectAll()(trimmed);
+        guesses = guessesFor(trimmed);
     } catch {
         return null; // detector failure (incl. load failure) must never break reply generation
     }
     const top = guesses[0];
     if (!top || !OVERRIDE_LANGS.has(top.lang)) return null;
-
-    if (top.accuracy >= 0.5) return top.lang;
     const second = guesses[1]?.accuracy ?? 0;
-    if (words >= 3 && top.accuracy >= 0.1 && top.accuracy >= second * 1.5) return top.lang;
-    return null;
+
+    if (hasNonAsciiLetter) {
+        if (top.accuracy >= 0.5) return top.lang;
+        if (words >= 3 && top.accuracy >= 0.1 && top.accuracy >= second * 1.5) return top.lang;
+        return null;
+    }
+
+    // Pure ASCII: only the narrow allowlist, then a clear-margin call at a
+    // tier keyed on length. The margin term is load-bearing — "var bor du
+    // manen ?" reads no@0.21/da@0.20 (a Scandinavian coin flip) and must keep
+    // deferring to its thread rather than be asserted Norwegian.
+    if (!ASCII_OVERRIDE_LANGS.has(top.lang)) return null;
+    if (top.accuracy < second * 1.5) return null;
+    if (words === 2) return top.accuracy >= ASCII_TWO_WORD_MIN_ACCURACY ? top.lang : null;
+    return top.accuracy >= ASCII_FOREIGN_MIN_ACCURACY ? top.lang : null;
 }
 
 /**
@@ -238,16 +341,13 @@ export function isConfidentAsciiEnglish(text: string): boolean {
     // eslint-disable-next-line no-control-regex
     if (/[^\x00-\x7F]/.test(letters)) return false;
 
-    // Arabizi orthography: a digit adjacent to a letter INSIDE a token. Plain
-    // numbers ("Sun 4 o'clock", "Year 2027") are untouched — they are separate
-    // tokens and carry no such fusion.
-    if (/[a-zA-Z][0-9]|[0-9][a-zA-Z]/.test(trimmed)) return false;
+    if (hasArabiziDigitFusion(trimmed)) return false;
 
     if (isNameShaped(trimmed)) return false;
 
     let guesses: { lang: string; accuracy: number }[];
     try {
-        guesses = getDetectAll()(trimmed);
+        guesses = guessesFor(trimmed);
     } catch {
         return false; // detector failure (incl. load failure) must never break reply generation
     }

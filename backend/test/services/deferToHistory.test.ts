@@ -79,26 +79,38 @@ describe('the DM defer-to-history gate — Arabizi protection (do not narrow thi
     });
 });
 
-describe('the DM defer-to-history gate — its known blind spot', () => {
-    it('cannot tell accent-free French from a low-signal token', () => {
+describe('the DM defer-to-history gate — the accent-free French blind spot', () => {
+    it('now tells clear accent-free French from a low-signal token (the ASCII-foreign promotion)', () => {
         process.env.LANG_ENGINE = 'tinyld';
         const french = detectLanguage('Bonjour Madame merci beaucoup pour les photos');
         const token = detectLanguage('ok');
 
-        // Same language, same confidence: a 7-word French sentence is indistinguishable
-        // from the token "ok" at this layer, so it defers and inherits the thread's
-        // language. This is the mechanism behind the prod rows where a French-speaking
+        // Until 2026-08-24 these two were indistinguishable at this layer (both
+        // en@0.5), so the French sentence deferred and inherited the thread's
+        // language — the mechanism behind the prod rows where a French-speaking
         // Nourva customer was answered in English and Arabic (flag_reason
-        // language_mismatch, 156 all-time / 27 in the trailing 30d as of 2026-07-29).
-        expect(french.language).toBe('en');
+        // language_mismatch), and behind the Salla-test replay where «Quelles
+        // tailles avez-vous ?» was answered in Arabic 4/4. The ASCII-foreign
+        // promotion (engine.ts) now names a clear-margin tinyld call, so the
+        // sentence resolves fr and clears the gate; the token still defers.
+        expect(french.language).toBe('fr');
         expect(token.language).toBe('en');
-        expect(french.confidence).toBe(token.confidence);
-        expect(gate('Bonjour Madame merci beaucoup pour les photos')).toBe(true);
+        expect(gate('Bonjour Madame merci beaucoup pour les photos')).toBe(false);
+        expect(gate('ok')).toBe(true);
+    });
 
-        // The information needed to separate the two is not present here: the tinyld
-        // override requires a non-ASCII letter precisely so ASCII Arabizi can never
-        // reach it (engine.ts). Fixing this class means revisiting that gate, which is
-        // a deliberate product trade-off, not a bug in this expression.
+    it('RESIDUAL blind spots, unchanged by the promotion (accepted misses)', () => {
+        process.env.LANG_ENGINE = 'tinyld';
+        // Mixed-language: "in" is an ENGLISH_COMMON word, so this scores a
+        // POSITIVE English reading (en@0.6, identical in legacy mode) and never
+        // reaches the override at all — it doesn't defer, it asserts English.
+        // Pre-existing behavior, not a regression of this fix.
+        expect(detectLanguage('Je voudrais hotel in tartous city').language).toBe('en');
+        expect(gate('Je voudrais hotel in tartous city')).toBe(false);
+        // es@0.07: genuine Spanish below the 0.12 floor still defers. Accepted
+        // miss — raising recall here means lowering the floor, which re-admits
+        // the junk residue (cs@0.04, pl@0.09, fi@0.09 Arabizi guesses).
+        expect(gate('hola buenos dias')).toBe(true);
     });
 
     it('does NOT defer French once it carries a diacritic — that path already works', () => {
