@@ -47,14 +47,12 @@ import {
 } from '../../src/services/ecommerce';
 import { syncProducts, mapShopifyWebhookProduct, SHOPIFY_API_VERSION } from '../../src/services/shopify';
 import { encrypt, decrypt, decryptOptional } from '../../src/services/ecommerceCrypto';
+import { uniq } from '../helpers/ecommerceFixtures';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function uniq(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 async function getStoreRow(storeId: string): Promise<typeof schema.ecommerceStores.$inferSelect> {
     const [row] = await testDb.select().from(schema.ecommerceStores)

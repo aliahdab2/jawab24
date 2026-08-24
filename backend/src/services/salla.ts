@@ -483,7 +483,17 @@ async function fetchAllProducts(accessToken: string): Promise<SallaProduct[]> {
             accessToken,
         );
 
-        allProducts.push(...(data.data ?? []));
+        // ⛔ A missing product array is NOT an empty catalogue. `?? []` here would
+        // hand `replaceProductsAndRebuildSummary` an empty list, and its
+        // "Empty catalog → drop everything for this store" branch would delete
+        // every product the merchant has. Same reasoning as the pagination guard
+        // below — refuse rather than amputate.
+        if (!Array.isArray(data.data)) {
+            throw new Error(
+                `Salla products response has no product array (page ${page}) — refusing to treat it as an empty catalogue`,
+            );
+        }
+        allProducts.push(...data.data);
 
         // Stop at the shared safety cap — the DB layer truncates beyond it anyway.
         if (allProducts.length >= PRODUCT_SAFETY_CAP) break;

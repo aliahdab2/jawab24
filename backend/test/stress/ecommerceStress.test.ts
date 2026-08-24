@@ -10,7 +10,8 @@
  *
  * Scenarios map 1:1 onto the Tier-4 table:
  *   S1 webhook burst      → dedup holds under genuine concurrency
- *   S2 large catalog sync → the cap binds on Salla and Zid, with no partial write
+ *   S2 large catalog sync → the cap binds on Salla and Zid; a failed fetch never
+ *                           replaces or truncates the stored catalogue
  *   S3 token refresh race → single-use refresh tokens are never spent twice
  *   S4 agent tool latency → independent reads run in parallel, not sequentially
  *
@@ -48,6 +49,7 @@ import { redis } from '../../src/lib/redis';
 // ---------------------------------------------------------------------------
 
 const mockFetch = vi.fn();
+const realFetch = global.fetch;
 
 function jsonOk(body: unknown) {
     return { ok: true, status: 200, headers: new Headers(), json: async () => body, text: async () => JSON.stringify(body) };
@@ -55,12 +57,16 @@ function jsonOk(body: unknown) {
 
 describe('Tier-4 stress — Salla + Zid (our side only)', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        // resetAllMocks, NOT clearAllMocks: `clear` wipes call history but KEEPS
+        // mockImplementation, so a previous scenario's fetch behaviour leaks into
+        // the next one — which is how a test can pass on a stub it never set.
+        vi.resetAllMocks();
         global.fetch = mockFetch as unknown as typeof fetch;
     });
 
     afterEach(() => {
-        vi.restoreAllMocks();
+        // restoreAllMocks does not undo a global assignment; put fetch back by hand.
+        global.fetch = realFetch;
     });
 
     // =======================================================================
@@ -150,7 +156,7 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
     // every other store's sync down with it.
 
     describe('S2 — catalog sync at the safety cap', () => {
-        it('salla: stops at PRODUCT_SAFETY_CAP and writes exactly the cap', async () => {
+        it('salla: never writes more than PRODUCT_SAFETY_CAP, however many pages the platform offers', async () => {
             const store = await createFixtureStore('salla');
             const PAGE = 65;
             let served = 0;
@@ -180,7 +186,7 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
             console.log(`[S2 salla] capped at ${result.synced} after ${mockFetch.mock.calls.length} pages`);
         });
 
-        it('zid: stops at PRODUCT_SAFETY_CAP and writes exactly the cap', async () => {
+        it('zid: never writes more than PRODUCT_SAFETY_CAP, however many pages the platform offers', async () => {
             const store = await createFixtureStore('zid');
             const PAGE = 100;
             let served = 0;
@@ -209,7 +215,7 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
             console.log(`[S2 zid] capped at ${result.synced} after ${mockFetch.mock.calls.length} pages`);
         });
 
-        it('a sync that dies mid-catalogue leaves the PREVIOUS catalogue intact, not a half-written one', async () => {
+        it('a FETCH failure mid-catalogue leaves the previous catalogue intact', async () => {
             const store = await createFixtureStore('salla');
             const onePage = (items: unknown[], totalPages: number) =>
                 jsonOk({ data: items, pagination: { currentPage: 1, totalPages, perPage: 65, total: items.length } });
@@ -264,6 +270,28 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
             // The old catalogue survived the failure.
             expect(await storeProductRows(store.id)).toHaveLength(1);
         });
+
+        // The sibling of the case above, and the more dangerous one: a response
+        // with pagination but NO product array. `replaceProductsAndRebuildSummary`
+        // treats an empty list as "the merchant deleted everything" and drops every
+        // row, so tolerating a missing array (`data.data ?? []`) silently amputates
+        // the catalogue — the exact failure the pagination guard exists to prevent.
+        // Caught in review after being introduced here; this pins it.
+        it('a products page with no product array fails, and does NOT wipe the catalogue', async () => {
+            const store = await createFixtureStore('salla');
+            mockFetch.mockImplementation(async () => jsonOk({
+                data: [{ id: 'p-1', name: 'منتج', status: 'sale', price: { amount: 10, currency: 'SAR' }, quantity: 1 }],
+                pagination: { currentPage: 1, totalPages: 1, perPage: 65, total: 1 },
+            }));
+            await sallaSyncProducts(store.id);
+            expect(await storeProductRows(store.id)).toHaveLength(1);
+
+            // Pagination present, `data` absent.
+            mockFetch.mockImplementation(async () => jsonOk({ pagination: { currentPage: 1, totalPages: 1, perPage: 65, total: 0 } }));
+
+            await expect(sallaSyncProducts(store.id)).rejects.toThrow(/product array/i);
+            expect(await storeProductRows(store.id)).toHaveLength(1);
+        });
     });
 
     // =======================================================================
@@ -301,7 +329,7 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
                     clientSecret: 'secret',
                 };
 
-                await Promise.allSettled(
+                const outcomes = await Promise.allSettled(
                     Array.from({ length: 25 }, () => refreshAccessToken(store.id, cfg)),
                 );
 
@@ -310,6 +338,14 @@ describe('Tier-4 stress — Salla + Zid (our side only)', () => {
                 // proving nothing (every caller had died on a bad fixture ciphertext).
                 // >1 means the store is disconnected in production; 0 means the test lied.
                 expect(exchanges).toBe(1);
+                // ...and every caller must have SUCCEEDED. Without this, "24 threw
+                // before reaching the endpoint and one got through" is indistinguishable
+                // from "the lock held" — the same wrong-reason pass in a new disguise.
+                expect(outcomes.every(o => o.status === 'fulfilled')).toBe(true);
+                // The refresh really landed: the stored expiry moved out of the window.
+                const [refreshed] = await testDb.select().from(schema.ecommerceStores)
+                    .where(eq(schema.ecommerceStores.id, store.id));
+                expect(refreshed.tokenExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 24 * 60 * 60 * 1000);
                 // eslint-disable-next-line no-console
                 console.log(`[S3 ${platform}] 25 concurrent refreshes → ${exchanges} token exchange(s)`);
             });

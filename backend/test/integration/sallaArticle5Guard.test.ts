@@ -31,10 +31,8 @@ vi.mock('../../src/lib/customerNotificationQueue', () => ({
 }));
 
 import { hasActiveStoreForBillingSubject } from '../../src/services/ecommerce';
+import { uniq } from '../helpers/ecommerceFixtures';
 
-function uniq(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 /** Insert a store row directly — createStore encrypts tokens we never read here. */
 async function insertStore(values: {

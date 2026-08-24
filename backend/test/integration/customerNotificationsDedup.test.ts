@@ -22,10 +22,6 @@ import {
     notificationLogRows as logRows,
 } from '../helpers/ecommerceFixtures';
 
-/** Kept as a local shim so the assertions below read unchanged. */
-async function createStoreWithTemplates() {
-    return { store: await createStoreWithNotificationTemplates('salla') };
-}
 
 describe('customer-notification dedup (real Postgres)', () => {
     beforeEach(() => {
@@ -33,7 +29,7 @@ describe('customer-notification dedup (real Postgres)', () => {
     });
 
     it('two concurrent schedule() calls for the same event insert exactly one row', async () => {
-        const { store } = await createStoreWithTemplates();
+        const store = await createStoreWithNotificationTemplates('salla');
         const params = {
             storeId: store.id,
             type: 'order_confirmed' as const,
@@ -55,7 +51,7 @@ describe('customer-notification dedup (real Postgres)', () => {
     });
 
     it('a tracking-bearing shipment upgrades an earlier tracking-less shipped row in place', async () => {
-        const { store } = await createStoreWithTemplates();
+        const store = await createStoreWithNotificationTemplates('salla');
 
         // Status path first: order.status.updated (slug shipped) — no tracking, held 5 min.
         await customerNotificationService.schedule({

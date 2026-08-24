@@ -10,6 +10,7 @@ import {
 } from '../../src/services/ecommerce';
 import { hashEmbeddedToken } from '../../src/services/embeddedSession';
 import * as schema from '../../src/db/schema';
+import { uniq } from '../helpers/ecommerceFixtures';
 
 /**
  * `getStoreByEmbeddedTokenHash` is the single query behind three separate security
@@ -30,9 +31,6 @@ import * as schema from '../../src/db/schema';
  * cleanup), so these pin the logic without spending it.
  */
 describe('getStoreByEmbeddedTokenHash — Integration (real Postgres)', () => {
-    function uniq(prefix: string): string {
-        return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    }
 
     /** A connected Zid store with a live embedded credential, as a real install leaves it. */
     async function createEmbeddedStore() {
