@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { messageProcessor } from '../../src/services/reply/messageProcessor';
+import { noopLogger } from '../../src/types';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { invalidateWorkspaceStatsCache } from '../../src/services/pages';
@@ -390,6 +391,37 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         const stored = vi.mocked(messagesService.storeOutgoingMessage).mock.calls.at(-1) ?? [];
         expect(stored).toContain(rendered);
         expect(stored.some(a => typeof a === 'string' && a.includes(']('))).toBe(false);
+    });
+
+    // Rule 17.6: latency must be observable. The 16 stage laps existed for months
+    // at debug level while prod runs at info — so the timings were dark exactly
+    // where they matter. This pins that the reply_sent info line carries the
+    // per-stage delta map, so a production log query can answer "which stage was
+    // slow" without redeploying at debug level.
+    it('carries per-stage timings on the reply_sent info line', async () => {
+        const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), child: vi.fn() };
+        messageProcessor.setLogger(logger as never);
+        try {
+            const adapter = createMockAdapter();
+            const result = await messageProcessor.processMessage(
+                adapter, 'page-1', 'sender-1', 'What are your hours?', 'msg-1',
+            );
+            expect(result.success).toBe(true);
+
+            const replySent = logger.info.mock.calls.find(c => String(c[0]).includes('reply_sent'));
+            expect(replySent).toBeDefined();
+            const meta = replySent![1] as { durationMs: number; stages: Record<string, number> };
+            // The stages that always run on a sent AI reply must be present, as
+            // per-stage DELTAS (numbers), ending with the DONE marker.
+            for (const stage of ['1-getPage', '3-storeMessage', '12-generateReply', '13-sendReply', 'DONE']) {
+                expect(meta.stages[stage], stage).toBeTypeOf('number');
+            }
+            // Deltas, not cumulative clocks: their sum cannot exceed the total.
+            const sum = Object.values(meta.stages).reduce((a, b) => a + b, 0);
+            expect(sum).toBeLessThanOrEqual(meta.durationMs + 1);
+        } finally {
+            messageProcessor.setLogger(noopLogger as never);
+        }
     });
 });
 

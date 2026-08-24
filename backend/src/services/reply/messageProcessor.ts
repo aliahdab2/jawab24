@@ -156,8 +156,19 @@ export class MessageProcessor {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
         const t0 = Date.now();
+        // Per-stage costs, carried on the reply_sent line. The debug laps below
+        // are unchanged, but prod runs at info level, so for months the 16 stage
+        // timings existed and were dark in production (Rule 17.6: latency must
+        // be observable, or the lead is undefendable). stageMs records the DELTA
+        // each stage cost (not the cumulative clock), so one log line answers
+        // "which stage was slow" without arithmetic.
+        const stageMs: Record<string, number> = {};
+        let lastLapAt = t0;
         const lap = (label: string) => {
-            this.logger.debug(`[${platform}] ⏱ ${label}`, { ms: Date.now() - t0, messageId: platformMessageId });
+            const now = Date.now();
+            stageMs[label] = now - lastLapAt;
+            lastLapAt = now;
+            this.logger.debug(`[${platform}] ⏱ ${label}`, { ms: now - t0, messageId: platformMessageId });
         };
 
         try {
@@ -1143,6 +1154,10 @@ export class MessageProcessor {
                 // produced it and of whether that mode had anywhere to route.
                 replyMode: effectiveReplyMode,
                 durationMs: Date.now() - t0,
+                // Stage deltas in ms (see lap above). What each pipeline stage
+                // cost THIS reply — the production answer to "where does reply
+                // time go", previously only visible at debug level.
+                stages: stageMs,
             });
 
             // Fire-and-forget, outside the reply's critical path (Rule 17): the
