@@ -410,7 +410,7 @@ export class WebhookController {
             // markAsRead({ typing: true }) call in the WhatsApp branch).
             //
             // This used to fire deep in the reply pipeline instead, AFTER the merchant's
-            // reply delay (settings.replyDelay, 0-60s, default 3) — so on Messenger the
+            // reply delay (settings.replyDelay, 0-60s) — so on Messenger the
             // customer stared at dead air for the whole delay and only saw "typing…" in
             // the last moment before the reply. That is the bug this fixes; WhatsApp never
             // had it because it claims the indicator here, at receipt.

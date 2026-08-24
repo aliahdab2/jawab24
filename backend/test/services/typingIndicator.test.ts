@@ -156,7 +156,7 @@ describe('typingIndicator.clear', () => {
 
 /**
  * The Messenger fix (2026-07-29). The indicator used to be claimed deep in the reply
- * pipeline, AFTER the merchant's reply delay (0-60s, default 3), so a Messenger customer
+ * pipeline, AFTER the merchant's reply delay (0-60s), so a Messenger customer
  * saw dead air for the whole delay and "typing…" only in the final moment. WhatsApp never
  * had the bug because it claims at webhook receipt.
  *
