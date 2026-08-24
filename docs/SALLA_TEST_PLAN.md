@@ -41,6 +41,7 @@ Run every row. All must pass before a single Tier-3 step.
 | 0.8 | **Webhook Security Strategy = Signature** | Salla Partners portal → app → Webhooks/Notifications | radio **Signature** selected. ⛔ *Token* makes Salla send `Authorization: <secret>` with **no** `X-Salla-Signature`, and `controllers/salla.ts` verifies the signature only ⇒ **every delivery 401s** regardless of the secret. This is what the first real install hit on 2026-08-23; the secret itself was correct. ✅ Set 2026-08-23 (flip persists across reload; the secret is not regenerated) |
 | 0.9 | **API-registered subscriptions are SIGNED** | `GET https://api.salla.dev/admin/v2/webhooks` with the store token (or from the merchant dashboard's own session) | every row for `https://jawab24.com/salla/webhooks` shows `security.strategy = "signature"` and a non-null secret. ⛔ `strategy: ""` / `secret: null` ⇒ Salla delivers WITHOUT `X-Salla-Signature` and every order/product event 401s — the state all ten demo-store subscriptions were in on 2026-08-23 (registered by the pre-fix `registerWebhooks`, which sent `{name, event, url}` only). Fix = the store's *Re-register* button or `node dist/scripts/reregister-webhooks.js salla` in the backend container on a build that carries the signed upsert; a plain re-subscribe 422s and changes nothing. ⚠️ The first live run of that repair (2026-08-23, 17:47Z) failed 10/10 with `422 «حقل event غير صالح»`: the live `PUT /webhooks/{id}` REQUIRES `event` in the body even though docs.salla.dev's Update Webhook page omits it (measured on the demo store — the same body with `event` → 200). Fixed in `registerWebhooks`; re-run the repair on a build that carries it |
 | 0.7 | ✅ **Is the production app in Easy Mode?** | Salla Partners portal → app → OAuth Mode | **Answered 2026-08-20: YES.** See the resolved note below. Portal state must be read by a human — Turnstile blocks chrome-devtools MCP; use the Claude-in-Chrome extension |
+| 0.10 | **Portal Store Events list contains the 4 order events** | Salla Partners portal → app → Webhooks/Notifications → Store Events | «Added Events» = 4, matching the list in `services/salla.ts` (`order.created`, `order.updated`, `order.status.updated`, `order.shipment.created`). ⛔ An EMPTY portal list makes `POST /admin/v2/webhooks` answer `422 {"event":["The event type is disabled"]}` for exactly those events — Salla began enforcing this mid-day 2026-08-23 (registrations at 07:12Z that morning still worked), and the 422 reads like a platform refusal when the cause is our portal config. Delivery for these events then comes via the app-level channel, NOT the API-registered per-store subscription — see the 2026-08-24 results for the consequence (`webhookStatus.failed` + noisy `[WebhookRetry]`) |
 
 ### ✅ 0.7 — RESOLVED 2026-08-20: Easy Mode confirmed, dead end confirmed, now guarded
 
@@ -199,6 +200,15 @@ has cost production defects before. Run in order — later rows depend on earlie
 > unsigned (Tier 0.9). The portal Webhooks Log shows the same events for the old
 > `Jawab24-Dev` app too (dead ngrok URL → 404); that app still holds subscriptions on the
 > demo store and should be uninstalled from it.
+>
+> ⚠️ **2026-08-24 counter-observation: not every admin New-order path fires.** Order
+> `#279682567` created fully through the wizard with **Store pickup** («الفرع الرئيسي»)
+> and Unpaid/COD — real order, and Salla's own Webhooks Log showed NOTHING for it in
+> ~15 min (Salla's incident notice warned of delayed notifications, so this is "did not
+> fire within 15 min", not "never"). The recipe above that DID fire used **Shipping &
+> delivery with a full National Address + a courier + Fully paid**. Treat the full
+> shipping+payment recipe as the only admin path known to fire `order.created`; a
+> storefront checkout remains the clean way to close 3.5.
 
 
 | # | Step | Pass criteria | On failure |
@@ -210,16 +220,15 @@ has cost production defects before. Run in order — later rows depend on earlie
 | 3.5 | `order.created` | **exactly one** customer SMS (dedup holds) | duplicate ⇒ stop; dedup key regression |
 | 3.6 | `order.status.updated` → `shipped` | shipped SMS held for the grace window, then sent | |
 | 3.7 | `order.shipment.created` | tracking upgraded **in place** — still exactly one SMS total, now carrying the tracking number | two SMS ⇒ `upgradePendingOnDuplicate` regression |
-| 3.8 | **`track_shipment` on a real shipped order** — NEW, never yet run live | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link. **Prove the shipments call was actually made** before reading anything into a silent Sentry: after the 2026-08-23 fix the verify step reads the shipment live whenever the model's Phase-1 tool was `lookup_order`, so `metrics:ecom:verify:sibling` or `…:live` > 0 in prod Redis is the evidence the endpoint was hit. Then read the OUTCOME off the pair that follows: `…:requested_empty` = the call returned 200 with no shipment (the order is not shipped yet — pick a shipped order and re-run), `…:requested_live_failed` = it threw, which is where a 403 lands. ⛔ Do not read one for the other; they were one counter in the first draft of D-096 and that conflation would have answered 3.8 "platform failure" on a perfectly healthy 200 | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing. ⛔ 2026-08-23: "no `Salla shipments lookup failed` in Sentry" was misread as 200 when the model had never called `track_shipment` (0 calls) — silence is not a result |
+| 3.8 | **`track_shipment` on a real shipped order** — ✅ PASSED live 2026-08-24 (see results) | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link. **Prove the shipments call was actually made** before reading anything into a silent Sentry: after the 2026-08-23 fix the verify step reads the shipment live whenever the model's Phase-1 tool was `lookup_order`, so `metrics:ecom:verify:sibling` or `…:live` > 0 in prod Redis is the evidence the endpoint was hit. Then read the OUTCOME off the pair that follows: `…:requested_empty` = the call returned 200 with no shipment (the order is not shipped yet — pick a shipped order and re-run), `…:requested_live_failed` = it threw, which is where a 403 lands. ⛔ Do not read one for the other; they were one counter in the first draft of D-096 and that conflation would have answered 3.8 "platform failure" on a perfectly healthy 200 | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing. ⛔ 2026-08-23: "no `Salla shipments lookup failed` in Sentry" was misread as 200 when the model had never called `track_shipment` (0 calls) — silence is not a result |
 | 3.9 | `app.uninstalled` | store row deactivates; no further webhook processing | |
 | 3.10 | Sentry + health | quiet; `scripts/health-check.sh` green | |
 
-**3.8 is the highest-value row in this document.** The tracking fix (PR #798) was built from
-Salla's published documentation and has **never touched a live Salla API**. Response
-envelope, exact scope spelling, and whether an approved app can add a scope without
-re-review are all unconfirmed. It fails safe (degrades to status-only, i.e. the old
-behaviour), so it cannot regress — but "cannot regress" is not "works". This row is what
-turns it into "works".
+**3.8 is the highest-value row in this document — closed 2026-08-24.** The tracking fix
+(PR #798) was built from Salla's published documentation without ever touching a live
+Salla API; the live run confirmed the response envelope and that `shipping.read` returns
+200 (see the 2026-08-24 results). Still unconfirmed: whether an approved app can add a
+scope without re-review.
 
 > Ask Salla support whether adding `shipping.read` to an **approved** app requires
 > re-review. Cheaper to ask than to discover after publishing.
@@ -246,6 +255,66 @@ already tell us. This is a standing rule, not a one-off caution.
 | Many stores | N stores on the 6h refresh cadence | cadence doesn't stampede; Easy-Mode stores skipped when `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` |
 
 ---
+
+## Results — 2026-08-24 (production app `665811310`, demo store `2108580704`, prod `e53e89f5`)
+
+- **The order-events 422 was OURS, not Salla's.** `POST /admin/v2/webhooks` answering
+  `422 {"event":["The event type is disabled"]}` for all four `order.*` events (and the
+  events catalog listing 61 events with zero `order.*`) was caused by the app's portal
+  **Webhooks/Notifications → Store Events** list being EMPTY. Fix: portal → app
+  `665811310` → Store Events → tick exactly the 4 events the code registers → Save
+  («Added Events 4»). Now Tier 0.10. A support email blaming Salla's 08-23 incident was
+  drafted and **discarded after checking the docs first** — the falsifying check before
+  the outbound message.
+- **3.6 ✅ FULL-CHAIN PASS.** With the portal events added, status flips on order
+  `#279531515` fired webhooks within seconds. Flip to «تم الشحن» → exactly one
+  `customer_notifications_log` row (`order_shipped / 279531515`, `+971555555555`,
+  «abc def»), lifecycle `pending` (5-min tracking grace) → `failed «Vonage delivery
+  error: Quota Exceeded - rejected»`. Ingestion, signature check, dedup, template render
+  and the grace window all correct — only the SMS provider fails (known Vonage account
+  verification issue, ticket #3002710; not Salla, not code).
+- ⭐ Each event arrived **TWICE**: once signed (`x-salla-signature` → 200, processed) and
+  once as an unsigned duplicate (→ 401, dropped — harmless, dedup never even reached).
+  Origin of the unsigned copy not yet attributed.
+- ⚠️ **API registration of `order.*` STILL 422s even with the portal events added** —
+  delivery for those events comes via the app-level (portal) channel instead of a
+  per-store subscription. Consequence: `platform_data->webhookStatus.failed: 4` persists
+  on the store row and `[WebhookRetry]` fails noisily every few minutes.
+  **TODO (follow-up fix PR): stop queueing `order.*` for Salla API re-registration —
+  treat portal-level delivery as the mechanism for these events, or drop them from the
+  retry queue.** Until then the noise is known and benign.
+- **3.8 ✅ PASS — the highest-value row, closed.** Two-turn playground conversation
+  (same production pipeline, page `eb06462a…`) against shipped order `#279531515`:
+  turn 1 «وين وصل طلبي رقم 279531515؟» → model called `lookup_order`, asked the identity
+  question; turn 2 phone answer → `verify_and_get_shipment` → **success**, reply
+  «طلبك رقم 279531515 تم شحنه بالفعل مع شركة Dev Company» in 3.3 s. Prod Redis proof,
+  read as the 3.8 row demands: `metrics:ecom:verify:sibling` 1→2 (Phase-2 verified
+  against the parked order blob, then read the shipment LIVE), `verify_and_get_shipment:success`
+  5→6, and **neither** `requested_empty` **nor** `requested_live_failed` appeared — by
+  the code's own branching that is proof `GET /admin/v2/shipments?order_id=…` returned
+  **200** with a parseable `{data:[…]}` envelope containing a shipment. The
+  200-vs-403 question on `shipping.read` is answered: 200. `verification_expired`
+  stayed at 4 — the D-096 fix holds live. The reply carries the courier but **no
+  tracking number/link because the demo shipment has none** (verified in the Salla
+  admin order view: shipping details show only «Dev Company», no tracking field) —
+  the adapter's tracking-number preference had nothing to prefer. PR #798's
+  doc-derived envelope assumption is confirmed against the live API.
+- **3.5 still open** — needs one real storefront checkout on
+  `demostore.salla.sa/dev-jkgsyu3w6pzzfrzw` (see the admin-wizard counter-observation
+  above; the store-pickup wizard path fires nothing).
+- **Stale app `Jawab24-Dev` (1565152053) defused.** Its webhook URL is a bare 64-hex
+  string (not a URL) yet it had 10 Store Events subscribed → every delivery 404'd →
+  portal Webhooks Log health read **Failure 47.4%**, visible to a reviewer. All 10
+  events removed 04:10Z (verified after full reload; no new 404s). Historical rows
+  clear only as the log window rolls; full app DELETE is the only purge — irreversible,
+  owner's call, recommended, not done. ⛔ Never press «Retry» on its old log rows.
+- **Public→Private conversion: NOT possible in the portal** (checked 2026-08-24 for the
+  private-app distribution route). App details shows `Type: Public` as static text;
+  «Edit App» exposes only name/website/support-email/description. The type is fixed at
+  creation ⇒ the private route means a **new app** + repointing creds
+  (client id/secret/webhook secret in `env/backend.env`, `--force-recreate`, nginx
+  reload — same procedure as the 08-20 repoint) + re-adding the Store Events list
+  (Tier 0.10) on the new app.
 
 ## Results — 2026-08-23 (production app `665811310`, demo store `2108580704`)
 
