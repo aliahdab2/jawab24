@@ -55,19 +55,59 @@ describe('tinyldLatinOverride — the hardened rule', () => {
         expect(tinyldLatinOverride('tôi muốn đăng ký')).toBe('vi');
     });
 
-    it('NEVER fires on ASCII-only input — Arabizi, English, acronyms (the load-bearing guard)', () => {
+    it('NEVER fires on ASCII Arabizi, English, acronyms or names (the load-bearing guard)', () => {
         // Arabizi that tinyld confidently mislabels (rn@1.00, eo@1.00, es@0.23):
+        // digit-fusion is blocked structurally, the rest by allowlist/floor/margin.
         expect(tinyldLatinOverride('sho hal as3ar')).toBeNull();
         expect(tinyldLatinOverride('bkam el course')).toBeNull();
         expect(tinyldLatinOverride('kam el se3r')).toBeNull();
         expect(tinyldLatinOverride('salam kifak')).toBeNull();
-        // English (incl. low-tinyld-accuracy English) and tokens:
+        expect(tinyldLatinOverride('shu 3ndkon')).toBeNull();
+        expect(tinyldLatinOverride('inshallah bukra')).toBeNull();
+        expect(tinyldLatinOverride('yalla habibi')).toBeNull();
+        // English (incl. low-tinyld-accuracy English) and tokens ('en' is not
+        // in the allowlist — English stays legacy's own business):
         expect(tinyldLatinOverride('i want to register')).toBeNull();
         expect(tinyldLatinOverride('hello')).toBeNull();
         expect(tinyldLatinOverride('ICDL')).toBeNull();
         expect(tinyldLatinOverride('ok')).toBeNull();
-        // ASCII foreign sentences are an accepted miss (defer to context, same as today):
-        expect(tinyldLatinOverride('vad kostar det')).toBeNull();
+        // Transliterated display names (name-shape guard):
+        expect(tinyldLatinOverride('Mohammed Alahmad')).toBeNull();
+    });
+
+    it('names accent-free French/Spanish with a clear-margin call (the 2026-08-24 Salla-test fix)', () => {
+        // The class that was an accepted miss until the ASCII-foreign promotion:
+        // zero non-ASCII letters, yet tinyld is unambiguous about the language.
+        expect(tinyldLatinOverride('Quelles tailles avez-vous ?')).toBe('fr'); // fr@1.00 — answered in Arabic in prod
+        expect(tinyldLatinOverride('Donne moi hotel a tartous')).toBe('fr');   // fr@0.14 vs la@0.01 — the Joelle/Shahin class
+        expect(tinyldLatinOverride("c'est combien")).toBe('fr');               // 2 words at top-of-scale
+        expect(tinyldLatinOverride('cuanto cuesta el vestido')).toBe('es');
+    });
+
+    it('ASCII promotion is fr/es ONLY — other languages junk-dominate the corpus (accepted misses)', () => {
+        // 60-day corpus (14,710 Latin texts): outside fr/es, ASCII promotions are
+        // mostly romanized Arabic ("Asalam aleikum warahmatullahi wabarakatu" →
+        // lv@1.00 ×23, "Ana achkourak min kol kalbi" → de@1.00), Tagalog (→ ro/vi),
+        // and typo'd English. Genuine ASCII German/Swedish keeps deferring — the
+        // price of never asserting Latvian at a customer.
+        expect(tinyldLatinOverride('vad kostar det')).toBeNull();       // sv@0.16 — genuine, accepted miss
+        expect(tinyldLatinOverride('wie viel kostet das')).toBeNull();  // de@0.22 — genuine, accepted miss
+        expect(tinyldLatinOverride('Asalam aleikum warahmatullahi wabarakatu')).toBeNull(); // lv@1.00 junk
+        expect(tinyldLatinOverride('Ana achkourak min kol kalbi')).toBeNull();              // de@1.00 junk
+        expect(tinyldLatinOverride('yes po galing po xa sa public school')).toBeNull();     // vi@1.00 Tagalog
+    });
+
+    it('2-word ASCII texts must be unambiguous — typo\'d English must not become Spanish', () => {
+        // "Hw much" reads es@0.17 and "Main courses" fr@0.18 — real prod traffic
+        // (17 "Hw much" DMs in the 60-day corpus). The 2-word tier demands 1.00.
+        expect(tinyldLatinOverride('Hw much')).toBeNull();
+        expect(tinyldLatinOverride('Main courses')).toBeNull();
+    });
+
+    it('keeps deferring ASCII near-ties — a Scandinavian coin flip must not be asserted (the margin guard)', () => {
+        // no@0.21 vs da@0.20: promoting the top guess would name Norwegian for a
+        // Swedish customer AS CERTAIN. The 1.5× margin keeps it on the thread.
+        expect(tinyldLatinOverride('var bor du manen ?')).toBeNull();
     });
 
     it('emoji / symbols / non-ASCII punctuation do NOT open the gate (the letter-gate guard)', () => {
