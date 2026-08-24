@@ -222,7 +222,7 @@ export const SETTINGS_DEFAULTS = {
     greetingMessageMulti: {},
     awayMessageMulti: {},
     limitFallbackEnabled: false,
-    replyDelay: 3,
+    replyDelay: 2,
     defaultReplyLanguage: 'ar',
     supportedLanguages: ['en', 'ar'],
     autoDetectLanguage: true,

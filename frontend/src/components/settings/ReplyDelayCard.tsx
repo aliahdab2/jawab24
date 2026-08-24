@@ -46,7 +46,7 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
       <div className="mt-2 flex gap-2 flex-wrap">
         {[
           { value: 0, label: t('replyDelay.instant') },
-          { value: 3, label: t('replyDelay.natural') },
+          { value: 2, label: t('replyDelay.natural') },
           { value: 10, label: t('replyDelay.slower') },
         ].map((opt) => (
           <button
