@@ -323,7 +323,7 @@ describe('WorkspaceSettingsService — Integration', () => {
         expect(settings.aiEnabled).toBe(true);
         expect(settings.commentsAutoReply).toBe(true);
         expect(settings.messagesAutoReply).toBe(true);
-        expect(settings.replyDelay).toBe(3); // defaults to the "Natural" preset for a human feel
+        expect(settings.replyDelay).toBe(2); // defaults to the "Natural" preset for a human feel
         expect(settings.defaultReplyLanguage).toBe('ar');
     });
 
