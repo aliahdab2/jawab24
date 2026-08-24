@@ -1,0 +1,15 @@
+-- Reply-delay default: 3s → 2s (owner ruling, 2026-08-24).
+--
+-- The 08-24 latency study measured the fleet on 7 days of prod traffic:
+-- merchants on the delay=3 default received replies at p50 6.67s, while
+-- delay=0 merchants got p50 2.72s — the single biggest number in the reply
+-- path was the deliberate "feel human" pause. Speed is the product (D-049);
+-- 2s keeps the human feel at half the cost, and matches the UI's own tip
+-- ("we recommend 2-5 seconds"). The frontend "Natural" preset moves to 2s in
+-- the same change.
+--
+-- Column DEFAULT only: existing rows keep their stored value — a stored 3
+-- cannot be told apart from a merchant who deliberately chose 3, so no
+-- backfill is attempted. Only settings rows created after this migration
+-- start at 2.
+ALTER TABLE "settings" ALTER COLUMN "reply_delay" SET DEFAULT 2;

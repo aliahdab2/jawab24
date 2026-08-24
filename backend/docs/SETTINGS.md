@@ -280,7 +280,7 @@ moves every eval baseline, so it is tracked separately rather than folded in her
 | `greetingMessage` / `greetingMessageMulti` + `greetingMessageEnabled` | greeting | First-contact welcome. Toggle read-back once regressed to always-off — keep it in the settings GET. |
 | `limitFallbackEnabled` + `limitFallbackMessageMulti` | quota exhaustion | Master switch + custom text; when off, silence at the limit. |
 | `dualReplyNudge` / `dualReplyNudgeMulti` / `dualReplyNudgeVariations` | dual mode | The "check your DMs" comment; variations rotate. |
-| `replyDelay` | both processors | 0–300s humanized delay (`computeHumanDelayMs`). Also disables the debounce fast-path when > 0. |
+| `replyDelay` | both processors | 0–300s humanized delay (`computeHumanDelayMs`). Also disables the debounce fast-path when > 0. Default **2s** (was 3s until 2026-08-24 — the latency study measured delay=3 merchants at p50 6.67s vs 2.72s for delay=0; existing rows kept their stored value, the UI "Natural" preset moved to 2s with it). |
 | `commentEscalationMinutes` / `messageEscalationMinutes` | `escalation.ts` cron | Unanswered-thread thresholds (defaults 60 / 30) before Needs Attention escalation. |
 | `handoffPauseDurationMinutes` | gate 3 | How long a manual reply pauses the AI on that thread. |
 | `holdLowConfidence` | gate 6 | Park low-confidence replies for review. See lead-capture defect above. |
