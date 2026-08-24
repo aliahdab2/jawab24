@@ -3074,13 +3074,18 @@ const TEST_CASES: TestCase[] = [
     },
     // Case 757: Prod replay (Shahin World, 2026-08-08 21:24 UTC — the paying
     // merchant's SECOND complaint that day). Accent-free French («Donne moi hotel
-    // a tartous», «23aout jusqua 25») was answered in ENGLISH throughout. The
-    // detector cannot name accent-free French (en@0.5 floor — an accepted miss,
-    // pinned in engine.test.ts); the model CAN, and the VISIBLY_FOREIGN_MIRROR
-    // demonstration in languageDirective is what makes it act on that (measured
-    // 0/6 → 6/6 French on the damascus fixture, 2026-08-09). The message here is
-    // deliberately DIFFERENT from the demonstration's example sentence, so this
-    // pins generalization, not parroting. English-anchored history exercises the
+    // a tartous», «23aout jusqua 25») was answered in ENGLISH throughout. Two
+    // independent mechanisms now carry this case, which is why it is kept as-is:
+    // the VISIBLY_FOREIGN_MIRROR demonstration in languageDirective (measured
+    // 0/6 → 6/6 French on the damascus fixture, 2026-08-09), and — since
+    // 2026-08-24 — the DETECTOR itself, which now names this sentence fr@0.75
+    // via the ASCII-foreign promotion, so the strong directive fires instead of
+    // the uncertain one. (The comment here previously said the detector "cannot
+    // name accent-free French"; that stopped being true with the promotion.
+    // «23aout jusqua 25» is still an accepted miss — the digit-fusion guard that
+    // protects Arabizi catches «23aout» too.) The message is deliberately
+    // DIFFERENT from the demonstration's example sentence, so this pins
+    // generalization, not parroting. English-anchored history exercises the
     // user-history variant's escape hatch — the hardest arm of the fix.
     {
         id: 757, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
@@ -3096,6 +3101,38 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['We offer', 'we offer', 'You can', 'you can', 'Here are'],
         },
         notes: 'Prod replay Shahin World 2026-08-08: accent-free French must be mirrored in French even though the detector reads it as uncertain English and the thread anchor is English. Guard for the VISIBLY_FOREIGN_MIRROR demonstration.',
+    },
+    // Case 776: PROD REPLAY (Jawab24 Salla Test, 2026-08-24 ~01:45) — the
+    // language-switching thread. A customer moved Swedish → English → Arabic →
+    // French in one conversation; every turn mirrored correctly EXCEPT the
+    // French one, «Quelles tailles avez-vous ?», which was answered in ARABIC
+    // (reproduced 4/4 through the admin playground against the real page the
+    // same night). Mechanism: the sentence carries no accented letter, so the
+    // override's non-ASCII gate never opened, it floored at en@0.5, and the
+    // defer-to-history gate handed it the thread's Arabic anchor. Fixed by the
+    // ASCII-foreign promotion (engine.ts) — the detector now names it fr@0.75.
+    //
+    // The Arabic-anchored history is the point: it is what the old behavior
+    // inherited, so a reply that is still Arabic means the promotion did not
+    // reach the reply path. Unit-pinned end-to-end in
+    // backend/test/services/multilingualThreadReplay.test.ts (all six turns).
+    {
+        id: 776, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'Quelles tailles avez-vous ?',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'ابوا معناتا انت ماعندك مكتب شغل' },
+            { role: 'assistant', content: 'أنا جزء من فريق الصفحة هنا، مش مكتب فعلي. كيف أقدر أساعدك؟' },
+            { role: 'user', content: 'شو عندك منتجات' },
+            { role: 'assistant', content: 'عندنا عدة فئات من المنتجات مثل البلايز، التنانير، الجاكيتات، والفساتين. أي نوع من المنتجات يهمّك؟' },
+        ],
+        expected: {
+            // Latin script alone would accept an English reply, which is the
+            // OTHER half of this bug class — so assert French function words too.
+            replyDominantScript: 'latin',
+            replyContainsAny: ['taille', 'Taille', 'tailles', 'Nous', 'nous', 'disponible', 'Voici', 'voici'],
+        },
+        notes: 'Prod replay Salla test 2026-08-24: accent-free French on an Arabic-anchored thread must be answered in French. Pre-fix this was Arabic 4/4 at prod sampling; the detector now names fr@0.75 via the ASCII-foreign promotion so the strong directive fires.',
     },
     {
         id: 773, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
