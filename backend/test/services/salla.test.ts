@@ -920,14 +920,17 @@ describe('Salla Service', () => {
         const writeCalls = () => mockFetch.mock.calls.filter(
             (call: [string, { method?: string }]) => call[1]?.method === 'POST' || call[1]?.method === 'PUT',
         ) as Array<[string, { method: string; body: string }]>;
+        const deleteCalls = () => mockFetch.mock.calls.filter(
+            (call: [string, { method?: string }]) => call[1]?.method === 'DELETE',
+        ) as Array<[string, { method: string }]>;
 
-        it('should register all 11 webhook events after listing what Salla already holds', async () => {
+        it('should register the 7 API-managed webhook events after listing what Salla already holds', async () => {
             routeFetch([]);
 
             await registerWebhooks('access_token');
 
-            // 1 listing GET + 11 subscribes
-            expect(mockFetch).toHaveBeenCalledTimes(12);
+            // 1 listing GET + 7 subscribes (order.* are portal-managed, never subscribed)
+            expect(mockFetch).toHaveBeenCalledTimes(8);
             expect(mockFetch.mock.calls[0][0]).toBe(LIST_URL);
 
             const events = writeCalls().map(call => JSON.parse(call[1].body).event);
@@ -938,10 +941,6 @@ describe('Salla Service', () => {
                 'product.status.updated',
                 'product.quantity.low',
                 'app.uninstalled',
-                'order.created',
-                'order.updated',
-                'order.status.updated',
-                'order.shipment.created',
                 'abandoned.cart',
             ]);
         });
@@ -965,10 +964,10 @@ describe('Salla Service', () => {
 
         it('UPDATES an existing subscription for our URL in place instead of re-subscribing (a re-subscribe 422s and leaves it unsigned)', async () => {
             routeFetch([
-                { id: 1069900204, event: 'order.created', url: WEBHOOK_URL },
-                { id: 445433511, event: 'order.status.updated', url: WEBHOOK_URL },
+                { id: 1069900204, event: 'product.created', url: WEBHOOK_URL },
+                { id: 445433511, event: 'product.quantity.low', url: WEBHOOK_URL },
                 // Someone else's subscription for the same event — not ours, must not be touched.
-                { id: 999, event: 'product.created', url: 'https://other.example/hook' },
+                { id: 999, event: 'product.deleted', url: 'https://other.example/hook' },
             ]);
 
             const result = await registerWebhooks('token');
@@ -982,17 +981,61 @@ describe('Salla Service', () => {
             // The live API rejects an update without `event` (422 «حقل event غير صالح»,
             // measured 2026-08-23) even though the docs omit it — so every PUT must
             // name the event of the row it repairs, or the row stays unsigned.
-            const expectedEventById: Record<string, string> = { '1069900204': 'order.created', '445433511': 'order.status.updated' };
+            const expectedEventById: Record<string, string> = { '1069900204': 'product.created', '445433511': 'product.quantity.low' };
             for (const [url, init] of puts) {
                 const body = JSON.parse(init.body);
                 const id = url.split('/').pop() as string;
                 expect(body).toMatchObject({ event: expectedEventById[id], url: WEBHOOK_URL, security_strategy: 'signature', secret: 'test_webhook_secret', version: 2 });
             }
-            // The other 9 events are subscribed fresh — including product.created, whose
-            // only existing subscription belongs to a different URL.
-            expect(writes.filter(c => c[1].method === 'POST')).toHaveLength(9);
-            expect(result.registered).toHaveLength(11);
+            // The other 5 API-managed events are subscribed fresh — including
+            // product.deleted, whose only existing subscription belongs to a
+            // different URL.
+            expect(writes.filter(c => c[1].method === 'POST')).toHaveLength(5);
+            expect(result.registered).toHaveLength(7);
             expect(result.failed).toEqual([]);
+        });
+
+        // The defect this pins (2026-08-24): order.* are portal-managed — the API
+        // answers 422 «The event type is disabled» for them. Counting that as a
+        // failure kept webhookStatus.failed at 4 forever: retry-until-exhausted,
+        // a Sentry alert per pass, and a permanent merchant-facing "Re-register
+        // webhooks" CTA that no click could clear.
+        it('never registers order.* via the API; deletes our stale per-store order.* subscriptions instead', async () => {
+            routeFetch([
+                { id: 111, event: 'order.created', url: WEBHOOK_URL },
+                { id: 222, event: 'order.status.updated', url: WEBHOOK_URL },
+                // Someone else's order subscription — not ours, must not be deleted.
+                { id: 999, event: 'order.updated', url: 'https://other.example/hook' },
+            ]);
+
+            const result = await registerWebhooks('token');
+
+            const writtenEvents = writeCalls().map(call => JSON.parse(call[1].body).event);
+            expect(writtenEvents.some(e => e.startsWith('order.'))).toBe(false);
+            expect(deleteCalls().map(c => c[0]).sort()).toEqual([
+                'https://api.salla.dev/admin/v2/webhooks/111',
+                'https://api.salla.dev/admin/v2/webhooks/222',
+            ].sort());
+            expect(result.registered.some(e => e.startsWith('order.'))).toBe(false);
+            expect(result.failed).toEqual([]);
+        });
+
+        it('a failed zombie delete is reported but never lands in `failed` (it must not re-open the retry loop)', async () => {
+            mockFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+                if (url === LIST_URL && (!init?.method || init.method === 'GET')) {
+                    return { ok: true, status: 200, json: async () => ({ data: [{ id: 111, event: 'order.created', url: WEBHOOK_URL }] }) };
+                }
+                if (init?.method === 'DELETE') {
+                    return { ok: false, status: 422, text: async () => '{"error":{"fields":{"event":["The event type is disabled"]}}}' };
+                }
+                return { ok: true };
+            });
+
+            const result = await registerWebhooks('token');
+
+            expect(deleteCalls()).toHaveLength(1);
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).toHaveBeenCalledTimes(1);
         });
 
         it('should not report error on 422 (webhook already exists) when the listing could not see it', async () => {
@@ -1001,18 +1044,18 @@ describe('Salla Service', () => {
             const result = await registerWebhooks('token');
 
             expect(mockCaptureError).not.toHaveBeenCalled();
-            expect(result.registered).toHaveLength(11);
+            expect(result.registered).toHaveLength(7);
         });
 
         it('a 422 on an UPDATE is a real failure, not "already exists"', async () => {
             routeFetch(
-                [{ id: 1069900204, event: 'order.created', url: WEBHOOK_URL }],
+                [{ id: 1069900204, event: 'product.created', url: WEBHOOK_URL }],
                 { ok: false, status: 422, text: async () => 'invalid' },
             );
 
             const result = await registerWebhooks('token');
 
-            expect(result.failed).toEqual(expect.arrayContaining([expect.objectContaining({ topic: 'order.created', status: 422 })]));
+            expect(result.failed).toEqual(expect.arrayContaining([expect.objectContaining({ topic: 'product.created', status: 422 })]));
         });
 
         it('falls back to blind subscribes (still signed) when the listing fails, and reports the listing once', async () => {
@@ -1024,7 +1067,7 @@ describe('Salla Service', () => {
             const result = await registerWebhooks('token');
 
             expect(writeCalls().every(([url, init]) => url === SUBSCRIBE_URL && JSON.parse(init.body).security_strategy === 'signature')).toBe(true);
-            expect(result.registered).toHaveLength(11);
+            expect(result.registered).toHaveLength(7);
             expect(mockCaptureError).toHaveBeenCalledTimes(1);
         });
 

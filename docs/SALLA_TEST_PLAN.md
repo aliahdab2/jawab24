@@ -275,14 +275,19 @@ already tell us. This is a standing rule, not a one-off caution.
   verification issue, ticket #3002710; not Salla, not code).
 - ⭐ Each event arrived **TWICE**: once signed (`x-salla-signature` → 200, processed) and
   once as an unsigned duplicate (→ 401, dropped — harmless, dedup never even reached).
-  Origin of the unsigned copy not yet attributed.
-- ⚠️ **API registration of `order.*` STILL 422s even with the portal events added** —
-  delivery for those events comes via the app-level (portal) channel instead of a
-  per-store subscription. Consequence: `platform_data->webhookStatus.failed: 4` persists
-  on the store row and `[WebhookRetry]` fails noisily every few minutes.
-  **TODO (follow-up fix PR): stop queueing `order.*` for Salla API re-registration —
-  treat portal-level delivery as the mechanism for these events, or drop them from the
-  retry queue.** Until then the noise is known and benign.
+  **Attributed (2026-08-24, follow-up fix)**: the duplicates come from the store's
+  pre-enforcement per-store `order.*` subscriptions — unsigned, and unrepairable because
+  the PUT answers the same 422. The `webhookStatus.failed:4` on the store row proved
+  they exist: only the update path (an existing row) records that failure; a plain
+  subscribe-422 is tolerated.
+- ✅ **RESOLVED (same-day fix PR): `order.*` are now PORTAL-managed in code.**
+  `registerWebhooks` upserts only `SALLA_API_WEBHOOK_EVENTS` (products,
+  `app.uninstalled`, `abandoned.cart`) and DELETES our leftover per-store `order.*`
+  subscriptions — ending both the noisy `[WebhookRetry]` exhaustion loop (with its
+  permanent merchant-facing "Re-register webhooks" CTA) and the unsigned 401
+  duplicates. After the deploy, press *Re-register* on the store once (or run
+  `reregister-webhooks.js salla`) so the cleanup pass runs and `webhookStatus`
+  self-heals to `ok`.
 - **3.8 ✅ PASS — the highest-value row, closed.** Two-turn playground conversation
   (same production pipeline, page `eb06462a…`) against shipped order `#279531515`:
   turn 1 «وين وصل طلبي رقم 279531515؟» → model called `lookup_order`, asked the identity

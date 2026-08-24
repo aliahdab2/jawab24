@@ -134,24 +134,40 @@ export function verifyWebhookHmac(body: string, signature: string): boolean {
 
 // --- Webhook Registration via API ---
 
-export const SALLA_WEBHOOK_EVENTS = [
+/** Events we subscribe per-store via `POST /admin/v2/webhooks/subscribe`. */
+export const SALLA_API_WEBHOOK_EVENTS = [
     'product.created',
     'product.deleted',
     'product.price.updated',
     'product.status.updated',
     'product.quantity.low',
     'app.uninstalled',
-    // Order lifecycle — for customer notifications.
-    // Salla has NO `order.completed` event and NO `order.shipping.update` event
-    // (verified against docs.salla.dev + SDKs). Order completion/delivery is a
-    // STATUS VALUE inside `order.status.updated` (data.status.slug in
-    // {completed,delivered,shipped}); shipment/tracking is `order.shipment.created`.
+    'abandoned.cart',
+] as const;
+
+/**
+ * Order lifecycle — for customer notifications. Delivered APP-LEVEL via the
+ * portal's Webhooks/Notifications → Store Events list, NOT via per-store API
+ * subscriptions: since mid-day 2026-08-23 Salla refuses API subscribe/update
+ * for these with 422 «The event type is disabled» whenever they are managed
+ * through the portal list (SALLA_TEST_PLAN.md Tier 0.10). With the portal list
+ * populated, signed deliveries arrive for every installed store with no
+ * per-store subscription at all (verified live 2026-08-24, order #279531515).
+ *
+ * Salla has NO `order.completed` event and NO `order.shipping.update` event
+ * (verified against docs.salla.dev + SDKs). Order completion/delivery is a
+ * STATUS VALUE inside `order.status.updated` (data.status.slug in
+ * {completed,delivered,shipped}); shipment/tracking is `order.shipment.created`.
+ */
+export const SALLA_PORTAL_WEBHOOK_EVENTS = [
     'order.created',
     'order.updated',
     'order.status.updated',
     'order.shipment.created',
-    'abandoned.cart',
 ] as const;
+
+/** Everything `/salla/webhooks` receives and processes, regardless of channel. */
+export const SALLA_WEBHOOK_EVENTS = [...SALLA_API_WEBHOOK_EVENTS, ...SALLA_PORTAL_WEBHOOK_EVENTS] as const;
 
 export type SallaWebhookEvent = typeof SALLA_WEBHOOK_EVENTS[number];
 
@@ -210,7 +226,7 @@ async function listOwnSubscriptions(accessToken: string, webhookUrl: string): Pr
 }
 
 /**
- * Register (or repair) our subscription for every event in SALLA_WEBHOOK_EVENTS.
+ * Register (or repair) our subscription for every event in SALLA_API_WEBHOOK_EVENTS.
  *
  * List-then-upsert, like the Shopify path: an event Salla already has for our
  * URL is UPDATED in place (`PUT /webhooks/{id}`) so the security fields land on
@@ -218,6 +234,14 @@ async function listOwnSubscriptions(accessToken: string, webhookUrl: string): Pr
  * answers 422 and would leave an unsigned subscription unsigned forever — which
  * is exactly the state every pre-2026-08-23 store is in, and what the per-store
  * "Re-register" button and src/scripts/reregister-webhooks.ts now fix.
+ *
+ * SALLA_PORTAL_WEBHOOK_EVENTS are deliberately NOT subscribed here — the API
+ * refuses them with 422 «The event type is disabled» (portal-managed), and
+ * counting that refusal as a failure kept `webhookStatus.failed` at 4 forever:
+ * the retry worker re-attempted until exhaustion, Sentry alerted on every
+ * pass, and the integrations card showed the merchant a permanent
+ * "Re-register webhooks" CTA that no click could clear. Any leftover per-store
+ * subscription for those events is deleted instead (see below).
  *
  * Single endpoint receives all events — dispatches by event type in body. Topics
  * are written in parallel because each is an independent REST call; serial
@@ -233,7 +257,7 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
 
     const existing = await listOwnSubscriptions(accessToken, webhookUrl);
 
-    const results = await Promise.allSettled(SALLA_WEBHOOK_EVENTS.map(event => {
+    const results = await Promise.allSettled(SALLA_API_WEBHOOK_EVENTS.map(event => {
         const current = existing.get(event);
         // `event` is REQUIRED on the update too. docs.salla.dev (Update Webhook)
         // lists only name/url/version/rule/headers/security_*, but the live API
@@ -257,7 +281,7 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
     }));
 
     for (let i = 0; i < results.length; i++) {
-        const event = SALLA_WEBHOOK_EVENTS[i];
+        const event = SALLA_API_WEBHOOK_EVENTS[i];
         const result = results[i];
         if (result.status === 'rejected') {
             const err = result.reason;
@@ -283,7 +307,55 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
         }
     }
 
+    await deleteStalePortalEventSubscriptions(existing, headers);
+
     return { registered, failed, lastAttempt: new Date().toISOString() };
+}
+
+/**
+ * Delete our leftover per-store subscriptions for portal-managed events.
+ *
+ * Every pre-enforcement store carries them: they are unsigned (delivering a
+ * DUPLICATE of every order event that `verifyWebhookHmac` refuses with 401)
+ * and unrepairable — a PUT answers the same 422 «The event type is disabled»
+ * as a subscribe. Only rows whose url is OURS and whose event is
+ * portal-managed are touched.
+ *
+ * A failed delete is reported but never pushed into `failed`: the leftover
+ * row is inert to us (its deliveries can't pass the signature check), and
+ * counting it as a failure would re-open exactly the exhausted-retry /
+ * permanent-CTA loop this split exists to close.
+ */
+async function deleteStalePortalEventSubscriptions(
+    existing: Map<string, SallaWebhookSubscription>,
+    headers: Record<string, string>,
+): Promise<void> {
+    const stale = SALLA_PORTAL_WEBHOOK_EVENTS
+        .map(event => existing.get(event))
+        .filter((sub): sub is SallaWebhookSubscription => sub !== undefined);
+
+    const results = await Promise.allSettled(stale.map(sub =>
+        tracedExternalCall('salla', 'deleteWebhook', () =>
+            fetch(`https://api.salla.dev/admin/v2/webhooks/${sub.id}`, { method: 'DELETE', headers })
+                .then(async response => ({ response, body: response.ok ? '' : await response.text() })),
+        ),
+    ));
+
+    for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const { id, event } = stale[i];
+        if (result.status === 'rejected') {
+            captureError(result.reason, `Salla stale portal-event subscription delete failed: ${event}`, {
+                tags: { service: 'salla' }, extra: { event, subscriptionId: id },
+            });
+        } else if (!result.value.response.ok) {
+            captureError(
+                new Error(`Salla stale portal-event subscription delete failed: ${event} ${result.value.response.status}`),
+                `Salla stale portal-event subscription delete failed: ${event}`,
+                { tags: { service: 'salla' }, extra: { event, subscriptionId: id, status: result.value.response.status, body: result.value.body.slice(0, ERROR_TEXT_MAX_LENGTH) } }
+            );
+        }
+    }
 }
 
 // --- REST API Helper ---

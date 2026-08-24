@@ -5,9 +5,10 @@ import type { WebhookRegistrationResult } from '../services/ecommerce';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
-// Mirrors SALLA_WEBHOOK_EVENTS in services/salla.ts. Kept here so the adapter
-// can answer getWebhookTopics() synchronously without importing the full
-// service module. Tests assert these stay in sync.
+// Mirrors SALLA_WEBHOOK_EVENTS in services/salla.ts (API-managed events first,
+// then the portal-managed order events — see SALLA_PORTAL_WEBHOOK_EVENTS).
+// Kept here so the adapter can answer getWebhookTopics() synchronously without
+// importing the full service module. Tests assert these stay in sync.
 const SALLA_WEBHOOK_TOPICS = [
     'product.created',
     'product.deleted',
@@ -15,11 +16,11 @@ const SALLA_WEBHOOK_TOPICS = [
     'product.status.updated',
     'product.quantity.low',
     'app.uninstalled',
+    'abandoned.cart',
     'order.created',
     'order.updated',
     'order.status.updated',
     'order.shipment.created',
-    'abandoned.cart',
 ] as const;
 
 /**
