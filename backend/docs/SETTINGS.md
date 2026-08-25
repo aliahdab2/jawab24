@@ -210,6 +210,26 @@ Not a `UserSettings` field: six rows per store in `customer_notification_templat
 `PUT /notification-templates/:storeId/:type` (admin role + `requireOwnedStore`); read by
 `customerNotificationService.schedule()` on every order webhook (Salla / Zid / Shopify).
 
+> ⛔ **A seeded template is NOT a working notification — only three of the six fire
+> everywhere.** All six get a row, an editable AR/EN body, an API whitelist entry and a
+> merchant toggle in `/integrations`, which makes the UI read as six working features.
+> The table below is what each one can actually do; verified by tracing every
+> `OrderEvent` producer (`buildSallaOrderEvent` / `buildShopifyOrderEvent` /
+> `buildZidOrderEvent`) into the single `schedule()` entry point, 2026-08-24.
+>
+> | Type | Salla | Zid | Shopify | Reality |
+> |---|---|---|---|---|
+> | `order_confirmed` | ✅ | ✅ | ✅ | fires on the create webhook |
+> | `order_shipped` | ✅ | ✅ | ✅ | fires; Salla upgrades the row in place when tracking follows |
+> | `order_delivered` | ✅ | ✅ | ✅ | fires on the delivered status/slug |
+> | `review_request` | ⚠️ | ⚠️ | ⚠️ | fires, but **sends a dangling link**: `orderNotificationScheduler.ts` passes `review_url: ''` hardcoded while the default body ends in `⭐ {review_url}`, and no endpoint can set it (`controllers/customerNotifications.ts` accepts only isEnabled/messages/delay) |
+> | `abandoned_cart` | ✅ | ✅ | ❌ | **Salla + Zid** — Salla fires from the `abandoned.cart` branch in `controllers/salla.ts`; Zid since #951 (2026-08-25): `abandoned_cart.created` schedules the recovery nudge and `abandoned_cart.completed` cancels it (`controllers/zid.ts`). Shopify never subscribes `checkouts/create`, so the analytics "revenue recovered" figure is structurally always 0 for Shopify stores |
+> | `digital_delivery` | ❌ | ❌ | ❌ | **NOT IMPLEMENTED — declared, seeded, toggleable, never fired.** No `OrderEvent` builder emits it and nothing else calls `schedule()`, so the merchant can enable it and edit its copy and it will never send. Either wire it or remove the toggle |
+>
+> Also note the `channel` column is **decorative**: it defaults to `'sms'` and `send()`
+> calls `smsService.send` unconditionally. There is no WhatsApp delivery path for
+> customer notifications on any platform.
+
 | Fact | Value | Why it matters |
 |------|-------|----------------|
 | Seeded | by `createStore` for every platform and every reinstall, idempotent (#908, 2026-08-23). Before that only the Easy-Mode claim path seeded them, so an OAuth or embedded install had no rows at all | a store with no rows cannot send: `getTemplate()` → null → `schedule()` returns before writing anything |
