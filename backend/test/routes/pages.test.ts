@@ -268,17 +268,22 @@ describe('Pages Routes', () => {
         });
     });
 
-    describe('POST /pages/sync — no_fb_pages demand signal', () => {
+    describe('POST /pages/sync — zero-page diagnosis', () => {
         // Exactly the shape syncFromFacebook returns when /me/accounts is empty.
+        // Since feat/no-pages-diagnosis the no_fb_pages emit lives INSIDE
+        // syncFromFacebook (pinned by pagesSyncZeroDiagnosis.test.ts); the
+        // route's contract is to surface the diagnosis `reason` to the client.
         const EMPTY_SYNC = {
             syncedPages: [], skippedCount: 0, skippedPages: [], skipReason: undefined,
             pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [],
             revokedCount: 0, alreadyMemberOf: [],
         };
 
-        it('records no_fb_pages when Facebook returns no pages and none exist', async () => {
-            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(EMPTY_SYNC as any);
-            vi.mocked(pagesService.getPages).mockResolvedValue([]);
+        it('surfaces the diagnosis reason on a zero-page sync, without a route-level emit', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
+                ...EMPTY_SYNC,
+                noPagesDiagnosis: { reason: 'instagram_only', igTargetCount: 1, pageTargetCount: 0, grantedScopes: ['instagram_basic'] },
+            } as any);
 
             const response = await app.inject({
                 method: 'POST',
@@ -287,15 +292,18 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload).synced).toBe(0);
-            expect(recordActivationEvent).toHaveBeenCalledWith('test_user_id', 'no_fb_pages');
+            const payload = JSON.parse(response.payload);
+            expect(payload.synced).toBe(0);
+            expect(payload.reason).toBe('instagram_only');
+            // The emit is the service's job now — a second one here would double-count.
+            expect(recordActivationEvent).not.toHaveBeenCalled();
         });
 
-        it('does NOT record no_fb_pages when the workspace already has pages', async () => {
-            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(EMPTY_SYNC as any);
-            vi.mocked(pagesService.getPages).mockResolvedValue([
-                { id: 'page_1', name: 'Existing', facebookPageId: 'fb_1' } as any,
-            ]);
+        it('returns reason null when the service produced no diagnosis (established workspace)', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
+                ...EMPTY_SYNC,
+                noPagesDiagnosis: null,
+            } as any);
 
             const response = await app.inject({
                 method: 'POST',
@@ -304,6 +312,7 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload).reason).toBeNull();
             expect(recordActivationEvent).not.toHaveBeenCalled();
         });
     });
