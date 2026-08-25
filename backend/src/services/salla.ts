@@ -570,7 +570,10 @@ export function collectSallaCategories(products: ReadonlyArray<Pick<SallaProduct
 
 interface SallaProductsResponse {
     data: SallaProduct[];
-    pagination: {
+    // Optional in the TYPE because it is an external payload, not a promise we
+    // control — `fetchAllProducts` refuses to page on without it rather than
+    // trusting the declaration. (Salla sends it on every observed response.)
+    pagination?: {
         currentPage: number;
         totalPages: number;
         perPage: number;
@@ -609,11 +612,37 @@ async function fetchAllProducts(accessToken: string): Promise<SallaProduct[]> {
             accessToken,
         );
 
+        // ⛔ A missing product array is NOT an empty catalogue. `?? []` here would
+        // hand `replaceProductsAndRebuildSummary` an empty list, and its
+        // "Empty catalog → drop everything for this store" branch would delete
+        // every product the merchant has. Same reasoning as the pagination guard
+        // below — refuse rather than amputate.
+        if (!Array.isArray(data.data)) {
+            throw new Error(
+                `Salla products response has no product array (page ${page}) — refusing to treat it as an empty catalogue`,
+            );
+        }
         allProducts.push(...data.data);
 
         // Stop at the shared safety cap — the DB layer truncates beyond it anyway.
         if (allProducts.length >= PRODUCT_SAFETY_CAP) break;
-        if (page >= data.pagination.totalPages) break;
+
+        // ⛔ An unknown page count must FAIL, never "stop here". syncProducts
+        // REPLACES the catalogue, so treating a missing envelope as "we're done"
+        // would delete every product past page 1 — a silent amputation the
+        // merchant would only notice through the AI answering "we don't sell
+        // that". Failing keeps the previous catalogue intact.
+        //
+        // The throw itself is not new; before, the same case surfaced as
+        // "Cannot read properties of undefined (reading 'totalPages')", which
+        // named neither Salla nor the store. Only the diagnosis changed.
+        const totalPages = data.pagination?.totalPages;
+        if (typeof totalPages !== 'number') {
+            throw new Error(
+                `Salla products response has no pagination envelope (page ${page}) — refusing to truncate the catalogue`,
+            );
+        }
+        if (page >= totalPages) break;
         page++;
     }
 

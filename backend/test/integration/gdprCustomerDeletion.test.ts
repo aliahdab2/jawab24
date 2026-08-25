@@ -23,10 +23,8 @@ import {
 } from './setup';
 import * as schema from '../../src/db/schema';
 import { purgeCustomerData } from '../../src/services/gdprCustomerDeletion';
+import { uniq } from '../helpers/ecommerceFixtures';
 
-function uniq(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 async function countBySender(table: 'conversations' | 'messages' | 'conversationPauses' | 'leads', senderId: string) {
     const t = schema[table];

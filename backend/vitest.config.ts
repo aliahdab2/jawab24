@@ -8,7 +8,10 @@ export default defineConfig({
     // `.claude/worktrees/**` = per-task git worktrees (full repo checkouts). Without
     // this, a plain `vitest run` scans every worktree's stale test copies too, so
     // an assertion change here "fails" in N unrelated branches. Only test THIS tree.
-    exclude: ['test/integration/**', 'node_modules/**', 'dist/**', '**/.claude/worktrees/**'],
+    // `test/stress/**` = the opt-in Tier-4 suite (vitest.stress.config.ts): it needs
+    // the integration DB setup, so under the unit sentinel DATABASE_URL its module-
+    // scope import throws and the whole unit run — the pre-deploy gate — goes red.
+    exclude: ['test/integration/**', 'test/stress/**', 'node_modules/**', 'dist/**', '**/.claude/worktrees/**'],
     // Coverage instrumentation can slow tests ~3-10x; default 5s timeout is
     // too tight for the heavier pipeline suites under load. (The original
     // culprit — instagramReply at ~4.5s — turned out to be unmocked real HTTPS
