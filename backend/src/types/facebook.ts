@@ -2,6 +2,8 @@
  * Facebook API related types
  */
 
+import type { NoPagesReason } from '@jawab24/shared';
+
 export interface FacebookTokenResponse {
     access_token: string;
     token_type: string;
@@ -50,5 +52,21 @@ export interface FacebookPagesResponse {
 export interface FacebookGranularScope {
     scope: string;
     target_ids?: string[];
+}
+
+/**
+ * Why /me/accounts came back empty for a logged-in user — computed from one
+ * /debug_token call on the rare zero-page path (facebookService.diagnoseNoPages).
+ * The reason vocabulary lives in @jawab24/shared (rendered by the frontend
+ * empty state, so the two sides must not drift).
+ */
+export interface NoPagesDiagnosis {
+    reason: NoPagesReason;
+    /** IG accounts the user authorized under instagram_basic (0 when none). */
+    igTargetCount: number;
+    /** Page ids authorized under pages_* granular scopes (0 when none). */
+    pageTargetCount: number;
+    /** Top-level granted scopes, for the activation-event metadata. */
+    grantedScopes: string[];
 }
 

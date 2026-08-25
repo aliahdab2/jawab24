@@ -2650,9 +2650,18 @@ Internal **ops-only** dashboard — system health, not cost (all AI cost visibil
 - **Data source**: Existing backend analytics endpoints
 - **Demand signals** (in `activation_events`, one row per user, NOT funnel steps):
   `no_fb_pages` — Facebook login completed but `/me/accounts` was empty and the
-  workspace has no pages (Instagram-only merchant candidate); `ig_direct_interest` —
-  merchant clicked the empty-state CTA asking for Instagram-without-Facebook connect.
-  Read directly via SQL; no admin panel renders them yet.
+  workspace has no pages; its `metadata` carries a `reason` classification
+  (`permissions_declined` / `pages_unreachable` / `instagram_only` / `no_pages` /
+  `unknown`) computed from `/debug_token` granular scopes at every zero-page
+  login/sync (`facebookService.diagnoseNoPages`, emitted from
+  `syncFromFacebook` — the single canonical emit site). The same reason is
+  returned by `POST /pages/sync` and drives the tailored `/pages` empty-state
+  copy. `ig_direct_interest` — merchant clicked the empty-state CTA asking for
+  Instagram-without-Facebook connect. Read directly via SQL; no admin panel
+  renders them yet. Accounts that went zero-page BEFORE this classification
+  existed can be classified retroactively with
+  `scripts/classify-zero-page-accounts.mjs` (run inside the prod backend
+  container; read-only).
 
 ### Admin AI Cost & Quota Panel
 

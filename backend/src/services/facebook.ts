@@ -3,7 +3,7 @@ import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
 import { fbAxios, GRAPH_API_BASE } from '../lib/fbAxios';
 import * as Sentry from '@sentry/node';
-import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, FacebookPage, FacebookGranularScope, Logger } from '../types';
+import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, FacebookPage, FacebookGranularScope, NoPagesDiagnosis, Logger } from '../types';
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
@@ -365,6 +365,48 @@ export class FacebookService {
             }
         }
         return [...pageIds];
+    }
+
+    /**
+     * Classify WHY /me/accounts came back empty, from one /debug_token call.
+     * Separates the three merchant populations we could not previously tell
+     * apart: declined the pages permission, Instagram-only business, or a
+     * personal account managing nothing. Runs only on the rare zero-page
+     * path (login/sync), never per-message. Never throws — a failed
+     * /debug_token (usually an expired token) classifies as 'unknown'.
+     */
+    async diagnoseNoPages(accessToken: string): Promise<NoPagesDiagnosis> {
+        try {
+            const tokenInfo = await this.verifyAccessToken(accessToken);
+
+            const igScope = tokenInfo.granularScopes.find(s => s.scope === 'instagram_basic');
+            const igTargetCount = Array.isArray(igScope?.target_ids) ? igScope.target_ids.length : 0;
+
+            const pageTargetIds = new Set<string>();
+            for (const scope of tokenInfo.granularScopes) {
+                if (scope.scope.startsWith('pages_') && Array.isArray(scope.target_ids)) {
+                    for (const id of scope.target_ids) {
+                        if (id) pageTargetIds.add(id);
+                    }
+                }
+            }
+            const pageTargetCount = pageTargetIds.size;
+
+            const reason = !tokenInfo.scopes.includes('pages_show_list')
+                ? 'permissions_declined' as const
+                : pageTargetCount > 0
+                    // Page(s) authorized, yet the caller saw zero — the granular
+                    // reconciliation in getUserPages could not fetch any of them.
+                    ? 'pages_unreachable' as const
+                    : igTargetCount > 0
+                        ? 'instagram_only' as const
+                        : 'no_pages' as const;
+
+            return { reason, igTargetCount, pageTargetCount, grantedScopes: tokenInfo.scopes };
+        } catch (error) {
+            this.logger.warn(`[Facebook] diagnoseNoPages failed: ${error instanceof Error ? error.message : String(error)}`);
+            return { reason: 'unknown', igTargetCount: 0, pageTargetCount: 0, grantedScopes: [] };
+        }
     }
 
     /**
