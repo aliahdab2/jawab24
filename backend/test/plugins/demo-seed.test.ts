@@ -98,11 +98,16 @@ describe('seedDemoData', () => {
         // Derived from the fixture list so adding a demo page doesn't break this
         // test: 1 settings dashboardLanguage refresh + one refresh per DEMO_PAGES
         // entry + 2 e-commerce page link updates (Shopify on electronics, Salla
-        // on fashion, both via seedDemoStore).
+        // on fashion, both via seedDemoStore) + the D-102 store-facts writes:
+        // applyStoreFactsToLinkedPages (Salla store only) selects linked pages —
+        // this suite's select mock returns the same `existingPages` fixture for
+        // every select, so all 4 rows read as linked, fact-less pages and each
+        // gets one business_profile update.
         const SETTINGS_REFRESH = 1;
         const ECOMMERCE_PAGE_LINKS = 2;
+        const STORE_FACTS_WRITES = existingPages.length;
         expect(db.update).toHaveBeenCalledTimes(
-            SETTINGS_REFRESH + DEMO_PAGES.length + ECOMMERCE_PAGE_LINKS,
+            SETTINGS_REFRESH + DEMO_PAGES.length + ECOMMERCE_PAGE_LINKS + STORE_FACTS_WRITES,
         );
     });
 

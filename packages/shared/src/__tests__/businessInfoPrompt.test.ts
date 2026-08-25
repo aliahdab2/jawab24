@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBusinessInfoPrompt, businessPhoneEntries, businessPhoneList } from '../businessInfoPrompt';
+import { formatBusinessInfoPrompt, businessPhoneEntries, businessPhoneList, isFieldAuthoritative } from '../businessInfoPrompt';
 import { MAX_PHONE_DESCRIPTION_LENGTH } from '../businessPhone';
 import type { BusinessProfile } from '../index';
 import type { MerchantProvenanceMap } from '../businessProfileMerge';
@@ -711,5 +711,39 @@ describe('email', () => {
 
     it('a blank email is treated as unset', () => {
         expect(formatBusinessInfoPrompt({ email: '   ' })).toBeNull();
+    });
+});
+
+describe('store_sync provenance is authoritative (D-102)', () => {
+    // Pins the isFieldAuthoritative default: store facts are merchant-authored
+    // in their own store admin, so — unlike fb_sync — they render in the block.
+    // If a future gate change demotes unknown sources, this is the test that
+    // turns the whole store-facts feature off, loudly.
+    const storeProv: MerchantProvenanceMap = {
+        phones: { source: 'store_sync', confirmedAt: null },
+        channels: { source: 'store_sync', confirmedAt: null },
+        hours: { source: 'store_sync', confirmedAt: null },
+    };
+
+    it('isFieldAuthoritative(store_sync) is true', () => {
+        expect(isFieldAuthoritative(storeProv, 'phones')).toBe(true);
+        expect(isFieldAuthoritative(storeProv, 'channels')).toBe(true);
+    });
+
+    it('store_sync phones and WhatsApp render in the block (fb_sync would not)', () => {
+        const profile: BusinessProfile = {
+            phones: ['+966512223344'],
+            channels: { whatsapp: '+966512223344' },
+        };
+        const block = formatBusinessInfoPrompt(profile, storeProv);
+        expect(block).toContain('+966512223344');
+
+        const fbProv: MerchantProvenanceMap = {
+            phones: { source: 'fb_sync', confirmedAt: null },
+            channels: { source: 'fb_sync', confirmedAt: null },
+        };
+        // Under fb_sync the same values are demoted: the number must not be
+        // asserted anywhere in the block.
+        expect(formatBusinessInfoPrompt(profile, fbProv) ?? '').not.toContain('+966512223344');
     });
 });

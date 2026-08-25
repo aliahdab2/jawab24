@@ -12,6 +12,7 @@ const {
     mockRedisSet,
     mockRedisDel,
     mockDbWhere,
+    mockApplyStoreFacts,
 } = vi.hoisted(() => ({
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
@@ -22,6 +23,7 @@ const {
     mockRedisSet: vi.fn(),
     mockRedisDel: vi.fn(),
     mockDbWhere: vi.fn(),
+    mockApplyStoreFacts: vi.fn().mockResolvedValue({ pagesUpdated: 0 }),
 }));
 
 // --- vi.mock() calls ---
@@ -75,6 +77,14 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: (...args: unknown[]) => mockCaptureError(...args),
 }));
 
+// storeFactsSync pulls in the real db module — mocked so this suite stays
+// drizzle-free. reportStoreFactDrop routes to mockCaptureError so the
+// mapper tests can assert drop-reporting.
+vi.mock('../../src/services/storeFactsSync', () => ({
+    applyStoreFactsToLinkedPages: (...args: unknown[]) => mockApplyStoreFacts(...args),
+    reportStoreFactDrop: (...args: unknown[]) => mockCaptureError(...args),
+}));
+
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         set: (...args: unknown[]) => mockRedisSet(...args),
@@ -109,6 +119,7 @@ import {
     lookupOrder,
     getShipmentTracking,
     getProductById,
+    mapZidStoreFacts,
     type ZidCredentials,
 } from '../../src/services/zid';
 
@@ -482,6 +493,9 @@ describe('Zid Service', () => {
                 storeCurrency: 'SAR',
                 storeDomain: 'demo.zid.store',
                 merchantId: '99',
+                // D-102: facts ride along; this profile carries only the URL.
+                storeFacts: { website: expect.stringContaining('zid.store') },
+                factsRaw: expect.objectContaining({ phone: undefined, mobile_object: undefined }),
             });
         });
 
@@ -584,6 +598,8 @@ describe('Zid Service', () => {
                     storeCurrency: 'SAR',
                     storeDomain: 'a0xxorvfi5.zid.store',
                     merchantId: '130216',
+                    storeFacts: { website: 'https://a0xxorvfi5.zid.store' },
+                    factsRaw: expect.objectContaining({ url: 'https://a0xxorvfi5.zid.store' }),
                 });
                 // The bug in one assertion: anything longer than the column is
                 // what took the install down.
@@ -971,7 +987,11 @@ describe('Zid Service', () => {
                     storeEmail: 'updated@zid.sa',
                     storeCurrency: 'SAR',
                 }),
-                { merchantId: '99' },
+                expect.objectContaining({
+                    merchantId: '99',
+                    // D-102: the raw facts snapshot rides in the merge patch.
+                    storeFacts: expect.objectContaining({ url: 'https://demo.zid.store' }),
+                }),
             );
             expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalled();
         });
@@ -980,6 +1000,73 @@ describe('Zid Service', () => {
             mockGetStoreById.mockResolvedValue(null);
 
             await expect(fullSync('no-such-store')).rejects.toThrow('Store not found');
+        });
+
+        it('applies store facts to linked pages BEFORE syncing products (D-102 cache-retirement contract)', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({
+                    user: {
+                        store: {
+                            id: 99,
+                            title: 'Store',
+                            currency: 'SAR',
+                            url: 'https://demo.zid.store',
+                            phone: '+966512223344',
+                        },
+                    },
+                }))
+                .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
+
+            await fullSync('store-1');
+
+            expect(mockApplyStoreFacts).toHaveBeenCalledTimes(1);
+            const [storeId, facts] = mockApplyStoreFacts.mock.calls[0];
+            expect(storeId).toBe('store-1');
+            expect(facts.phones).toEqual(['+966512223344']);
+            expect(facts.website).toBe('https://demo.zid.store');
+
+            const factsOrder = mockApplyStoreFacts.mock.invocationCallOrder[0];
+            const productsOrder = mockReplaceProductsAndRebuildSummary.mock.invocationCallOrder[0];
+            expect(factsOrder).toBeLessThan(productsOrder);
+        });
+    });
+
+    // ============================================================
+    // mapZidStoreFacts (D-102)
+    // ============================================================
+
+    describe('mapZidStoreFacts (D-102)', () => {
+        const base = { id: '1' };
+
+        it('maps phone + website from the documented profile shape', () => {
+            const facts = mapZidStoreFacts({ ...base, phone: '+966512223344', website: 'https://shop.example' });
+            expect(facts.phones).toEqual(['+966512223344']);
+            expect(facts.website).toBe('https://shop.example');
+        });
+
+        it('composes mobile_object {country_code, mobile} into an international number', () => {
+            const facts = mapZidStoreFacts({ ...base, mobile_object: { country_code: '966', mobile: '512223344' } });
+            expect(facts.phones).toEqual(['+966512223344']);
+        });
+
+        it('accepts a bare-string mobile_object and dedupes it against phone', () => {
+            const facts = mapZidStoreFacts({ ...base, phone: '+966512223344', mobile_object: '+966512223344' });
+            expect(facts.phones).toEqual(['+966512223344']);
+        });
+
+        it('falls back to the storefront url when website is absent', () => {
+            const facts = mapZidStoreFacts({ ...base, url: 'https://a0xxorvfi5.zid.store' });
+            expect(facts.website).toBe('https://a0xxorvfi5.zid.store');
+        });
+
+        it('drops an unreadable mobile_object without throwing and reports it', () => {
+            const facts = mapZidStoreFacts({ ...base, mobile_object: 42 });
+            expect(facts.phones).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('returns an empty fragment for a bare profile (no fabricated fields)', () => {
+            expect(mapZidStoreFacts({ ...base })).toEqual({});
         });
     });
 

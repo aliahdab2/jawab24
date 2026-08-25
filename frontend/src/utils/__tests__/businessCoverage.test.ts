@@ -90,6 +90,24 @@ describe('computeFactCoverage — unconfirmed fb_sync values (the MES «+9715560
     expect(covered.phone).toBe(true);
     expect(suggested.phones).toBeUndefined();
   });
+
+  it('a store_sync value COUNTS as covered (D-102 — store facts are authoritative, unlike fb_sync)', () => {
+    const page = {
+      id: 'p1', name: 'Shop',
+      businessProfile: {
+        merchant: { phones: ['+966512223344'], hours: FILLED_HOURS },
+        merchantProvenance: {
+          phones: { source: 'store_sync', confirmedAt: null },
+          hours: { source: 'store_sync', confirmedAt: null },
+        },
+      },
+    } as unknown as Page;
+    const { covered, values, suggested } = computeFactCoverage(page);
+    expect(covered.phone).toBe(true);
+    expect(covered.hours).toBe(true);
+    expect(values.phones).toEqual([{ number: '+966512223344' }]);
+    expect(suggested.phones).toBeUndefined();
+  });
 });
 
 describe('computeFactCoverage — connected store', () => {

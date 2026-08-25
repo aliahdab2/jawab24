@@ -5907,6 +5907,44 @@ const TEST_CASES: TestCase[] = [
         notes: 'THE SECURITY HALF of D-101: the phone belongs to أحمد, the name given is خالد. Both must match, so nothing about the order may reach the customer — no order number, no tracking. The tool itself is unit-tested (ecommerceActions.test.ts); this pins that a refusal survives all the way to the delivered reply.',
     },
 
+    // ===== Category 82: Store Facts Sync (D-102) =====
+    // The fashion page's KB deliberately carries NO phone/WhatsApp lines
+    // (seedData.ts) — the ONLY source of these digits is the Salla store's
+    // synced facts (DEMO_SALLA_STORE_INFO → mapSallaStoreFacts →
+    // applyStoreFactsToLinkedPages → business_profile, store_sync provenance
+    // → BUSINESS_INFO block). Before D-102 these cases fail (info_not_in_kb);
+    // a passing reply proves the store-facts path end-to-end.
+    {
+        id: 806, category: 82, categoryName: 'Store Facts Sync', channel: 'dm',
+        message: 'شو رقمكم؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['512223344'],
+        },
+        notes: 'D-102: store phone (+966512223344) synced from Salla store/info is the only phone anywhere in this page\'s context. Digits appear nowhere else in the seed.',
+    },
+    {
+        id: 807, category: 82, categoryName: 'Store Facts Sync', channel: 'dm',
+        message: 'عندكم واتساب أتواصل معكم عليه؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['512223344'],
+        },
+        notes: 'D-102: WhatsApp channel from Salla social.whatsapp — same distinctive number, reachable only via the store-facts path (channels.whatsapp is gated on authoritative provenance; store_sync passes the gate).',
+    },
+    {
+        id: 808, category: 82, categoryName: 'Store Facts Sync', channel: 'dm',
+        message: 'متى دوامكم يوم الجمعة؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['4', '٤', '16'],
+        },
+        notes: 'D-102 hours: Friday 16:00-22:00 comes from BOTH the KB prose and the synced store hours (deliberately consistent — a real store\'s two sources agree). Regression guard that the added BUSINESS_INFO hours do not contradict or degrade the KB answer.',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at

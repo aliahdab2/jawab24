@@ -12,6 +12,7 @@ const {
     mockCaptureError,
     mockRedisSet,
     mockRedisDel,
+    mockApplyStoreFacts,
 } = vi.hoisted(() => ({
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
@@ -21,6 +22,7 @@ const {
     mockCaptureError: vi.fn(),
     mockRedisSet: vi.fn(),
     mockRedisDel: vi.fn(),
+    mockApplyStoreFacts: vi.fn().mockResolvedValue({ pagesUpdated: 0 }),
 }));
 
 // --- vi.mock() calls ---
@@ -83,6 +85,14 @@ vi.mock('../../src/services/ecommerceCrypto', () => ({
     decryptOptional: (...args: unknown[]) => (args[0] && args[1] ? mockDecrypt(...args) : undefined),
 }));
 
+// storeFactsSync pulls in the real db module — mocked so this suite stays
+// drizzle-free. reportStoreFactDrop routes to mockCaptureError so the
+// mapper tests can assert drop-reporting.
+vi.mock('../../src/services/storeFactsSync', () => ({
+    applyStoreFactsToLinkedPages: (...args: unknown[]) => mockApplyStoreFacts(...args),
+    reportStoreFactDrop: (...args: unknown[]) => mockCaptureError(...args),
+}));
+
 vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: (...args: unknown[]) => mockCaptureError(...args),
 }));
@@ -114,6 +124,9 @@ import {
     getShipmentTracking,
     getProductById,
     composeSallaPhone,
+    mapSallaStoreFacts,
+    mapSallaWorkingHours,
+    fullSync,
 } from '../../src/services/salla';
 
 // --- Helpers ---
@@ -843,6 +856,14 @@ describe('Salla Service', () => {
                 storeDomain: 'mystore.salla.sa',
                 merchantId: '98765',
                 storeType: null,
+                // D-102: the raw facts subset rides along; absent fields stay undefined.
+                factsRaw: {
+                    mobile: undefined,
+                    phone: undefined,
+                    social: undefined,
+                    default_branch: undefined,
+                    domain: 'mystore.salla.sa',
+                },
             });
         });
 
@@ -1525,6 +1546,137 @@ describe('Salla Service', () => {
 
             mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: makeSallaProduct({ id: 5555 }) }) });
             expect(await getProductById('store-1', '1004')).toBeNull();
+        });
+    });
+
+    describe('mapSallaWorkingHours (D-102)', () => {
+        it('maps the documented payload shape (Arabic day labels, {from,to} windows)', () => {
+            const hours = mapSallaWorkingHours([
+                { name: 'السبت', times: [{ from: '09:00', to: '23:55' }] },
+                { name: 'الجمعة', times: [{ from: '16:00', to: '22:00' }] },
+            ]);
+            expect(hours).toEqual({ sat: ['09:00-23:55'], fri: ['16:00-22:00'] });
+        });
+
+        it('keeps multiple windows on one day', () => {
+            const hours = mapSallaWorkingHours([
+                { name: 'الأحد', times: [{ from: '09:00', to: '13:00' }, { from: '16:00', to: '22:00' }] },
+            ]);
+            expect(hours).toEqual({ sun: ['09:00-13:00', '16:00-22:00'] });
+        });
+
+        it('skips a day with no windows without asserting closed (absence is not a schedule)', () => {
+            const hours = mapSallaWorkingHours([
+                { name: 'السبت', times: [{ from: '10:00', to: '22:00' }] },
+                { name: 'الجمعة', times: [] },
+            ]);
+            expect(hours).toEqual({ sat: ['10:00-22:00'] });
+        });
+
+        it('drops an unparseable window and an unknown day label, reports both, keeps the rest', () => {
+            const hours = mapSallaWorkingHours([
+                { name: 'السبت', times: [{ from: '10:00', to: '22:00' }, { from: '99:00', to: 'xx' }] },
+                { name: 'يوم غريب', times: [{ from: '10:00', to: '22:00' }] },
+            ]);
+            expect(hours).toEqual({ sat: ['10:00-22:00'] });
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('returns undefined for a non-array value (and reports the drift) and for an empty result', () => {
+            expect(mapSallaWorkingHours({ not: 'an array' })).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalled();
+            expect(mapSallaWorkingHours(undefined)).toBeUndefined();
+            expect(mapSallaWorkingHours([])).toBeUndefined();
+        });
+    });
+
+    describe('mapSallaStoreFacts (D-102)', () => {
+        it('maps the documented store/info shapes: mobile+phone, social.whatsapp, branch hours, domain', () => {
+            const facts = mapSallaStoreFacts({
+                mobile: '+966111112121',
+                phone: '00201025557999',
+                social: { whatsapp: '+966501806978' },
+                default_branch: { working_hours: [{ name: 'السبت', times: [{ from: '09:00', to: '23:55' }] }] },
+                domain: 'https://salla.sa/dev-wofftr4xsra5xtlv',
+            });
+            expect(facts.phones).toEqual(['+966111112121', '00201025557999']);
+            expect(facts.channels).toEqual({ whatsapp: '+966501806978' });
+            expect(facts.hours).toEqual({ sat: ['09:00-23:55'] });
+            expect(facts.website).toBe('https://salla.sa/dev-wofftr4xsra5xtlv');
+        });
+
+        it('dedupes mobile == phone (same line listed twice)', () => {
+            const facts = mapSallaStoreFacts({ mobile: '+966512223344', phone: '+966512223344' });
+            expect(facts.phones).toEqual(['+966512223344']);
+        });
+
+        it('extracts the number from a wa.me link', () => {
+            const facts = mapSallaStoreFacts({ social: { whatsapp: 'https://wa.me/966501806978' } });
+            expect(facts.channels?.whatsapp).toContain('966501806978');
+        });
+
+        it('drops unreadable fields without throwing and reports them (never aborts a sync)', () => {
+            const facts = mapSallaStoreFacts({
+                mobile: { nested: 'object' },
+                phone: null,
+                social: 'not-an-object',
+                default_branch: 42,
+                domain: 'not a url at all',
+            });
+            expect(facts.phones).toBeUndefined();
+            expect(facts.channels).toBeUndefined();
+            expect(facts.hours).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('returns an empty fragment for an empty payload (no fabricated fields)', () => {
+            expect(mapSallaStoreFacts({})).toEqual({});
+        });
+    });
+
+    describe('fullSync — store facts ordering (D-102)', () => {
+        beforeEach(() => {
+            mockGetStoreById.mockResolvedValue(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+            }));
+            mockDecrypt.mockReturnValue('decrypted_access_token');
+        });
+
+        it('applies store facts to linked pages BEFORE syncing products (cache-retirement contract)', async () => {
+            // fetch #1: store/info
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: {
+                        name: 'متجر', email: 'm@x.sa', currency: 'SAR',
+                        domain: 'https://gulf-fashion.salla.sa', id: 1,
+                        mobile: '+966512223344',
+                        social: { whatsapp: '+966512223344' },
+                    },
+                }),
+            });
+            // fetch #2: products page (empty)
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: [],
+                    pagination: { currentPage: 1, totalPages: 1, perPage: 65, total: 0 },
+                }),
+            });
+
+            await fullSync('store-1');
+
+            expect(mockApplyStoreFacts).toHaveBeenCalledTimes(1);
+            const [storeId, facts] = mockApplyStoreFacts.mock.calls[0];
+            expect(storeId).toBe('store-1');
+            expect(facts.phones).toEqual(['+966512223344']);
+            expect(facts.channels).toEqual({ whatsapp: '+966512223344' });
+
+            // Ordering: facts land before the product replace that triggers
+            // invalidateCachesForStore (which re-ingests these same pages).
+            const factsOrder = mockApplyStoreFacts.mock.invocationCallOrder[0];
+            const productsOrder = mockReplaceProductsAndRebuildSummary.mock.invocationCallOrder[0];
+            expect(factsOrder).toBeLessThan(productsOrder);
         });
     });
 

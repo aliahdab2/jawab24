@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, formatBusinessInfoPrompt } from '../index';
+import { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, applyStoreSyncToMerchant, classifyForMigration, hasTrackedField, formatBusinessInfoPrompt } from '../index';
 import type { BusinessProfile, BusinessProfileContainer, MerchantProvenanceMap, StoredBusinessProfile } from '../index';
 
 // The "Damascus institute" fixture — the real prod failure case that
@@ -669,5 +669,135 @@ describe('applyKbExtractToMerchant', () => {
         expect(merchant.address).toBe(extracted.address);                       // KB wins over unconfirmed legacy
         expect(merchantProvenance.address).toEqual({ source: 'kb_extract', confirmedAt: null });
         expect(merchant.website).toBe('https://kept.example');                  // not in KB extract → preserved
+    });
+});
+
+describe('applyStoreSyncToMerchant (D-102)', () => {
+    // The synced facts a Salla store typically produces.
+    const storeFacts: BusinessProfile = {
+        phones: ['+966512223344'],
+        channels: { whatsapp: '+966512223344' },
+        hours: { sat: ['10:00-22:00'], fri: ['16:00-22:00'] },
+        website: 'https://gulf-fashion.salla.sa',
+    };
+
+    it('populates a fresh page and stamps store_sync/confirmedAt:null on every field', () => {
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant(undefined, undefined, storeFacts);
+        expect(merchant.phones).toEqual(['+966512223344']);
+        expect(merchant.channels).toEqual({ whatsapp: '+966512223344' });
+        expect(merchant.hours?.fri).toEqual(['16:00-22:00']);
+        expect(merchant.website).toBe('https://gulf-fashion.salla.sa');
+        expect(merchantProvenance.phones).toEqual({ source: 'store_sync', confirmedAt: null });
+        expect(merchantProvenance.channels).toEqual({ source: 'store_sync', confirmedAt: null });
+    });
+
+    it('never overwrites a CONFIRMED editor value (set)', () => {
+        const existingMerchant: BusinessProfile = { phones: ['0501112222'] };
+        const existingProvenance: MerchantProvenanceMap = {
+            phones: { source: 'editor', confirmedAt: '2026-08-01T10:00:00.000Z' },
+        };
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant(existingMerchant, existingProvenance, storeFacts);
+        expect(merchant.phones).toEqual(['0501112222']);
+        expect(merchantProvenance.phones?.source).toBe('editor');
+        // Non-editor fields still land.
+        expect(merchant.website).toBe('https://gulf-fashion.salla.sa');
+    });
+
+    it('never resurrects a field the merchant explicitly CLEARED (editor tombstone)', () => {
+        const existingProvenance: MerchantProvenanceMap = {
+            phones: { source: 'editor', confirmedAt: '2026-08-01T10:00:00.000Z' },
+        };
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant({}, existingProvenance, storeFacts);
+        expect(merchant.phones).toBeUndefined();
+        expect(merchantProvenance.phones?.source).toBe('editor');
+    });
+
+    it('never overwrites a kb_extract value (KB prose outranks store fields, D-102)', () => {
+        const existingMerchant: BusinessProfile = { hours: { sat: ['09:00-21:00'] } };
+        const existingProvenance: MerchantProvenanceMap = {
+            hours: { source: 'kb_extract', confirmedAt: null },
+        };
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant(existingMerchant, existingProvenance, storeFacts);
+        expect(merchant.hours).toEqual({ sat: ['09:00-21:00'] });
+        expect(merchantProvenance.hours?.source).toBe('kb_extract');
+    });
+
+    it('overwrites an fb_sync value (store_sync > fb_sync)', () => {
+        const existingMerchant: BusinessProfile = { phones: ['+971556087128'] };
+        const existingProvenance: MerchantProvenanceMap = {
+            phones: { source: 'fb_sync', confirmedAt: null },
+        };
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant(existingMerchant, existingProvenance, storeFacts);
+        expect(merchant.phones).toEqual(['+966512223344']);
+        expect(merchantProvenance.phones).toEqual({ source: 'store_sync', confirmedAt: null });
+    });
+
+    it('refreshes its own previous value on re-sync', () => {
+        const existingMerchant: BusinessProfile = { website: 'https://old.salla.sa' };
+        const existingProvenance: MerchantProvenanceMap = {
+            website: { source: 'store_sync', confirmedAt: null },
+        };
+        const { merchant } = applyStoreSyncToMerchant(existingMerchant, existingProvenance, storeFacts);
+        expect(merchant.website).toBe('https://gulf-fashion.salla.sa');
+    });
+
+    it('leaves fields alone when the store stops reporting them (absence is not removal)', () => {
+        const existingMerchant: BusinessProfile = { hours: { sat: ['10:00-22:00'] } };
+        const existingProvenance: MerchantProvenanceMap = {
+            hours: { source: 'store_sync', confirmedAt: null },
+        };
+        const { merchant } = applyStoreSyncToMerchant(existingMerchant, existingProvenance, { phones: ['+966512223344'] });
+        expect(merchant.hours).toEqual({ sat: ['10:00-22:00'] });
+    });
+
+    it('overwrites an UNCONFIRMED legacy editor entry (normalizeLegacyProvenance mislabel)', () => {
+        // No provenance → normalizeLegacyProvenance stamps editor/confirmedAt:null.
+        // Same doctrine as applyKbExtractToMerchant: that state is never a real
+        // save, so fresh store facts must not be shadowed by it.
+        const existingMerchant: BusinessProfile = { phones: ['0500000000'], about: 'kept prose' };
+        const { merchant, merchantProvenance } = applyStoreSyncToMerchant(existingMerchant, undefined, storeFacts);
+        expect(merchant.phones).toEqual(['+966512223344']);
+        expect(merchantProvenance.phones).toEqual({ source: 'store_sync', confirmedAt: null });
+        expect(merchant.about).toBe('kept prose'); // not in store facts → preserved
+    });
+
+    it('does not mutate its inputs (purity)', () => {
+        const existingMerchant: BusinessProfile = { phones: ['0501112222'] };
+        const existingProvenance: MerchantProvenanceMap = {
+            phones: { source: 'fb_sync', confirmedAt: null },
+        };
+        const merchantSnapshot = JSON.parse(JSON.stringify(existingMerchant));
+        const provenanceSnapshot = JSON.parse(JSON.stringify(existingProvenance));
+        applyStoreSyncToMerchant(existingMerchant, existingProvenance, storeFacts);
+        expect(existingMerchant).toEqual(merchantSnapshot);
+        expect(existingProvenance).toEqual(provenanceSnapshot);
+    });
+});
+
+describe('fb_sync vs store_sync precedence (D-102)', () => {
+    it('a later FB sync never clobbers a store_sync value', () => {
+        const existingMerchant: BusinessProfile = { phones: ['+966512223344'] };
+        const existingProvenance: MerchantProvenanceMap = {
+            phones: { source: 'store_sync', confirmedAt: null },
+        };
+        const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+            existingMerchant, existingProvenance, damascusFbSuggestions,
+        );
+        expect(merchant.phones).toEqual(['+966512223344']);
+        expect(merchantProvenance.phones?.source).toBe('store_sync');
+        // A field store_sync does not own still refreshes from FB.
+        expect(merchant.address).toBe(damascusFbSuggestions.address);
+    });
+
+    it('a later KB extraction DOES override a store_sync value (kb_extract > store_sync)', () => {
+        const existingMerchant: BusinessProfile = { hours: { sat: ['10:00-22:00'] } };
+        const existingProvenance: MerchantProvenanceMap = {
+            hours: { source: 'store_sync', confirmedAt: null },
+        };
+        const { merchant, merchantProvenance } = applyKbExtractToMerchant(
+            existingMerchant, existingProvenance, { hours: { sat: ['09:00-21:00'] } },
+        );
+        expect(merchant.hours).toEqual({ sat: ['09:00-21:00'] });
+        expect(merchantProvenance.hours?.source).toBe('kb_extract');
     });
 });

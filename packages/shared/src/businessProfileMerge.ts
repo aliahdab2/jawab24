@@ -1,7 +1,7 @@
 import type { BusinessProfile, BusinessProfileContainer, StoredBusinessProfile } from './index';
 import { unwrapBusinessProfile } from './index';
 
-export type ProvenanceSource = 'fb_sync' | 'editor' | 'kb_extract';
+export type ProvenanceSource = 'fb_sync' | 'editor' | 'kb_extract' | 'store_sync';
 
 export interface FieldProvenance {
     /**
@@ -11,8 +11,14 @@ export interface FieldProvenance {
      *   - 'editor'     — merchant typed or cleared this field via the editor.
      *     Future FB syncs / KB extractions MUST NOT overwrite.
      *   - 'kb_extract' — auto-extracted from the merchant's free-text KB
-     *     (operationalFactsExtractor). Lowest authority: a later FB sync or a
-     *     merchant edit overrides it; a re-extraction may refresh it.
+     *     (operationalFactsExtractor). A later merchant edit overrides it;
+     *     a re-extraction may refresh it.
+     *   - 'store_sync' — synced from the merchant's connected e-commerce
+     *     store settings (Salla/Zid store info, D-102). Merchant-authored in
+     *     their store admin, so authoritative — but below kb_extract (KB
+     *     prose is written FOR the AI deliberately; store fields can be
+     *     platform defaults) and above fb_sync. Refreshed by every store
+     *     full sync.
      */
     source: ProvenanceSource;
     /**
@@ -129,13 +135,14 @@ export function applyFbSyncToMerchant(
         if (fbValue === undefined) continue;
 
         // Rule 2: merchant-authored values are never overwritten by Facebook —
-        // editor-owned (set or cleared) OR extracted from the merchant's own KB
-        // (kb_extract). Decision D-008: editor > kb_extract > fb_sync, "Facebook
-        // never overrides." Skipping kb_extract keeps the KB-derived operational
-        // facts (hours/phone/address) the block asserts from being clobbered back
-        // to stale FB values on the next sync.
+        // editor-owned (set or cleared), extracted from the merchant's own KB
+        // (kb_extract), OR synced from their e-commerce store (store_sync).
+        // Decisions D-008 + D-102: editor > kb_extract > store_sync > fb_sync,
+        // "Facebook never overrides." Skipping kb_extract/store_sync keeps the
+        // merchant-derived operational facts (hours/phone/address) the block
+        // asserts from being clobbered back to stale FB values on the next sync.
         const src = provenance[field]?.source;
-        if (src === 'editor' || src === 'kb_extract') continue;
+        if (src === 'editor' || src === 'kb_extract' || src === 'store_sync') continue;
 
         // Rule 3: never seen OR previously fb_sync. Populate/refresh.
         (merchant as Record<string, unknown>)[field] = fbValue;
@@ -294,10 +301,68 @@ export function applyKbExtractToMerchant(
         const entry = provenance[field];
         if (entry?.source === 'editor' && entry.confirmedAt != null) continue;
 
-        // Rule 3: never-seen, previously kb_extract/fb_sync, or unconfirmed
-        // editor → populate/refresh from the KB.
+        // Rule 3: never-seen, previously kb_extract/fb_sync/store_sync, or
+        // unconfirmed editor → populate/refresh from the KB.
         (merchant as Record<string, unknown>)[field] = value;
         provenance[field] = { source: 'kb_extract', confirmedAt: null };
+    }
+
+    return { merchant, merchantProvenance: provenance };
+}
+
+/**
+ * Apply store facts synced from the merchant's connected e-commerce store
+ * (Salla/Zid store info — phone, WhatsApp, hours, website) into the
+ * `merchant` half. Pure function — does not mutate inputs. Decision D-102.
+ *
+ * Store settings are typed by the merchant into their own store admin — the
+ * same trust class as kb_extract (merchant-authored), unlike Meta-generated
+ * fb_sync. Precedence: editor(confirmed) > kb_extract > store_sync > fb_sync.
+ * Per-field decision (in order):
+ *   1. Store sync provided no value for this field          → leave alone.
+ *      (Never removes fields the platform stops reporting — same tradeoff
+ *      as applyFbSyncToMerchant: tolerate transient API gaps over chasing
+ *      removals; the editor is the merchant's escape hatch.)
+ *   2. provenance is a CONFIRMED editor edit, OR 'kb_extract' → leave alone.
+ *      KB prose outranks store fields: the KB is written FOR the AI
+ *      deliberately, while store fields (default-branch hours especially)
+ *      can be platform defaults the merchant never touched.
+ *   3. Otherwise — never-seen, previously 'store_sync'/'fb_sync', or an
+ *      UNCONFIRMED 'editor' entry (confirmedAt: null) → populate/refresh,
+ *      set provenance {source: 'store_sync', confirmedAt: null}.
+ *
+ * Unconfirmed editor is overwritable for the same reason as in
+ * applyKbExtractToMerchant: a real save always stamps confirmedAt, so that
+ * state is only the normalizeLegacyProvenance auto-stamp over possibly-FB
+ * data — fresh store facts must not be permanently shadowed by it.
+ */
+export function applyStoreSyncToMerchant(
+    existingMerchant: BusinessProfile | undefined,
+    existingProvenance: MerchantProvenanceMap | undefined,
+    storeFacts: BusinessProfile,
+): { merchant: BusinessProfile; merchantProvenance: MerchantProvenanceMap } {
+    const startingMerchant: BusinessProfile = { ...(existingMerchant ?? {}) };
+    const provenance = normalizeLegacyProvenance(
+        startingMerchant,
+        { ...(existingProvenance ?? {}) },
+    );
+    const merchant = startingMerchant;
+
+    for (const field of TRACKED_FIELDS) {
+        const value = storeFacts[field];
+        // Rule 1: store sync has nothing for this field.
+        if (value === undefined) continue;
+
+        // Rule 2: confirmed merchant edits and KB-derived facts outrank
+        // store settings.
+        const entry = provenance[field];
+        if (entry?.source === 'kb_extract') continue;
+        if (entry?.source === 'editor' && entry.confirmedAt != null) continue;
+
+        // Rule 3: never-seen, previously store_sync/fb_sync, or unconfirmed
+        // editor → populate/refresh from the store.
+        (merchant as Record<string, unknown>)[field] = value;
+        provenance[field] = { source: 'store_sync', confirmedAt: null };
     }
 
     return { merchant, merchantProvenance: provenance };

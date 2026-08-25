@@ -79,7 +79,9 @@ export function isFieldAuthoritative(
     if (!entry) return true;                       // legacy / no provenance → keep (back-compat)
     if (entry.source === 'fb_sync') return false;  // unconfirmed FB sync → fallback only
     if (entry.source === 'editor') return entry.confirmedAt != null; // real edit sets confirmedAt
-    return true;                                   // kb_extract → KB-derived, agrees with the KB
+    // kb_extract (KB-derived, agrees with the KB) and store_sync (merchant-
+    // authored in their own store admin, D-102) are both authoritative.
+    return true;
 }
 
 /**

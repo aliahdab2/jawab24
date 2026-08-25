@@ -30,6 +30,17 @@ import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
 import { ecommerceApiGet } from '../utils/httpRetry';
 import {
+    canonicalizeHoursEntry,
+    dayKeyFromLabel,
+    extractPhoneFromText,
+    normalizeHttpUrl,
+    normalizePhoneEntries,
+    phoneEntryNumber,
+    samePhoneNumber,
+    type BusinessProfile,
+} from '@jawab24/shared';
+import { applyStoreFactsToLinkedPages, reportStoreFactDrop } from './storeFactsSync';
+import {
     refreshAccessToken as sharedRefreshAccessToken,
     ensureValidToken as sharedEnsureValidToken,
     resolveStoreAccessToken,
@@ -379,6 +390,13 @@ export async function fetchStoreInfo(accessToken: string) {
             id: number;
             /** Store environment — `demo` | `development` | `live` (docs.salla.dev/5394261e0). */
             type?: string;
+            /** Store contact numbers — international strings ('+9665…' / '0020…'). */
+            mobile?: unknown;
+            phone?: unknown;
+            /** Social links; `whatsapp` is a bare number or a wa.me link. */
+            social?: unknown;
+            /** Default branch — carries `working_hours` (D-102 store facts). */
+            default_branch?: unknown;
         };
     }>('https://api.salla.dev/admin/v2/store/info', accessToken);
 
@@ -392,7 +410,118 @@ export async function fetchStoreInfo(accessToken: string) {
         storeDomain: normalizeStoreDomain(s.domain),
         merchantId: String(s.id),
         storeType: s.type ?? null,
+        /** Raw store-facts subset (D-102) — mapped by `mapSallaStoreFacts`. */
+        factsRaw: {
+            mobile: s.mobile,
+            phone: s.phone,
+            social: s.social,
+            default_branch: s.default_branch,
+            domain: s.domain,
+        } satisfies SallaStoreFactsRaw,
     };
+}
+
+// --- Store Facts (D-102) ---
+
+/** The `store/info` fields consumed by the store-facts sync. Every field is
+ *  `unknown` on purpose: shapes are read defensively so a payload drift can
+ *  only drop a field (reported), never abort the sync. */
+export interface SallaStoreFactsRaw {
+    mobile?: unknown;
+    phone?: unknown;
+    social?: unknown;
+    default_branch?: unknown;
+    domain?: unknown;
+}
+
+/**
+ * Map Salla's default-branch working hours to the canonical BusinessProfile
+ * shape. Documented payload (docs.salla.dev/5394261e0):
+ *   working_hours: [{ name: "السبت", times: [{ from: "09:00", to: "23:55" }] }]
+ * Day names are rendered labels (Arabic in practice) — resolved via
+ * `dayKeyFromLabel`. Unparseable windows/days are dropped and reported,
+ * never thrown; days Salla omits are NOT written as closed (absence is not
+ * a schedule). Returns undefined when nothing parseable remains.
+ */
+export function mapSallaWorkingHours(raw: unknown): Record<string, string[]> | undefined {
+    if (!Array.isArray(raw)) {
+        if (raw !== undefined && raw !== null) reportStoreFactDrop('salla', 'working_hours', raw);
+        return undefined;
+    }
+    const hours: Record<string, string[]> = {};
+    for (const day of raw) {
+        const d = day as { name?: unknown; times?: unknown };
+        const key = typeof d?.name === 'string' ? dayKeyFromLabel(d.name) : undefined;
+        if (!key) {
+            reportStoreFactDrop('salla', 'working_hours.day', d?.name);
+            continue;
+        }
+        if (!Array.isArray(d.times)) continue; // no windows listed → skip, don't assert closed
+        const windows: string[] = [];
+        for (const t of d.times) {
+            const w = t as { from?: unknown; to?: unknown };
+            if (typeof w?.from !== 'string' || typeof w?.to !== 'string') {
+                reportStoreFactDrop('salla', 'working_hours.window', t);
+                continue;
+            }
+            const parsed = canonicalizeHoursEntry(`${w.from}-${w.to}`);
+            if (parsed.ok) windows.push(parsed.value);
+            else reportStoreFactDrop('salla', 'working_hours.window', `${w.from}-${w.to}`);
+        }
+        if (windows.length > 0) hours[key] = windows;
+    }
+    return Object.keys(hours).length > 0 ? hours : undefined;
+}
+
+/**
+ * Map the raw `store/info` facts subset to a BusinessProfile fragment
+ * (phones, WhatsApp channel, hours, website — the D-102 phase-1 scope).
+ * Pure and throw-free: any unreadable field is dropped + reported so the
+ * surrounding fullSync never aborts over a cosmetic field.
+ */
+export function mapSallaStoreFacts(raw: SallaStoreFactsRaw): BusinessProfile {
+    const facts: BusinessProfile = {};
+
+    // Phones: `mobile` + `phone`, deduped (same line often listed twice).
+    const candidates = [raw.mobile, raw.phone].filter((v): v is string | number => {
+        if (v === undefined || v === null || v === '') return false;
+        if (typeof v !== 'string' && typeof v !== 'number') {
+            reportStoreFactDrop('salla', 'phone', v);
+            return false;
+        }
+        return true;
+    }).map(String);
+    const phones = normalizePhoneEntries(candidates).filter((entry, i, arr) =>
+        arr.findIndex(e => samePhoneNumber(phoneEntryNumber(e), phoneEntryNumber(entry))) === i);
+    if (phones.length > 0) facts.phones = phones;
+
+    // WhatsApp: `social.whatsapp` — a bare number ('+9665…') or a wa.me link.
+    const social = (raw.social && typeof raw.social === 'object')
+        ? raw.social as { whatsapp?: unknown }
+        : undefined;
+    if (raw.social !== undefined && raw.social !== null && !social) {
+        reportStoreFactDrop('salla', 'social', raw.social);
+    }
+    if (typeof social?.whatsapp === 'string' && social.whatsapp.trim() !== '') {
+        const wa = extractPhoneFromText(social.whatsapp);
+        if (wa) facts.channels = { whatsapp: wa };
+        else reportStoreFactDrop('salla', 'social.whatsapp', social.whatsapp);
+    }
+
+    // Hours: default branch working hours.
+    const branch = (raw.default_branch && typeof raw.default_branch === 'object')
+        ? raw.default_branch as { working_hours?: unknown }
+        : undefined;
+    const hours = mapSallaWorkingHours(branch?.working_hours);
+    if (hours) facts.hours = hours;
+
+    // Website: the storefront URL (full `domain`, not the canonicalised host).
+    if (typeof raw.domain === 'string') {
+        const url = normalizeHttpUrl(raw.domain);
+        if (url) facts.website = url;
+    }
+
+    return facts;
 }
 
 // --- Products (REST, page-based) ---
@@ -558,7 +687,16 @@ export async function fullSync(storeId: string) {
         storeName: storeInfo.storeName,
         storeEmail: storeInfo.storeEmail,
         storeCurrency: storeInfo.storeCurrency,
-    }, { merchantId: storeInfo.merchantId });
+    }, {
+        merchantId: storeInfo.merchantId,
+        // Raw snapshot of the consumed facts subset — audit trail for D-102.
+        storeFacts: { ...storeInfo.factsRaw, fetchedAt: new Date().toISOString() },
+    });
+
+    // Store facts → linked pages' business_profile (D-102). MUST run before
+    // syncProducts: the product sync's invalidateCachesForStore tail is what
+    // retires the semantic cache / re-ingests RAG for these same pages.
+    await applyStoreFactsToLinkedPages(storeId, mapSallaStoreFacts(storeInfo.factsRaw));
 
     // Sync products
     const productResult = await syncProducts(storeId);

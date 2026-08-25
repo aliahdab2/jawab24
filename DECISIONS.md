@@ -2818,3 +2818,47 @@ customer receives their order, `find_order_by_phone:success`. #805 (same phone, 
 nothing about the order reaches the reply, `find_order_by_phone:order_not_found`. Unit gate
 in `ecommerceActions.test.ts` (9 cases); mutation-checked both ways — trusting the platform
 search fails 3, making the name optional fails 1.
+
+## D-102 · Store contact facts (Salla/Zid) sync into the page Business Profile as a new provenance source `store_sync` (2026-08-25)
+
+**Context.** Study 2026-08-25: Salla `store/info` and Zid `account/profile` return the store's
+phone, WhatsApp, working hours and site in calls we already make, and everything beyond six
+identity scalars was discarded. Customers ask for exactly these facts in DMs (30d keyword
+screen, social-only proxy population: delivery ~3.3%, phone 1.9%, hours 0.7%) and 41% of pages
+with a KB hand-type a phone. Zero real e-commerce merchants exist yet — this is pre-launch
+positioning for the Salla/Zid app-store launches, not a live-bleed fix. Narrowly supersedes
+the D-097 "Out of scope, on record" line for **contact** (policies remain out: Salla/Zid
+expose no policy-pages API — the merchant authors those in the `/business` editor).
+
+**Ruling.**
+1. **No parallel channel.** Synced facts flow into the existing per-page Business Profile
+   (`pages.business_profile`) as provenance source **`store_sync`**, rendered by the existing
+   BUSINESS_INFO block. No prompt scaffolding change, no PROMPT_VERSION bump — pages without
+   store facts keep byte-identical prompts, so no cache retirement for social merchants.
+2. **`store_sync` is authoritative** (unlike `fb_sync`): the merchant typed these values into
+   their own store admin — same trust class as `kb_extract`. Writing them as `suggestions`
+   was rejected: unconfirmed values contribute nothing to any prompt, making the feature a
+   no-op.
+3. **Precedence `editor(confirmed) > kb_extract > store_sync > fb_sync`.** KB prose outranks
+   store fields (it is written FOR the AI; store fields can be platform defaults);
+   store fields outrank Facebook's (refreshed 6-hourly vs the rotting fb_sync precedent —
+   MES's stale UAE phone). Unconfirmed-editor entries (the `normalizeLegacyProvenance`
+   mislabel) are overwritable, mirroring `applyKbExtractToMerchant`.
+4. **Invalidation by ordering, not by bump**: `applyStoreFactsToLinkedPages` writes
+   `business_profile` only and runs inside each platform `fullSync` **before**
+   `syncProducts`, whose `invalidateCachesForStore` tail retires the semantic cache and
+   re-ingests RAG for the same linked pages (store-linked pages bypass the reply caches
+   anyway via the tool loop). Mutation-checked ordering test in `salla.test.ts`.
+5. **Phase-1 scope**: Salla phones + WhatsApp + branch hours + storefront URL; Zid phones +
+   website. Skipped deliberately: store description (marketing prose), non-WhatsApp social
+   links (no BusinessProfile slot), Salla COD→policies, Shopify shop phone, `store_location`
+   (coordinates). Raw consumed subset snapshotted at `platformData.storeFacts`.
+6. **Days a platform omits are never written as closed** — absence is not a schedule (the
+   standing never-infer-from-NULL rule applied to hours).
+
+**Known, accepted.** Read-modify-write race across the three profile writers (fb_sync,
+kb_extract, store_sync) — pre-existing class, low frequency (6h staggered), not fixed here.
+The readiness gate honestly widens: a store-synced phone now satisfies `business_info_block`.
+A merchant's confirmed edit tombstones a field against future store-side changes (same
+semantics as fb_sync). Eval Cat 82 (#806-808) pins the path end-to-end on the demo Salla
+store, whose fashion-page KB deliberately carries no contact lines.
