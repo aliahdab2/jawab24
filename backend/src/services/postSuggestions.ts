@@ -173,11 +173,14 @@ export function planAllowsPostSuggestions(slug: string | null | undefined): bool
  * not a check, and the thing behind this one costs real money per press.
  */
 export async function isPostSuggestionsEntitled(workspaceId: string): Promise<boolean> {
-    if (!config.postSuggestions?.enabled) return false;
+    // The sync half owns the config logic — dark feature, allowlist, GA flag —
+    // so the two gates cannot drift on what those mean.
+    if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return false;
     // Named workspaces (the pilot) skip the plan entirely — the owner invited
     // them by hand, and a tester must not lose the feature the day GA lands.
     if (config.postSuggestions.workspaceIds?.includes(workspaceId)) return true;
-    if (config.postSuggestions.planGateEnabled !== true) return false;
+    // Reaching here means the config admitted us via the GA flag, not the
+    // allowlist — so the plan must answer.
 
     try {
         const [ws] = await db.select({ ownerId: workspaces.ownerId })
@@ -1240,7 +1243,12 @@ class PostSuggestionsService {
      * consumes a normal cap slot.
      */
     async requestSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
-        if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return { ok: false, reason: 'gated' };
+        // The FULL entitlement check, not the sync config gate: this is the one
+        // path that spends money, and the sync gate answers `true` for EVERY
+        // workspace once `planGateEnabled` is on — it carries no plan check.
+        // The allowlist bypass inside keeps pilot testers and the seed sweep
+        // (allowlisted workspaces only) working unchanged.
+        if (!await isPostSuggestionsEntitled(workspaceId)) return { ok: false, reason: 'gated' };
 
         // ONE day for the whole call: cap key, DB count, supersede, and insert
         // all cut the same boundary even when the call straddles UTC midnight.

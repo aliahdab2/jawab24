@@ -99,7 +99,8 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../lib/postSuggestionQueue', () => ({ enqueuePostSuggestion: mockEnqueue }));
 
 import { makeDbRouter, type DbRouter } from './helpers/drizzleQueryMock';
-import { pages, postSuggestions, catalogItems, factCollections } from '../db/schema';
+import { pages, postSuggestions, catalogItems, factCollections, workspaces } from '../db/schema';
+import { subscriptionsService } from '../services/subscriptions';
 import { makeTrackedOpenAI } from '../services/openaiClient';
 import { getStoreContextForAI } from '../services/ecommerce';
 import { captureError } from '../utils/sentryHelpers';
@@ -422,6 +423,49 @@ describe('plan entitlement — "Business and above" (owner ruling 2026-08-09)', 
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
         expect(r).toEqual({ ok: false, reason: 'gated' });
         expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+    });
+});
+
+describe('requestSuggestion — the PAID route honours the plan gate at GA', () => {
+    /**
+     * ⭐ The review finding this pins: generate is the ONE route that spends
+     * money, and it used to gate on the sync config check — which answers
+     * `true` for EVERY workspace once `planGateEnabled` is on, because the
+     * plan lookup lives only in `isPostSuggestionsEntitled`. The four cheap
+     * routes had the plan check; the paid one did not, so at GA a Starter
+     * workspace whose card was hidden (GETs 404) could still POST the endpoint
+     * directly and spend paid text + image calls.
+     */
+    it('⭐ refuses a Starter workspace at GA — before any cap read or paid call', async () => {
+        mockConfig.postSuggestions.workspaceIds = ['someone-else'];
+        mockConfig.postSuggestions.planGateEnabled = true;
+        router.queue({ op: 'select', table: workspaces, fields: ['ownerId'], rows: [{ ownerId: 'owner-1' }] });
+        const sub = vi.spyOn(subscriptionsService, 'getUserSubscription')
+            .mockResolvedValue({ status: 'active', plan: { slug: 'starter' } } as never);
+
+        const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
+
+        expect(r).toEqual({ ok: false, reason: 'gated' });
+        expect(mockCheckDailyCap).not.toHaveBeenCalled();
+        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+        sub.mockRestore();
+    });
+
+    it('admits an entitled Business workspace at GA (the gate passes; ownership runs next)', async () => {
+        mockConfig.postSuggestions.workspaceIds = ['someone-else'];
+        mockConfig.postSuggestions.planGateEnabled = true;
+        router.queue({ op: 'select', table: workspaces, fields: ['ownerId'], rows: [{ ownerId: 'owner-1' }] });
+        const sub = vi.spyOn(subscriptionsService, 'getUserSubscription')
+            .mockResolvedValue({ status: 'active', plan: { slug: 'business' } } as never);
+        // Page not in the workspace — failing on OWNERSHIP proves the call got
+        // PAST the entitlement gate without running a full generation.
+        queueOwnedPage([]);
+
+        const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
+
+        expect(r).toEqual({ ok: false, reason: 'page_not_found' });
+        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+        sub.mockRestore();
     });
 });
 
