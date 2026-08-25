@@ -110,6 +110,30 @@ function buildLabelMap(names: readonly string[]): Record<string, string> {
 export const DAY_LABELS_EN: Record<string, string> = buildLabelMap(EN_NAMES);
 export const DAY_LABELS_AR: Record<string, string> = buildLabelMap(AR_NAMES);
 
+/**
+ * Reverse of the label maps above: a rendered day name (Arabic or English,
+ * any case, e.g. Salla's working-hours `name: "السبت"`) OR an existing day
+ * key → the canonical short key. Built from the SAME name arrays so a label
+ * change cannot drift. `الاثنين` (bare alif) is accepted alongside the
+ * canonical `الإثنين` — both spellings are standard.
+ */
+const LABEL_TO_SHORT_KEY: Record<string, typeof SHORT_DAY_KEYS[number]> = (() => {
+    const out: Record<string, typeof SHORT_DAY_KEYS[number]> = {};
+    SHORT_DAY_KEYS.forEach((k, i) => {
+        out[k] = k;
+        out[LONG_DAY_KEYS[i]] = k;
+        out[EN_NAMES[i].toLowerCase()] = k;
+        out[AR_NAMES[i]] = k;
+        // Hamza-tolerant Arabic variant (إ → ا) — covers «الاثنين» etc.
+        out[AR_NAMES[i].replace(/[أإآ]/g, 'ا')] = k;
+    });
+    return out;
+})();
+
+export function dayKeyFromLabel(label: string): typeof SHORT_DAY_KEYS[number] | undefined {
+    return LABEL_TO_SHORT_KEY[label.trim().toLowerCase().replace(/[أإآ]/g, 'ا')];
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────
 
 /**

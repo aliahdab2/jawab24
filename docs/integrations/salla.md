@@ -189,6 +189,37 @@ Salla access tokens expire after 14 days. Refresh tokens are **single-use** (usi
 - Generates text summary (`productSummary`) for AI context
 - Retries on 429/5xx with exponential backoff (up to 3 retries)
 
+### Store Facts Sync (D-102)
+
+Every `fullSync` (install enqueue, 6h cron, manual sync button) also reads the
+store's contact facts from the same `GET /admin/v2/store/info` response —
+`mobile` + `phone`, `social.whatsapp` (bare number or wa.me link),
+`default_branch.working_hours` (Arabic day labels, `{from,to}` windows), and
+the storefront `domain` as `website` — and applies them to every linked page's
+`pages.business_profile` as provenance source **`store_sync`**:
+
+- Mapping: `mapSallaStoreFacts` / `mapSallaWorkingHours` (`services/salla.ts`) —
+  pure, throw-free; an unreadable field is dropped + reported to Sentry
+  (fingerprint `store-facts-field-drop`), never aborts the sync. Days Salla
+  omits are NOT written as closed (absence is not a schedule).
+- Writer: `services/storeFactsSync.ts:applyStoreFactsToLinkedPages` — merges via
+  `applyStoreSyncToMerchant` (`@jawab24/shared`). Precedence
+  `editor(confirmed) > kb_extract > store_sync > fb_sync`: a merchant's
+  confirmed edit or KB-derived fact is never overwritten; stale FB values are.
+- Ordering contract: the facts write runs **before** `syncProducts`, whose
+  `invalidateCachesForStore` tail retires the semantic cache and re-ingests RAG
+  for the same linked pages.
+- The raw consumed subset is snapshotted at `platformData.storeFacts`
+  (audit trail; merged, never replacing other platformData keys).
+- Reaches the AI through the existing BUSINESS_INFO block
+  (`formatBusinessInfoPrompt`) — `store_sync` is authoritative, unlike
+  unconfirmed `fb_sync`. No PROMPT_VERSION change: pages without store facts
+  keep byte-identical prompts.
+
+Policies (return/shipping) are NOT part of this sync — Salla's Merchant API
+exposes no policy-pages endpoint; the merchant authors them in the `/business`
+facts editor (`policies.{shipping,returns,payment}`).
+
 ### KB Enrichment
 
 When a comment/message arrives for a page linked to a Salla store:

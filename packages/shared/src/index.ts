@@ -2283,10 +2283,10 @@ export { formatBusinessInfoPrompt, countBusinessInfoFacts, whatsappNumbers, busi
 // --- Merchant contact standard: number + optional free-text description ---
 export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
 export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';
-export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
+export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, applyStoreSyncToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
-export { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, dayOrderIndex, SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN, DAY_LABELS_AR } from './businessHours';
+export { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, dayOrderIndex, dayKeyFromLabel, SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN, DAY_LABELS_AR } from './businessHours';
 export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';
 // --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
 export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from './activation';

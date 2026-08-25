@@ -177,12 +177,15 @@ export const DEMO_PAGES = [
     {
         facebookPageId: 'demo_page_fashion',
         name: 'أزياء الخليج',
+        // NOTE (D-102): deliberately NO phone/WhatsApp lines in this KB — the
+        // fashion page's contact channels come from the linked Salla store's
+        // synced facts (DEMO_SALLA_STORE_INFO → store_sync provenance). This is
+        // the realistic Salla merchant (contact lives in the store, not the KB)
+        // AND what lets the eval prove the store-facts path: with the fact in
+        // the KB too, a passing reply wouldn't show which source answered.
         suggestedKnowledgeBase: `👗 أزياء الخليج - أناقتك تبدأ من هنا
 
 📍 الموقع: جدة، حي الحمراء، مول رد سي
-
-📞 الهاتف: 0509876543
-📱 واتساب: 0509876543
 
 ⏰ ساعات العمل:
 السبت - الخميس: 10 صباحاً - 10 مساءً
@@ -2049,6 +2052,38 @@ const DEMO_SALLA_STORE = {
 };
 
 /**
+ * Raw Salla `store/info` facts subset (D-102), in the DOCUMENTED payload
+ * shape (docs.salla.dev/5394261e0: international `mobile`/`phone` strings,
+ * `social.whatsapp` bare number, `default_branch.working_hours` with Arabic
+ * day labels and {from,to} windows). Seeded through the PRODUCTION
+ * `mapSallaStoreFacts` + `applyStoreFactsToLinkedPages` so the eval exercises
+ * the real mapper/merger/gate (Rule 19.2), never a hand-built profile.
+ *
+ * The phone is distinctive on purpose (appears nowhere else in the seed) and
+ * the fashion KB deliberately carries NO contact lines — an eval reply
+ * containing these digits proves the store-facts path answered. Hours match
+ * the KB's prose hours (Sat–Thu 10–22, Fri 16–22): same facts, two sources,
+ * no contradiction for the model.
+ */
+const DEMO_SALLA_STORE_INFO = {
+    mobile: '+966512223344',
+    phone: '+966512223344',
+    social: { whatsapp: '+966512223344' },
+    default_branch: {
+        working_hours: [
+            { name: 'السبت', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الأحد', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الإثنين', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الثلاثاء', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الأربعاء', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الخميس', times: [{ from: '10:00', to: '22:00' }] },
+            { name: 'الجمعة', times: [{ from: '16:00', to: '22:00' }] },
+        ],
+    },
+    domain: 'https://gulf-fashion.salla.sa',
+};
+
+/**
  * Salla fixtures are authored with a `handle` for readability, then shaped like
  * a REAL synced Salla row below: Salla exposes no slug, so the row carries
  * `handle: null` and the platform's canonical `productUrl` (`urls.customer`).
@@ -2581,7 +2616,7 @@ export async function seedDemoData(
         if (electronicsRefresh) await seedDemoStore(userId, workspaceId, electronicsRefresh.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
 
         const fashionRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_fashion');
-        if (fashionRefresh) await seedDemoStore(userId, workspaceId, fashionRefresh.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
+        if (fashionRefresh) await seedDemoStore(userId, workspaceId, fashionRefresh.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger, DEMO_SALLA_STORE_INFO);
 
         return;
     }
@@ -2767,7 +2802,7 @@ export async function seedDemoData(
     if (electronicsPage) await seedDemoStore(userId, workspaceId, electronicsPage.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
 
     const fashionPage = createdPages.find(p => p.facebookPageId === 'demo_page_fashion');
-    if (fashionPage) await seedDemoStore(userId, workspaceId, fashionPage.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
+    if (fashionPage) await seedDemoStore(userId, workspaceId, fashionPage.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger, DEMO_SALLA_STORE_INFO);
 
     // Create demo notifications (varied types, timestamps, and read states)
     await refreshDemoNotifications(userId, logger);
@@ -2791,6 +2826,10 @@ async function seedDemoStore(
     storeConfig: typeof DEMO_SHOPIFY_STORE | typeof DEMO_SALLA_STORE,
     products: typeof DEMO_SHOPIFY_PRODUCTS | typeof DEMO_SALLA_PRODUCTS,
     logger: Logger,
+    /** Raw platform store-info facts (D-102) — applied through the PRODUCTION
+     *  mapper + writer after the page↔store link, so evals exercise the real
+     *  store-facts path. Currently Salla-shaped only. */
+    storeInfoRaw?: typeof DEMO_SALLA_STORE_INFO,
 ): Promise<void> {
     // Delete only existing store for this specific platform + user
     await db.delete(ecommerceStores).where(
@@ -2861,6 +2900,19 @@ async function seedDemoStore(
     await db.update(pages)
         .set({ ecommerceStoreId: store.id })
         .where(eq(pages.id, pageId));
+
+    // Store facts → linked page's business_profile through the PRODUCTION path
+    // (D-102). Runs after the page link and before invalidateCachesForStore —
+    // the same ordering fullSync guarantees.
+    if (storeInfoRaw) {
+        try {
+            const { mapSallaStoreFacts } = await import('../../services/salla');
+            const { applyStoreFactsToLinkedPages } = await import('../../services/storeFactsSync');
+            await applyStoreFactsToLinkedPages(store.id, mapSallaStoreFacts(storeInfoRaw), logger);
+        } catch (err) {
+            logger.warn('[DemoData] Store-facts seeding failed (non-critical)', { err });
+        }
+    }
 
     // Trigger RAG ingestion so product chunks are searchable (same as production sync)
     try {

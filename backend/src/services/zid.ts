@@ -37,6 +37,14 @@ import { stripHtml } from '../utils/htmlUtils';
 import { verifyBasicAuthHeader } from '../utils/basicAuthVerify';
 import { ecommerceApiGet } from '../utils/httpRetry';
 import {
+    normalizeHttpUrl,
+    normalizePhoneEntries,
+    phoneEntryNumber,
+    samePhoneNumber,
+    type BusinessProfile,
+} from '@jawab24/shared';
+import { applyStoreFactsToLinkedPages, reportStoreFactDrop } from './storeFactsSync';
+import {
     refreshAccessToken as sharedRefreshAccessToken,
     ensureValidToken as sharedEnsureValidToken,
     resolveStoreCredentialPair,
@@ -376,7 +384,61 @@ const ZidStoreProfileSchema = z.object({
     currency: zidOptionalCurrencyCode,
     url: zidOptionalText('url'),
     domain: zidOptionalText('domain'),
+    // Store facts (D-102). `phone` is documented as a string; `mobile_object`
+    // references Zid's StoreMobileObject schema whose live shape is uncaptured,
+    // so it stays `unknown` and is read defensively in mapZidStoreFacts.
+    phone: zidOptionalText('phone'),
+    website: zidOptionalText('website'),
+    mobile_object: z.unknown().optional(),
 }).passthrough();
+
+type ZidStoreProfile = z.infer<typeof ZidStoreProfileSchema>;
+
+/**
+ * Map the Zid store profile to a BusinessProfile fragment (phones + website —
+ * the D-102 phase-1 scope; Zid exposes no WhatsApp/hours on the profile).
+ * Pure and throw-free: unreadable fields are dropped + reported, never abort
+ * the sync.
+ */
+export function mapZidStoreFacts(store: ZidStoreProfile): BusinessProfile {
+    const facts: BusinessProfile = {};
+
+    const candidates: string[] = [];
+    if (store.phone) candidates.push(store.phone);
+
+    // mobile_object: accept a bare string, or {country_code?, mobile} where
+    // mobile may itself be a string/number. Anything else is reported drift.
+    const mo = store.mobile_object;
+    if (typeof mo === 'string' && mo.trim() !== '') {
+        candidates.push(mo);
+    } else if (mo && typeof mo === 'object') {
+        const o = mo as { country_code?: unknown; mobile?: unknown };
+        const mobile = (typeof o.mobile === 'string' || typeof o.mobile === 'number') ? String(o.mobile).trim() : '';
+        if (mobile !== '') {
+            const code = typeof o.country_code === 'string' || typeof o.country_code === 'number' ? String(o.country_code).trim() : '';
+            const full = mobile.startsWith('+') || code === '' ? mobile : `${code.startsWith('+') ? code : `+${code}`}${mobile}`;
+            candidates.push(full);
+        } else {
+            reportStoreFactDrop('zid', 'mobile_object', mo);
+        }
+    } else if (mo !== undefined && mo !== null) {
+        reportStoreFactDrop('zid', 'mobile_object', mo);
+    }
+
+    const phones = normalizePhoneEntries(candidates).filter((entry, i, arr) =>
+        arr.findIndex(e => samePhoneNumber(phoneEntryNumber(e), phoneEntryNumber(entry))) === i);
+    if (phones.length > 0) facts.phones = phones;
+
+    // Website: the merchant's own site when set (docs: null when the Zid
+    // store is their only web presence), else the storefront URL.
+    const site = store.website || store.url;
+    if (site) {
+        const url = normalizeHttpUrl(site);
+        if (url) facts.website = url;
+    }
+
+    return facts;
+}
 
 export async function fetchStoreInfo(creds: ZidCredentials) {
     const data = await zidApiGet<Record<string, unknown>>(
@@ -414,6 +476,10 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
         storeCurrency: store.currency,
         storeDomain,
         merchantId: store.id,
+        /** Mapped store-facts fragment (D-102) — see mapZidStoreFacts. */
+        storeFacts: mapZidStoreFacts(store),
+        /** Raw facts subset — audit snapshot for platformData.storeFacts. */
+        factsRaw: { phone: store.phone, website: store.website, url: store.url, mobile_object: store.mobile_object },
     };
 }
 
@@ -648,7 +714,16 @@ export async function fullSync(storeId: string) {
         storeName: storeInfo.storeName,
         storeEmail: storeInfo.storeEmail,
         storeCurrency: storeInfo.storeCurrency,
-    }, { merchantId: storeInfo.merchantId });
+    }, {
+        merchantId: storeInfo.merchantId,
+        // Raw snapshot of the consumed facts subset — audit trail for D-102.
+        storeFacts: { ...storeInfo.factsRaw, fetchedAt: new Date().toISOString() },
+    });
+
+    // Store facts → linked pages' business_profile (D-102). MUST run before
+    // syncProducts: the product sync's invalidateCachesForStore tail is what
+    // retires the semantic cache / re-ingests RAG for these same pages.
+    await applyStoreFactsToLinkedPages(storeId, storeInfo.storeFacts);
 
     return syncProducts(storeId);
 }

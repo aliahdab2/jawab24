@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, dayOrderIndex, SHORT_DAY_KEYS, LONG_DAY_KEYS } from '../businessHours';
+import { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, dayOrderIndex, dayKeyFromLabel, SHORT_DAY_KEYS, LONG_DAY_KEYS } from '../businessHours';
 
 describe('canonicalizeHoursEntry — strict canonical pass-through (idempotency)', () => {
     it('passes through already-canonical HH:MM-HH:MM', () => {
@@ -284,5 +284,30 @@ describe('Saturday-first week order (CLDR ar-SY)', () => {
         expect(dayOrderIndex('funday')).toBe(SHORT_DAY_KEYS.length);
         const sorted = ['funday', 'fri', 'sat'].sort((a, b) => dayOrderIndex(a) - dayOrderIndex(b));
         expect(sorted).toEqual(['sat', 'fri', 'funday']);
+    });
+});
+
+describe('dayKeyFromLabel (D-102 — Salla working-hours day names)', () => {
+    it('resolves Arabic day labels (the shape Salla store/info sends)', () => {
+        expect(dayKeyFromLabel('السبت')).toBe('sat');
+        expect(dayKeyFromLabel('الجمعة')).toBe('fri');
+        expect(dayKeyFromLabel('الإثنين')).toBe('mon');
+    });
+
+    it('accepts the bare-alif spelling «الاثنين» (hamza-tolerant)', () => {
+        expect(dayKeyFromLabel('الاثنين')).toBe('mon');
+    });
+
+    it('resolves English names and existing keys, any case, trimmed', () => {
+        expect(dayKeyFromLabel('Saturday')).toBe('sat');
+        expect(dayKeyFromLabel(' friday ')).toBe('fri');
+        expect(dayKeyFromLabel('SUN')).toBe('sun');
+        expect(dayKeyFromLabel('tuesday')).toBe('tue');
+    });
+
+    it('returns undefined for anything that is not a weekday', () => {
+        expect(dayKeyFromLabel('عطلة')).toBeUndefined();
+        expect(dayKeyFromLabel('funday')).toBeUndefined();
+        expect(dayKeyFromLabel('')).toBeUndefined();
     });
 });
