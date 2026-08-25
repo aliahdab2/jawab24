@@ -187,8 +187,12 @@ export class CustomerNotificationService {
         }> = [
             {
                 notificationType: 'abandoned_cart',
-                messageAr: 'مرحباً {customer_name}! لسا عندك منتجات بالسلة بقيمة {cart_total}. كمل طلبك الحين 🛒',
-                messageEn: 'Hi {customer_name}! You left items worth {cart_total} in your cart. Complete your order now 🛒',
+                // فصحى per AI_INSTRUCTIONS §5 (migrated from dialect when the checkout
+                // link was added, 2026-08-25). {checkout_url} is filled from the
+                // platform's cart-recovery link (Salla: data.checkout_url) and renders
+                // empty on platforms that don't provide one.
+                messageAr: 'مرحباً {customer_name}! ما زالت في سلتك منتجات بقيمة {cart_total}. أكمل طلبك من هنا 🛒 {checkout_url}',
+                messageEn: 'Hi {customer_name}! You left items worth {cart_total} in your cart. Complete your order here 🛒 {checkout_url}',
                 delayMinutes: 60,
             },
             {

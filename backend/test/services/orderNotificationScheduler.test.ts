@@ -48,7 +48,27 @@ describe('scheduleOrderNotifications', () => {
                     order_number: 'ORD-999',
                     tracking_number: 'TRK-1',
                     cart_total: '150',
+                    checkout_url: '',
                 },
+            }),
+        );
+    });
+
+    it('passes the cart-recovery link through as the checkout_url variable', async () => {
+        await scheduleOrderNotifications({
+            ...sampleEvent,
+            type: 'abandoned_cart',
+            cartTotal: '348 SAR',
+            checkoutUrl: 'https://store.example/checkout/abc123',
+        });
+
+        expect(customerNotificationService.schedule).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'abandoned_cart',
+                variables: expect.objectContaining({
+                    cart_total: '348 SAR',
+                    checkout_url: 'https://store.example/checkout/abc123',
+                }),
             }),
         );
     });
