@@ -18,6 +18,7 @@ import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 import { motion, MotionConfig, useInView } from 'framer-motion';
+import { EASE_OUT, DUR, STAGGER } from '@/constants/motion';
 import {
   LandingHero,
   LandingFeatures,
@@ -51,9 +52,9 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
             className="text-center group"
             initial={{ opacity: 1, y: 30, scale: 0.9 }}
             animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, y: 30, scale: 0.9 }}
-            transition={{ duration: 0.6, delay: i * 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: DUR.section, delay: i * STAGGER, ease: EASE_OUT }}
           >
-            <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500 stat-neon-breathe">{stat.value}</div>
+            <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hoverable:scale-110 transition-transform duration-200 stat-neon-breathe">{stat.value}</div>
             <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
           </motion.div>
         ))}
@@ -153,7 +154,7 @@ export default function LandingPageContent({ latestPosts = [] }: LandingPageCont
             <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
-                className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
+                className="w-10 h-10 sm:w-12 sm:h-12 transition-transform duration-200 group-hoverable:rotate-6 flex-shrink-0"
               />
               <span className="font-display font-bold text-xl sm:text-2xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>

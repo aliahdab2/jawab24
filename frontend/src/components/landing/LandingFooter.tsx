@@ -41,7 +41,7 @@ export function LandingFooter() {
                 aria-label={t('footer.whatsappAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
               >
-                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
+                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hoverable:scale-110 transition-[transform,color] duration-200" aria-hidden="true" />
               </a>
               <a
                 href="https://facebook.com/jawab24app"
@@ -50,14 +50,14 @@ export function LandingFooter() {
                 aria-label={t('footer.facebookAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#1877F2]/10 flex items-center justify-center hover:bg-[#1877F2] transition-colors border border-[#1877F2]/20 group"
               >
-                <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
+                <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hoverable:scale-110 transition-[transform,color] duration-200" aria-hidden="true" />
               </a>
               <a
                 href="mailto:support@jawab24.com"
                 aria-label={t('footer.emailAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
               >
-                <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
+                <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hoverable:scale-110 transition-transform duration-200" aria-hidden="true" />
               </a>
             </div>
 

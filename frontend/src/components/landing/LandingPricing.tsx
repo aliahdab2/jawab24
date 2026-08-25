@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl';
 // Direct import, NOT the '@/components/ui' barrel — see LandingPageContent.
 import { Button } from '@/components/ui/Button';
 import { motion, useInView } from 'framer-motion';
+import { EASE_OUT, DUR, STAGGER } from '@/constants/motion';
 
 const containerVariants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.15 },
+    transition: { staggerChildren: STAGGER },
   },
 };
 
@@ -19,7 +20,7 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -28,7 +29,7 @@ const headingVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 

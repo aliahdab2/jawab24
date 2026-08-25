@@ -10,11 +10,12 @@ import { PostReplyIcon } from '@/utils/postReply';
 import { useTranslations } from 'next-intl';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
+import { EASE_OUT, DUR, STAGGER } from '@/constants/motion';
 
 const containerVariants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.12 },
+    transition: { staggerChildren: STAGGER },
   },
 };
 
@@ -24,7 +25,7 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -33,7 +34,7 @@ const headingVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -98,7 +99,7 @@ export function LandingFeatures() {
             <motion.div
               key={i}
               variants={cardVariants}
-              className="group bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-8 lg:p-10 shadow-lg sm:shadow-xl shadow-surface-200/50 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-theme-border flex flex-col items-center text-center"
+              className="group bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-8 lg:p-10 shadow-lg sm:shadow-xl shadow-surface-200/50 hoverable:shadow-2xl hoverable:-translate-y-2 transition-[transform,box-shadow] duration-200 border border-theme-border flex flex-col items-center text-center"
             >
               <div className={`w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-2xl ${accents[i]} group-hover:text-white flex items-center justify-center mb-4 sm:mb-6 lg:mb-8 transition-colors duration-500 shadow-inner`}>
                 <feature.icon className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10" />
