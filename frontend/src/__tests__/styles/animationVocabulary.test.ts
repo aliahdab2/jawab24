@@ -126,6 +126,32 @@ describe('prefers-reduced-motion reaches every infinite animation', () => {
     expect(uncovered).toEqual([]);
   });
 
+  it('covers infinite animations on classes NOT named animate-*', () => {
+    // Every test above discovers animations by NAME — the `animation` key in the
+    // config, `.animate-*` in globals.css. An infinite animation on a class that
+    // does not use that prefix is invisible to all of them, and one was:
+    // `.stat-neon-breathe` (globals.css ~821, the glow on the hero stat numbers)
+    // kept pulsing under a reduce preference because it is not called
+    // `.animate-neon-breathe`. Found 2026-08-25 during a landing motion audit.
+    //
+    // So discover by DECLARATION instead. The naming convention is then no
+    // longer the thing standing between us and a WCAG 2.2.2 failure — which is
+    // the point, because a convention is exactly what a new class forgets.
+    const uncovered: string[] = [];
+
+    for (const [, selector, body] of cssCode.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/animation:[^;]*\binfinite\b/.test(body)) continue;
+      for (const [, cls] of selector.matchAll(/\.([\w-]+)/g)) {
+        // `animate-spin` is the documented exemption: it only ever marks a
+        // request in flight, which 2.2.2 treats as essential activity.
+        if (cls === 'animate-spin') continue;
+        if (!reduceBlock.includes(`.${cls}`)) uncovered.push(cls);
+      }
+    }
+
+    expect([...new Set(uncovered)]).toEqual([]);
+  });
+
   it('covers the infinite Tailwind built-ins the app actually uses', () => {
     // `spin` is the deliberate exception — it only marks a request in flight,
     // which WCAG 2.2.2 treats as essential activity.
