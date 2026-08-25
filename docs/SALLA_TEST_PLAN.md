@@ -226,7 +226,7 @@ has cost production defects before. Run in order — later rows depend on earlie
 | 3.7 | `order.shipment.created` — ⚠️ NOT closable live on the demo store (see 2026-08-25 results): the event is never emitted for label-flow shipments and Dev Company assigns no tracking number. Upgrade-in-place with tracking is pinned by `test/integration/customerNotificationsDedup.test.ts` ("a tracking-bearing shipment upgrades an earlier tracking-less shipped row in place") and the shipment-shaped payload parse by `test/controllers/salla.test.ts`; the live full pass needs a real store with a real courier, post-launch | tracking upgraded **in place** — still exactly one SMS total, now carrying the tracking number | two SMS ⇒ `upgradePendingOnDuplicate` regression |
 | 3.8 | **`track_shipment` on a real shipped order** — ✅ PASSED live 2026-08-24 (see results) | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link. **Prove the shipments call was actually made** before reading anything into a silent Sentry: after the 2026-08-23 fix the verify step reads the shipment live whenever the model's Phase-1 tool was `lookup_order`, so `metrics:ecom:verify:sibling` or `…:live` > 0 in prod Redis is the evidence the endpoint was hit. Then read the OUTCOME off the pair that follows: `…:requested_empty` = the call returned 200 with no shipment (the order is not shipped yet — pick a shipped order and re-run), `…:requested_live_failed` = it threw, which is where a 403 lands. ⛔ Do not read one for the other; they were one counter in the first draft of D-096 and that conflation would have answered 3.8 "platform failure" on a perfectly healthy 200 | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing. ⛔ 2026-08-23: "no `Salla shipments lookup failed` in Sentry" was misread as 200 when the model had never called `track_shipment` (0 calls) — silence is not a result |
 | 3.9 | `app.uninstalled` | store row deactivates; no further webhook processing | |
-| 3.10 | Sentry + health | quiet; `scripts/health-check.sh` green | |
+| 3.10 | Sentry + health — ✅ PASSED 2026-08-25 (see results; the only Sentry issue in 24h was the known Vonage quota error, triggered by this rehearsal's own SMS attempts) | quiet; `scripts/health-check.sh` green | |
 
 **3.8 is the highest-value row in this document — closed 2026-08-24.** The tracking fix
 (PR #798) was built from Salla's published documentation without ever touching a live
@@ -301,6 +301,21 @@ chrome-real; every timestamp below is UTC and was verified at the read path
   pinned by `test/integration/customerNotificationsDedup.test.ts` and
   `test/controllers/salla.test.ts`; the live pass is deferred to the first real store
   with a real courier. The row is NOT waived — it moves to post-launch.
+- **3.10 ✅ PASS (05:25Z).** `health-check.sh` is written for on-server use (docker-compose
+  checks), so its probes were replicated remotely: `GET /api/health` → all services up
+  (database 2 ms, redis 1 ms, stripe configured, AI enabled + circuit closed), frontend 200,
+  prod = `57b3266` (green), DB reachable via the read-only runner. Sentry last 24 h:
+  **jawab24-ai-worker zero unresolved issues; jawab24-backend exactly one** —
+  `JAWAB24-BACKEND-2A` «Vonage delivery error: Quota Exceeded», 6 events all between
+  04:44–04:50Z, i.e. this rehearsal's own order_confirmed/order_shipped send attempts.
+  Known provider issue #3002710, not a defect. Nothing Salla-integration-shaped fired.
+- **Post-#942 webhook state healed (05:19Z).** After the deploy, one
+  `reregister-webhooks.js salla` run (owner-executed) cleaned the store:
+  `webhookStatus.failed: []`, exactly the 7 API-managed events registered (products ×5,
+  `app.uninstalled`, `abandoned.cart` — `order.*` portal-only), `exhausted` gone. Verified
+  at BOTH read paths: the DB blob and `GET /api/salla/store` → `webhookHealth: "ok"` with
+  the merchant's own session — so the «حاول مرة أخرى» recovery CTA no longer renders
+  (and `/integrations` is admin-only during rollout anyway, `integrations.tsx` guard).
 - **Wizard traps found this run** (add to the 08-23/08-24 recipe): «New order» RESUMES
   an existing draft rather than starting fresh (adding a product bumped the draft's
   quantity); the address form cascade **Region → City → Neighborhood resets its
