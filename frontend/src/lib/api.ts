@@ -261,6 +261,11 @@ export const postSuggestionsApi = {
   // postType: merchant-chosen angle; omitted = the server's variety picker.
   generate: (pageId: string, includeContact = true, postType?: PostSuggestionPostType) =>
     api.post<PostSuggestionResponse>(`/pages/${pageId}/post-suggestions`, { includeContact, ...(postType ? { postType } : {}) }),
+  // Swipe the dashboard card away for the rest of today, or bring it back.
+  // Server-side on purpose: hiding it on the phone must hold on the desktop,
+  // and localStorage is per-device (the same reason #743 rejected it).
+  setVisibility: (hidden: boolean) =>
+    api.put<{ hiddenToday: boolean }>('/post-suggestions/visibility', { hidden }),
   // The card's bytes, from OUR origin. Deliberately not a direct fetch of the
   // stored `imageUrl`: that host serves no CORS headers, so the browser can
   // display it but never read it — which is why the download button threw on

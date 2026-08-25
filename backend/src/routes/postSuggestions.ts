@@ -67,6 +67,23 @@ export default async function postSuggestionsRoutes(fastify: FastifyInstance) {
         adminRoutes.addHook('preHandler', resolveWorkspace);
         adminRoutes.addHook('preHandler', requireRole('admin'));
 
+        // Hiding the card is free, but it is WORKSPACE-wide — a viewer must not
+        // be able to take the feature off every admin's dashboard for a day.
+        // Hence the admin block, beside generate, despite costing nothing.
+        // No pageId: the decision sits above the card's page switcher.
+        adminRoutes.put('/post-suggestions/visibility', {
+            schema: {
+                tags: ['PostSuggestions'],
+                summary: 'Hide the dashboard card for the rest of today, or bring it back',
+                security: auth,
+                body: {
+                    type: 'object',
+                    properties: { hidden: { type: 'boolean' } },
+                    required: ['hidden'],
+                },
+            },
+        }, postSuggestionsController.setVisibility.bind(postSuggestionsController));
+
         // Paid route: rate-limited here, daily-capped (absolute, cron included)
         // in the service — same layering as catalog /extract.
         adminRoutes.post('/pages/:pageId/post-suggestions', {

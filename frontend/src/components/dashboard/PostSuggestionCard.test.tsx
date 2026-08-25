@@ -7,14 +7,40 @@ import enPostSuggestions from '@/i18n/en/postSuggestions.json';
 import arPostSuggestions from '@/i18n/ar/postSuggestions.json';
 import { PostSuggestionCard } from './PostSuggestionCard';
 
-const { mockGetToday, mockIsVisible, mockRole } = vi.hoisted(() => ({
+const { mockGetToday, mockIsVisible, mockRole, mockSetVisibility, mockToastSuccess, mockToastError } = vi.hoisted(() => ({
   mockGetToday: vi.fn(),
   mockIsVisible: vi.fn(),
   mockRole: { isAdmin: true },
+  mockSetVisibility: vi.fn(),
+  mockToastSuccess: vi.fn(),
+  mockToastError: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn() },
+  postSuggestionsApi: { getCurrent: mockGetToday, generate: vi.fn(), markEvent: vi.fn(), setVisibility: mockSetVisibility },
+}));
+vi.mock('sonner', () => ({ toast: { success: mockToastSuccess, error: mockToastError } }));
+vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
+
+/**
+ * The gesture itself belongs to `useSwipeToDismiss`, which has its own suite
+ * (test/hooks/useSwipeToDismiss.test.tsx) covering direction lock, threshold,
+ * pointer capture and the slide-out. Re-driving pointer events here would test
+ * that hook a second time — brittle, and it would hide what this file is for.
+ *
+ * So the wrapper is stubbed down to what the CARD is responsible for: the props
+ * it passes, and what it does when a dismiss actually happens.
+ */
+vi.mock('@/components/ui/SwipeDismissWrapper', () => ({
+  SwipeDismissWrapper: ({ children, onDismiss, enabled, foregroundClassName }: {
+    children: React.ReactNode; onDismiss: () => void; enabled?: boolean; foregroundClassName?: string;
+  }) => (
+    <div>
+      <button type="button" data-testid="swipe" disabled={enabled === false} onClick={onDismiss}>swipe</button>
+      <span data-testid="fg-class">{foregroundClassName ?? ''}</span>
+      {children}
+    </div>
+  ),
 }));
 vi.mock('@/lib/featureFlags', () => ({ isPostSuggestionsVisible: mockIsVisible }));
 vi.mock('@/hooks/useWorkspaceRole', () => ({ useWorkspaceRole: () => mockRole }));
@@ -38,7 +64,93 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRole.isAdmin = true;
   mockIsVisible.mockReturnValue(true);
+  mockSetVisibility.mockResolvedValue({ data: { hiddenToday: true } });
   mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
+});
+
+describe('PostSuggestionCard — swipe hides it until tomorrow', () => {
+  const SUGGESTION = {
+    id: 's1', status: 'ready', text: 'منشور تجريبي', imageUrl: null,
+    variants: [{ text: 'منشور تجريبي', headline: 'ه', imageUrl: null }],
+    selectedVariant: 0, postType: 'general', source: 'manual',
+    suggestedFor: '2026-08-14', createdAt: '2026-08-14T08:00:00Z',
+  };
+
+  const swipe = async () => fireEvent.click(await screen.findByTestId('swipe'));
+
+  it('renders NOTHING when the server says it was hidden earlier today', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3, hiddenToday: true } });
+    const { container } = renderCard();
+    // The read still happens — the SERVER owns the day boundary, not the client.
+    // A phone in Damascus and a browser in Berlin must agree on when it returns.
+    await waitFor(() => expect(mockGetToday).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('swiping persists the choice SERVER-side, so the phone and the desktop agree', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    await swipe();
+
+    await waitFor(() => expect(mockSetVisibility).toHaveBeenCalledWith(true));
+    // …and the space is reclaimed optimistically, without waiting for the trip.
+    await waitFor(() => expect(screen.queryByText(enPostSuggestions.cardTitle)).not.toBeInTheDocument());
+    expect(mockToastSuccess).toHaveBeenCalled();
+  });
+
+  it('a FAILED write puts the card back rather than promising a persistence we did not get', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    mockSetVisibility.mockRejectedValue(new Error('offline'));
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    await swipe();
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith(enPostSuggestions.hideFailed));
+    expect(await screen.findByText(enPostSuggestions.cardTitle)).toBeInTheDocument();
+  });
+
+  it('a generation IN FLIGHT cannot be swiped away — that is paid work the merchant is watching', async () => {
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: null, inFlight: { id: 'x', status: 'pending', brief: null }, remainingToday: 2 },
+    });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    expect(await screen.findByTestId('swipe')).toBeDisabled();
+  });
+
+  /**
+   * ⭐ Regression: "View your post is above Hide for Today" (reported on the
+   * running build, 2026-08-14).
+   *
+   * The wrapper stacks the swipe background and the card as two layers. This
+   * card's own fill is `bg-brand-50/60` — 60% ALPHA — so with a transparent
+   * foreground the teal «إخفاء لليوم» band was legible straight through the
+   * post. Every other consumer (SwipeableMessageCard, SwipeableNotificationItem)
+   * passes an opaque `bg-card` foreground; this one did not.
+   *
+   * Asserted on the PROP rather than on pixels because jsdom computes no
+   * stacking — but the prop is exactly what was missing.
+   */
+  it('gives the swipe wrapper an OPAQUE foreground, or the background bleeds through the card', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+
+    const fg = await screen.findByTestId('fg-class');
+    expect(fg).toHaveTextContent('bg-card');
+  });
+
+  it('a non-admin member cannot hide the card for the whole workspace', async () => {
+    mockRole.isAdmin = false;
+    mockGetToday.mockResolvedValue({ data: { suggestion: SUGGESTION, remainingToday: 3 } });
+    renderCard();
+    await screen.findByText(enPostSuggestions.cardTitle);
+
+    expect(await screen.findByTestId('swipe')).toBeDisabled();
+  });
 });
 
 describe('PostSuggestionCard — pilot self-gating', () => {
@@ -275,5 +387,76 @@ describe('PostSuggestionCard — a generation still in flight', () => {
     renderCard();
     expect(await screen.findByText('بوست جاهز')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
+  });
+});
+
+/**
+ * The card is the feature's ENTRY POINT, and the entry point is where an
+ * unusable action does its damage. `remainingToday` has ridden on this card's
+ * response since the feature shipped and was spent on nothing: a merchant whose
+ * three attempts had all FAILED — a burned slot is never refunded, see the
+ * comment in `requestSuggestion` — was shown a full-strength «أنشئ منشوراً
+ * الآن» that the server was guaranteed to refuse with a 429 («بلغت الحد
+ * اليومي»). Reported on the running build, 2026-08-14.
+ *
+ * One rule pinned here: the card never offers an action the server will decline.
+ */
+describe('PostSuggestionCard — never offers what the server will refuse', () => {
+  const POST = {
+    id: 's-cap', status: 'ready', text: 'منشور جاهز', imageUrl: null,
+    variants: [{ text: 'منشور جاهز', headline: 'ه', imageUrl: null }],
+    selectedVariant: 0, postType: 'general', source: 'manual',
+    suggestedFor: '2026-08-14', createdAt: '2026-08-14T08:00:00Z',
+  };
+
+  it('⭐ withholds the create CTA at a spent cap, and states the reason instead', async () => {
+    // Three attempts, all failed: nothing to show AND nothing left to spend.
+    mockGetToday.mockResolvedValue({
+      data: { suggestion: null, inFlight: { id: 'f3', status: 'failed' as const }, remainingToday: 0 },
+    });
+    renderCard();
+
+    expect(await screen.findByText(enPostSuggestions.noRemaining)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+    // Not a DISABLED button either: greyed-out reads as «you may not do this»,
+    // a permission problem, when the truth is «come back tomorrow».
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCtaLast })).not.toBeInTheDocument();
+    // And the generic pitch must not sit above the refusal, still selling it.
+    expect(screen.queryByText(enPostSuggestions.cardDesc)).not.toBeInTheDocument();
+  });
+
+  it('still offers the post when one exists at a spent cap — the cap governs creating, not reading', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: POST, remainingToday: 0 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardOpen })).toBeEnabled();
+    expect(screen.queryByText(enPostSuggestions.noRemaining)).not.toBeInTheDocument();
+  });
+
+  it('warns on the LAST attempt, so 0 is never a cliff', async () => {
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 1 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCtaLast })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCta })).not.toBeInTheDocument();
+  });
+
+  it('says nothing about the budget while attempts are plentiful', async () => {
+    // A quota printed on a fresh CTA makes the feature read as a limit.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: 3 } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCta })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: enPostSuggestions.cardCtaLast })).not.toBeInTheDocument();
+  });
+
+  it('an UNKNOWN remaining keeps the CTA — a cap store that is down must not deny a merchant', async () => {
+    // `null` ≠ 0. Withholding on "we could not check" would block attempts the
+    // merchant actually holds; the route fails closed behind it either way.
+    mockGetToday.mockResolvedValue({ data: { suggestion: null, remainingToday: null } });
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: enPostSuggestions.cardCta })).toBeEnabled();
+    expect(screen.queryByText(enPostSuggestions.noRemaining)).not.toBeInTheDocument();
   });
 });

@@ -57,6 +57,7 @@ import { enqueuePostSuggestion } from '../lib/postSuggestionQueue';
 import { imageStorage } from './imageStorage';
 import { composePostCard, fetchRoundedLogo, renderPosterBase } from './imageCompose';
 import { settingsService } from './settings';
+import { workspaceSettingsService } from './workspaceSettings';
 import { getStoreContextForAI } from './ecommerce';
 import { catalogService } from './catalog';
 import { factCollectionsService } from './factCollections';
@@ -1051,7 +1052,7 @@ class PostSuggestionsService {
      * its counter. The same page row feeds computeAvailableTypes, so KB/profile
      * are fetched exactly once.
      */
-    async getCurrent(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; inFlight: PostSuggestionInFlight | null; remainingToday: number | null; availableTypes: PostSuggestionPostType[]; history: PostSuggestionHistoryItem[] } | null> {
+    async getCurrent(workspaceId: string, pageId: string): Promise<{ suggestion: PostSuggestionDto | null; inFlight: PostSuggestionInFlight | null; remainingToday: number | null; availableTypes: PostSuggestionPostType[]; history: PostSuggestionHistoryItem[]; hiddenToday: boolean } | null> {
         const today = todayIso();
         const page = await fetchOwnedPage(workspaceId, pageId);
         if (!page) return null;
@@ -1066,14 +1067,67 @@ class PostSuggestionsService {
         // idx_post_suggestions_page_created, added with this split because
         // dropping the day scope left `suggested_for` — the only indexed
         // discriminator either query had — out of both of them.
-        const [current, inFlight, history, remainingToday] = await Promise.all([
+        const [current, inFlight, history, remainingToday, hiddenToday] = await Promise.all([
             readCurrentPost(pageId),
             readInFlight(pageId),
             readPostHistory(pageId),
             this.readRemainingToday(pageId, today),
+            // Joins the SAME parallel batch rather than adding a fifth sequential
+            // hop to the dashboard's highest-frequency fetch (Rule 17.3). It is
+            // a cached JSONB read, so it usually costs nothing at all.
+            this.isHiddenToday(workspaceId, today),
         ]);
         const availableTypes = await computeAvailableTypes(page, today);
-        return { suggestion: current ? toDto(current) : null, inFlight, remainingToday, availableTypes, history };
+        return { suggestion: current ? toDto(current) : null, inFlight, remainingToday, availableTypes, history, hiddenToday };
+    }
+
+    /**
+     * Did the merchant swipe the card away earlier today?
+     *
+     * Compared against the feature's own UTC day, never the viewer's — a phone
+     * in Damascus and a browser in Berlin must agree on when the card comes
+     * back, and `suggested_for` already defines that boundary.
+     *
+     * Fails OPEN: if the settings read throws, the card SHOWS. Hiding a feature
+     * whose only entry point is that card is the worse failure, and the merchant
+     * can always swipe again.
+     */
+    async isHiddenToday(workspaceId: string, today = todayIso()): Promise<boolean> {
+        try {
+            const settings = await workspaceSettingsService.getSettings(workspaceId);
+            return settings.postSuggestionHiddenOn === today;
+        } catch (err) {
+            logger.warn('[PostSuggestions] Could not read the hidden-today flag; showing the card', {
+                workspaceId, error: err instanceof Error ? err.message : String(err),
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Swipe the card away for the rest of the UTC day, or bring it back.
+     *
+     * Stores a DATE rather than a boolean or a timer: the card returns the
+     * moment this stops equalling today, so nothing has to expire it — no
+     * scheduled sweep, no TTL, and no state that can get stuck hiding the
+     * feature's only entry point. Undo writes `null` rather than yesterday's
+     * date, so the stored value never has to be interpreted as a sentinel.
+     */
+    async setHiddenToday(workspaceId: string, hidden: boolean): Promise<void> {
+        // `setKey`, NEVER `updateSettings`. The latter is a read-modify-write
+        // over a defaults-merged object, so it would materialise every
+        // read-time default as an explicit key and permanently end the
+        // legacy-drift heal for this workspace — as a side effect of a swipe.
+        await workspaceSettingsService.setKey(
+            workspaceId,
+            'postSuggestionHiddenOn',
+            hidden ? todayIso() : null,
+        );
+        // The pilot's only signal for whether this gesture is a "not today" or a
+        // standing "I don't want this feature". A merchant swiping every day for
+        // a week is the evidence that would justify a permanent opt-out; without
+        // this line that question could only be guessed at.
+        logger.info('[PostSuggestions] Card visibility changed', { workspaceId, hidden });
     }
 
     /**
@@ -1588,9 +1642,9 @@ class PostSuggestionsService {
      * generate button, which is the whole model, and an automatic retry loop is
      * exactly the unattended spend this change removes.
      */
-    async seedFirstPostSuggestions(): Promise<{ eligible: number; seeded: number; skippedExisting: number; failed: number }> {
+    async seedFirstPostSuggestions(): Promise<{ eligible: number; seeded: number; skippedExisting: number; skippedHidden: number; failed: number }> {
         const startedAt = Date.now();
-        const result = { eligible: 0, seeded: 0, skippedExisting: 0, failed: 0 };
+        const result = { eligible: 0, seeded: 0, skippedExisting: 0, skippedHidden: 0, failed: 0 };
         const workspaceIds = config.postSuggestions.workspaceIds;
         if (!config.postSuggestions.enabled || workspaceIds.length === 0) {
             // The most common healthy state must still leave a trace — an
@@ -1609,6 +1663,18 @@ class PostSuggestionsService {
             ));
         result.eligible = eligiblePages.length;
 
+        // One answer per workspace for the whole run. Deliberately NOT hoisted
+        // outside the sweep: a run is short, and a value memoised across runs
+        // would keep a workspace hidden into the next day.
+        const hiddenCache = new Map<string, boolean>();
+        const hiddenForWorkspace = async (workspaceId: string): Promise<boolean> => {
+            const memo = hiddenCache.get(workspaceId);
+            if (memo !== undefined) return memo;
+            const hidden = await this.isHiddenToday(workspaceId);
+            hiddenCache.set(workspaceId, hidden);
+            return hidden;
+        };
+
         for (const page of eligiblePages) {
             const pageId = page.id;
             if (!page.workspaceId) { result.failed++; continue; }
@@ -1618,6 +1684,23 @@ class PostSuggestionsService {
                 const [existing] = await db.select({ id: postSuggestions.id }).from(postSuggestions)
                     .where(eq(postSuggestions.pageId, pageId)).limit(1);
                 if (existing) { result.skippedExisting++; continue; }
+
+                // The merchant swiped the card away today, so a seed generated
+                // now would be paid for and never seen. It is only DEFERRED —
+                // the "has any row" predicate above is unchanged, so this page
+                // is still unseeded tomorrow and the sweep picks it up then.
+                // Skipping costs the merchant nothing; generating costs a real
+                // image call for a card that is not on screen.
+                //
+                // Asked once per WORKSPACE, not once per page: hiding is a
+                // workspace decision, and at GA (Business + Pro, every eligible
+                // page) the per-page form would be one settings read per page
+                // per day to answer the same question repeatedly.
+                if (await hiddenForWorkspace(page.workspaceId)) {
+                    result.skippedHidden++;
+                    logger.info('[PostSuggestions] Seed deferred — the card is hidden today', { pageId });
+                    continue;
+                }
 
                 const generated = await this.requestSuggestion(page.workspaceId, pageId, 'cron');
                 // `ok` only means the REQUEST succeeded. The seed fulfils

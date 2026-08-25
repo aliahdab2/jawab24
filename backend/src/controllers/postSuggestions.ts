@@ -43,6 +43,30 @@ class PostSuggestionsController {
         return reply.send(body);
     }
 
+    /**
+     * PUT /post-suggestions/visibility — swipe the dashboard card away for the
+     * rest of today, or bring it back.
+     *
+     * Workspace-scoped, so it carries NO pageId: a merchant who does not want
+     * the card today does not want it on any of their pages, and the card's own
+     * page switcher sits below this decision rather than above it.
+     */
+    async setVisibility(
+        request: FastifyRequest<{ Body: { hidden?: unknown } | null }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!isPostSuggestionsEnabledForWorkspace(req.workspaceId)) return reply.status(404).send({ error: 'Not found' });
+
+        const hidden = request.body?.hidden;
+        if (typeof hidden !== 'boolean') {
+            return reply.status(400).send({ error: 'hidden must be a boolean' });
+        }
+
+        await postSuggestionsService.setHiddenToday(req.workspaceId, hidden);
+        return reply.send({ hiddenToday: hidden });
+    }
+
     /** POST /pages/:pageId/post-suggestions — generate or regenerate today's post. */
     async generate(
         request: FastifyRequest<{ Params: { pageId: string }; Body: { includeContact?: boolean; postType?: string } | null }>,

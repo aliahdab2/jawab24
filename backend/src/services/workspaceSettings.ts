@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaces, workspaceMembers, settings as settingsTable } from '../db/schema';
 import { redis } from '../lib/redis';
@@ -233,8 +233,55 @@ export class WorkspaceSettingsService {
     }
 
     /**
+     * Write ONE key into the workspace JSONB, touching nothing else.
+     *
+     * ⚠️ Use this — not `updateSettings` — for anything a merchant triggers
+     * casually or often.
+     *
+     * `updateSettings` is a read-modify-write over `getSettings`, which returns
+     * `{ ...DEFAULTS, ...stored }`. So it writes every read-time default back as
+     * an EXPLICIT key, and once a key is present `detectLegacyDrift` no longer
+     * counts it as missing — the legacy-row heal silently stops working for that
+     * workspace, for every field, forever. That is an acceptable side effect of
+     * a deliberate settings save (the merchant just chose those values). It is
+     * NOT acceptable as the side effect of dismissing a card, which is how this
+     * method came to exist.
+     *
+     * `jsonb_set` with `create_missing = true` writes the one path server-side,
+     * so it also cannot lose a concurrent write to a different key the way a
+     * read-modify-write can.
+     */
+    async setKey<K extends keyof WorkspaceSettings>(
+        workspaceId: string,
+        key: K,
+        value: WorkspaceSettings[K] | null,
+    ): Promise<void> {
+        // The key is a compile-time literal from our own code (never request
+        // input), and it is passed as a bound text[] path rather than
+        // interpolated, so the statement carries no injectable surface.
+        await db
+            .update(workspaces)
+            .set({
+                settings: sql`jsonb_set(COALESCE(${workspaces.settings}, '{}'::jsonb), ARRAY[${key as string}]::text[], ${JSON.stringify(value ?? null)}::jsonb, true)`,
+                updatedAt: new Date(),
+            })
+            .where(eq(workspaces.id, workspaceId));
+
+        try {
+            await redis.del(cacheKey(workspaceId));
+        } catch {
+            // Redis unavailable — cache expires via TTL
+        }
+    }
+
+    /**
      * Update workspace settings (partial merge into JSONB).
      * Invalidates cache.
+     *
+     * ⚠️ Materialises every read-time DEFAULT as an explicit key (see `setKey`),
+     * which permanently ends `detectLegacyDrift`'s heal for this workspace. That
+     * is correct for a merchant saving the settings form; for a single flag
+     * written by a gesture, use `setKey`.
      */
     async updateSettings(
         workspaceId: string,
