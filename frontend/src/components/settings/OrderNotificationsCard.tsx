@@ -47,13 +47,19 @@ const TYPE_ICONS: Record<OrderNotificationType, React.ComponentType<{ className?
   digital_delivery: Download,
 };
 
+/* These MUST be the literal placeholder keys the backend renderer substitutes
+ * (customerNotifications.renderTemplate — snake_case). The card shows them
+ * verbatim for the merchant to copy into the template, so an entry here that
+ * the renderer doesn't know renders as an empty string in the customer's SMS.
+ * Before 2026-08-25 this list advertised camelCase aliases ({cartTotal}, …)
+ * that the renderer never substituted. */
 const TYPE_VARIABLES: Record<OrderNotificationType, string[]> = {
-  abandoned_cart: ['name', 'cartTotal'],
-  order_confirmed: ['name', 'orderNumber'],
-  order_shipped: ['name', 'orderNumber', 'trackingNumber'],
-  order_delivered: ['name', 'orderNumber'],
-  review_request: ['name', 'orderNumber'],
-  digital_delivery: ['name', 'orderNumber'],
+  abandoned_cart: ['customer_name', 'cart_total', 'checkout_url'],
+  order_confirmed: ['customer_name', 'order_number'],
+  order_shipped: ['customer_name', 'order_number', 'tracking_number'],
+  order_delivered: ['customer_name', 'order_number'],
+  review_request: ['customer_name', 'order_number'],
+  digital_delivery: ['customer_name', 'order_number'],
 };
 
 const DELAY_PRESETS = [0, 5, 15, 30, 60, 120, 1440];

@@ -932,6 +932,49 @@ describe('Salla Controller', () => {
             expect(mockDispatchOrderNotification.mock.calls[0][0].trackingNumber).toBeUndefined();
         });
 
+        // --- abandoned.cart: payload per docs.salla.dev doc-433812 — customer carries
+        // `name` (no first_name) and a full international `mobile` (no mobile_code);
+        // the cart-recovery link is top-level `checkout_url`. ---
+        it('should dispatch abandoned_cart WITH the checkout_url recovery link (doc-shaped payload)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'abandoned.cart', merchant: 2108580704,
+                data: {
+                    id: 225167971,
+                    total: { amount: 348, currency: 'SAR' },
+                    subtotal: { amount: 348, currency: 'SAR' },
+                    checkout_url: 'https://demostore.salla.sa/dev-x/checkout/abc123',
+                    age_in_minutes: 90,
+                    customer: { id: 1, name: 'abc def', mobile: '+971555555555', email: 'c@e.com' },
+                },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                platform: 'salla', storeId: 'store-1', type: 'abandoned_cart',
+                customerPhone: '+971555555555', customerName: 'abc def',
+                orderId: '225167971', orderNumber: '225167971',
+                cartTotal: '348 SAR',
+                checkoutUrl: 'https://demostore.salla.sa/dev-x/checkout/abc123',
+            });
+        });
+
+        it('should treat a missing/blank checkout_url as absent on abandoned.cart', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'abandoned.cart', merchant: 2108580704,
+                data: { id: 225167971, total: { amount: 348, currency: 'SAR' }, checkout_url: '  ', customer: { name: 'abc', mobile: '+971555555555' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0].checkoutUrl).toBeUndefined();
+        });
+
         it('should NOT dispatch on order.updated (avoids double-send with order.status.updated)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });

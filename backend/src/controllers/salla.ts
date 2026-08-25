@@ -359,6 +359,7 @@ interface SallaWebhookData extends SallaOrderCore {
     customized?: { slug?: string };        // status slug on order.status.updated
     order?: SallaOrderCore;                // nested order on order.status.updated
     total?: { amount?: number; currency?: string }; // best-effort for abandoned.cart
+    checkout_url?: string;                 // abandoned.cart: the cart-recovery link
 }
 
 // order.shipment.created — `data` IS the shipment (NOT an order). The customer lives
@@ -411,6 +412,9 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
             customerPhone: phone, customerName: sallaCustomerName(data.customer),
             orderId: String(data.id ?? ''), orderNumber: String(data.id ?? ''),
             cartTotal: formatSallaTotal(data),
+            // The cart-recovery link (docs.salla.dev doc-433812) — the whole point of
+            // the nudge; rendered via the {checkout_url} template variable.
+            checkoutUrl: data.checkout_url?.trim() || undefined,
         };
     }
 

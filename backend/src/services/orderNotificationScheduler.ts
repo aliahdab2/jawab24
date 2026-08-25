@@ -19,6 +19,8 @@ export interface OrderEvent {
     orderNumber: string;
     trackingNumber?: string;
     cartTotal?: string;
+    /** Cart-recovery link for abandoned_cart nudges — rendered as {checkout_url}. */
+    checkoutUrl?: string;
     /** Minimum delay before sending (ms). Effective delay = max(template delay, this).
      *  Used to hold a tracking-less shipped SMS briefly so a later shipment webhook
      *  carrying the tracking number can upgrade it in place. */
@@ -70,7 +72,7 @@ export function orderDeliveredEvent(platform: string, storeId: string, fields: O
  * Shared across Salla, Shopify, and Zid controllers.
  */
 export async function scheduleOrderNotifications(event: OrderEvent): Promise<void> {
-    const { platform, storeId, type, customerPhone, customerName, orderId, orderNumber, trackingNumber, cartTotal, minDelayMs, upgradePendingOnDuplicate, also } = event;
+    const { platform, storeId, type, customerPhone, customerName, orderId, orderNumber, trackingNumber, cartTotal, checkoutUrl, minDelayMs, upgradePendingOnDuplicate, also } = event;
 
     // The customer bought — a still-pending "you left items in your cart" nudge must
     // never reach them. Runs regardless of whether the order_confirmed template is
@@ -92,6 +94,7 @@ export async function scheduleOrderNotifications(event: OrderEvent): Promise<voi
         order_number: orderNumber,
         tracking_number: trackingNumber ?? '',
         cart_total: cartTotal ?? '',
+        checkout_url: checkoutUrl ?? '',
     };
 
     await customerNotificationService.schedule({
