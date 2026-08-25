@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../src/services/customerNotifications', () => ({
     customerNotificationService: {
         schedule: vi.fn().mockResolvedValue(undefined),
+        cancel: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -102,6 +103,36 @@ describe('scheduleOrderNotifications', () => {
                 platformEventId: 'salla:review_request:999',
             }),
         );
+    });
+
+    // The customer bought — a pending "you left items in your cart" nudge for the same
+    // store+phone must be cancelled, or it fires up to an hour after the purchase.
+    it('order_confirmed cancels a pending abandoned_cart nudge for the same store+phone', async () => {
+        await scheduleOrderNotifications(sampleEvent);
+
+        expect(customerNotificationService.cancel).toHaveBeenCalledTimes(1);
+        expect(customerNotificationService.cancel).toHaveBeenCalledWith(
+            'store-1', 'abandoned_cart', '+966501234567',
+        );
+    });
+
+    it('non-purchase events do not cancel the abandoned_cart nudge', async () => {
+        await scheduleOrderNotifications({ ...sampleEvent, type: 'order_shipped' });
+        await scheduleOrderNotifications({ ...sampleEvent, type: 'order_delivered' });
+        await scheduleOrderNotifications({ ...sampleEvent, type: 'abandoned_cart' });
+
+        expect(customerNotificationService.cancel).not.toHaveBeenCalled();
+    });
+
+    it('a failing cancel never costs the confirmation SMS itself', async () => {
+        vi.mocked(customerNotificationService.cancel).mockRejectedValueOnce(new Error('db down'));
+
+        await scheduleOrderNotifications(sampleEvent);
+
+        expect(customerNotificationService.schedule).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'order_confirmed' }),
+        );
+        expect(captureError).toHaveBeenCalledTimes(1);
     });
 });
 

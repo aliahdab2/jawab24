@@ -72,6 +72,22 @@ export function orderDeliveredEvent(platform: string, storeId: string, fields: O
 export async function scheduleOrderNotifications(event: OrderEvent): Promise<void> {
     const { platform, storeId, type, customerPhone, customerName, orderId, orderNumber, trackingNumber, cartTotal, minDelayMs, upgradePendingOnDuplicate, also } = event;
 
+    // The customer bought — a still-pending "you left items in your cart" nudge must
+    // never reach them. Runs regardless of whether the order_confirmed template is
+    // enabled (schedule() below may no-op on a disabled template, but the purchase
+    // still invalidates the nudge), and best-effort so a cancel failure can never
+    // cost the confirmation SMS itself.
+    if (type === 'order_confirmed') {
+        try {
+            await customerNotificationService.cancel(storeId, 'abandoned_cart', customerPhone);
+        } catch (err) {
+            captureError(err, 'Abandoned-cart cancel on order_confirmed failed', {
+                tags: { service: 'customer-notifications', platform },
+                extra: { storeId, orderId },
+            });
+        }
+    }
+
     const variables: Record<string, string> = {
         order_number: orderNumber,
         tracking_number: trackingNumber ?? '',
