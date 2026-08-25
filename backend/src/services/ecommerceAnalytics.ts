@@ -201,6 +201,11 @@ async function queryRecoveryStats(storeId: string, since: Date): Promise<Recover
             eq(customerNotificationsLog.ecommerceStoreId, storeId),
             eq(customerNotificationsLog.notificationType, 'abandoned_cart'),
             gte(customerNotificationsLog.createdAt, since),
+            // A cancelled row means the customer completed checkout BEFORE the nudge
+            // was ever sent (abandoned_cart.completed / order_confirmed cancel) —
+            // counting it as "notified", let alone crediting its revenue as
+            // "recovered", would inflate both numbers with sends that never happened.
+            sql`${customerNotificationsLog.status} IS DISTINCT FROM 'cancelled'`,
         ));
 
     const abandonedCartsNotified = rows.length;

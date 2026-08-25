@@ -834,6 +834,64 @@ describe('Salla Controller', () => {
             });
         });
 
+        // --- abandoned.cart [provisional]: the event string has never been confirmed by a
+        // live delivery (SALLA_TEST_PLAN.md) — the payload shape mirrors the order.created
+        // capture. These pin the previously untested branch: cart id doubling as
+        // orderId/orderNumber (= the dedupe key), the total fallback, and the phone gate. ---
+        it('dispatches an abandoned_cart nudge on abandoned.cart, cart id doubling as order id/number', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'abandoned.cart', merchant: 2108580704,
+                data: {
+                    id: 5550001,
+                    customer: { first_name: 'abc', mobile: 555555555, mobile_code: '+971' },
+                    amounts: { sub_total: { amount: 268, currency: 'SAR' } },
+                },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                platform: 'salla', storeId: 'store-1', type: 'abandoned_cart',
+                customerPhone: '+971555555555', customerName: 'abc',
+                orderId: '5550001', orderNumber: '5550001', cartTotal: '268 SAR',
+            });
+        });
+
+        it('falls back to data.total for the cart total when amounts.sub_total is absent', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'abandoned.cart', merchant: 2108580704,
+                data: {
+                    id: 5550002,
+                    customer: { first_name: 'abc', mobile: 555555555, mobile_code: '+971' },
+                    total: { amount: 99, currency: 'SAR' },
+                },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ cartTotal: '99 SAR' });
+        });
+
+        it('drops abandoned.cart when the customer has no phone (nothing to send an SMS to)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'abandoned.cart', merchant: 2108580704,
+                data: { id: 5550003, customer: { first_name: 'abc' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
         it('should dispatch order_delivered on order.status.updated (order nested under data.order, slug at data.customized.slug)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });

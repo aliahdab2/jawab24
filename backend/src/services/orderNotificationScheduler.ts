@@ -67,6 +67,16 @@ export function orderDeliveredEvent(platform: string, storeId: string, fields: O
     };
 }
 
+/** The cart has no order yet — the cart id doubles as orderId AND the dedupe key
+ *  (`<platform>:abandoned_cart:<cart id>`), so a re-delivered webhook never double-sends. */
+export function abandonedCartEvent(
+    platform: string,
+    storeId: string,
+    fields: OrderEventFields & { cartTotal?: string; checkoutUrl?: string },
+): OrderEvent {
+    return { platform, storeId, type: 'abandoned_cart', ...fields };
+}
+
 /**
  * Schedule one or more customer notifications for an order event.
  * Shared across Salla, Shopify, and Zid controllers.

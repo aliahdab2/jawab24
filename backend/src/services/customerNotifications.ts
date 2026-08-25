@@ -185,14 +185,19 @@ export class CustomerNotificationService {
             messageEn: string;
             delayMinutes: number;
         }> = [
+            // Arabic copy is Jawab24-authored ⇒ فصحى only (AI_INSTRUCTIONS §5) —
+            // seeds only affect stores connected after this change; existing rows
+            // are merchant-editable and refreshed via POST .../reset when wanted.
             {
                 notificationType: 'abandoned_cart',
                 // فصحى per AI_INSTRUCTIONS §5 (migrated from dialect when the checkout
                 // link was added, 2026-08-25). {checkout_url} is filled from the
-                // platform's cart-recovery link (Salla: data.checkout_url) and renders
-                // empty on platforms that don't provide one.
-                messageAr: 'مرحباً {customer_name}! ما زالت في سلتك منتجات بقيمة {cart_total}. أكمل طلبك من هنا 🛒 {checkout_url}',
-                messageEn: 'Hi {customer_name}! You left items worth {cart_total} in your cart. Complete your order here 🛒 {checkout_url}',
+                // platform's cart-recovery link (Salla: data.checkout_url; Zid
+                // [provisional]) and renders empty on platforms that don't provide
+                // one — so the copy must read naturally WITHOUT the link too. «أكمل
+                // طلبك الآن» / "now" does; «من هنا» / "here" pointed at nothing.
+                messageAr: 'مرحباً {customer_name}! ما زالت في سلتك منتجات بقيمة {cart_total}. أكمل طلبك الآن 🛒 {checkout_url}',
+                messageEn: 'Hi {customer_name}! You left items worth {cart_total} in your cart. Complete your order now 🛒 {checkout_url}',
                 delayMinutes: 60,
             },
             {
@@ -209,7 +214,7 @@ export class CustomerNotificationService {
             },
             {
                 notificationType: 'order_delivered',
-                messageAr: '{customer_name}، طلبك #{order_number} تم توصيله ✅ نتمنى تعجبك المنتجات!',
+                messageAr: '{customer_name}، طلبك #{order_number} تم توصيله ✅ نتمنى أن تنال المنتجات إعجابك!',
                 messageEn: '{customer_name}, your order #{order_number} has been delivered ✅ We hope you love it!',
                 delayMinutes: 0,
             },
@@ -254,9 +259,16 @@ export class CustomerNotificationService {
         return template ?? null;
     }
 
-    /** Replace {variable} placeholders in a template string. */
+    /** Replace {variable} placeholders in a template string. An empty variable
+     *  (e.g. {checkout_url} on a platform without a recovery link) must not leave
+     *  the message ragged, so runs of spaces/tabs collapse and the ends are
+     *  trimmed — newlines are preserved (merchants format with them). */
     renderTemplate(template: string, variables: Record<string, string>): string {
-        return template.replace(/\{(\w+)\}/g, (_, key: string) => variables[key] ?? '');
+        return template
+            .replace(/\{(\w+)\}/g, (_, key: string) => variables[key] ?? '')
+            .replace(/[ \t]{2,}/g, ' ')
+            .replace(/[ \t]+$/gm, '')
+            .trim();
     }
 
     /** Detect language from phone prefix — Arabic countries default to Arabic. */

@@ -22,6 +22,7 @@ import { tryGetUserId } from '../utils/authHelpers';
 import { captureError } from '../utils/sentryHelpers';
 import {
     dispatchOrderNotification,
+    abandonedCartEvent,
     orderConfirmedEvent,
     orderShippedEvent,
     orderDeliveredEvent,
@@ -407,15 +408,17 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
     if (event === 'abandoned.cart') {
         const phone = normalizeSallaPhone(data.customer);
         if (!phone) return null;
-        return {
-            platform: 'salla', storeId, type: 'abandoned_cart',
-            customerPhone: phone, customerName: sallaCustomerName(data.customer),
-            orderId: String(data.id ?? ''), orderNumber: String(data.id ?? ''),
+        const cartId = String(data.id ?? '');
+        return abandonedCartEvent('salla', storeId, {
+            customerPhone: phone,
+            customerName: sallaCustomerName(data.customer),
+            orderId: cartId,
+            orderNumber: cartId,
             cartTotal: formatSallaTotal(data),
             // The cart-recovery link (docs.salla.dev doc-433812) — the whole point of
             // the nudge; rendered via the {checkout_url} template variable.
             checkoutUrl: data.checkout_url?.trim() || undefined,
-        };
+        });
     }
 
     // order.shipment.created has a shipment-shaped payload (not an order): customer under
