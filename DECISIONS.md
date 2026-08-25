@@ -2863,3 +2863,37 @@ A merchant's confirmed edit tombstones a field against future store-side changes
 semantics as fb_sync). Eval Cat 83 (#810-812) pins the path end-to-end on the demo Salla
 store, whose fashion-page KB deliberately carries no contact lines. (Noted in passing:
 ids 804/805 were already duplicated between Cat 81 and Cat 82 on main before this change.)
+
+---
+
+## D-103 · Salla goes PUBLIC on the D-095 prices: Business/Pro only, 146 / 296 SAR ex-VAT, 14-day trial — one price across both marketplaces (2026-08-26, owner ruling)
+
+**Context.** The Salla listing was blocked on a distribution decision. The owner's 08-23
+«i do not want to make it public to everyone» had been read as pointing at Salla's Private-app
+type (new app, creds repoint, no shelf presence). On 2026-08-26 the owner clarified: «انا قصدت
+لا اريده للجميع الان لكن بعد الاطلاق يجب ان يكون للجميع» — *not yet*, never *never*. Salla's
+public-app wizard rejects a 0-price plan («Price must be at least 1 SAR») but its Trial Period
+field is optional; the live shelf confirms nobody ships a free plan — every competitor is a
+paid plan carrying a free trial (Mando 71/221/559 SAR + 3-day trial, Letsbot 49/119 + 7-day,
+and on Zid Radad 113.85/263.35 + 7-day).
+
+**Ruling.** The Salla app (665811310) stays PUBLIC and the Private-app track is dead. The
+listing carries exactly the two plans whose `ecommerceEnabled` is true in
+`backend/src/config/plans.ts` — **الأعمال (Business) 146 SAR** and **الاحترافي (Pro) 296 SAR**,
+ex-VAT, the D-095 numbers ($39/$79 × 3.75) — with a **14-day trial** on both. Salla and Zid
+list identical prices and identical trials.
+
+**Consequences.** Basic/Starter are never listed on a store marketplace: they cannot open the
+store (`ecommerceEnabled: false`), so listing them would sell a plan the buyer cannot use.
+The 14-day trial doubles the friendliest competitor (7d) and is the same differentiator D-072
+originally recorded. Jawab24 absorbs Salla's commission exactly as D-095 settled for Zid.
+Open, parked: how a Salla-billed subscription reconciles with Stripe-side entitlement (§H-class
+work, needed before the first real paid envelope), and the direct-signup trial length (#705
+proposes 7 days there — marketplace 14d vs direct 7d is a deliberate asymmetry, not drift).
+
+**Rejected.** (a) The Private-app route — superseded by the owner's clarification; it also
+required a brand-new app since Type is not portal-convertible. (b) Re-raising the withdrawn
+D-072 gross-up (189/379): it was re-proposed in-session and OK'd before anyone noticed D-095
+had withdrawn it; the recorded ruling stands on the D-095 numbers. (c) A 10-day trial — no
+competitor uses it, and page-connect traffic stats were ruled inadmissible for store-merchant
+decisions; the comparison set is Letsbot/Mando/Radad.
