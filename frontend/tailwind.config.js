@@ -1,3 +1,5 @@
+const plugin = require('tailwindcss/plugin')
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
@@ -129,5 +131,23 @@ module.exports = {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    // `hoverable:` / `group-hoverable:` — hover, but only on a real pointer.
+    //
+    // A touch tap fires a synthetic :hover that is never cleared, so a plain
+    // `hover:-translate-y-2` leaves the card stuck in its hovered transform
+    // after the finger lifts; it only releases when something else is tapped.
+    // Tailwind v4 makes this the default for `hover:`; on v3 it is the opt-in
+    // `future.hoverOnlyWhenSupported` flag, which rewrites EVERY hover: in the
+    // app. These variants are the contained form: nothing changes unless a
+    // class opts in, so the blast radius is exactly the call sites we convert.
+    //
+    // Use for hover MOVEMENT (transform). Colour-only hovers can stay `hover:`
+    // — a stuck colour is a hint, a stuck transform is a broken-looking card.
+    plugin(({ addVariant }) => {
+      addVariant('hoverable', '@media (hover: hover) and (pointer: fine) { &:hover }')
+      addVariant('group-hoverable', '@media (hover: hover) and (pointer: fine) { :merge(.group):hover & }')
+    }),
+  ],
 }
