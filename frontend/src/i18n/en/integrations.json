@@ -15,6 +15,11 @@
     "salla": "Salla",
     "zid": "Zid"
   },
+  "policiesNudge": {
+    "title": "Store policies incomplete",
+    "body": "Add your delivery and payment policies in your Business Info so Smart Replies can answer customer questions about them.",
+    "cta": "Complete policies"
+  },
   "webhookHealth": {
     "pendingTitle": "Almost ready",
     "pendingBody": "Finishing setup so we can answer comments and messages from this store.",

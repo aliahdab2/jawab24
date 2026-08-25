@@ -35,10 +35,12 @@ import {
   Loader2,
   Plus,
   ChevronDown,
+  ClipboardList,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { useIsDemoUser } from '@/features/demo';
+import { computeFactCoverage } from '@/utils/businessCoverage';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 // Direct import, NOT the '@/hooks' barrel — public page.
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
@@ -203,6 +205,7 @@ function ConnectedStoreCard({
   const { canEdit } = useWorkspaceRole();
   const connectAvailable = useConnectAvailable(platform.id);
   const isDemoUser = useIsDemoUser();
+  const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -258,6 +261,19 @@ function ConnectedStoreCard({
       setDisconnecting(false);
     }
   };
+
+  // D-102 policies nudge: delivery/payment policies are not API-syncable on
+  // Salla/Zid (no policy-pages endpoint) — the merchant authors them in the
+  // /business facts editor. Surface the gap on the store card for the first
+  // linked page still missing either fact. `computeFactCoverage` already
+  // accounts for Shopify's synced `storeAnswersPolicies`, so a Shopify store
+  // whose policies synced never nudges.
+  const policyGapPage = pages
+    .filter((p) => p.ecommerceStoreId === store.id)
+    .find((p) => {
+      const { covered } = computeFactCoverage(p);
+      return !covered.delivery || !covered.payment;
+    });
 
   const handleLinkPage = async (pageId: string) => {
     const alreadyLinked = pages.find((p) => p.id === pageId)?.ecommerceStoreId === store.id;
@@ -380,6 +396,25 @@ function ConnectedStoreCard({
         </div>
 
         <StoreAnalyticsSummary storeId={store.id} />
+
+        {policyGapPage && (
+          <div className="flex items-start gap-3 p-3 rounded-xl alert-warning border" role="status">
+            <ClipboardList className="w-5 h-5 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold">{tInt('policiesNudge.title')}</p>
+              <p className="text-muted-foreground mb-2">{tInt('policiesNudge.body')}</p>
+              {canEdit && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => router.push(`/business?page=${policyGapPage.id}`)}
+                >
+                  {tInt('policiesNudge.cta')}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {pages.length > 0 && (
           <div>
