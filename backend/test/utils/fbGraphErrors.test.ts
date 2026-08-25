@@ -62,6 +62,18 @@ describe('classifyDmError — DmSendError (structured)', () => {
         expect(classifyDmError(err, 'facebook').bucket).toBe('window_expired');
     });
 
+    // Regression: Sentry JAWAB24-BACKEND-1A — IG manual reply outside the 24h window
+    // returns 10/2534022 (not 2018278), which fell through to 'unknown' → 502 → Sentry.
+    it('classifies 10/2534022 as window_expired on Instagram', () => {
+        const err = new DmSendError('(#10) This message is sent outside of allowed window', { code: 10, subcode: 2534022 });
+        expect(classifyDmError(err, 'instagram').bucket).toBe('window_expired');
+    });
+
+    it('classifies 10/2534022 as window_expired on Facebook', () => {
+        const err = new DmSendError('(#10) This message is sent outside of allowed window', { code: 10, subcode: 2534022 });
+        expect(classifyDmError(err, 'facebook').bucket).toBe('window_expired');
+    });
+
     it('classifies 613 as transient (rate limit)', () => {
         const err = new DmSendError('rate', { code: 613 });
         expect(classifyDmError(err, 'facebook').bucket).toBe('transient');

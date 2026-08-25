@@ -219,6 +219,8 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     // window_expired — outside 24h messaging window
     'facebook|10|2018278':  'window_expired',
     'instagram|10|2018278': 'window_expired',
+    'facebook|10|2534022':  'window_expired',  // same error, subcode used by IG messaging ("This message is sent outside of allowed window")
+    'instagram|10|2534022': 'window_expired',
 
     // transient — retry-worthy
     'facebook|613':         'transient',         // rate limited

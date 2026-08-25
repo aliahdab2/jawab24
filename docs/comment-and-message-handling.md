@@ -120,7 +120,7 @@ bucket, not on "something failed":
 | Bucket | Graph signals | Public-comment action | Merchant visibility |
 |---|---|---|---|
 | `customer_refused` | `10/2534014`, `551`, `100/2018001` | None (both private and dual) | Log only |
-| `window_expired` | `10/2018278` | Nudge only (never full reply) | Log only |
+| `window_expired` | `10/2018278`, `10/2534022` (IG variant) | Nudge only (never full reply) | Log only |
 | `transient` | `613`, network errors, 5xx | None; rethrow for retry | Log only |
 | `our_fault` | `190` (token), `200` (perms) | None | **Page-level banner** on settings view; auto-clears on next successful DM |
 | `unknown` | unmatched | None (safe default) | Log only |
