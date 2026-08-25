@@ -105,11 +105,26 @@ describe('CustomerNotificationService', () => {
             expect(result).toBe('Hi Sara, order #123');
         });
 
-        it('leaves unknown placeholders as empty string', () => {
+        it('leaves unknown placeholders as empty string and trims the ragged tail', () => {
             const result = service.renderTemplate('Hi {customer_name}, ref: {unknown_key}', {
                 customer_name: 'Ali',
             });
-            expect(result).toBe('Hi Ali, ref: ');
+            expect(result).toBe('Hi Ali, ref:');
+        });
+
+        // An empty {checkout_url} (platform without a recovery link) must not leave
+        // a trailing gap — the seeded copy reads naturally with or without the link.
+        it('renders the cart nudge cleanly when checkout_url is empty', () => {
+            const result = service.renderTemplate('أكمل طلبك الآن 🛒 {checkout_url}', { checkout_url: '' });
+            expect(result).toBe('أكمل طلبك الآن 🛒');
+        });
+
+        it('collapses the double space an empty mid-text variable leaves, preserving newlines', () => {
+            const result = service.renderTemplate('Total: {cart_total} SAR\nLink: {checkout_url}', {
+                cart_total: '',
+                checkout_url: 'https://x.example/c/1',
+            });
+            expect(result).toBe('Total: SAR\nLink: https://x.example/c/1');
         });
     });
 

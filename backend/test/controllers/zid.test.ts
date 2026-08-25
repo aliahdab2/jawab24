@@ -36,7 +36,8 @@ vi.mock('../../src/services/zid', async (importOriginal) => {
 // Real services/zid transitively imports the shared token refresher — stub its
 // heavy deps so importOriginal works without a DB/Redis.
 vi.mock('../../src/db', () => ({ db: {} }));
-vi.mock('../../src/lib/redis', () => ({ redis: { set: vi.fn(), del: vi.fn() } }));
+// set resolves 'OK' so NX-throttled captures (captureCartDropThrottled) fire in tests.
+vi.mock('../../src/lib/redis', () => ({ redis: { set: vi.fn().mockResolvedValue('OK'), del: vi.fn() } }));
 
 // --- Mocked Zid billing rail (D-070) ---
 // Mocked at the service boundary so these controller tests pin the WIRING —
@@ -138,6 +139,14 @@ const mockDispatchOrderNotification = vi.fn();
 vi.mock('../../src/services/orderNotificationScheduler', async (importActual) => ({
     ...(await importActual<typeof import('../../src/services/orderNotificationScheduler')>()),
     dispatchOrderNotification: (...args: unknown[]) => mockDispatchOrderNotification(...args),
+}));
+
+const mockCancelNotification = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../src/services/customerNotifications', async (importActual) => ({
+    ...(await importActual<typeof import('../../src/services/customerNotifications')>()),
+    customerNotificationService: {
+        cancel: (...args: unknown[]) => mockCancelNotification(...args),
+    },
 }));
 
 const mockCaptureError = vi.fn();
@@ -1361,6 +1370,147 @@ describe('Zid Controller', () => {
                 expect.objectContaining({ type: 'order_confirmed', customerPhone: '+966591555966' }),
                 req.log,
             );
+        });
+    });
+
+    describe('webhookHandler — abandoned-cart events [provisional — pending Zid live captures]', () => {
+        beforeEach(() => {
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', platform: 'zid', isActive: true });
+        });
+
+        // Shape inferred from docs.zid.sa "Abandoned Cart" (cart id, customer, totals,
+        // continue-checkout URL) — no live capture exists yet; replace with the real
+        // payload once one is recorded in docs/testing/zid_live_payloads.jsonl.
+        const cartPayload = (overrides: Record<string, unknown> = {}) => ({
+            id: 98765,
+            customer: { name: 'Ahmed Ali', mobile: '966591555966' },
+            total: 10000,
+            currency: 'SAR',
+            ...overrides,
+        });
+
+        it('dispatches an abandoned_cart nudge on abandoned_cart.created, cart id as the dedupe id', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload() },
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    platform: 'zid',
+                    storeId: 'store-1',
+                    type: 'abandoned_cart',
+                    customerPhone: '+966591555966',
+                    customerName: 'Ahmed Ali',
+                    orderId: '98765',
+                    orderNumber: '98765',
+                    cartTotal: '10000 SAR',
+                }),
+                req.log,
+            );
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('passes the continue-checkout URL through as checkoutUrl ({checkout_url} in the template)', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload({ checkout_url: 'https://demo.zid.store/cart/resume/abc' }) },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ checkoutUrl: 'https://demo.zid.store/cart/resume/abc' }),
+                req.log,
+            );
+        });
+
+        it('reads an object-shaped total ({amount, currency}) and an object currency code', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload({ total: { amount: '249.50', currency: 'SAR' }, currency: undefined }) },
+            });
+
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledWith(
+                expect.objectContaining({ cartTotal: '249.50 SAR' }),
+                req.log,
+            );
+        });
+
+        it('cancels the pending nudge on abandoned_cart.completed and dispatches nothing', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.completed', sid: 'store-1' },
+                body: { data: cartPayload() },
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockCancelNotification).toHaveBeenCalledWith('store-1', 'abandoned_cart', '+966591555966');
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('drops an id-less cart loudly — an empty id would collapse the dedupe key and silently swallow every later cart', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload({ id: undefined }) },
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+            await new Promise(r => setTimeout(r, 10)); // capture is fire-and-forget
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Zid abandoned-cart payload missing cart id',
+                expect.objectContaining({ tags: { service: 'zid' } }),
+            );
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('drops a phoneless cart event loudly (Sentry) — the provisional parser likely drifted', async () => {
+            const req = webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload({ customer: { name: 'Ahmed Ali' } }) },
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+            await new Promise(r => setTimeout(r, 10)); // capture is fire-and-forget
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(mockCancelNotification).not.toHaveBeenCalled();
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Zid abandoned-cart payload missing phone',
+                expect.objectContaining({ tags: { service: 'zid' } }),
+            );
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('throttles drop captures — a second drop inside the Redis NX window logs but does not re-capture', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.set)
+                .mockResolvedValueOnce('OK' as never)   // first drop wins the NX key
+                .mockResolvedValueOnce(null as never);  // second drop: key already held
+
+            const drop = () => webhookHandler(webhookRequest({
+                query: { e: 'abandoned_cart.created', sid: 'store-1' },
+                body: { data: cartPayload({ customer: { name: 'Ahmed Ali' } }) },
+            }), mockReply());
+
+            await drop();
+            await drop();
+            await new Promise(r => setTimeout(r, 10));
+
+            expect(mockCaptureError).toHaveBeenCalledTimes(1);
         });
     });
 

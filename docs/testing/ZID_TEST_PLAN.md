@@ -369,6 +369,36 @@ otherwise replay the captured delivery verbatim with curl).
   (never log the password).
 - Delivery with no auth header at all → 401.
 
+### E-7. `abandoned_cart.created` → recovery-nudge log row (added 2026-08-25, code shipped, NOT live-run)
+**Precondition:** webhooks re-registered on the dev store AFTER the 2026-08-25 deploy
+(the pre-existing subscription carries only the 6 old events), and the `abandoned_cart`
+template enabled on store `e3deb6f2-…`.
+
+**Steps:** In a REAL browser (chrome-real; the human taps any Cloudflare challenge):
+storefront `h47p59.zid.store` → sign in as a customer with a phone → add «سونى A7» to
+the cart → abandon. Zid marks the cart abandoned after ~10 min of inactivity.
+
+**Expected:** `abandoned_cart.created` delivery (Basic-auth) → `abandoned_cart` log row
+`pending` with `platform_event_id = zid:abandoned_cart:<cart id>` and a `cart_total`;
+after the 60-min template delay the send fires (lands `failed` on Vonage today — the row
+is the proof). Verify at `GET /api/notification-log/<storeId>`.
+
+**Capture — C12**: the raw payload → `zid_live_payloads.jsonl`. The parser is
+[provisional] (docs promise id/customer/totals/continue-checkout URL) — if the live
+shape differs, fix `ZidAbandonedCartPayload` in `controllers/zid.ts` and pin the real
+payload in `test/controllers/zid.test.ts`. Also record whether the continue-checkout
+URL field exists (gates the follow-up `{cart_url}` template variable).
+
+### E-8. `abandoned_cart.completed` → pending nudge cancelled (added 2026-08-25, code shipped, NOT live-run)
+**Steps:** Complete the same cart's checkout within the 60-min delay window.
+
+**Expected:** `abandoned_cart.completed` delivery → the pending `abandoned_cart` row
+flips to `cancelled` BEFORE the send; the customer gets the `order_confirmed` SMS only.
+Analytics: the cancelled row is excluded from "revenue recovered" (pinned by
+`test/integration/abandonedCartRecovery.test.ts`).
+
+**Capture — C13**: the raw `.completed` payload → `zid_live_payloads.jsonl`.
+
 ---
 
 ## F. Refresh + Lifecycle (captures C10–C11)

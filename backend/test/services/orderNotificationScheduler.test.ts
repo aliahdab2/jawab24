@@ -15,6 +15,7 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 import {
     scheduleOrderNotifications,
     dispatchOrderNotification,
+    abandonedCartEvent,
     type OrderEvent,
 } from '../../src/services/orderNotificationScheduler';
 import { customerNotificationService } from '../../src/services/customerNotifications';
@@ -153,6 +154,29 @@ describe('scheduleOrderNotifications', () => {
             expect.objectContaining({ type: 'order_confirmed' }),
         );
         expect(captureError).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('abandonedCartEvent', () => {
+    it('builds an abandoned_cart event — cart id doubles as order id/number (the dedupe key)', () => {
+        const event = abandonedCartEvent('zid', 'store-1', {
+            customerPhone: '+966501234567',
+            customerName: 'Ahmed',
+            orderId: '98765',
+            orderNumber: '98765',
+            cartTotal: '100 SAR',
+        });
+
+        expect(event).toEqual({
+            platform: 'zid',
+            storeId: 'store-1',
+            type: 'abandoned_cart',
+            customerPhone: '+966501234567',
+            customerName: 'Ahmed',
+            orderId: '98765',
+            orderNumber: '98765',
+            cartTotal: '100 SAR',
+        });
     });
 });
 

@@ -16,10 +16,13 @@ import {
 import { captureError } from '../utils/sentryHelpers';
 import {
     dispatchOrderNotification,
+    abandonedCartEvent,
     orderConfirmedEvent,
     orderShippedEvent,
     orderDeliveredEvent,
 } from '../services/orderNotificationScheduler';
+import { customerNotificationService } from '../services/customerNotifications';
+import { redis } from '../lib/redis';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { cancelZidSubscriptionLocal, syncZidBilling } from '../services/zidBilling';
@@ -316,9 +319,139 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
             const orderEvent = buildZidOrderEvent(store.id, event, body);
             if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
         }
+        return reply.status(200).send({ ok: true });
+    }
+
+    if (zidService.isAbandonedCartEvent(event)) {
+        const store = await resolveStore();
+        if (store) handleZidAbandonedCartEvent(store.id, event, body, request.log);
     }
 
     return reply.status(200).send({ ok: true });
+}
+
+/**
+ * [provisional] Abandoned-cart payload fields pending live captures — read tolerantly.
+ * Docs (docs.zid.sa "Abandoned Cart") promise the cart id, the customer, totals and a
+ * continue-checkout URL; only the id is required here. The URL field name is unobserved —
+ * both plausible spellings are read; the live capture (ZID_TEST_PLAN C12) pins the real one.
+ */
+interface ZidAbandonedCartPayload {
+    id?: string | number;
+    cart_id?: string | number;
+    customer?: { name?: string; mobile?: string | number; phone?: string | number };
+    total?: string | number | { amount?: string | number; currency?: string };
+    totals?: { total?: string | number };
+    currency?: string | { code?: string };
+    /** [provisional] continue-checkout URL → rendered as {checkout_url} (same as Salla). */
+    checkout_url?: string;
+    url?: string;
+}
+
+const CART_DROP_CAPTURE_TTL_SECONDS = 60 * 60;
+
+/**
+ * Sentry-capture a dropped cart event at most once per store+reason per hour
+ * (Redis SET NX — same shape as ai.ts `alertQuotaExhausted`): if Zid routinely
+ * sends guest carts without a phone, one capture per hour is signal and one per
+ * cart is a flood. Every drop still lands in the warn log. Fails open (Redis
+ * down ⇒ capture rather than lose the drift signal); never throws.
+ */
+async function captureCartDropThrottled(
+    reason: 'phone' | 'cart_id',
+    storeId: string,
+    event: string,
+    payloadKeys: string[],
+): Promise<void> {
+    let shouldCapture = true;
+    try {
+        const acquired = await redis.set(
+            `alert:zid_cart_drop:${reason}:${storeId}`, '1',
+            'EX', CART_DROP_CAPTURE_TTL_SECONDS, 'NX',
+        );
+        shouldCapture = acquired === 'OK';
+    } catch {
+        // Redis unavailable — prefer a possible duplicate capture over silence.
+    }
+    if (!shouldCapture) return;
+    captureError(
+        new Error(`Zid abandoned-cart event without a customer ${reason === 'phone' ? 'phone' : 'cart id'}: ${event}`),
+        reason === 'phone'
+            ? 'Zid abandoned-cart payload missing phone'
+            : 'Zid abandoned-cart payload missing cart id',
+        { tags: { service: 'zid' }, extra: { event, storeId, payloadKeys } },
+    );
+}
+
+/** Mirror of Salla's `formatSallaTotal` output shape ("<amount> <currency>") so the
+ *  analytics `parseAmount`/`extractCurrency` string readers keep working unchanged. */
+function formatZidCartTotal(data: ZidAbandonedCartPayload): string | undefined {
+    const raw = typeof data.total === 'object' && data.total !== null
+        ? data.total.amount
+        : data.total ?? data.totals?.total;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    const currency = (typeof data.total === 'object' && data.total !== null ? data.total.currency : undefined)
+        ?? (typeof data.currency === 'object' && data.currency !== null ? data.currency.code : data.currency);
+    return `${raw}${currency ? ` ${currency}` : ''}`.trim();
+}
+
+/**
+ * abandoned_cart.created  → schedule the recovery nudge (template-gated, seeds disabled).
+ * abandoned_cart.completed → the customer finished checkout: cancel any still-pending
+ * nudge for that phone. Partly redundant with the order_confirmed hook in
+ * scheduleOrderNotifications (a completed cart usually fires order.create too), but this
+ * is the direct signal keyed to the cart and still lands when the order webhook drops.
+ */
+function handleZidAbandonedCartEvent(
+    storeId: string,
+    event: string,
+    body: ZidWebhookBody,
+    log: { warn: (obj: object, msg: string) => void; error: (obj: object, msg: string) => void },
+): void {
+    const data = (body.data ?? (body.cart as Record<string, unknown> | undefined) ?? body) as ZidAbandonedCartPayload;
+
+    const phone = zidService.normalizeZidPhone(data.customer?.mobile ?? data.customer?.phone);
+    if (!phone) {
+        // Fail loud, field NAMES only (no PII): a cart event we cannot act on most
+        // likely means the payload drifted from this [provisional] parser — same
+        // pattern as zid-profile-field-drop. Capture throttled: guest carts may
+        // legitimately lack a phone, and a storm of them must not flood Sentry.
+        log.warn({ event, storeId }, '[ZidCart] abandoned-cart event without a customer phone — dropped');
+        void captureCartDropThrottled('phone', storeId, event, Object.keys(data));
+        return;
+    }
+
+    if (event === 'abandoned_cart.completed') {
+        customerNotificationService.cancel(storeId, 'abandoned_cart', phone).catch(err => {
+            log.error({ err, storeId }, '[ZidCart] failed to cancel abandoned-cart nudge on completion');
+            captureError(err, 'Zid abandoned-cart cancel on completion failed', {
+                tags: { service: 'zid' }, extra: { storeId },
+            });
+        });
+        return;
+    }
+
+    if (event === 'abandoned_cart.created') {
+        const rawCartId = data.id ?? data.cart_id;
+        if (rawCartId === undefined || rawCartId === null || String(rawCartId) === '') {
+            // Without a cart id the dedupe key would collapse to the shared
+            // 'zid:abandoned_cart:' — the FIRST id-less cart claims it and every
+            // later one is silently dropped by the unique index. A missing id on
+            // this [provisional] parser means the payload drifted: fail loud.
+            log.warn({ event, storeId }, '[ZidCart] abandoned-cart event without a cart id — dropped');
+            void captureCartDropThrottled('cart_id', storeId, event, Object.keys(data));
+            return;
+        }
+        const cartId = String(rawCartId);
+        dispatchOrderNotification(abandonedCartEvent('zid', storeId, {
+            customerPhone: phone,
+            customerName: data.customer?.name,
+            orderId: cartId,
+            orderNumber: cartId,
+            cartTotal: formatZidCartTotal(data),
+            checkoutUrl: (data.checkout_url ?? data.url)?.trim() || undefined,
+        }), log);
+    }
 }
 
 /** [provisional] Order payload fields pending live captures — read tolerantly. */

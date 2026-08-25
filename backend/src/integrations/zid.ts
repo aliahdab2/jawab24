@@ -15,6 +15,8 @@ const ZID_WEBHOOK_TOPICS = [
     'product.delete',
     'order.create',
     'order.status.update',
+    'abandoned_cart.created',
+    'abandoned_cart.completed',
 ] as const;
 
 /**

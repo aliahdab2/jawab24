@@ -530,9 +530,15 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
   (`utils/basicAuthVerify.ts`).
 - Registered events (`ZID_WEBHOOK_EVENTS`, mirrored in `integrations/zid.ts`
   `ZID_WEBHOOK_TOPICS`, drift-tested): `product.create`, `product.update`,
-  `product.publish`, `product.delete`, `order.create`, `order.status.update`.
+  `product.publish`, `product.delete`, `order.create`, `order.status.update`,
+  `abandoned_cart.created`, `abandoned_cart.completed` (cart events added
+  2026-08-25 — `.created` schedules the recovery nudge via the shared scheduler,
+  `.completed` cancels a still-pending nudge; payload parser is [provisional]
+  until a live capture lands in `docs/testing/zid_live_payloads.jsonl`).
+  ⚠️ Stores connected before 2026-08-25 keep the old 6-event subscription until
+  webhooks are re-registered (merchant UI button or `reregister-webhooks.js zid`).
   Deliberately excluded: `order.payment_status.update` (no consumer),
-  `abandoned_cart.created/.completed` (phase-2), `customer.*`/`category.*`.
+  `customer.*`/`category.*`.
 - **App lifecycle** (`app.market.application.install` / `app.market.application.uninstall`)
   is configured in the Zid **Partner Dashboard**, not via the API — the handler treats
   `app.market.application.uninstall` as the uninstall signal (→ `deactivateStore`). Zid

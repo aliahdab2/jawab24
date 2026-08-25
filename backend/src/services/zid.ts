@@ -174,9 +174,10 @@ export function verifyWebhookBasicAuth(authorizationHeader: string | undefined):
 
 // --- Webhook Registration ---
 
-// Verified event slugs (docs.zid.sa "Supported Webhook Events", 2026-08-01).
-// Deliberately excluded: order.payment_status.update (no consumer yet),
-// abandoned_cart.created/.completed (phase-2 power feature), customer.*/category.*.
+// Verified event slugs (docs.zid.sa "Supported Webhook Events", 2026-08-01;
+// abandoned_cart.* re-verified 2026-08-25 — created fires after ~10 min of cart
+// inactivity, completed when the customer later finishes checkout).
+// Deliberately excluded: order.payment_status.update (no consumer yet), customer.*/category.*.
 // App lifecycle (app.market.application.install/uninstall) is configured in the
 // Zid Partner Dashboard — it is NOT registered through /v1/managers/webhooks,
 // so it must not appear in this list (webhookTopicDrift asserts the adapter copy).
@@ -187,6 +188,8 @@ export const ZID_WEBHOOK_EVENTS = [
     'product.delete',
     'order.create',
     'order.status.update',
+    'abandoned_cart.created',
+    'abandoned_cart.completed',
 ] as const;
 
 export type ZidWebhookEvent = typeof ZID_WEBHOOK_EVENTS[number];
@@ -197,6 +200,10 @@ export function isProductEvent(event: string): boolean {
 
 export function isOrderEvent(event: string): boolean {
     return event.startsWith('order.');
+}
+
+export function isAbandonedCartEvent(event: string): boolean {
+    return event.startsWith('abandoned_cart.');
 }
 
 /**

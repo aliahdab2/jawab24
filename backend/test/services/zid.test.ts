@@ -95,6 +95,7 @@ import {
     ZID_WEBHOOK_EVENTS,
     isProductEvent,
     isOrderEvent,
+    isAbandonedCartEvent,
     registerWebhooks,
     fetchStoreInfo,
     syncProducts,
@@ -326,6 +327,8 @@ describe('Zid Service', () => {
                 'product.delete',
                 'order.create',
                 'order.status.update',
+                'abandoned_cart.created',
+                'abandoned_cart.completed',
             ]);
         });
 
@@ -349,10 +352,20 @@ describe('Zid Service', () => {
             expect(isProductEvent(event)).toBe(false);
         });
 
-        it('both are false for unrelated events', () => {
+        it.each(['abandoned_cart.created', 'abandoned_cart.completed'])(
+            'isAbandonedCartEvent(%s) is true and the other predicates reject it',
+            (event) => {
+                expect(isAbandonedCartEvent(event)).toBe(true);
+                expect(isProductEvent(event)).toBe(false);
+                expect(isOrderEvent(event)).toBe(false);
+            },
+        );
+
+        it('all are false for unrelated events', () => {
             for (const event of ['app.market.application.uninstall', 'customer.create', '']) {
                 expect(isProductEvent(event)).toBe(false);
                 expect(isOrderEvent(event)).toBe(false);
+                expect(isAbandonedCartEvent(event)).toBe(false);
             }
         });
     });
