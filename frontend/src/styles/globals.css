@@ -1404,6 +1404,15 @@
   .animate-pulse-attention,
   .animate-float-delayed,
   .animate-float-slow,
+  /* Defined far from the others (line ~821, in the landing section rather than
+     the animation block) and NOT named `animate-*`, so it was missed both by the
+     2026-08 sweep above and by animationVocabulary.test.ts, which discovered
+     animations from their class name. It is infinite, it sits on the two hero
+     stat numbers the section exists to communicate, and it animates
+     `text-shadow` — a paint property with an 80px spread — so it also repaints
+     forever for a glow most visitors never notice. The guard now discovers by
+     DECLARATION, so the next such class cannot hide behind its name. */
+  .stat-neon-breathe,
   /* Tailwind's own infinite utilities. `animate-spin` is deliberately NOT here:
      it only ever marks a request in flight, which 2.2.2 treats as essential
      activity, and freezing it would leave a dead-looking control. */

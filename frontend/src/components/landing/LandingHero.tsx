@@ -8,8 +8,8 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { AnimatePresence, motion, type Variants } from 'framer-motion';
-import { useEffect, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useInView, type Variants } from 'framer-motion';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 // Direct imports, NOT the '@/components/ui' barrel — see LandingPageContent.
 import { Button } from '@/components/ui/Button';
@@ -257,6 +257,25 @@ function BotBubble({ text }: { text: string }) {
 
 
 function HeroPhoneChat({ t }: { t: (key: string) => string }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  /*
+   * Pause the loop while the hero is off screen.
+   *
+   * This is a 9.35s conversation on `% HERO_STEPS.length`, so it never ends. It
+   * used to keep advancing after the visitor had scrolled away — every tick a
+   * React re-render plus a fresh set of Framer springs on the main thread, still
+   * running while they read pricing four sections down. On the low-end Android
+   * that correlates with a slow connection that is real, permanent, invisible
+   * cost for something nobody is looking at.
+   *
+   * The identical mockup in IntegrationShowcase has always gated this way
+   * (`if (!isInView) { setPhase(-1); return; }`) — two copies of one widget with
+   * opposite lifecycle contracts. This is the copy that was wrong.
+   *
+   * We freeze rather than reset: scrolling back resumes mid-conversation instead
+   * of restarting it, which is what you want for a hero you scroll past twice.
+   */
+  const isInView = useInView(wrapperRef, { once: false, amount: 0.3 });
   const [step, setStep] = useState(0);
 
   const [delay, mode] = HERO_STEPS[step] ?? HERO_STEPS[0];
@@ -264,16 +283,17 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
   const resetting = mode === 'reset';
 
   useEffect(() => {
+    if (!isInView) return;
     const timer = setTimeout(() => {
       setStep(prev => (prev + 1) % HERO_STEPS.length);
     }, delay);
     return () => clearTimeout(timer);
-  }, [step, delay]);
+  }, [step, delay, isInView]);
 
   const show = (atPhase: number) => phase >= atPhase;
 
   return (
-    <div className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
+    <div ref={wrapperRef} className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
       <div className="relative p-2.5 sm:p-4 h-full flex flex-col">
         {/* Status Bar */}
         <div className="flex items-center justify-between pt-5 sm:pt-9 pb-1.5 sm:pb-4 px-4">
@@ -369,7 +389,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
     <section className="relative pt-6 sm:pt-10 lg:pt-16 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
       {/* Background gradients — static blur (rasterised once), opacity-only pulse (compositor-safe) */}
       <div className="absolute top-20 left-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full animate-pulse" style={{ filter: 'blur(40px)' }} />
-      <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full animate-pulse delay-1000" style={{ filter: 'blur(40px)' }} />
+      <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full animate-pulse animation-delay-1000" style={{ filter: 'blur(40px)' }} />
       {/* Centered Glowing Background */}
       <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
         <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full" style={{ filter: 'blur(80px)' }} />
@@ -392,7 +412,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
 
             <div className="flex flex-col items-center sm:items-start gap-3 sm:gap-5 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
               <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform duration-200 hoverable:scale-105 active:scale-[0.98]">
                   {isAuthenticated ? (tNav('dashboard') || 'Dashboard') : t('hero.cta1')}
                 </Button>
               </Link>

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
+import { EASE_OUT, DUR } from '@/constants/motion';
 
 const containerVariants = {
   hidden: {},
@@ -15,7 +16,7 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -24,7 +25,7 @@ const headingVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -89,7 +90,7 @@ export function LandingFAQ() {
                 <motion.div
                   className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ms-2 ${openFaq === i ? 'bg-brand-600 text-white' : 'bg-surface-100 text-surface-400 group-hover:bg-brand-100 group-hover:text-brand-600'}`}
                   animate={{ rotate: openFaq === i ? 180 : 0 }}
-                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                  transition={{ duration: DUR.dropdown, ease: EASE_OUT }}
                 >
                   <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
                 </motion.div>
@@ -100,7 +101,7 @@ export function LandingFAQ() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    transition={{ duration: DUR.dropdown, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <div className="px-4 sm:px-8 pb-4 sm:pb-8 text-sm sm:text-base text-muted-foreground font-medium leading-relaxed">

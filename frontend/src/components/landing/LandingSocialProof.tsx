@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { Star } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { motion, useInView } from 'framer-motion';
+import { EASE_OUT, DUR } from '@/constants/motion';
 
 export function LandingSocialProof() {
   const t = useTranslations('landing');
@@ -25,9 +26,9 @@ export function LandingSocialProof() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10">
         <motion.div
           className="inline-flex items-center gap-1 mb-3 bg-white/10 px-3 py-1 rounded-full border border-white/20"
-          initial={{ opacity: 1, scale: 0.8 }}
-          animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 0.8 }}
-          transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+          initial={{ opacity: 1, scale: 0.97 }}
+          animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 0.97 }}
+          transition={{ duration: DUR.section, ease: EASE_OUT }}
         >
           {[...Array(5)].map((_, i) => (
             <motion.div
@@ -45,7 +46,7 @@ export function LandingSocialProof() {
           className="text-base sm:text-lg lg:text-xl font-display text-white mb-3 leading-relaxed italic italic-arabic px-2"
           initial={{ opacity: 1, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 20 }}
-          transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+          transition={{ duration: DUR.section, delay: 0.2, ease: EASE_OUT }}
         >
           &ldquo;{t('testimonials.quote1')}&rdquo;
         </motion.p>

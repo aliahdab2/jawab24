@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
 import { isRTLLocale } from '@/utils/locale';
+import { EASE_OUT, DUR, STAGGER } from '@/constants/motion';
 
 interface LandingHowItWorksProps {
   isAuthenticated: boolean;
@@ -19,9 +20,9 @@ function makeStepVariants(rtl: boolean) {
       opacity: 1,
       x: 0,
       transition: {
-        delay: i * 0.2,
-        duration: 0.5,
-        ease: [0.25, 0.46, 0.45, 0.94] as const,
+        delay: i * STAGGER,
+        duration: DUR.section,
+        ease: EASE_OUT,
       },
     }),
   };
@@ -33,7 +34,7 @@ const imageVariants = {
     opacity: 1,
     scale: 1,
     rotate: 2,
-    transition: { duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.3 },
+    transition: { duration: DUR.section, ease: EASE_OUT, delay: 0.3 },
   },
 };
 
@@ -42,7 +43,7 @@ const headingVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] as const },
+    transition: { duration: DUR.section, ease: EASE_OUT },
   },
 };
 
@@ -123,7 +124,11 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
               animate={isInView ? 'visible' : 'hidden'}
             >
               <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="inline-block mt-4 sm:mt-12">
-                <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
+                {/* Grows on a transform, not on `px`. `hover:px-12` animated
+                    horizontal padding, which runs layout + paint + composite
+                    every frame and reflowed the button's whole row; it also
+                    disagreed with the hero CTA, which already scales. */}
+                <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-transform duration-200 hoverable:scale-[1.03]">
                   <span className="flex items-center gap-2">
                     {isAuthenticated ? (tNav('dashboard') || 'Dashboard') : t('howItWorks.cta')}
                     <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
@@ -140,7 +145,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
             initial="hidden"
             animate={isInView ? 'visible' : 'hidden'}
           >
-            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700 bg-surface-50">
+            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hoverable:rotate-0 transition-transform duration-300 bg-surface-50">
               <Image
                 src="/images/social-icons-3d.png"
                 alt={t('images.dashboardPreview')}

@@ -760,7 +760,48 @@ matches the class `group-hover:animate-shimmer`. `animate-spin` is the one
 deliberate exception: it marks a request in flight, which 2.2.2 treats as
 essential activity.
 
+> **The rule is not "every `.animate-*`" — it is every infinite animation.**
+> `.stat-neon-breathe` (the hero stat glow) escaped for months because the guard
+> discovered animations by their class NAME, and that class does not start
+> `animate-`. Found 2026-08-25. The guard now discovers by DECLARATION — any rule
+> whose `animation` shorthand says `infinite` — so a new class cannot hide behind
+> its own name. If you write an infinite animation, the name you give the class
+> is irrelevant; it still has to be listed in the block.
+
 Pinned by `frontend/src/__tests__/styles/animationVocabulary.test.ts`.
+
+#### Motion values are tokens; hover MOVEMENT is pointer-gated
+
+`frontend/src/constants/motion.ts` owns the curves and the duration budget —
+`EASE_OUT`, `EASE_IN_OUT`, `DUR`, `STAGGER`. Motion used to be the only design
+axis with no token layer: `[0.25, 0.46, 0.45, 0.94]` was hand-typed in 13 places
+across 7 landing files, beside 14 distinct durations. Import the token; never
+retype a bezier.
+
+**Hover that MOVES something must use `hoverable:` / `group-hoverable:`**, not
+`hover:` / `group-hover:`. A touch tap fires a synthetic `:hover` that is never
+cleared, so `hover:-translate-y-2` leaves the card stuck in its hovered transform
+until something else is tapped — on a page whose traffic is mostly phones. The
+two variants (defined in `tailwind.config.js`) wrap the rule in
+`@media (hover: hover) and (pointer: fine)`.
+
+This is the *contained* form of Tailwind v4's default. The app-wide equivalent is
+the v3 flag `future.hoverOnlyWhenSupported`, which rewrites every `hover:` in the
+product; it was considered and deliberately not taken, so **the rest of the app
+still has ungated hover transforms.** Colour-only hovers stay `hover:` on purpose
+— a stuck colour is a hint, a stuck transform is a broken-looking card.
+
+**A public-page entrance never starts at `opacity: 0`.** Framer Motion serialises
+`initial` into the SSR markup, so a fade-in ships a visually blank hero that
+appears only once the JS has hydrated — ~16s on a cold Slow 3G first visit
+(`frontend/scripts/perf`). Fixed once already in `46c76c1e` ("remove opacity-0
+from scroll animations to prevent white flash"); every `hidden` variant on the
+landing page pins `opacity: 1` for this reason. To soften a jumpy entrance,
+shrink the transform's amplitude instead. This does **not** apply to elements
+that mount later — `AnimatePresence` children, the FAQ answer panel — which are
+not in the server HTML at rest.
+
+Pinned by `frontend/src/__tests__/styles/landingMotionContract.test.ts`.
 
 #### A semantic class owns its hue alone — `jawab24/no-mixed-semantic-palette`
 

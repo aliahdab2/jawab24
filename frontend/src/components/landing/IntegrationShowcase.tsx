@@ -478,7 +478,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
             <div className="flex gap-3.5 flex-wrap">
               <a
                 href={shopifyLink}
-                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-[transform,background-color,box-shadow] duration-200 hoverable:-translate-y-0.5"
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -500,7 +500,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               </a>
               <a
                 href={sallaLink}
-                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-[transform,background-color,box-shadow] duration-200 hoverable:-translate-y-0.5"
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -522,7 +522,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               </a>
               <a
                 href={zidLink}
-                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-[transform,background-color,box-shadow] duration-200 hoverable:-translate-y-0.5"
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
