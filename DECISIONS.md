@@ -2860,5 +2860,6 @@ expose no policy-pages API — the merchant authors those in the `/business` edi
 kb_extract, store_sync) — pre-existing class, low frequency (6h staggered), not fixed here.
 The readiness gate honestly widens: a store-synced phone now satisfies `business_info_block`.
 A merchant's confirmed edit tombstones a field against future store-side changes (same
-semantics as fb_sync). Eval Cat 82 (#806-808) pins the path end-to-end on the demo Salla
-store, whose fashion-page KB deliberately carries no contact lines.
+semantics as fb_sync). Eval Cat 83 (#810-812) pins the path end-to-end on the demo Salla
+store, whose fashion-page KB deliberately carries no contact lines. (Noted in passing:
+ids 804/805 were already duplicated between Cat 81 and Cat 82 on main before this change.)
