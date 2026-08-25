@@ -38,7 +38,10 @@ const {
     mockFetchRoundedLogo: vi.fn(),
     mockConfig: {
         openai: { apiKey: 'test-key' },
-        postSuggestions: { enabled: true, workspaceIds: [] as string[], dailyCapPerPage: 3 },
+        // Present only so importing the subscriptions service (pulled in by the
+        // entitlement check) can construct its Redis client at module load.
+        redis: { host: '127.0.0.1', port: 6379, password: undefined },
+        postSuggestions: { enabled: true, workspaceIds: [] as string[], dailyCapPerPage: 3, planGateEnabled: false },
     },
 }));
 
@@ -96,13 +99,15 @@ vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../lib/postSuggestionQueue', () => ({ enqueuePostSuggestion: mockEnqueue }));
 
 import { makeDbRouter, type DbRouter } from './helpers/drizzleQueryMock';
-import { pages, postSuggestions, catalogItems, factCollections } from '../db/schema';
+import { pages, postSuggestions, catalogItems, factCollections, workspaces } from '../db/schema';
+import { subscriptionsService } from '../services/subscriptions';
 import { makeTrackedOpenAI } from '../services/openaiClient';
 import { getStoreContextForAI } from '../services/ecommerce';
 import { captureError } from '../utils/sentryHelpers';
 import {
     postSuggestionsService,
     isPostSuggestionsEnabledForWorkspace,
+    planAllowsPostSuggestions,
     setPostSuggestionsLogger,
     pickPostType,
     buildContactSuffix,
@@ -286,12 +291,16 @@ function queueFullRun(
  */
 function queueGetCurrent(
     currentRows: unknown[],
-    opts: { latest?: unknown[]; history?: unknown[] } = {},
+    opts: { latest?: unknown[]; history?: unknown[]; dbUsed?: number } = {},
 ) {
     queueOwnedPage([PAGE_ROW]);
     router.queue({ op: 'select', table: postSuggestions, rows: currentRows });     // readCurrentPost (full row)
     queueInFlight(opts.latest ?? currentRows.map(r => ({ id: (r as { id: string }).id, status: 'ready' })));
     queueHistory(opts.history ?? []);                                             // the earlier posts
+    // The READ path counts durable rows too now — same arithmetic the write
+    // path enforces, so the card can never advertise an attempt the POST will
+    // refuse. Defaults to 0 so the Redis mock alone decides, as before.
+    queueCapCount(opts.dbUsed ?? 0);
     router.queue({ op: 'select', table: catalogItems, fields: ['id'], rows: [] }); // availability probe
     queueDatedCatalog([]);
     queueCollections([]);
@@ -302,7 +311,11 @@ beforeEach(() => {
     router = makeDbRouter();
     setPostSuggestionsLogger(log);
     mockConfig.postSuggestions.enabled = true;
-    mockConfig.postSuggestions.workspaceIds = [];
+    // The test workspace is ALLOWLISTED explicitly. It used to be `[]`, which
+    // relied on empty meaning fleet-wide — the very fail-open behaviour this
+    // branch removes. Naming it is also how production works now.
+    mockConfig.postSuggestions.workspaceIds = [WS];
+    mockConfig.postSuggestions.planGateEnabled = false;
     mockConfig.postSuggestions.dailyCapPerPage = 3;
     mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
     mockClaimDailyCapSlot.mockResolvedValue(true);
@@ -320,18 +333,89 @@ beforeEach(() => {
 });
 
 describe('gate functions', () => {
-    it('workspace gate: disabled kills everything; empty allowlist = fleet-wide; non-empty = only listed', () => {
+    it('workspace gate: disabled kills everything; non-empty = only listed', () => {
         mockConfig.postSuggestions.enabled = false;
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
 
         mockConfig.postSuggestions.enabled = true;
-        mockConfig.postSuggestions.workspaceIds = [];
-        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
-
         mockConfig.postSuggestions.workspaceIds = ['other-workspace'];
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
         mockConfig.postSuggestions.workspaceIds = [WS];
         expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+
+    /**
+     * ⭐ THE test this file exists for.
+     *
+     * An empty allowlist used to mean FLEET-WIDE, and was documented as "the GA
+     * path". So the intuitive way to switch the pilot off — clear
+     * `POST_SUGGESTIONS_WORKSPACE_IDS` — handed a feature that spends a PAID
+     * text call and a PAID image call per generation to every workspace on
+     * every tier, free and trial included, with no plan check behind it.
+     *
+     * If this test ever goes green after being inverted, the gate has gone back
+     * to failing open and the blast radius is the entire customer base.
+     */
+    it('⭐ an EMPTY allowlist admits NOBODY — the gate fails closed', () => {
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [];
+        mockConfig.postSuggestions.planGateEnabled = false;
+
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
+        expect(isPostSuggestionsEnabledForWorkspace('any-other-workspace')).toBe(false);
+    });
+
+    it('the GA plan gate is the explicit way to widen — and it is OFF by default', () => {
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [];
+
+        mockConfig.postSuggestions.planGateEnabled = false;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(false);
+
+        mockConfig.postSuggestions.planGateEnabled = true;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+
+    it('an allowlisted workspace stays in even before the plan gate opens', () => {
+        // The pilot testers must not lose the feature the day GA wiring lands.
+        mockConfig.postSuggestions.enabled = true;
+        mockConfig.postSuggestions.workspaceIds = [WS];
+        mockConfig.postSuggestions.planGateEnabled = false;
+        expect(isPostSuggestionsEnabledForWorkspace(WS)).toBe(true);
+    });
+});
+
+describe('plan entitlement — "Business and above" (owner ruling 2026-08-09)', () => {
+    it('admits Business and every larger tier', () => {
+        expect(planAllowsPostSuggestions('business')).toBe(true);
+        expect(planAllowsPostSuggestions('pro')).toBe(true);
+    });
+
+    /**
+     * ⭐ The reason this is a RANK and not the literal ['business','pro'] the
+     * ruling was phrased with: the catalogue also sells scale-20k / scale-30k,
+     * which are LARGER than Pro. A two-slug list would have excluded the
+     * biggest paying customers — failing quietly, in the direction nobody
+     * checks, while admitting nobody by accident.
+     */
+    it('⭐ admits tiers ABOVE Pro that the ruling never named', () => {
+        expect(planAllowsPostSuggestions('scale-20k')).toBe(true);
+        expect(planAllowsPostSuggestions('scale-30k')).toBe(true);
+    });
+
+    it('refuses Starter, and refuses absence', () => {
+        expect(planAllowsPostSuggestions('starter')).toBe(false);
+        expect(planAllowsPostSuggestions(null)).toBe(false);
+        expect(planAllowsPostSuggestions(undefined)).toBe(false);
+        expect(planAllowsPostSuggestions('')).toBe(false);
+    });
+
+    it('refuses an UNKNOWN slug rather than guessing', () => {
+        // A plan we cannot rank is a plan we cannot call entitled. The
+        // affordable failure is "a paying merchant asks where the card went",
+        // never "every trial account generates paid images".
+        expect(planAllowsPostSuggestions('enterprise-2027')).toBe(false);
+        expect(planAllowsPostSuggestions('BUSINESS')).toBe(false); // case is not a guess either
     });
 
     it('generateSuggestion refuses a workspace outside the allowlist', async () => {
@@ -339,6 +423,49 @@ describe('gate functions', () => {
         const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
         expect(r).toEqual({ ok: false, reason: 'gated' });
         expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+    });
+});
+
+describe('requestSuggestion — the PAID route honours the plan gate at GA', () => {
+    /**
+     * ⭐ The review finding this pins: generate is the ONE route that spends
+     * money, and it used to gate on the sync config check — which answers
+     * `true` for EVERY workspace once `planGateEnabled` is on, because the
+     * plan lookup lives only in `isPostSuggestionsEntitled`. The four cheap
+     * routes had the plan check; the paid one did not, so at GA a Starter
+     * workspace whose card was hidden (GETs 404) could still POST the endpoint
+     * directly and spend paid text + image calls.
+     */
+    it('⭐ refuses a Starter workspace at GA — before any cap read or paid call', async () => {
+        mockConfig.postSuggestions.workspaceIds = ['someone-else'];
+        mockConfig.postSuggestions.planGateEnabled = true;
+        router.queue({ op: 'select', table: workspaces, fields: ['ownerId'], rows: [{ ownerId: 'owner-1' }] });
+        const sub = vi.spyOn(subscriptionsService, 'getUserSubscription')
+            .mockResolvedValue({ status: 'active', plan: { slug: 'starter' } } as never);
+
+        const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
+
+        expect(r).toEqual({ ok: false, reason: 'gated' });
+        expect(mockCheckDailyCap).not.toHaveBeenCalled();
+        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+        sub.mockRestore();
+    });
+
+    it('admits an entitled Business workspace at GA (the gate passes; ownership runs next)', async () => {
+        mockConfig.postSuggestions.workspaceIds = ['someone-else'];
+        mockConfig.postSuggestions.planGateEnabled = true;
+        router.queue({ op: 'select', table: workspaces, fields: ['ownerId'], rows: [{ ownerId: 'owner-1' }] });
+        const sub = vi.spyOn(subscriptionsService, 'getUserSubscription')
+            .mockResolvedValue({ status: 'active', plan: { slug: 'business' } } as never);
+        // Page not in the workspace — failing on OWNERSHIP proves the call got
+        // PAST the entitlement gate without running a full generation.
+        queueOwnedPage([]);
+
+        const r = await postSuggestionsService.requestSuggestion(WS, PAGE, 'manual');
+
+        expect(r).toEqual({ ok: false, reason: 'page_not_found' });
+        expect(makeTrackedOpenAI).not.toHaveBeenCalled();
+        sub.mockRestore();
     });
 });
 
@@ -1038,6 +1165,38 @@ describe('getCurrent', () => {
         const r = await postSuggestionsService.getCurrent(WS, PAGE);
         expect(r).toBeNull();
         expect(mockCheckDailyCap).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⭐ The defect the UI could not fix: the READ reported the cap from Redis
+     * alone while the WRITE refused on the durable row count, so a page whose
+     * counter key was gone but whose rows were not advertised «3 attempts left»
+     * and answered every one with «بلغت الحد اليومي».
+     *
+     * Measured on تقنيات الشام, 2026-08-14: three rows for the day, no counter
+     * key, GET reporting remainingToday 3 and POST returning 429 in the same
+     * second. Both paths now share readCapStatus.
+     */
+    it('⭐ reports 0 when the COUNTER was lost but the durable rows say the cap is spent', async () => {
+        // Redis has no memory of today (key evicted / flushed / never claimed).
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 0, limit: 3 });
+        queueGetCurrent([INSERTED], { dbUsed: 3 });
+
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+
+        // The number the card is handed must be the number the POST will honour.
+        expect(r?.remainingToday).toBe(0);
+    });
+
+    it('takes the STRICTER of the two views, not whichever was read first', async () => {
+        // Counter ahead of the rows — a failed attempt burned a slot before any
+        // row landed. The counter wins here; the row count wins above.
+        mockCheckDailyCap.mockResolvedValue({ allowed: true, used: 2, limit: 3 });
+        queueGetCurrent([INSERTED], { dbUsed: 1 });
+
+        const r = await postSuggestionsService.getCurrent(WS, PAGE);
+
+        expect(r?.remainingToday).toBe(1);
     });
 
     it('returns the ready suggestion, remaining, and availableTypes from ONE page read', async () => {

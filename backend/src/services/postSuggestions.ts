@@ -45,7 +45,8 @@ import {
     type PostSuggestionStatus,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { pages, catalogItems, factCollections, factRows, postSuggestions, type PostSuggestionVariantRow } from '../db/schema';
+import { pages, catalogItems, factCollections, factRows, postSuggestions, workspaces, type PostSuggestionVariantRow } from '../db/schema';
+import { subscriptionsService } from './subscriptions';
 import { config } from '../config';
 import { makeTrackedOpenAI } from './openaiClient';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -102,14 +103,101 @@ export function setPostSuggestionsLogger(l: Logger): void { logger = l; }
  * Whether the feature is live for this WORKSPACE (owner ruling 2026-08-09:
  * the pilot belongs to the founder's workspace, not to page lists). Pure and
  * exported so the gate is unit-testable on its own (shouldVerifyGrounding
- * posture). Empty allowlist = fleet-wide once enabled (the GA path);
- * non-empty = only those workspaces.
+ * posture).
+ *
+ * ⭐ FAILS CLOSED. An EMPTY allowlist means OFF, not "everyone".
+ *
+ * It used to mean fleet-wide, and was documented as "the GA path" — so the
+ * intuitive way to disable the pilot (clear `POST_SUGGESTIONS_WORKSPACE_IDS`)
+ * was in fact the way to hand a feature that spends a PAID text call and a PAID
+ * image call per generation to every workspace on every tier, including free
+ * and trial. One env var, no second confirmation, no plan check behind it.
+ *
+ * A gate whose most dangerous state is also its emptiest is not a gate. Opening
+ * this feature to more merchants is now something you do by SAYING SO — either
+ * by listing workspaces, or by turning on the plan gate below, which is the
+ * real GA path (owner ruling 2026-08-09: Business and above).
  */
 export function isPostSuggestionsEnabledForWorkspace(workspaceId: string): boolean {
     if (!config.postSuggestions?.enabled) return false;
-    const allowed = config.postSuggestions.workspaceIds;
-    if (allowed && allowed.length > 0 && !allowed.includes(workspaceId)) return false;
-    return true;
+    if (config.postSuggestions.workspaceIds?.includes(workspaceId)) return true;
+    // Not named explicitly ⇒ only the plan gate can admit this workspace, and
+    // it is off until GA. Never "true because the list was empty".
+    return config.postSuggestions.planGateEnabled === true;
+}
+
+/**
+ * Plans that may use the feature at GA — "Business and above" (owner ruling
+ * 2026-08-09, recorded in SYSTEM_ANALYSIS as «الأعمال + الاحترافي»).
+ *
+ * ⛔ Deliberately an ORDER, not the literal `['business','pro']` the ruling was
+ * phrased with. The catalogue also sells `scale-20k` and `scale-30k`, which are
+ * LARGER than Pro — a two-slug list would have silently excluded the biggest
+ * paying customers while admitting nobody by accident, i.e. failed quietly in
+ * the direction nobody checks. Rank comparison keeps new tiers correct by
+ * default: anything at or above Business is in.
+ */
+export const PLAN_RANK: Readonly<Record<string, number>> = {
+    starter: 1,
+    business: 2,
+    pro: 3,
+    'scale-20k': 4,
+    'scale-30k': 5,
+};
+const MIN_PLAN_RANK = PLAN_RANK.business;
+
+/**
+ * Does this plan slug clear the GA bar?
+ *
+ * An UNKNOWN slug is refused. A plan we cannot rank is a plan we cannot say is
+ * entitled, and the failure we can afford is "a paying merchant asks why the
+ * card is missing" — not "every trial account generates paid images".
+ */
+export function planAllowsPostSuggestions(slug: string | null | undefined): boolean {
+    if (!slug) return false;
+    const rank = PLAN_RANK[slug];
+    return rank !== undefined && rank >= MIN_PLAN_RANK;
+}
+
+/**
+ * The REAL gate: config, then — once GA is on — the workspace's plan.
+ *
+ * Async because entitlement is a fact about the merchant's subscription, not
+ * about the process's env. The sync
+ * `isPostSuggestionsEnabledForWorkspace` above stays as the cheap
+ * config-only half, so the dark-feature 404s cost no query while the pilot is
+ * allowlist-only; this adds a lookup ONLY on the GA path.
+ *
+ * Fails CLOSED on every uncertainty — no subscription, unknown plan, a DB error
+ * mid-lookup. An entitlement check that admits people when it cannot answer is
+ * not a check, and the thing behind this one costs real money per press.
+ */
+export async function isPostSuggestionsEntitled(workspaceId: string): Promise<boolean> {
+    // The sync half owns the config logic — dark feature, allowlist, GA flag —
+    // so the two gates cannot drift on what those mean.
+    if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return false;
+    // Named workspaces (the pilot) skip the plan entirely — the owner invited
+    // them by hand, and a tester must not lose the feature the day GA lands.
+    if (config.postSuggestions.workspaceIds?.includes(workspaceId)) return true;
+    // Reaching here means the config admitted us via the GA flag, not the
+    // allowlist — so the plan must answer.
+
+    try {
+        const [ws] = await db.select({ ownerId: workspaces.ownerId })
+            .from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+        if (!ws?.ownerId) return false;
+        const sub = await subscriptionsService.getUserSubscription(ws.ownerId);
+        // Only a LIVE subscription entitles. `past_due` is the state that
+        // already silently starved 8 pages of replies on 2026-08-09; it must
+        // not quietly keep buying images here.
+        if (!sub || (sub.status !== 'active' && sub.status !== 'trialing')) return false;
+        return planAllowsPostSuggestions(sub.plan?.slug);
+    } catch (err) {
+        logger.warn('[PostSuggestions] Entitlement lookup failed; refusing', {
+            workspaceId, error: err instanceof Error ? err.message : String(err),
+        });
+        return false;
+    }
 }
 
 /**
@@ -252,6 +340,45 @@ async function fetchOwnedPage(workspaceId: string, pageId: string) {
  * and re-checking would mean a second pages read on the highest-frequency fetch
  * in the feature.
  */
+/**
+ * Today's cap for one page — the SINGLE arithmetic both the read and the write
+ * path use.
+ *
+ * ⛔ It exists because they used to compute it differently, and the drift was
+ * user-visible. `readRemainingToday` reported `limit - redisUsed` while
+ * `requestSuggestion` refused on `dbUsed >= limit`, so a page whose Redis key
+ * was gone but whose rows were not read as «3 attempts left» and answered every
+ * one of them with «بلغت الحد اليومي». Measured on تقنيات الشام, 2026-08-14:
+ * three durable rows for the day, no counter key, GET reporting 3 remaining and
+ * POST returning 429 in the same second. No amount of UI gating can fix that —
+ * the client was being handed a number the server would not honour.
+ *
+ * Redis bounds ATTEMPTS (a failed generation burns its slot by design); the
+ * durable row count is the FLOOR that survives a lost key (eviction/failover,
+ * observed in the 08-09 dogfood). The truth is whichever is higher.
+ *
+ * Throws when either source is unreachable — both callers fail closed on that,
+ * which is the dailyCap contract: the cap is the only bound on real spend.
+ */
+async function readCapStatus(pageId: string, today: string, limit: number): Promise<{ used: number; limit: number; allowed: boolean }> {
+    const [cap, countRows] = await Promise.all([
+        checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), limit),
+        // Served by idx_post_suggestions_page_date — (page_id, suggested_for) is
+        // exactly this predicate, so the count the read path now pays for is an
+        // index scan running INSIDE an existing parallel batch, not a new
+        // sequential hop (Rule 17.3).
+        db.select({ value: sql<number>`count(*)::int` }).from(postSuggestions)
+            .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today))),
+    ]);
+    const dbUsed = Number(countRows[0]?.value ?? 0);
+    if (dbUsed > cap.used) {
+        // Durable rows exceed the counter, i.e. the counter was lost or reset.
+        // The DB floor below keeps the cap honest regardless.
+        logger.warn('[PostSuggestions] Daily-cap counter behind DB rows', { pageId, dbUsed, redisUsed: cap.used });
+    }
+    return { used: Math.max(cap.used, dbUsed), limit, allowed: cap.allowed && dbUsed < limit };
+}
+
 async function readCurrentPost(pageId: string) {
     const [row] = await db.select().from(postSuggestions)
         .where(and(
@@ -1086,7 +1213,10 @@ class PostSuggestionsService {
      */
     private async readRemainingToday(pageId: string, today: string): Promise<number | null> {
         try {
-            const cap = await checkDailyCap(dailyCapKey(DAILY_CAP_PREFIX, pageId, today), config.postSuggestions.dailyCapPerPage);
+            // Same arithmetic the WRITE path enforces — see readCapStatus. A
+            // number this method reports is a promise the card makes on the
+            // server's behalf, so it must be the server's own number.
+            const cap = await readCapStatus(pageId, today, config.postSuggestions.dailyCapPerPage);
             return Math.max(0, cap.limit - cap.used);
         } catch (err) {
             captureError(err, 'Post suggestion: getCurrent cap read failed', {
@@ -1113,7 +1243,12 @@ class PostSuggestionsService {
      * consumes a normal cap slot.
      */
     async requestSuggestion(workspaceId: string, pageId: string, source: 'cron' | 'manual', opts?: { includeContact?: boolean; postType?: PostSuggestionPostType }): Promise<GenerateResult> {
-        if (!isPostSuggestionsEnabledForWorkspace(workspaceId)) return { ok: false, reason: 'gated' };
+        // The FULL entitlement check, not the sync config gate: this is the one
+        // path that spends money, and the sync gate answers `true` for EVERY
+        // workspace once `planGateEnabled` is on — it carries no plan check.
+        // The allowlist bypass inside keeps pilot testers and the seed sweep
+        // (allowlisted workspaces only) working unchanged.
+        if (!await isPostSuggestionsEntitled(workspaceId)) return { ok: false, reason: 'gated' };
 
         // ONE day for the whole call: cap key, DB count, supersede, and insert
         // all cut the same boundary even when the call straddles UTC midnight.
@@ -1130,33 +1265,18 @@ class PostSuggestionsService {
 
         const capKey = dailyCapKey(DAILY_CAP_PREFIX, pageId, today);
         const limit = config.postSuggestions.dailyCapPerPage;
-        let cap: DailyCapStatus;
-        let dbUsed: number;
+        let cap: { used: number; limit: number; allowed: boolean };
         try {
-            // The Redis counter bounds ATTEMPTS (a failed generation burns its
-            // slot by design); the DB row count grounds the cap in durable
-            // truth, so a lost Redis key (eviction/failover — observed in the
-            // 08-09 dogfood) can never silently re-open spend. Either read
-            // failing → fail closed (dailyCap contract).
-            const [capStatus, countRows] = await Promise.all([
-                checkDailyCap(capKey, limit),
-                db.select({ value: sql<number>`count(*)::int` }).from(postSuggestions)
-                    .where(and(eq(postSuggestions.pageId, pageId), eq(postSuggestions.suggestedFor, today))),
-            ]);
-            cap = capStatus;
-            dbUsed = Number(countRows[0]?.value ?? 0);
+            // Shared with the read path so the card can never advertise an
+            // attempt this block will refuse. Either source failing → fail
+            // closed (dailyCap contract).
+            cap = await readCapStatus(pageId, today, limit);
         } catch (err) {
             captureError(err, 'Post suggestion: cap check unavailable', { tags: { service: 'post-suggestions' }, extra: { pageId } });
             return { ok: false, reason: 'cap_check_unavailable' };
         }
-        if (dbUsed > cap.used) {
-            // The dogfood 08-09 counter-loss signal: durable rows exceed the
-            // Redis counter, i.e. the counter was lost/reset. The DB floor
-            // below keeps the cap honest regardless.
-            logger.warn('[PostSuggestions] Daily-cap counter behind DB rows', { pageId, dbUsed, redisUsed: cap.used });
-        }
-        if (!cap.allowed || dbUsed >= limit) {
-            return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: Math.max(cap.used, dbUsed), limit } };
+        if (!cap.allowed) {
+            return { ok: false, reason: 'daily_cap', cap: { allowed: false, used: cap.used, limit } };
         }
         // Atomic claim BEFORE the paid calls: the INCR itself is the arbiter,
         // so two requests racing the last slot can never both pass (the
@@ -1265,9 +1385,10 @@ class PostSuggestionsService {
             computeAvailableTypes(page, today),
         ]);
 
-        // Remaining slots from the stricter of the two views, counting the slot
-        // this request just consumed.
-        const remaining = Math.max(0, limit - Math.max(cap.used + 1, dbUsed + 1));
+        // Counting the slot this request just consumed. `cap.used` is already
+        // the stricter of the counter and the durable row count (readCapStatus),
+        // so there is no second view left to take a max against.
+        const remaining = Math.max(0, limit - (cap.used + 1));
         return {
             ok: true,
             suggestion: settledIsPost ? toDto(settled) : (previous ? toDto(previous) : null),
