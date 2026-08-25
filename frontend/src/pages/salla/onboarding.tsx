@@ -364,6 +364,18 @@ export default function SallaOnboarding() {
                   >
                     {t('onboarding.goToDashboard')}
                   </Button>
+
+                  {/* D-102: delivery/payment policies are not API-syncable —
+                      route the merchant to the /business facts editor. */}
+                  {linkedPageName && (
+                    <Button
+                      onClick={() => router.push(selectedPageId ? `/business?page=${selectedPageId}` : '/business')}
+                      variant="ghost"
+                      className="w-full rounded-2xl"
+                    >
+                      {t('onboarding.policiesNudge')}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
