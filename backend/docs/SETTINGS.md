@@ -223,7 +223,7 @@ Not a `UserSettings` field: six rows per store in `customer_notification_templat
 > | `order_shipped` | ✅ | ✅ | ✅ | fires; Salla upgrades the row in place when tracking follows |
 > | `order_delivered` | ✅ | ✅ | ✅ | fires on the delivered status/slug |
 > | `review_request` | ⚠️ | ⚠️ | ⚠️ | fires, but **sends a dangling link**: `orderNotificationScheduler.ts` passes `review_url: ''` hardcoded while the default body ends in `⭐ {review_url}`, and no endpoint can set it (`controllers/customerNotifications.ts` accepts only isEnabled/messages/delay) |
-> | `abandoned_cart` | ✅ | ❌ | ❌ | **Salla only** — the sole firing site is the `abandoned.cart` branch in `controllers/salla.ts`. Shopify never subscribes `checkouts/create`; Zid excludes `abandoned_cart.*` from its topic list. Consequence: the analytics "revenue recovered" figure is structurally always 0 for Shopify and Zid stores |
+> | `abandoned_cart` | ✅ | ✅ | ❌ | **Salla + Zid** — Salla fires from the `abandoned.cart` branch in `controllers/salla.ts`; Zid since #951 (2026-08-25): `abandoned_cart.created` schedules the recovery nudge and `abandoned_cart.completed` cancels it (`controllers/zid.ts`). Shopify never subscribes `checkouts/create`, so the analytics "revenue recovered" figure is structurally always 0 for Shopify stores |
 > | `digital_delivery` | ❌ | ❌ | ❌ | **NOT IMPLEMENTED — declared, seeded, toggleable, never fired.** No `OrderEvent` builder emits it and nothing else calls `schedule()`, so the merchant can enable it and edit its copy and it will never send. Either wire it or remove the toggle |
 >
 > Also note the `channel` column is **decorative**: it defaults to `'sms'` and `send()`
