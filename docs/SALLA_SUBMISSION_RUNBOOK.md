@@ -330,12 +330,18 @@ Summary of the gates:
 - [ ] Install onto a real store → token push → pending install → claim binds by owner-email
       match → products sync.
 - [ ] Test reply quotes a real product name **and price** from the live catalog.
-- [ ] `order.created` → **exactly one** customer SMS.
-- [ ] `order.status.updated`(shipped) then `order.shipment.created` → still exactly one SMS,
-      tracking upgraded **in place** (PR #411 design note).
-- [ ] **`track_shipment` against a real shipped order** — the shipments call returns 200 (not
-      403), and the reply carries tracking number + courier + link. **This is the one gate
-      that has never been run: PR #798 was built from documentation, not from a live call.**
+- [x] `order.created` → **exactly one** customer SMS. ✅ 2026-08-25 (confirmed admin order
+      `#279682567`; a Draft fires nothing — the Confirm dialog is what creates the order).
+- [x] `order.status.updated`(shipped) → one SMS row held for the 5-min grace, then sent.
+      ✅ 2026-08-24 + 2026-08-25. ⚠️ The `order.shipment.created` half (tracking upgraded
+      **in place**, PR #411 design note) is NOT verifiable on a demo store — the label flow
+      never emits the event and Dev Company assigns no tracking (`SALLA_TEST_PLAN.md`
+      2026-08-25 results); pinned by unit tests, live pass deferred to the first
+      real-courier store.
+- [x] **`track_shipment` against a real shipped order** — ✅ PASSED 2026-08-24
+      (see `SALLA_TEST_PLAN.md` 3.8): the shipments call returned 200
+      with a parseable envelope; reply carried the courier (no tracking on the demo
+      shipment — demo limitation, not a defect).
 - [ ] `app.uninstalled` → store deactivates.
 - [ ] Sentry quiet; `scripts/health-check.sh` green.
 - [ ] Docs same-commit rule: `SYSTEM_ANALYSIS.md` platform table → "Live in App Store";

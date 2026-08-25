@@ -169,14 +169,16 @@ has cost production defects before. Run in order — later rows depend on earlie
 >
 > | Row | Reachable from an existing order? |
 > |---|---|
-> | 3.5 `order.created` | ❌ **No.** Only a real purchase fires it. This row genuinely needs the checkout. |
+> | 3.5 `order.created` | ✅ **Yes — from a CONFIRMED admin order** (corrected 2026-08-25). The wizard's full recipe + the *Confirm new order* dialog fires it; an unconfirmed Draft fires nothing (that was the whole 08-24 "counter-observation"). A storefront checkout also works but is not required. |
 > | 3.6 `order.status.updated` → shipped | ✅ Flip the order to *shipped* in the admin. |
-> | 3.7 `order.shipment.created` | ✅ Create a shipment with a tracking number in the admin. |
-> | 3.8 `track_shipment` live | ✅ Once 3.7 has produced a real shipment. |
+> | 3.7 `order.shipment.created` | ❌ **Not on a demo store** (measured 2026-08-25). The label flow auto-creates the shipment WITH the order and only flips its status afterwards — the portal Webhooks Log shows ZERO `order.shipment.created` deliveries ever for this store. And Dev Company assigns no tracking number. See the 2026-08-25 results. |
+> | 3.8 `track_shipment` live | ✅ Once a shipped order carries a shipment (the label flow's auto-created one is enough — 3.8 passed against it). |
 >
 > ⚠️ Run 3.6 → 3.7 in that order on the SAME order — 3.7's whole point is that it upgrades
 > 3.6's still-pending row in place rather than sending a second SMS, so flipping the status
-> after creating the shipment tests nothing.
+> after creating the shipment tests nothing. Note the window is real: the grace is 5 minutes
+> from the 3.6 flip, and the dedup key gives each order exactly ONE `order_shipped` row ever —
+> once the row leaves `pending`, that order is burned for 3.7 (measured live 2026-08-25).
 >
 > **Verify at the read path**, not at the webhook: `GET /api/notification-log/<storeId>`
 > and `…/stats` with the merchant's own session. Record the row in the captures file the
@@ -201,14 +203,16 @@ has cost production defects before. Run in order — later rows depend on earlie
 > `Jawab24-Dev` app too (dead ngrok URL → 404); that app still holds subscriptions on the
 > demo store and should be uninstalled from it.
 >
-> ⚠️ **2026-08-24 counter-observation: not every admin New-order path fires.** Order
-> `#279682567` created fully through the wizard with **Store pickup** («الفرع الرئيسي»)
-> and Unpaid/COD — real order, and Salla's own Webhooks Log showed NOTHING for it in
-> ~15 min (Salla's incident notice warned of delayed notifications, so this is "did not
-> fire within 15 min", not "never"). The recipe above that DID fire used **Shipping &
-> delivery with a full National Address + a courier + Fully paid**. Treat the full
-> shipping+payment recipe as the only admin path known to fire `order.created`; a
-> storefront checkout remains the clean way to close 3.5.
+> ~~⚠️ 2026-08-24 counter-observation: not every admin New-order path fires.~~
+> **RESOLVED 2026-08-25 — the counter-observation was a misread: order `#279682567` was
+> still a DRAFT.** The 08-24 wizard run (Store pickup, Unpaid/COD) never went through the
+> *Confirm new order* dialog, so no real order existed and nothing could fire — the orders
+> list plainly labelled it «Draft». Completing that same draft on 08-25 (Shipping &
+> delivery + National Address + Dev Company + COD fee > 0 → *Create order* → **Confirm**)
+> fired `order.created` within seconds (200 in the portal Webhooks Log). So the rule is
+> NOT "store pickup doesn't fire" — it is **"a Draft fires nothing; the Confirm dialog is
+> what creates the order"** (already stated in the 08-23 note above, forgotten in the
+> 08-24 run). A storefront checkout is no longer needed to close 3.5.
 
 
 | # | Step | Pass criteria | On failure |
@@ -217,9 +221,9 @@ has cost production defects before. Run in order — later rows depend on earlie
 | 3.2 | Claim it | **live store:** sign in as the account whose email matches the store's registered email → binds; wrong account → 403 `email_mismatch`. **demo/development store (D-093):** binds for any signed-in account that has an email — its `@email.partners` address can never match | `SALLA_EASY_MODE_CLAIM_ENABLED` off is the usual cause; 403 on a demo store ⇒ prod predates D-093 |
 | 3.3 | Catalog sync | products land; count matches the store; `product_summary` populated | |
 | 3.4 | Test reply quoting a real product | correct name **and price** from the live catalog | |
-| 3.5 | `order.created` | **exactly one** customer SMS (dedup holds) | duplicate ⇒ stop; dedup key regression |
-| 3.6 | `order.status.updated` → `shipped` | shipped SMS held for the grace window, then sent | |
-| 3.7 | `order.shipment.created` | tracking upgraded **in place** — still exactly one SMS total, now carrying the tracking number | two SMS ⇒ `upgradePendingOnDuplicate` regression |
+| 3.5 | `order.created` — ✅ PASSED live 2026-08-25 (confirmed admin order; see results) | **exactly one** customer SMS (dedup holds) | duplicate ⇒ stop; dedup key regression. Zero rows ⇒ check the order is not still a **Draft** (the Confirm dialog creates it) before suspecting anything else |
+| 3.6 | `order.status.updated` → `shipped` — ✅ PASSED live 2026-08-24 and again 2026-08-25 (grace window observed end-to-end) | shipped SMS held for the grace window, then sent | |
+| 3.7 | `order.shipment.created` — ⚠️ NOT closable live on the demo store (see 2026-08-25 results): the event is never emitted for label-flow shipments and Dev Company assigns no tracking number. Upgrade-in-place with tracking is pinned by `test/integration/customerNotificationsDedup.test.ts` ("a tracking-bearing shipment upgrades an earlier tracking-less shipped row in place") and the shipment-shaped payload parse by `test/controllers/salla.test.ts`; the live full pass needs a real store with a real courier, post-launch | tracking upgraded **in place** — still exactly one SMS total, now carrying the tracking number | two SMS ⇒ `upgradePendingOnDuplicate` regression |
 | 3.8 | **`track_shipment` on a real shipped order** — ✅ PASSED live 2026-08-24 (see results) | `GET /admin/v2/shipments?order_id=…` returns **200, not 403**; envelope is `{data:[…]}`; the reply carries tracking number + courier + link. **Prove the shipments call was actually made** before reading anything into a silent Sentry: after the 2026-08-23 fix the verify step reads the shipment live whenever the model's Phase-1 tool was `lookup_order`, so `metrics:ecom:verify:sibling` or `…:live` > 0 in prod Redis is the evidence the endpoint was hit. Then read the OUTCOME off the pair that follows: `…:requested_empty` = the call returned 200 with no shipment (the order is not shipped yet — pick a shipped order and re-run), `…:requested_live_failed` = it threw, which is where a 403 lands. ⛔ Do not read one for the other; they were one counter in the first draft of D-096 and that conflation would have answered 3.8 "platform failure" on a perfectly healthy 200 | 403 ⇒ Tier 0.4 (scope not ticked). 200 but empty/odd shape ⇒ the doc-derived assumption in PR #798 was wrong — fix before publishing. ⛔ 2026-08-23: "no `Salla shipments lookup failed` in Sentry" was misread as 200 when the model had never called `track_shipment` (0 calls) — silence is not a result |
 | 3.9 | `app.uninstalled` | store row deactivates; no further webhook processing | |
 | 3.10 | Sentry + health | quiet; `scripts/health-check.sh` green | |
@@ -255,6 +259,56 @@ already tell us. This is a standing rule, not a one-off caution.
 | Many stores | N stores on the 6h refresh cadence | cadence doesn't stampede; Easy-Mode stores skipped when `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` |
 
 ---
+
+## Results — 2026-08-25 (production app `665811310`, demo store `2108580704`, prod `57b32665`)
+
+All on order `#279682567` (internal id `1234088610`) — the 08-24 "counter-observation"
+order, which turned out to still be a **Draft**. Completed and confirmed it live via
+chrome-real; every timestamp below is UTC and was verified at the read path
+(`customer_notifications_log`) plus the portal Webhooks Log.
+
+- **3.5 ✅ PASS — and the 08-24 counter-observation is retracted.** The draft was
+  completed with the full recipe (Shipping & delivery + National Address `TAAD2235` +
+  Dev Company + COD fee 5 > 0) → *Create order* → **Confirm new order** dialog at
+  04:43Z → `order.created` delivered (200 in the portal Webhooks Log, 07:43:56 local)
+  → **exactly one** `order_confirmed` row at 04:43:56 (dedup holds; lifecycle
+  `pending → failed «Vonage Quota Exceeded»` — the known #3002710 provider issue, not
+  ingestion). Conclusion: the admin wizard DOES fire `order.created`; a **Draft fires
+  nothing**. A storefront checkout is not required for 3.5.
+- **3.6 ✅ PASS (second full-chain run), grace window observed live end-to-end.** Flip
+  to «تم الشحن» at 04:45Z → `order.status.updated` 200 → exactly one `order_shipped`
+  row, `pending`, `created_at 04:45:19`, `scheduled_at 04:50:19` — the 5-minute
+  `SHIPPED_NO_TRACKING_GRACE_MS` to the second. No shipment event arrived during the
+  grace, so after it the row went to send (→ `failed`, Vonage only). Still exactly one
+  row afterwards. This is the designed no-tracking fallback proven live for the first
+  time.
+- **3.7 ⚠️ NOT closable live on a demo store — structural, measured, documented:**
+  1. **`order.shipment.created` has NEVER been delivered for this store** — the portal
+     Webhooks Log (all 22 events since install) contains zero such entries, across both
+     the 08-23 storefront-style order and today's. The label flow auto-creates the
+     shipment WITH the order (`Shipment status: Pending` visible before any label
+     action) and «Create shipping label» merely flips it to `Shipped` — a status change,
+     not a creation, so no create event exists to deliver.
+  2. **Dev Company assigns no tracking number** (same as #279531515, re-verified), and
+     per Salla's docs `tracking_number` is courier-assigned at create; a merchant can
+     only SET it afterwards via `PUT /admin/v2/shipments/{id}` — which would fire a
+     shipment **update** event we do not subscribe to.
+  3. The earlier plan "add a tracking number to #279531515's shipment" was therefore
+     doubly impossible: that order's notification row is long past `pending` (the
+     upgrade only touches pending rows, and the dedup key allows one row per order
+     ever), and no subscribed event would fire anyway.
+  What 3.7 exists to verify (one SMS total, upgraded in place with tracking) stays
+  pinned by `test/integration/customerNotificationsDedup.test.ts` and
+  `test/controllers/salla.test.ts`; the live pass is deferred to the first real store
+  with a real courier. The row is NOT waived — it moves to post-launch.
+- **Wizard traps found this run** (add to the 08-23/08-24 recipe): «New order» RESUMES
+  an existing draft rather than starting fresh (adding a product bumped the draft's
+  quantity); the address form cascade **Region → City → Neighborhood resets its
+  children** when a parent changes — re-pick City and Neighborhood after setting
+  Region; the **National Address search box requires CLICKING the suggestion** — typed
+  text alone fails Save with «الكود الجغرافي للشحن مطلوب», and picking the suggestion
+  overwrites street/postal with the code's registered address (TAAD2235 resolves to
+  Taif, not Riyadh — Dev Company appeared regardless).
 
 ## Results — 2026-08-24 (production app `665811310`, demo store `2108580704`, prod `e53e89f5`)
 
@@ -304,9 +358,10 @@ already tell us. This is a standing rule, not a one-off caution.
   admin order view: shipping details show only «Dev Company», no tracking field) —
   the adapter's tracking-number preference had nothing to prefer. PR #798's
   doc-derived envelope assumption is confirmed against the live API.
-- **3.5 still open** — needs one real storefront checkout on
-  `demostore.salla.sa/dev-jkgsyu3w6pzzfrzw` (see the admin-wizard counter-observation
-  above; the store-pickup wizard path fires nothing).
+- ~~**3.5 still open** — needs one real storefront checkout~~ **SUPERSEDED 2026-08-25:
+  3.5 passed from the admin wizard once the Draft was actually confirmed** — the
+  "store-pickup wizard path fires nothing" reading was wrong; the order had never left
+  Draft. See the 2026-08-25 results.
 - **Stale app `Jawab24-Dev` (1565152053) defused.** Its webhook URL is a bare 64-hex
   string (not a URL) yet it had 10 Store Events subscribed → every delivery 404'd →
   portal Webhooks Log health read **Failure 47.4%**, visible to a reviewer. All 10
@@ -403,4 +458,5 @@ commits behind, three env vars absent) — recorded above as the reason Tier 0 e
 - Dashboard `GET /analytics/ai-usage?days=30` → 500 (×3) and `GET /subscription/usage` → 404 on local dev.
 - Local-dev `/sse/events` CORS errors from `:3001` — dev-env config.
 - `abandoned.cart` event string still unconfirmed by a real delivery (`SALLA_LAUNCH_VALIDATION.md`).
-  `order.shipment.created` is now exercised by Tier 3.7.
+  `order.shipment.created` is likewise unconfirmed by a real delivery — the demo store's
+  label flow never emits it (2026-08-25 results); first real-courier store will confirm both.
