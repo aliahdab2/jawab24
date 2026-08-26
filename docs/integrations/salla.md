@@ -150,6 +150,10 @@ SALLA_CLIENT_ID=your_client_id
 SALLA_CLIENT_SECRET=your_client_secret
 SALLA_HOST_NAME=jawab24.com
 SALLA_WEBHOOK_SECRET=your_webhook_secret
+# Salla Application ID (prod app = 665811310). Required by the billing rail's
+# subscription read; unset = billing is DORMANT (reconcile cron disabled, every
+# sync answers no_store) — deploy-safe, but a paying merchant activates nothing.
+SALLA_APP_ID=665811310
 
 # Shared encryption key for e-commerce tokens (generate with: openssl rand -hex 32)
 SHOPIFY_TOKEN_ENCRYPTION_KEY=your_64_char_hex_string
