@@ -50,9 +50,14 @@ describe('AuthManager', () => {
 
             unsubscribe();
 
-            // Trigger a logout which calls notifyAuthStateChange(false) internally
+            // Trigger a logout which calls notifyAuthStateChange(false) internally.
+            // doMock registrations LEAK into the tests that follow in this file, so
+            // every store stub here must expose all of what authManager touches, not
+            // just what logout() needs. A setState-only stub made a SUCCESSFUL
+            // /auth/refresh report failure in the refreshToken suite below, because
+            // adopting the rotated access token calls getState().setToken.
             vi.doMock('@/lib/store', () => ({
-                useAuthStore: { setState: vi.fn() },
+                useAuthStore: { setState: vi.fn(), getState: vi.fn(() => ({ setToken: vi.fn() })) },
             }));
             vi.doMock('@/lib/api', () => ({
                 publicApi: { post: vi.fn().mockResolvedValue({}) },
@@ -114,6 +119,7 @@ describe('AuthManager', () => {
             vi.doMock('@/lib/store', () => ({
                 useAuthStore: {
                     setState: vi.fn(),
+                    getState: vi.fn(() => ({ setToken: vi.fn() })),
                 },
             }));
 
@@ -139,6 +145,7 @@ describe('AuthManager', () => {
             vi.doMock('@/lib/store', () => ({
                 useAuthStore: {
                     setState: vi.fn(),
+                    getState: vi.fn(() => ({ setToken: vi.fn() })),
                 },
             }));
 
@@ -169,6 +176,7 @@ describe('AuthManager', () => {
             vi.doMock('@/lib/store', () => ({
                 useAuthStore: {
                     setState: vi.fn(),
+                    getState: vi.fn(() => ({ setToken: vi.fn() })),
                 },
             }));
 
@@ -497,7 +505,7 @@ describe('AuthManager', () => {
 
             // Mock logout dependencies
             vi.doMock('@/lib/store', () => ({
-                useAuthStore: { setState: vi.fn() },
+                useAuthStore: { setState: vi.fn(), getState: vi.fn(() => ({ setToken: vi.fn() })) },
             }));
             vi.doMock('@/lib/api', () => ({
                 publicApi: { post: vi.fn().mockResolvedValue({}) },

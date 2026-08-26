@@ -48,6 +48,24 @@ interface AuthState {
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
   setAuth: (user: User, token: string, fbToken: string) => void;
+  /**
+   * Rotate ONLY the access token, keeping user / workspaces / isAuthenticated
+   * as they are. Called after a successful `POST /auth/refresh`.
+   *
+   * This exists because the refreshed token has to reach the request
+   * interceptor, and on native that interceptor reads `localStorage.token`
+   * (api.ts) while the backend PREFERS the `Authorization: Bearer` header over
+   * the fresh cookie (middleware/auth.ts). Without this write the post-refresh
+   * retry re-sends the expired token and 401s again — forever, with no logout,
+   * because the refresh itself keeps succeeding. Confirmed in production: the
+   * demo account burned 41 refresh-token rotations in a single minute
+   * (2026-08-26 07:21) doing exactly this.
+   *
+   * Kept separate from setAuth deliberately: setAuth is the LOGIN path (it
+   * validates a user object, writes `user`, and flips isAuthenticated), and a
+   * refresh has no user payload to give it.
+   */
+  setToken: (token: string) => void;
   updateUser: (patch: Partial<User>) => void;
   /**
    * Replace the workspaces list. When `defaultWorkspaceId` is provided AND
@@ -104,6 +122,20 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       updateUser: (patch) => set((state) => state.user ? { user: { ...state.user, ...patch } } : state),
+      setToken: (token) => {
+        if (!token || token.trim() === '') return;
+
+        // Synchronous native check (not setAuth's `import('@capacitor/core')`
+        // .then) so the write lands BEFORE the interceptor retries the request
+        // that triggered the refresh — a deferred write would lose that race
+        // and re-send the expired token. Web keeps using the HttpOnly cookie,
+        // so it must not gain a localStorage token here.
+        if (typeof window !== 'undefined' && isNativePlatform()) {
+          localStorage.setItem('token', token);
+        }
+
+        set({ token });
+      },
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {

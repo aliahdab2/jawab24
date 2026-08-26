@@ -23,6 +23,10 @@ vi.mock('../lib/store', () => ({
       token: null,
       fbToken: null,
       isAuthenticated: false,
+      // refreshToken() adopts the rotated access token through this action.
+      // Omitting it here makes a successful refresh throw and report FAILURE —
+      // the hand-rolled-mock trap: the mock, not the code, decides the verdict.
+      setToken: vi.fn(),
     })),
   },
 }));

@@ -224,7 +224,20 @@ class AuthManager {
     }
     try {
       const response = await axiosInstance.post<RefreshResponse>('/auth/refresh');
-      return response.data?.success === true;
+      if (response.data?.success !== true) return false;
+
+      // Adopt the rotated access token. Mandatory, not an optimisation: the
+      // request interceptor sends `localStorage.token` as a Bearer header on
+      // native, and the backend prefers that header over the cookie this
+      // refresh just set (middleware/auth.ts authenticate()). Dropping the
+      // token here left the retry re-sending the EXPIRED one, so it 401'd
+      // again, `_retry` rejected it, and no logout ever fired — a silent,
+      // permanent 401 loop on every native API call. See store.setToken.
+      if (response.data.token) {
+        const { useAuthStore } = await import('./store');
+        useAuthStore.getState().setToken(response.data.token);
+      }
+      return true;
     } catch {
       return false;
     }
