@@ -19,9 +19,19 @@ vi.mock('../../src/lib/customerNotificationQueue', () => ({
     customerNotificationQueue: { add: vi.fn().mockResolvedValue(undefined) },
 }));
 
+// The one third-party boundary in these flows. Everything DB-side stays real.
+vi.mock('../../src/services/whatsapp', () => ({
+    whatsappService: {
+        createMessageTemplate: vi.fn().mockResolvedValue('tpl-meta-1'),
+        getMessageTemplateStatus: vi.fn().mockResolvedValue('PENDING'),
+    },
+}));
+
 import { createStore } from '../../src/services/ecommerce';
 import { customerNotificationService } from '../../src/services/customerNotifications';
 import { resolveWhatsAppSender } from '../../src/services/whatsappNotificationSender';
+import { pagesService } from '../../src/services/pages';
+import { whatsappService } from '../../src/services/whatsapp';
 
 function uniq(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -161,5 +171,101 @@ describe('WhatsApp notification channel (real Postgres)', () => {
         await createWhatsAppPage({ userId: user.id, workspaceId: workspace.id, phoneNumberId: uniq('pn') }); // no storeId
 
         await expect(resolveWhatsAppSender(store.id)).resolves.toBeNull();
+    });
+});
+
+/**
+ * Provisioning starts AT CONNECT TIME — not when the merchant later flips a
+ * notification type to WhatsApp. Meta's template review takes minutes to hours,
+ * so switch-time provisioning guaranteed the merchant's FIRST notification always
+ * failed as `whatsapp_template_pending` (a deliberately silent failure). Both
+ * connect writers funnel every connect path — the pages controller, the
+ * WhatsApp-only card, and the browser-redirect bridge — so covering them here
+ * covers them all. The template rows appearing is the whole assertion: they are
+ * what the review clock runs against.
+ */
+describe('template provisioning at connect time (real Postgres)', () => {
+    const ALL_CANONICAL = 8;   // 4 WhatsApp-capable types × 2 languages
+
+    beforeEach(() => {
+        // Reset implementations, not just call counts — the failure test below
+        // replaces one wholesale.
+        vi.mocked(whatsappService.createMessageTemplate).mockReset().mockResolvedValue('tpl-meta-1');
+        vi.mocked(whatsappService.getMessageTemplateStatus).mockReset().mockResolvedValue('PENDING');
+    });
+
+    async function templateRowsFor(pageId: string) {
+        return testDb.select().from(schema.whatsappNotificationTemplates)
+            .where(eq(schema.whatsappNotificationTemplates.pageId, pageId));
+    }
+
+    it('createWhatsAppOnlyPage submits the canonical templates for the new number', async () => {
+        const user = await createTestUser({ facebookId: uniq('fb'), email: `${uniq('m')}@test.com` });
+        const workspace = await createTestWorkspace(user.id);
+
+        const page = await pagesService.createWhatsAppOnlyPage(workspace.id, user.id, {
+            phoneNumberId: uniq('pn'),
+            businessAccountId: uniq('waba'),
+            displayPhoneNumber: '+966501111111',
+            accessToken: 'plain-token',
+        });
+
+        // The kickoff is fire-and-forget by design (8 Meta POSTs must not sit on
+        // the connect response), so the rows land shortly after, not before, the
+        // method returns.
+        await vi.waitFor(async () => {
+            expect(await templateRowsFor(page.id)).toHaveLength(ALL_CANONICAL);
+        });
+        const rows = await templateRowsFor(page.id);
+        expect(rows.every(r => r.status === 'pending')).toBe(true);
+        expect(rows.every(r => r.lastSubmittedAt !== null)).toBe(true);
+        expect(whatsappService.createMessageTemplate).toHaveBeenCalledTimes(ALL_CANONICAL);
+    });
+
+    it('connectWhatsApp (existing page gains a number) submits them too', async () => {
+        const user = await createTestUser({ facebookId: uniq('fb'), email: `${uniq('m')}@test.com` });
+        const workspace = await createTestWorkspace(user.id);
+        const [page] = await testDb.insert(schema.pages).values({
+            userId: user.id,
+            workspaceId: workspace.id,
+            facebookPageId: uniq('fbp'),
+            name: 'FB Page',
+            accessToken: 'fb-token',
+        }).returning();
+
+        await pagesService.connectWhatsApp(workspace.id, page.id, {
+            phoneNumberId: uniq('pn'),
+            businessAccountId: uniq('waba'),
+            displayPhoneNumber: '+966502222222',
+            accessToken: 'plain-token',
+        });
+
+        await vi.waitFor(async () => {
+            expect(await templateRowsFor(page.id)).toHaveLength(ALL_CANONICAL);
+        });
+    });
+
+    // A provisioning failure must never fail the connect: the merchant keeps their
+    // number, and the send path re-kicks provisioning (idempotent) on first use.
+    it('the connect succeeds even when every template submission fails', async () => {
+        vi.mocked(whatsappService.createMessageTemplate).mockRejectedValue(new Error('Meta 500'));
+        const user = await createTestUser({ facebookId: uniq('fb'), email: `${uniq('m')}@test.com` });
+        const workspace = await createTestWorkspace(user.id);
+
+        const page = await pagesService.createWhatsAppOnlyPage(workspace.id, user.id, {
+            phoneNumberId: uniq('pn'),
+            businessAccountId: uniq('waba'),
+            displayPhoneNumber: '+966503333333',
+            accessToken: 'plain-token',
+        });
+
+        expect(page.id).toBeDefined();   // the connect itself landed
+        // The failures are recorded as `unknown` — the resubmit backoff's input,
+        // not silence.
+        await vi.waitFor(async () => {
+            const rows = await templateRowsFor(page.id);
+            expect(rows).toHaveLength(ALL_CANONICAL);
+            expect(rows.every(r => r.status === 'unknown')).toBe(true);
+        });
     });
 });

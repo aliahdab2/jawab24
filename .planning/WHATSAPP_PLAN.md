@@ -126,7 +126,9 @@ Connect WhatsApp via Facebook Embedded Signup on the existing pages screen.
 ### Phase 4: Template Messages — ✅ proactive half shipped (2026-08-26), inbox half still open
 - [x] **Order/cart notifications over WhatsApp** — `whatsappService.sendTemplateMessage` + canonical
       Jawab24 UTILITY templates (`services/whatsappNotificationTemplates.ts`), auto-submitted to each
-      merchant's own WABA and tracked in `whatsapp_notification_templates`. Per-type channel switch on
+      merchant's own WABA **at connect time** (both connect writers fire
+      `kickOffNotificationTemplates`, so Meta's review completes before the merchant ever sees the
+      channel toggle) and tracked in `whatsapp_notification_templates`. Per-type channel switch on
       the notifications card; sender = the WhatsApp page linked to the store. This is the
       cart-recovery / order-update gap this plan called LetsBot's biggest revenue feature.
 - [x] Create/manage message templates via the Graph API (`POST /{waba-id}/message_templates` +

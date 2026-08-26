@@ -87,8 +87,11 @@ export async function updateTemplate(request: FastifyRequest, reply: FastifyRepl
                     code: 'NO_WHATSAPP_SENDER',
                 });
             }
-            // Submitting the canonical templates takes minutes-to-hours at Meta, so
-            // start now — the merchant sees the status on the card.
+            // Belt-and-braces: templates are provisioned AT CONNECT TIME
+            // (pagesService.kickOffNotificationTemplates), so by the time a
+            // merchant flips this switch Meta's review is normally already done.
+            // This re-kick (idempotent, single-flighted) covers numbers connected
+            // before that existed and any submission the connect-time run lost.
             ensureTemplatesProvisioned(sender).catch(err => {
                 request.log.error({ err, storeId }, '[WANotif] template provisioning failed after channel switch');
             });
