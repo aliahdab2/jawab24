@@ -373,7 +373,7 @@ export async function adoptZidSubscription(
     // untangle. 'paypal' is a documented legacy value for this column.
     if (
         currentIsLive
-        && ['stripe', 'manual', 'paypal', 'shopify'].includes(current.paymentMethod ?? '')
+        && ['stripe', 'manual', 'paypal', 'shopify', 'salla'].includes(current.paymentMethod ?? '')
     ) {
         return refuse(
             `Zid subscription for store ${storeId} collides with a live ${current.paymentMethod} subscription`,
