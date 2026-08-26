@@ -150,10 +150,6 @@ SALLA_CLIENT_ID=your_client_id
 SALLA_CLIENT_SECRET=your_client_secret
 SALLA_HOST_NAME=jawab24.com
 SALLA_WEBHOOK_SECRET=your_webhook_secret
-# Salla Application ID (prod app = 665811310). Required by the billing rail's
-# subscription read; unset = billing is DORMANT (reconcile cron disabled, every
-# sync answers no_store) — deploy-safe, but a paying merchant activates nothing.
-SALLA_APP_ID=665811310
 
 # Shared encryption key for e-commerce tokens (generate with: openssl rand -hex 32)
 SHOPIFY_TOKEN_ENCRYPTION_KEY=your_64_char_hex_string
@@ -307,32 +303,10 @@ silently blocked — the manual rail is also the payment route for merchants Str
 `subscription.sallaBilled`: plan select (`useSelectPlan`), the `/pricing` banner, the top-up CTA
 (`BuyTopUpCTA`), and a `/pricing` bounce in `checkout.tsx`.
 
-✅ **Salla-managed billing is IMPLEMENTED (2026-08-26, D-104)** — `services/sallaBilling.ts`,
-mirroring the Zid rail (D-070). **Verify-first**: Salla documents a subscription-read endpoint,
-`GET https://api.salla.dev/admin/v2/apps/{app_id}/subscriptions` (docs.salla.dev 5401098e0,
-merchant token, `SALLA_APP_ID` required), so that API is the authority and the
-`app.subscription.*` / `app.trial.*` deliveries are only TRIGGERS — they carry no state into the
-database, they call the one idempotent choke point `syncSallaBilling(storeId)`. Four triggers:
-the subscription/trial webhooks, the uninstall webhook (cancels the mirror — no paid local sub
-outlives the app), the **post-claim hook** in `claimStoreHandler` (a merchant who subscribed
-inside Salla before claiming had no store row when those webhooks arrived, so they drop — the
-claim is the first moment a verify can land), and the 6-hourly `SallaBillingReconcile` cron,
-the authority of last resort that makes a missed delivery a ≤6h delay. The mirror lands on
-`subscriptions` with `payment_method='salla'` + `salla_store_id` (migration `0181`: partial
-unique index over live rows + CHECK), and the Stripe suppression now fires on the mirror row
-itself (`isSallaBilled`, exactly like Shopify's) with the store-presence heuristic kept as the
-pre-subscription fallback.
-
-⚠️ **Two Salla-specific derivations, both [provisional] until the first live paid envelope:**
-(1) the read carries **no `status` field** — entitlement is DERIVED from `end_date` (future =
-entitled, past = inactive, missing/unparseable = `unknown_state`, which fails loud and writes
-nothing); a null price on an entitled entry is read as the trial window. (2) base plans carry
-**no plan id and a nullable `plan_name`** — mapping is name-first («الأعمال»/«الاحترافي»,
-normalizeArabic-folded) with the D-103 ex-VAT price (146/296) as the fallback identity;
-`plan_type: 'free'` is a known non-entitling shape (silent skip); anything else unmapped is
-`unknown_plan`, fail-loud. Add-on entries (`item_type != 'plan'`) are never adopted as the base
-plan. Coverage: `backend/test/services/sallaBilling.test.ts` + wiring in
-`backend/test/controllers/salla.test.ts`.
+❌ **Salla-managed billing itself is NOT IMPLEMENTED.** When it lands — a `'salla'` subscription
+source driven by `app.subscription.*` webhooks — the suppression becomes a redirect to Salla's
+plan management, and `hasLiveStripeBilling` is replaced by a subscription-reading
+`isSallaBilled(row)` exactly like Shopify's.
 
 ---
 

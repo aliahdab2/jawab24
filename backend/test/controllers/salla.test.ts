@@ -44,16 +44,6 @@ vi.mock('../../src/services/customerNotifications', () => ({
     customerNotificationService: { schedule: vi.fn().mockResolvedValue(undefined) },
 }));
 
-// --- Mocked billing rail — these tests pin only the controller WIRING (which
-// events cancel the mirror / trigger a verify), while services/sallaBilling.test.ts
-// pins the rail's own rules. Mirrors the Zid controller test's zidBilling mock.
-const mockCancelSallaSubscriptionLocal = vi.fn().mockResolvedValue(true);
-const mockSyncSallaBilling = vi.fn().mockResolvedValue({ outcome: 'adopted', changed: true });
-vi.mock('../../src/services/sallaBilling', () => ({
-    cancelSallaSubscriptionLocal: (...args: unknown[]) => mockCancelSallaSubscriptionLocal(...args),
-    syncSallaBilling: (...args: unknown[]) => mockSyncSallaBilling(...args),
-}));
-
 // --- Mocked shared ecommerce service ---
 const mockGetStoreByDomain = vi.fn();
 const mockGetStoreByMerchantId = vi.fn();
@@ -706,88 +696,6 @@ describe('Salla Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('cancels the billing mirror BEFORE deactivating on app.uninstalled — no paid sub outlives the app', async () => {
-            mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
-            const body = { event: 'app.uninstalled', merchant: 12345 };
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'valid_hmac' },
-                body,
-                rawBody: Buffer.from(JSON.stringify(body)),
-            });
-            const rep = mockReply();
-
-            await webhookHandler(req, rep);
-
-            expect(mockCancelSallaSubscriptionLocal).toHaveBeenCalledWith('store-1', 'salla_app_uninstalled', expect.anything());
-            expect(mockCancelSallaSubscriptionLocal.mock.invocationCallOrder[0])
-                .toBeLessThan(mockDeactivateStore.mock.invocationCallOrder[0]);
-        });
-
-        // --- Billing triggers: the delivery carries NO state — the controller only
-        // asks the verify-first choke point to go and look (services/sallaBilling). ---
-        it.each([
-            ['app.subscription.started'],
-            ['app.subscription.renewed'],
-            ['app.subscription.expired'],
-            ['app.subscription.canceled'],
-            ['app.trial.started'],
-            ['app.trial.expired'],
-        ])('triggers a billing verify on %s without reading the payload', async (event) => {
-            mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
-            const body = { event, merchant: 12345, data: { plan_name: 'IGNORED', price: '999.00' } };
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'valid_hmac' },
-                body,
-                rawBody: Buffer.from(JSON.stringify(body)),
-            });
-            const rep = mockReply();
-
-            await webhookHandler(req, rep);
-            await new Promise(r => setTimeout(r, 10)); // fire-and-forget
-
-            expect(mockSyncSallaBilling).toHaveBeenCalledWith('store-1', expect.anything());
-            expect(rep.status).toHaveBeenCalledWith(200);
-        });
-
-        it('acks a subscription event for an unclaimed merchant without syncing — the post-claim hook and the reconciler cover it', async () => {
-            mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue(null);
-            mockGetStoreByMerchantId.mockResolvedValue(null);
-            const body = { event: 'app.subscription.started', merchant: 999111 };
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'valid_hmac' },
-                body,
-                rawBody: Buffer.from(JSON.stringify(body)),
-            });
-            const rep = mockReply();
-
-            await webhookHandler(req, rep);
-            await new Promise(r => setTimeout(r, 10));
-
-            expect(mockSyncSallaBilling).not.toHaveBeenCalled();
-            expect(rep.status).toHaveBeenCalledWith(200);
-        });
-
-        it('acks a subscription event even when the fire-and-forget sync rejects', async () => {
-            mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
-            mockSyncSallaBilling.mockRejectedValueOnce(new Error('salla api down'));
-            const body = { event: 'app.subscription.renewed', merchant: 12345 };
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'valid_hmac' },
-                body,
-                rawBody: Buffer.from(JSON.stringify(body)),
-            });
-            const rep = mockReply();
-
-            await webhookHandler(req, rep);
-            await new Promise(r => setTimeout(r, 10));
-
-            expect(rep.status).toHaveBeenCalledWith(200);
-        });
-
         // --- S1 regression: Salla webhooks send the numeric `merchant` id, persisted in
         // platformData.merchantId — NOT the storeDomain. So getStoreByDomain(merchant)
         // misses and the merchantId fallback must catch it. Without the fallback EVERY
@@ -1349,28 +1257,6 @@ describe('Salla Controller', () => {
             const rep = mockReply();
             await claimStoreHandler(req, rep);
             expect(mockClaimPendingInstallByMerchantId).toHaveBeenCalledWith('671738424', 'user-123', 'salla', expect.any(Function), expect.any(Function), expect.any(Function));
-            expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });
-        });
-
-        // A merchant who subscribed inside Salla BEFORE claiming had no store row
-        // when those webhooks arrived — the claim is the first moment a verify
-        // can land anywhere. Fire-and-forget: a failure must not fail the claim.
-        it('triggers a billing verify on the just-claimed store', async () => {
-            mockClaimPendingInstallByMerchantId.mockResolvedValue({ id: 'store-new' });
-            const req = authedReq({ merchantId: '671738424' });
-            const rep = mockReply();
-            await claimStoreHandler(req, rep);
-            await new Promise(r => setTimeout(r, 10));
-            expect(mockSyncSallaBilling).toHaveBeenCalledWith('store-new', expect.anything());
-        });
-
-        it('still returns the onboarding payload when the post-claim billing verify rejects', async () => {
-            mockClaimPendingInstallByMerchantId.mockResolvedValue({ id: 'store-new' });
-            mockSyncSallaBilling.mockRejectedValueOnce(new Error('salla api down'));
-            const req = authedReq({ merchantId: '671738424' });
-            const rep = mockReply();
-            await claimStoreHandler(req, rep);
-            await new Promise(r => setTimeout(r, 10));
             expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });
         });
 

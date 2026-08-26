@@ -428,7 +428,7 @@ describe('reconcileStripeSubscriptions', () => {
     });
 });
 
-describe('adoptStripeSubscription — D-H twin (marketplace mirror protection)', () => {
+describe('adoptStripeSubscription — D-H twin (Shopify mirror protection)', () => {
     it('refuses to overwrite a live shopify-billed row and alerts Sentry', async () => {
         vi.mocked(db.select).mockReturnValue(q([{
             id: 'row_1', paymentMethod: 'shopify', status: 'active',
@@ -440,46 +440,15 @@ describe('adoptStripeSubscription — D-H twin (marketplace mirror protection)',
         expect(db.insert).not.toHaveBeenCalled();
         expect(mockCaptureError).toHaveBeenCalledWith(
             expect.any(Error),
-            expect.stringContaining('shopify mirror'),
+            expect.stringContaining('Shopify mirror'),
             expect.objectContaining({ fingerprint: ['stripe-adopt-refused-shopify-mirror'] }),
         );
     });
 
-    /**
-     * The six merchant-facing Stripe entry points refuse a marketplace-billed
-     * account, but `admin/billing.ts:createPaymentRequest` consults neither
-     * marketplace rule — so a Stripe subscription CAN reach a zid/salla
-     * merchant. Adopting would flip payment_method to 'stripe' while LEAVING
-     * `zid_store_id`/`salla_store_id` set, dropping the row out of that rail's
-     * WHERE triple: the sweep could then neither pause nor heal it.
-     */
-    it.each([
-        ['zid'],
-        ['salla'],
-    ])('refuses to overwrite a live %s-billed row and alerts Sentry', async (rail) => {
-        vi.mocked(db.select).mockReturnValue(q([{
-            id: 'row_1', paymentMethod: rail, status: 'active',
-        }]) as never);
-
-        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(false);
-
-        expect(db.update).not.toHaveBeenCalled();
-        expect(db.insert).not.toHaveBeenCalled();
-        expect(mockCaptureError).toHaveBeenCalledWith(
-            expect.any(Error),
-            expect.stringContaining(`${rail} mirror`),
-            expect.objectContaining({ fingerprint: [`stripe-adopt-refused-${rail}-mirror`] }),
-        );
-    });
-
-    it.each([
-        ['shopify'],
-        ['zid'],
-        ['salla'],
-    ])('still adopts over a canceled %s row — the merchant came back through Stripe', async (rail) => {
+    it('still adopts over a canceled shopify row — the merchant came back through Stripe', async () => {
         const chain = q([]);
         vi.mocked(db.select).mockReturnValue(q([{
-            id: 'row_1', paymentMethod: rail, status: 'canceled',
+            id: 'row_1', paymentMethod: 'shopify', status: 'canceled',
         }]) as never);
         vi.mocked(db.update).mockReturnValue(chain as never);
 
