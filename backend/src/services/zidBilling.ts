@@ -11,6 +11,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
 import { resolveBillingSubjectUserId } from './ecommerce';
+import { pick, asString, parseDate } from '../utils/provisionalEnvelope';
 
 /**
  * Zid App Market subscriptions → local subscription mirror.
@@ -98,21 +99,6 @@ export function mapZidStatus(raw: string): ZidStatusVerdict {
     if (ZID_ACTIVE_STATUSES.has(normalized)) return { kind: 'active', localStatus: 'active' };
     if (ZID_INACTIVE_STATUSES.has(normalized)) return { kind: 'inactive' };
     return { kind: 'unknown' };
-}
-
-/** Read the first present key from a tolerant envelope [provisional]. */
-function pick(source: Record<string, unknown>, ...keys: string[]): unknown {
-    for (const key of keys) {
-        const value = source[key];
-        if (value !== undefined && value !== null && value !== '') return value;
-    }
-    return undefined;
-}
-
-function asString(value: unknown): string | null {
-    if (value === undefined || value === null) return null;
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
-    return null;
 }
 
 /**
@@ -276,12 +262,6 @@ export interface ZidBillingSyncResult {
     /** true when a row was actually written (drives the reconciler's healed count) */
     changed: boolean;
 }
-
-const parseDate = (value: string | null): Date | null => {
-    if (!value) return null;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-};
 
 /**
  * Mirror one Zid App Market subscription onto the subject user's local row.

@@ -154,6 +154,16 @@ const LAZY_EXPIRY_CANARIES: Record<string, {
         flow: 'lazy_expiry_zid',
         requiresExternalId: false,
     },
+    // Salla advances the period through its own app subscription, mirrored on
+    // the webhook trigger, the post-claim sync, and the 6h reconciler. A salla
+    // row reaching lazy expiry means ALL of them missed. requiresExternalId is
+    // false because `subscription_id` is documented to change every renewal
+    // cycle (see services/sallaBilling) — its absence proves nothing.
+    salla: {
+        message: 'Salla-billed subscription lazily expired — neither the subscription webhook nor the billing reconciler advanced the period',
+        flow: 'lazy_expiry_salla',
+        requiresExternalId: false,
+    },
 };
 
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */

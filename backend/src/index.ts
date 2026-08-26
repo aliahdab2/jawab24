@@ -700,6 +700,23 @@ const start = async () => {
       recovered: r => ({ count: r.healed, message: `Zid billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
     });
 
+    // Salla App Store billing reconciliation — the authority of last resort.
+    // Salla delivers app.subscription.*/app.trial.* webhooks, but a delivery
+    // that never arrives — or one that arrived BEFORE the merchant claimed the
+    // store (no row to resolve) — would otherwise strand a paying merchant.
+    // This sweep is what makes a missed delivery a ≤6h delay instead of a lost
+    // subscription. Gated on SALLA_APP_ID because the subscription-read URL
+    // cannot be built without it.
+    const { reconcileSallaBilling } = await import('./services/sallaBilling');
+    scheduleReconcileCron({
+      label: 'SallaBillingReconcile',
+      tag: 'salla_billing_reconcile',
+      enabled: () => !!config.salla.clientId && !!config.salla.appId,
+      intervalMs: 6 * 60 * 60 * 1000,
+      run: () => reconcileSallaBilling({ log: server.log }),
+      recovered: r => ({ count: r.healed, message: `Salla billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
+    });
+
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms.
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update).
     // Runs an initial sweep 3 min after boot: a process-anchored interval alone never
