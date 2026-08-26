@@ -50,5 +50,6 @@
     "missing": "Not submitted for approval yet"
   },
   "connectWhatsAppHint": "Link a WhatsApp number to this store to enable WhatsApp delivery.",
-  "whatsappTemplateNote": "WhatsApp uses a Meta-approved template, so its wording cannot be edited here. The text above still applies to SMS."
+  "whatsappTemplateNote": "WhatsApp uses a Meta-approved template, so its wording cannot be edited here. The text above still applies to SMS.",
+  "noDeliveryRail": "Not available yet — this type has no WhatsApp template, and SMS delivery is currently unavailable."
 }

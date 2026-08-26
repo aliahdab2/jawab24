@@ -93,6 +93,22 @@ const WHATSAPP_CAPABLE_TYPES: OrderNotificationType[] = [
   'abandoned_cart',
 ];
 
+/**
+ * Is there any rail that can actually deliver this type today?
+ *
+ * SMS is dead fleet-wide (Vonage dropped by owner ruling, 2026-08-25), so a type
+ * delivers only if it has a canonical Meta template. `review_request` and
+ * `digital_delivery` have neither — switching them on produced nothing but
+ * `failed` log rows, silently, forever.
+ *
+ * ⚠️ This encodes the Vonage ruling. The day SMS works again — or either type
+ * gains a WhatsApp template — this predicate is the ONE line to revisit, and the
+ * toggles come back on their own.
+ */
+function isDeliverable(type: OrderNotificationType): boolean {
+  return WHATSAPP_CAPABLE_TYPES.includes(type);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
@@ -267,6 +283,7 @@ interface NotificationTypeRowProps {
 function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle, onFieldChange, onExpandToggle, waStatus, t }: NotificationTypeRowProps) {
   const Icon = TYPE_ICONS[type];
   const dirty = isDraftDirty(draft, saved);
+  const deliverable = isDeliverable(type);
 
   return (
     <div
@@ -301,13 +318,21 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
           <p className="text-xs text-muted-foreground truncate">
             {t(`typeDesc.${type}` as `typeDesc.${typeof type}`)}
           </p>
+          {!deliverable && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {t('noDeliveryRail')}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <Toggle
             enabled={draft.isEnabled}
             onChange={(v) => onToggle(type, v)}
-            disabled={!canEdit}
+            // Undeliverable types cannot be switched ON — but one already on stays
+            // switchable OFF, or a merchant who enabled it earlier would be stuck
+            // with a setting they can see and cannot retract.
+            disabled={!canEdit || (!deliverable && !draft.isEnabled)}
             size="sm"
             aria-label={t(`types.${type}` as `types.${typeof type}`)}
           />
