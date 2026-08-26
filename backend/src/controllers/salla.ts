@@ -29,6 +29,7 @@ import {
 } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
+import { syncSallaBilling, cancelSallaSubscriptionLocal } from '../services/sallaBilling';
 import { config } from '../config';
 import {
     PENDING_SALLA_COOKIE_OPTIONS,
@@ -97,7 +98,37 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
     if (event === 'app.uninstalled') {
         const store = await resolveStore();
-        if (store) await deactivateStore('salla', store.storeDomain);
+        if (store) {
+            // Cancel the billing mirror BEFORE deactivating: no paid local
+            // subscription may outlive the app. Keyed on salla_store_id rather
+            // than the store row, so the order is defensive rather than
+            // required. (Salla refunds an uninstall inside the 7-day window
+            // itself — data.refunded — there is no separate refund event.)
+            await cancelSallaSubscriptionLocal(store.id, 'salla_app_uninstalled', request.log);
+            await deactivateStore('salla', store.storeDomain);
+        }
+        return reply.status(200).send({ ok: true });
+    }
+
+    // App Store SUBSCRIPTION/TRIAL lifecycle — pure TRIGGERS: the handler never
+    // reads a plan, price, or state out of the delivery — it calls
+    // syncSallaBilling, which asks Salla's own subscription endpoint
+    // (GET /admin/v2/apps/{app_id}/subscriptions) and reconciles from that
+    // answer. Matched by PREFIX so an event variant we have not seen (add-on
+    // events share these names with `item_type` differing) still just triggers
+    // a verify — a spurious verify is cheap; a missed one strands a paying
+    // merchant. Pre-claim deliveries resolve no store row and drop harmlessly:
+    // the post-claim sync in claimStoreHandler and the 6h reconciler cover them.
+    if (event && (event.startsWith('app.subscription.') || event.startsWith('app.trial.'))) {
+        const store = await resolveStore();
+        if (store) {
+            // Fire-and-forget: Salla retries deliveries and the ack must not
+            // wait on a Merchant API round-trip. A failure here is not lost —
+            // the 6h reconciler sweeps the same store.
+            syncSallaBilling(store.id, request.log).catch(err => {
+                request.log.error({ err, storeId: store.id }, 'Salla billing sync failed for a subscription webhook');
+            });
+        }
         return reply.status(200).send({ ok: true });
     }
 
@@ -286,6 +317,13 @@ export async function claimStoreHandler(request: FastifyRequest, reply: FastifyR
             : await claimPendingInstallByMerchantId(merchantId as string, userId, 'salla', registerSallaWebhooks, saveWebhookStatus, verifyOwnership);
 
         if (!store) return reply.status(404).send({ error: 'No claimable Salla install found' });
+        // A merchant who subscribed (or started the trial) inside Salla BEFORE
+        // claiming had no store row when those webhooks arrived, so they
+        // dropped. Verify now that the store exists — fire-and-forget, the 6h
+        // reconciler is the backstop.
+        syncSallaBilling(store.id, request.log).catch(err => {
+            request.log.error({ err, storeId: store.id }, 'Post-claim Salla billing sync failed');
+        });
         return reply.send({ sallaOnboarding: true, ecommerceStoreId: store.id });
     } catch (err) {
         if (err instanceof ClaimOwnershipError) {

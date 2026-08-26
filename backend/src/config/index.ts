@@ -272,6 +272,12 @@ export const config = {
     salla: {
         clientId: process.env.SALLA_CLIENT_ID || '',
         clientSecret: process.env.SALLA_CLIENT_SECRET || '',
+        // Salla Application ID (Salla Partners → My Apps; prod app is 665811310).
+        // Required by the App Subscription Details read
+        // (GET /admin/v2/apps/{app_id}/subscriptions) that services/sallaBilling.ts
+        // verifies against. Empty = the billing rail stays dormant (reconcile cron
+        // disabled, syncs answer no_store).
+        appId: process.env.SALLA_APP_ID || '',
         hostName: process.env.SALLA_HOST_NAME || '',
         webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
         // ⚠️ `shipping.read` powers the List Shipments call in services/salla.ts — order
