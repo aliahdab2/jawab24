@@ -226,34 +226,33 @@ go into a live listing as written:
 
 The remaining five bullets describe shipped, demonstrable behaviour and are fine.
 
-## 4. App Pricing — 🔴 BLOCKED. **There is no "Free" option**, and a price must not be entered
+## 4. App Pricing — ✅ UNBLOCKED (D-103 + D-104, 2026-08-26). Fill the two paid plans
 
-⚠️ **Correction, measured in the portal 2026-08-20.** Earlier revisions of this section said "set
-Free". **No such option exists.** The `Pricing Type` selector offers exactly three:
-**One-Time · Recurring · Pay As You Go**. Left on the `One-Time` default with price 0, the wizard
-errors with **`Price: Charge must be at least 1.`** — i.e. the form *requires* a chargeable amount,
-and this error is one of the four that block **Save Draft** entirely.
+⚠️ **History.** This section was 🔴 BLOCKED through two states, both now resolved:
+(a) *"There is no Free option"* — measured 2026-08-20 (`Pricing Type` = One-Time · Recurring ·
+Pay As You Go only; price 0 fails Save Draft with `Price: Charge must be at least 1.`). The live
+shelf answered it 2026-08-26: **nobody ships a free plan — every app is a paid plan carrying a
+free trial**, and the owner ruled Salla goes public on paid plans (**D-103**).
+(b) *"Salla-managed billing is NOT IMPLEMENTED — never enter a price"* — resolved 2026-08-26
+(**D-104**): `services/sallaBilling.ts` turns `app.subscription.*`/`app.trial.*` deliveries into
+a verified Jawab24 plan (see `docs/integrations/salla.md` § billing). ⛔ The
+charged-granted-nothing dead end no longer exists ONLY once that code is DEPLOYED to prod with
+`SALLA_APP_ID=665811310` added to `env/backend.env` (+ `--force-recreate` + nginx reload) —
+both are submit prerequisites; do not press "Start publishing your App" before them.
 
-⛔ **Do NOT enter a price to clear the error.** This is not a pricing preference; a price here
-produces the worst reachable state for a merchant:
+**What to enter (D-103 = D-095 numbers, identical to Zid):**
 
-- Salla apps-policy **Article 5** requires paid apps to bill through Salla, and Salla-managed
-  billing is **NOT IMPLEMENTED** — no code path turns a Salla payment or an `app.subscription.*`
-  webhook into a Jawab24 plan.
-- Simultaneously, **D-065 guards our Stripe surfaces to *refuse* Salla-sourced merchants**
-  (400 `SALLA_BILLED`).
+| Plan | Name (AR) | Billing Cycle | Price (ex-VAT) | Trial |
+|------|-----------|---------------|----------------|-------|
+| Business | **الأعمال** | Monthly (Recurring) | **146 SAR** | **14 days** |
+| Pro | **الاحترافي** | Monthly (Recurring) | **296 SAR** | **14 days** |
 
-So a paying merchant would be **charged, granted nothing, and blocked from buying the real thing**.
-That is taking money without service wiring, not a misconfiguration. Launch is free-tier-only
-(decided 2026-05-30) and that decision stands.
-
-**Resolution path — ask, do not guess.** Salla support answered a comparable question in ~29 minutes
-during ID verification; a support round trip is the cheap instrument here. The question to send:
-how is a free app configured, and does a free-app setting live outside the publish wizard?
-
-**One safe probe while waiting** (a draft field change, fully reversible, commits nothing): switch
-the type to **Pay As You Go** and see whether the minimum-charge error clears. If it also demands
-≥ 1, revert and wait for support. ⛔ Under no circumstances type a price to get past validation.
+⛔ The plan **names and prices are load-bearing**: `config/sallaBilling.ts` maps a subscription
+to a Jawab24 tier by the plan name («الأعمال»/«الاحترافي») first and by the ex-VAT price
+(146/296) as the fallback — Salla's payloads carry no plan id and may deliver `plan_name: null`.
+A renamed or repriced plan in the wizard without the matching map change books `unknown_plan`
+(fail-loud, no activation) for every paying merchant on it.
+⛔ Basic/Starter are never listed (`ecommerceEnabled: false` — they cannot open the store).
 
 ⚠️ **Consequence for sequencing:** because this error blocks Save Draft, *nothing else in the wizard
 can be saved either*. Uploads and benefit text typed before this resolves are unsaved work that a

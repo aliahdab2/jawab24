@@ -415,9 +415,12 @@ describe('adoptZidSubscription', () => {
         );
     });
 
-    it('refuses to adopt over a live SHOPIFY mirror — two marketplaces cannot both bill one workspace', async () => {
+    it.each([
+        ['shopify'],
+        ['salla'],
+    ])('refuses to adopt over a live %s mirror — two marketplaces cannot both bill one workspace', async (rail) => {
         vi.mocked(db.select).mockReturnValue(q([{
-            id: 'row_1', paymentMethod: 'shopify', status: 'active',
+            id: 'row_1', paymentMethod: rail, status: 'active',
             currentPeriodEnd: null, currentPeriodStart: null,
         }]) as never);
 

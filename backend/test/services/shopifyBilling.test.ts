@@ -400,6 +400,23 @@ describe('adoptShopifySubscription — additional refusal surfaces', () => {
         expect(result).toEqual({ outcome: 'refused', changed: false });
     });
 
+    // The zid/salla adopts have always refused over a live shopify row; without
+    // the mirror-image refusal here, which marketplace "won" a doubly-billed
+    // workspace depended on which rail's sync ran last.
+    it.each([
+        ['zid'],
+        ['salla'],
+    ])('refuses over a live %s mirror — two marketplaces cannot both bill one workspace (D-H)', async (rail) => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: rail, status: 'active',
+            externalSubscriptionId: null, currentPeriodEnd: null, currentPeriodStart: null,
+        }]) as never);
+
+        const result = await adoptShopifySubscription('u1', appSub(), SHOP, mkLog());
+
+        expect(result).toEqual({ outcome: 'refused', changed: false });
+    });
+
     it('clears stale Stripe identity when taking over a canceled stripe row', async () => {
         const chain = q([]);
         vi.mocked(db.select).mockReturnValue(q([{

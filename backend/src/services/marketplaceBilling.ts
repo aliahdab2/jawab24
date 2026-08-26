@@ -1,4 +1,4 @@
-import { hasLiveStripeBilling, SALLA_BILLED_CODE } from '../config/sallaBilling';
+import { hasLiveStripeBilling, isSallaBilled, SALLA_BILLED_CODE, buildSallaManageUrl } from '../config/sallaBilling';
 import { isShopifyBilled, SHOPIFY_BILLED_CODE, buildShopifyManageUrl } from '../config/shopifyBilling';
 import { isZidBilled, ZID_BILLED_CODE, buildZidManageUrl } from '../config/zidBilling';
 import { hasActiveStoreForBillingSubject } from './ecommerce';
@@ -55,8 +55,8 @@ type BillingSubscriptionRow = {
  *
  * ORDER IS THE CONTRACT:
  *
- * 1. **Row-based rails first.** An existing `shopify`/`zid` mirror is positive
- *    proof that a marketplace is already charging this merchant, so it outranks
+ * 1. **Row-based rails first.** An existing `shopify`/`zid`/`salla` mirror is
+ *    positive proof that a marketplace is already charging this merchant, so it outranks
  *    every heuristic below, including the Stripe exemption. (The adopt paths
  *    refuse to overwrite a live Stripe row, so "pays Stripe AND has a mirror"
  *    should be unreachable; ordering it this way means that even if it happened
@@ -95,6 +95,15 @@ export async function resolveMarketplaceBilling(
         };
     }
 
+    if (subscription && isSallaBilled(subscription)) {
+        return {
+            marketplace: 'salla',
+            code: SALLA_BILLED_CODE,
+            message: 'Paid plans for Salla merchants are billed through the Salla App Store',
+            manageUrl: buildSallaManageUrl(),
+        };
+    }
+
     // The exemption is a pure in-memory check, so an already-paying Stripe
     // merchant never pays for the store queries below at all.
     if (subscription && hasLiveStripeBilling(subscription)) return null;
@@ -103,10 +112,10 @@ export async function resolveMarketplaceBilling(
         return {
             marketplace: 'salla',
             code: SALLA_BILLED_CODE,
-            message: 'Paid plans for Salla merchants are billed through Salla',
-            // Salla launches free-tier-only: there is no Salla-side plan to
-            // manage, so there is deliberately nowhere to send them.
-            manageUrl: undefined,
+            message: 'Paid plans for Salla merchants are billed through the Salla App Store',
+            // Undefined until SALLA_APP_STORE_URL is configured (the listing
+            // URL exists only after publish) — suppress Stripe, show no link.
+            manageUrl: buildSallaManageUrl(),
         };
     }
 
