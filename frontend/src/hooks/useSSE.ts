@@ -100,6 +100,12 @@ export function useSSE(): void {
     const incrementUnreadMessages = useUIStore((s) => s.incrementUnreadMessages);
 
     const esRef = useRef<EventSource | null>(null);
+    // True after the lifecycle effect's cleanup. The reconnect path has an async
+    // gap (the embedded re-mint fetch) between the retry timer firing and the
+    // actual connect — clearTimeout alone cannot cancel work already past the
+    // timer, and an orphan EventSource opened after teardown would reconnect
+    // forever with nobody left to close it.
+    const disposedRef = useRef(false);
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -370,7 +376,9 @@ export function useSSE(): void {
                 // a failed refresh falls back to the stored token and the next
                 // backoff tries again. Mint frequency is bounded by the backoff.
                 if (isEmbeddedSession()) {
-                    void refreshEmbeddedToken(API_URL).finally(connectSSE);
+                    void refreshEmbeddedToken(API_URL).finally(() => {
+                        if (!disposedRef.current) connectSSE();
+                    });
                 } else {
                     connectSSE();
                 }
@@ -428,6 +436,7 @@ export function useSSE(): void {
             return;
         }
 
+        disposedRef.current = false;
         if (isNativePlatform()) {
             startPolling();
         } else {
@@ -435,6 +444,7 @@ export function useSSE(): void {
         }
 
         return () => {
+            disposedRef.current = true;
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             if (esRef.current) {
                 esRef.current.close();

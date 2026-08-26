@@ -133,6 +133,30 @@ describe('useSSE auth modes', () => {
         expect(MockEventSource.instances[1].url).toContain('token=fresh-jwt');
     });
 
+    it('embedded mode: a reconnect re-mint resolving after unmount opens no orphan connection', async () => {
+        vi.mocked(getEmbeddedToken).mockReturnValue('embedded-jwt');
+        vi.mocked(isEmbeddedSession).mockReturnValue(true);
+
+        // Refresh stays pending until we resolve it — models the fetch in flight
+        // while the hook tears down (logout / unmount).
+        let resolveRefresh: (v: string | null) => void = () => {};
+        vi.mocked(refreshEmbeddedToken).mockImplementation(
+            () => new Promise((resolve) => { resolveRefresh = resolve; }),
+        );
+
+        const { unmount } = renderHook(() => useSSE(), { wrapper: makeWrapper() });
+        expect(MockEventSource.instances).toHaveLength(1);
+
+        act(() => { MockEventSource.instances[0].onerror?.(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+        expect(refreshEmbeddedToken).toHaveBeenCalledTimes(1);
+
+        unmount();
+        await act(async () => { resolveRefresh('fresh-jwt'); await Promise.resolve(); });
+
+        expect(MockEventSource.instances).toHaveLength(1);
+    });
+
     it('cookie mode: reconnects without touching the embedded mint endpoint', async () => {
         renderHook(() => useSSE(), { wrapper: makeWrapper() });
 
