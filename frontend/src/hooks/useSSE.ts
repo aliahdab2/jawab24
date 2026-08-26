@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
+import { getEmbeddedToken, isEmbeddedSession, refreshEmbeddedToken } from '@/lib/embeddedSession';
 import { createDebouncedInvalidator } from '@/lib/queryInvalidation';
 import { useLeadAlertsEnabled } from './useLeadAlertsEnabled';
 import type { SSEEvent, Page, Comment } from '@jawab24/shared';
@@ -99,6 +100,12 @@ export function useSSE(): void {
     const incrementUnreadMessages = useUIStore((s) => s.incrementUnreadMessages);
 
     const esRef = useRef<EventSource | null>(null);
+    // True after the lifecycle effect's cleanup. The reconnect path has an async
+    // gap (the embedded re-mint fetch) between the retry timer firing and the
+    // actual connect — clearTimeout alone cannot cancel work already past the
+    // timer, and an orphan EventSource opened after teardown would reconnect
+    // forever with nobody left to close it.
+    const disposedRef = useRef(false);
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -164,8 +171,17 @@ export function useSSE(): void {
         if (typeof window === 'undefined') return;
         if (!isAuthenticated) return;
 
-        const url = `${API_URL}/sse/events`;
-        const es = new EventSource(url, { withCredentials: true });
+        // Embedded (platform-dashboard iframe): SameSite=strict cookies never
+        // reach a third-party frame, so the cookie handshake 401s forever there.
+        // EventSource cannot set an Authorization header — pass the embedded
+        // Bearer token via the backend's sanctioned ?token= query param instead
+        // (routes/sse.ts, the same path mobile uses). Read fresh on every
+        // (re)connect so a token refreshed elsewhere is picked up.
+        const embeddedToken = getEmbeddedToken();
+        const url = embeddedToken
+            ? `${API_URL}/sse/events?token=${encodeURIComponent(embeddedToken)}`
+            : `${API_URL}/sse/events`;
+        const es = new EventSource(url, { withCredentials: !embeddedToken });
         esRef.current = es;
 
         es.addEventListener('connected', () => {
@@ -351,7 +367,22 @@ export function useSSE(): void {
             );
             retryCountRef.current++;
 
-            retryTimerRef.current = setTimeout(connectSSE, delay);
+            retryTimerRef.current = setTimeout(() => {
+                // The embedded access token is short-lived (15 min), so a
+                // reconnect after expiry would 401 with the stored value until
+                // some other API call happens to refresh it — an idle tab never
+                // recovers. Re-mint from the durable platform credential first;
+                // connectSSE reads the refreshed token from storage. Best-effort:
+                // a failed refresh falls back to the stored token and the next
+                // backoff tries again. Mint frequency is bounded by the backoff.
+                if (isEmbeddedSession()) {
+                    void refreshEmbeddedToken(API_URL).finally(() => {
+                        if (!disposedRef.current) connectSSE();
+                    });
+                } else {
+                    connectSSE();
+                }
+            }, delay);
         };
     }, [
         isAuthenticated,
@@ -405,6 +436,7 @@ export function useSSE(): void {
             return;
         }
 
+        disposedRef.current = false;
         if (isNativePlatform()) {
             startPolling();
         } else {
@@ -412,6 +444,7 @@ export function useSSE(): void {
         }
 
         return () => {
+            disposedRef.current = true;
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             if (esRef.current) {
                 esRef.current.close();
