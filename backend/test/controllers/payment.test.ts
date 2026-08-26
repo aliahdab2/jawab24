@@ -145,7 +145,6 @@ vi.mock('../../src/config', () => ({
         // which is exactly the state the Zid rail ships in.
         shopify: { appHandle: '' },
         zid: { appMarketUrl: '' },
-        salla: { appStoreUrl: '' },
     },
 }));
 

@@ -980,8 +980,8 @@ export const subscriptions = pgTable('subscriptions', {
     currentPeriodEnd: timestamp('current_period_end'),
 
     // Payment info (for Stripe integration)
-    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID / Zid App Market subscription id / Salla app subscription id
-    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify', 'zid', 'salla'
+    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID / Zid App Market subscription id
+    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify', 'zid'
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
     stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
     // Shopify App Pricing (managed billing): the *.myshopify.com domain whose app
@@ -1003,14 +1003,6 @@ export const subscriptions = pgTable('subscriptions', {
     // deletes the store row out from under the subscription, so the mirror does
     // not need to survive independently of ecommerce_stores.
     zidStoreId: varchar('zid_store_id', { length: 255 }),
-    // Salla App Store (managed billing, Article 5): our ecommerce_stores UUID
-    // for the Salla store whose app subscription this row mirrors. Same role —
-    // and same constraints below — as zid_store_id on the Zid rail: required
-    // when payment_method='salla' (CHECK), unique among live salla rows
-    // (partial index) so one store can never bill two workspaces. Keyed on OUR
-    // store UUID because every trigger already holds it (the webhook handler
-    // resolves the store row before syncing, the reconciler sweeps store rows).
-    sallaStoreId: varchar('salla_store_id', { length: 255 }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
 
     // Dunning-email idempotency stamps (services/dunningNotices.ts). Each marks
@@ -1079,17 +1071,6 @@ export const subscriptions = pgTable('subscriptions', {
         zidStoreIdRequiredCheck: check(
             'subscriptions_zid_store_id_required',
             sql`${table.paymentMethod} IS DISTINCT FROM 'zid' OR ${table.zidStoreId} IS NOT NULL`
-        ),
-        // The Salla rail's twin of the Zid pair above — same reasoning, same
-        // canceled-row exclusion. Migration 0181.
-        sallaStoreIdUnique: uniqueIndex('idx_subscriptions_salla_store_id')
-            .on(table.sallaStoreId)
-            .where(sql`${table.paymentMethod} = 'salla' AND ${table.status} IS DISTINCT FROM 'canceled'`),
-        // A salla-billed row without its store id is unreconcilable — the sweep
-        // and the uninstall cancel both resolve rows by this column.
-        sallaStoreIdRequiredCheck: check(
-            'subscriptions_salla_store_id_required',
-            sql`${table.paymentMethod} IS DISTINCT FROM 'salla' OR ${table.sallaStoreId} IS NOT NULL`
         ),
     };
 });

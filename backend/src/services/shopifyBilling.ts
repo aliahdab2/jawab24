@@ -184,16 +184,13 @@ export async function adoptShopifySubscription(
     // back through Shopify); a live one is a double-billing risk a human must
     // untangle — Sentry and stand down. 'paypal' is a documented legacy value
     // for this column — treated like stripe/manual rather than silently eaten.
-    // 'zid'/'salla' were absent while those rails did not exist; their adopts
-    // have always refused over a live shopify row, and the refusal must be
-    // symmetric or the outcome depends on which rail's sync ran last.
     if (
         currentIsLive &&
-        ['stripe', 'manual', 'paypal', 'zid', 'salla'].includes(current.paymentMethod ?? '')
+        ['stripe', 'manual', 'paypal'].includes(current.paymentMethod ?? '')
     ) {
         return refuse(
             `Shopify subscription for ${shopDomain} collides with a live ${current.paymentMethod} subscription`,
-            'Shopify billing: refusing to adopt over a paying row on another rail (D-H)',
+            'Shopify billing: refusing to adopt over a paying stripe/manual row (D-H)',
             { localSubscriptionId: current.id, localPaymentMethod: current.paymentMethod, localStatus: current.status },
         );
     }

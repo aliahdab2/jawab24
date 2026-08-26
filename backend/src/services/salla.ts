@@ -371,7 +371,7 @@ async function deleteStalePortalEventSubscriptions(
 
 // --- REST API Helper ---
 
-export function sallaApiGet<T = unknown>(url: string, accessToken: string): Promise<T> {
+function sallaApiGet<T = unknown>(url: string, accessToken: string): Promise<T> {
     return ecommerceApiGet<T>(url, {
         platform: 'salla',
         authHeaderValue: `Bearer ${accessToken}`,
@@ -762,10 +762,8 @@ import type { OrderInfoFull, ShipmentInfoFull } from '@jawab24/shared';
 /**
  * Resolve store credentials for a given storeId.
  * Ensures token is valid (refreshes if needed) and returns decrypted accessToken.
- * Exported for the billing rail (services/sallaBilling.ts), mirroring
- * `resolveZidCredentials` on the Zid rail.
  */
-export async function resolveStoreCredentials(storeId: string): Promise<string | null> {
+async function resolveStoreCredentials(storeId: string): Promise<string | null> {
     return resolveStoreAccessToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
 }
 

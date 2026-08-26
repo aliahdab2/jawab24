@@ -135,35 +135,22 @@ export async function adoptStripeSubscription(
         .orderBy(desc(subscriptions.createdAt))
         .limit(1);
 
-    // Mirror of every marketplace rail's D-H: never overwrite a LIVE marketplace
-    // mirror with a Stripe adoption — the external id would be lost and that
-    // rail's reconciler would refuse (and Sentry) every 6h while the merchant is
-    // double-billed. A canceled/paused mirror is fair game.
-    //
-    // `zid` and `salla` are listed for the same reason `shopify` is, and their
-    // absence was a live gap: the six merchant-facing Stripe entry points refuse
-    // a marketplace-billed account, but `admin/billing.ts:createPaymentRequest`
-    // consults neither rule, so a Stripe subscription CAN reach one of these
-    // merchants. Worse than Shopify's case: the adopt would leave the row's
-    // `zid_store_id`/`salla_store_id` set while flipping payment_method to
-    // 'stripe', which drops it out of that rail's WHERE triple entirely — the
-    // sweep can then neither pause nor heal it, and the mirror is unrecoverable
-    // without a human.
-    const MARKETPLACE_MIRROR_METHODS = ['shopify', 'zid', 'salla'] as const;
+    // Mirror of the Shopify rail's D-H: never overwrite a LIVE shopify mirror
+    // with a Stripe adoption — the AppSubscription GID would be lost and the
+    // Shopify reconciler would refuse (and Sentry) every 6h while the merchant
+    // is double-billed. A canceled/paused shopify row is fair game.
     if (
         current &&
-        (MARKETPLACE_MIRROR_METHODS as readonly string[]).includes(current.paymentMethod ?? '') &&
+        current.paymentMethod === 'shopify' &&
         (LIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(current.status ?? '')
     ) {
         captureError(
-            new Error(`Stripe subscription ${stripeSubscription.id} collides with a live ${current.paymentMethod}-billed row for user ${userId}`),
-            `Stripe adoption refused over a live ${current.paymentMethod} mirror (D-H twin)`,
+            new Error(`Stripe subscription ${stripeSubscription.id} collides with a live shopify-billed row for user ${userId}`),
+            'Stripe adoption refused over a live Shopify mirror (D-H twin)',
             {
                 level: 'warning',
                 tags: { service: 'subscriptions', flow: 'adopt_refused' },
-                // Per-rail so an alert names which marketplace collided; the
-                // shopify string is unchanged, keeping its alert history.
-                fingerprint: [`stripe-adopt-refused-${current.paymentMethod}-mirror`],
+                fingerprint: ['stripe-adopt-refused-shopify-mirror'],
                 extra: { subscriptionId: stripeSubscription.id, userId, localSubscriptionId: current.id },
             },
         );
