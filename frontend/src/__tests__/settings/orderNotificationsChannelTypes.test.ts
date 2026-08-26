@@ -53,3 +53,38 @@ describe('OrderNotificationsCard WHATSAPP_CAPABLE_TYPES', () => {
     expect(fs.readFileSync(CARD, 'utf8')).not.toMatch(/^import\s+\{[^}]*\}\s+from\s+'@jawab24\/shared'/m);
   });
 });
+
+/**
+ * The undeliverable types must not be switchable ON.
+ *
+ * SMS is dead fleet-wide and `review_request` / `digital_delivery` have no Meta
+ * template, so enabling either produced nothing but `failed` log rows — silently,
+ * because the merchant has no reason to suspect it. The toggle is therefore
+ * disabled for them, with an explanation shown on the row.
+ *
+ * ⚠️ But ONLY in the ON direction: a type already enabled stays switchable off, or
+ * a merchant who turned it on earlier would be stuck with a setting they can see
+ * and cannot retract. That asymmetry is the whole subtlety here.
+ */
+describe('undeliverable notification types', () => {
+  const source = () => fs.readFileSync(CARD, 'utf8');
+
+  it('gates the toggle on deliverability AND current state, not deliverability alone', () => {
+    // A bare `!deliverable` here would trap an already-enabled type permanently.
+    expect(source()).toMatch(/disabled=\{!canEdit \|\| \(!deliverable && !draft\.isEnabled\)\}/);
+  });
+
+  it('derives deliverability from the WhatsApp-capable list rather than a second hand-written one', () => {
+    expect(source()).toMatch(/function isDeliverable[\s\S]{0,200}WHATSAPP_CAPABLE_TYPES\.includes\(type\)/);
+  });
+
+  it('explains why on the row, in both locales', () => {
+    expect(source()).toContain("t('noDeliveryRail')");
+    for (const locale of ['en', 'ar']) {
+      const messages = JSON.parse(
+        fs.readFileSync(path.resolve(__dirname, `../../i18n/${locale}/orderNotifications.json`), 'utf8'),
+      );
+      expect(messages.noDeliveryRail?.trim().length ?? 0).toBeGreaterThan(0);
+    }
+  });
+});
