@@ -905,9 +905,11 @@ export interface Subscription {
   plan?: Plan; // Joined plan data
   status: SubscriptionStatus;
   stripeCustomerId?: string | null;
-  paymentMethod?: string | null; // 'stripe' | 'paypal' | 'manual' | 'shopify'
+  paymentMethod?: string | null; // 'stripe' | 'paypal' | 'manual' | 'shopify' | 'zid' | 'salla'
   /** Set when paymentMethod='shopify': the *.myshopify.com domain whose App
-   * Pricing subscription this row mirrors. */
+   * Pricing subscription this row mirrors. The zid/salla rails carry the
+   * equivalent `zid_store_id`/`salla_store_id` on the row, but those are
+   * server-side reconciliation keys and are deliberately not on the wire. */
   shopifyShopDomain?: string | null;
   trialEndsAt?: string | Date | null;
   currentPeriodStart: string | Date;
@@ -1009,7 +1011,15 @@ export interface UsageSummary {
     };
     hasStripeCustomer?: boolean;
     /** 'shopify' = billing lives in Shopify admin: the frontend must route
-     * plan changes there and never into Stripe checkout/top-ups (D-G). */
+     * plan changes there and never into Stripe checkout/top-ups (D-G).
+     *
+     * ⚠️ A CANCELED shopify mirror is suppressed to `undefined` at the
+     * `getUsageSummary` choke point, because a returning merchant must be free
+     * to buy through Stripe. `'zid'`/`'salla'` are emitted as-is — no consumer
+     * branches on them, and `marketplaceBilling` (which carries the canceled
+     * exemption) is what actually gates their CTAs. Never add a
+     * `paymentMethod === 'zid' | 'salla'` check in a component without adding
+     * the same canceled-mirror suppression beside the shopify one. */
     paymentMethod?: string;
     /** Deep link into Shopify admin plan management. Present only for
      * shopify-billed workspaces when the app handle is configured.
