@@ -2,7 +2,18 @@ import axios from 'axios';
 import { createHmac } from 'crypto';
 import { config } from '../config';
 
-const WHATSAPP_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+/**
+ * Graph base URL, resolved LAZILY.
+ *
+ * Reading `config` at module load made merely IMPORTING this file (directly or
+ * through any service that touches WhatsApp) require a fully-populated config —
+ * so an unrelated suite with a partial config mock failed at import time with an
+ * opaque "cannot read graphApiVersion". Resolve per call instead: same value,
+ * no import-time coupling.
+ */
+function whatsappApiBase(): string {
+    return `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+}
 
 /**
  * Outcome of a read-receipt / typing-indicator call. Cosmetic by design: the
@@ -123,7 +134,7 @@ class WhatsAppService {
         accessToken: string,
     ): Promise<string> {
         const res = await this.request(() => axios.post(
-            `${WHATSAPP_API}/${phoneNumberId}/messages`,
+            `${whatsappApiBase()}/${phoneNumberId}/messages`,
             {
                 messaging_product: 'whatsapp',
                 to: recipientPhone,
@@ -133,6 +144,113 @@ class WhatsAppService {
             { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ));
         return res.data?.messages?.[0]?.id ?? '';
+    }
+
+    /**
+     * Send a pre-approved template message (HSM).
+     *
+     * This is the ONLY way to open a conversation the customer did not start:
+     * order/cart notifications reach people who may never have messaged the
+     * merchant, so there is no 24h customer-service window to send free-form
+     * text into. Meta bills these as UTILITY (and free inside an open window).
+     *
+     * `bodyParams` fill `{{1}}`, `{{2}}`, … in template order. Meta REJECTS an
+     * empty string parameter (error 132000-family), so callers must substitute a
+     * meaningful filler — never `''` — before calling.
+     *
+     * @returns The WhatsApp message ID (wamid)
+     */
+    async sendTemplateMessage(
+        phoneNumberId: string,
+        recipientPhone: string,
+        templateName: string,
+        languageCode: string,
+        bodyParams: string[],
+        accessToken: string,
+    ): Promise<string> {
+        const res = await this.request(() => axios.post(
+            `${whatsappApiBase()}/${phoneNumberId}/messages`,
+            {
+                messaging_product: 'whatsapp',
+                to: recipientPhone,
+                type: 'template',
+                template: {
+                    name: templateName,
+                    language: { code: languageCode },
+                    ...(bodyParams.length > 0 && {
+                        components: [{
+                            type: 'body',
+                            parameters: bodyParams.map(text => ({ type: 'text', text })),
+                        }],
+                    }),
+                },
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
+        ));
+        return res.data?.messages?.[0]?.id ?? '';
+    }
+
+    // ================== Message templates (WABA-scoped) ==================
+
+    /**
+     * Submit a message template to the merchant's own WABA for Meta review.
+     *
+     * Idempotency: Meta rejects a duplicate (name, language) with error 100
+     * subcode 2388023 ("template name already exists"). Callers treat that as
+     * success — the template is already there, which is the desired end state.
+     *
+     * @returns Meta's template id, or '' when the name already existed.
+     */
+    async createMessageTemplate(
+        wabaId: string,
+        accessToken: string,
+        template: {
+            name: string;
+            language: string;
+            /** Body text with `{{1}}`-style placeholders. */
+            body: string;
+            /** Example values per placeholder — Meta requires them to review the template. */
+            bodyExamples: string[];
+        },
+    ): Promise<string> {
+        const res = await this.request(() => axios.post(
+            `${whatsappApiBase()}/${wabaId}/message_templates`,
+            {
+                name: template.name,
+                language: template.language,
+                category: 'UTILITY',
+                components: [{
+                    type: 'BODY',
+                    text: template.body,
+                    ...(template.bodyExamples.length > 0 && {
+                        example: { body_text: [template.bodyExamples] },
+                    }),
+                }],
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
+        ));
+        return res.data?.id ?? '';
+    }
+
+    /**
+     * Read a template's review status on the merchant's WABA.
+     * @returns Meta's status (`APPROVED` / `PENDING` / `REJECTED` / …), or null
+     *          when no template with that name+language exists.
+     */
+    async getMessageTemplateStatus(
+        wabaId: string,
+        accessToken: string,
+        name: string,
+        language: string,
+    ): Promise<string | null> {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/${wabaId}/message_templates`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: { name, fields: 'name,language,status', limit: 50 },
+            timeout: WHATSAPP_TIMEOUT_MS,
+        }));
+        const rows = (res.data?.data ?? []) as Array<{ name?: string; language?: string; status?: string }>;
+        const match = rows.find(r => r.name === name && r.language === language);
+        return match?.status ?? null;
     }
 
     /**
@@ -150,7 +268,7 @@ class WhatsAppService {
     ): Promise<ReceiptResult> {
         try {
             await axios.post(
-                `${WHATSAPP_API}/${phoneNumberId}/messages`,
+                `${whatsappApiBase()}/${phoneNumberId}/messages`,
                 {
                     messaging_product: 'whatsapp',
                     status: 'read',
@@ -195,7 +313,7 @@ class WhatsAppService {
         // (`beforeBreadcrumb` / `beforeSend` / `beforeSendTransaction`) rather than
         // here, because the same leak applies to every Graph call that takes a
         // credential in the URL. Do not remove that scrubbing.
-        const res = await this.request(() => axios.get(`${WHATSAPP_API}/oauth/access_token`, {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/oauth/access_token`, {
             params: {
                 client_id: config.facebook.appId,
                 client_secret: config.facebook.appSecret,
@@ -227,7 +345,7 @@ class WhatsAppService {
      * Server-side only — the app secret must never reach a client.
      */
     async debugToken(inputToken: string): Promise<WhatsAppTokenDebugInfo> {
-        const res = await this.request(() => axios.get(`${WHATSAPP_API}/debug_token`, {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/debug_token`, {
             params: {
                 input_token: inputToken,
                 access_token: `${config.facebook.appId}|${config.facebook.appSecret}`,
@@ -295,7 +413,7 @@ class WhatsAppService {
         platformType?: string;
         lastOnboardedTime?: string;
     }>> {
-        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${wabaId}/phone_numbers`, {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/${wabaId}/phone_numbers`, {
             params: { fields: 'id,display_phone_number,verified_name,platform_type,last_onboarded_time' },
             headers: { Authorization: `Bearer ${accessToken}` },
             timeout: WHATSAPP_TIMEOUT_MS,
@@ -318,7 +436,7 @@ class WhatsAppService {
      */
     async subscribeAppToWaba(wabaId: string, accessToken: string): Promise<void> {
         await this.request(() => axios.post(
-            `${WHATSAPP_API}/${wabaId}/subscribed_apps`,
+            `${whatsappApiBase()}/${wabaId}/subscribed_apps`,
             {},
             { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ));
@@ -332,7 +450,7 @@ class WhatsAppService {
      */
     async registerPhoneNumber(phoneNumberId: string, accessToken: string): Promise<void> {
         await this.request(() => axios.post(
-            `${WHATSAPP_API}/${phoneNumberId}/register`,
+            `${whatsappApiBase()}/${phoneNumberId}/register`,
             {
                 messaging_product: 'whatsapp',
                 pin: this.derivePin(phoneNumberId),
@@ -357,7 +475,7 @@ class WhatsAppService {
         phoneNumberId: string,
         accessToken: string,
     ): Promise<{ displayPhoneNumber: string; verifiedName: string }> {
-        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${phoneNumberId}`, {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/${phoneNumberId}`, {
             params: { fields: 'display_phone_number,verified_name' },
             headers: { Authorization: `Bearer ${accessToken}` },
             timeout: WHATSAPP_TIMEOUT_MS,
@@ -376,7 +494,7 @@ class WhatsAppService {
      * token to download (unlike FB/IG public CDN URLs).
      */
     async getMediaInfo(mediaId: string, accessToken: string): Promise<WhatsAppMediaInfo> {
-        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${mediaId}`, {
+        const res = await this.request(() => axios.get(`${whatsappApiBase()}/${mediaId}`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             timeout: WHATSAPP_TIMEOUT_MS,
         }));

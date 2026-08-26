@@ -123,12 +123,23 @@ Connect WhatsApp via Facebook Embedded Signup on the existing pages screen.
 - [x] Mobile: Connect hands off to the system browser at the web dashboard (`openExternalUrl` + `buildWebUrl`) — ES popup can't run in the Capacitor WebView
 - [x] WhatsApp-only page card ✅ (2026-07-03): `POST /pages/connect-whatsapp` creates a `facebookPageId=null` page row (named after the WABA verified name, own Business Info + stats); "Add WhatsApp number" card + empty-state CTA on /pages; removal = page delete; enabled card consumes a page slot. **Doubles as multi-number support** — one card per number. Manual inbox replies route per-platform (whatsapp branch in messages controller). UI renamed "Pages" → "Channels"/«قنوات التواصل» (copy only). Deferred alternative: a decoupled `channels` table (enterprise pattern, zero demand signal — revisit only if merchants outgrow cards). Tier B (no Facebook account at all → WhatsApp OTP login) stays parked until our own WABA is live
 
-### Phase 4: Template Messages (24h window) — deferred post-launch
-- [ ] Detect when 24h window expires (check `lastMessageAt` from sender)
-- [ ] Create/manage WhatsApp message templates in Meta Business Suite
-- [ ] Fallback to template when free-form reply fails with error 131047
-- [ ] UI for template selection (or auto-select based on context)
-> Not launch-blocking: auto-replies to incoming messages are always inside the 24h window. Needed for proactive messaging (cart recovery / order updates).
+### Phase 4: Template Messages — ✅ proactive half shipped (2026-08-26), inbox half still open
+- [x] **Order/cart notifications over WhatsApp** — `whatsappService.sendTemplateMessage` + canonical
+      Jawab24 UTILITY templates (`services/whatsappNotificationTemplates.ts`), auto-submitted to each
+      merchant's own WABA and tracked in `whatsapp_notification_templates`. Per-type channel switch on
+      the notifications card; sender = the WhatsApp page linked to the store. This is the
+      cart-recovery / order-update gap this plan called LetsBot's biggest revenue feature.
+- [x] Create/manage message templates via the Graph API (`POST /{waba-id}/message_templates` +
+      status polling) — no Business-Suite hand-work needed. First reader of
+      `pages.whatsapp_business_account_id`.
+- [ ] Detect when the 24h window expires for the INBOX path (`lastMessageAt` per sender) — still open
+- [ ] Fallback to a template when a free-form auto-reply fails with error 131047 — still open
+> ⭐ The proactive path needs **no** window tracking at all: a notification recipient may never have
+> messaged the merchant, so a template is always required and always correct. The `lastMessageAt`
+> idea above applies only to the inbox/auto-reply path, where free-form text is preferable in-window.
+> Deliberately out of v1: per-merchant editable WhatsApp copy (a body is frozen at Meta-approval
+> time, so each edit would need its own review cycle) and OTP/team-invite templates (Authentication
+> category — the seams are `otpService.sendOtp()` and `workspaceInvite.ts`).
 
 ### Phase 5: Media Messages — ✅ core shipped (2026-07-03)
 - [x] Handle incoming images, voice notes, videos, documents (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts` — separate function: WhatsApp media is ID + authorized download, not a public URL)

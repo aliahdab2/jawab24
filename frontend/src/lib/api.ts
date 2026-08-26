@@ -16,8 +16,8 @@ import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import { getEmbeddedToken } from './embeddedSession';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, EmailAttachment, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
-export type { OrderNotificationType, NotificationTemplate, NotificationStats, PostSuggestionResponse };
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, NotificationChannel, WhatsAppNotificationStatus, WhatsAppTemplateStatus, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, EmailAttachment, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+export type { OrderNotificationType, NotificationTemplate, NotificationStats, NotificationChannel, WhatsAppNotificationStatus, WhatsAppTemplateStatus, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -1764,12 +1764,15 @@ export const zidApi = {
 export const orderNotificationsApi = {
   getTemplates: (storeId: string) =>
     api.get<NotificationTemplate[]>(`/notification-templates/${storeId}`),
-  updateTemplate: (storeId: string, type: OrderNotificationType, data: Partial<Pick<NotificationTemplate, 'isEnabled' | 'messageAr' | 'messageEn' | 'delayMinutes'>>) =>
+  updateTemplate: (storeId: string, type: OrderNotificationType, data: Partial<Pick<NotificationTemplate, 'isEnabled' | 'messageAr' | 'messageEn' | 'delayMinutes' | 'channel'>>) =>
     api.put<NotificationTemplate>(`/notification-templates/${storeId}/${type}`, data),
   resetTemplates: (storeId: string) =>
     api.post<{ ok: boolean }>(`/notification-templates/${storeId}/reset`),
   getStats: (storeId: string) =>
     api.get<NotificationStats>(`/notification-log/${storeId}/stats`),
+  /** Can this store send over WhatsApp, and where does Meta's review stand? */
+  getWhatsAppStatus: (storeId: string) =>
+    api.get<WhatsAppNotificationStatus>(`/notification-templates/${storeId}/whatsapp-status`),
 };
 
 // Leads API

@@ -930,7 +930,7 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **In-app (polling)** | Implemented | `NotificationBell` component polls unread count every 60 seconds |
 | **SSE (Server-Sent Events)** | Implemented | Real-time dashboard updates — badge/toast for new messages, flagged replies |
 | **Push (Capacitor native)** | Implemented | Native push notifications on iOS/Android via `@capacitor/push-notifications` |
-| **E-commerce SMS notifications** | Implemented | Abandoned cart, order confirmed/shipped/delivered, review request — SMS via Vonage, BullMQ queue, per-store templates, Arabic/English auto-detected from phone prefix. Abandoned cart fires on Salla + Zid (Zid `abandoned_cart.created`/`.completed` added 2026-08-25; `.completed` cancels the pending nudge); Shopify has no cart wiring |
+| **E-commerce customer notifications** | Implemented | Abandoned cart, order confirmed/shipped/delivered, review request — BullMQ queue, per-store templates, Arabic/English auto-detected from phone prefix. **Per-type delivery channel (2026-08-26): WhatsApp (Meta-approved UTILITY template from the merchant's own linked number) or SMS via Vonage.** WhatsApp covers the four order/cart types; `review_request`/`digital_delivery` remain SMS-only, and SMS delivery itself is dead by the Vonage ruling. Abandoned cart fires on Salla + Zid (Zid `abandoned_cart.created`/`.completed` added 2026-08-25; `.completed` cancels the pending nudge); Shopify has no cart wiring |
 
 ### Mobile / Capacitor
 

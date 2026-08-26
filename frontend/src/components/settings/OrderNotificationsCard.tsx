@@ -20,7 +20,13 @@ import {
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { orderNotificationsApi } from '@/lib/api';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats } from '@/lib/api';
+import type {
+  OrderNotificationType,
+  NotificationTemplate,
+  NotificationStats,
+  NotificationChannel,
+  WhatsAppNotificationStatus,
+} from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 // Direct import, NOT the '@/hooks' barrel — reached from public /integrations.
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
@@ -73,7 +79,18 @@ interface TemplateDraft {
   messageAr: string;
   messageEn: string;
   delayMinutes: number;
+  channel: NotificationChannel;
 }
+
+/* Types that have a canonical Meta-approved WhatsApp template. The others stay
+ * SMS-only, so their channel toggle is not offered at all (the backend refuses
+ * the switch too — see whatsappNotificationTemplates.WHATSAPP_NOTIFICATION_TYPES). */
+const WHATSAPP_CAPABLE_TYPES: OrderNotificationType[] = [
+  'abandoned_cart',
+  'order_confirmed',
+  'order_shipped',
+  'order_delivered',
+];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -93,6 +110,7 @@ function templateToDraft(t: NotificationTemplate): TemplateDraft {
     messageAr: t.messageAr,
     messageEn: t.messageEn,
     delayMinutes: t.delayMinutes,
+    channel: t.channel === 'whatsapp' ? 'whatsapp' : 'sms',
   };
 }
 
@@ -101,7 +119,8 @@ function isDraftDirty(draft: TemplateDraft, original: TemplateDraft): boolean {
     draft.isEnabled !== original.isEnabled ||
     draft.messageAr !== original.messageAr ||
     draft.messageEn !== original.messageEn ||
-    draft.delayMinutes !== original.delayMinutes
+    draft.delayMinutes !== original.delayMinutes ||
+    draft.channel !== original.channel
   );
 }
 
@@ -115,6 +134,7 @@ function useOrderNotifications(storeId: string) {
   const [saved, setSaved] = useState<Record<OrderNotificationType, TemplateDraft> | null>(null);
   const [draft, setDraft] = useState<Record<OrderNotificationType, TemplateDraft> | null>(null);
   const [stats, setStats] = useState<NotificationStats | null>(null);
+  const [waStatus, setWaStatus] = useState<WhatsAppNotificationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -124,9 +144,11 @@ function useOrderNotifications(storeId: string) {
 
   const loadData = useCallback(async () => {
     try {
-      const [templatesRes, statsRes] = await Promise.all([
+      const [templatesRes, statsRes, waRes] = await Promise.all([
         orderNotificationsApi.getTemplates(storeId),
         orderNotificationsApi.getStats(storeId).catch(() => null),
+        // Optional: the card still works (SMS-only) if this call fails.
+        orderNotificationsApi.getWhatsAppStatus(storeId).catch(() => null),
       ]);
 
       const byType: Record<string, TemplateDraft> = {};
@@ -135,7 +157,7 @@ function useOrderNotifications(storeId: string) {
       }
       for (const type of NOTIFICATION_TYPES) {
         if (!byType[type]) {
-          byType[type] = { isEnabled: false, messageAr: '', messageEn: '', delayMinutes: 0 };
+          byType[type] = { isEnabled: false, messageAr: '', messageEn: '', delayMinutes: 0, channel: 'sms' };
         }
       }
 
@@ -143,6 +165,7 @@ function useOrderNotifications(storeId: string) {
       setSaved(state);
       setDraft(structuredClone(state));
       if (statsRes) setStats(statsRes.data);
+      setWaStatus(waRes?.data ?? null);
     } catch (err) {
       captureError(err, 'OrderNotificationsCard.loadData');
       toast.error(t('loadError'));
@@ -160,7 +183,7 @@ function useOrderNotifications(storeId: string) {
 
   const handleFieldChange = (
     type: OrderNotificationType,
-    field: 'messageAr' | 'messageEn' | 'delayMinutes',
+    field: 'messageAr' | 'messageEn' | 'delayMinutes' | 'channel',
     value: string | number,
   ) => {
     if (!draft) return;
@@ -200,7 +223,7 @@ function useOrderNotifications(storeId: string) {
     }
   };
 
-  return { draft, saved, stats, loading, saving, resetting, hasChanges, handleToggle, handleFieldChange, handleSave, handleReset };
+  return { draft, saved, stats, waStatus, loading, saving, resetting, hasChanges, handleToggle, handleFieldChange, handleSave, handleReset };
 }
 
 /* ------------------------------------------------------------------ */
@@ -214,12 +237,14 @@ interface NotificationTypeRowProps {
   isExpanded: boolean;
   canEdit: boolean;
   onToggle: (type: OrderNotificationType, enabled: boolean) => void;
-  onFieldChange: (type: OrderNotificationType, field: 'messageAr' | 'messageEn' | 'delayMinutes', value: string | number) => void;
+  onFieldChange: (type: OrderNotificationType, field: 'messageAr' | 'messageEn' | 'delayMinutes' | 'channel', value: string | number) => void;
   onExpandToggle: (type: OrderNotificationType) => void;
+  /** null while unknown (status call failed) — the channel selector then stays hidden. */
+  waStatus: WhatsAppNotificationStatus | null;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle, onFieldChange, onExpandToggle, t }: NotificationTypeRowProps) {
+function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle, onFieldChange, onExpandToggle, waStatus, t }: NotificationTypeRowProps) {
   const Icon = TYPE_ICONS[type];
   const dirty = isDraftDirty(draft, saved);
 
@@ -280,6 +305,55 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
       {/* Expanded editor */}
       {isExpanded && (
         <div className="px-3 pb-3 space-y-3 border-t border-theme-border pt-3">
+          {/* Delivery channel — only for types with a canonical WhatsApp template */}
+          {WHATSAPP_CAPABLE_TYPES.includes(type) && (
+            <div>
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+                {t('channelLabel')}
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                {(['sms', 'whatsapp'] as const).map((channel) => (
+                  <button
+                    key={channel}
+                    type="button"
+                    // No WhatsApp number linked ⇒ the option is offered but inert,
+                    // with the nudge below explaining what to do about it.
+                    disabled={!canEdit || (channel === 'whatsapp' && waStatus?.available !== true)}
+                    aria-pressed={draft.channel === channel}
+                    onClick={() => onFieldChange(type, 'channel', channel)}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
+                      'disabled:opacity-50 disabled:cursor-default',
+                      draft.channel === channel
+                        ? 'bg-brand-500 text-white border-brand-600 shadow-sm'
+                        : 'bg-background text-muted-foreground border-theme-border hover:enabled:border-brand-400',
+                    )}
+                  >
+                    {t(`channels.${channel}` as 'channels.sms' | 'channels.whatsapp')}
+                  </button>
+                ))}
+                {draft.channel === 'whatsapp' && waStatus?.templates?.[type] && waStatus.templates[type] !== 'approved' && (
+                  <span
+                    className={clsx(
+                      'text-[11px] rounded-full px-2 py-0.5 border',
+                      waStatus.templates[type] === 'rejected'
+                        ? 'status-error'
+                        : 'text-muted-foreground border-theme-border',
+                    )}
+                  >
+                    {t(`templateStatus.${waStatus.templates[type]}` as 'templateStatus.pending')}
+                  </span>
+                )}
+              </div>
+              {waStatus?.available === false && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">{t('connectWhatsAppHint')}</p>
+              )}
+              {draft.channel === 'whatsapp' && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">{t('whatsappTemplateNote')}</p>
+              )}
+            </div>
+          )}
+
           {/* Variable hints */}
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-[11px] text-muted-foreground font-medium">{t('variables')}:</span>
@@ -375,7 +449,7 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
   const [expandedType, setExpandedType] = useState<OrderNotificationType | null>(null);
 
   const {
-    draft, saved, stats, loading, saving, resetting, hasChanges,
+    draft, saved, stats, waStatus, loading, saving, resetting, hasChanges,
     handleToggle, handleFieldChange, handleSave, handleReset,
   } = useOrderNotifications(storeId);
 
@@ -414,6 +488,7 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
       <div className="space-y-1">
         {NOTIFICATION_TYPES.map((type) => (
           <NotificationTypeRow
+            waStatus={waStatus}
             key={type}
             type={type}
             draft={draft[type]}

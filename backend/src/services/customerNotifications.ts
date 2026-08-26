@@ -2,6 +2,7 @@ import { db } from '../db';
 import { customerNotificationTemplates, customerNotificationsLog } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { smsService } from './sms';
+import { sendWhatsAppNotification, WhatsAppNotificationError } from './whatsappNotificationSender';
 import { customerNotificationQueue } from '../lib/customerNotificationQueue';
 import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
@@ -68,6 +69,9 @@ export class CustomerNotificationService {
                 customerName,
                 channel: template.channel ?? 'sms',
                 messageSent: rendered,
+                // The WhatsApp path needs the values SEPARATELY (to fill {{1}}, {{2}}…),
+                // and `rendered` has already flattened them into one string.
+                variables: { customer_name: customerName ?? '', ...variables },
                 status: 'pending',
                 orderNumber,
                 cartTotal,
@@ -134,27 +138,55 @@ export class CustomerNotificationService {
         if (!entry || entry.status === 'cancelled') return;
 
         try {
-            await smsService.send(entry.customerPhone, entry.messageSent);
+            // The row carries the channel the template asked for (written at
+            // schedule time). WhatsApp sends a Meta-approved template; SMS stays
+            // the default. There is deliberately NO cross-channel fallback: a
+            // WhatsApp failure is reported to the merchant, never silently
+            // re-routed to the SMS rail (which is provider-blocked today).
+            let providerMessageId: string | null = null;
+            if (entry.channel === 'whatsapp') {
+                providerMessageId = await sendWhatsAppNotification({
+                    storeId: entry.ecommerceStoreId,
+                    notificationType: entry.notificationType,
+                    customerPhone: entry.customerPhone,
+                    customerName: entry.customerName,
+                    language: this.detectLanguage(entry.customerPhone),
+                    variables: entry.variables ?? {},
+                });
+            } else {
+                await smsService.send(entry.customerPhone, entry.messageSent);
+            }
 
             await db
                 .update(customerNotificationsLog)
-                .set({ status: 'sent', sentAt: new Date() })
+                .set({ status: 'sent', sentAt: new Date(), ...(providerMessageId && { providerMessageId }) })
                 .where(eq(customerNotificationsLog.id, notificationLogId));
 
-            this.logger.info('[CustomerNotif] Sent', { type: entry.notificationType, phone: entry.customerPhone });
+            this.logger.info('[CustomerNotif] Sent', { type: entry.notificationType, phone: entry.customerPhone, channel: entry.channel });
         } catch (error) {
+            // A WhatsApp send that cannot work carries a stable reason code — store
+            // THAT rather than a prose message, so the merchant UI can explain it
+            // ("connect WhatsApp", "waiting for Meta approval") instead of showing
+            // an opaque provider string.
+            const isWaReason = error instanceof WhatsAppNotificationError;
             await db
                 .update(customerNotificationsLog)
                 .set({
                     status: 'failed',
-                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorMessage: isWaReason
+                        ? (error as WhatsAppNotificationError).reason
+                        : (error instanceof Error ? error.message : String(error)),
                 })
                 .where(eq(customerNotificationsLog.id, notificationLogId));
 
-            captureError(error, 'CustomerNotification send failed', {
-                tags: { service: 'customer-notifications' },
-                extra: { notificationLogId, type: entry.notificationType },
-            });
+            // A template still awaiting Meta approval is an expected waiting state,
+            // not a defect — it must not page anyone. Everything else is reported.
+            if (!isWaReason || !(error as WhatsAppNotificationError).retryable) {
+                captureError(error, 'CustomerNotification send failed', {
+                    tags: { service: 'customer-notifications', channel: entry.channel ?? 'sms' },
+                    extra: { notificationLogId, type: entry.notificationType },
+                });
+            }
             throw error; // Let BullMQ retry
         }
     }

@@ -13,6 +13,9 @@ export default async function customerNotificationRoutes(fastify: FastifyInstanc
     const write = [authenticate, resolveWorkspace, requireRole('admin'), requireOwnedStore];
 
     fastify.get('/notification-templates/:storeId', { preHandler: read }, customerNotificationsController.getTemplates);
+    // Registered before the /:type PUT sibling is irrelevant (different method), but
+    // keep it beside the GET it belongs with: both are read-only store queries.
+    fastify.get('/notification-templates/:storeId/whatsapp-status', { preHandler: read }, customerNotificationsController.getWhatsAppStatus);
     fastify.put('/notification-templates/:storeId/:type', { preHandler: write }, customerNotificationsController.updateTemplate);
     fastify.post('/notification-templates/:storeId/reset', { preHandler: write }, customerNotificationsController.resetTemplates);
 

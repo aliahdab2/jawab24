@@ -1635,6 +1635,23 @@ export type OrderNotificationType =
   | 'review_request'
   | 'digital_delivery';
 
+/** Delivery rails for a customer notification. */
+export type NotificationChannel = 'sms' | 'whatsapp';
+
+/**
+ * Meta's review state of the canonical WhatsApp template behind a notification
+ * type, collapsed across both languages: a type is `approved` only when the
+ * Arabic AND English variants are, since the language is chosen per customer.
+ * `missing` = never submitted for this merchant's WABA yet.
+ */
+export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected' | 'missing';
+
+export interface WhatsAppNotificationStatus {
+  /** False when no WhatsApp-connected page is linked to the store. */
+  available: boolean;
+  templates: Partial<Record<OrderNotificationType, WhatsAppTemplateStatus>>;
+}
+
 export interface NotificationTemplate {
   id: string;
   ecommerceStoreId: string;
@@ -1643,7 +1660,8 @@ export interface NotificationTemplate {
   messageEn: string;
   isEnabled: boolean;
   delayMinutes: number;
-  channel: string;
+  /** Delivery rail: 'sms' (default) or 'whatsapp' (Meta-approved template). */
+  channel: NotificationChannel;
   includeCoupon: boolean;
   couponCode: string | null;
   couponDiscount: string | null;
@@ -2283,6 +2301,9 @@ export { formatBusinessInfoPrompt, countBusinessInfoFacts, whatsappNumbers, busi
 // --- Merchant contact standard: number + optional free-text description ---
 export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
 export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';
+// Outbound CUSTOMER phone (order webhooks → WhatsApp Cloud API) — distinct from
+// the merchant-typed businessPhone helpers above.
+export { normalizeCustomerPhoneForWhatsApp } from './customerPhone';
 export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, applyStoreSyncToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
