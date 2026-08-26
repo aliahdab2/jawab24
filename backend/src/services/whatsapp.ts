@@ -65,6 +65,16 @@ export interface WhatsAppTokenDebugInfo {
  */
 const WHATSAPP_TIMEOUT_MS = 15_000;
 
+/** Templates per page when looking one up on a WABA (Meta's own max is 250). */
+const TEMPLATE_LOOKUP_PAGE_SIZE = 50;
+/**
+ * How many pages a lookup will walk before giving up. Bounded on purpose: the
+ * `name_or_content` filter should make one page enough, so more than a couple of
+ * pages means the filter is not doing what we think — walk a little, then stop
+ * rather than paging an entire agency WABA on every notification.
+ */
+const TEMPLATE_LOOKUP_MAX_PAGES = 5;
+
 /**
  * Sanitized WhatsApp Cloud API error. Carries only Meta's error code + message
  * — never the axios `config`/`headers`/`request`, which hold the FB app secret
@@ -192,6 +202,7 @@ class WhatsAppService {
 
     // ================== Message templates (WABA-scoped) ==================
 
+
     /**
      * Submit a message template to the merchant's own WABA for Meta review.
      *
@@ -234,6 +245,20 @@ class WhatsAppService {
 
     /**
      * Read a template's review status on the merchant's WABA.
+     *
+     * The documented server-side filter on this edge is `name_or_content`, NOT
+     * `name`. Graph silently IGNORES an unknown query param, so filtering on
+     * `name` degraded to "the first page of every template on this WABA" — and a
+     * merchant arriving with a populated WABA (an agency, or a store migrating in
+     * from another provider) would push our template past that page and read back
+     * `null`, which the caller maps to `unknown` and reports forever as
+     * `whatsapp_template_pending`.
+     *
+     * Paging is followed explicitly rather than by chasing `paging.next`: that URL
+     * embeds the access token as a query parameter, and this service keeps
+     * credentials in headers so they cannot leak into logs or Sentry breadcrumbs
+     * (see the note on `exchangeToken`).
+     *
      * @returns Meta's status (`APPROVED` / `PENDING` / `REJECTED` / …), or null
      *          when no template with that name+language exists.
      */
@@ -243,14 +268,31 @@ class WhatsAppService {
         name: string,
         language: string,
     ): Promise<string | null> {
-        const res = await this.request(() => axios.get(`${whatsappApiBase()}/${wabaId}/message_templates`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: { name, fields: 'name,language,status', limit: 50 },
-            timeout: WHATSAPP_TIMEOUT_MS,
-        }));
-        const rows = (res.data?.data ?? []) as Array<{ name?: string; language?: string; status?: string }>;
-        const match = rows.find(r => r.name === name && r.language === language);
-        return match?.status ?? null;
+        let after: string | undefined;
+
+        for (let page = 0; page < TEMPLATE_LOOKUP_MAX_PAGES; page++) {
+            const res = await this.request(() => axios.get(`${whatsappApiBase()}/${wabaId}/message_templates`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    name_or_content: name,
+                    fields: 'name,language,status',
+                    limit: TEMPLATE_LOOKUP_PAGE_SIZE,
+                    ...(after && { after }),
+                },
+                timeout: WHATSAPP_TIMEOUT_MS,
+            }));
+
+            const rows = (res.data?.data ?? []) as Array<{ name?: string; language?: string; status?: string }>;
+            // `name_or_content` is a SEARCH, not an exact match — it also hits
+            // templates whose body contains the string. Match exactly here.
+            const match = rows.find(r => r.name === name && r.language === language);
+            if (match) return match.status ?? null;
+
+            after = res.data?.paging?.cursors?.after;
+            if (!after || rows.length === 0) break;
+        }
+
+        return null;
     }
 
     /**

@@ -93,6 +93,56 @@ describe('WhatsApp notification channel (real Postgres)', () => {
         expect(row.messageSent).toContain('72524870');
     });
 
+    // The tracking-number upgrade: Salla's `order.status.updated` schedules a
+    // shipped row before a courier is assigned, then `order.shipment.created`
+    // arrives within the grace window carrying the real number and upgrades the
+    // still-pending row in place (`upgradePendingOnDuplicate`).
+    //
+    // `messageSent` and `variables` are two renderings of the SAME values, read by
+    // different rails — SMS sends the flattened text, WhatsApp rebuilds {{1}},{{2}},…
+    // from the variables. Upgrading only the text left the WhatsApp send filling
+    // {{3}} from the stale variables, telling the customer «سيصلك من مندوب التوصيل»
+    // on the very event that carried the tracking number.
+    it('upgrades the stored variables, not just the text, when a richer duplicate arrives', async () => {
+        const { store } = await createStoreWithWorkspace();
+        await customerNotificationService.seedDefaults(store.id);
+        await testDb.update(schema.customerNotificationTemplates)
+            .set({ isEnabled: true, channel: 'whatsapp' })
+            .where(and(
+                eq(schema.customerNotificationTemplates.ecommerceStoreId, store.id),
+                eq(schema.customerNotificationTemplates.notificationType, 'order_shipped'),
+            ));
+
+        const base = {
+            storeId: store.id,
+            type: 'order_shipped' as const,
+            customerPhone: '+966501806978',
+            customerName: 'Ahmed',
+            platformEventId: 'salla:order_shipped:9001',
+            orderNumber: '9001',
+        };
+
+        // 1. status update: shipped, no courier assigned yet.
+        await customerNotificationService.schedule({
+            ...base,
+            variables: { order_number: '9001', tracking_number: '', cart_total: '' },
+        });
+
+        // 2. shipment created: the same dedup key, now carrying the tracking number.
+        await customerNotificationService.schedule({
+            ...base,
+            variables: { order_number: '9001', tracking_number: 'SA1234567890', cart_total: '' },
+            upgradePendingOnDuplicate: true,
+        });
+
+        const rows = await testDb.select().from(schema.customerNotificationsLog)
+            .where(eq(schema.customerNotificationsLog.ecommerceStoreId, store.id));
+
+        expect(rows).toHaveLength(1);                                  // deduped, not doubled
+        expect(rows[0].messageSent).toContain('SA1234567890');         // SMS rail sees it
+        expect(rows[0].variables).toMatchObject({ tracking_number: 'SA1234567890' }); // WhatsApp rail too
+    });
+
     it('finds the WhatsApp number linked to the store', async () => {
         const { user, workspace, store } = await createStoreWithWorkspace();
         await createWhatsAppPage({ userId: user.id, workspaceId: workspace.id, storeId: store.id, phoneNumberId: uniq('pn') });

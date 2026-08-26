@@ -92,10 +92,20 @@ export class CustomerNotificationService {
             // carrying a tracking number, after an earlier status-update row was scheduled
             // without one), upgrade the still-pending row's message in place. The worker
             // re-reads messageSent at send time (see send()), so the queued job sends it.
+            //
+            // ⛔ `variables` must be upgraded WITH `messageSent`, not instead of it.
+            // They are two renderings of the same values, read by different rails:
+            // SMS sends the flattened `messageSent`, WhatsApp rebuilds {{1}},{{2}},…
+            // from `variables`. Upgrading only the text left the WhatsApp send filling
+            // {{3}} from the STALE variables — telling the customer «سيصلك من مندوب
+            // التوصيل» on the very event that carried the real tracking number.
             if (upgradePendingOnDuplicate && platformEventId) {
                 await db
                     .update(customerNotificationsLog)
-                    .set({ messageSent: rendered })
+                    .set({
+                        messageSent: rendered,
+                        variables: { customer_name: customerName ?? '', ...variables },
+                    })
                     .where(and(
                         eq(customerNotificationsLog.ecommerceStoreId, storeId),
                         eq(customerNotificationsLog.notificationType, type),

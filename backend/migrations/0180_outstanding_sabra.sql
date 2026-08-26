@@ -1,0 +1,1 @@
+ALTER TABLE "whatsapp_notification_templates" ADD COLUMN "last_submitted_at" timestamp;

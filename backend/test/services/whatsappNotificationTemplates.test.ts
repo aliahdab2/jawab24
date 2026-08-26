@@ -40,6 +40,19 @@ describe('canonical WhatsApp templates', () => {
         }
     });
 
+    // Meta rejects a "dangling parameter" — a body that starts or ends on a {{n}}
+    // with no static text beside it. This is a REVIEW-time rejection: it surfaces
+    // hours after submission, not at send time, so a unit test is the only place
+    // it can be caught cheaply. Four of the eight bodies originally ended on their
+    // last placeholder (`… رقم التتبع: {{3}}`, `… 🛒 {{3}}`), which would have
+    // killed the tracking and cart-recovery templates specifically.
+    it('never starts or ends a body with a placeholder (Meta rejects dangling parameters)', () => {
+        for (const template of allCanonicalTemplates()) {
+            expect(template.body).not.toMatch(/^\s*\{\{\d+\}\}/);
+            expect(template.body).not.toMatch(/\{\{\d+\}\}\s*$/);
+        }
+    });
+
     it('gives every slot a non-empty fallback and example — Meta rejects empty parameters', () => {
         for (const template of allCanonicalTemplates()) {
             for (const slot of template.slots) {

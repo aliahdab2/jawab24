@@ -2011,7 +2011,18 @@ export const whatsappNotificationTemplates = pgTable('whatsapp_notification_temp
     providerTemplateId: varchar('provider_template_id', { length: 255 }),
     /** Why a submission or refresh failed — secret-free. */
     errorMessage: text('error_message'),
+    /** When Meta was last POLLED for this template's review status. */
     lastCheckedAt: timestamp('last_checked_at'),
+    /**
+     * When we last tried to SUBMIT this template to Meta.
+     *
+     * Deliberately separate from `lastCheckedAt`: they answer different questions,
+     * and collapsing them re-creates the wedge they exist to prevent. A row stuck at
+     * `unknown` is re-submitted once this is older than the backoff — but the status
+     * poll re-stamps `lastCheckedAt` every few minutes, so sharing one column would
+     * push the resubmit window out forever and the template would never be retried.
+     */
+    lastSubmittedAt: timestamp('last_submitted_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({

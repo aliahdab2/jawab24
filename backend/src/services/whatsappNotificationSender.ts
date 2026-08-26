@@ -118,12 +118,72 @@ function mapMetaStatus(status: string | null): 'pending' | 'approved' | 'rejecte
 }
 
 /**
- * Submit every canonical template that this page has not been submitted for.
- * Idempotent: an already-existing template at Meta is recorded, not retried
- * forever. Never throws — provisioning is best-effort; the send path reports
- * the resulting status to the merchant.
+ * How long a template stuck at `unknown` — submitted, but never confirmed to have
+ * reached Meta — waits before we try submitting it again.
+ *
+ * `unknown` is written when a submission failed for a reason that is NOT "already
+ * exists": a network blip, a 5xx, a 429, or a 4xx from a token that has since been
+ * refreshed. All of those can succeed on a later attempt, so the row must not be a
+ * permanent tombstone — see `needsResubmission`.
+ */
+const UNKNOWN_RESUBMIT_BACKOFF_MS = 30 * 60 * 1000;
+
+/**
+ * In-flight provisioning runs, keyed by page.
+ *
+ * Saving several types at once issues one PUT per type in parallel, and each one
+ * asks for provisioning. Without this they would all read "nothing exists yet"
+ * before any of them wrote a row, and each would submit all 8 canonical templates
+ * — 32 POSTs to Meta's rate-limited template endpoint, 24 of them duplicates.
+ * Collapsing them into one shared promise makes the burst impossible rather than
+ * merely survivable (AI_INSTRUCTIONS Rule 14, prevention over detection).
+ *
+ * Process-local. A second backend replica could still race, which is why the
+ * duplicate-name branch below still treats "already exists" as success.
+ */
+const inFlightProvisioning = new Map<string, Promise<void>>();
+
+/**
+ * A row that never made it to Meta is retried after a backoff.
+ *
+ * Without this, ONE transient failure wedged the store's WhatsApp channel forever:
+ * the row existed, so provisioning skipped it on every later call; Meta had no such
+ * template, so the status poll returned null → `unknown` → `whatsapp_template_pending`
+ * → a BullMQ retry that re-entered the same skip. And because `templatePending` is
+ * deliberately not Sentry-reported, it failed silently. Only a manual DELETE recovered.
+ *
+ * Measured on `lastSubmittedAt`, NOT `lastCheckedAt`. The status poll re-stamps
+ * `lastCheckedAt` every few minutes while a template is stuck, so keying the
+ * backoff off it would push the resubmit window out on every poll and the retry
+ * would never fire — the same wedge in a slower disguise.
+ */
+function needsResubmission(row: { status: string; lastSubmittedAt: Date | null }): boolean {
+    if (row.status !== 'unknown') return false;
+    const age = row.lastSubmittedAt ? Date.now() - row.lastSubmittedAt.getTime() : Infinity;
+    return age > UNKNOWN_RESUBMIT_BACKOFF_MS;
+}
+
+/**
+ * Submit every canonical template that this page has not successfully been
+ * submitted for. Idempotent: an already-existing template at Meta is recorded, not
+ * retried forever, while a submission that never landed is retried after a backoff.
+ * Never throws — provisioning is best-effort; the send path reports the resulting
+ * status to the merchant.
+ *
+ * Concurrent calls for the same page share one run (see `inFlightProvisioning`).
  */
 export async function ensureTemplatesProvisioned(sender: WhatsAppSender): Promise<void> {
+    const existingRun = inFlightProvisioning.get(sender.pageId);
+    if (existingRun) return existingRun;
+
+    const run = provisionTemplates(sender).finally(() => {
+        inFlightProvisioning.delete(sender.pageId);
+    });
+    inFlightProvisioning.set(sender.pageId, run);
+    return run;
+}
+
+async function provisionTemplates(sender: WhatsAppSender): Promise<void> {
     if (!sender.wabaId) {
         // Every Embedded Signup connection stores a WABA id; its absence means an
         // older/partial connection. Visible, because without it the merchant's
@@ -137,13 +197,21 @@ export async function ensureTemplatesProvisioned(sender: WhatsAppSender): Promis
     }
 
     const existing = await db
-        .select({ templateName: whatsappNotificationTemplates.templateName, language: whatsappNotificationTemplates.language })
+        .select({
+            templateName: whatsappNotificationTemplates.templateName,
+            language: whatsappNotificationTemplates.language,
+            status: whatsappNotificationTemplates.status,
+            lastSubmittedAt: whatsappNotificationTemplates.lastSubmittedAt,
+        })
         .from(whatsappNotificationTemplates)
         .where(eq(whatsappNotificationTemplates.pageId, sender.pageId));
-    const known = new Set(existing.map(r => `${r.templateName}:${r.language}`));
+    // Keyed on status too, not just existence: a row is only a reason to SKIP when
+    // it records a submission that actually reached Meta.
+    const known = new Map(existing.map(r => [`${r.templateName}:${r.language}`, r]));
 
     for (const template of allCanonicalTemplates()) {
-        if (known.has(`${template.name}:${template.language}`)) continue;
+        const row = known.get(`${template.name}:${template.language}`);
+        if (row && !needsResubmission(row)) continue;
         try {
             const providerTemplateId = await whatsappService.createMessageTemplate(sender.wabaId, sender.accessToken, {
                 name: template.name,
@@ -153,9 +221,11 @@ export async function ensureTemplatesProvisioned(sender: WhatsAppSender): Promis
             });
             await upsertTemplateRow(sender.pageId, template.name, template.language, {
                 status: 'pending',
-                providerTemplateId: providerTemplateId || null,
+                // A submission that just succeeded supersedes whatever the previous
+                // attempt failed with — this is the one place clearing it is right.
                 errorMessage: null,
-            });
+                providerTemplateId: providerTemplateId || null,
+            }, true);
         } catch (error) {
             // A duplicate name is success in disguise — the template already
             // exists on this WABA (e.g. provisioned for another store). Record it
@@ -166,7 +236,7 @@ export async function ensureTemplatesProvisioned(sender: WhatsAppSender): Promis
                 status: alreadyExists ? 'pending' : 'unknown',
                 providerTemplateId: null,
                 errorMessage: alreadyExists ? null : message.slice(0, 500),
-            });
+            }, true);
             if (!alreadyExists) {
                 captureError(error, 'WhatsApp template submission failed', {
                     tags: { service: 'whatsapp-notifications' },
@@ -177,22 +247,30 @@ export async function ensureTemplatesProvisioned(sender: WhatsAppSender): Promis
     }
 }
 
+/**
+ * @param submitted true when this write records a SUBMISSION attempt (success or
+ *        failure), false when it records a status POLL. The two stamp different
+ *        clocks — see `whatsappNotificationTemplates.lastSubmittedAt`.
+ */
 async function upsertTemplateRow(
     pageId: string,
     templateName: string,
     language: string,
     values: { status: string; providerTemplateId: string | null; errorMessage: string | null },
+    submitted = false,
 ): Promise<void> {
+    const now = new Date();
+    const clocks = submitted ? { lastCheckedAt: now, lastSubmittedAt: now } : { lastCheckedAt: now };
     await db
         .insert(whatsappNotificationTemplates)
-        .values({ pageId, templateName, language, ...values, lastCheckedAt: new Date() })
+        .values({ pageId, templateName, language, ...values, ...clocks })
         .onConflictDoUpdate({
             target: [
                 whatsappNotificationTemplates.pageId,
                 whatsappNotificationTemplates.templateName,
                 whatsappNotificationTemplates.language,
             ],
-            set: { ...values, lastCheckedAt: new Date(), updatedAt: new Date() },
+            set: { ...values, ...clocks, updatedAt: now },
         });
 }
 
@@ -228,7 +306,12 @@ async function resolveTemplateStatus(
         await upsertTemplateRow(sender.pageId, templateName, language, {
             status: metaStatus,
             providerTemplateId: row?.providerTemplateId ?? null,
-            errorMessage: null,
+            // Only an approval clears the recorded reason. This column is where a
+            // failed SUBMISSION leaves its explanation, and it is the only readable
+            // account of why a template is stuck — a poll that succeeds while the
+            // template is still absent or pending must not erase it
+            // (AI_INSTRUCTIONS Rule 10.11c: don't destroy the evidence you'll need).
+            errorMessage: metaStatus === 'approved' ? null : (row?.errorMessage ?? null),
         });
         return metaStatus;
     } catch (error) {
@@ -299,6 +382,10 @@ export async function sendWhatsAppNotification(params: {
         );
     }
 
+    // `variables` is the authoritative source — `schedule()` writes `customer_name`
+    // into it alongside the rest, so the spread deliberately WINS over the argument.
+    // The argument is the fallback for rows written before the `variables` column
+    // existed, where `entry.variables` is null and the caller passes `{}`.
     const bodyParams = buildTemplateParams(template, { customer_name: customerName ?? undefined, ...variables });
     return whatsappService.sendTemplateMessage(
         sender.phoneNumberId,

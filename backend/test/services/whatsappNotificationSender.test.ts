@@ -25,6 +25,7 @@ import { db } from '../../src/db';
 import { whatsappService } from '../../src/services/whatsapp';
 import { safeDecryptToken } from '../../src/services/facebookCrypto';
 import {
+    ensureTemplatesProvisioned,
     resolveWhatsAppSender,
     sendWhatsAppNotification,
     WhatsAppNotificationError,
@@ -190,6 +191,52 @@ describe('sendWhatsAppNotification', () => {
         expect(whatsappService.sendTemplateMessage).not.toHaveBeenCalled();
     });
 
+    // `error_message` is where a failed SUBMISSION leaves its explanation, and it
+    // is the only readable account of why a template is stuck. A status poll that
+    // succeeds while the template is still not approved must not wipe it
+    // (AI_INSTRUCTIONS Rule 10.11c) — otherwise the first refresh destroys the
+    // evidence needed to diagnose the very state being refreshed.
+    it('keeps the recorded submission error while a template is still not approved', async () => {
+        const stale = {
+            status: 'unknown',
+            lastCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+            providerTemplateId: null,
+            errorMessage: 'Rate limit hit while submitting',
+        };
+        vi.mocked(db.select)
+            .mockReturnValueOnce(mockSenderLookup([LIVE_PAGE]) as never)
+            .mockReturnValueOnce(mockTemplateLookup([stale]) as never)
+            .mockReturnValueOnce(mockExistingTemplates([]) as never);
+        vi.mocked(whatsappService.getMessageTemplateStatus).mockResolvedValue('PENDING');
+
+        await sendWhatsAppNotification(SEND_PARAMS).catch(() => undefined);
+
+        const insertMock = vi.mocked(db.insert).mock.results[0].value as ReturnType<typeof mockInsertChain>;
+        expect(insertMock.values).toHaveBeenCalledWith(
+            expect.objectContaining({ status: 'pending', errorMessage: 'Rate limit hit while submitting' }),
+        );
+    });
+
+    it('clears the recorded error once Meta approves the template', async () => {
+        const stale = {
+            status: 'pending',
+            lastCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+            providerTemplateId: 'tpl-1',
+            errorMessage: 'Rate limit hit while submitting',
+        };
+        vi.mocked(db.select)
+            .mockReturnValueOnce(mockSenderLookup([LIVE_PAGE]) as never)
+            .mockReturnValueOnce(mockTemplateLookup([stale]) as never);
+        vi.mocked(whatsappService.getMessageTemplateStatus).mockResolvedValue('APPROVED');
+
+        await expect(sendWhatsAppNotification(SEND_PARAMS)).resolves.toBe('wamid.OK');
+
+        const insertMock = vi.mocked(db.insert).mock.results[0].value as ReturnType<typeof mockInsertChain>;
+        expect(insertMock.values).toHaveBeenCalledWith(
+            expect.objectContaining({ status: 'approved', errorMessage: null }),
+        );
+    });
+
     // A stale record must be re-read from Meta before we trust it: approval is
     // asynchronous, so "pending an hour ago" is not "pending now".
     it('refreshes a stale pending record from Meta and sends once it reads APPROVED', async () => {
@@ -204,5 +251,131 @@ describe('sendWhatsAppNotification', () => {
             'waba-1', 'enc:v1:token', 'jawab24_order_confirmed_ar_v1', 'ar',
         );
         expect(whatsappService.sendTemplateMessage).toHaveBeenCalled();
+    });
+});
+
+describe('ensureTemplatesProvisioned', () => {
+    const SENDER = { pageId: 'page-1', phoneNumberId: 'pn-1', wabaId: 'waba-1', accessToken: 'tok' };
+    const ALL_CANONICAL = 8;   // 4 WhatsApp-capable types × 2 languages
+
+    // The wedge this guards against: a submission that fails for any reason other
+    // than "already exists" used to write a row anyway, and the next run skipped
+    // the template because a ROW EXISTED — regardless of what it said. Meta had no
+    // such template, so the status poll returned null → 'unknown' → an eternal,
+    // deliberately-unreported `whatsapp_template_pending`. Only a manual DELETE
+    // recovered it. A row that never reached Meta must be retried.
+    it('re-submits a template stuck at unknown once the backoff has elapsed', async () => {
+        const stale = {
+            templateName: 'jawab24_order_confirmed_ar_v1',
+            language: 'ar',
+            status: 'unknown',
+            lastSubmittedAt: new Date(Date.now() - 60 * 60 * 1000),
+        };
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([stale]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+
+        expect(whatsappService.createMessageTemplate).toHaveBeenCalledWith(
+            'waba-1', 'tok', expect.objectContaining({ name: stale.templateName, language: 'ar' }),
+        );
+    });
+
+    // ...but not on every retry: a genuinely unreachable Meta would otherwise be
+    // hammered once per notification attempt.
+    it('leaves a freshly-failed unknown row alone until the backoff elapses', async () => {
+        const fresh = {
+            templateName: 'jawab24_order_confirmed_ar_v1',
+            language: 'ar',
+            status: 'unknown',
+            lastSubmittedAt: new Date(),
+        };
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([fresh]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+
+        const submitted = vi.mocked(whatsappService.createMessageTemplate).mock.calls
+            .map(c => (c[2] as { name: string }).name);
+        expect(submitted).not.toContain(fresh.templateName);
+        expect(submitted).toHaveLength(ALL_CANONICAL - 1);   // the other seven still go
+    });
+
+    // The two clocks must stay separate. `lastCheckedAt` is re-stamped by the
+    // status poll every few minutes while a template is stuck, so measuring the
+    // resubmit backoff on it would push the window out on every poll and the retry
+    // would never fire — the original wedge, just slower. `lastSubmittedAt` only
+    // moves when we actually try to submit.
+    it('measures the backoff on the submit clock, not the poll clock', async () => {
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([{
+            templateName: 'jawab24_order_confirmed_ar_v1',
+            language: 'ar',
+            status: 'unknown',
+            lastSubmittedAt: new Date(Date.now() - 60 * 60 * 1000),   // due for a retry
+            lastCheckedAt: new Date(),                                // just polled
+        }]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+
+        const submitted = vi.mocked(whatsappService.createMessageTemplate).mock.calls
+            .map(c => (c[2] as { name: string }).name);
+        expect(submitted).toContain('jawab24_order_confirmed_ar_v1');
+    });
+
+    // A status poll must not advance the submit clock, or the poll would keep
+    // deferring the retry it is supposed to reveal the need for.
+    it('stamps only the poll clock when refreshing status, both when submitting', async () => {
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+
+        const values = vi.mocked(db.insert).mock.results
+            .map(r => (r.value as ReturnType<typeof mockInsertChain>).values.mock.calls[0][0]);
+        expect(values).toHaveLength(ALL_CANONICAL);
+        for (const v of values) {
+            expect(v).toHaveProperty('lastSubmittedAt');   // this write IS a submission
+        }
+    });
+
+    // A pending or approved row is a submission that DID reach Meta — never resend.
+    it.each(['pending', 'approved', 'rejected'])('never re-submits a %s row', async (status) => {
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([{
+            templateName: 'jawab24_order_confirmed_ar_v1',
+            language: 'ar',
+            status,
+            lastCheckedAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+        }]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+
+        const submitted = vi.mocked(whatsappService.createMessageTemplate).mock.calls
+            .map(c => (c[2] as { name: string }).name);
+        expect(submitted).not.toContain('jawab24_order_confirmed_ar_v1');
+    });
+
+    // Saving four types at once fires four PUTs in parallel, each asking for
+    // provisioning. Without single-flighting they all read "nothing exists" before
+    // any wrote a row and each submitted all 8 templates — 32 POSTs at Meta's
+    // rate-limited template endpoint, 24 of them duplicates.
+    it('collapses concurrent runs for the same page into one submission pass', async () => {
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([]) as never);
+
+        await Promise.all([
+            ensureTemplatesProvisioned(SENDER),
+            ensureTemplatesProvisioned(SENDER),
+            ensureTemplatesProvisioned(SENDER),
+            ensureTemplatesProvisioned(SENDER),
+        ]);
+
+        expect(whatsappService.createMessageTemplate).toHaveBeenCalledTimes(ALL_CANONICAL);
+    });
+
+    // The in-flight entry must be released, or the page could never be provisioned
+    // again in the lifetime of the process.
+    it('provisions again after the previous run settled', async () => {
+        vi.mocked(db.select).mockReturnValue(mockExistingTemplates([]) as never);
+
+        await ensureTemplatesProvisioned(SENDER);
+        await ensureTemplatesProvisioned(SENDER);
+
+        expect(whatsappService.createMessageTemplate).toHaveBeenCalledTimes(ALL_CANONICAL * 2);
     });
 });

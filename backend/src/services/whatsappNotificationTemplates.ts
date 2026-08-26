@@ -13,29 +13,41 @@
  * here (never an empty string, never a dangling label — the «رقم التتبع: » defect).
  * Fillers are part of the copy contract and are pinned by tests.
  *
+ * ⛔ META ALSO REJECTS A *DANGLING PARAMETER* — a body that STARTS or ENDS with a
+ * `{{n}}` and no static text beside it. Unlike an empty parameter this fails at
+ * REVIEW time, so it surfaces hours after submission instead of at send time.
+ * `order_shipped` and `abandoned_cart` originally ended on their final
+ * placeholder in both languages — 4 of the 8 canonical templates — which would
+ * have killed exactly the tracking and cart-recovery cases this channel exists
+ * for. Every body therefore closes with real words. Pinned by the "no dangling
+ * parameter" test.
+ *
  * ⛔ Bodies must stay in فصحى (AI_INSTRUCTIONS §5) — this is Jawab24-authored copy.
  */
-import type { OrderNotificationType } from '@jawab24/shared';
+import { WHATSAPP_NOTIFICATION_TYPES, isWhatsAppNotificationType } from '@jawab24/shared';
+import type { WhatsAppNotificationType } from '@jawab24/shared';
 
-/** Bumped when a body changes: Meta templates are immutable once approved, so a
- *  new body needs a NEW name. Never edit a shipped body in place. */
+/**
+ * Bumped when a body changes: Meta templates are immutable once approved, so a
+ * new body needs a NEW name. Never edit a shipped body in place.
+ *
+ * Still `v1` after the dangling-parameter fix above: at that point NO merchant had
+ * a WhatsApp number connected (measured in production — zero `pages` rows carry a
+ * `whatsapp_phone_number_id`), so no `v1` body had ever been submitted to any WABA
+ * and there was nothing frozen to supersede. The next body change will not have
+ * that luxury — check `whatsapp_notification_templates` for provisioned rows
+ * first, and bump this instead of editing in place if any exist.
+ */
 export const TEMPLATE_VERSION = 'v1';
 
 export type TemplateLanguage = 'ar' | 'en';
 
-/** The notification types v1 delivers over WhatsApp. Others stay SMS-only. */
-export const WHATSAPP_NOTIFICATION_TYPES = [
-    'order_confirmed',
-    'order_shipped',
-    'order_delivered',
-    'abandoned_cart',
-] as const satisfies readonly OrderNotificationType[];
-
-export type WhatsAppNotificationType = typeof WHATSAPP_NOTIFICATION_TYPES[number];
-
-export function isWhatsAppNotificationType(type: string): type is WhatsAppNotificationType {
-    return (WHATSAPP_NOTIFICATION_TYPES as readonly string[]).includes(type);
-}
+// The set of WhatsApp-capable types lives in @jawab24/shared: the settings card
+// needs the same list to decide which rows get a channel selector, and a second
+// hand-maintained copy in the frontend would silently drift the day a type gains
+// a template (AI_INSTRUCTIONS Rule 10.8).
+export { WHATSAPP_NOTIFICATION_TYPES, isWhatsAppNotificationType };
+export type { WhatsAppNotificationType };
 
 /**
  * One `{{n}}` slot: which rendered variable fills it, and what to send when that
@@ -91,7 +103,7 @@ export const CANONICAL_TEMPLATES: Record<WhatsAppNotificationType, Record<Templa
         ar: {
             name: templateName('order_shipped', 'ar'),
             language: 'ar',
-            body: 'مرحباً {{1}}، تم شحن طلبك رقم {{2}} 🚚 رقم التتبع: {{3}}',
+            body: 'مرحباً {{1}}، تم شحن طلبك رقم {{2}} 🚚 رقم التتبع: {{3}} — يمكنك تتبع شحنتك به.',
             slots: [
                 CUSTOMER_SLOT_AR,
                 ORDER_SLOT,
@@ -103,7 +115,7 @@ export const CANONICAL_TEMPLATES: Record<WhatsAppNotificationType, Record<Templa
         en: {
             name: templateName('order_shipped', 'en'),
             language: 'en',
-            body: 'Hi {{1}}, your order {{2}} has been shipped 🚚 Tracking: {{3}}',
+            body: 'Hi {{1}}, your order {{2}} has been shipped 🚚 Tracking: {{3}} — use it to follow your delivery.',
             slots: [
                 CUSTOMER_SLOT_EN,
                 ORDER_SLOT,
@@ -129,7 +141,7 @@ export const CANONICAL_TEMPLATES: Record<WhatsAppNotificationType, Record<Templa
         ar: {
             name: templateName('abandoned_cart', 'ar'),
             language: 'ar',
-            body: 'مرحباً {{1}}! ما زالت في سلتك منتجات بقيمة {{2}}. أكمل طلبك من هنا 🛒 {{3}}',
+            body: 'مرحباً {{1}}! ما زالت في سلتك منتجات بقيمة {{2}}. أكمل طلبك من هنا 🛒 {{3}} — السلة بانتظارك.',
             slots: [
                 CUSTOMER_SLOT_AR,
                 { variable: 'cart_total', fallback: 'بانتظارك', example: '10,000 SAR' },
@@ -142,7 +154,7 @@ export const CANONICAL_TEMPLATES: Record<WhatsAppNotificationType, Record<Templa
         en: {
             name: templateName('abandoned_cart', 'en'),
             language: 'en',
-            body: 'Hi {{1}}! You still have items worth {{2}} in your cart. Complete your order here 🛒 {{3}}',
+            body: 'Hi {{1}}! You still have items worth {{2}} in your cart. Complete your order here 🛒 {{3}} — your cart is waiting.',
             slots: [
                 CUSTOMER_SLOT_EN,
                 { variable: 'cart_total', fallback: 'waiting for you', example: '10,000 SAR' },

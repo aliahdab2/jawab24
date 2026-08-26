@@ -70,6 +70,29 @@ const TYPE_VARIABLES: Record<OrderNotificationType, string[]> = {
 
 const DELAY_PRESETS = [0, 5, 15, 30, 60, 120, 1440];
 
+/**
+ * Types that have a canonical Meta-approved WhatsApp template. The others stay
+ * SMS-only, so their channel selector is not offered at all — the backend refuses
+ * the switch too.
+ *
+ * ⛔ DELIBERATE DUPLICATE of `WHATSAPP_NOTIFICATION_TYPES` in `@jawab24/shared`,
+ * and it must stay one. This card is reached from the PUBLIC /integrations page,
+ * and `@jawab24/shared` is compiled to CommonJS with no `exports` map — webpack
+ * cannot tree-shake it, so a single value import from it would put 66.1 kB gzip
+ * (zod, libphonenumber-js, the lot) on a public page. `publicPageBarrels.test.ts`
+ * fails the build if this file ever imports it; importing the shared list here
+ * was tried and rejected for exactly that reason.
+ *
+ * Drift is caught instead of prevented: `orderNotificationsChannelTypes.test.ts`
+ * imports the shared list (free — it runs in Node) and asserts the two match.
+ */
+const WHATSAPP_CAPABLE_TYPES: OrderNotificationType[] = [
+  'order_confirmed',
+  'order_shipped',
+  'order_delivered',
+  'abandoned_cart',
+];
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
@@ -82,15 +105,8 @@ interface TemplateDraft {
   channel: NotificationChannel;
 }
 
-/* Types that have a canonical Meta-approved WhatsApp template. The others stay
- * SMS-only, so their channel toggle is not offered at all (the backend refuses
- * the switch too — see whatsappNotificationTemplates.WHATSAPP_NOTIFICATION_TYPES). */
-const WHATSAPP_CAPABLE_TYPES: OrderNotificationType[] = [
-  'abandoned_cart',
-  'order_confirmed',
-  'order_shipped',
-  'order_delivered',
-];
+/** The draft fields edited through `handleFieldChange` (`isEnabled` has its own toggle). */
+type EditableField = Exclude<keyof TemplateDraft, 'isEnabled'>;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -181,10 +197,14 @@ function useOrderNotifications(storeId: string) {
     setDraft({ ...draft, [type]: { ...draft[type], isEnabled: enabled } });
   };
 
-  const handleFieldChange = (
+  // Generic over the field so each one keeps its own value type: `channel` only
+  // accepts a NotificationChannel, `delayMinutes` only a number. A widened
+  // `value: string | number` compiled fine but let any string through as a
+  // channel, which the backend would then 400 on.
+  const handleFieldChange = <F extends EditableField>(
     type: OrderNotificationType,
-    field: 'messageAr' | 'messageEn' | 'delayMinutes' | 'channel',
-    value: string | number,
+    field: F,
+    value: TemplateDraft[F],
   ) => {
     if (!draft) return;
     setDraft({ ...draft, [type]: { ...draft[type], [field]: value } });
@@ -237,7 +257,7 @@ interface NotificationTypeRowProps {
   isExpanded: boolean;
   canEdit: boolean;
   onToggle: (type: OrderNotificationType, enabled: boolean) => void;
-  onFieldChange: (type: OrderNotificationType, field: 'messageAr' | 'messageEn' | 'delayMinutes' | 'channel', value: string | number) => void;
+  onFieldChange: <F extends EditableField>(type: OrderNotificationType, field: F, value: TemplateDraft[F]) => void;
   onExpandToggle: (type: OrderNotificationType) => void;
   /** null while unknown (status call failed) — the channel selector then stays hidden. */
   waStatus: WhatsAppNotificationStatus | null;
@@ -308,10 +328,15 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
           {/* Delivery channel — only for types with a canonical WhatsApp template */}
           {WHATSAPP_CAPABLE_TYPES.includes(type) && (
             <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+              {/* A group of buttons, not a form control — so this is a labelled
+                  group, not a <label> (which would point at nothing). */}
+              <span
+                id={`channel-label-${type}`}
+                className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2"
+              >
                 {t('channelLabel')}
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
+              </span>
+              <div role="group" aria-labelledby={`channel-label-${type}`} className="flex flex-wrap items-center gap-2">
                 {(['sms', 'whatsapp'] as const).map((channel) => (
                   <button
                     key={channel}
@@ -411,13 +436,20 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
 
           {/* Delay selector */}
           <div>
-            <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+            {/* Same shape as the channel group above: buttons, so a labelled
+                group rather than a <label> with no control to point at. */}
+            <span
+              id={`delay-label-${type}`}
+              className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2"
+            >
               {t('delayLabel')}
-            </label>
-            <div className="flex flex-wrap gap-2">
+            </span>
+            <div role="group" aria-labelledby={`delay-label-${type}`} className="flex flex-wrap gap-2">
               {DELAY_PRESETS.map((minutes) => (
                 <button
                   key={minutes}
+                  type="button"
+                  aria-pressed={draft.delayMinutes === minutes}
                   disabled={!canEdit}
                   onClick={() => onFieldChange(type, 'delayMinutes', minutes)}
                   className={clsx(
