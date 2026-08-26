@@ -11,6 +11,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
 import { resolveBillingSubjectUserId } from './ecommerce';
+import { updateLiveMirrorsForStore } from './marketplaceMirror';
 import { pick, asString, parseDate } from '../utils/provisionalEnvelope';
 
 /**
@@ -487,31 +488,16 @@ export async function adoptZidSubscription(
     return { outcome: 'adopted', changed: true };
 }
 
-/**
- * Transition every LIVE mirror row for a store. The WHERE triple is THE
- * row-targeting invariant of this module — the same shape as the partial unique
- * index in migration 0161 — so cancel (uninstall) and pause (Zid shows no
- * subscription) share one copy of it instead of drifting apart.
- */
-async function updateLiveMirrorsForStore(
+/** This rail's identity on the mirror — see services/marketplaceMirror.ts. */
+const ZID_MIRROR_RAIL = {
+    paymentMethod: 'zid',
+    storeIdColumn: subscriptions.zidStoreId,
+} as const;
+
+const updateLiveMirrors = (
     storeId: string,
     set: Partial<typeof subscriptions.$inferInsert>,
-): Promise<Array<{ id: string; userId: string }>> {
-    const rows = await db
-        .update(subscriptions)
-        .set(set)
-        .where(and(
-            eq(subscriptions.paymentMethod, 'zid'),
-            eq(subscriptions.zidStoreId, storeId),
-            inArray(subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]),
-        ))
-        .returning({ id: subscriptions.id, userId: subscriptions.userId });
-
-    for (const row of rows) {
-        await subscriptionsService.invalidateStatusCache(row.userId);
-    }
-    return rows;
-}
+) => updateLiveMirrorsForStore(ZID_MIRROR_RAIL, storeId, set);
 
 /**
  * Cancel the local mirror for a store — the app was uninstalled from the App
@@ -523,7 +509,7 @@ export async function cancelZidSubscriptionLocal(
     reason: string,
     log: LinkLogger,
 ): Promise<boolean> {
-    const rows = await updateLiveMirrorsForStore(storeId, {
+    const rows = await updateLiveMirrors(storeId, {
         status: 'canceled',
         canceledAt: new Date(),
         cancelReason: reason,
@@ -601,7 +587,7 @@ export async function syncZidBilling(
     // empty container or a status we recognise as inactive. Pause a live local
     // mirror — 'paused', not 'canceled': the app is still installed and
     // re-subscribing inside Zid reactivates through this same sync.
-    const paused = await updateLiveMirrorsForStore(storeId, { status: 'paused', updatedAt: new Date() });
+    const paused = await updateLiveMirrors(storeId, { status: 'paused', updatedAt: new Date() });
     if (paused.length > 0) {
         log.info({ storeId }, 'Zid shows no live subscription — paused local mirror');
         return { outcome: 'paused', changed: true };

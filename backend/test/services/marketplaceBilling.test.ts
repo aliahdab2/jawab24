@@ -83,12 +83,48 @@ describe('resolveMarketplaceBilling', () => {
             expect(verdict?.marketplace).toBe('salla');
         });
 
-        it('offers no manage URL — Salla is free-tier-only, so there is nowhere to send them', async () => {
+        it('offers no manage URL until SALLA_APP_STORE_URL is configured (post-publish)', async () => {
             onlyStore('salla');
 
             const verdict = await resolveMarketplaceBilling('user_1', null);
 
             expect(verdict?.manageUrl).toBeUndefined();
+        });
+
+        // --- Row-based (D-104): a live salla mirror is positive proof Salla is
+        // charging this merchant — no store query, and it outranks the Stripe
+        // exemption like the other row-based rails. ---
+
+        it('applies to a live salla mirror without any store query', async () => {
+            noStores();
+
+            const verdict = await resolveMarketplaceBilling('user_1', {
+                paymentMethod: 'salla',
+                status: 'active',
+            });
+
+            expect(verdict?.marketplace).toBe('salla');
+            expect(verdict?.code).toBe('SALLA_BILLED');
+            expect(hasStore).not.toHaveBeenCalled();
+        });
+
+        it('does NOT apply to a canceled mirror — an uninstalled merchant may return via Stripe', async () => {
+            noStores();
+
+            await expect(
+                resolveMarketplaceBilling('user_1', { paymentMethod: 'salla', status: 'canceled' }),
+            ).resolves.toBeNull();
+        });
+
+        it('still applies to a paused mirror — re-subscribing inside Salla is the recovery path', async () => {
+            noStores();
+
+            const verdict = await resolveMarketplaceBilling('user_1', {
+                paymentMethod: 'salla',
+                status: 'paused',
+            });
+
+            expect(verdict?.marketplace).toBe('salla');
         });
     });
 

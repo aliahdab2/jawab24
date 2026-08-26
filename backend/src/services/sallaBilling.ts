@@ -11,6 +11,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
 import { resolveBillingSubjectUserId } from './ecommerce';
+import { updateLiveMirrorsForStore } from './marketplaceMirror';
 import { pick, asString, parseDate } from '../utils/provisionalEnvelope';
 
 /**
@@ -447,31 +448,16 @@ export async function adoptSallaSubscription(
     return { outcome: 'adopted', changed: true };
 }
 
-/**
- * Transition every LIVE mirror row for a store. The WHERE triple is THE
- * row-targeting invariant of this module — the same shape as the partial unique
- * index in migration 0181 — so cancel (uninstall) and pause (Salla shows no
- * subscription) share one copy of it instead of drifting apart.
- */
-async function updateLiveMirrorsForStore(
+/** This rail's identity on the mirror — see services/marketplaceMirror.ts. */
+const SALLA_MIRROR_RAIL = {
+    paymentMethod: 'salla',
+    storeIdColumn: subscriptions.sallaStoreId,
+} as const;
+
+const updateLiveMirrors = (
     storeId: string,
     set: Partial<typeof subscriptions.$inferInsert>,
-): Promise<Array<{ id: string; userId: string }>> {
-    const rows = await db
-        .update(subscriptions)
-        .set(set)
-        .where(and(
-            eq(subscriptions.paymentMethod, 'salla'),
-            eq(subscriptions.sallaStoreId, storeId),
-            inArray(subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]),
-        ))
-        .returning({ id: subscriptions.id, userId: subscriptions.userId });
-
-    for (const row of rows) {
-        await subscriptionsService.invalidateStatusCache(row.userId);
-    }
-    return rows;
-}
+) => updateLiveMirrorsForStore(SALLA_MIRROR_RAIL, storeId, set);
 
 /**
  * Cancel the local mirror for a store — the app was uninstalled from the App
@@ -483,7 +469,7 @@ export async function cancelSallaSubscriptionLocal(
     reason: string,
     log: LinkLogger,
 ): Promise<boolean> {
-    const rows = await updateLiveMirrorsForStore(storeId, {
+    const rows = await updateLiveMirrors(storeId, {
         status: 'canceled',
         canceledAt: new Date(),
         cancelReason: reason,
@@ -567,7 +553,7 @@ export async function syncSallaBilling(
     // container or an end_date in the past. Pause a live local mirror —
     // 'paused', not 'canceled': the app is still installed and re-subscribing
     // inside Salla reactivates through this same sync.
-    const paused = await updateLiveMirrorsForStore(storeId, { status: 'paused', updatedAt: new Date() });
+    const paused = await updateLiveMirrors(storeId, { status: 'paused', updatedAt: new Date() });
     if (paused.length > 0) {
         log.info({ storeId }, 'Salla shows no live subscription — paused local mirror');
         return { outcome: 'paused', changed: true };
