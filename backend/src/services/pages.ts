@@ -23,6 +23,7 @@ import { STATS_CACHE_TTL, pagesStatsCacheKey } from './statsCache';
 // other stats-cache invalidation helpers.
 export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
+import { ensureTemplatesProvisioned } from './whatsappNotificationSender';
 import { isUniqueViolation } from '../utils/dbErrors';
 import { clearReconnectAlertClaims } from './pageTokenRecovery';
 import { recordActivationEvent } from './activation';
@@ -1706,6 +1707,40 @@ export class PagesService {
     }
 
     /**
+     * Kick off notification-template provisioning for a freshly connected number.
+     *
+     * AT CONNECT TIME, not at channel-switch time, because Meta's template review
+     * takes minutes to hours: provisioning only when the merchant flips a
+     * notification type to WhatsApp guaranteed that their FIRST notification
+     * always failed as `whatsapp_template_pending` — a silent failure by design
+     * (a pending review deliberately does not page Sentry). Submitting here means
+     * review completes long before the merchant ever opens the notifications
+     * card, and the channel toggle is usable the moment they see it. The
+     * switch-time kick in the notifications controller stays as belt-and-braces
+     * for numbers connected before this ran (idempotent + single-flighted).
+     *
+     * Fire-and-forget: 8 sequential Meta POSTs must not sit on the connect
+     * response, and a provisioning failure must not fail the connect — the send
+     * path re-kicks and reports status to the merchant either way.
+     */
+    private kickOffNotificationTemplates(page: { id: string; whatsappPhoneNumberId: string | null; whatsappBusinessAccountId: string | null }, plainAccessToken: string): void {
+        if (!page.whatsappPhoneNumberId) return;
+        ensureTemplatesProvisioned({
+            pageId: page.id,
+            phoneNumberId: page.whatsappPhoneNumberId,
+            wabaId: page.whatsappBusinessAccountId ?? null,
+            // The connect flow holds the PLAIN token (it encrypts at rest itself),
+            // so no decrypt round-trip is needed here.
+            accessToken: plainAccessToken,
+        }).catch(error => {
+            captureError(error, 'WhatsApp template provisioning kickoff failed after connect', {
+                tags: { service: 'whatsapp-notifications' },
+                extra: { pageId: page.id },
+            });
+        });
+    }
+
+    /**
      * Create a WhatsApp-only page row (no Facebook page behind it).
      * Backs both WhatsApp-only merchants (Shopify/Salla/Zid sellers with no FB
      * page) and additional numbers for existing merchants — each number gets
@@ -1747,6 +1782,7 @@ export class PagesService {
             })
             .returning();
 
+        this.kickOffNotificationTemplates(newPage, data.accessToken);
         return newPage;
     }
 
@@ -1787,6 +1823,9 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
+        // Undefined when the (pageId, workspaceId) pair matched nothing — the
+        // caller handles that; there is no number to provision for.
+        if (updatedPage) this.kickOffNotificationTemplates(updatedPage, data.accessToken);
         return updatedPage;
     }
 

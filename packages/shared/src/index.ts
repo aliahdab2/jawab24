@@ -1635,6 +1635,46 @@ export type OrderNotificationType =
   | 'review_request'
   | 'digital_delivery';
 
+/** Delivery rails for a customer notification. */
+export type NotificationChannel = 'sms' | 'whatsapp';
+
+/**
+ * The notification types deliverable over WhatsApp — those with a canonical
+ * Meta-approved template. `review_request` and `digital_delivery` stay SMS-only.
+ *
+ * Shared because BOTH sides must agree: the backend refuses a channel switch for
+ * a type that isn't here, and the settings card decides from the same list which
+ * rows get a channel selector at all. Two hand-maintained copies would drift the
+ * day a type gains a template — the card would keep hiding a toggle the backend
+ * had started accepting (AI_INSTRUCTIONS Rule 10.8).
+ */
+export const WHATSAPP_NOTIFICATION_TYPES = [
+  'order_confirmed',
+  'order_shipped',
+  'order_delivered',
+  'abandoned_cart',
+] as const satisfies readonly OrderNotificationType[];
+
+export type WhatsAppNotificationType = typeof WHATSAPP_NOTIFICATION_TYPES[number];
+
+export function isWhatsAppNotificationType(type: string): type is WhatsAppNotificationType {
+  return (WHATSAPP_NOTIFICATION_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Meta's review state of the canonical WhatsApp template behind a notification
+ * type, collapsed across both languages: a type is `approved` only when the
+ * Arabic AND English variants are, since the language is chosen per customer.
+ * `missing` = never submitted for this merchant's WABA yet.
+ */
+export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected' | 'missing';
+
+export interface WhatsAppNotificationStatus {
+  /** False when no WhatsApp-connected page is linked to the store. */
+  available: boolean;
+  templates: Partial<Record<OrderNotificationType, WhatsAppTemplateStatus>>;
+}
+
 export interface NotificationTemplate {
   id: string;
   ecommerceStoreId: string;
@@ -1643,7 +1683,8 @@ export interface NotificationTemplate {
   messageEn: string;
   isEnabled: boolean;
   delayMinutes: number;
-  channel: string;
+  /** Delivery rail: 'sms' (default) or 'whatsapp' (Meta-approved template). */
+  channel: NotificationChannel;
   includeCoupon: boolean;
   couponCode: string | null;
   couponDiscount: string | null;
@@ -2283,6 +2324,9 @@ export { formatBusinessInfoPrompt, countBusinessInfoFacts, whatsappNumbers, busi
 // --- Merchant contact standard: number + optional free-text description ---
 export { normalizePhoneEntry, normalizePhoneEntries, sanitizePhoneDescription, phoneEntryNumber, phoneEntryDescription, isUsablePhoneEntry, MAX_PHONE_DESCRIPTION_LENGTH } from './businessPhone';
 export type { BusinessPhone, BusinessPhoneEntry } from './businessPhone';
+// Outbound CUSTOMER phone (order webhooks → WhatsApp Cloud API) — distinct from
+// the merchant-typed businessPhone helpers above.
+export { normalizeCustomerPhoneForWhatsApp } from './customerPhone';
 export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, applyStoreSyncToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---

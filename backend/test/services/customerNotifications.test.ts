@@ -26,7 +26,20 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: vi.fn(),
 }));
 
+vi.mock('../../src/services/whatsappNotificationSender', async (importActual) => {
+    const actual = await importActual<typeof import('../../src/services/whatsappNotificationSender')>();
+    return {
+        ...actual,               // keep the real error class + reason codes
+        sendWhatsAppNotification: vi.fn().mockResolvedValue('wamid.TEST'),
+    };
+});
+
 import { CustomerNotificationService } from '../../src/services/customerNotifications';
+import {
+    sendWhatsAppNotification,
+    WhatsAppNotificationError,
+    WA_SEND_ERRORS,
+} from '../../src/services/whatsappNotificationSender';
 import { db } from '../../src/db';
 import { smsService } from '../../src/services/sms';
 import { customerNotificationQueue } from '../../src/lib/customerNotificationQueue';
@@ -396,6 +409,87 @@ describe('CustomerNotificationService', () => {
 
             expect(smsService.send).not.toHaveBeenCalled();
             expect(db.update).not.toHaveBeenCalled();
+        });
+
+        // ─── channel dispatch: the row's channel decides the rail ───
+        // Written when SMS was hardcoded here and `channel` was a decorative column.
+
+        const waEntry = {
+            ...logEntry,
+            channel: 'whatsapp',
+            ecommerceStoreId: 'store-1',
+            customerName: 'Ahmed',
+            variables: { customer_name: 'Ahmed', order_number: '72524870' },
+        };
+
+        it('sends a WhatsApp template (never SMS) when the row asks for whatsapp, storing the wamid', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([waEntry]) as never);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+            vi.mocked(sendWhatsAppNotification).mockResolvedValueOnce('wamid.TEST');
+
+            await service.send('log-1');
+
+            expect(sendWhatsAppNotification).toHaveBeenCalledWith(expect.objectContaining({
+                storeId: 'store-1',
+                notificationType: 'order_confirmed',
+                customerPhone: '+966501234567',
+                customerName: 'Ahmed',
+                language: 'ar',                       // +966 → Arabic template
+                variables: waEntry.variables,
+            }));
+            expect(smsService.send).not.toHaveBeenCalled();
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'sent', providerMessageId: 'wamid.TEST' }),
+            );
+        });
+
+        it('uses the SMS rail for an sms row — the WhatsApp path is not touched', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...logEntry, channel: 'sms' }]) as never);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+
+            await service.send('log-1');
+
+            expect(smsService.send).toHaveBeenCalledWith('+966501234567', 'Hello Ahmed');
+            expect(sendWhatsAppNotification).not.toHaveBeenCalled();
+        });
+
+        // A store with no WhatsApp page must fail VISIBLY with a stable reason the
+        // merchant UI can explain — never silently, and never rerouted to the
+        // (provider-blocked) SMS rail.
+        it('records the stable reason code when there is no WhatsApp sender, and does NOT fall back to SMS', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([waEntry]) as never);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+            vi.mocked(sendWhatsAppNotification).mockRejectedValueOnce(
+                new WhatsAppNotificationError(WA_SEND_ERRORS.noSender),
+            );
+
+            await expect(service.send('log-1')).rejects.toThrow();
+
+            expect(smsService.send).not.toHaveBeenCalled();
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'failed', errorMessage: 'no_whatsapp_sender' }),
+            );
+            expect(captureError).toHaveBeenCalled();
+        });
+
+        // Meta approval takes minutes-to-hours; a pending template is a waiting
+        // state, not an incident — it must not page anyone while BullMQ retries.
+        it('does not Sentry-report a template still awaiting Meta approval', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([waEntry]) as never);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+            vi.mocked(sendWhatsAppNotification).mockRejectedValueOnce(
+                new WhatsAppNotificationError(WA_SEND_ERRORS.templatePending),
+            );
+
+            await expect(service.send('log-1')).rejects.toThrow();
+
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'failed', errorMessage: 'whatsapp_template_pending' }),
+            );
+            expect(captureError).not.toHaveBeenCalled();
         });
 
         it('marks entry as failed and re-throws if smsService throws', async () => {

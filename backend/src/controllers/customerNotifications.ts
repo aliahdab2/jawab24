@@ -1,8 +1,14 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
-import { customerNotificationTemplates, customerNotificationsLog } from '../db/schema';
+import { customerNotificationTemplates, customerNotificationsLog, whatsappNotificationTemplates } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { customerNotificationService } from '../services/customerNotifications';
+import { ensureTemplatesProvisioned, resolveWhatsAppSender } from '../services/whatsappNotificationSender';
+import {
+    canonicalTemplateFor,
+    isWhatsAppNotificationType,
+    WHATSAPP_NOTIFICATION_TYPES,
+} from '../services/whatsappNotificationTemplates';
 
 /** GET /api/notification-templates/:storeId */
 export async function getTemplates(request: FastifyRequest, reply: FastifyReply) {
@@ -22,6 +28,8 @@ const VALID_NOTIFICATION_TYPES = new Set([
     'order_delivered', 'review_request', 'digital_delivery',
 ]);
 const MAX_MESSAGE_LENGTH = 1600; // 10 SMS segments
+/** Delivery rails a merchant may pick per notification type. */
+const VALID_CHANNELS = new Set(['sms', 'whatsapp']);
 
 /** PUT /api/notification-templates/:storeId/:type */
 export async function updateTemplate(request: FastifyRequest, reply: FastifyReply) {
@@ -58,6 +66,38 @@ export async function updateTemplate(request: FastifyRequest, reply: FastifyRepl
         }
         patch.delayMinutes = delay;
     }
+    if ('channel' in body) {
+        if (typeof body.channel !== 'string' || !VALID_CHANNELS.has(body.channel)) {
+            return reply.status(400).send({ error: `channel must be one of: ${[...VALID_CHANNELS].join(', ')}` });
+        }
+        if (body.channel === 'whatsapp') {
+            // Refuse the switch rather than accept it and fail silently at send
+            // time: only these types have a canonical Meta template, and the store
+            // needs a WhatsApp-connected page linked to it to have a sender at all.
+            if (!isWhatsAppNotificationType(type)) {
+                return reply.status(400).send({
+                    error: 'This notification type is not available over WhatsApp',
+                    code: 'WHATSAPP_TYPE_UNSUPPORTED',
+                });
+            }
+            const sender = await resolveWhatsAppSender(storeId);
+            if (!sender) {
+                return reply.status(400).send({
+                    error: 'No WhatsApp-connected page is linked to this store',
+                    code: 'NO_WHATSAPP_SENDER',
+                });
+            }
+            // Belt-and-braces: templates are provisioned AT CONNECT TIME
+            // (pagesService.kickOffNotificationTemplates), so by the time a
+            // merchant flips this switch Meta's review is normally already done.
+            // This re-kick (idempotent, single-flighted) covers numbers connected
+            // before that existed and any submission the connect-time run lost.
+            ensureTemplatesProvisioned(sender).catch(err => {
+                request.log.error({ err, storeId }, '[WANotif] template provisioning failed after channel switch');
+            });
+        }
+        patch.channel = body.channel;
+    }
 
     if (Object.keys(patch).length === 0) {
         return reply.status(400).send({ error: 'No valid fields provided' });
@@ -86,6 +126,46 @@ export async function resetTemplates(request: FastifyRequest, reply: FastifyRepl
 
     await customerNotificationService.seedDefaults(storeId);
     return reply.send({ ok: true });
+}
+
+/**
+ * GET /api/notification-templates/:storeId/whatsapp-status
+ *
+ * Whether this store can send over WhatsApp at all, and where Meta's review of
+ * the canonical templates stands. The card uses it to decide between the channel
+ * toggle, a "connect WhatsApp" nudge, and a "waiting for approval" chip — so the
+ * merchant is never left guessing why a notification did not go out.
+ */
+export async function getWhatsAppStatus(request: FastifyRequest, reply: FastifyReply) {
+    const { storeId } = request.params as { storeId: string };
+
+    const sender = await resolveWhatsAppSender(storeId);
+    if (!sender) return reply.send({ available: false, templates: {} });
+
+    const rows = await db
+        .select({
+            templateName: whatsappNotificationTemplates.templateName,
+            language: whatsappNotificationTemplates.language,
+            status: whatsappNotificationTemplates.status,
+        })
+        .from(whatsappNotificationTemplates)
+        .where(eq(whatsappNotificationTemplates.pageId, sender.pageId));
+
+    // Collapse the per-language rows into one status per notification type: a type
+    // is usable only when BOTH language variants are approved (we pick the language
+    // from the customer's phone at send time, so a half-approved pair is not ready).
+    const templates: Record<string, string> = {};
+    for (const type of WHATSAPP_NOTIFICATION_TYPES) {
+        const statuses = (['ar', 'en'] as const).map(lang =>
+            rows.find(r => r.templateName === canonicalTemplateFor(type, lang).name && r.language === lang)?.status ?? 'missing',
+        );
+        templates[type] = statuses.includes('rejected') ? 'rejected'
+            : statuses.every(s => s === 'approved') ? 'approved'
+                : statuses.includes('missing') ? 'missing'
+                    : 'pending';
+    }
+
+    return reply.send({ available: true, templates });
 }
 
 /** GET /api/notification-log/:storeId */

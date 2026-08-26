@@ -1968,6 +1968,13 @@ export const customerNotificationsLog = pgTable('customer_notifications_log', {
     errorMessage: text('error_message'),
     orderNumber: varchar('order_number', { length: 50 }),
     cartTotal: varchar('cart_total', { length: 50 }),
+    /**
+     * The rendered variables (`{customer_name}`, `{order_number}`, …) this row was
+     * built from. `messageSent` is the flattened human-readable text; a WhatsApp
+     * template send needs the values SEPARATELY to fill `{{1}}`, `{{2}}`, … so the
+     * scheduler keeps them here. Null on rows written before this column existed.
+     */
+    variables: jsonb('variables').$type<Record<string, string>>(),
     scheduledAt: timestamp('scheduled_at'),
     sentAt: timestamp('sent_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -1981,6 +1988,47 @@ export const customerNotificationsLog = pgTable('customer_notifications_log', {
     // NULLs as distinct — matching the pre-existing "only dedup when event id present" rule.
     storeTypeEventIdx: uniqueIndex('idx_cust_notif_log_store_type_event').on(table.ecommerceStoreId, table.notificationType, table.platformEventId),
     pendingScheduledIdx: index('idx_cust_notif_log_pending_scheduled').on(table.status, table.scheduledAt),
+}));
+
+/**
+ * Meta review state of the canonical WhatsApp notification templates, per page
+ * (= per WABA). A template must be APPROVED before a notification can use it, and
+ * approval is asynchronous — Meta takes minutes to hours. Rows are created when a
+ * template is submitted and refreshed by polling; we never assume approval.
+ *
+ * Keyed on the PAGE, not the store: the WABA belongs to the page that carries the
+ * WhatsApp credentials, and one page can serve several stores.
+ */
+export const whatsappNotificationTemplates = pgTable('whatsapp_notification_templates', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').notNull().references(() => pages.id, { onDelete: 'cascade' }),
+    /** Meta template name, e.g. `jawab24_order_confirmed_ar_v1`. */
+    templateName: varchar('template_name', { length: 512 }).notNull(),
+    language: varchar('language', { length: 10 }).notNull(),
+    /** Mirrors Meta's status: 'pending' | 'approved' | 'rejected' | 'unknown'. */
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    /** Meta's template id, when the submission returned one. */
+    providerTemplateId: varchar('provider_template_id', { length: 255 }),
+    /** Why a submission or refresh failed — secret-free. */
+    errorMessage: text('error_message'),
+    /** When Meta was last POLLED for this template's review status. */
+    lastCheckedAt: timestamp('last_checked_at'),
+    /**
+     * When we last tried to SUBMIT this template to Meta.
+     *
+     * Deliberately separate from `lastCheckedAt`: they answer different questions,
+     * and collapsing them re-creates the wedge they exist to prevent. A row stuck at
+     * `unknown` is re-submitted once this is older than the backoff — but the status
+     * poll re-stamps `lastCheckedAt` every few minutes, so sharing one column would
+     * push the resubmit window out forever and the template would never be retried.
+     */
+    lastSubmittedAt: timestamp('last_submitted_at'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    pageIdx: index('idx_wa_notif_tpl_page').on(table.pageId),
+    // One row per template per page — the upsert target for submit + refresh.
+    pageTemplateIdx: uniqueIndex('idx_wa_notif_tpl_page_name_lang').on(table.pageId, table.templateName, table.language),
 }));
 
 // Waitlist - collects emails or phone numbers for upcoming features
