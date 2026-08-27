@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageProcessor } from '../../src/services/reply/messageProcessor';
 import { messagesService } from '../../src/services/messages';
+import { leadExtractorService } from '../../src/services/leadExtractor';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { createTestUser, createTestWorkspace, createTestPage, insertMessage, insertPause, testDb } from './setup';
@@ -518,5 +519,79 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         expect(getSettingsSpy).toHaveBeenCalledWith(workspace2.id);
 
         getSettingsSpy.mockRestore();
+    });
+
+    // =========================================================
+    // Lead capture is told whether this turn verified an order
+    // =========================================================
+    // The suppression itself is proven against the real DB in
+    // leadOrderVerification.test.ts. What can ONLY break here is the wire: the
+    // tool outcomes exist on this reply's result and nowhere else, so if the
+    // pipeline stops forwarding them, capture silently reverts to filing every
+    // order-tracking customer as a prospect with no test turning red.
+    it('forwards identityVerificationTurn=true when the reply verified an order', async () => {
+        const captureSpy = vi.spyOn(leadExtractorService, 'maybeCaptureLead').mockResolvedValue(undefined);
+        mockGenerateForMessage.mockResolvedValueOnce({
+            replyText: 'طلبك رقم 73285179 تم شحنه.',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+            toolOutcomes: [{ name: 'verify_and_get_order', outcome: 'success' }],
+        });
+
+        const adapter = createMockAdapter(platformPage);
+        await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'اسمي أحمد ورقمي 0966554433', 'fb-verify-001',
+        );
+
+        expect(captureSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ identityVerificationTurn: true }),
+        );
+        captureSpy.mockRestore();
+    });
+
+    it('forwards it on the HELD path too — a withheld reply must not resurrect the lead', async () => {
+        // 12d holds the reply for merchant review and returns BEFORE the shared
+        // capture, so it calls maybeCaptureLead itself. That second call site is
+        // invisible to the happy-path test: dropping the flag there left the whole
+        // suite green (verified by mutation), which is exactly how an
+        // order-tracking customer would quietly come back as a prospect.
+        await workspaceSettingsService.updateSettings(workspaceId, { holdLowConfidence: true });
+        const captureSpy = vi.spyOn(leadExtractorService, 'maybeCaptureLead').mockResolvedValue(undefined);
+        mockGenerateForMessage.mockResolvedValueOnce({
+            replyText: 'طلبك رقم 73285179 تم شحنه.',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+            confidence: 'low',
+            toolOutcomes: [{ name: 'verify_and_get_order', outcome: 'success' }],
+        });
+
+        const adapter = createMockAdapter(platformPage);
+        await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'اسمي أحمد ورقمي 0966554433', 'fb-verify-held-001',
+        );
+
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(captureSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ identityVerificationTurn: true }),
+        );
+        captureSpy.mockRestore();
+    });
+
+    it('forwards identityVerificationTurn=false for an ordinary reply', async () => {
+        // The default mock returns no toolOutcomes — an ordinary DM on a page with
+        // no store. A phone here is a real lead and must still be captured.
+        const captureSpy = vi.spyOn(leadExtractorService, 'maybeCaptureLead').mockResolvedValue(undefined);
+
+        const adapter = createMockAdapter(platformPage);
+        await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'رقمي 0966554433', 'fb-verify-002',
+        );
+
+        expect(captureSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ identityVerificationTurn: false }),
+        );
+        captureSpy.mockRestore();
     });
 });

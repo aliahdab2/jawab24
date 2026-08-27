@@ -10,7 +10,7 @@ import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn } from '@jawab24/shared';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { isDemoPlatformId } from '../../utils/demo';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -664,6 +664,9 @@ export class CommentProcessor {
             // Only generatedText is reassigned below (fallback/truncation); the rest are const.
             let generatedText = generated.replyText;
             const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence } = generated;
+            // Same rule as the DM path: a phone the commenter typed to prove an
+            // order is theirs is an identity claim, not a lead's contact line.
+            const identityVerificationTurn = isIdentityVerificationTurn(generated.toolOutcomes);
 
             // Capture the original AI-generated reply before any modifications (fallback, truncation, CTA)
             const aiOriginalReply = replyMethod === 'ai' ? (generatedText ?? undefined) : undefined;
@@ -748,6 +751,7 @@ export class CommentProcessor {
                     replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
+                    identityVerificationTurn,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_self_identification');
                 return { success: true, commentId: comment.id };
@@ -782,6 +786,7 @@ export class CommentProcessor {
                     replyMode: effectiveReplyMode,
                     messageText: commentMessage,
                     postMessage: content.message || undefined,
+                    identityVerificationTurn,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, commentId: comment.id };
@@ -879,7 +884,7 @@ export class CommentProcessor {
                 postMessage: content.message || undefined,
                 contentId: content.id,
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
-                confidence,
+                confidence, identityVerificationTurn,
                 groundingSource: buildGroundingSource({
                     knowledgeBase: generatorContext.knowledgeBase,
                     postMessage: content.message,
@@ -1042,6 +1047,11 @@ export class CommentProcessor {
         /** The originating post/media UUID. Persisted on the conversation so
          *  follow-up DMs can inherit post context (see messageProcessor). */
         contentId: string;
+        /** This reply's tool round consumed the commenter's phone as an identity
+         *  claim (see isIdentityVerificationTurn) — forwarded to lead capture so
+         *  an order-tracking commenter is not filed as a prospect. Absent on the
+         *  post_reply path, which runs no tools. */
+        identityVerificationTurn?: boolean;
         needsAttention?: boolean;
         flagReason?: string;
         flagMeta?: import('@jawab24/shared').FlagMeta | null;
@@ -1284,6 +1294,7 @@ export class CommentProcessor {
             messageText: commentMessage,
             postMessage: opts.postMessage,
             replyText,
+            identityVerificationTurn: opts.identityVerificationTurn,
         }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
         // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
