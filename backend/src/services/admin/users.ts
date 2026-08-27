@@ -535,6 +535,12 @@ class AdminUsersService {
                     .select({
                         pageId: kbChunks.pageId,
                         maxVersion: sql<number>`max(${kbChunks.kbVersion})::int`,
+                        // Product chunks at ANY version — the page's CAPABILITY to use
+                        // retrieval, which is what decides whether a stale index costs it
+                        // anything. Must not be read off the live generation: that count is
+                        // 0 precisely when the pointer is dead, i.e. exactly when the page is
+                        // broken (see onRetrievalPath below).
+                        productChunksAnyVersion: sql<number>`count(*) FILTER (WHERE ${kbChunks.type} = 'product')::int`,
                     })
                     .from(kbChunks)
                     .where(inArray(kbChunks.pageId, displayPageIds))
@@ -591,8 +597,10 @@ class AdminUsersService {
             gapsByPage.set(r.pageId, r.count);
         }
         const newestChunkByPage = new Map<string, number>();
+        const productChunksAnyByPage = new Map<string, number>();
         for (const r of kbNewestChunkRows) {
             newestChunkByPage.set(r.pageId, r.maxVersion);
+            productChunksAnyByPage.set(r.pageId, r.productChunksAnyVersion);
         }
         const catalogByPage = new Map<string, number>();
         for (const r of catalogCountRows) {
@@ -608,7 +616,7 @@ class AdminUsersService {
         const pagesPayload = userPages.map(p => {
             const {
                 kbLength, kbActiveVersion, kbUpdatedAt, businessProfile,
-                ecommerceStoreId: _ecommerceStoreId, workspaceId: _workspaceId, ...rest
+                ecommerceStoreId, workspaceId: _workspaceId, ...rest
             } = p;
             const c = chunksByPage.get(p.id);
             const facts = factsByPage.get(p.id);
@@ -644,15 +652,20 @@ class AdminUsersService {
                         && newestChunkVersion !== null
                         && kbActiveVersion !== null
                         && newestChunkVersion < kbActiveVersion,
-                    // Whether a stale chunk set actually costs this page anything.
-                    // Mirrors resolveKnowledge's gate as it is TODAY: retrieval runs only
-                    // where the live generation holds PRODUCT chunks (D-106). It used to
-                    // read `store || catalogItems > 0`, which over-reported after the gate
-                    // was narrowed — a merchant-typed catalog row is prompt-injected and
-                    // never chunked (D-004), so such a page reads no chunk and a stale
-                    // index costs it nothing. Flagging it anyway sends support to fix
-                    // bookkeeping that reaches no customer, the same conflation D-088 fixed.
-                    onRetrievalPath: (c?.byType?.product ?? 0) > 0,
+                    // Whether a stale chunk set actually costs this page anything — a
+                    // CAPABILITY question, deliberately not "can we read chunks right now".
+                    //
+                    // It used to read `store || catalogItems > 0`, which over-reported once
+                    // the reply gate was narrowed: a merchant-typed catalog row is
+                    // prompt-injected and never chunked (D-004), so such a page reads no
+                    // chunk and a stale index costs it nothing (the D-088 conflation).
+                    // Reading the LIVE generation instead was worse in the opposite
+                    // direction — that count is 0 exactly when the pointer is dead, so a
+                    // store page with a broken index would suppress its own
+                    // `kb_chunks_stale` flag and degrade its product answers in silence.
+                    // A store's products are chunked on every sync, and stored product
+                    // chunks prove the page uses them, so either is sufficient.
+                    onRetrievalPath: !!ecommerceStoreId || (productChunksAnyByPage.get(p.id) ?? 0) > 0,
                     // The one honest answer to "does the AI have anything to
                     // answer from?" — false only when EVERY store is empty.
                     // Derived by the same function the health flags use, so the

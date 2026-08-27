@@ -848,8 +848,23 @@ export class ReplyGenerator {
         // chunk-filter its Business Info. `hasLiveProductChunks` narrows the gate to pages
         // that really do have product chunks in the live generation; it can only take pages
         // OFF this path, never add them, so a store keeps exactly the behaviour it has today.
-        const onEcommerceChunkPath = !!hasEcommerceChunks && !!pageId
-            && await hasLiveProductChunks(pageId, kbIndexedVersion);
+        //
+        // Fail-CLOSED on a DB error. This probe is the one thing here that can throw, and it
+        // sits above the try/catch whose job is "RAG failure → fall back to the static KB";
+        // the expression it replaced (`!!productCatalog`) could not throw at all. Neither
+        // generateForComment nor generateForMessage wraps resolveKnowledge, so letting a pool
+        // timeout escape would turn "reply grounded in the full KB" into "no reply" for every
+        // DM and comment on every page carrying a catalog block. Answering `false` degrades to
+        // the full-KB prompt — which this gate argues is what the query would have produced
+        // anyway — so the safe default costs nothing.
+        const onEcommerceChunkPath = hasEcommerceChunks
+            ? await hasLiveProductChunks(pageId, kbIndexedVersion).catch(err => {
+                this.logger.warn('[Generator] product-chunk probe failed — treating page as full-KB', {
+                    pageId, error: err instanceof Error ? err.message : String(err),
+                });
+                return false;
+            })
+            : false;
         if (!onEcommerceChunkPath && staticKB) {
             const ragRollbackCeiling = parseInt(process.env.KB_RAG_THRESHOLD_CHARS || '', 10);
             const forceRagForLargeKb = !Number.isNaN(ragRollbackCeiling) && staticKB.length > ragRollbackCeiling;
@@ -1016,6 +1031,13 @@ export class ReplyGenerator {
                 productCatalog,
                 channel,
                 kbActiveVersion,
+                // Must travel with the cache token, or the playground stops matching
+                // production: with a store linked, dispatchAiReply routes to the tool loop,
+                // which reads `kbIndexedVersion` to decide whether the product resolver's
+                // page-index stage runs (D-106). Omitted here it reads undefined → that
+                // stage is silently off in the eval and on for real customers, and the eval
+                // is what every reply-quality claim rests on (§19.2).
+                kbIndexedVersion,
                 queryEmbedding,
                 ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),

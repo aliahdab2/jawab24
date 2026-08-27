@@ -193,4 +193,35 @@ describe('D-106 — kb_indexed_version', () => {
         kb = detail!.pages.find((p: { id: string }) => p.id === page.id)!.kb;
         expect(kb.onRetrievalPath).toBe(true);
     });
+
+    it('embedding reuse survives a KB save, when the pointer is NULL (real DB)', async () => {
+        // The dominant ingestion trigger is `updatePage`, which clears kb_indexed_version and
+        // THEN fires the ingest — so keying reuse on either pointer re-embeds every chunk on
+        // the page, including a store's whole catalogue. The reuse source must come from
+        // kb_chunks. A unit test cannot see this: its db is mocked, so the SQL is never run.
+        const page = await createTestPage(userId, { workspaceId, knowledgeBase: KB, kbVersion: 1 });
+        const provider = new FakeEmbeddingProvider();
+        const svc = new KbIngestionService(provider, new PgVectorStore());
+
+        await svc.ingestFullPage(page.id, KB, [], 1, { resolveGaps: false });
+        const afterFirst = provider.calls;
+        expect(afterFirst).toBeGreaterThan(0);
+
+        // A prompt-only save moves the cache token; then a KB save clears the index pointer.
+        await pagesService.invalidatePageCaches(page.id);
+        await client_updateKbText(page.id);
+        expect((await pointers(page.id)).indexed).toBeNull();
+
+        // Same text ⇒ every chunk's embedding is reusable ⇒ the provider must not be called.
+        await svc.ingestFullPage(page.id, KB, [], 9, { resolveGaps: false });
+        expect(provider.calls).toBe(afterFirst);
+        expect((await pointers(page.id)).indexed).toBe(9);
+    });
 });
+
+/** Clear the index pointer the way updatePage does, without re-firing its ingestion. */
+async function client_updateKbText(pageId: string): Promise<void> {
+    await testDb.update(schema.pages)
+        .set({ kbIndexedVersion: null })
+        .where(eq(schema.pages.id, pageId));
+}

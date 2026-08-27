@@ -3044,12 +3044,37 @@ it (`onRetrievalPath`, and the console's chunk counts now join on `kb_indexed_ve
 console cannot flag a stale index on a page that reads none — the D-088 conflation in a new
 colour.
 
-**What this deliberately does NOT do.** The drift reconciler's predicate is left alone:
-fixing it would heal the 16 pages, and healing an index is what STARTS the chunk-filtering
-measured above. `reingestPage` does now pass `resolveGaps: false` — using the option Phase C
+**What this deliberately does NOT do — and a rationale corrected in review.** The drift
+reconciler's predicate is left alone. The reason first recorded here — "healing an index is
+what STARTS the chunk-filtering measured above" — was true of the pointer split ALONE and is
+false once this PR's gate change is included, as the review pointed out. None of the 16 pages
+has a store, so `fetchProductsForPage` returns `[]`, so a healed generation contains no
+`type='product'` chunks, so `hasLiveProductChunks` answers false and every one of them stays
+on the full-KB path. Healing them is harmless. The predicate is left for a follow-up on
+narrower grounds: it is a separate behaviour (a sweep that re-embeds 16 pages), it belongs
+with the `kb_indexed_version IS NULL AND kb_active_version >= kb_version` case that no
+reconciler covers today, and one change at a time is how this one stayed provably neutral.
+`reingestPage` does now pass `resolveGaps: false` — using the option Phase C
 already built — because a self-heal answers no customer question, and the sweep would
 otherwise have marked 156 open «سألها N عملاء» questions resolved across those 16 pages,
 including the 25 the resort's own admin card displays.
+
+**Found in review, fixed in the same PR** (all seven verified by running the suites, not by
+reading them): the product-chunk probe sat ABOVE the try/catch that degrades RAG failures to
+the static KB, so a pool timeout would have aborted reply generation instead — it now
+fail-closes to the full KB. Embedding reuse was keyed on `kb_indexed_version`, which
+`updatePage` clears immediately before firing the ingest, so the most common save re-embedded
+every chunk including a store's whole catalogue — the reuse source is now derived from
+`kb_chunks` (`max(kb_version) < newVersion`) and needs no pointer at all. The playground/eval
+request context omitted the field while production passed it, which would have run the product
+resolver's page-index stage for customers and not in the eval (§19.2). `admin/kb.ts` still
+counted chunks at the cache token, contradicting `getUserDetail` about the same page. And
+`onRetrievalPath` was derived from the readable generation, which is 0 exactly when a store
+page's pointer is dead — it now answers the CAPABILITY question (`store || product chunks at
+any version`), so the flag fires precisely in the case it used to suppress. Seven unit tests
+were also red on the first attempt: the verification table in the PR body had been measured on
+a subset that excluded both affected files, which is the "a sample is not a population" failure
+in §10.11.
 
 **The generalisable rule.** One column, one job. When a value is both a cache key and a data
 selector, every writer of the first silently rewrites the second — and the drift is invisible

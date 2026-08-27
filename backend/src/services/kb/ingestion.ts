@@ -205,17 +205,20 @@ export class KbIngestionService {
         const textsToEmbed = chunks.map(c => embedTextFor(c));
 
         // Resolve userId from pageId so the embedding cost is attributed to the merchant.
-        // Ingestion is rare (KB updates), so the extra round-trip is acceptable. The
-        // INDEXED version rides on the same read — it names the generation whose rows are
-        // actually in `kb_chunks`, which is what reuse needs. Reading the cache token
-        // (`kb_active_version`) instead would look up a generation that holds no rows
-        // whenever a prompt-injected write has bumped it, silently re-embedding every
-        // chunk at full cost — the same conflation D-106 split apart.
-        const [pageRow] = await db.select({ userId: pages.userId, kbIndexedVersion: pages.kbIndexedVersion })
+        // Ingestion is rare (KB updates), so the extra round-trip is acceptable.
+        //
+        // Reuse takes NO pointer (D-106 review). Both were wrong here: the cache token
+        // (`kb_active_version`) names a generation holding no rows whenever a prompt-injected
+        // write has bumped it, and `kb_indexed_version` is deliberately NULL on the most
+        // common trigger of all — `updatePage` clears it before firing this very ingest — so
+        // keying on either silently re-embedded every chunk on the page, including a store's
+        // whole catalogue, which is the exact cost this path exists to avoid. The previous
+        // COMPLETE generation is a property of `kb_chunks`, so it is read from there.
+        const [pageRow] = await db.select({ userId: pages.userId })
             .from(pages).where(eq(pages.id, pageId)).limit(1);
         const logCtx = pageRow?.userId ? { userId: pageRow.userId, pageId, pipeline: 'embedding_ingestion' as const } : undefined;
 
-        const reusable = await this.loadReusableEmbeddings(pageId, pageRow?.kbIndexedVersion ?? null);
+        const reusable = await this.loadReusableEmbeddings(pageId, kbVersion);
         const embeddings: Array<number[] | undefined> = textsToEmbed.map(text => reusable.get(text));
         const missIndexes = embeddings.flatMap((e, i) => (e ? [] : [i]));
 
@@ -246,20 +249,28 @@ export class KbIngestionService {
     }
 
     /**
-     * Embeddings of the page's active version, keyed by the exact text that was
-     * embedded — the same `embedTextFor` the caller uses, so a key hit means the
-     * vector is valid for the new chunk as-is. Empty when the page has no active
-     * version or the read fails (then everything is embedded afresh).
+     * Embeddings of the newest generation stored BELOW `newVersion`, keyed by the exact text
+     * that was embedded — the same `embedTextFor` the caller uses, so a key hit means the
+     * vector is valid for the new chunk as-is. Empty when the page has no earlier generation
+     * or the read fails (then everything is embedded afresh).
+     *
+     * Deliberately derived from `kb_chunks` rather than from any pointer on `pages`: the
+     * question "which stored generation can I reuse?" is answered by the rows themselves, and
+     * every pointer answer got it wrong in at least one real case (see embedChunks).
      */
-    private async loadReusableEmbeddings(pageId: string, activeVersion: number | null): Promise<Map<string, number[]>> {
+    private async loadReusableEmbeddings(pageId: string, newVersion: number): Promise<Map<string, number[]>> {
         const reusable = new Map<string, number[]>();
-        if (activeVersion === null) return reusable;
 
         try {
             const result = await db.execute(sql`
                 SELECT title, content_normalized, embedding::text AS embedding
                 FROM kb_chunks
-                WHERE page_id = ${pageId} AND kb_version = ${activeVersion} AND embedding IS NOT NULL
+                WHERE page_id = ${pageId}
+                  AND embedding IS NOT NULL
+                  AND kb_version = (
+                      SELECT max(kb_version) FROM kb_chunks
+                      WHERE page_id = ${pageId} AND kb_version < ${newVersion}
+                  )
             `);
             type Row = { title: string | null; content_normalized: string; embedding: string };
             const rows = (result as unknown as { rows?: Row[] }).rows ?? (result as unknown as Row[]);
@@ -272,7 +283,7 @@ export class KbIngestionService {
             }
         } catch (error) {
             this.logger.warn('Embedding reuse lookup failed — embedding every chunk', {
-                pageId, activeVersion, error: error instanceof Error ? error.message : String(error),
+                pageId, newVersion, error: error instanceof Error ? error.message : String(error),
             });
         }
 
