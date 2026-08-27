@@ -224,35 +224,63 @@ export interface ShipmentInfoFull extends ShipmentInfo {
 }
 
 /**
- * The tools that consume a phone number the customer typed as an IDENTITY CLAIM,
- * not as a contact detail: the two Phase-2 verifiers and the D-101 one-call
- * lookup. A turn that executed any of them answered "prove the order is yours" —
- * the number in it belongs to an order the customer already placed.
- *
- * Lead capture reads this to stay out of that turn (see `maybeCaptureLead`):
- * someone verifying an existing order is not a prospect, and recording them as
- * one puts an existing buyer in the merchant's "potential customers" list with a
- * new-lead push behind it. `lookup_order` / `track_shipment` are deliberately
- * ABSENT — Phase 1 carries only an order number, so a phone in that same message
- * was volunteered for contact and must still become a lead.
+ * Phase-2 verifiers. Both are reachable only AFTER a Phase-1 lookup found a real
+ * order, so the customer already supplied an order number: whatever the phone
+ * they then type turns out to be, it was offered to prove ownership of THAT
+ * order, never as a contact line. Suppression here ignores the outcome — a wrong
+ * number is still an ownership claim.
  */
-export const IDENTITY_VERIFICATION_TOOLS: readonly EcommerceToolName[] = [
+const PHASE_TWO_VERIFIERS: readonly EcommerceToolName[] = [
     'verify_and_get_order',
     'verify_and_get_shipment',
-    'find_order_by_phone',
+];
+
+/**
+ * The D-101 one-call lookup. Unlike the verifiers it carries NO prior evidence —
+ * the model may call it on any message, so a customer who typed «اسمي أحمد ورقمي
+ * 05…» purely to be contacted can trigger one. A failed call therefore proves
+ * nothing (`order_not_found` deliberately conflates "no such phone" with "the
+ * name does not match"), and treating that as an identity claim would silently
+ * drop a real lead. Only a SUCCESSFUL match — an order that exists under that
+ * phone AND that name — makes the sender a proven buyer.
+ */
+const PHONE_LOOKUP_TOOL: EcommerceToolName = 'find_order_by_phone';
+
+/**
+ * The tools that can consume a phone the customer typed as an IDENTITY CLAIM
+ * rather than as a contact detail.
+ *
+ * Lead capture reads this to stay out of such a turn (see `maybeCaptureLead`):
+ * someone verifying an order they already placed is not a prospect, and
+ * recording them as one puts an existing buyer in the merchant's "potential
+ * customers" list with a new-lead push behind it. `lookup_order` /
+ * `track_shipment` are deliberately ABSENT — Phase 1 carries only an order
+ * number, so a phone in that same message was volunteered for contact and must
+ * still become a lead.
+ */
+export const IDENTITY_VERIFICATION_TOOLS: readonly EcommerceToolName[] = [
+    ...PHASE_TWO_VERIFIERS,
+    PHONE_LOOKUP_TOOL,
 ];
 
 /**
  * Did this reply's tool round consume the customer's phone as an identity claim?
  *
  * Reads the executed tool names, so it is same-turn and cannot mistake a phone
- * typed for any other reason. Outcome is deliberately ignored: a FAILED
- * verification (wrong number) still means the number was submitted to prove
- * ownership of an order, never as a lead's contact line.
+ * typed for any other reason. The two families are judged differently on purpose
+ * — see PHASE_TWO_VERIFIERS (outcome ignored) and PHONE_LOOKUP_TOOL (success
+ * only). Erring toward capture on a failed phone lookup is deliberate: losing a
+ * real lead is the worse of the two mistakes.
+ *
+ * The unit is the TURN, not the message: a burst of unreplied messages is
+ * consolidated into one reply, so every phone in that burst is covered.
  */
 export function isIdentityVerificationTurn(
-    toolOutcomes?: readonly { name: string }[],
+    toolOutcomes?: readonly { name: string; outcome?: string }[],
 ): boolean {
     if (!toolOutcomes?.length) return false;
-    return toolOutcomes.some(o => (IDENTITY_VERIFICATION_TOOLS as readonly string[]).includes(o.name));
+    return toolOutcomes.some(o =>
+        (PHASE_TWO_VERIFIERS as readonly string[]).includes(o.name) ||
+        (o.name === PHONE_LOOKUP_TOOL && o.outcome === 'success'),
+    );
 }

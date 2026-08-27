@@ -2961,15 +2961,25 @@ and passed to `maybeCaptureLead` as `identityVerificationTurn`. Such a turn is r
 writes `extractedData` only — never the phone, the status, or the follow-up flags), and
 `metrics:lead:suppressed:order_verification` counts every suppression.
 
-Three boundaries are deliberate. (a) **Phase 1 is excluded**: `lookup_order` / `track_shipment`
+Four boundaries are deliberate. (a) **Phase 1 is excluded**: `lookup_order` / `track_shipment`
 carry only an order number, so a phone in that same message was volunteered for contact and
-must still capture. (b) **The outcome is ignored**: a FAILED verification still means the number
-was offered as proof of ownership. (c) **Only NEW leads are suppressed** — the prospect who went
-on to buy keeps the card the merchant is working.
+must still capture. (b) **The two families are judged differently.** For the Phase-2 verifiers
+the outcome is ignored — they are reachable only after Phase 1 found a real order, so a FAILED
+verification is still an ownership claim about a known order. `find_order_by_phone` counts
+**only on `success`**: it is callable on any message, so a customer who typed «اسمي أحمد ورقمي
+05…» purely to be contacted can trigger one, and `order_not_found` deliberately conflates "no
+such phone" with "the name does not match" — suppressing on that would silently drop a real
+lead, which is the worse of the two mistakes. (c) **Only NEW leads are suppressed** — the
+prospect who went on to buy keeps the card the merchant is working. (d) **The unit is the
+TURN, not the message**: a burst of unreplied messages is consolidated into one reply, so every
+phone in that burst is covered.
 
 **Consequences.** Nothing is lost for revenue attribution: orders reach us from the platform's
 own webhooks, not from this message, so the Lead → Outcome matching keeps its input. The known
-cost is a customer who verifies an order and states fresh purchase intent **in the same
-message** — no card is created from that turn; the counter above is what makes that bound
-measurable against real traffic instead of re-argued. Never "fix" this by matching on reply
-wording: the tool name is the only signal that cannot mistake a phone typed for another reason.
+cost is a customer who verifies an order and states fresh purchase intent **in the same turn**
+— and per (d) a turn can be several consolidated messages, so a number volunteered in an
+earlier unreplied message of the same burst is covered too. No card is created from that turn;
+the counter above, plus an `info` log carrying `pageId`/`senderId` (the counter is fleet-global
+and could otherwise never answer "which merchant?"), is what makes that bound measurable
+against real traffic instead of re-argued. Never "fix" this by matching on reply wording: the
+tool name is the only signal that cannot mistake a phone typed for another reason.

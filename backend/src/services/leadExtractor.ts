@@ -520,6 +520,14 @@ class LeadExtractorService {
         // new-lead / re-engaged alert fires.
         if (params.identityVerificationTurn) {
             recordLeadSuppressed('order_verification');
+            // The counter is fleet-global, so it can say THAT capture was skipped
+            // but never for whom. A merchant reporting "leads stopped appearing"
+            // needs the page and sender, or this rule is untraceable from the
+            // outside — the one log line is the difference between a five-minute
+            // diagnosis and a rewrite of the investigation.
+            this.logger.info('[leadExtractor] Lead capture skipped: order-verification turn', {
+                pageId, senderId, sourceType,
+            });
             await this.maybeReextractLead(params);
             return;
         }

@@ -219,6 +219,33 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         captureSpy.mockRestore();
     });
 
+    it('forwards it on the HELD path too — a withheld reply must not resurrect the lead', async () => {
+        // Same blind spot as the DM pipeline: 8d returns before the shared capture
+        // in sendAndFinalize and calls maybeCaptureLead itself.
+        await workspaceSettingsService.updateSettings(workspaceId, { holdLowConfidence: true });
+        const captureSpy = vi.spyOn(leadExtractorService, 'maybeCaptureLead').mockResolvedValue(undefined);
+        mockGenerateForComment.mockResolvedValueOnce({
+            replyText: 'طلبك رقم 73285179 تم شحنه.',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+            confidence: 'low',
+            toolOutcomes: [{ name: 'verify_and_get_order', outcome: 'success' }],
+        });
+
+        const adapter = createMockAdapter(platformPage);
+        await processor.processComment(
+            adapter, facebookPageId, 'post-fb-verify-held', 'comment-fb-verify-held',
+            'اسمي أحمد ورقمي 0966554433', fromId, fromName,
+        );
+
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(captureSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ identityVerificationTurn: true }),
+        );
+        captureSpy.mockRestore();
+    });
+
     // =========================================================
     // 1. Happy path: new comment → stored → replied
     // =========================================================
