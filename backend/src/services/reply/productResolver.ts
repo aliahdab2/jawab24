@@ -76,7 +76,9 @@ export interface ResolveProductInput {
     storeId: string;
     /** The linked page whose product index is scanned. Without it only the by-id path and the title fallback run. */
     pageId?: string | null;
-    kbActiveVersion?: number | null;
+    /** The chunk generation to scan — `pages.kb_indexed_version` (D-106), NOT the
+     *  cache token. Absent/NULL = no live index, so the semantic stage is skipped. */
+    kbIndexedVersion?: number | null;
     /** Model-supplied id — validated, never trusted. */
     productId?: string | null;
     /** The customer's wording (or the model's paraphrase of it). */
@@ -130,8 +132,8 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
     const normalizedQuery = normalizeArabic(rawName);
 
     // 2. The page's product index (trigram first, then semantic).
-    if (input.pageId && input.kbActiveVersion) {
-        let hits = await retrieveProducts(input.pageId, input.kbActiveVersion, normalizedQuery, input.queryEmbedding ?? null);
+    if (input.pageId && input.kbIndexedVersion) {
+        let hits = await retrieveProducts(input.pageId, input.kbIndexedVersion, normalizedQuery, input.queryEmbedding ?? null);
 
         if (hits.length > 0) {
             const lexical = decideTrigram(hits);
@@ -149,7 +151,7 @@ export async function resolveProduct(input: ResolveProductInput): Promise<Produc
                 const embedded = await embedQuery(normalizedQuery, input.userId ?? undefined, log);
                 if (embedded) {
                     recordResolverOutcome('embedded');
-                    hits = await retrieveProducts(input.pageId, input.kbActiveVersion, normalizedQuery, embedded);
+                    hits = await retrieveProducts(input.pageId, input.kbIndexedVersion, normalizedQuery, embedded);
                 }
             }
 

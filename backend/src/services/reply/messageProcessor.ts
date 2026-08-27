@@ -719,6 +719,7 @@ export class MessageProcessor {
                         storePolicies,
                         productCatalog,
                         kbActiveVersion: page.kbActiveVersion,
+                        kbIndexedVersion: page.kbIndexedVersion,
                         pageId: page.id,
                         postMessage: originPostMessage,
                         senderId,

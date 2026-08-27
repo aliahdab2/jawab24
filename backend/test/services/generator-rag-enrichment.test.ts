@@ -207,7 +207,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             ]));
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم سعره؟', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم سعره؟', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -220,7 +220,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             mockGetConversationHistory.mockResolvedValue([]);
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'شوفي', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'شوفي', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -236,7 +236,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
 
             const longQuery = 'عندكم باقات للاشتراك الشهري وكم تكون التكلفة الإجمالية مع كل الخدمات والميزات المتوفرة لديكم';
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: longQuery, pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: longQuery, pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -256,7 +256,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             ]));
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'وين ألاقيكم', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'وين ألاقيكم', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -280,7 +280,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             ]));
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان اذا سمحت', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان اذا سمحت', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -303,7 +303,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             const postMessage = 'دورة الإسعافات الأولية بكلفة 25 ألف بالعملة القديمة. سجّل واحجز مقعدك.';
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم اشتراك الدورة', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1', postMessage },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم اشتراك الدورة', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1', postMessage },
                 true,
             );
 
@@ -318,7 +318,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             mockGetConversationHistory.mockResolvedValue([]);
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'مرحبا', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'مرحبا', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
@@ -334,7 +334,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             const postMessage = 'دورة المكياج، سعرها 25 ألف، يومين بالأسبوع';
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1', postMessage },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان', pageId: 'p-1', kbActiveVersion: 1, kbIndexedVersion: 1, senderId: 'sender-1', postMessage },
                 true,
             );
 

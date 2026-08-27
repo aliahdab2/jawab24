@@ -303,6 +303,18 @@ export const pages = pgTable('pages', {
     // KB versioning — kbVersion bumps on every KB change, kbActiveVersion set after ingestion completes
     kbVersion: integer('kb_version').default(1),
     kbActiveVersion: integer('kb_active_version').default(1),
+    // The chunk generation retrieval may read, written ONLY by ingestion (D-106).
+    //
+    // Split from kbActiveVersion because that column does two unrelated jobs: it is the
+    // reply-cache scope token (ai.ts buildCacheKey, semantic_cache invalidation) AND it
+    // used to be the chunk-generation selector. Every prompt-injected write bumps the
+    // token — business_profile, catalog_items, fact_collections, all via
+    // invalidatePageCaches — with no re-ingestion, which silently orphaned the whole
+    // chunk index: prod 2026-08-27 had 16 of 57 live pages with every chunk sitting at
+    // an older version than the pointer, so retrieval matched nothing forever.
+    // NULL = no live generation (never indexed, or the KB text changed and ingestion
+    // has not completed) → retrieval is skipped and the full KB text is used.
+    kbIndexedVersion: integer('kb_indexed_version'),
     kbUpdatedAt: timestamp('kb_updated_at'),
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),

@@ -291,6 +291,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             pageName: page.name || undefined,
             knowledgeBase: page.knowledgeBase || undefined,
             kbActiveVersion: page.kbActiveVersion,
+            kbIndexedVersion: page.kbIndexedVersion,
             postMessage: contentEntity.message || undefined,
             pageId: page.id,
         };

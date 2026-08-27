@@ -49,6 +49,8 @@ export interface CommentReplyContext {
     pageName?: string;
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
+    /** `pages.kb_indexed_version` — the chunk generation retrieval may read (D-106). */
+    kbIndexedVersion?: number | null;
     postId?: string;
     postMessage?: string;
     pageId: string;

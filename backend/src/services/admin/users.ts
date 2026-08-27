@@ -504,7 +504,11 @@ class AdminUsersService {
                     .from(kbChunks)
                     .innerJoin(pages, and(
                         eq(pages.id, kbChunks.pageId),
-                        eq(kbChunks.kbVersion, pages.kbActiveVersion),
+                        // The LIVE generation is kb_indexed_version (D-106) — the same value
+                        // retrieval filters by. Joining on the cache token instead counted
+                        // rows nobody could read: every prompt-injected write bumps it, so
+                        // the console reported 0 chunks for a full index (the D-088 class).
+                        eq(kbChunks.kbVersion, pages.kbIndexedVersion),
                     ))
                     .where(inArray(kbChunks.pageId, displayPageIds))
                     .groupBy(kbChunks.pageId, kbChunks.type)
@@ -604,7 +608,7 @@ class AdminUsersService {
         const pagesPayload = userPages.map(p => {
             const {
                 kbLength, kbActiveVersion, kbUpdatedAt, businessProfile,
-                ecommerceStoreId, workspaceId: _workspaceId, ...rest
+                ecommerceStoreId: _ecommerceStoreId, workspaceId: _workspaceId, ...rest
             } = p;
             const c = chunksByPage.get(p.id);
             const facts = factsByPage.get(p.id);
@@ -641,12 +645,14 @@ class AdminUsersService {
                         && kbActiveVersion !== null
                         && newestChunkVersion < kbActiveVersion,
                     // Whether a stale chunk set actually costs this page anything.
-                    // resolveKnowledge only retrieves for pages with a store OR
-                    // merchant catalog items; every other page is handed the full
-                    // KB text and never reads a chunk (D-050). On the retrieval
-                    // path an empty result still falls back to the full KB, so the
-                    // cost is a wasted embedding round-trip per reply, not silence.
-                    onRetrievalPath: !!ecommerceStoreId || catalogItemCount > 0,
+                    // Mirrors resolveKnowledge's gate as it is TODAY: retrieval runs only
+                    // where the live generation holds PRODUCT chunks (D-106). It used to
+                    // read `store || catalogItems > 0`, which over-reported after the gate
+                    // was narrowed — a merchant-typed catalog row is prompt-injected and
+                    // never chunked (D-004), so such a page reads no chunk and a stale
+                    // index costs it nothing. Flagging it anyway sends support to fix
+                    // bookkeeping that reaches no customer, the same conflation D-088 fixed.
+                    onRetrievalPath: (c?.byType?.product ?? 0) > 0,
                     // The one honest answer to "does the AI have anything to
                     // answer from?" — false only when EVERY store is empty.
                     // Derived by the same function the health flags use, so the

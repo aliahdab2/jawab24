@@ -15,6 +15,8 @@ export interface PlatformPage {
     knowledgeBase: string | null;
     /** Active KB version for RAG retrieval (null = no chunks ingested yet) */
     kbActiveVersion: number | null;
+    /** `pages.kb_indexed_version` — the chunk generation retrieval may read (D-106). */
+    kbIndexedVersion: number | null;
     /** Whether auto-reply is enabled for this platform on this page */
     autoReplyEnabled: boolean;
     /**

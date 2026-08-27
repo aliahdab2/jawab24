@@ -48,6 +48,7 @@ export function mapToPlatformPage(
         accessToken: string;
         knowledgeBase: string | null;
         kbActiveVersion: number | null;
+        kbIndexedVersion: number | null;
         ecommerceStoreId: string | null;
         businessProfile: unknown;
         brandVoiceNotesMulti?: Record<string, string> | null;
@@ -68,6 +69,7 @@ export function mapToPlatformPage(
         accessToken: page.accessToken,
         knowledgeBase: page.knowledgeBase,
         kbActiveVersion: page.kbActiveVersion ?? null,
+        kbIndexedVersion: page.kbIndexedVersion ?? null,
         autoReplyEnabled: overrides.autoReplyEnabled,
         autoReplyDisabledReason: overrides.autoReplyDisabledReason ?? null,
         platformAccountId: overrides.platformAccountId,

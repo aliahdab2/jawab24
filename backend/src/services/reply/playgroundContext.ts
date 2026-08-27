@@ -37,6 +37,7 @@ export const PLAYGROUND_PAGE_COLUMNS = {
     workspaceId: pages.workspaceId,
     knowledgeBase: pages.knowledgeBase,
     kbActiveVersion: pages.kbActiveVersion,
+    kbIndexedVersion: pages.kbIndexedVersion,
     ecommerceStoreId: pages.ecommerceStoreId,
     businessProfile: pages.businessProfile,
     brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
@@ -52,6 +53,7 @@ export interface PlaygroundPageData {
     workspaceId: string | null;
     knowledgeBase?: string | null;
     kbActiveVersion?: number | null;
+    kbIndexedVersion?: number | null;
     ecommerceStoreId?: string | null;
     /** Stage 2.6: needed to build the structured BUSINESS_INFO prompt block. */
     businessProfile?: unknown;
@@ -267,6 +269,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         renderTarget: playgroundRenderTarget(page),
         knowledgeBase: pageKB,
         kbActiveVersion: page.kbActiveVersion,
+        kbIndexedVersion: page.kbIndexedVersion,
         pageName: page.name ?? undefined,
         productCatalog,
         storePolicies,

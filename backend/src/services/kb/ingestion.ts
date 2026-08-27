@@ -15,9 +15,17 @@ import { noopLogger } from '../../types/logger';
  *
  * Version-based swap guarantees zero empty windows:
  * 1. New chunks are inserted with the new kbVersion
- * 2. kbActiveVersion is updated only after ALL chunks are stored
- * 3. Retrieval always filters by kbActiveVersion (previous complete set)
+ * 2. kbActiveVersion AND kbIndexedVersion are updated only after ALL chunks are stored
+ * 3. Retrieval always filters by kbIndexedVersion (previous complete set)
  * 4. Old version chunks are cleaned up separately
+ *
+ * INVARIANT (D-106): this file is the ONLY writer of `kbIndexedVersion` that sets it to a
+ * version — the single exception is `updatePage`, which clears it to NULL the moment the KB
+ * text changes so no reader can be served chunks built from text the merchant just edited.
+ * Never set it from a cache-invalidation path: `kbActiveVersion` is the cache token and is
+ * bumped by every prompt-injected write (business_profile, catalog_items, fact_collections),
+ * and letting those bumps move the retrieval filter is what orphaned 16 of 57 live pages'
+ * chunk indexes before this split.
  */
 export class KbIngestionService {
     private logger: Logger = noopLogger;
@@ -45,7 +53,7 @@ export class KbIngestionService {
             // too, which is what that method's doc promises. No gap resolution:
             // nothing was answered.
             await db.update(pages)
-                .set({ kbActiveVersion: kbVersion })
+                .set({ kbActiveVersion: kbVersion, kbIndexedVersion: kbVersion })
                 .where(eq(pages.id, pageId));
             this.logger.info('KB ingestion activated an empty version: no chunks from text', { pageId, kbVersion });
             return;
@@ -61,7 +69,7 @@ export class KbIngestionService {
 
         // 4. Activate the new version (atomic — retrieval now uses new chunks)
         await db.update(pages)
-            .set({ kbActiveVersion: kbVersion })
+            .set({ kbActiveVersion: kbVersion, kbIndexedVersion: kbVersion })
             .where(eq(pages.id, pageId));
 
         // 5. Resolve all existing KB gaps — the merchant just updated their KB,
@@ -125,7 +133,7 @@ export class KbIngestionService {
             // makes the deleted facts disappear. Nothing is stored, nothing is
             // embedded, and no gap is resolved (nothing was answered).
             await db.update(pages)
-                .set({ kbActiveVersion: kbVersion })
+                .set({ kbActiveVersion: kbVersion, kbIndexedVersion: kbVersion })
                 .where(eq(pages.id, pageId));
             this.logger.info('Full page ingestion activated an empty version: no chunks', { pageId, kbVersion });
             return;
@@ -141,7 +149,7 @@ export class KbIngestionService {
         await this.vectorStore.upsertChunks(pageId, chunksWithEmbeddings);
 
         await db.update(pages)
-            .set({ kbActiveVersion: kbVersion })
+            .set({ kbActiveVersion: kbVersion, kbIndexedVersion: kbVersion })
             .where(eq(pages.id, pageId));
 
         // Resolving gaps means "the merchant just answered the open customer
@@ -198,12 +206,16 @@ export class KbIngestionService {
 
         // Resolve userId from pageId so the embedding cost is attributed to the merchant.
         // Ingestion is rare (KB updates), so the extra round-trip is acceptable. The
-        // active version rides on the same read — it is the reuse source.
-        const [pageRow] = await db.select({ userId: pages.userId, kbActiveVersion: pages.kbActiveVersion })
+        // INDEXED version rides on the same read — it names the generation whose rows are
+        // actually in `kb_chunks`, which is what reuse needs. Reading the cache token
+        // (`kb_active_version`) instead would look up a generation that holds no rows
+        // whenever a prompt-injected write has bumped it, silently re-embedding every
+        // chunk at full cost — the same conflation D-106 split apart.
+        const [pageRow] = await db.select({ userId: pages.userId, kbIndexedVersion: pages.kbIndexedVersion })
             .from(pages).where(eq(pages.id, pageId)).limit(1);
         const logCtx = pageRow?.userId ? { userId: pageRow.userId, pageId, pipeline: 'embedding_ingestion' as const } : undefined;
 
-        const reusable = await this.loadReusableEmbeddings(pageId, pageRow?.kbActiveVersion ?? null);
+        const reusable = await this.loadReusableEmbeddings(pageId, pageRow?.kbIndexedVersion ?? null);
         const embeddings: Array<number[] | undefined> = textsToEmbed.map(text => reusable.get(text));
         const missIndexes = embeddings.flatMap((e, i) => (e ? [] : [i]));
 

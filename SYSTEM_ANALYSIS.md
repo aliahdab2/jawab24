@@ -1327,7 +1327,9 @@ while that cache key is `kbVersion`-scoped.
 │  ┌──────────────────────────────────────┐                      │
 │  │  VERSION ACTIVATION                  │                      │
 │  │  kbVersion bumped                    │                      │
-│  │  kbActiveVersion set AFTER all       │                      │
+│  │  kbActiveVersion (cache token) AND   │                      │
+│  │  kbIndexedVersion (what retrieval    │                      │
+│  │  filters by — D-106) set AFTER all   │                      │
 │  │  chunks stored (atomic, no gaps)     │                      │
 │  └──────────────────────────────────────┘                      │
 │                                                                │

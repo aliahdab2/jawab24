@@ -84,7 +84,7 @@ export class PgVectorStore implements VectorStore {
         pageId: string,
         queryVector: number[],
         topK: number,
-        kbActiveVersion: number,
+        kbIndexedVersion: number,
     ): Promise<ScoredChunk[]> {
         validateVector(queryVector, EMBEDDING_DIMENSIONS);
         const vectorStr = `[${queryVector.join(',')}]`;
@@ -101,7 +101,7 @@ export class PgVectorStore implements VectorStore {
                 1 - (embedding <=> ${vectorStr}::vector) as vec_score
             FROM kb_chunks
             WHERE page_id = ${pageId}
-              AND kb_version = ${kbActiveVersion}
+              AND kb_version = ${kbIndexedVersion}
               AND embedding IS NOT NULL
               AND (valid_until IS NULL OR valid_until > NOW())
               AND source_tier < 5

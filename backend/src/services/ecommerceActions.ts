@@ -58,7 +58,7 @@ const STOCK_CACHE_TTL_SECONDS = STOCK_REFRESH_MIN * 60;
 /** What the tool loop knows about the reply it is serving — lets the resolver reuse its work. */
 export interface ToolExecutionContext {
     pageId?: string | null;
-    kbActiveVersion?: number | null;
+    kbIndexedVersion?: number | null;
     /** The customer's message's own embedding — never an enriched (history-laden) one; see ecommerceToolLoop. */
     queryEmbedding?: number[] | null;
     userId?: string | null;
@@ -633,7 +633,7 @@ async function executeInventoryCheck(
     const resolution = await resolveProduct({
         storeId: store.id,
         pageId: ctx.pageId,
-        kbActiveVersion: ctx.kbActiveVersion,
+        kbIndexedVersion: ctx.kbIndexedVersion,
         productId,
         productName,
         queryEmbedding: ctx.queryEmbedding,
