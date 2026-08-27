@@ -552,12 +552,12 @@ describe('executeToolCall — check_inventory', () => {
 
     it('hands the resolver the sanitized id + name AND the reply context (page, version, embedding, user)', async () => {
         mockResolveProduct.mockResolvedValue({ kind: 'resolved', via: 'id', product: productRow() });
-        const ctx = { pageId: 'page-1', kbActiveVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1' };
+        const ctx = { pageId: 'page-1', kbIndexedVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1' };
 
         await executeToolCall(storeId, { name: 'check_inventory', arguments: { product_id: ' zid-42 ', product_name: 'نظارة <b>' } }, ctx);
 
         expect(mockResolveProduct).toHaveBeenCalledWith(expect.objectContaining({
-            storeId, productId: 'zid-42', productName: 'نظارة b', pageId: 'page-1', kbActiveVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1',
+            storeId, productId: 'zid-42', productName: 'نظارة b', pageId: 'page-1', kbIndexedVersion: 7, queryEmbedding: [0.1, 0.2], userId: 'user-1',
         }));
     });
 

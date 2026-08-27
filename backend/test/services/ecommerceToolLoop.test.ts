@@ -290,20 +290,20 @@ describe('generateReplyWithTools', () => {
         const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
         const request = {
             ...baseRequest,
-            context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1' },
+            context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbIndexedVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1' },
         };
 
         await generateReplyWithTools(request, logger);
 
         expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'check_inventory' }), {
-            pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1', logger,
+            pageId: 'page-1', kbIndexedVersion: 3, queryEmbedding: [0.1, 0.2], userId: 'user-1', logger,
         });
     });
 
     it('withholds an ENRICHED embedding — the resolver was calibrated on the asked phrase, not on recent history', async () => {
         mockRagRetrievalMode.mockReturnValue('enriched');
         primeOneInventoryRound();
-        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2] } };
+        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1', pageId: 'page-1', kbIndexedVersion: 3, queryEmbedding: [0.1, 0.2] } };
 
         await generateReplyWithTools(request);
 

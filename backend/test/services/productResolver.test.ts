@@ -128,7 +128,7 @@ describe('sanitizeProductId', () => {
 });
 
 describe('resolveProduct — flow', () => {
-    const base = { storeId: 'store-1', pageId: 'page-1', kbActiveVersion: 5 };
+    const base = { storeId: 'store-1', pageId: 'page-1', kbIndexedVersion: 5 };
 
     it('by id: a valid id resolves from the ROW without touching the index', async () => {
         const r = await resolveProduct({ ...base, productId: 'sony', productName: 'كاميرا' });

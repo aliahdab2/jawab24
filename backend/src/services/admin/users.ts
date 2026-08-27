@@ -535,12 +535,6 @@ class AdminUsersService {
                     .select({
                         pageId: kbChunks.pageId,
                         maxVersion: sql<number>`max(${kbChunks.kbVersion})::int`,
-                        // Product chunks at ANY version — the page's CAPABILITY to use
-                        // retrieval, which is what decides whether a stale index costs it
-                        // anything. Must not be read off the live generation: that count is
-                        // 0 precisely when the pointer is dead, i.e. exactly when the page is
-                        // broken (see onRetrievalPath below).
-                        productChunksAnyVersion: sql<number>`count(*) FILTER (WHERE ${kbChunks.type} = 'product')::int`,
                     })
                     .from(kbChunks)
                     .where(inArray(kbChunks.pageId, displayPageIds))
@@ -597,10 +591,8 @@ class AdminUsersService {
             gapsByPage.set(r.pageId, r.count);
         }
         const newestChunkByPage = new Map<string, number>();
-        const productChunksAnyByPage = new Map<string, number>();
         for (const r of kbNewestChunkRows) {
             newestChunkByPage.set(r.pageId, r.maxVersion);
-            productChunksAnyByPage.set(r.pageId, r.productChunksAnyVersion);
         }
         const catalogByPage = new Map<string, number>();
         for (const r of catalogCountRows) {
@@ -663,9 +655,14 @@ class AdminUsersService {
                     // direction — that count is 0 exactly when the pointer is dead, so a
                     // store page with a broken index would suppress its own
                     // `kb_chunks_stale` flag and degrade its product answers in silence.
-                    // A store's products are chunked on every sync, and stored product
-                    // chunks prove the page uses them, so either is sufficient.
-                    onRetrievalPath: !!ecommerceStoreId || (productChunksAnyByPage.get(p.id) ?? 0) > 0,
+                    // A store's products are chunked on every sync, so a linked store is
+                    // sufficient on its own — that is what keeps the flag firing for the case
+                    // that matters. The second half stays on the LIVE generation rather than
+                    // "any version": a page that was store-linked and later unlinked keeps
+                    // orphan product chunks (cleanupOldVersions has no production caller), and
+                    // counting those would re-create the same over-report in a third place —
+                    // a re-ingest deletes them, since fetchProductsForPage returns [].
+                    onRetrievalPath: !!ecommerceStoreId || (c?.byType?.product ?? 0) > 0,
                     // The one honest answer to "does the AI have anything to
                     // answer from?" — false only when EVERY store is empty.
                     // Derived by the same function the health flags use, so the
