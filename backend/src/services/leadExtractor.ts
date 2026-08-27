@@ -143,6 +143,20 @@ export interface MaybeCaptureLeadParams {
      * "information source" and doesn't work leads. Absent = 'sales'.
      */
     replyMode?: string;
+    /**
+     * This turn's tool round consumed the customer's phone as an IDENTITY CLAIM
+     * for an order they already placed (`verify_and_get_*` / `find_order_by_phone`
+     * — see `isIdentityVerificationTurn`). Resolved by the caller, which is the
+     * only place that holds the reply's tool outcomes.
+     *
+     * When true no NEW lead is created from this message: a customer proving an
+     * order is theirs is not a prospect, and capturing them would file an existing
+     * buyer under "potential customers" with a new-lead push behind it. The turn
+     * still reaches `maybeReextractLead`, so a lead that ALREADY exists for this
+     * sender keeps getting its card enriched — that path writes only
+     * `extractedData`, never the phone, the status, or the follow-up flags.
+     */
+    identityVerificationTurn?: boolean;
 }
 
 export interface LeadsPage {
@@ -335,6 +349,26 @@ function priorBusinessTurns(history: Array<{ role: string; content: string }>): 
 }
 
 /**
+ * Fire-and-forget diagnostic counter: `metrics:lead:suppressed:{reason}` — one
+ * increment per message that carried a phone the capture path deliberately did
+ * NOT turn into a lead. Same idiom as `metrics:ecom:tool:*` (§13c): never
+ * blocks, never fails a capture.
+ *
+ * Why it exists: the suppression is a product judgement ("an order-tracking
+ * customer is not a prospect") taken with no e-commerce merchant live to measure
+ * — so the counter is what makes it reviewable later against real traffic
+ * instead of re-argued from intuition.
+ */
+function recordLeadSuppressed(reason: string): void {
+    try {
+        redis.incr(`metrics:lead:suppressed:${reason}`).catch(() => { });
+    } catch {
+        // A client that throws synchronously (disconnected, or a partial mock)
+        // must not touch lead capture.
+    }
+}
+
+/**
  * Runtime normalization for a stored extracted_data value. Legacy rows are
  * double-encoded (a jsonb string containing JSON) — Drizzle's jsonb read path
  * usually unwraps that, but this stays defensive so the merge can never crash
@@ -475,6 +509,17 @@ class LeadExtractorService {
         // arrived with a stale size / missing recipient name). Fire-and-forget,
         // same contract as the caller.
         if (extractPhones(gateText, phoneOpts).length === 0) {
+            await this.maybeReextractLead(params);
+            return;
+        }
+
+        // The phone in this message answered "prove the order is yours", so it is
+        // not a lead's contact line — it is an order the merchant already has.
+        // Re-extraction still runs: an existing lead (a prospect who went on to
+        // buy) keeps its card current, while nothing new is created and no
+        // new-lead / re-engaged alert fires.
+        if (params.identityVerificationTurn) {
+            recordLeadSuppressed('order_verification');
             await this.maybeReextractLead(params);
             return;
         }

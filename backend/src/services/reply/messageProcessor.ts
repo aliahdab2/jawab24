@@ -27,7 +27,7 @@ import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import { instagramCredentialOf } from '../instagramCredential';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
-import { resolveEffectiveReplyMode, unwrapBusinessProfile, hasRoutableContactChannel } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn } from '@jawab24/shared';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { isPunctuationOnly } from '../../utils/commentText';
@@ -738,6 +738,11 @@ export class MessageProcessor {
             // Only replyText is reassigned below (fallback substitution); the rest are const.
             let replyText = generated.replyText;
             const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence, productCards, replyShortened } = generated;
+            // A phone the customer typed to prove an order is theirs is not a lead's
+            // contact line — see isIdentityVerificationTurn. Resolved once here
+            // because the tool outcomes exist only on this reply's result, and read
+            // by every lead-capture call site below (held, low-confidence, sent).
+            const identityVerificationTurn = isIdentityVerificationTurn(generated.toolOutcomes);
             lap('12-generateReply');
 
             // Capture the original AI-generated reply before any modifications (fallback substitution)
@@ -821,6 +826,7 @@ export class MessageProcessor {
                     senderName,
                     replyMode: effectiveReplyMode,
                     messageText: consolidatedText,
+                    identityVerificationTurn,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_self_identification');
                 return { success: true, messageId: platformMessageId };
@@ -853,6 +859,7 @@ export class MessageProcessor {
                     senderName,
                     replyMode: effectiveReplyMode,
                     messageText: consolidatedText,
+                    identityVerificationTurn,
                 }).catch(() => { /* errors captured inside maybeCaptureLead */ });
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, messageId: platformMessageId };
@@ -1083,6 +1090,7 @@ export class MessageProcessor {
                 senderName,
                 replyMode: effectiveReplyMode,
                 messageText: consolidatedText,
+                identityVerificationTurn,
             }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
             // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).

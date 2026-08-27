@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommentProcessor } from '../../src/services/reply/commentProcessor';
+import { leadExtractorService } from '../../src/services/leadExtractor';
 import { postsService } from '../../src/services/posts';
 import { commentsService } from '../../src/services/comments';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
@@ -187,6 +188,35 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
 
         // Ensure workspace settings exist with comments auto-reply ON
         await workspaceSettingsService.updateSettings(workspaceId, { commentsAutoReply: true });
+    });
+
+    // =========================================================
+    // Lead capture is told whether this turn verified an order
+    // =========================================================
+    // Comments run the same tool loop as DMs, so a commenter can answer an
+    // identity challenge too. The wire is what can only break here — the
+    // suppression itself is proven against the real DB in
+    // leadOrderVerification.test.ts (D-105).
+    it('forwards identityVerificationTurn=true when the reply verified an order', async () => {
+        const captureSpy = vi.spyOn(leadExtractorService, 'maybeCaptureLead').mockResolvedValue(undefined);
+        mockGenerateForComment.mockResolvedValueOnce({
+            replyText: 'طلبك رقم 73285179 تم شحنه.',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+            toolOutcomes: [{ name: 'verify_and_get_order', outcome: 'success' }],
+        });
+
+        const adapter = createMockAdapter(platformPage);
+        await processor.processComment(
+            adapter, facebookPageId, 'post-fb-verify-001', 'comment-fb-verify-001',
+            'اسمي أحمد ورقمي 0966554433', fromId, fromName,
+        );
+
+        expect(captureSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ identityVerificationTurn: true }),
+        );
+        captureSpy.mockRestore();
     });
 
     // =========================================================

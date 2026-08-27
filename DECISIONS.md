@@ -2939,3 +2939,37 @@ state; a misread trigger only costs a spurious verify. (b) Trusting `plan_name` 
 documented base-plan examples all show `plan_name: null`. (c) Activating unmapped trials on a
 guessed tier: the merchant's signup trial already entitles them locally, so fail-loud costs
 nothing while a guess grants wrong limits.
+
+## D-105 · A customer proving an order is theirs is not a lead: an identity-verification turn never creates one (2026-08-27)
+
+**Context.** Order tracking asks the customer to identify themselves — Phase 2 takes the name
+on the order or the phone used when ordering, and `find_order_by_phone` (D-101) REQUIRES phone
+AND name in one call. Lead capture reads only the message text, so that answer walked straight
+through the phone gate: a "potential customer" card for someone who had already bought, a
+`new_lead` push behind it, a `lead_reengaged` **urgent** alert if the merchant had already
+handled that lead, plus a slot of the 50/day extraction budget meant for real prospects. Found
+by the owner in testing, before any store merchant was live — prod carried 1 such lead in 30
+days for exactly that reason (Zid in review, Salla submitting), so the volume argument is
+"not yet", never "not real".
+
+**Ruling.** A turn whose tool round executed `verify_and_get_order`, `verify_and_get_shipment`
+or `find_order_by_phone` creates **no new lead**. The predicate is
+`isIdentityVerificationTurn(toolOutcomes)` in `packages/shared/src/ecommerce-tools.ts`, resolved
+by `messageProcessor`/`commentProcessor` — the only places holding the reply's tool outcomes —
+and passed to `maybeCaptureLead` as `identityVerificationTurn`. Such a turn is routed to
+`maybeReextractLead` instead, so a lead that ALREADY exists keeps its card enriched (that path
+writes `extractedData` only — never the phone, the status, or the follow-up flags), and
+`metrics:lead:suppressed:order_verification` counts every suppression.
+
+Three boundaries are deliberate. (a) **Phase 1 is excluded**: `lookup_order` / `track_shipment`
+carry only an order number, so a phone in that same message was volunteered for contact and
+must still capture. (b) **The outcome is ignored**: a FAILED verification still means the number
+was offered as proof of ownership. (c) **Only NEW leads are suppressed** — the prospect who went
+on to buy keeps the card the merchant is working.
+
+**Consequences.** Nothing is lost for revenue attribution: orders reach us from the platform's
+own webhooks, not from this message, so the Lead → Outcome matching keeps its input. The known
+cost is a customer who verifies an order and states fresh purchase intent **in the same
+message** — no card is created from that turn; the counter above is what makes that bound
+measurable against real traffic instead of re-argued. Never "fix" this by matching on reply
+wording: the tool name is the only signal that cannot mistake a phone typed for another reason.

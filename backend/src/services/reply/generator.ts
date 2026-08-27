@@ -384,6 +384,14 @@ export interface GenerateReplyResult {
      * message; deliberately never part of flagReason/needsAttention.
      */
     replyShortened?: boolean;
+    /**
+     * What each e-commerce tool call decided, in execution order — present only
+     * when a tool round ran. Read by the message/comment pipelines to tell an
+     * identity-verification turn from an ordinary one before lead capture
+     * (`isIdentityVerificationTurn`); the playground result carries the same
+     * field for the eval.
+     */
+    toolOutcomes?: ToolOutcome[];
 }
 
 export interface PlaygroundInput {
@@ -1144,6 +1152,7 @@ export class ReplyGenerator {
             confidence: aiResponse.confidence,
             ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
             ...(replyShortened ? { replyShortened: true } : {}),
+            ...(aiResponse.toolOutcomes ? { toolOutcomes: aiResponse.toolOutcomes } : {}),
         };
     }
 }

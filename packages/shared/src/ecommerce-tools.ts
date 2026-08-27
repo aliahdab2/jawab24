@@ -222,3 +222,37 @@ export interface ShipmentInfoFull extends ShipmentInfo {
     customerFirstName: string; // for server-side name comparison
     customerPhone?: string;    // for server-side phone comparison
 }
+
+/**
+ * The tools that consume a phone number the customer typed as an IDENTITY CLAIM,
+ * not as a contact detail: the two Phase-2 verifiers and the D-101 one-call
+ * lookup. A turn that executed any of them answered "prove the order is yours" —
+ * the number in it belongs to an order the customer already placed.
+ *
+ * Lead capture reads this to stay out of that turn (see `maybeCaptureLead`):
+ * someone verifying an existing order is not a prospect, and recording them as
+ * one puts an existing buyer in the merchant's "potential customers" list with a
+ * new-lead push behind it. `lookup_order` / `track_shipment` are deliberately
+ * ABSENT — Phase 1 carries only an order number, so a phone in that same message
+ * was volunteered for contact and must still become a lead.
+ */
+export const IDENTITY_VERIFICATION_TOOLS: readonly EcommerceToolName[] = [
+    'verify_and_get_order',
+    'verify_and_get_shipment',
+    'find_order_by_phone',
+];
+
+/**
+ * Did this reply's tool round consume the customer's phone as an identity claim?
+ *
+ * Reads the executed tool names, so it is same-turn and cannot mistake a phone
+ * typed for any other reason. Outcome is deliberately ignored: a FAILED
+ * verification (wrong number) still means the number was submitted to prove
+ * ownership of an order, never as a lead's contact line.
+ */
+export function isIdentityVerificationTurn(
+    toolOutcomes?: readonly { name: string }[],
+): boolean {
+    if (!toolOutcomes?.length) return false;
+    return toolOutcomes.some(o => (IDENTITY_VERIFICATION_TOOLS as readonly string[]).includes(o.name));
+}

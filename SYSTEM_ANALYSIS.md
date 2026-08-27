@@ -2776,6 +2776,9 @@ leadExtractorService.maybeCaptureLead() — fire-and-forget
         ↓
 Phone detection (extractPhoneFromText — handles Arabic-Indic ٠١٢٣٤٥٦٧٨٩)
         ↓
+Order-verification turn? (verify_and_get_* / find_order_by_phone ran this turn)
+        → the phone is an identity claim, not a contact line: no new lead, D-105
+        ↓
 Redis rate limit check (50 AI extractions/day per workspace)
         ↓
 OpenAI gpt-4.1-mini — extracts { phone, summary, fields[] }
