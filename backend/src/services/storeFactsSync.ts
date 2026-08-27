@@ -7,8 +7,8 @@
  * ORDERING CONTRACT (D-102): callers run this inside the platform `fullSync`
  * BEFORE `syncProducts`, so the sync's existing tail
  * (`replaceProductsAndRebuildSummary` → `invalidateCachesForStore`) performs
- * the semantic-cache purge + RAG re-ingest + atomic kbActiveVersion flip for
- * the same linked pages. This function itself writes `business_profile` +
+ * the semantic-cache purge + RAG re-ingest + atomic version flip (both
+ * kbActiveVersion and kbIndexedVersion, D-106) for the same linked pages. This function itself writes `business_profile` +
  * `business_profile_updated_at` ONLY — no version bumps (see the
  * kb_extract writer in pages.ts for why bumping here would orphan chunks).
  * Store-linked pages bypass the exact/semantic reply caches anyway
