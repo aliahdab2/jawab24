@@ -2202,3 +2202,108 @@ export const postSuggestions = pgTable('post_suggestions', {
         .on(table.pageId, table.suggestedFor)
         .where(sql`source = 'cron'`),
 }));
+
+/**
+ * Raw bytes column. `bytea` is not a first-class drizzle type; postgres.js hands
+ * back a Buffer/Uint8Array and accepts one on write, so the mapping is identity
+ * with the Uint8Array→Buffer narrowing callers expect.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+    dataType: () => 'bytea',
+    fromDriver: (v) => (Buffer.isBuffer(v) ? v : Buffer.from(v)),
+});
+
+// 40. Offline Payments — the manual (non-card) payment rail.
+//
+// Stripe cannot process a Syrian card (utils/sanctions.ts blocks SY before any
+// API call, and that block STAYS — this is a second rail beside it, not a hole
+// in it). A merchant in Syria transfers to our Sham Cash wallet and submits the
+// transfer reference here; support matches it against the wallet statement and
+// grants the plan through the existing admin manual-upgrade path.
+//
+// Named for the rail CLASS, not for Sham Cash: Libya's bank transfers already
+// go through support by hand and belong in this table the day they get a UI.
+//
+// Status lifecycle: 'pending_review' → 'approved' | 'rejected'. A row is a
+// RECORD OF A CLAIM, never an entitlement: approving it does not itself extend
+// a subscription — `adminSubscriptionsService.manualUpgrade` remains the single
+// grant choke point, so an electronic Sham Cash integration later changes only
+// WHO moves the status, not what a status means.
+export const offlinePayments = pgTable('offline_payments', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    // Which rail the money moved on. 'sham_cash' today.
+    rail: varchar('rail', { length: 32 }).notNull(),
+    // What the merchant intends to buy. A reference, not a snapshot of the plan
+    // name, so the reviewer grants the plan that still exists.
+    planId: uuid('plan_id').references(() => plans.id).notNull(),
+    billingInterval: varchar('billing_interval', { length: 5 }).notNull(), // 'month' | 'year'
+    // Price of record at submission time, resolved SERVER-side from the plan —
+    // never taken from the client. USD cents, matching every other price we hold.
+    amountCents: integer('amount_cents').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('usd'),
+    // As the merchant typed it — shown to the reviewer, who reads it against the
+    // wallet statement.
+    transferReference: varchar('transfer_reference', { length: 64 }).notNull(),
+    // Normalized form (case / spacing / Arabic-Indic digits folded) that the
+    // uniqueness constraint below sees. THE anti-replay key: without it the same
+    // transfer renews a subscription forever.
+    transferReferenceNormalized: varchar('transfer_reference_normalized', { length: 64 }).notNull(),
+    senderName: varchar('sender_name', { length: 120 }),
+    note: varchar('note', { length: 500 }),
+    status: varchar('status', { length: 16 }).notNull().default('pending_review'),
+    reviewNote: varchar('review_note', { length: 500 }),
+    reviewedByAdminUserId: uuid('reviewed_by_admin_user_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_offline_payments_user').on(table.userId, table.createdAt.desc()),
+    // The review queue's only read: by status, oldest first.
+    statusIdx: index('idx_offline_payments_status').on(table.status, table.createdAt),
+    // Anti-replay. Scoped by rail because two rails can legitimately issue the
+    // same reference string; scoped across ALL users on purpose — a reference is
+    // a claim on one real transfer, and a second account claiming it is exactly
+    // the abuse this prevents.
+    referenceUnique: uniqueIndex('uq_offline_payments_reference')
+        .on(table.rail, table.transferReferenceNormalized),
+    statusCheck: check(
+        'offline_payments_status_check',
+        sql`${table.status} IN ('pending_review', 'approved', 'rejected')`
+    ),
+    intervalCheck: check(
+        'offline_payments_interval_check',
+        sql`${table.billingInterval} IN ('month', 'year')`
+    ),
+    amountPositiveCheck: check(
+        'offline_payments_amount_positive',
+        sql`${table.amountCents} > 0`
+    ),
+}));
+
+// 40b. Offline Payment Receipts — the screenshot, in its OWN table.
+//
+// Two reasons it is not a column on offline_payments:
+//  1. Privacy. A transfer receipt is a financial document. `imageStorage` returns
+//     a PUBLIC url by design (see its header, and backend/docs/OBJECT_STORAGE.md
+//     §4 — the bucket is a public-type bucket), so a receipt cannot go there: it
+//     would sit one guessable URL away from anyone. Bytes live in Postgres, the
+//     most protected store we run, covered by the DB backups, and are served
+//     ONLY by the admin-authenticated receipt route.
+//  2. Weight. Split out, no query on the review queue can accidentally drag
+//     megabytes of image into memory — impossible rather than merely avoided.
+//
+// Volume makes this cheap and keeps it honest: a handful of manual payers a
+// month at ≤2 MB each. If the rail ever carries real volume, the answer is a
+// private bucket, not a bigger table.
+export const offlinePaymentReceipts = pgTable('offline_payment_receipts', {
+    // 1:1 with the claim, and cascades with it — deleting a claim must not
+    // strand its image.
+    offlinePaymentId: uuid('offline_payment_id')
+        .references(() => offlinePayments.id, { onDelete: 'cascade' })
+        .primaryKey(),
+    mimeType: varchar('mime_type', { length: 32 }).notNull(),
+    byteLength: integer('byte_length').notNull(),
+    bytes: bytea('bytes').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});

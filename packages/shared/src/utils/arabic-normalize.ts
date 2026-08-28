@@ -33,6 +33,29 @@ const ARABIC_DIGIT_MAP: Record<string, string> = {
 };
 const ARABIC_DIGITS_RE = /[\u0660-\u0669]/g;
 
+// Extended Arabic-Indic (Persian/Urdu keyboards): ۰۱۲۳۴۵۶۷۸۹ → 0123456789.
+// Merchants on those layouts type them into price and reference fields.
+const EXTENDED_ARABIC_DIGITS_RE = /[\u06F0-\u06F9]/g;
+
+/**
+ * Fold BOTH Arabic-Indic digit ranges to ASCII, and nothing else.
+ *
+ * The one definition — a reference or a price typed «١٢٣», «۱۲۳» and "123"
+ * must compare equal wherever we compare them, and three private copies of
+ * this mapping is how they stop doing that.
+ *
+ * NOTE: `normalizeArabic` below keeps its own basic-range fold as one step of a
+ * larger pipeline whose output is a cache/search key — widening it to the
+ * extended range would silently re-key existing KB chunks, so that call is
+ * deliberately left alone.
+ */
+export function foldArabicDigits(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(ARABIC_DIGITS_RE, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(EXTENDED_ARABIC_DIGITS_RE, (d) => String(d.charCodeAt(0) - 0x06F0));
+}
+
 /**
  * Normalize Arabic text for consistent storage, search, and comparison.
  *

@@ -15,6 +15,8 @@
  * dialect, and misreading one is a 1000× price quoted to a customer.
  */
 
+import { foldArabicDigits } from './utils/arabic-normalize';
+
 /** `ok: false` = the text cannot be read as a number; the caller decides
  *  whether that is a 400 or an inline message. `value: null` = no price at
  *  all («price on request»), which is a valid, non-error state. */
@@ -22,17 +24,13 @@ export type ParsedPrice =
     | { ok: true; value: number | null }
     | { ok: false };
 
-const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
-const EXTENDED_ARABIC_INDIC = '۰۱۲۳۴۵۶۷۸۹';
 
 export function parseMerchantPrice(raw: unknown): ParsedPrice {
     if (raw === null || raw === undefined || raw === '') return { ok: true, value: null };
     if (typeof raw === 'number') return Number.isFinite(raw) ? { ok: true, value: raw } : { ok: false };
     if (typeof raw !== 'string') return { ok: false };
 
-    let normalized = raw
-        .replace(/[٠-٩]/g, (d) => String(ARABIC_INDIC.indexOf(d)))
-        .replace(/[۰-۹]/g, (d) => String(EXTENDED_ARABIC_INDIC.indexOf(d)))
+    let normalized = foldArabicDigits(raw)
         .replace(/٫/g, '.')
         .trim();
 

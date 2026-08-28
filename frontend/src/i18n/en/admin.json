@@ -7,7 +7,8 @@
     "playground": "AI Playground",
     "waitlist": "Waitlist",
     "observability": "Observability",
-    "aiCost": "AI Cost"
+    "aiCost": "AI Cost",
+    "offlinePayments": "Sham Cash"
   },
   "aiCost": {
     "title": "AI Cost",
@@ -192,6 +193,7 @@
     "upgradeFormPaymentMethodsManual": "Manual",
     "upgradeFormPaymentMethodsBankTransfer": "Bank Transfer",
     "upgradeFormPaymentMethodsSyrianBank": "Syrian Bank",
+    "upgradeFormPaymentMethodsShamCash": "Sham Cash",
     "upgradeFormPaymentReference": "Payment Reference",
     "upgradeFormPaymentReferencePlaceholder": "e.g., Bank transfer ID",
     "upgradeFormNote": "Admin Note",
@@ -700,5 +702,29 @@
     "leadDigestModalTitle": "Lead digest email",
     "leadDigestModalLoading": "Loading email…",
     "leadDigestModalNoBody": "No email body stored for this row (older record or skipped before send)."
+  },
+  "offlinePayments": {
+    "title": "Sham Cash payments",
+    "subtitle": "Transfers merchants submitted for review.",
+    "grantNotice": "Approving records that you matched the transfer against the wallet statement. It does NOT open the account — grant the plan from the customer page.",
+    "filterPending": "Awaiting review",
+    "filterApproved": "Approved",
+    "filterRejected": "Rejected",
+    "filterAll": "All",
+    "statusPending": "Awaiting review",
+    "statusApproved": "Approved",
+    "statusRejected": "Rejected",
+    "empty": "Nothing here.",
+    "plan": "Plan",
+    "amount": "Amount",
+    "reference": "Transfer reference",
+    "sender": "Sender",
+    "yearly": "yearly",
+    "monthly": "monthly",
+    "viewReceipt": "View receipt",
+    "receiptAlt": "Transfer receipt submitted by the merchant",
+    "approve": "Approve",
+    "reject": "Reject",
+    "openCustomer": "Open customer"
   }
 }

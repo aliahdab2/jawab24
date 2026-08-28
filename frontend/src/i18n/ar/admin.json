@@ -7,7 +7,8 @@
     "playground": "ساحة التجريب",
     "waitlist": "قائمة الانتظار",
     "observability": "المراقبة",
-    "aiCost": "تكلفة الذكاء الاصطناعي"
+    "aiCost": "تكلفة الذكاء الاصطناعي",
+    "offlinePayments": "شام كاش"
   },
   "aiCost": {
     "title": "تكلفة الذكاء الاصطناعي",
@@ -192,6 +193,7 @@
     "upgradeFormPaymentMethodsManual": "يدوي",
     "upgradeFormPaymentMethodsBankTransfer": "تحويل بنكي",
     "upgradeFormPaymentMethodsSyrianBank": "بنك سوري",
+    "upgradeFormPaymentMethodsShamCash": "شام كاش",
     "upgradeFormPaymentReference": "مرجع الدفع",
     "upgradeFormPaymentReferencePlaceholder": "مثال: رقم التحويل البنكي",
     "upgradeFormNote": "ملاحظة المسؤول",
@@ -700,5 +702,29 @@
     "leadDigestModalTitle": "بريد ملخص العملاء",
     "leadDigestModalLoading": "جاري تحميل البريد…",
     "leadDigestModalNoBody": "لا يوجد محتوى محفوظ لهذا السجل (سجل قديم أو تم تخطيه قبل الإرسال)."
+  },
+  "offlinePayments": {
+    "title": "مدفوعات شام كاش",
+    "subtitle": "الحوالات التي أرسلها التجار للمراجعة.",
+    "grantNotice": "الموافقة تسجّل أنك طابقت الحوالة مع كشف المحفظة، ولا تفتح الحساب. افتح الخطة من صفحة العميل.",
+    "filterPending": "بانتظار المراجعة",
+    "filterApproved": "مقبولة",
+    "filterRejected": "مرفوضة",
+    "filterAll": "الكل",
+    "statusPending": "بانتظار المراجعة",
+    "statusApproved": "مقبولة",
+    "statusRejected": "مرفوضة",
+    "empty": "لا يوجد شيء هنا.",
+    "plan": "الخطة",
+    "amount": "المبلغ",
+    "reference": "رقم الحوالة",
+    "sender": "المُرسِل",
+    "yearly": "سنوي",
+    "monthly": "شهري",
+    "viewReceipt": "عرض الإشعار",
+    "receiptAlt": "إشعار الحوالة المُرسَل من التاجر",
+    "approve": "قبول",
+    "reject": "رفض",
+    "openCustomer": "فتح صفحة العميل"
   }
 }

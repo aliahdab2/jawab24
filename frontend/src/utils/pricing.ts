@@ -1,5 +1,19 @@
 /**
- * Shared pricing display helpers.
+ * Pricing DISPLAY helpers. Frontend-only by design — do not move them into
+ * `@jawab24/shared`.
+ *
+ * Two reasons, and the second is the one that bites:
+ *
+ * 1. `/pricing` and `/pricing/scale` are the paid-ads landing pages and refuse
+ *    every VALUE import from `@jawab24/shared` (CommonJS, untree-shakeable: one
+ *    named import drags in zod + libphonenumber-js). See the import block at the
+ *    top of both pages. Re-exporting shared helpers from here would smuggle that
+ *    bundle onto exactly the page those comments protect.
+ * 2. The monthly × 10 fallback below is a DISPLAY rule — it keeps the grid
+ *    rendering for a plan nobody has priced annually yet. It is deliberately NOT
+ *    the rule for money: `services/offlinePayments.ts` refuses a yearly claim on
+ *    a plan with no yearly price rather than quote an invented figure. The two
+ *    look like the same arithmetic and are not the same rule (D-109).
  *
  * Yearly prices come from the DB (`plan.yearlyPrice`).
  * If a plan has no yearly price set, we fall back to monthly * 10

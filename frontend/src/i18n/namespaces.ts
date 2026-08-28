@@ -83,6 +83,7 @@ export const PAGE_NAMESPACES = {
   adminPlayground:    [...ADMIN_LAYOUT, 'kb'],
   adminObservability: [...ADMIN_LAYOUT],
   adminAiCost:        [...ADMIN_LAYOUT],
+  adminOfflinePayments: [...ADMIN_LAYOUT],
 
   // ── Partner portal (reseller-facing, standalone layout) ───────
   partner:            ['partner'],

@@ -24,7 +24,7 @@ import type { Subscription, Plan } from '@jawab24/shared';
 
 vi.mock('../db', () => ({ db: {} }));
 
-import { subscriptionsService, resolveEntitlementEnd } from '../services/subscriptions';
+import { subscriptionsService, resolveEntitlementEnd, isPayingCustomer } from '../services/subscriptions';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -400,5 +400,94 @@ describe('checkSubscriptionStatus — cause', () => {
             expect(result.allowed).toBe(false);
             expect(result.cause).toBeUndefined();
         }
+    });
+});
+
+describe('checkSubscriptionStatus — EVERY offline rail expires, not just "manual"', () => {
+    // The bug this pins: the gate tested `paymentMethod === 'manual'` literally,
+    // so a row stamped 'bank_transfer' or 'syrian_bank' — BOTH already
+    // selectable in the admin upgrade modal, and one of them live in production
+    // — skipped the immediate expiry check entirely, fell through to the
+    // past_due branch, and collected the 3-day grace meant for a Stripe CARD
+    // RETRY. With the usage window already closed, getCurrentUsage reads used=0,
+    // so that grace handed the merchant a free full-quota refill. There is no
+    // card to retry on any offline rail.
+    it.each(['manual', 'bank_transfer', 'syrian_bank', 'sham_cash'])(
+        'blocks an expired %s subscription',
+        (paymentMethod) => {
+            const result = subscriptionsService.checkSubscriptionStatus(
+                sub({ paymentMethod, currentPeriodEnd: new Date('2026-07-17T18:52:00.000Z') }),
+            );
+
+            expect(result.allowed).toBe(false);
+            expect(result.code).toBe('subscription_inactive');
+        },
+    );
+
+    it.each(['manual', 'bank_transfer', 'syrian_bank', 'sham_cash'])(
+        'serves a %s subscription while its window is open',
+        (paymentMethod) => {
+            const result = subscriptionsService.checkSubscriptionStatus(
+                sub({ paymentMethod, currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY_MS) }),
+            );
+
+            expect(result.allowed).toBe(true);
+        },
+    );
+
+    it('does not treat an unknown payment method as offline', () => {
+        // The set is an allowlist, not a "not stripe" fallback: a new MANAGED
+        // rail must not start expiring on date the moment it is introduced.
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({ paymentMethod: 'some_future_rail', currentPeriodEnd: new Date('2026-07-01T00:00:00.000Z') }),
+        );
+
+        expect(result.allowed).toBe(true);
+    });
+});
+
+describe('resolveEntitlementEnd — offline rails read their own period end', () => {
+    it.each(['manual', 'bank_transfer', 'syrian_bank', 'sham_cash'])(
+        'snaps %s to UTC midnight of the period end',
+        (paymentMethod) => {
+            const end = resolveEntitlementEnd(
+                sub({ paymentMethod, currentPeriodEnd: new Date('2026-07-20T18:52:00.000Z') }),
+            );
+
+            // Snapped, so the date the merchant is shown is the date enforced.
+            expect(end?.toISOString()).toBe('2026-07-20T00:00:00.000Z');
+        },
+    );
+});
+
+describe('isPayingCustomer — an offline payer is a customer', () => {
+    it.each(['manual', 'bank_transfer', 'syrian_bank', 'sham_cash'])(
+        'counts an active %s row',
+        (paymentMethod) => {
+            expect(isPayingCustomer({
+                status: 'active',
+                externalSubscriptionId: null,
+                stripeCustomerId: null,
+                paymentMethod,
+            })).toBe(true);
+        },
+    );
+
+    it('does not count a canceled offline row', () => {
+        expect(isPayingCustomer({
+            status: 'canceled',
+            externalSubscriptionId: null,
+            stripeCustomerId: null,
+            paymentMethod: 'bank_transfer',
+        })).toBe(false);
+    });
+
+    it('does not count a trial-only row', () => {
+        expect(isPayingCustomer({
+            status: 'trialing',
+            externalSubscriptionId: null,
+            stripeCustomerId: null,
+            paymentMethod: null,
+        })).toBe(false);
     });
 });

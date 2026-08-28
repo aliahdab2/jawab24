@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { auth } from '../utils/swagger';
 import { adminController } from '../controllers/admin';
+import { offlinePaymentsController } from '../controllers/offlinePayments';
+import { OFFLINE_PAYMENT_STATUSES } from '@jawab24/shared';
 import { AI_COST_PERIODS } from '../services/admin';
 import { sendMerchantEmailBodySchema } from './schemas/sendMerchantEmail';
 
@@ -512,5 +514,64 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             },
             adminController.runLeadDigest,
         );
+
+        // ============================================
+        // Offline payments (Sham Cash review queue)
+        // ============================================
+        //
+        // Reviewing a claim RECORDS a decision; it never opens an account. The
+        // plan is still granted through /users/:userId/upgrade below, which
+        // stays the single grant choke point.
+
+        adminProtected.get(
+            '/offline-payments',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'List offline payment claims (Sham Cash), newest first',
+                    security: auth,
+                    querystring: {
+                        type: 'object',
+                        properties: { status: { type: 'string', enum: [...OFFLINE_PAYMENT_STATUSES] } },
+                    },
+                },
+            },
+            offlinePaymentsController.adminList,
+        );
+
+        adminProtected.get(
+            '/offline-payments/:id/receipt',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Receipt image bytes for one claim (served from our own origin)',
+                    security: auth,
+                    params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } }, required: ['id'] },
+                },
+            },
+            offlinePaymentsController.adminGetReceipt,
+        );
+
+        adminProtected.post(
+            '/offline-payments/:id/review',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Record approve/reject on a claim (does NOT grant the plan)',
+                    security: auth,
+                    params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } }, required: ['id'] },
+                    body: {
+                        type: 'object',
+                        required: ['decision'],
+                        properties: {
+                            decision: { type: 'string', enum: ['approved', 'rejected'] },
+                            reviewNote: { type: 'string', maxLength: 500 },
+                        },
+                    },
+                },
+            },
+            offlinePaymentsController.adminReview,
+        );
     });
 }
+

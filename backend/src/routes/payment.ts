@@ -1,6 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { paymentController } from '../controllers/payment';
-import { authenticate } from '../middleware/auth';
+import { offlinePaymentsController } from '../controllers/offlinePayments';
+import { authenticate, type AuthenticatedRequest } from '../middleware/auth';
+import {
+    OFFLINE_PAYMENT_NOTE_MAX,
+    OFFLINE_PAYMENT_REFERENCE_MAX,
+    OFFLINE_PAYMENT_SENDER_NAME_MAX,
+} from '@jawab24/shared';
 import { CreateCheckoutSessionRequest } from '../types/payment';
 import { auth } from '../utils/swagger';
 
@@ -96,6 +102,62 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         { schema: { tags: ['Payment'], summary: 'Stripe webhook handler (signature-verified)' } },
         async (request: FastifyRequest, reply: FastifyReply) => {
             return paymentController.handleWebhook(request, reply);
+        }
+    );
+    // ── Offline payment rail (Sham Cash) ───────────────────────────────────
+    // A second rail BESIDE the Stripe block, never a hole in it: the sanctions
+    // guard on card payments is untouched. These endpoints only record and read
+    // a merchant's claim that they transferred; nothing here grants a plan.
+
+    fastify.get(
+        '/offline/config',
+        { schema: { tags: ['Payment'], summary: 'Sham Cash wallet details (404 when the rail is off)', security: auth }, preHandler: [authenticate] },
+        async (request, reply) => {
+            return offlinePaymentsController.getConfig(request as AuthenticatedRequest, reply);
+        }
+    );
+
+    fastify.post(
+        '/offline/claims',
+        {
+            // Tighter than the card endpoints: each request can carry a 2 MB
+            // image, and a claim is a human review task, not a machine one.
+            config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+            schema: {
+                tags: ['Payment'],
+                summary: 'Submit a completed offline transfer for review',
+                security: auth,
+                body: {
+                    type: 'object',
+                    required: ['planId', 'transferReference'],
+                    properties: {
+                        planId: { type: 'string', format: 'uuid' },
+                        billingInterval: { type: 'string', enum: ['month', 'year'] },
+                        transferReference: { type: 'string', minLength: 1, maxLength: OFFLINE_PAYMENT_REFERENCE_MAX },
+                        senderName: { type: 'string', maxLength: OFFLINE_PAYMENT_SENDER_NAME_MAX },
+                        note: { type: 'string', maxLength: OFFLINE_PAYMENT_NOTE_MAX },
+                        receipt: {
+                            type: ['object', 'null'],
+                            properties: {
+                                base64: { type: 'string' },
+                                mimeType: { type: 'string' },
+                            },
+                        },
+                    },
+                },
+            },
+            preHandler: [authenticate],
+        },
+        async (request, reply) => {
+            return offlinePaymentsController.submit(request as AuthenticatedRequest, reply);
+        }
+    );
+
+    fastify.get(
+        '/offline/claims',
+        { schema: { tags: ['Payment'], summary: "The caller's own offline payment claims", security: auth }, preHandler: [authenticate] },
+        async (request, reply) => {
+            return offlinePaymentsController.listMine(request as AuthenticatedRequest, reply);
         }
     );
 }

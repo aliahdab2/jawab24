@@ -11,6 +11,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { isWhatsAppMarketable } from '@/lib/featureFlags';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
+import { ShamCashPanel } from '@/components/billing/ShamCashPanel';
 import { useAuthStore } from '@/lib/store';
 import { withOwnerOnly } from '@/hoc';
 import { useLocale } from 'next-intl';
@@ -23,7 +24,7 @@ import {
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
-import { useIOSPaymentRedirect, useIsDarkMode } from '@/hooks';
+import { useIOSPaymentRedirect, useIsDarkMode, useLocalPaymentRail } from '@/hooks';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 import { isMarketplaceBilledCode, type Plan } from '@jawab24/shared';
@@ -283,7 +284,7 @@ function CheckoutPage() {
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
 
   // Where the header "back" link goes — top-up buyers came from the dashboard
   // modal, subscription buyers from pricing.
@@ -329,6 +330,12 @@ function CheckoutPage() {
   const [topupInfo, setTopupInfo] = useState<TopupInfo | null>(null);
   const [fetchError, setFetchError] = useState(false);
   const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null);
+
+  // A blocked card is not a blocked customer: where a local rail exists (inside
+  // Syria → Sham Cash) the sanctioned branch below becomes a real payment
+  // screen instead of a "not available in your region" notice. Top-ups keep the
+  // notice — a claim is filed against a PLAN, and there is no plan to review.
+  const hasLocalRail = useLocalPaymentRail(isSanctioned !== null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -575,6 +582,8 @@ function CheckoutPage() {
     router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   };
 
+  const shamCashReady = hasLocalRail && !isTopup;
+
   const maintenanceMode = isCheckoutMaintenance();
   const intervalLabel = tPlans(billingInterval === 'year' ? 'year' : 'month');
 
@@ -614,7 +623,17 @@ function CheckoutPage() {
               <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{pageTitle}</h1>
               </div>
-              <PaymentsUnavailableNotice />
+              {shamCashReady && plan ? (
+                <ShamCashPanel
+                  planId={plan.id}
+                  planName={getPlanName(plan)}
+                  billingInterval={billingInterval}
+                  amountCents={getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice)}
+                  userEmail={user?.email}
+                />
+              ) : (
+                <PaymentsUnavailableNotice />
+              )}
             </div>
           </div>
         </div>

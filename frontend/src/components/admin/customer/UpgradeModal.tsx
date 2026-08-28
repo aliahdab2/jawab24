@@ -23,7 +23,7 @@ export function UpgradeModal({ isOpen, onClose, userId, plans, currentPlanId, on
     const [error, setError] = useState<string | null>(null);
     const [selectedPlan, setSelectedPlan] = useState<string>(currentPlanId);
     const [periodMonths, setPeriodMonths] = useState<1 | 3 | 6 | 12>(1);
-    const [paymentMethod, setPaymentMethod] = useState<'manual' | 'bank_transfer' | 'syrian_bank'>('manual');
+    const [paymentMethod, setPaymentMethod] = useState<'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash'>('manual');
     const [paymentReference, setPaymentReference] = useState('');
     const [note, setNote] = useState('');
 
@@ -123,12 +123,13 @@ export function UpgradeModal({ isOpen, onClose, userId, plans, currentPlanId, on
                     </label>
                     <select
                         value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank')}
+                        onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash')}
                         className={FIELD_CLASS}
                     >
                         <option value="manual">{t('customer.upgradeFormPaymentMethodsManual')}</option>
                         <option value="bank_transfer">{t('customer.upgradeFormPaymentMethodsBankTransfer')}</option>
                         <option value="syrian_bank">{t('customer.upgradeFormPaymentMethodsSyrianBank')}</option>
+                        <option value="sham_cash">{t('customer.upgradeFormPaymentMethodsShamCash')}</option>
                     </select>
                 </div>
 

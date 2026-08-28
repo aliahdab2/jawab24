@@ -24,6 +24,13 @@ expected to reuse it and the image send path as-is; the only net-new work then i
 image-*selection* problem (a merchant image library + retrieval), not this plumbing.
 **The door was left open on purpose.**
 
+**Who deliberately does NOT use it:** offline payment receipts (the Sham Cash rail,
+D-109). A transfer receipt is a financial document and this bucket is a **public**
+bucket — an object here is one URL away from anyone. Those bytes live in
+`offline_payment_receipts` in Postgres and are served only by the admin-authenticated
+route. Do not "tidy" them into this service; if that rail ever carries enough volume to
+make a table the wrong home, the answer is a private bucket, not this one.
+
 **Model = ManyChat, right-sized:** per-file size cap only, no total-storage wall,
 reference-based auto-cleanup. A central reusable media-library UI is intentionally
 deferred until Smart Reply images need it.
