@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import './setup';
 import { testDb, createTestUser } from './setup';
-import { offlinePayments, offlinePaymentReceipts, plans } from '../../src/db/schema';
+import { adminAuditLogs, offlinePayments, offlinePaymentReceipts, plans } from '../../src/db/schema';
 import { offlinePaymentsService } from '../../src/services/offlinePayments';
 import { OFFLINE_PAYMENT_MAX_PENDING_PER_USER } from '@jawab24/shared';
 
@@ -261,6 +261,30 @@ describe('offlinePaymentsService.review', () => {
             .where(eq(offlinePayments.id, result.row.id));
         expect(row.status).toBe('approved');
         expect(row.note).toBe('matched');
+    });
+
+    it('writes ONE admin audit row, naming the reviewer and the reference', async () => {
+        // Every other admin mutation writes to admin_audit_logs; a decision about
+        // whether real money arrived is the last one that should not. The second
+        // (refused) review must not add a second row.
+        const user = await createTestUser();
+        const admin = await createTestUser();
+        const result = await offlinePaymentsService.submit(submission(user.id, `REF-${Date.now()}-AUDIT`));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        await offlinePaymentsService.review(result.row.id, 'approved', admin.id, 'matched the statement');
+        await offlinePaymentsService.review(result.row.id, 'rejected', admin.id, 'second click');
+
+        const rows = await testDb
+            .select()
+            .from(adminAuditLogs)
+            .where(eq(adminAuditLogs.targetUserId, user.id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].action).toBe('offline_payment_review');
+        expect(rows[0].adminUserId).toBe(admin.id);
+        expect(rows[0].paymentReference).toBe(result.row.transferReference);
+        expect(rows[0].note).toBe('matched the statement');
     });
 
     it('frees the pending slot once reviewed', async () => {
