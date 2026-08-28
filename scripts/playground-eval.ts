@@ -64,9 +64,12 @@ interface TestCase {
     // `electro` was resolvable via PAGE_NAME_PATTERNS and used by Cat 76 long
     // before it was listed here — nothing type-checks this file, so the gap
     // stayed silent.
-    // `resort` and `chalets` are seeded and resolvable too — added here when the
-    // no-CTA engagement cases below started using `resort`, closing the same silent
-    // gap that let `electro` be used for Cat 76 long before it was listed.
+    // `resort` and `chalets` are seeded and resolvable too, and had ALREADY drifted out
+    // of this union before anything below was written: on the previous revision `resort`
+    // was used by 4 cases (Cat 78) and `chalets` by 6 (Cat 77) while neither appeared
+    // here. Listed now to close that pre-existing gap — the same silent one that let
+    // `electro` be used by Cat 76 long before it was listed. Nothing in this file is
+    // type-checked, so this union is documentation: keep it in step by hand.
     page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support' | 'resort' | 'chalets';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
@@ -2539,28 +2542,39 @@ const TEST_CASES: TestCase[] = [
     // each carry their own cost, and dropping the rewrite entirely is what caused the
     // silence regression that case #324 pins. These cases exist so the gap is measured by a
     // running test instead of rotting on a branch. Remove the flag in the change that fixes it.
+    //
+    // ⚠️ PAGE CHOICE IS PART OF THE INSTRUMENT. #817/#818 and their control #819 all run on
+    // `training`, and they must keep running on the SAME page: the only thing that may differ
+    // between the gap cases and the control is whether the caption carries a CTA. `resort`
+    // («منتجع الواحة السياحي») is wrong for these despite the matching subject matter — it is
+    // the D-084 per-page-PERSONA fixture, and its persona («أنتِ سارة، موظفة استعلامات… عملكِ
+    // أن تعطي المعلومة ثم توجّهي الزبون لرقم المنتجع») governs reply length and shape, which
+    // is exactly what `replyMaxLength: 160` measures. On `resort` a short reply proves nothing:
+    // the persona could produce it with the CTA gap fully open, and the harness would print
+    // "🎉 NOW PASSES — gap appears fixed" on an unfixed defect. `training` is persona-free, and
+    // is what #813–816 already use.
     {
         id: 817, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '❤️',
-        page: 'resort',
+        page: 'training',
         postMessage: 'YAZAN RASHID\n#shahin_resort',
         expected: {
             // A brochure is 450–500 chars; an honest acknowledgement of praise is short.
             replyMaxLength: 160,
             replyMethod: ['ai'],
         },
-        notes: 'XGAP — praise on a NO-CTA post must not be answered with the whole Business Info. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything.',
+        notes: 'XGAP — praise on a NO-CTA post must not be answered with the whole Business Info. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything. On the persona-free `training` fixture so the CTA presence is the ONLY variable against control #819 — see the note above.',
     },
     {
         id: 818, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '😍😍',
-        page: 'resort',
+        page: 'training',
         postMessage: 'Amazing atmosphere at the resort 👌🔥',
         expected: {
             replyMaxLength: 160,
             replyMethod: ['ai'],
         },
-        notes: 'XGAP — same class, atmosphere post (22 prod replies). Pairs with #819, which proves the fix must NOT silence real CTA campaigns.',
+        notes: 'XGAP — same class, atmosphere post (22 prod replies). Pairs with #819, which proves the fix must NOT silence real CTA campaigns; same page as #819 so the pair is a controlled comparison.',
     },
     // OVER-CORRECTION GUARD — must stay GREEN through any fix to #817/#818. A page that
     // genuinely runs «علق بنقطة» campaigns (الفريق الدمشقي: 266 of 276) depends on the
