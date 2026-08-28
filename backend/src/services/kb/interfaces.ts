@@ -49,7 +49,7 @@ export interface EmbeddingProvider {
 /** Swap vector store without touching retrieval logic */
 export interface VectorStore {
     upsertChunks(pageId: string, chunks: ChunkWithEmbedding[]): Promise<void>;
-    searchSimilar(pageId: string, queryVector: number[], topK: number, kbActiveVersion: number): Promise<ScoredChunk[]>;
+    searchSimilar(pageId: string, queryVector: number[], topK: number, kbIndexedVersion: number): Promise<ScoredChunk[]>;
     deleteByPage(pageId: string): Promise<void>;
     deleteByPageVersion(pageId: string, kbVersion: number): Promise<void>;
 }

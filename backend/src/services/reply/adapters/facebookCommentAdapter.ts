@@ -183,6 +183,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             pageName: page.name || undefined,
             knowledgeBase: page.knowledgeBase || undefined,
             kbActiveVersion: page.kbActiveVersion,
+            kbIndexedVersion: page.kbIndexedVersion,
             postId: contentId,
             postMessage: contentEntity.message || undefined,
             pageId: page.id,

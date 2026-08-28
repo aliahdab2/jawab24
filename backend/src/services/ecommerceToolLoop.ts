@@ -228,7 +228,7 @@ export async function generateReplyWithTools(
             // phrase alone — so there the resolver embeds the phrase itself instead.
             const toolCtx: ToolExecutionContext = {
                 pageId: request.context?.pageId,
-                kbActiveVersion: request.context?.kbActiveVersion,
+                kbIndexedVersion: request.context?.kbIndexedVersion,
                 queryEmbedding: ragRetrievalMode() === 'enriched' ? null : request.context?.queryEmbedding,
                 userId: request.context?.userId,
                 logger,

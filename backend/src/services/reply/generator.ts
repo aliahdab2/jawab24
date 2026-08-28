@@ -7,7 +7,7 @@ import { workspaceSettingsService } from '../workspaceSettings';
 import { postsService } from '../posts';
 import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type ToolOutcome } from '../../types';
-import { getRetrievalService, ragRetrievalMode } from '../kb/retrieval';
+import { getRetrievalService, hasLiveProductChunks, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta, renderReplyForChannel, type ReplyRenderTarget } from '@jawab24/shared';
 import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
@@ -313,6 +313,8 @@ export interface GenerateReplyContext {
     pageName?: string;
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
+    /** `pages.kb_indexed_version` — the chunk generation retrieval may read (D-106). */
+    kbIndexedVersion?: number | null;
     storePolicies?: string;
     productCatalog?: string;
     // For comments — also populated for DMs whose conversation originated from a
@@ -415,6 +417,8 @@ export interface PlaygroundInput {
     requestedChannel?: 'comment' | 'dm';
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
+    /** `pages.kb_indexed_version` — the chunk generation retrieval may read (D-106). */
+    kbIndexedVersion?: number | null;
     pageName?: string;
     productCatalog?: string;
     storePolicies?: string;
@@ -626,7 +630,7 @@ export class ReplyGenerator {
             // comment with the post context (shared with the playground/test tool).
             const ragQuery = buildCommentRagQuery(commentForAI, text, postMessage);
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
-                pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
+                pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion, kbIndexedVersion: context.kbIndexedVersion,
                 channel: effectiveChannel, hasEcommerceChunks: !!context.productCatalog, userId,
             });
 
@@ -642,7 +646,7 @@ export class ReplyGenerator {
                 // re-derives from `comment` whether this is a reading of the customer's own
                 // words (resolveChain.currentMessageIsIdentifiable) — nothing to pass here.
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, kbIndexedVersion: context.kbIndexedVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             }, this.logger);
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -721,7 +725,7 @@ export class ReplyGenerator {
                 // the address chunk). The post is instead surfaced to the model as optional
                 // [current_post] context below, which does not skew retrieval.
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
-                    pageId, query: text, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
+                    pageId, query: text, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion, kbIndexedVersion: context.kbIndexedVersion,
                     channel: 'dm', conversationHistory, hasEcommerceChunks: !!context.productCatalog, userId,
                 });
 
@@ -763,7 +767,7 @@ export class ReplyGenerator {
                     // default). What must NOT happen is the prompt asserting "the customer
                     // wrote in English" over it; the ai-worker re-derives that from `comment`.
                     language: resolveDmLanguageHint(text, historyForAI.length > 0),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, kbIndexedVersion: context.kbIndexedVersion, queryEmbedding, replyStyle: context.replyStyle, replyMode: context.replyMode, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest, this.logger);
@@ -788,17 +792,39 @@ export class ReplyGenerator {
         query: string;
         staticKB: string | undefined;
         kbActiveVersion: number | null | undefined;
+        /** The chunk generation to read (`pages.kb_indexed_version`, D-106). NULL = no live
+         *  index → skip retrieval entirely and use the full KB. */
+        kbIndexedVersion: number | null | undefined;
         channel: 'comment' | 'dm';
         conversationHistory?: { role: string; content: string }[];
         hasEcommerceChunks?: boolean;
         userId?: string;
     }): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
-        const { pageId, query, staticKB, kbActiveVersion, channel, conversationHistory, hasEcommerceChunks, userId } = opts;
+        const { pageId, query, staticKB, kbActiveVersion, kbIndexedVersion, channel, conversationHistory, hasEcommerceChunks, userId } = opts;
         const retrieval = getRetrievalService();
 
-        // No retrieval possible: missing service, pageId, or active version
+        // No retrieval possible: missing service, pageId, or a page that was never versioned.
         if (!retrieval || !pageId || kbActiveVersion === null || kbActiveVersion === undefined) {
             return { effectiveKB: staticKB, ragAttempted: false };
+        }
+
+        // No LIVE chunk generation: either the page was never ingested, or its KB text
+        // changed and ingestion has not finished (updatePage clears the pointer). Either
+        // way a query would filter on a version that holds no rows, so skip the embedding
+        // round-trip and hand over the full, current KB — which is exactly the prompt the
+        // query would have produced anyway (D-106).
+        //
+        // `ragAttempted: true` is deliberate and load-bearing: before the split this state
+        // DID run retrieval and get 0 rows, and `computeReplyFlags` keys its hallucination
+        // backstop on (ragAttempted && 0 chunks && no static KB) to force
+        // info_not_in_kb + low_confidence. Reporting `false` here would silently disarm that
+        // backstop for any page whose Business Info is empty. Only the never-versioned case
+        // above answers `false`, matching the guard it replaces.
+        if (kbIndexedVersion === null || kbIndexedVersion === undefined) {
+            this.logger.debug('[Generator] No live chunk index — using full KB, no retrieval call', {
+                pageId, channel, kbActiveVersion,
+            });
+            return { effectiveKB: staticKB, ragAttempted: true };
         }
 
         // Non-ecommerce pages ALWAYS receive the full Business Info / KB, in full — and no
@@ -814,11 +840,36 @@ export class ReplyGenerator {
         // KB_RAG_THRESHOLD_CHARS is an emergency rollback lever ONLY: when set, a KB LARGER
         // than it falls back to the legacy RAG path. Unset (the default) → full KB
         // unconditionally, at any size.
-        if (!hasEcommerceChunks && staticKB) {
+        //
+        // "Is this an ecommerce page?" is answered by the INDEX, not by the prompt: the
+        // caller's `hasEcommerceChunks` is `!!productCatalog`, which is also true for a page
+        // whose only products are merchant-typed `catalog_items` — injected verbatim (D-004)
+        // and never chunked. Such a page has nothing to retrieve, so a query could only
+        // chunk-filter its Business Info. `hasLiveProductChunks` narrows the gate to pages
+        // that really do have product chunks in the live generation; it can only take pages
+        // OFF this path, never add them, so a store keeps exactly the behaviour it has today.
+        //
+        // Fail-CLOSED on a DB error. This probe is the one thing here that can throw, and it
+        // sits above the try/catch whose job is "RAG failure → fall back to the static KB";
+        // the expression it replaced (`!!productCatalog`) could not throw at all. Neither
+        // generateForComment nor generateForMessage wraps resolveKnowledge, so letting a pool
+        // timeout escape would turn "reply grounded in the full KB" into "no reply" for every
+        // DM and comment on every page carrying a catalog block. Answering `false` degrades to
+        // the full-KB prompt — which this gate argues is what the query would have produced
+        // anyway — so the safe default costs nothing.
+        const onEcommerceChunkPath = hasEcommerceChunks
+            ? await hasLiveProductChunks(pageId, kbIndexedVersion).catch(err => {
+                this.logger.warn('[Generator] product-chunk probe failed — treating page as full-KB', {
+                    pageId, error: err instanceof Error ? err.message : String(err),
+                });
+                return false;
+            })
+            : false;
+        if (!onEcommerceChunkPath && staticKB) {
             const ragRollbackCeiling = parseInt(process.env.KB_RAG_THRESHOLD_CHARS || '', 10);
             const forceRagForLargeKb = !Number.isNaN(ragRollbackCeiling) && staticKB.length > ragRollbackCeiling;
             if (!forceRagForLargeKb) {
-                this.logger.debug('[Generator] Non-ecommerce page — sending full KB (RAG not used as a filter)', {
+                this.logger.debug('[Generator] No product chunks — sending full KB (RAG not used as a filter)', {
                     pageId, kbLength: staticKB.length,
                 });
                 return { effectiveKB: staticKB, ragAttempted: false };
@@ -845,10 +896,10 @@ export class ReplyGenerator {
             const retrievalMode = ragRetrievalMode();
             const { chunks, queryEmbedding } = await (
                 retrievalMode === 'off'
-                    ? retrieval.retrieve(pageId, query, kbActiveVersion, undefined, userId)
+                    ? retrieval.retrieve(pageId, query, kbIndexedVersion, undefined, userId)
                     : retrievalMode === 'enriched' || enrichedQuery === query
-                        ? retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion, undefined, userId)
-                        : retrieval.retrieveMulti(pageId, [enrichedQuery, query], kbActiveVersion, undefined, userId, 1)
+                        ? retrieval.retrieve(pageId, enrichedQuery, kbIndexedVersion, undefined, userId)
+                        : retrieval.retrieveMulti(pageId, [enrichedQuery, query], kbIndexedVersion, undefined, userId, 1)
             );
 
             if (chunks.length === 0) {
@@ -899,7 +950,7 @@ export class ReplyGenerator {
      */
     async generateForPlayground(input: PlaygroundInput): Promise<PlaygroundResult> {
         const {
-            pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
+            pageId, userId, question, channel, knowledgeBase, kbActiveVersion, kbIndexedVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, replyMode, brandVoiceNotes, businessInfoBlock, factCollectionsBlock, factCollectionsGated, customerContext, senderName, minutesSinceLastMessage, model, defaultReplyLanguage,
             timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
@@ -950,7 +1001,7 @@ export class ReplyGenerator {
             ? buildCommentRagQuery(questionForAI, question, postMessage)
             : questionForAI;
         const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
-            pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion,
+            pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion, kbIndexedVersion,
             channel, conversationHistory, hasEcommerceChunks: !!productCatalog, userId,
         });
 
@@ -980,6 +1031,13 @@ export class ReplyGenerator {
                 productCatalog,
                 channel,
                 kbActiveVersion,
+                // Must travel with the cache token, or the playground stops matching
+                // production: with a store linked, dispatchAiReply routes to the tool loop,
+                // which reads `kbIndexedVersion` to decide whether the product resolver's
+                // page-index stage runs (D-106). Omitted here it reads undefined → that
+                // stage is silently off in the eval and on for real customers, and the eval
+                // is what every reply-quality claim rests on (§19.2).
+                kbIndexedVersion,
                 queryEmbedding,
                 ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),

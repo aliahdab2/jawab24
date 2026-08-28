@@ -2983,3 +2983,100 @@ the counter above, plus an `info` log carrying `pageId`/`senderId` (the counter 
 and could otherwise never answer "which merchant?"), is what makes that bound measurable
 against real traffic instead of re-argued. Never "fix" this by matching on reply wording: the
 tool name is the only signal that cannot mistake a phone typed for another reason.
+
+## D-106 · The chunk-generation pointer is split from the reply-cache token: retrieval reads `kb_indexed_version`, and only ingestion writes it (2026-08-28)
+
+`pages.kb_active_version` was doing two unrelated jobs. It is the **reply-cache scope token** —
+`kbv:{n}` in the exact-cache key (`ai.ts buildCacheKey`) and the filter that retires semantic
+rows (`cleanup.ts`) — so every write of prompt-injected content must bump it, which is what
+`invalidatePageCaches` exists for (business_profile, catalog_items, fact_collections). It was
+ALSO the value retrieval filtered chunks by, on exact equality. Job one therefore destroyed
+job two: a merchant saving a phone number, or our own migration writing a catalog row, moved
+the pointer with no re-ingestion and **orphaned the page's entire chunk index** — silently,
+with no error and no failed operation.
+
+**Prod, 2026-08-27/28:** 16 of 57 live pages were in that state. 15 of the 16 had a structured
+write dated AFTER their last ingestion, i.e. the drift was being produced by the Business
+Surface migration itself, four of them that same week; one page's pointer moved 545 → 550
+between two diagnostic queries an hour apart. The resort page's own timeline is the whole
+mechanism in three lines: chunks written 16:24:07 (v51), `business_profile` 16:29:51, catalog
+row 16:31:10.776 with `kb_updated_at` 16:31:10.784 — the same transaction.
+
+**Nothing reached a customer.** `resolveKnowledge` falls back to the full KB text when
+retrieval returns zero rows, so the merchant's information kept arriving, current and
+complete; flag rates on the affected pages sat at or below the fleet baseline of 4.50%. The
+measured cost was one embedding round-trip per reply that could not return anything (~144 ms
+locally, $0.0084/month across the four pages) and a diagnostic contradiction: `health.ts`
+computed the drift correctly from `kb_chunks` and reported it, while `reingestDriftedPages`
+could not see it at all — its predicate is `kb_active_version < kb_version`, and
+`invalidatePageCaches` bumps both together.
+
+**The split.** `pages.kb_indexed_version` (migration 0182, nullable) names the generation
+retrieval may read. Ingestion is its only writer, at all four activation points; `updatePage`
+clears it to NULL the instant the KB text changes, so chunks built from replaced text can
+never be served during the fire-and-forget ingest window (the 2026-08-22 five-and-a-half-hour
+class, now impossible rather than guarded). `kbActiveVersion` keeps its cache-token job
+untouched. The backfill is deliberately conservative — `= kb_active_version` only where
+`max(kb_chunks.kb_version)` already matched it, NULL otherwise — which makes deploy
+behaviour-identical: an orphaned index returns 0 rows today, and NULL returns the same full-KB
+prompt without the dead round-trip. Copying the token across unconditionally would instead
+have REVIVED 16 orphaned indexes and started serving chunks built from older KB text.
+
+**Two details that are load-bearing.** (1) The skip path reports `ragAttempted: true`, because
+`computeReplyFlags` keys its hallucination backstop on (ragAttempted && 0 chunks && no static
+KB); reporting false would silently disarm it for any page whose Business Info is empty. Only
+a never-versioned page answers false, matching the guard it replaces. (2) `embedChunks` reads
+`kb_indexed_version` for embedding reuse — pointed at the cache token it would look up a
+generation holding no rows and re-embed every chunk at full cost.
+
+**Same change, second correction: the RAG gate now asks the index, not the prompt.**
+`hasEcommerceChunks = !!productCatalog` conflated a store's synced products (chunked, type
+`product`) with merchant-typed `catalog_items` (injected verbatim, D-004, never chunked —
+`fetchProductsForPage` returns [] with no store). One hand-typed row therefore moved a page
+onto semantic search with nothing to search, and chunk-filtered its Business Info for no
+benefit. Measured on the real KBs through the real ingestion + retrieval code: the resort's
+10,504 chars became 6 chunks and answered 6 of 8 real customer questions from 15–36% of its own
+text, with the address distance and the opening hours absent from every retrieved set; a
+paying training centre, 15%. `hasLiveProductChunks(pageId, kbIndexedVersion)` replaces it — a
+conjunction, so it can only take pages OFF the path, never add them, and every real store
+keeps exactly today's behaviour. `admin/users.ts` was corrected in the same commit to mirror
+it (`onRetrievalPath`, and the console's chunk counts now join on `kb_indexed_version`), so the
+console cannot flag a stale index on a page that reads none — the D-088 conflation in a new
+colour.
+
+**What this deliberately does NOT do — and a rationale corrected in review.** The drift
+reconciler's predicate is left alone. The reason first recorded here — "healing an index is
+what STARTS the chunk-filtering measured above" — was true of the pointer split ALONE and is
+false once this PR's gate change is included, as the review pointed out. None of the 16 pages
+has a store, so `fetchProductsForPage` returns `[]`, so a healed generation contains no
+`type='product'` chunks, so `hasLiveProductChunks` answers false and every one of them stays
+on the full-KB path. Healing them is harmless. The predicate is left for a follow-up on
+narrower grounds: it is a separate behaviour (a sweep that re-embeds 16 pages), it belongs
+with the `kb_indexed_version IS NULL AND kb_active_version >= kb_version` case that no
+reconciler covers today, and one change at a time is how this one stayed provably neutral.
+`reingestPage` does now pass `resolveGaps: false` — using the option Phase C
+already built — because a self-heal answers no customer question, and the sweep would
+otherwise have marked 156 open «سألها N عملاء» questions resolved across those 16 pages,
+including the 25 the resort's own admin card displays.
+
+**Found in review, fixed in the same PR** (all seven verified by running the suites, not by
+reading them): the product-chunk probe sat ABOVE the try/catch that degrades RAG failures to
+the static KB, so a pool timeout would have aborted reply generation instead — it now
+fail-closes to the full KB. Embedding reuse was keyed on `kb_indexed_version`, which
+`updatePage` clears immediately before firing the ingest, so the most common save re-embedded
+every chunk including a store's whole catalogue — the reuse source is now derived from
+`kb_chunks` (`max(kb_version) < newVersion`) and needs no pointer at all. The playground/eval
+request context omitted the field while production passed it, which would have run the product
+resolver's page-index stage for customers and not in the eval (§19.2). `admin/kb.ts` still
+counted chunks at the cache token, contradicting `getUserDetail` about the same page. And
+`onRetrievalPath` was derived from the readable generation, which is 0 exactly when a store
+page's pointer is dead — it now answers the CAPABILITY question (`store || product chunks at
+any version`), so the flag fires precisely in the case it used to suppress. Seven unit tests
+were also red on the first attempt: the verification table in the PR body had been measured on
+a subset that excluded both affected files, which is the "a sample is not a population" failure
+in §10.11.
+
+**The generalisable rule.** One column, one job. When a value is both a cache key and a data
+selector, every writer of the first silently rewrites the second — and the drift is invisible
+to any monitor that compares the two counters to each other instead of to the data they
+describe.

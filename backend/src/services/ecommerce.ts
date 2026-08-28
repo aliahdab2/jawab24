@@ -1159,8 +1159,11 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         const pageIds = linkedPages.map(p => p.id);
 
         // 1. Compute next kbVersion for each page (DON'T activate yet — wait for ingestion)
-        //    kbActiveVersion is only set by ingestFullPage after ALL chunks are stored,
-        //    so retrieval continues using the previous (complete) version until the new one is ready.
+        //    Both pointers are set by ingestFullPage only after ALL chunks are stored, and
+        //    retrieval filters on kbIndexedVersion (D-106), so it keeps reading the previous
+        //    COMPLETE generation until the new one lands. Reading kbActiveVersion here is
+        //    just "the highest number in use" — cache bumps may have moved it past the last
+        //    ingested version, and +1 stays monotonic either way.
         const nextVersionByPage: Record<string, number> = {};
         for (const pageId of pageIds) {
             const [row] = await db.select({ kbActiveVersion: pages.kbActiveVersion })

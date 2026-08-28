@@ -504,7 +504,11 @@ class AdminUsersService {
                     .from(kbChunks)
                     .innerJoin(pages, and(
                         eq(pages.id, kbChunks.pageId),
-                        eq(kbChunks.kbVersion, pages.kbActiveVersion),
+                        // The LIVE generation is kb_indexed_version (D-106) — the same value
+                        // retrieval filters by. Joining on the cache token instead counted
+                        // rows nobody could read: every prompt-injected write bumps it, so
+                        // the console reported 0 chunks for a full index (the D-088 class).
+                        eq(kbChunks.kbVersion, pages.kbIndexedVersion),
                     ))
                     .where(inArray(kbChunks.pageId, displayPageIds))
                     .groupBy(kbChunks.pageId, kbChunks.type)
@@ -640,13 +644,25 @@ class AdminUsersService {
                         && newestChunkVersion !== null
                         && kbActiveVersion !== null
                         && newestChunkVersion < kbActiveVersion,
-                    // Whether a stale chunk set actually costs this page anything.
-                    // resolveKnowledge only retrieves for pages with a store OR
-                    // merchant catalog items; every other page is handed the full
-                    // KB text and never reads a chunk (D-050). On the retrieval
-                    // path an empty result still falls back to the full KB, so the
-                    // cost is a wasted embedding round-trip per reply, not silence.
-                    onRetrievalPath: !!ecommerceStoreId || catalogItemCount > 0,
+                    // Whether a stale chunk set actually costs this page anything — a
+                    // CAPABILITY question, deliberately not "can we read chunks right now".
+                    //
+                    // It used to read `store || catalogItems > 0`, which over-reported once
+                    // the reply gate was narrowed: a merchant-typed catalog row is
+                    // prompt-injected and never chunked (D-004), so such a page reads no
+                    // chunk and a stale index costs it nothing (the D-088 conflation).
+                    // Reading the LIVE generation instead was worse in the opposite
+                    // direction — that count is 0 exactly when the pointer is dead, so a
+                    // store page with a broken index would suppress its own
+                    // `kb_chunks_stale` flag and degrade its product answers in silence.
+                    // A store's products are chunked on every sync, so a linked store is
+                    // sufficient on its own — that is what keeps the flag firing for the case
+                    // that matters. The second half stays on the LIVE generation rather than
+                    // "any version": a page that was store-linked and later unlinked keeps
+                    // orphan product chunks (cleanupOldVersions has no production caller), and
+                    // counting those would re-create the same over-report in a third place —
+                    // a re-ingest deletes them, since fetchProductsForPage returns [].
+                    onRetrievalPath: !!ecommerceStoreId || (c?.byType?.product ?? 0) > 0,
                     // The one honest answer to "does the AI have anything to
                     // answer from?" — false only when EVERY store is empty.
                     // Derived by the same function the health flags use, so the

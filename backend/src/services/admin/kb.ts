@@ -24,6 +24,9 @@ export interface KbStatus {
     kbLength: number;
     kbVersion: number | null;
     kbActiveVersion: number | null;
+    /** The generation retrieval reads (D-106). NULL = no live index; `chunksCount` is then 0
+     *  by definition, and the KB text is what reaches the model. */
+    kbIndexedVersion: number | null;
     kbUpdatedAt: Date | null;
     chunksCount: number;
     gapsCount: number;
@@ -75,6 +78,7 @@ class AdminKbService {
                 knowledgeBase: pages.knowledgeBase,
                 kbVersion: pages.kbVersion,
                 kbActiveVersion: pages.kbActiveVersion,
+                kbIndexedVersion: pages.kbIndexedVersion,
                 kbUpdatedAt: pages.kbUpdatedAt,
             })
             .from(pages)
@@ -89,8 +93,13 @@ class AdminKbService {
             .where(
                 and(
                     eq(kbChunks.pageId, pageId),
-                    page.kbActiveVersion !== null
-                        ? eq(kbChunks.kbVersion, page.kbActiveVersion)
+                    // The LIVE generation is kb_indexed_version (D-106), the same value
+                    // retrieval filters by. Counting at the cache token instead reported 0
+                    // chunks for a perfectly healthy index on any page that had had a
+                    // prompt-injected write — and left this endpoint contradicting
+                    // getUserDetail one file away about the same page.
+                    page.kbIndexedVersion !== null
+                        ? eq(kbChunks.kbVersion, page.kbIndexedVersion)
                         : sql`false`,
                 ),
             );
@@ -107,6 +116,7 @@ class AdminKbService {
             kbLength: page.knowledgeBase?.length || 0,
             kbVersion: page.kbVersion,
             kbActiveVersion: page.kbActiveVersion,
+            kbIndexedVersion: page.kbIndexedVersion,
             kbUpdatedAt: page.kbUpdatedAt,
             chunksCount: chunkCount?.count || 0,
             gapsCount: gapCount?.count || 0,

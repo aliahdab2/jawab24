@@ -29,6 +29,9 @@ vi.hoisted(() => {
 const WRONG_CHUNK = { type: 'info', title: 'unrelated', content: 'WRONG CHUNK — not the answer', finalScore: 0.42 };
 const retrieve = vi.fn().mockResolvedValue({ chunks: [WRONG_CHUNK], queryEmbedding: [0.1, 0.2] });
 const retrieveMulti = vi.fn().mockResolvedValue({ chunks: [WRONG_CHUNK], queryEmbedding: [0.1, 0.2] });
+// Real product-chunk probe (D-106) hits the DB; these tests are DB-free, so it answers from
+// the case's own `hasEcommerceChunks` intent. Overridden per-test where the gate is the subject.
+const hasLiveProductChunks = vi.fn().mockResolvedValue(true);
 
 vi.mock('../services/kb/embedding', () => ({
     OpenAIEmbeddingProvider: vi.fn(() => ({})),
@@ -45,6 +48,10 @@ vi.mock('../services/kb/retrieval', () => {
         RetrievalService: vi.fn(instance),
         getRetrievalService: instance,
         ragRetrievalMode: () => 'dual',
+        // Required: resolveKnowledge calls this to decide whether the page has product
+        // chunks to retrieve (D-106). Omit it and the gate's `await` resolves undefined —
+        // the mock, not the code, would decide the verdict.
+        hasLiveProductChunks: (...args: unknown[]) => hasLiveProductChunks(...args),
     };
 });
 
@@ -55,7 +62,8 @@ const gen = new ReplyGenerator();
 // resolveKnowledge is private; call it directly for a deterministic, model-free unit test.
 const resolveKnowledge = (opts: Record<string, unknown>): Promise<Resolved> =>
     (gen as unknown as { resolveKnowledge: (o: unknown) => Promise<Resolved> }).resolveKnowledge({
-        pageId: 'page-1', kbActiveVersion: 1, channel: 'dm', query: 'وين موقعكم', ...opts,
+        pageId: 'page-1', kbActiveVersion: 1, kbIndexedVersion: 1,
+        channel: 'dm', query: 'وين موقعكم', ...opts,
     });
 
 const retrievalCalls = () => retrieve.mock.calls.length + retrieveMulti.mock.calls.length;
@@ -63,6 +71,8 @@ const retrievalCalls = () => retrieve.mock.calls.length + retrieveMulti.mock.cal
 beforeEach(() => {
     retrieve.mockClear();
     retrieveMulti.mockClear();
+    hasLiveProductChunks.mockClear();
+    hasLiveProductChunks.mockResolvedValue(true);
 });
 
 describe('resolveKnowledge — non-ecommerce always gets the full KB (D-012)', () => {
@@ -112,5 +122,59 @@ describe('resolveKnowledge — non-ecommerce always gets the full KB (D-012)', (
         } finally {
             delete process.env.KB_RAG_THRESHOLD_CHARS;
         }
+    });
+
+    // ---- D-106: the live-index pointer and the probe that reads it ----------------
+
+    it('no live chunk generation (kbIndexedVersion null) → full KB, no retrieval call, ragAttempted TRUE', async () => {
+        const staticKB = 'ع'.repeat(3000);
+        const r = await resolveKnowledge({ staticKB, hasEcommerceChunks: true, kbIndexedVersion: null });
+        expect(r.effectiveKB).toBe(staticKB);
+        expect(retrievalCalls()).toBe(0);
+        // TRUE on purpose: before the split this state ran retrieval and got 0 rows, and
+        // computeReplyFlags keys its hallucination backstop on (ragAttempted && 0 chunks &&
+        // no static KB). Reporting false would disarm it for an empty-KB page.
+        expect(r.ragAttempted).toBe(true);
+    });
+
+    it('never-versioned page (kbActiveVersion null) → ragAttempted FALSE, as before the split', async () => {
+        const staticKB = 'ع'.repeat(3000);
+        const r = await resolveKnowledge({ staticKB, hasEcommerceChunks: true, kbActiveVersion: null });
+        expect(r.effectiveKB).toBe(staticKB);
+        expect(retrievalCalls()).toBe(0);
+        expect(r.ragAttempted).toBe(false);
+    });
+
+    it('product-chunk probe THROWS → falls back to the full KB instead of aborting the reply', async () => {
+        // The probe is the only thing in this gate that can throw, and it sits above the
+        // try/catch that exists to degrade RAG failures to the static KB. Neither
+        // generateForComment nor generateForMessage wraps resolveKnowledge, so an escaping
+        // pool timeout would turn "reply grounded in the full KB" into NO REPLY on every
+        // page carrying a catalog block.
+        hasLiveProductChunks.mockRejectedValue(new Error('connection terminated'));
+        const staticKB = 'ع'.repeat(3000);
+        const r = await resolveKnowledge({ staticKB, hasEcommerceChunks: true });
+        expect(r.effectiveKB).toBe(staticKB);
+        expect(r.retrievedChunks).toBeUndefined();
+        expect(retrievalCalls()).toBe(0);
+    });
+
+    it('page with a catalog block but NO product chunks → full KB, retrieval never consulted', async () => {
+        // One merchant-typed catalog row used to be enough to put a page on semantic search
+        // with nothing to search (D-004: those rows are prompt-injected, never chunked).
+        hasLiveProductChunks.mockResolvedValue(false);
+        const staticKB = 'ع'.repeat(10000);
+        const r = await resolveKnowledge({ staticKB, hasEcommerceChunks: true });
+        expect(r.effectiveKB).toBe(staticKB);
+        expect(retrievalCalls()).toBe(0);
+    });
+
+    it('retrieval filters on the INDEXED pointer, not the cache token', async () => {
+        const r = await resolveKnowledge({ staticKB: 'kb', hasEcommerceChunks: true, kbActiveVersion: 54, kbIndexedVersion: 51 });
+        expect(retrievalCalls()).toBeGreaterThan(0);
+        const calls = retrieveMulti.mock.calls.length ? retrieveMulti.mock.calls : retrieve.mock.calls;
+        const versionArg = calls[0]?.[2];
+        expect(versionArg).toBe(51);
+        expect(r.retrievedChunks?.length).toBeGreaterThan(0);
     });
 });

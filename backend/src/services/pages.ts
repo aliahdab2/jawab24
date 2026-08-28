@@ -661,6 +661,16 @@ export class PagesService {
      * row write and the cache invalidation land (or fail) together — e.g. the
      * catalog service, where a committed delete without the bump would keep
      * replies quoting a deleted item until cache TTL.
+     *
+     * ⛔ Deliberately does NOT touch `kbIndexedVersion` (D-106). Everything this
+     * function exists for is prompt-injected — business_profile, catalog_items,
+     * fact_collections — none of it is chunked, so the chunk index stays valid and
+     * must keep being read. Bumping the retrieval filter here is precisely the bug
+     * this split fixed: on 2026-08-27, 16 of 57 live pages had every chunk stranded
+     * at an older version than the pointer, retrieval matched nothing forever, and
+     * the drift was invisible to `reingestDriftedPages` because both counters moved
+     * together. If you add a writer of prompt-injected content, call this — and still
+     * leave `kbIndexedVersion` alone.
      */
     async invalidatePageCaches(pageId: string, executor: Pick<typeof db, 'update'> = db): Promise<{ kbActiveVersion: number } | null> {
         const [updated] = await executor
@@ -715,6 +725,13 @@ export class PagesService {
         if (data.knowledgeBase !== undefined) {
             setData.kbVersion = sql`COALESCE(${pages.kbVersion}, 0) + 1`;
             setData.kbUpdatedAt = new Date();
+            // Retire the live chunk generation immediately (D-106). The chunks still in
+            // the index were built from the text being replaced right now, so from this
+            // moment they are wrong — and ingestion below is fire-and-forget, so "wrong"
+            // would otherwise be served for the whole embed+store window (and forever if
+            // that ingest fails). NULL routes retrieval to the full, current KB text
+            // instead; the ingest sets it back to the new version on success.
+            setData.kbIndexedVersion = null;
         }
 
         // business_profile is prompt-injected, so cache invalidation must be
@@ -1018,7 +1035,14 @@ export class PagesService {
         let lastErr: unknown;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                await ingestion.ingestFullPage(pageId, page.knowledgeBase ?? undefined, products, page.kbVersion);
+                // resolveGaps:false — a self-heal is not the merchant answering anything.
+                // `ingestFullPage` defaults to resolving every open KB gap on the page, so
+                // an automated re-ingest would silently clear the «سألها N عملاء» backlog
+                // that anchors /business: 156 open questions across the 16 drifted pages on
+                // 2026-08-27, none of them answered by a sweep nobody asked for. The option
+                // already exists for exactly this reason (Phase C's gap-backlog protection);
+                // this path just never used it.
+                await ingestion.ingestFullPage(pageId, page.knowledgeBase ?? undefined, products, page.kbVersion, { resolveGaps: false });
                 return true;
             } catch (err) {
                 lastErr = err;

@@ -95,7 +95,7 @@ describe('product resolver — real Postgres', () => {
     });
 
     it('an exact title resolves in the trigram stage — no embedding involved', async () => {
-        const r = await resolveProduct({ storeId, pageId, kbActiveVersion: 1, productName: 'نظارة شمسية' });
+        const r = await resolveProduct({ storeId, pageId, kbIndexedVersion: 1, productName: 'نظارة شمسية' });
         expect(r).toMatchObject({ kind: 'resolved', via: 'trigram', product: { platformProductId: 'glasses' } });
     });
 
@@ -107,18 +107,18 @@ describe('product resolver — real Postgres', () => {
         expect(hits[0].triScore).toBeGreaterThan(0.1);
         expect(hits[0].triScore).toBeLessThan(0.3);
 
-        const r = await resolveProduct({ storeId, pageId, kbActiveVersion: 1, productName: 'النظارة' });
+        const r = await resolveProduct({ storeId, pageId, kbIndexedVersion: 1, productName: 'النظارة' });
         expect(r.kind).toBe('not_found');
     });
 
     it('a sold-out product resolves and reports its status — never "we don\'t sell that"', async () => {
-        const r = await resolveProduct({ storeId, pageId, kbActiveVersion: 1, productName: 'Running Shoes' });
+        const r = await resolveProduct({ storeId, pageId, kbIndexedVersion: 1, productName: 'Running Shoes' });
         expect(r).toMatchObject({ kind: 'resolved', product: { platformProductId: 'shoes', status: 'out_of_stock' } });
     });
 
     it('a hidden product is unreachable by id AND by name — and its exact name is never answered with a substitute', async () => {
         expect(await resolveProduct({ storeId, productId: 'secret' })).toEqual({ kind: 'not_found', reason: 'id_unknown' });
-        const byName = await resolveProduct({ storeId, pageId, kbActiveVersion: 1, productName: 'نظارة سرية' });
+        const byName = await resolveProduct({ storeId, pageId, kbIndexedVersion: 1, productName: 'نظارة سرية' });
         // The sunglasses score 0.296 against «نظارة سرية» — just under the 0.3 floor, which is
         // the floor doing its job: a near-miss on a different product is not a resolve.
         expect(byName.kind).not.toBe('resolved');
@@ -151,7 +151,7 @@ describe('product resolver — real Postgres', () => {
         await seedRows(otherStore, [product('foreign-glasses', 'نظارة شمسية فاخرة')]);
         const bare = await createTestPage(userId, { name: 'No index', kbVersion: 1, ecommerceStoreId: storeId });
 
-        const r = await resolveProduct({ storeId, pageId: bare.id, kbActiveVersion: 1, productName: 'نظارة شمسية' });
+        const r = await resolveProduct({ storeId, pageId: bare.id, kbIndexedVersion: 1, productName: 'نظارة شمسية' });
 
         expect(r).toMatchObject({ kind: 'resolved', via: 'title_trigram', product: { platformProductId: 'glasses' } });
     });
@@ -190,7 +190,7 @@ describe('product resolver — real Postgres', () => {
         expect(hits.filter(h => h.vecScore !== null && h.vecScore > 0.99).length).toBeGreaterThan(20);
         expect(hits.find(h => h.platformProductId === 'target')).toMatchObject({ vecScore: expect.closeTo(0, 3) });
 
-        const r = await resolveProduct({ storeId, pageId, kbActiveVersion: 3, productName: 'معطف شتوي طويل', queryEmbedding: unit(1) });
+        const r = await resolveProduct({ storeId, pageId, kbIndexedVersion: 3, productName: 'معطف شتوي طويل', queryEmbedding: unit(1) });
         expect(r).toMatchObject({ kind: 'resolved', via: 'trigram', product: { platformProductId: 'target' } });
     });
 });

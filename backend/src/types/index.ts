@@ -47,7 +47,15 @@ export interface AiGenerateRequest {
         productCatalog?: string;
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
+        /** Reply-cache scope token (exact key + semantic-cache filter). Bumped by every
+         *  prompt-injected write; never a statement about the chunk index. */
         kbActiveVersion?: number | null;
+        /** The chunk generation retrieval may read — `pages.kb_indexed_version`, written only
+         *  by ingestion (D-106). NULL/absent = no live index, so the product resolver's
+         *  semantic stage is skipped exactly as it is for an unindexed page. Kept separate
+         *  from `kbActiveVersion` on purpose: the two moved together until 2026-08-27 and a
+         *  cache bump silently emptied every chunk query. */
+        kbIndexedVersion?: number | null;
         queryEmbedding?: number[];
         replyStyle?: string;
         /**

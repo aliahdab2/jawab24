@@ -90,7 +90,7 @@ export class RetrievalService {
     async retrieve(
         pageId: string,
         query: string,
-        kbActiveVersion: number,
+        kbIndexedVersion: number,
         topK: number = DEFAULT_TOP_K,
         userId?: string,
     ): Promise<RetrievalResult> {
@@ -98,7 +98,7 @@ export class RetrievalService {
         const normalizedQuery = normalizeArabic(query);
         const queryLanguage = detectQueryLanguage(query);
 
-        this.logger.debug('Retrieval started', { pageId, queryLanguage, kbActiveVersion });
+        this.logger.debug('Retrieval started', { pageId, queryLanguage, kbIndexedVersion });
 
         const embedLogCtx = userId ? { userId, pageId, pipeline: 'embedding_rag' as const } : undefined;
         const queryEmbedding = await this.embeddingProvider.embed(normalizedQuery, embedLogCtx);
@@ -119,7 +119,7 @@ export class RetrievalService {
                     1 - (embedding <=> ${vectorStr}::vector) as vec_score
                 FROM kb_chunks
                 WHERE page_id = ${pageId}
-                  AND kb_version = ${kbActiveVersion}
+                  AND kb_version = ${kbIndexedVersion}
                   AND embedding IS NOT NULL
                   AND (valid_until IS NULL OR valid_until > NOW())
                   AND source_tier < ${sql.raw(String(SOURCE_TIER_EXCLUDED))}
@@ -168,7 +168,7 @@ export class RetrievalService {
 
         this.logger.info('Retrieval completed', {
             pageId,
-            kbActiveVersion,
+            kbIndexedVersion,
             candidatesReturned: chunks.length,
             topScore: chunks[0]?.finalScore ?? 0,
         });
@@ -195,18 +195,18 @@ export class RetrievalService {
     async retrieveMulti(
         pageId: string,
         queries: string[],
-        kbActiveVersion: number,
+        kbIndexedVersion: number,
         topK: number = DEFAULT_TOP_K,
         userId?: string,
         primaryEmbeddingIndex = 0,
     ): Promise<RetrievalResult> {
         const uniqueQueries = [...new Set(queries.map(q => (q || '').trim()).filter(Boolean))];
         if (uniqueQueries.length <= 1) {
-            return this.retrieve(pageId, uniqueQueries[0] ?? (queries[0] || ''), kbActiveVersion, topK, userId);
+            return this.retrieve(pageId, uniqueQueries[0] ?? (queries[0] || ''), kbIndexedVersion, topK, userId);
         }
 
         const results = await Promise.all(
-            uniqueQueries.map(q => this.retrieve(pageId, q, kbActiveVersion, topK, userId)),
+            uniqueQueries.map(q => this.retrieve(pageId, q, kbIndexedVersion, topK, userId)),
         );
 
         const bestById = new Map<string, RetrievedChunk>();
@@ -225,7 +225,7 @@ export class RetrievalService {
         const primaryIdx = Math.max(0, uniqueQueries.indexOf(primaryQuery));
 
         this.logger.info('Multi-query retrieval completed', {
-            pageId, kbActiveVersion, queries: uniqueQueries.length,
+            pageId, kbIndexedVersion, queries: uniqueQueries.length,
             merged: merged.length, topScore: merged[0]?.finalScore ?? 0,
         });
 
@@ -274,7 +274,7 @@ export interface ProductHit {
  */
 export async function retrieveProducts(
     pageId: string,
-    kbActiveVersion: number,
+    kbIndexedVersion: number,
     normalizedQuery: string,
     queryEmbedding: number[] | null,
     limit = 20,
@@ -297,7 +297,7 @@ export async function retrieveProducts(
                 ) AS tri_score
             FROM kb_chunks
             WHERE page_id = ${pageId}
-              AND kb_version = ${kbActiveVersion}
+              AND kb_version = ${kbIndexedVersion}
               AND type = 'product'
               AND embedding IS NOT NULL
               AND metadata->>'platformProductId' IS NOT NULL
@@ -339,6 +339,39 @@ export async function retrieveProducts(
 export function ragRetrievalMode(): 'off' | 'enriched' | 'dual' {
     const raw = process.env.RAG_RETRIEVAL_MODE;
     return raw === 'off' || raw === 'enriched' ? raw : 'dual';
+}
+
+/**
+ * Does the page's LIVE chunk generation actually hold product chunks?
+ *
+ * The retrieval path exists for one reason: product data that lives in chunks rather
+ * than in the KB text (D-050 — for a single-document KB, chunking can only DROP the
+ * answer-bearing line). So the question the gate must ask is this one, and it is
+ * answered from `kb_chunks`, not inferred from the prompt.
+ *
+ * It replaced `!!productCatalog`, which conflated two unrelated things: a STORE's synced
+ * products (chunked, type 'product') and the merchant's own `catalog_items` (injected
+ * into the prompt verbatim, D-004, never chunked — `fetchProductsForPage` returns [] with
+ * no store). One hand-typed catalog row therefore moved a page onto semantic search with
+ * zero product chunks to search, so its Business Info was chunk-filtered for no benefit:
+ * prod 2026-08-27 had a 10.5k-char resort KB answering from 15–36% of its own text, and a
+ * training centre from 15%. Both are paying merchants; neither has a store.
+ *
+ * One indexed EXISTS on (page_id) — and only for pages that got past the live-index guard,
+ * i.e. at most a handful — in exchange for skipping an OpenAI embedding round-trip on the
+ * hot path when it answers false (Rule 17).
+ */
+export async function hasLiveProductChunks(pageId: string, kbIndexedVersion: number): Promise<boolean> {
+    const rows = await db.execute(sql`
+        SELECT 1
+        FROM kb_chunks
+        WHERE page_id = ${pageId}
+          AND kb_version = ${kbIndexedVersion}
+          AND type = 'product'
+        LIMIT 1
+    `);
+    const list = (rows as unknown as { rows?: unknown[] }).rows ?? (rows as unknown as unknown[]);
+    return list.length > 0;
 }
 
 /**
