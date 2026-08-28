@@ -80,13 +80,45 @@ export function resolveAiUsageNotificationType(
 }
 
 /**
+ * Payment methods where NO external authority advances the billing period — a
+ * human does, through `adminSubscriptionsService.manualUpgrade`, after money
+ * lands off-platform. 'manual' (admin comp / cash), 'bank_transfer',
+ * 'syrian_bank' (all three already selectable in the admin upgrade modal), and
+ * 'sham_cash' (the Syria rail).
+ *
+ * ONE set, because the three predicates below used to test the string 'manual'
+ * directly and every other offline string fell through them: a `bank_transfer`
+ * row skipped the immediate-expiry check, landed in the past_due branch, and
+ * collected the 3-day grace meant for a STRIPE CARD RETRY — with its usage
+ * window already closed, `getCurrentUsage` reads used=0, so the merchant got a
+ * free full-quota refill for three days after their subscription ended. There
+ * is no card to retry on any of these rails; expiry is immediate by design
+ * (D-023). Same rule as LAZY_EXPIRY_CANARIES below: a new offline rail is an
+ * entry here, never another copied if-block.
+ *
+ * Exported for tests and for anything else that must ask "is this rail
+ * human-advanced?" rather than re-listing the strings.
+ */
+export const OFFLINE_PAYMENT_METHODS: ReadonlySet<string> = new Set([
+    'manual',
+    'bank_transfer',
+    'syrian_bank',
+    'sham_cash',
+]);
+
+/** True when a subscription's period is advanced by a human, not a processor. */
+export function isOfflinePaymentMethod(paymentMethod: string | null | undefined): boolean {
+    return !!paymentMethod && OFFLINE_PAYMENT_METHODS.has(paymentMethod);
+}
+
+/**
  * Is this subscription row a real billing relationship (paying or admin-comp),
  * as opposed to a free-trial-only account?
  *
  * Status is intentionally NOT required to be 'active' for Stripe rows: a
  * card-on-file customer mid Stripe-managed trial (status='trialing' with an
  * externalSubscriptionId) is a real customer, not a free-trial farmer. Only the
- * 'manual' comp path requires status='active' so a canceled comp doesn't count.
+ * OFFLINE rails require status='active', so a canceled comp doesn't count.
  *
  * Shopify-billed rows (payment_method='shopify') read as paying through the
  * first branch BY DESIGN: their externalSubscriptionId holds the AppSubscription
@@ -102,7 +134,7 @@ export function isPayingCustomer(row: {
     paymentMethod: string | null;
 }): boolean {
     if (row.externalSubscriptionId || row.stripeCustomerId) return true;
-    if (row.paymentMethod === 'manual' && row.status === 'active') return true;
+    if (isOfflinePaymentMethod(row.paymentMethod) && row.status === 'active') return true;
     return false;
 }
 
@@ -124,9 +156,10 @@ export class QuotaExhaustedError extends Error {
  * billing period — stripe via renewal webhooks, shopify via the 6h billing
  * reconciler (D-B; the 3-day past_due grace absorbs a late sweep). A row on
  * these rails lazily expiring means the authority is broken; a Sentry warning
- * fires before a paying customer notices. 'manual' is deliberately absent
- * (D-023: manual expiry IS the normal path). New managed rails (zid, salla)
- * get an entry here — never another copied if-block.
+ * fires before a paying customer notices. The OFFLINE_PAYMENT_METHODS rails are
+ * deliberately absent (D-023: manual expiry IS the normal path — a human, not a
+ * processor, advances those periods). New MANAGED rails (zid, salla) get an
+ * entry here — never another copied if-block.
  */
 const LAZY_EXPIRY_CANARIES: Record<string, {
     message: string;
@@ -243,7 +276,7 @@ export function resolveEntitlementEnd(subscription: SubscriptionStatusInput): Da
     // refused at all — both are unbounded in time, so no date may be shown for them.
     if (status === 'canceled' || status === 'paused') return null;
 
-    if (paymentMethod === 'manual' && currentPeriodEnd) {
+    if (isOfflinePaymentMethod(paymentMethod) && currentPeriodEnd) {
         return startOfUtcDay(new Date(currentPeriodEnd));
     }
 
@@ -1375,7 +1408,7 @@ export const subscriptionsService = {
         // free-refill bug lives (window closed, but subscription not "expired" yet).
         // Admin reopens the window (and the quota) via manualUpgrade once the
         // cash/transfer lands.
-        if (subscription.paymentMethod === 'manual' && subscription.currentPeriodEnd) {
+        if (isOfflinePaymentMethod(subscription.paymentMethod) && subscription.currentPeriodEnd) {
             // resolveEntitlementEnd applies the snap; display surfaces call the
             // same helper so the date a merchant reads is the date enforced here.
             const entitlementEnd = resolveEntitlementEnd(subscription);

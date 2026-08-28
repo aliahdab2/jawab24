@@ -3364,3 +3364,75 @@ for `manual`, `getInboundRecency` opener / burst / active / 14-day-return / othe
 `storeOutgoingMessage` platform fallback and existing-conversation precedence), frontend badge +
 card-hint tests asserted from the i18n JSON. Backend tsc / lint / duplication clean;
 `translation:validate` pass. Reference: `docs/whatsapp-coexistence-echoes.md`.
+
+---
+
+## D-110 · A blocked card is not a blocked customer: Syria gets a Sham Cash payment screen, and the grant stays human (2026-08-28)
+
+**Decision.** A merchant inside Syria reaching `/checkout` is shown a **payment screen**, not
+"payments are not available in your region". They transfer to our Sham Cash wallet and submit the
+**transfer reference** (receipt image optional); support matches it against the wallet statement
+and opens the account with the existing admin manual-upgrade action. Stripe's SY block is
+untouched.
+
+**Why the framing flips.** The old copy was accurate about the card and wrong about the customer.
+Syrian pages are the #2 AI-usage cluster, `SANCTIONED_COUNTRIES` refuses SY before any Stripe call,
+and the growth study found 7 top-up attempts and 0 completions — so the surface that greeted our
+second-largest usage cluster was a dead end while a working payment method existed. Owner ruling
+(2026-08-28): «لازم ما نقول المدفوعات غير متاحة، بالعكس منقول يمكن الدفع عن طريق شام كاش».
+
+**Four things this decision fixes in place, each of which could have been done the easy way:**
+
+1. **The reference is the payment record; the image is only evidence.** A screenshot has to be
+   read by eye; a reference is matched against the wallet statement, and — normalized and unique
+   per rail — it is also the **anti-replay key**. Without uniqueness one receipt renews a
+   subscription forever. Uniqueness is scoped across ALL accounts, not per user: a reference names
+   one real transfer, so a second account claiming it is claiming someone else's money. The image
+   stays optional.
+
+2. **Approving a claim grants nothing.** `offline_payments` records a claim
+   (`pending_review → approved | rejected`); `adminSubscriptionsService.manualUpgrade` stays the
+   single grant choke point. An electronic Sham Cash integration later changes only *who* moves the
+   status — not what a status means, and not who grants. The admin page says this in a banner,
+   because a queue with an Approve button invites the opposite assumption.
+
+3. **Receipts do not go in the media bucket.** `imageStorage` returns a PUBLIC url by design (its
+   own header; `docs/OBJECT_STORAGE.md` §4 — the bucket is a public-type bucket). A transfer receipt
+   is a financial document, so the bytes live in `offline_payment_receipts` in Postgres and are
+   served only by the admin-authenticated route. That is the cheap answer at this volume (single
+   digits a month, ≤2 MB each) and it depends on no provider config that no test can pin. If the
+   rail ever carries real volume the answer is a private bucket, not a bigger table.
+
+4. **USD, not SYP.** Quoting a Syrian-pound figure that is stale by the time the transfer clears
+   produces a short payment and an argument per customer. The price is USD and the merchant sends
+   the equivalent. An admin-editable rate is a later slice, and only if a real transfer shows it is
+   needed — there are zero Syrian payers today, so the rate machinery would be built for a case that
+   has never occurred.
+
+5. **A display price and a charged price are different rules, even when the arithmetic matches.**
+   The frontend's `getDisplayPrice` falls back to `monthly × 10` for a plan with no yearly price so
+   the pricing grid still renders. `services/offlinePayments.ts` **refuses** a yearly claim on such
+   a plan instead: a claim's amount is what a human matches against a wallet statement, and
+   inventing a figure nobody agreed and then reviewing real money against it is worse than a
+   refusal. The first cut of this PR unified the two into `@jawab24/shared` on a no-duplication
+   argument, and was wrong twice over — it also smuggled the untree-shakeable CommonJS shared
+   bundle (zod + libphonenumber-js) onto `/pricing` and `/pricing/scale`, the paid-ads landing
+   pages whose import blocks exist to forbid exactly that. The display helpers stay frontend-only,
+   with the reason written at both sites so this is not re-unified later.
+
+**A prerequisite bug fixed in the same PR, because it was live.** Three predicates in
+`services/subscriptions.ts` tested `paymentMethod === 'manual'` literally. `bank_transfer` and
+`syrian_bank` are BOTH already selectable in the admin upgrade modal, and one `bank_transfer`
+subscription exists in production — such a row skipped the immediate expiry check, fell into the
+`past_due` branch, and collected the 3-day grace meant for a **Stripe card retry**; with its usage
+window already closed, `getCurrentUsage` reads `used = 0`, so that grace handed the merchant a free
+full-quota refill. There is no card to retry on any offline rail. Replaced by one
+`OFFLINE_PAYMENT_METHODS` set — the same rule `LAZY_EXPIRY_CANARIES` already states: a new rail is
+an entry, never another copied if-block. Pinned by `subscriptionExpiry.test.ts` across all four
+rails.
+
+**Scope held deliberately.** The sanctions block itself is unchanged (Rule 4) — this is a second
+rail beside it, and `/checkout`'s sanctioned branch never mounts Stripe. Top-ups stay on the old
+notice, since a claim is filed against a plan. The rail is off unless `SHAM_CASH_WALLET_NUMBER` is
+set, and off means the previous WhatsApp notice, unchanged. Everything is hidden on iOS native
+(App Store 3.1.1), like every other payment surface.

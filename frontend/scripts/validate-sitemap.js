@@ -49,6 +49,7 @@ const EXCLUDED_ROUTES = new Map([
   ['admin/customers', 'admin panel (auth-gated)'],
   ['admin/customers/detail', 'admin panel (auth-gated)'],
   ['admin/observability', 'admin panel (auth-gated)'],
+  ['admin/offline-payments', 'admin panel (auth-gated)'],
   ['admin/playground', 'admin panel (auth-gated)'],
   ['admin/waitlist', 'admin panel (auth-gated)'],
   ['auth/app-sync', 'auth flow (noindex)'],

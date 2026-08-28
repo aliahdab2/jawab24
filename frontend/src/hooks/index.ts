@@ -11,6 +11,7 @@
 export { useEscapeKey } from './useEscapeKey';
 export { useClickOutside } from './useClickOutside';
 export { useIOSPaymentRedirect } from './useIOSPaymentRedirect';
+export { useLocalPaymentRail } from './useLocalPaymentRail';
 export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
 export { useModalBackHandler, dismissTopModal } from './useModalBackHandler';

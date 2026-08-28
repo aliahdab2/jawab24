@@ -1,3 +1,5 @@
+import { foldArabicDigits } from './utils/arabic-normalize';
+
 /**
  * Max length for customer-facing message templates (greeting, away message,
  * limit-fallback). Tied to Instagram DM limit (1000 chars) — the strictest
@@ -17,9 +19,17 @@ export const POST_REPLY_MAX_KEYWORD_LEN = 100;
 // The merchant may write up to 1000 chars. Delivery on a cold comment→DM (one message
 // allowed) depends on length + whether an image is attached — see POST_REPLY_CARD_CAPTION_MAX.
 export const POST_REPLY_MAX_REPLY_LEN = 1000;
+/**
+ * Image types accepted from ANY merchant upload in the product. One list, so a
+ * new upload surface cannot quietly widen the allowlist: every caller validates
+ * the declared mime against this AND the buffer's magic bytes
+ * (`bufferMatchesMime`) before the bytes are stored.
+ */
+export const UPLOADED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
 /** Post Reply image upload limits (DM-modes only). */
 export const POST_REPLY_IMAGE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
-export const POST_REPLY_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const POST_REPLY_IMAGE_MIME_TYPES = UPLOADED_IMAGE_MIME_TYPES;
 
 /**
  * Post Reply CTA button (DM-modes only, Facebook only). A tappable link button under the
@@ -133,4 +143,44 @@ export type AllowedAiModel = (typeof ALLOWED_AI_MODELS)[number];
 
 export function isAllowedAiModel(model: string | null | undefined): model is AllowedAiModel {
     return !!model && (ALLOWED_AI_MODELS as readonly string[]).includes(model);
+}
+
+/**
+ * Offline (non-card) payment rail — Syria pays through Sham Cash, and the same
+ * shape serves any future manual rail (Libya's bank transfers go through support
+ * by hand today). The merchant transfers to our wallet, then submits the transfer
+ * reference so we can match it against the wallet statement.
+ *
+ * THE REFERENCE IS THE ANTI-REPLAY KEY, not a nicety: without uniqueness on it,
+ * one screenshot renews a subscription forever.
+ */
+export const OFFLINE_PAYMENT_RAILS = ['sham_cash'] as const;
+export type OfflinePaymentRail = typeof OFFLINE_PAYMENT_RAILS[number];
+
+export const OFFLINE_PAYMENT_REFERENCE_MAX = 64;
+export const OFFLINE_PAYMENT_SENDER_NAME_MAX = 120;
+export const OFFLINE_PAYMENT_NOTE_MAX = 500;
+
+/** Receipt screenshot: OPTIONAL evidence. The reference is what reconciles. */
+export const OFFLINE_PAYMENT_RECEIPT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
+export const OFFLINE_PAYMENT_RECEIPT_MIME_TYPES = UPLOADED_IMAGE_MIME_TYPES;
+
+/**
+ * How many submissions one user may leave awaiting review. Not a business rule —
+ * an abuse bound, so a single account cannot fill the receipts table.
+ */
+export const OFFLINE_PAYMENT_MAX_PENDING_PER_USER = 3;
+
+export const OFFLINE_PAYMENT_STATUSES = ['pending_review', 'approved', 'rejected'] as const;
+export type OfflinePaymentStatus = typeof OFFLINE_PAYMENT_STATUSES[number];
+
+/**
+ * Normalized form of a transfer reference — what the uniqueness constraint sees.
+ * Merchants retype the same reference with spaces, dashes, or Arabic-Indic
+ * digits; all three spellings must collide, or the replay guard is decorative.
+ */
+export function normalizeTransferReference(raw: string): string {
+    return foldArabicDigits(raw.trim())
+        .toUpperCase()
+        .replace(/[\s\-_./\\]+/g, '');
 }

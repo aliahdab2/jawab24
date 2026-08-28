@@ -17,6 +17,7 @@ import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { useSelectPlan } from '@/hooks/useSelectPlan';
+import { useLocalPaymentRail } from '@/hooks/useLocalPaymentRail';
 import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { Check, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
@@ -48,6 +49,7 @@ function ScalePlanCard({
   hasActiveSubscription,
   currentPlanPrice,
   isSanctioned,
+  hasLocalRail,
   loading,
   onSelect,
   locale,
@@ -57,6 +59,9 @@ function ScalePlanCard({
   hasActiveSubscription: boolean;
   currentPlanPrice: number;
   isSanctioned: boolean;
+  /** Sanctioned, but a local rail exists (Syria → Sham Cash): keep the real CTA
+   *  and let /checkout render the offline panel. */
+  hasLocalRail: boolean;
   loading: boolean;
   onSelect: () => void;
   locale: string;
@@ -152,7 +157,7 @@ function ScalePlanCard({
       </div>
 
       <div className="mt-auto pt-4 px-4 pb-4">
-        {isSanctioned ? (
+        {isSanctioned && !hasLocalRail ? (
           <SanctionedCtaFallback />
         ) : (
           <Button
@@ -189,6 +194,10 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
 
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [isSanctioned, setIsSanctioned] = useState(false);
+  // Set once the geo check below has answered, so the local-rail hook can read
+  // the country it cached instead of issuing a second /geo/check.
+  const [geoResolved, setGeoResolved] = useState(false);
+  const hasLocalRail = useLocalPaymentRail(geoResolved);
   // Mobile tab state — one card visible at a time, matching the public /pricing
   // page's segmented control (shared PlanTabSelector). Defaults to the first
   // (lower-volume) plan; desktop shows both side by side.
@@ -202,7 +211,7 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
   // (the strict, authoritative check still runs again at click time + backend).
   useEffect(() => {
     isUserSanctionedNonBlocking(1000)
-      .then((r) => setIsSanctioned(r.sanctioned))
+      .then((r) => { setIsSanctioned(r.sanctioned); setGeoResolved(true); })
       .catch(() => {
         /* permissive on timeout — the strict check at click time covers it */
       });
@@ -274,6 +283,7 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
                   hasActiveSubscription={hasActiveSubscription}
                   currentPlanPrice={currentPlanPrice}
                   isSanctioned={isSanctioned}
+                  hasLocalRail={hasLocalRail}
                   loading={changingPlan === plan.id}
                   onSelect={() => handleSelectPlan(plan.id)}
                   locale={locale}

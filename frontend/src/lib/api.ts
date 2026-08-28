@@ -890,6 +890,64 @@ export const subscriptionApi = {
 };
 
 /**
+ * Offline (non-card) payment rail — Sham Cash for merchants inside Syria.
+ *
+ * `getConfig` answers "is this rail live, and what are the wallet details" in
+ * ONE call: a 404 means off, and the panel is not rendered. Nothing here grants
+ * a plan — a claim is reviewed by a human and the plan is opened through the
+ * admin manual-upgrade path.
+ */
+export interface OfflinePaymentConfig {
+  rail: 'sham_cash';
+  walletNumber: string;
+  walletName: string | null;
+  qrImageUrl: string | null;
+  currency: string;
+}
+
+export interface OfflinePaymentClaim {
+  id: string;
+  userId: string;
+  planId: string;
+  planName: string;
+  planSlug: string;
+  billingInterval: string;
+  amountCents: number;
+  currency: string;
+  transferReference: string;
+  senderName: string | null;
+  note: string | null;
+  status: 'pending_review' | 'approved' | 'rejected';
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  hasReceipt: boolean;
+  createdAt: string;
+}
+
+/** A claim as the review queue sees it — same row plus who submitted it. */
+export interface AdminOfflinePaymentClaim extends OfflinePaymentClaim {
+  userEmail: string | null;
+  userName: string | null;
+}
+
+export interface SubmitOfflinePaymentPayload {
+  planId: string;
+  billingInterval: 'month' | 'year';
+  transferReference: string;
+  senderName?: string;
+  note?: string;
+  /** Optional evidence; the reference is what reconciles the payment. */
+  receipt?: { base64: string; mimeType: string } | null;
+}
+
+export const offlinePaymentApi = {
+  getConfig: () => api.get<OfflinePaymentConfig>('/payment/offline/config'),
+  submit: (payload: SubmitOfflinePaymentPayload) =>
+    api.post<{ claim: OfflinePaymentClaim }>('/payment/offline/claims', payload),
+  listMine: () => api.get<{ claims: OfflinePaymentClaim[] }>('/payment/offline/claims'),
+};
+
+/**
  * Conversation pause state for the human-handoff banner.
  * `reason` distinguishes an explicit UI pause ('explicit') from the implicit
  * pause a manual reply triggers ('manual_reply') — the banner uses it to explain
@@ -1184,6 +1242,28 @@ export const partnerApi = {
 
 // Admin API - Protected routes for admin users only
 export const adminApi = {
+
+  // ── Offline payment claims (Sham Cash review queue) ──────────────────────
+  // Reviewing RECORDS a decision; the plan is still granted through the manual
+  // upgrade flow, which stays the single grant choke point.
+  listOfflinePayments: (status?: OfflinePaymentClaim['status']) =>
+    api.get<{ claims: AdminOfflinePaymentClaim[] }>(
+      `/admin/offline-payments${status ? `?status=${status}` : ''}`,
+    ),
+  reviewOfflinePayment: (id: string, decision: 'approved' | 'rejected', reviewNote?: string) =>
+    api.post<{ success: boolean; grantsSubscription: boolean }>(
+      `/admin/offline-payments/${id}/review`,
+      { decision, reviewNote },
+    ),
+  /**
+   * Receipt bytes, fetched through the API client rather than pointed at from an
+   * <img src>. The bytes are admin-only and live in Postgres precisely so they
+   * are never reachable without this session; going through the client also
+   * keeps it working under Bearer auth (native/embedded), where a bare <img>
+   * would send no credentials at all.
+   */
+  getOfflinePaymentReceipt: (id: string) =>
+    api.get<Blob>(`/admin/offline-payments/${id}/receipt`, { responseType: 'blob' }),
   // List all users with pagination and filters
   listUsers: async (filters: {
     page?: number;
@@ -1333,7 +1413,7 @@ export const adminApi = {
   upgradeUser: async (userId: string, data: {
     planId: string;
     periodMonths: 1 | 3 | 6 | 12;
-    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank';
+    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash';
     paymentReference?: string;
     note?: string;
   }) => {

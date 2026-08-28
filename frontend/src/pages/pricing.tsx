@@ -19,6 +19,7 @@ import { useAuthStore } from '@/lib/store';
 // Direct import, not the '@/hooks' barrel — public page (see DashboardLayout.tsx).
 import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { useSelectPlan } from '@/hooks/useSelectPlan';
+import { useLocalPaymentRail } from '@/hooks/useLocalPaymentRail';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
@@ -51,6 +52,7 @@ function PlanCard({
   currentPlanPrice,
   subscriptionStatus,
   isSanctioned,
+  hasLocalRail,
   billingInterval,
   locale,
 }: {
@@ -62,6 +64,9 @@ function PlanCard({
   currentPlanPrice: number;
   subscriptionStatus?: string;
   isSanctioned: boolean;
+  /** Sanctioned, but a local rail exists (Syria → Sham Cash): keep the real CTA
+   *  and let /checkout render the offline panel. */
+  hasLocalRail: boolean;
   billingInterval: 'month' | 'year';
   locale?: string;
 }) {
@@ -272,7 +277,7 @@ function PlanCard({
 
       {/* CTA */}
       <div className="mt-auto pt-1.5 md:pt-3 px-3 pb-1">
-        {isSanctioned ? (
+        {isSanctioned && !hasLocalRail ? (
           <SanctionedCtaFallback />
         ) : (
           <Button
@@ -364,6 +369,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const [plans, setPlans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [isSanctioned, setIsSanctioned] = useState<boolean>(false);
+  // Set once the geo check below has answered, so the local-rail hook can read
+  // the country it cached instead of issuing a second /geo/check.
+  const [geoResolved, setGeoResolved] = useState(false);
+  const hasLocalRail = useLocalPaymentRail(geoResolved);
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
@@ -417,6 +426,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         ]);
 
         setIsSanctioned(geoResult.sanctioned);
+        setGeoResolved(true);
 
         if (usageResult?.data) {
           setUsage(extractObjectData<UsageSummary>(usageResult.data));
@@ -673,6 +683,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 currentPlanPrice={currentPlanPrice}
                 subscriptionStatus={usage?.subscription?.status}
                 isSanctioned={isSanctioned === true}
+                hasLocalRail={hasLocalRail}
                 billingInterval={effectiveInterval}
                 locale={locale}
               />

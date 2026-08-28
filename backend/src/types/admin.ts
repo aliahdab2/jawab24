@@ -11,7 +11,7 @@ import type { TopupPack, TopupSource } from '../services/topup';
 export interface ManualUpgradeBody {
     planId: string;
     periodMonths: 1 | 3 | 6 | 12;
-    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank';
+    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash';
     paymentReference?: string;
     note?: string;
 }

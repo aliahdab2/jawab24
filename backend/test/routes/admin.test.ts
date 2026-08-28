@@ -91,6 +91,11 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
+    // The offline (Sham Cash) payment rail's tables. Present here only because
+    // this file hand-rolls the schema mock: the admin/payment routes import the
+    // offline-payments controller, and a missing export throws at import time.
+    offlinePayments: { id: 'id', userId: 'userId', rail: 'rail', planId: 'planId', billingInterval: 'bi', amountCents: 'ac', currency: 'currency', transferReference: 'tr', transferReferenceNormalized: 'trn', senderName: 'sn', note: 'note', status: 'status', reviewNote: 'rn', reviewedByAdminUserId: 'rba', reviewedAt: 'ra', createdAt: 'createdAt', updatedAt: 'updatedAt' },
+    offlinePaymentReceipts: { offlinePaymentId: 'opi', mimeType: 'mimeType', byteLength: 'bl', bytes: 'bytes', createdAt: 'createdAt' },
     users: { id: 'id', email: 'email', name: 'name', phone: 'phone', facebookId: 'facebookId', createdAt: 'createdAt', partnerId: 'partnerId', partnerNote: 'partnerNote' },
     partners: { id: 'id', name: 'name', email: 'email', userId: 'userId', commissionPct: 'commissionPct', isActive: 'isActive', createdAt: 'createdAt', updatedAt: 'updatedAt' },
     subscriptions: { id: 'id', userId: 'userId', status: 'status', planId: 'planId', currentPeriodStart: 'cps', currentPeriodEnd: 'cpe', paymentMethod: 'pm', trialEndsAt: 'te' },

@@ -97,7 +97,7 @@ export {
     getTimezoneOptions,
     utcOffsetMinutes,
 } from './timezone';
-export { normalizeArabic } from './utils/arabic-normalize';
+export { normalizeArabic, foldArabicDigits } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export type {
   FactWeekdaysValue,
@@ -1201,6 +1201,7 @@ export {
     POST_REPLY_MAX_KEYWORDS,
     POST_REPLY_MAX_KEYWORD_LEN,
     POST_REPLY_MAX_REPLY_LEN,
+    UPLOADED_IMAGE_MIME_TYPES,
     POST_REPLY_IMAGE_MAX_BYTES,
     POST_REPLY_IMAGE_MIME_TYPES,
     POST_REPLY_CARD_CAPTION_MAX,
@@ -1209,6 +1210,17 @@ export {
     READ_MORE_PAYLOAD_PREFIX,
     buildReadMorePayload,
     parseReadMorePayload,
+    OFFLINE_PAYMENT_RAILS,
+    type OfflinePaymentRail,
+    OFFLINE_PAYMENT_REFERENCE_MAX,
+    OFFLINE_PAYMENT_SENDER_NAME_MAX,
+    OFFLINE_PAYMENT_NOTE_MAX,
+    OFFLINE_PAYMENT_RECEIPT_MAX_BYTES,
+    OFFLINE_PAYMENT_RECEIPT_MIME_TYPES,
+    OFFLINE_PAYMENT_MAX_PENDING_PER_USER,
+    OFFLINE_PAYMENT_STATUSES,
+    type OfflinePaymentStatus,
+    normalizeTransferReference,
 } from './constants';
 
 // --- Phase 6.5 P1 diagnostic counters ---

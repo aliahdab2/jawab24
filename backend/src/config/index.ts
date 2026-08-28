@@ -389,6 +389,29 @@ export const config = {
         whatsappNumber: process.env.JAWAB24_SUPPORT_WHATSAPP || '',
     },
 
+    // Offline (non-card) payment rail — Sham Cash, for merchants inside Syria.
+    //
+    // Stripe refuses SY before any API call (utils/sanctions.ts) and that block
+    // STAYS; this is a second rail beside it. The wallet details are the owner's
+    // real financial identifiers, so they live in env and never in the repo —
+    // they are rotatable, and a redeploy is not needed to change them.
+    //
+    // EMPTY walletNumber = rail OFF: checkout falls back to the WhatsApp notice
+    // it shows today. Fails safe — we never render a payment panel with no
+    // account to pay into.
+    shamCash: {
+        walletNumber: process.env.SHAM_CASH_WALLET_NUMBER || '',
+        /** Account holder shown next to the number so the merchant can confirm before sending. */
+        walletName: process.env.SHAM_CASH_WALLET_NAME || '',
+        /**
+         * URL of the wallet's QR image. OPTIONAL, and deliberately secondary:
+         * on mobile the merchant is browsing on the very phone that holds the
+         * wallet app and cannot scan their own screen, so the copy-the-number
+         * button is the primary path and the QR is for a second device.
+         */
+        qrImageUrl: process.env.SHAM_CASH_QR_URL || '',
+    },
+
     // Frontend URL
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
 

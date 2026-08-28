@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/store';
 // whole Post Reply feature -> '@jawab24/shared' onto it.
 import { useOwnerGate } from '@/hooks/useOwnerGate';
 import { api, subscriptionApi } from '@/lib/api';
-import { isUserSanctioned } from '@/utils/geoCheck';
+import { getCachedGeoCountry, hasLocalPaymentAlternative, isUserSanctioned } from '@/utils/geoCheck';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebAuthedUrl } from '@/lib/webUrl';
@@ -143,6 +143,17 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     const sanctioned = await isUserSanctioned();
     if (sanctioned) {
       setChangingPlan(null);
+      // A blocked CARD is not a blocked customer. Where the region has a local
+      // rail (inside Syria → Sham Cash), send them to /checkout, whose
+      // sanctioned branch renders the offline payment panel and never mounts
+      // Stripe — so this is a route change, not a hole in the sanctions gate.
+      // Free plans are excluded: there is nothing to transfer for.
+      const railPlan = plans.find((p) => p.id === planId);
+      if (hasLocalPaymentAlternative(getCachedGeoCountry()) && (railPlan?.price ?? 0) > 0) {
+        const checkoutPath = `/checkout?planId=${planId}&interval=${intervalFor(railPlan)}`;
+        router.push(isAuthenticated ? checkoutPath : `/login?redirect=${encodeURIComponent(checkoutPath)}`);
+        return;
+      }
       toast.error(tPricing('unavailableRegion'));
       captureError(new Error('Payment blocked: sanctioned jurisdiction'), 'Sanctions block on plan select', { tags: { action: 'sanctions_block' }, level: 'warning' });
       return;
