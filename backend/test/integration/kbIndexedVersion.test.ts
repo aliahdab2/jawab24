@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { testDb, createTestUser, createTestWorkspace, createTestPage } from './setup';
+import { testDb, createTestUser, createTestWorkspace, createTestPage, createTestEcommerceStore } from './setup';
 import { KbIngestionService } from '../../src/services/kb/ingestion';
 import { PgVectorStore } from '../../src/services/kb/pgvector-store';
 import { RetrievalService, hasLiveProductChunks } from '../../src/services/kb/retrieval';
@@ -165,6 +165,35 @@ describe('D-106 — kb_indexed_version', () => {
             .from(schema.kbGaps).where(eq(schema.kbGaps.pageId, page.id));
         expect(gaps).toHaveLength(1);
         expect(gaps[0].resolved).toBe(false);
+    });
+
+    it('a store page with a DEAD pointer still raises the stale-index flag', async () => {
+        // The one case where a stale index really costs a customer: a store's product chunks
+        // are its only detailed data, so an orphaned pointer degrades product answers with no
+        // other signal. `kb_chunks_stale` fires on (chunksStale && onRetrievalPath), and the
+        // readable-chunk count is 0 EXACTLY here — so a predicate derived only from what is
+        // currently readable answers "not on the retrieval path" precisely when the page is
+        // broken, and suppresses its own alarm. The `!!ecommerceStoreId ||` half is what keeps
+        // it firing; this test is what holds that half in place.
+        const store = await createTestEcommerceStore(userId);
+        const page = await createTestPage(userId, {
+            workspaceId, knowledgeBase: KB, kbVersion: 5, kbActiveVersion: 5,
+            ecommerceStoreId: store.id,
+        });
+        await ingestion().ingestFullPage(page.id, KB, [], 4, { resolveGaps: false });
+        // Pointer dead, chunks stranded below it — the production shape.
+        await testDb.update(schema.pages)
+            .set({ kbIndexedVersion: null, kbActiveVersion: 5, kbVersion: 5 })
+            .where(eq(schema.pages.id, page.id));
+
+        const detail = await adminUsersService.getUserDetail(userId);
+        const kb = detail!.pages.find((x: { id: string }) => x.id === page.id)!.kb;
+
+        // No readable chunks at all — so the assertion below can only pass via the store half.
+        expect(kb.chunksTotal).toBe(0);
+        expect(kb.newestChunkVersion).toBe(4);
+        expect(kb.chunksStale).toBe(true);
+        expect(kb.onRetrievalPath).toBe(true);
     });
 
     it("the console's onRetrievalPath mirrors the generator's gate", async () => {
