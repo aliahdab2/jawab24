@@ -88,11 +88,31 @@ export function resolveFallbackLanguage(opts: {
  * is a real limit. Adding `<locale>.json` is what lifts it, and `MessageKey` makes a
  * half-added locale a compile error rather than a silent English reply.
  *
+ * ⚠️ That degradation is REACHABLE today, not hypothetical: `UpdateSettingsSchema` types
+ * this field as `z.string().min(2).max(10)`, so `'fr'`, `'ar-SY'` and `'AR'` are all
+ * writable, and each one lands here and yields the English sentence — the exact D-107
+ * symptom on a page configured for something else. It is not guarded at the write boundary
+ * because the accepted set would have to be a SECOND copy of the locale list that
+ * `utils/i18n.ts` already owns (`packages/shared` cannot import it), and prod holds no such
+ * value: 97/97 `settings` rows and 96/97 workspace JSONB values are exactly `'ar'`
+ * (2026-08-28). So the schema is one more site on the "registering a locale" list below,
+ * and `degrades an unauthored locale to English rather than guessing` is the test that
+ * keeps the behaviour honest until then.
+ *
  * NOTE (deliberately not bundled): `resolveFallbackLanguage`'s canned away/quota/price
  * templates are also authored-by-us text that fires on script-less input, so the same
  * inversion — and the same ar/en widening — arguably belongs there. That is a fleet-wide
  * change to a different set of messages and needs its own measurement; one change at a
- * time. Until then this function only WIDENS: for the ar/en pair the two agree exactly.
+ * time.
+ *
+ * ⛔ The two functions DISAGREE, deliberately — do not collapse them. This one reads the
+ * merchant default FIRST, `resolveFallbackLanguage` reads it LAST, so they differ for every
+ * page whose configured language is not its post's detected language, which is the whole
+ * fix. Worked counter-example (`postMessage: 'Amazing atmosphere at Shahin Resort 👌🔥'`,
+ * `defaultReplyLanguage: 'ar'`): `resolveFallbackLanguage` → 'en' (it returns at the post
+ * rung and never reaches the default), this function → 'ar'. That is eval case #814. What
+ * only WIDENS is the RETURN TYPE — a code instead of `'ar' | 'en'` — a no-op for the two
+ * locales that have authored strings; the ORDERING is a behaviour change.
  */
 export function resolveAuthoredCtaLanguage(opts: {
     postMessage?: string;
