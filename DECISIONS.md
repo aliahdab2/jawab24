@@ -3431,6 +3431,19 @@ full-quota refill. There is no card to retry on any offline rail. Replaced by on
 an entry, never another copied if-block. Pinned by `subscriptionExpiry.test.ts` across all four
 rails.
 
+**What this is NOT the answer to: Paymera.** The owner intends to integrate the Syrian gateway
+**Paymera** later (stated 2026-08-28). That is an ONLINE, automated rail — its callbacks advance
+the billing period — so when it lands it is a MANAGED rail alongside stripe/shopify/zid/salla, and
+it must **not** be added to `OFFLINE_PAYMENT_METHODS`: doing so on a "Syria = offline" reading
+would expire a properly-billed subscription on date and deny it the grace window that exists to
+absorb a late callback, cutting off a paying customer mid-renewal. The trap is written at the set
+itself. Three seams make Paymera a drop-in rather than a rewrite: the sanctions checks are
+per-endpoint in `controllers/payment.ts` (five Stripe entry points), NOT a global payment block, so
+a Paymera controller simply never calls `isSanctionedGeo` and the Stripe block stays untouched;
+`/checkout`'s sanctioned branch is a single decision point that can render a gateway checkout in
+place of the Sham Cash panel; and the Sham Cash rail is stored as `rail` on `offline_payments`, a
+table for human-reviewed claims that an automated gateway never needs to touch.
+
 **Scope held deliberately.** The sanctions block itself is unchanged (Rule 4) — this is a second
 rail beside it, and `/checkout`'s sanctioned branch never mounts Stripe. Top-ups stay on the old
 notice, since a claim is filed against a plan. The rail is off unless `SHAM_CASH_WALLET_NUMBER` is

@@ -98,6 +98,14 @@ export function resolveAiUsageNotificationType(
  *
  * Exported for tests and for anything else that must ask "is this rail
  * human-advanced?" rather than re-listing the strings.
+ *
+ * ⛔ SYRIA IS NOT THE CRITERION — "who advances the period" is. When the Syrian
+ * gateway (Paymera) is integrated it is a MANAGED rail like stripe/shopify/zid/
+ * salla: its callbacks advance the period, so it belongs in
+ * LAZY_EXPIRY_CANARIES below and must NOT be added here. Adding it here on the
+ * "Syria = offline" pattern would expire a properly-billed subscription on
+ * date and deny it the grace window that exists precisely to absorb a late
+ * callback — i.e. it would cut off a paying customer mid-renewal.
  */
 export const OFFLINE_PAYMENT_METHODS: ReadonlySet<string> = new Set([
     'manual',

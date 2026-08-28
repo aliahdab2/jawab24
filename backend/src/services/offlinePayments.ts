@@ -24,7 +24,7 @@ import {
     type OfflinePaymentStatus,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { offlinePayments, offlinePaymentReceipts, plans, users } from '../db/schema';
+import { adminAuditLogs, offlinePayments, offlinePaymentReceipts, plans, users } from '../db/schema';
 
 export interface SubmitOfflinePaymentInput {
     userId: string;
@@ -284,10 +284,19 @@ export const offlinePaymentsService = {
     },
 
     /**
-     * Move a claim to a terminal status. Gated on `pending_review`, so a double
-     * click, or two admins acting at once, transitions exactly once — the same
-     * status-gated idempotency the Stripe payment-request rows use.
+     * Move a claim to a terminal status, and record WHO decided it.
+     *
+     * Gated on `pending_review`, so a double click — or two admins acting on a
+     * stale queue — transitions exactly once and the audit row is written once:
+     * the same status-gated idempotency the Stripe payment-request rows use.
      * Returns false when the row was already reviewed (or does not exist).
+     *
+     * The `admin_audit_logs` write is in the SAME transaction as the status
+     * change, not beside it. Every other admin mutation in this codebase writes
+     * one (manual upgrade, top-up grant, partner edits), and a decision about
+     * whether real money arrived is the last one that should be missing from
+     * that trail. Atomic because a decision with no record of who made it is
+     * worse than no decision.
      */
     async review(
         id: string,
@@ -295,21 +304,48 @@ export const offlinePaymentsService = {
         adminUserId: string | undefined,
         reviewNote?: string | null,
     ): Promise<boolean> {
-        const updated = await db
-            .update(offlinePayments)
-            .set({
-                status: decision,
-                reviewNote: reviewNote?.trim() || null,
-                reviewedByAdminUserId: adminUserId ?? null,
-                reviewedAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .where(and(
-                eq(offlinePayments.id, id),
-                eq(offlinePayments.status, 'pending_review'),
-            ))
-            .returning({ id: offlinePayments.id });
-        return updated.length > 0;
+        const note = reviewNote?.trim() || null;
+
+        return db.transaction(async (tx) => {
+            const [updated] = await tx
+                .update(offlinePayments)
+                .set({
+                    status: decision,
+                    reviewNote: note,
+                    reviewedByAdminUserId: adminUserId ?? null,
+                    reviewedAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .where(and(
+                    eq(offlinePayments.id, id),
+                    eq(offlinePayments.status, 'pending_review'),
+                ))
+                .returning();
+
+            if (!updated) return false;
+
+            await tx.insert(adminAuditLogs).values({
+                adminUserId,
+                targetUserId: updated.userId,
+                action: 'offline_payment_review',
+                previousValue: { claimId: updated.id, status: 'pending_review' },
+                newValue: {
+                    claimId: updated.id,
+                    status: decision,
+                    rail: updated.rail,
+                    planId: updated.planId,
+                    billingInterval: updated.billingInterval,
+                    amountCents: updated.amountCents,
+                },
+                // The reviewer's own words on why, and the reference they matched
+                // against the wallet statement — the two things a later reader of
+                // this row will want and cannot reconstruct.
+                paymentReference: updated.transferReference,
+                note,
+            });
+
+            return true;
+        });
     },
 
     /** Receipt bytes for the admin-only route. The ONLY place bytes are read. */
