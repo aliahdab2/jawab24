@@ -3149,8 +3149,27 @@ finds every site, so it is mechanical, but it is not a drop-in. **Follow-up, un-
 **Deliberately NOT bundled.** `resolveFallbackLanguage`'s canned away/quota/price templates are
 also authored-by-us text firing on script-less input, so the same inversion and the same
 widening arguably belong there too. That is a fleet-wide change to a different set of messages
-and needs its own measurement — one change at a time. For the ar/en pair the two functions
-agree exactly today, so this change only widens.
+and needs its own measurement — one change at a time.
+
+⛔ **The two resolvers DISAGREE, and they are meant to.** Do not read the paragraph above as
+"they are interchangeable for ar/en, so they could be collapsed" — collapsing them re-ships
+this defect. `resolveFallbackLanguage` reads the context ladder FIRST and the merchant default
+LAST; `resolveAuthoredCtaLanguage` inverts that. For any page whose configured language differs
+from its post's detected language they return different answers, which is the entire fix.
+The counter-example is this ruling's own headline case, executed against the shipped code:
+
+```
+postMessage = 'Amazing atmosphere at Shahin Resort 👌🔥' , defaultReplyLanguage = 'ar'
+  isLowSignalLatinToken → false ; detectLanguageCode → 'en'
+  resolveFallbackLanguage    → 'en'   (returns at the post rung, never reaches the default)
+  resolveAuthoredCtaLanguage → 'ar'   (the default decides)
+```
+
+That is eval case **#814**, and the unit test `answers an emoji on 'Amazing atmosphere at
+Shahin Resort 👌🔥' in Arabic` pins the right-hand answer. What this change "only widens" is
+the RETURN TYPE — a language code instead of `'ar' | 'en'` — which is a no-op for the two
+locales that have authored strings. The ordering is a deliberate behaviour change, not a
+widening.
 
 **The generalisable rule.** Never infer a language for text you are authoring yourself from
 text a third party wrote. And when self-authored text is fed back into a detector to decide
@@ -3229,3 +3248,44 @@ pre-existing `returns true for long text (> 50 chars)` case was **deliberately r
 assumed — this one bought 3.9% of API calls and paid for it with a public reply to a private
 conversation. And when a function documents its own bias, a rule that contradicts that bias
 is a bug even when every individual line looks reasonable.
+
+**The cost side, measured — because removing a guard has one too.** The entry above measured
+the leak the cap caused; review asked for the opposite direction: how much SILENCE can the
+removal create? Widening the repair fetch means more comments reach the step-3a skip, which
+resolves silently, sets no `needs_attention`, and is therefore invisible to the merchant. Over
+the same 30 days:
+
+| | |
+|---|---|
+| comments already silently skipped as friend tags (baseline) | **4,720** |
+| comments the cap kept out of the fetch (the flip population) | 579 |
+| …of those, that received an AI reply | 243 |
+| …of THOSE, classified `COMPLIMENT` / `QUESTION` / `COMPLAINT` / `GREETING` | 177 / 42 / 22 / 2 |
+
+So the worst case is **at most +12% on a class that is already 4,720 a month** — and only for
+the subset that truly carries a tag, since a comment with no tag is fetched and then replied to
+exactly as before. The visible two-Latin-names signature concentrates where a skip is harmless
+(20 of 177 compliments, 2 of 42 questions). The exposure is the small remainder: a customer who
+tags a friend AND addresses us without a `?`, a digit, a currency token or a URL.
+
+**Two remedies were considered and both rejected on the numbers:**
+
+- **A word-count guard on the structured-tag path** (mirroring `FRIEND_MENTION_WORD_LIMIT = 3`,
+  which the regex `hasMention` path already has). Rejected: it re-opens this exact defect. The
+  Shahin comment carries ~5 words of trailing text after the tags, so a >3-word pass would
+  reply to it again. The asymmetry between the two paths is deliberate — a structured tag from
+  Graph is authoritative evidence, a regex `@` is a guess.
+- **Flagging instead of resolving** (`needs_attention = true` so the merchant can see it).
+  Rejected on volume: at 4,720 a month it would put ~4,700 rows of peer-to-peer chatter into
+  every merchant's attention queue, which is a worse product than the silence it replaces.
+
+**What shipped instead: make the class countable.** The skip now records
+`skipped_friend_tag` rather than sharing `skipped_spam`, and goes through the shared
+`silentlyResolveAndSkip` helper rather than a third hand-rolled copy of resolve + SSE. Silence
+that is *counted* is revisable on evidence; silence pooled with a different class is not. Watch
+it per page against `success` — a page whose friend-tag skips climb while its successes fall is
+the signal this trade-off went wrong.
+
+**The generalisable rule, second half.** Measuring the failure a guard causes does not excuse
+you from measuring the failure its removal causes. Both directions get a number, and when the
+answer is "stay silent", the silence gets a counter.

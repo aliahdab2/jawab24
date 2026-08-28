@@ -1054,6 +1054,17 @@ describe('CommentProcessor', () => {
                 reason: 'friend_tag',
             }),
         );
+
+        // Counted APART from `skipped_spam`, which this path used to share (D-108). The
+        // negative assertion is the load-bearing half: pooled with AI-classified spam,
+        // neither number can be read, and this class is ~4,700 comments a month against a
+        // handful of spam — and D-108 deliberately grew it by removing the length cap on the
+        // Graph repair fetch. The counter is the only signal if that widening ever starts
+        // sweeping up customers who are addressing the page, because these skips resolve
+        // without `needs_attention` by design.
+        const counters = (await pipelineMetrics.getMetrics()).counters;
+        expect(counters['facebook_comment.skipped_friend_tag']).toBe(1);
+        expect(counters['facebook_comment.skipped_spam']).toBeUndefined();
     });
 
     it('emits comment:skipped with reason=spam when no user-tag is present (generic SPAM)', async () => {
