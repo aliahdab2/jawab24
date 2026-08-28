@@ -2495,6 +2495,64 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Dot with NO postMessage — should be SPAM_OR_IRRELEVANT',
     },
+    // ── D-107: a content-free comment is answered in the MERCHANT's configured
+    // language, never the caption's detected one. Cases 813–816 are the four real
+    // caption shapes measured on Shahin Resort (2026-08-28), which between them
+    // produced 238 of that page's 240 content-free AI comment replies in ENGLISH
+    // over 30 days — on a page configured `default_reply_language = 'ar'`.
+    //
+    // These fail against the pre-D-107 expression (`detectLanguageCode(postMessage)
+    // === 'ar' ? … : …`) and pass after. The fixture pages seed
+    // `defaultReplyLanguage: 'ar'` + `autoDetectLanguage: true` — Shahin's exact
+    // configuration — so the arm is the real one, not a contrived override.
+    //
+    // ⚠️ `replyDominantScript`, not a substring: a correct Arabic reply may quote
+    // Latin product/brand names, and a substring assertion cannot express "this
+    // reply is in Arabic".
+    {
+        id: 813, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '🔥🔥',
+        page: 'training',
+        postMessage: 'P O O L\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: decorative spaced-Latin caption (127 prod replies). detectLanguageCode says "en" and isLowSignalLatinToken cannot rescue it — its ≤3-word cap admits "A R C" but not "P O O L" — so the pre-fix code sent an English brochure. The merchant default (ar) decides.',
+    },
+    {
+        id: 814, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'Amazing atmosphere at Shahin Resort 👌🔥\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107, the opinionated half (22 prod replies): the caption is GENUINE English, and the reply must STILL be Arabic. A bare emoji carries no customer language signal, and the post is the merchant\'s styling choice — not evidence about the commenter. This is the case a "reject decorative Latin" predicate would NOT have fixed.',
+    },
+    {
+        id: 815, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '....',
+        page: 'training',
+        postMessage: 'NADER AL ATAT \n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: an Arabic proper name written in Latin (14 prod replies) — «نادر الأتات». The detector names it English; it is not a language signal at all.',
+    },
+    {
+        id: 816, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '٠٠٠',
+        page: 'training',
+        postMessage: 'M L U E\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: Arabic-Indic digits on a decorative Latin caption (16 prod replies on this caption). Guards the interaction with the لامار الشام «٠٠٠» rewrite (case 258) — the rewrite must fire AND resolve Arabic.',
+    },
     {
         id: 260, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '@محمد شوف هذا',

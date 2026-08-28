@@ -3080,3 +3080,79 @@ in §10.11.
 selector, every writer of the first silently rewrites the second — and the drift is invisible
 to any monitor that compares the two counters to each other instead of to the data they
 describe.
+
+## D-107 · Text WE author when the customer gave no language signal is written in the merchant's configured language, not the post's detected one (2026-08-28)
+
+**Context.** A merchant's customers commented emoji only (`🔥🔥`, `❤️`, `....`) on his posts and
+the page answered each with a ~600-character **English** brochure, on a page configured
+`default_reply_language = 'ar'` whose Business Info is 10,494 characters of Arabic.
+
+`rewriteContentFreeCta` (`services/reply/commentPreprocess.ts`) substitutes a synthetic
+question for a content-free comment on a CTA post, so the model has something answerable
+instead of a bare token. Its language was `detectLanguageCode(postMessage) === 'ar' ? … : …`.
+That sentence is then fed back through `resolveCommentLanguage` as the EXPLICIT language hint —
+the first link of the resolve chain — so it outranks `default_reply_language` and decides the
+reply's language outright.
+
+**Measured (prod, 30 days).** 251 of 731 content-free AI comment replies went out in English
+against an Arabic default: 238 on Shahin Resort, 11 on مزة جبل 86, 2 on BAMBO LIBYA. **Every
+page in the fleet has `default_reply_language = 'ar'`**, so nothing was flipping the other way.
+Broken down by the caption that produced them, Shahin's 238:
+
+| caption shape | replies | share |
+|---|---|---|
+| decorative spaced letters (`P O O L`, `M L U E`, `S A L M A`) | 183 | 77% |
+| genuine English prose (`Amazing atmosphere at Shahin Resort 👌🔥`) | 36 | 15% |
+| Arabic proper names in Latin (`NADER AL ATAT`, `YAZAN RASHID`) | 19 | 8% |
+
+**Ruling.** For text we author on the customer's behalf, the merchant's configured language is
+the authority; the post is not. Two reasons, and the second is the one that decides it:
+
+1. `auto_detect_language` detects **the customer's** language. A content-free comment has none
+   by precondition — so there is nothing for detection to act on, and the configured default is
+   exactly what a default is for. (Shahin has auto-detect ON and default `ar`; both are honoured.)
+2. The post's language is the **merchant's styling choice for that post**, not evidence about
+   the commenter — and it is a guess the detector gets wrong on the shapes that dominate real
+   traffic. `isLowSignalLatinToken` cannot rescue it: its ≤3-word cap admits `A R C` but not
+   `P O O L`, so the ladder returns `en` at its first rung and never reaches the KB or the default.
+
+**Rejected alternative.** A "decorative Latin" predicate (reject spaced single letters) was
+measured and rejected: it fixes 183 of 238 (77%), needs a second and much harder predicate for
+transliterated proper names, and still replies in English to an emoji whenever the caption is
+genuinely English — which this ruling holds is wrong anyway. Widening
+`isLowSignalLatinToken`'s word cap was rejected outright: it is a shared detector on the DM,
+comment, and template paths, with fleet-wide blast radius.
+
+**What shipped.** The ladder moved out of `generator.ts` into `utils/replyLanguage.ts` (pure;
+`generator.ts` imports `commentPreprocess`, so importing it back would be circular), with
+`resolveFallbackLanguage` re-exported from its old home so all six call sites and the suites
+that mock them are untouched. `resolveAuthoredCtaLanguage` reads the merchant default first and
+falls back to the existing post→KB ladder when it is unset.
+
+**The sentence is an i18n key, not a hardcoded pair.** `resolveAuthoredCtaLanguage` returns a
+language **code**, not `'ar' | 'en'`. The narrowing was the real multi-language bottleneck:
+`detectLanguageCode` already names `sv`/`de`/`fr`/`es`/`tr` and `resolveCommentLanguage` is
+explicitly written to reply in any language it can name, so the pipeline was never the limit —
+the binary was. The sentence now comes from `t('contentFreeCtaQuestion', lang)`.
+
+⚠️ **The invariant that creates, stated plainly:** because this sentence's language BECOMES the
+reply's language, a locale with no authored sentence degrades to English rather than to a
+foreign reply built from an English prompt. That is safe but it is a real limit, and it is why
+i18n — with `MessageKey`'s compile-time completeness — is the right home. Verified by mutation:
+registering a one-key `sv.json` fails `tsc` with `TS2740` ("missing … and 133 more").
+
+⛔ **"Add a locale file" is optimistic (Rule 13b).** The same mutation surfaced **8 further type
+errors outside `i18n.ts`** — `paymentWebhookHandlers.ts` and `dunningNotices.ts` hardcode
+`'ar' | 'en'` in their own signatures. A third language is a ~10-site typed refactor. `tsc`
+finds every site, so it is mechanical, but it is not a drop-in. **Follow-up, un-filed.**
+
+**Deliberately NOT bundled.** `resolveFallbackLanguage`'s canned away/quota/price templates are
+also authored-by-us text firing on script-less input, so the same inversion and the same
+widening arguably belong there too. That is a fleet-wide change to a different set of messages
+and needs its own measurement — one change at a time. For the ar/en pair the two functions
+agree exactly today, so this change only widens.
+
+**The generalisable rule.** Never infer a language for text you are authoring yourself from
+text a third party wrote. And when self-authored text is fed back into a detector to decide
+something downstream, the authored string must exist in every language you can resolve to —
+otherwise the resolver's reach silently exceeds the vocabulary's.
