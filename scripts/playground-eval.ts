@@ -64,7 +64,10 @@ interface TestCase {
     // `electro` was resolvable via PAGE_NAME_PATTERNS and used by Cat 76 long
     // before it was listed here — nothing type-checks this file, so the gap
     // stayed silent.
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support';
+    // `resort` and `chalets` are seeded and resolvable too — added here when the
+    // no-CTA engagement cases below started using `resort`, closing the same silent
+    // gap that let `electro` be used for Cat 76 long before it was listed.
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support' | 'resort' | 'chalets';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -2509,6 +2512,70 @@ const TEST_CASES: TestCase[] = [
     // ⚠️ `replyDominantScript`, not a substring: a correct Arabic reply may quote
     // Latin product/brand names, and a substring assertion cannot express "this
     // reply is in Arabic".
+    // ── KNOWN OPEN GAP: praise on a post that never invited a comment ──
+    //
+    // `rewriteContentFreeCta` is NAMED for CTA posts and its docstring says it fires
+    // "when a post's CTA is 'comment a dot / zero / heart to get details' and the customer
+    // did exactly that". The code contains NO CTA CHECK: the only conditions are that the
+    // post has some caption and the comment is content-free. So a ❤️ on a music-video post
+    // whose whole caption is «YAZAN RASHID #shahin_resort» is treated identically to
+    // «علق بنقطة لتصلك التفاصيل», rewritten to "I want the details", and answered with the
+    // entire Business Info.
+    //
+    // Measured on 30 days of production: 452 of 731 content-free AI comment replies (62%)
+    // landed on posts with NO CTA anywhere in the caption. The split is by page intent, not
+    // by chance — الفريق الدمشقي runs real dot-CTA campaigns (266 of 276 WITH a CTA, where
+    // the rewrite is exactly right), while Shahin Resort (240), مزة جبل 86 (93) and
+    // ام. اي. اس (81) have ZERO CTA posts, so every rewrite there is unwarranted.
+    //
+    // Severity rose on 2026-08-27 17:38 UTC, when the merchant switched
+    // `comment_reply_mode` to `public`: the brochure had always been generated (avg 548
+    // chars) but used to go out as a DM behind a short public nudge. It is now posted
+    // publicly under each emoji.
+    //
+    // ⚠️ expectedFail ON PURPOSE — no fix is chosen yet. The obvious one (a CTA-phrase
+    // regex) is a hand-maintained linguistic list, which is against project preference; the
+    // alternatives (a merchant setting, letting the model judge, prompt demonstrations)
+    // each carry their own cost, and dropping the rewrite entirely is what caused the
+    // silence regression that case #324 pins. These cases exist so the gap is measured by a
+    // running test instead of rotting on a branch. Remove the flag in the change that fixes it.
+    {
+        id: 817, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'resort',
+        postMessage: 'YAZAN RASHID\n#shahin_resort',
+        expected: {
+            // A brochure is 450–500 chars; an honest acknowledgement of praise is short.
+            replyMaxLength: 160,
+            replyMethod: ['ai'],
+        },
+        notes: 'XGAP — praise on a NO-CTA post must not be answered with the whole Business Info. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything.',
+    },
+    {
+        id: 818, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '😍😍',
+        page: 'resort',
+        postMessage: 'Amazing atmosphere at the resort 👌🔥',
+        expected: {
+            replyMaxLength: 160,
+            replyMethod: ['ai'],
+        },
+        notes: 'XGAP — same class, atmosphere post (22 prod replies). Pairs with #819, which proves the fix must NOT silence real CTA campaigns.',
+    },
+    // OVER-CORRECTION GUARD — must stay GREEN through any fix to #817/#818. A page that
+    // genuinely runs «علق بنقطة» campaigns (الفريق الدمشقي: 266 of 276) depends on the
+    // rewrite, and a CTA post must keep getting the detailed answer.
+    {
+        id: 819, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'دورات معتمدة 🔥 لمعرفة التفاصيل والأسعار علق بنقطة ❤️⭕️',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'CONTROL, must stay green: an explicit CTA post still earns the detailed answer. If a fix for #817/#818 turns this red it has over-corrected and would break the dot-CTA campaigns the feature exists for (eval #324 / لامار الشام).',
+    },
     {
         id: 813, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '🔥🔥',
