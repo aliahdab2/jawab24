@@ -3156,3 +3156,76 @@ agree exactly today, so this change only widens.
 text a third party wrote. And when self-authored text is fed back into a detector to decide
 something downstream, the authored string must exist in every language you can resolve to —
 otherwise the resolver's reach silently exceeds the vocabulary's.
+
+## D-108 · The friend-tag repair fetch is gated on SEMANTIC signals only — comment length is not evidence of anything (2026-08-28)
+
+**Context.** A customer on Shahin Resort tagged two friends and talked to *them* about the
+post — «Ruba Alhomosh  Sara Kaddoura  راحت علينا حفلة نادر الاتات 😁» (comment
+`a2d0d3fb-bed5-43f2-a77a-35ae85c5cebd`, 2026-08-24). The page publicly answered
+«أرسلنا لك التفاصيل بالخاص». Jawab24 is supposed to stay out of peer-to-peer chatter.
+
+Three layers should have caught it, and each was blind for a different reason:
+
+1. `hasUserTag(messageTags)` — the authoritative structured guard. Facebook delivered the
+   webhook with **`message_tags` NULL**, so it saw nothing.
+2. `hasMention(text)` — the legacy regex fallback. It looks for `@`, and **a Facebook tag
+   carries no `@` in the message body**: the friends' names arrive as plain text.
+3. The **Graph repair fetch** in `commentProcessor.ts`, which exists precisely for layer 1
+   lying. It is gated on `!isConfidentlyNotATag(...)`, and that predicate carried a
+   `length > 50` rule. The comment is **60 characters**, so the fetch was skipped.
+
+**The defect is an internal contradiction, not a badly-chosen number.**
+`isConfidentlyNotATag`'s own doc comment states the correct bias — *"fail toward fetching
+rather than toward replying — a wrong reply is visible, a wasted fetch is cheap"* — and the
+length rule does the exact opposite: it fails toward **replying**.
+
+**Why length was the wrong predicate.** Every other signal in that function is SEMANTIC (a
+statement about what the customer is doing: a question mark, digits, a currency token, a
+URL). Length is structural — it says nothing about whether a tag exists. Its stated
+reasoning, "structured tags render as plain names, usually short", holds for a BARE tag and
+breaks for the common real shape, a tag plus a sentence addressed to the tagged friends. And
+it failed hardest exactly where it mattered most: **two tagged names are already 28
+characters and three are 53**, so the cap fired on the multi-tag comments most likely to be
+friend-tagging, with no real text needed at all.
+
+**Measured on 30 days of production before removing it:**
+
+| | |
+|---|---|
+| comments with `message_tags` NULL | 15,694 |
+| suppressed from the repair fetch **only** by the length rule | **553** |
+| …of those, received an AI reply | **244** |
+| fetch volume with the cap / without it | 14,271 / 14,824 — the cap saved **3.9%** |
+
+At least 29 of the 244 carry the visible two-capitalised-Latin-names signature; that is a
+**lower bound only**, because a friend with an Arabic name renders as Arabic text and is
+invisible to any text heuristic. So the true friend-tag count among them is higher and not
+measurable from the text — which is itself an argument for asking Graph rather than guessing.
+
+**Ruling.** The length rule is **removed**, not raised. Raising it to 120 would keep an
+uncorrelated proxy and simply lose the next slightly-longer comment. The remaining signals
+(`?`/`؟`, digits, currency tokens, URLs, empty) all correlate with "the customer is
+addressing US", and the question-mark rule is load-bearing in the other direction too:
+«Ruba شوفي، قديش السعر؟» tags a friend AND asks us, and must still reach the AI.
+
+⛔ **Do not reintroduce a length heuristic here.** If Graph fetch volume ever needs bounding,
+bound it on something that correlates with "is this a tag", or cache per comment id (BullMQ
+dedup upstream already makes this effectively once-per-comment).
+
+**What the fix does and does not prove.** Verified: the predicate now returns `false` for the
+production text, so the repair fetch runs. Inferred, not verified: that Graph returns the tags
+for that specific comment — evidence is that the names render as blue links (real structured
+tags exist) plus the existing in-code note that Graph does return them when the webhook does
+not. No live Graph call was made against production credentials.
+
+**Verification.** Red-first: 3 new cases in `backend/test/utils/commentText.test.ts` failed
+against the shipped predicate, including the exact production string; green after. The
+pre-existing `returns true for long text (> 50 chars)` case was **deliberately replaced**
+(not silently deleted) by one asserting that long prose with no semantic signal now returns
+`false`, plus one proving long text WITH a real signal still returns `true`. Backend unit
+7,768 pass / 407 files; tsc, lint 0/0, duplication clean.
+
+**The generalisable rule.** A guard added to save cost must have its saving MEASURED, not
+assumed — this one bought 3.9% of API calls and paid for it with a public reply to a private
+conversation. And when a function documents its own bias, a rule that contradicts that bias
+is a bug even when every individual line looks reasonable.

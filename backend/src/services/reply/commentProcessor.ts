@@ -261,7 +261,8 @@ export class CommentProcessor {
             // Facebook webhooks inconsistently deliver `message_tags` even when the
             // comment carries a real structured user tag (confirmed on Graph API v23
             // in prod). When the webhook is silent AND the text doesn't clearly rule
-            // out a tag (questions, prices, long messages — see isConfidentlyNotATag),
+            // out a tag (questions, prices, URLs — see isConfidentlyNotATag; length is
+            // deliberately NOT a signal, it leaked a public reply on Shahin Resort),
             // fetch authoritative tags from Graph API before the guard runs. Bias:
             // fail toward fetching rather than toward replying — a wrong reply is
             // visible, a wasted fetch is cheap. BullMQ dedup upstream already makes

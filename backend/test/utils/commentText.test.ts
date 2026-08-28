@@ -325,8 +325,48 @@ describe('isConfidentlyNotATag', () => {
         expect(isConfidentlyNotATag('what is the price?')).toBe(true);
     });
 
-    it('returns true for long text (> 50 chars)', () => {
+    // ── The Shahin Resort friend-tag leak (prod, 2026-08-24) ──
+    //
+    // Comment a2d0d3fb-bed5-43f2-a77a-35ae85c5cebd on Shahin Resort: a customer tagged
+    // two friends and talked TO THEM about the post. Facebook delivered the webhook with
+    // `message_tags` NULL, so `hasUserTag` was blind; the regex fallback `hasMention`
+    // cannot help either, because a Facebook tag carries NO "@" in the message body —
+    // the friends' names arrive as plain text. The Graph repair fetch in commentProcessor
+    // exists precisely for this, but it is gated on `!isConfidentlyNotATag(...)`, and this
+    // comment is 60 chars — so the OLD `length > 50` rule declared it "confidently not a
+    // tag", skipped the fetch, and the page publicly answered a private exchange.
+    //
+    // The length rule was an uncorrelated proxy: two tagged names are already 28 chars and
+    // THREE are 53, so it failed hardest on exactly the multi-tag comments most likely to
+    // be friend-tagging. Measured on 30 days of production: it suppressed the fetch for
+    // 553 comments (244 of which got an AI reply) while saving only 3.9% of fetch volume
+    // (14,271 → 14,824). Removed in favour of the SEMANTIC signals below, which is why
+    // there is no length assertion here any more.
+    it('returns false for a friend-tag plus a real sentence (the Shahin Resort leak)', () => {
+        // Exact production text, 60 chars, no digits / ?, / URL / currency.
+        expect(isConfidentlyNotATag('Ruba Alhomosh  Sara Kaddoura  راحت علينا حفلة نادر الاتات 😁'))
+            .toBe(false);
+    });
+
+    it('returns false for three tagged names alone (53 chars — over the old cap)', () => {
+        expect(isConfidentlyNotATag('Ruba Alhomosh  Sara Kaddoura  Maryaam Alawwad Alhmosh'))
+            .toBe(false);
+    });
+
+    it('returns false for long prose with no semantic not-a-tag signal', () => {
+        // Length alone no longer proves anything — only the content signals do. A wasted
+        // Graph fetch is cheap; a public reply to a private exchange is not (see above).
         expect(isConfidentlyNotATag('This is a long comment that definitely is not a tag it goes on'))
+            .toBe(false);
+    });
+
+    it('still returns true for long text carrying a real not-a-tag signal', () => {
+        // The signals that actually correlate keep working at any length.
+        expect(isConfidentlyNotATag('This is a long comment that is definitely not a tag, right?'))
+            .toBe(true);
+        expect(isConfidentlyNotATag('هل يمكنكم إخباري بتفاصيل الحفلة القادمة والعرض المتوفر حالياً؟'))
+            .toBe(true);
+        expect(isConfidentlyNotATag('راحت علينا الحفلة الكبيرة وكانت التذكرة بـ 5000 ليرة سورية فقط'))
             .toBe(true);
     });
 
