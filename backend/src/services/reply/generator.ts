@@ -10,7 +10,8 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger, type Too
 import { getRetrievalService, hasLiveProductChunks, ragRetrievalMode } from '../kb/retrieval';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta, renderReplyForChannel, type ReplyRenderTarget } from '@jawab24/shared';
-import { detectLanguageCode, isLowSignalLatinToken, resolveDmLanguageHint } from '../../utils/language';
+import { resolveDmLanguageHint } from '../../utils/language';
+import { resolveFallbackLanguage } from '../../utils/replyLanguage';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
@@ -274,34 +275,13 @@ export function priceFallbackText(lang: string): string {
 }
 
 /**
- * Pick a language for canned fallback text (PRICE_FALLBACK, etc.).
- * The customer message is often script-less ("..."/emoji) when fallback fires,
- * so fall through to post → KB → merchant default before defaulting to English.
- * Mirrors the chain in openai.ts buildDynamicSystemSuffix.
+ * Re-exported, not defined here: the ladder moved to `utils/replyLanguage.ts` so
+ * `commentPreprocess.ts` can share it without importing this module (which would be
+ * circular — this module imports commentPreprocess — and would drag the DB pool and
+ * OpenAI client into a pure text helper). Kept exported from here so the six existing
+ * call sites and the suites that mock them are unaffected.
  */
-export function resolveFallbackLanguage(opts: {
-    text?: string;
-    postMessage?: string;
-    knowledgeBase?: string;
-    defaultReplyLanguage?: string;
-}): 'ar' | 'en' {
-    const sources = [opts.text, opts.postMessage, opts.knowledgeBase];
-    for (const s of sources) {
-        if (!s) continue;
-        // A bare Latin token ("icdl", a product name) carries no real language
-        // signal — the detector floors it at English. Skip it so the conversation
-        // context (post → KB → merchant default) decides the fallback language,
-        // matching resolveCommentLanguage. Without this, an "icdl" reply on an
-        // Arabic thread forces the English away/quota fallback template.
-        if (isLowSignalLatinToken(s)) continue;
-        const lang = detectLanguageCode(s);
-        if (lang !== 'unknown') return lang === 'ar' ? 'ar' : 'en';
-    }
-    if (opts.defaultReplyLanguage) {
-        return opts.defaultReplyLanguage === 'ar' ? 'ar' : 'en';
-    }
-    return 'en';
-}
+export { resolveFallbackLanguage };
 
 export interface GenerateReplyContext {
     workspaceId: string;
@@ -621,6 +601,7 @@ export class ReplyGenerator {
 
             commentForAI = rewriteContentFreeCta({
                 commentForAI, rawText: text, postMessage,
+                knowledgeBase, defaultReplyLanguage: context.defaultReplyLanguage,
             });
 
             // Build gap source context for merchant insights
@@ -990,6 +971,7 @@ export class ReplyGenerator {
         // channel (see rewriteContentFreeCta for the public-mode rationale).
         questionForAI = rewriteContentFreeCta({
             commentForAI: questionForAI, rawText: question, postMessage,
+            knowledgeBase, defaultReplyLanguage,
         });
 
         // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production).

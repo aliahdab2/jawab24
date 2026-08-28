@@ -135,13 +135,37 @@ export function isContentFree(text: string): boolean {
  * rather than toward replying, because a false "is a tag" (skip reply) is
  * recoverable, while a false "not a tag" (reply) is visible to the customer.
  *
- * Signals that prove NOT-a-tag:
- *   - Question marks (?, ؟) — questions are the opposite of bare name tags
- *   - Length > 50 chars — structured tags render as plain names, usually short
+ * Signals that prove NOT-a-tag — all SEMANTIC. Every one of them is a statement
+ * about what the customer is doing, never about how much they typed:
+ *   - Question marks (?, ؟) — questions are the opposite of bare name tags. This
+ *     one is load-bearing in the other direction too: "Ruba شوفي، قديش السعر؟"
+ *     tags a friend AND asks US, and must still reach the AI.
  *   - Digits — prices, phones, dates are not tags
  *   - Currency tokens (ريال, ر.س, $, SAR, SR, €, £, د.إ, ج.م) — price queries
  *   - URLs — shared links are not tags
  *   - Punctuation-only content — covered separately (no letters at all)
+ *
+ * ⛔ There is deliberately NO LENGTH RULE. A `length > 50` cap used to live here on
+ * the reasoning that "structured tags render as plain names, usually short". That
+ * reasoning holds for a BARE tag and breaks for the common real shape — a tag plus
+ * a sentence addressed to the tagged friends — and it broke worst where it mattered
+ * most, because two tagged names are already 28 characters and three are 53, so the
+ * cap fired on precisely the multi-tag comments most likely to be friend-tagging.
+ *
+ * It shipped a visible leak: Shahin Resort comment
+ * `a2d0d3fb-bed5-43f2-a77a-35ae85c5cebd` (2026-08-24) tagged two friends and said
+ * «راحت علينا حفلة نادر الاتات» — 60 chars, no digit/?/URL/currency. Facebook sent the
+ * webhook with `message_tags` NULL, the cap suppressed the Graph repair fetch that
+ * exists for exactly that case, `hasUserTag` stayed blind (and `hasMention` cannot
+ * help — a Facebook tag carries no "@" in the body), and the page publicly answered a
+ * private exchange between three customers.
+ *
+ * Measured over 30 days of production before removing it: the cap suppressed the
+ * fetch for 553 comments — 244 of which received an AI reply — while saving only
+ * **3.9%** of fetch volume (14,271 fetched today vs 14,824 without it). It bought
+ * almost nothing and cost correctness. Do not reintroduce a length heuristic here;
+ * if fetch volume ever needs bounding, bound it on something that correlates with
+ * "is this a tag", or cache per comment id.
  *
  * Called ONLY for Facebook comments with no webhook-provided message_tags.
  * Instagram never carries tags, so callers gate this by platform first.
@@ -149,7 +173,6 @@ export function isContentFree(text: string): boolean {
 export function isConfidentlyNotATag(text: string): boolean {
     const trimmed = text.trim();
     if (trimmed.length === 0) return true;
-    if (trimmed.length > 50) return true;
     if (/[?؟]/.test(trimmed)) return true;
     if (/\d/.test(trimmed)) return true;
     if (/https?:\/\/|www\./i.test(trimmed)) return true;

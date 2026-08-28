@@ -6,6 +6,7 @@
     "attachmentFile": "[File]",
     "attachmentFallback": "[Attachment]",
     "nonTextNudge": "Thanks for reaching out! We can currently process text and voice messages. Please resend your question as a text or voice message and we'll be happy to help 🙏",
+    "contentFreeCtaQuestion": "I want the details",
     "priceFallback": "Thank you for your interest! For the exact price, please contact us directly on our numbers.",
     "defaultAway": "Thanks for your message! We're currently away and will get back to you as soon as possible.",
     "defaultGreeting": "Hello! How can we help you?",

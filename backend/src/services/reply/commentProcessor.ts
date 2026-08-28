@@ -261,7 +261,8 @@ export class CommentProcessor {
             // Facebook webhooks inconsistently deliver `message_tags` even when the
             // comment carries a real structured user tag (confirmed on Graph API v23
             // in prod). When the webhook is silent AND the text doesn't clearly rule
-            // out a tag (questions, prices, long messages — see isConfidentlyNotATag),
+            // out a tag (questions, prices, URLs — see isConfidentlyNotATag; length is
+            // deliberately NOT a signal, it leaked a public reply on Shahin Resort),
             // fetch authoritative tags from Graph API before the guard runs. Bias:
             // fail toward fetching rather than toward replying — a wrong reply is
             // visible, a wasted fetch is cheap. BullMQ dedup upstream already makes
@@ -295,13 +296,14 @@ export class CommentProcessor {
                     fromName: fromName ?? null,
                     message: commentMessage,
                 });
-                await commentsService.resolveComment(comment.id);
-                publishSSEEvent(userId, 'comment:skipped', {
-                    commentId: comment.id,
-                    pageId: page.id,
-                    reason: 'friend_tag',
-                });
-                pipelineMetrics.record(pipeline, 'skipped_spam');
+                // Through the shared helper, not a hand-rolled resolve + SSE pair: the two
+                // spam skips below already use it, and the sequence had drifted into a
+                // third copy here.
+                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'friend_tag');
+                // NOT `skipped_spam` — see the note on the Outcome union. This class is ~4,700
+                // comments a month and D-108 deliberately widened it; pooled with AI-classified
+                // spam, neither number could be read.
+                pipelineMetrics.record(pipeline, 'skipped_friend_tag');
                 this.logger.info(`[${platform}] Comment silently skipped — user-tag without own page-tag`, {
                     commentId: comment.id, platformCommentId, commentMessage,
                 });

@@ -9,6 +9,8 @@ import {
     type FacebookMessageTag,
 } from '../../utils/commentText';
 import { detectCommentLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
+import { resolveAuthoredCtaLanguage } from '../../utils/replyLanguage';
+import { t } from '../../utils/i18n';
 import { hasExternalPromoUrl } from './spamPatterns';
 
 /** Threshold below which a @mention comment is treated as friend-tagging
@@ -211,16 +213,31 @@ export function rewriteContentFreeCta(opts: {
     commentForAI: string;
     rawText: string;
     postMessage: string | undefined;
+    /** Static KB text, used only as a language signal when no merchant default is set. */
+    knowledgeBase?: string;
+    /** The merchant's configured reply language — the authority for this sentence. */
+    defaultReplyLanguage?: string;
 }): string {
     const { commentForAI, rawText, postMessage } = opts;
     if (!postMessage) return commentForAI;
     const probe = commentForAI || rawText;
     if (!isContentFree(probe.trim())) return commentForAI;
-    // Use the shared language detector (same one driving everything else in the
-    // pipeline) so the Arabic-vs-English decision stays consistent. `unknown` falls
-    // through to English, which matches the old inline-regex behavior.
-    const postLang = detectLanguageCode(postMessage);
-    return postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
+    // The merchant's configured language decides, NOT the post's detected language —
+    // see resolveAuthoredCtaLanguage for why the post is the wrong authority here and
+    // for the measured breakdown. This used to be
+    // `detectLanguageCode(postMessage) === 'ar' ? … : …`, which sent an English
+    // brochure to every emoji comment on a page whose captions are styled Latin
+    // (`P O O L`, `M L U E`) — 238 replies on one page in 30 days.
+    const lang = resolveAuthoredCtaLanguage({
+        postMessage,
+        knowledgeBase: opts.knowledgeBase,
+        defaultReplyLanguage: opts.defaultReplyLanguage,
+    });
+    // Via `t()`, not a hardcoded ar/en pair: this sentence's language BECOMES the reply's
+    // language (it is fed back as the explicit hint), so a merchant configured for sv/fr/tr
+    // needs a real sentence in that language, not English. Adding `i18n/<locale>.json` is
+    // then the only step — and `MessageKey` makes a half-added locale a compile error.
+    return t('contentFreeCtaQuestion', lang);
 }
 
 /** A comment with this many word-characters or fewer carries too little semantic

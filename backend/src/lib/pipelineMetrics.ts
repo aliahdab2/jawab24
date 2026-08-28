@@ -41,6 +41,18 @@ export type Outcome =
     | 'content_not_owned'
     | 'skipped_risky'
     | 'skipped_spam'
+    // A Facebook comment carrying a user-tag and no tag of our own page — the commenter is
+    // addressing a tagged friend, not us, so we stay out of it (step 3a). Counted APART from
+    // `skipped_spam`, which it used to share, for two reasons. It is by far the larger class
+    // (4,720 comments in the 30 days to 2026-08-28, vs the handful of AI-classified spam),
+    // so pooling them made the pool useless for either. And D-108 deliberately grew it by
+    // removing the `length > 50` cap on the Graph repair fetch: that widening is CORRECT for
+    // peer-to-peer chatter and would be a silent regression if it ever swept up customers
+    // addressing the page, and this is the only number that can show the trend. These skips
+    // are resolved without `needs_attention` by design — at this volume the alternative is
+    // 4,700 rows a month in every merchant's attention queue — so the counter is the ONLY
+    // signal that the class is growing. Watch it against `success` per page, not in isolation.
+    | 'skipped_friend_tag'
     | 'held_low_confidence'
     | 'held_self_identification'
     | 'greeting_sent'

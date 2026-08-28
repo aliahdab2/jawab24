@@ -64,7 +64,13 @@ interface TestCase {
     // `electro` was resolvable via PAGE_NAME_PATTERNS and used by Cat 76 long
     // before it was listed here — nothing type-checks this file, so the gap
     // stayed silent.
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support';
+    // `resort` and `chalets` are seeded and resolvable too, and had ALREADY drifted out
+    // of this union before anything below was written: on the previous revision `resort`
+    // was used by 4 cases (Cat 78) and `chalets` by 6 (Cat 77) while neither appeared
+    // here. Listed now to close that pre-existing gap — the same silent one that let
+    // `electro` be used by Cat 76 long before it was listed. Nothing in this file is
+    // type-checked, so this union is documentation: keep it in step by hand.
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'electro' | 'support' | 'resort' | 'chalets';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -2494,6 +2500,139 @@ const TEST_CASES: TestCase[] = [
             intent: ['SPAM_OR_IRRELEVANT'],
         },
         notes: 'Dot with NO postMessage — should be SPAM_OR_IRRELEVANT',
+    },
+    // ── D-107: a content-free comment is answered in the MERCHANT's configured
+    // language, never the caption's detected one. Cases 813–816 are the four real
+    // caption shapes measured on Shahin Resort (2026-08-28), which between them
+    // produced 238 of that page's 240 content-free AI comment replies in ENGLISH
+    // over 30 days — on a page configured `default_reply_language = 'ar'`.
+    //
+    // These fail against the pre-D-107 expression (`detectLanguageCode(postMessage)
+    // === 'ar' ? … : …`) and pass after. The fixture pages seed
+    // `defaultReplyLanguage: 'ar'` + `autoDetectLanguage: true` — Shahin's exact
+    // configuration — so the arm is the real one, not a contrived override.
+    //
+    // ⚠️ `replyDominantScript`, not a substring: a correct Arabic reply may quote
+    // Latin product/brand names, and a substring assertion cannot express "this
+    // reply is in Arabic".
+    // ── KNOWN OPEN GAP: praise on a post that never invited a comment ──
+    //
+    // `rewriteContentFreeCta` is NAMED for CTA posts and its docstring says it fires
+    // "when a post's CTA is 'comment a dot / zero / heart to get details' and the customer
+    // did exactly that". The code contains NO CTA CHECK: the only conditions are that the
+    // post has some caption and the comment is content-free. So a ❤️ on a music-video post
+    // whose whole caption is «YAZAN RASHID #shahin_resort» is treated identically to
+    // «علق بنقطة لتصلك التفاصيل», rewritten to "I want the details", and answered with the
+    // entire Business Info.
+    //
+    // Measured on 30 days of production: 452 of 731 content-free AI comment replies (62%)
+    // landed on posts with NO CTA anywhere in the caption. The split is by page intent, not
+    // by chance — الفريق الدمشقي runs real dot-CTA campaigns (266 of 276 WITH a CTA, where
+    // the rewrite is exactly right), while Shahin Resort (240), مزة جبل 86 (93) and
+    // ام. اي. اس (81) have ZERO CTA posts, so every rewrite there is unwarranted.
+    //
+    // Severity rose on 2026-08-27 17:38 UTC, when the merchant switched
+    // `comment_reply_mode` to `public`: the brochure had always been generated (avg 548
+    // chars) but used to go out as a DM behind a short public nudge. It is now posted
+    // publicly under each emoji.
+    //
+    // ⚠️ expectedFail ON PURPOSE — no fix is chosen yet. The obvious one (a CTA-phrase
+    // regex) is a hand-maintained linguistic list, which is against project preference; the
+    // alternatives (a merchant setting, letting the model judge, prompt demonstrations)
+    // each carry their own cost, and dropping the rewrite entirely is what caused the
+    // silence regression that case #324 pins. These cases exist so the gap is measured by a
+    // running test instead of rotting on a branch. Remove the flag in the change that fixes it.
+    //
+    // ⚠️ PAGE CHOICE IS PART OF THE INSTRUMENT. #817/#818 and their control #819 all run on
+    // `training`, and they must keep running on the SAME page: the only thing that may differ
+    // between the gap cases and the control is whether the caption carries a CTA. `resort`
+    // («منتجع الواحة السياحي») is wrong for these despite the matching subject matter — it is
+    // the D-084 per-page-PERSONA fixture, and its persona («أنتِ سارة، موظفة استعلامات… عملكِ
+    // أن تعطي المعلومة ثم توجّهي الزبون لرقم المنتجع») governs reply length and shape, which
+    // is exactly what `replyMaxLength: 160` measures. On `resort` a short reply proves nothing:
+    // the persona could produce it with the CTA gap fully open, and the harness would print
+    // "🎉 NOW PASSES — gap appears fixed" on an unfixed defect. `training` is persona-free, and
+    // is what #813–816 already use.
+    {
+        id: 817, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'YAZAN RASHID\n#shahin_resort',
+        expected: {
+            // A brochure is 450–500 chars; an honest acknowledgement of praise is short.
+            replyMaxLength: 160,
+            replyMethod: ['ai'],
+        },
+        notes: 'XGAP — praise on a NO-CTA post must not be answered with the whole Business Info. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything. On the persona-free `training` fixture so the CTA presence is the ONLY variable against control #819 — see the note above.',
+    },
+    {
+        id: 818, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '😍😍',
+        page: 'training',
+        postMessage: 'Amazing atmosphere at the resort 👌🔥',
+        expected: {
+            replyMaxLength: 160,
+            replyMethod: ['ai'],
+        },
+        notes: 'XGAP — same class, atmosphere post (22 prod replies). Pairs with #819, which proves the fix must NOT silence real CTA campaigns; same page as #819 so the pair is a controlled comparison.',
+    },
+    // OVER-CORRECTION GUARD — must stay GREEN through any fix to #817/#818. A page that
+    // genuinely runs «علق بنقطة» campaigns (الفريق الدمشقي: 266 of 276) depends on the
+    // rewrite, and a CTA post must keep getting the detailed answer.
+    {
+        id: 819, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'دورات معتمدة 🔥 لمعرفة التفاصيل والأسعار علق بنقطة ❤️⭕️',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'CONTROL, must stay green: an explicit CTA post still earns the detailed answer. If a fix for #817/#818 turns this red it has over-corrected and would break the dot-CTA campaigns the feature exists for (eval #324 / لامار الشام).',
+    },
+    {
+        id: 813, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '🔥🔥',
+        page: 'training',
+        postMessage: 'P O O L\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: decorative spaced-Latin caption (127 prod replies). detectLanguageCode says "en" and isLowSignalLatinToken cannot rescue it — its ≤3-word cap admits "A R C" but not "P O O L" — so the pre-fix code sent an English brochure. The merchant default (ar) decides.',
+    },
+    {
+        id: 814, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'Amazing atmosphere at Shahin Resort 👌🔥\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107, the opinionated half (22 prod replies): the caption is GENUINE English, and the reply must STILL be Arabic. A bare emoji carries no customer language signal, and the post is the merchant\'s styling choice — not evidence about the commenter. This is the case a "reject decorative Latin" predicate would NOT have fixed.',
+    },
+    {
+        id: 815, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '....',
+        page: 'training',
+        postMessage: 'NADER AL ATAT \n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: an Arabic proper name written in Latin (14 prod replies) — «نادر الأتات». The detector names it English; it is not a language signal at all.',
+    },
+    {
+        id: 816, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '٠٠٠',
+        page: 'training',
+        postMessage: 'M L U E\n#shahin_resort',
+        expected: {
+            replyDominantScript: 'arabic',
+            replyMethod: ['ai'],
+        },
+        notes: 'D-107: Arabic-Indic digits on a decorative Latin caption (16 prod replies on this caption). Guards the interaction with the لامار الشام «٠٠٠» rewrite (case 258) — the rewrite must fire AND resolve Arabic.',
     },
     {
         id: 260, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',

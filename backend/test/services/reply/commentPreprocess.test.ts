@@ -412,6 +412,93 @@ describe('rewriteContentFreeCta', () => {
         });
         expect(out).toBe('I want the details');
     });
+
+    // ── The merchant's configured language is the authority for THIS sentence ──
+    //
+    // Shipped defect (measured 2026-08-28): a page whose captions are styled Latin
+    // ("P O O L", "M L U E") answered every emoji comment with an English brochure —
+    // 238 of 240 content-free AI comment replies over 30 days on Shahin Resort, plus
+    // 11 on مزة جبل 86 and 2 on BAMBO LIBYA, all on pages configured
+    // default_reply_language = 'ar'. The cause was deriving this sentence's language
+    // from `detectLanguageCode(postMessage)`: the detector floors decorative spaced
+    // Latin at English, and `isLowSignalLatinToken` cannot rescue it (its ≤3-word cap
+    // admits "A R C" but not "P O O L"). The post is the merchant's styling choice,
+    // not evidence about the commenter — and a content-free comment carries no
+    // customer language signal at all, which is exactly what a default is for.
+    describe('language comes from the merchant default, not the post', () => {
+        const ARABIC_KB = 'منتجع شاهين يقع على بعد 8.5 كم من وسط المدينة. للحجز اتصل 0982414141.';
+
+        // Every caption below is a REAL Shahin Resort caption, with the number of
+        // English replies it produced in 30 days of production traffic.
+        it.each([
+            ['P O O L', 127, 'decorative spaced letters'],
+            ['P O O L +', 38, 'decorative spaced letters'],
+            ['Amazing atmosphere at Shahin Resort 👌🔥', 22, 'genuine English prose'],
+            ['M L U E', 16, 'decorative spaced letters'],
+            ['NADER AL ATAT', 14, 'Arabic proper name in Latin'],
+            ['Summer at Arc Beach is a special summer', 14, 'genuine English prose'],
+            ['YAZAN RASHID', 5, 'Arabic proper name in Latin'],
+        ])('answers an emoji on %j in Arabic (%i prod replies, %s)', (postMessage) => {
+            const out = rewriteContentFreeCta({
+                commentForAI: '🔥🔥',
+                rawText: '🔥🔥',
+                postMessage: postMessage as string,
+                knowledgeBase: ARABIC_KB,
+                defaultReplyLanguage: 'ar',
+            });
+            expect(out).toBe('أريد التفاصيل');
+            // The read path that actually decides the reply: this sentence is fed back
+            // as the explicit language hint, so it must resolve to Arabic too.
+            expect(resolveCommentLanguage(out, postMessage as string, ARABIC_KB)).toBe('ar');
+        });
+
+        it('honours an English default even on an Arabic post (no Arabic bias)', () => {
+            const out = rewriteContentFreeCta({
+                commentForAI: '❤️',
+                rawText: '❤️',
+                postMessage: 'علق بنقطة لتصلك تفاصيل الدورة',
+                knowledgeBase: ARABIC_KB,
+                defaultReplyLanguage: 'en',
+            });
+            expect(out).toBe('I want the details');
+        });
+
+        it('falls back to the post/KB ladder when no default is configured', () => {
+            expect(rewriteContentFreeCta({
+                commentForAI: '.', rawText: '.',
+                postMessage: 'علق بنقطة لتصلك التفاصيل',
+            })).toBe('أريد التفاصيل');
+            expect(rewriteContentFreeCta({
+                commentForAI: '.', rawText: '.',
+                postMessage: 'P O O L',
+            })).toBe('I want the details');
+        });
+
+        it('still does not touch a comment that carries real text', () => {
+            expect(rewriteContentFreeCta({
+                commentForAI: 'how much is the suite?',
+                rawText: 'how much is the suite?',
+                postMessage: 'P O O L',
+                knowledgeBase: ARABIC_KB,
+                defaultReplyLanguage: 'ar',
+            })).toBe('how much is the suite?');
+        });
+
+        // The sentence is resolved through `t()`, so a locale the backend has no authored
+        // strings for degrades to English rather than emitting a language the reply
+        // pipeline would then mirror with an English prompt. Guards the invariant
+        // documented on resolveAuthoredCtaLanguage; flips the day sv.json lands.
+        it('degrades an unauthored locale to English rather than guessing', () => {
+            for (const locale of ['sv', 'de', 'fr', 'tr']) {
+                expect(rewriteContentFreeCta({
+                    commentForAI: '🔥', rawText: '🔥',
+                    postMessage: 'P O O L',
+                    knowledgeBase: ARABIC_KB,
+                    defaultReplyLanguage: locale,
+                })).toBe('I want the details');
+            }
+        });
+    });
 });
 
 describe('buildCommentRagQuery', () => {

@@ -3080,3 +3080,212 @@ in §10.11.
 selector, every writer of the first silently rewrites the second — and the drift is invisible
 to any monitor that compares the two counters to each other instead of to the data they
 describe.
+
+## D-107 · Text WE author when the customer gave no language signal is written in the merchant's configured language, not the post's detected one (2026-08-28)
+
+**Context.** A merchant's customers commented emoji only (`🔥🔥`, `❤️`, `....`) on his posts and
+the page answered each with a ~600-character **English** brochure, on a page configured
+`default_reply_language = 'ar'` whose Business Info is 10,494 characters of Arabic.
+
+`rewriteContentFreeCta` (`services/reply/commentPreprocess.ts`) substitutes a synthetic
+question for a content-free comment on a CTA post, so the model has something answerable
+instead of a bare token. Its language was `detectLanguageCode(postMessage) === 'ar' ? … : …`.
+That sentence is then fed back through `resolveCommentLanguage` as the EXPLICIT language hint —
+the first link of the resolve chain — so it outranks `default_reply_language` and decides the
+reply's language outright.
+
+**Measured (prod, 30 days).** 251 of 731 content-free AI comment replies went out in English
+against an Arabic default: 238 on Shahin Resort, 11 on مزة جبل 86, 2 on BAMBO LIBYA. **Every
+page in the fleet has `default_reply_language = 'ar'`**, so nothing was flipping the other way.
+Broken down by the caption that produced them, Shahin's 238:
+
+| caption shape | replies | share |
+|---|---|---|
+| decorative spaced letters (`P O O L`, `M L U E`, `S A L M A`) | 183 | 77% |
+| genuine English prose (`Amazing atmosphere at Shahin Resort 👌🔥`) | 36 | 15% |
+| Arabic proper names in Latin (`NADER AL ATAT`, `YAZAN RASHID`) | 19 | 8% |
+
+**Ruling.** For text we author on the customer's behalf, the merchant's configured language is
+the authority; the post is not. Two reasons, and the second is the one that decides it:
+
+1. `auto_detect_language` detects **the customer's** language. A content-free comment has none
+   by precondition — so there is nothing for detection to act on, and the configured default is
+   exactly what a default is for. (Shahin has auto-detect ON and default `ar`; both are honoured.)
+2. The post's language is the **merchant's styling choice for that post**, not evidence about
+   the commenter — and it is a guess the detector gets wrong on the shapes that dominate real
+   traffic. `isLowSignalLatinToken` cannot rescue it: its ≤3-word cap admits `A R C` but not
+   `P O O L`, so the ladder returns `en` at its first rung and never reaches the KB or the default.
+
+**Rejected alternative.** A "decorative Latin" predicate (reject spaced single letters) was
+measured and rejected: it fixes 183 of 238 (77%), needs a second and much harder predicate for
+transliterated proper names, and still replies in English to an emoji whenever the caption is
+genuinely English — which this ruling holds is wrong anyway. Widening
+`isLowSignalLatinToken`'s word cap was rejected outright: it is a shared detector on the DM,
+comment, and template paths, with fleet-wide blast radius.
+
+**What shipped.** The ladder moved out of `generator.ts` into `utils/replyLanguage.ts` (pure;
+`generator.ts` imports `commentPreprocess`, so importing it back would be circular), with
+`resolveFallbackLanguage` re-exported from its old home so all six call sites and the suites
+that mock them are untouched. `resolveAuthoredCtaLanguage` reads the merchant default first and
+falls back to the existing post→KB ladder when it is unset.
+
+**The sentence is an i18n key, not a hardcoded pair.** `resolveAuthoredCtaLanguage` returns a
+language **code**, not `'ar' | 'en'`. The narrowing was the real multi-language bottleneck:
+`detectLanguageCode` already names `sv`/`de`/`fr`/`es`/`tr` and `resolveCommentLanguage` is
+explicitly written to reply in any language it can name, so the pipeline was never the limit —
+the binary was. The sentence now comes from `t('contentFreeCtaQuestion', lang)`.
+
+⚠️ **The invariant that creates, stated plainly:** because this sentence's language BECOMES the
+reply's language, a locale with no authored sentence degrades to English rather than to a
+foreign reply built from an English prompt. That is safe but it is a real limit, and it is why
+i18n — with `MessageKey`'s compile-time completeness — is the right home. Verified by mutation:
+registering a one-key `sv.json` fails `tsc` with `TS2740` ("missing … and 133 more").
+
+⛔ **"Add a locale file" is optimistic (Rule 13b).** The same mutation surfaced **8 further type
+errors outside `i18n.ts`** — `paymentWebhookHandlers.ts` and `dunningNotices.ts` hardcode
+`'ar' | 'en'` in their own signatures. A third language is a ~10-site typed refactor. `tsc`
+finds every site, so it is mechanical, but it is not a drop-in. **Follow-up, un-filed.**
+
+**Deliberately NOT bundled.** `resolveFallbackLanguage`'s canned away/quota/price templates are
+also authored-by-us text firing on script-less input, so the same inversion and the same
+widening arguably belong there too. That is a fleet-wide change to a different set of messages
+and needs its own measurement — one change at a time.
+
+⛔ **The two resolvers DISAGREE, and they are meant to.** Do not read the paragraph above as
+"they are interchangeable for ar/en, so they could be collapsed" — collapsing them re-ships
+this defect. `resolveFallbackLanguage` reads the context ladder FIRST and the merchant default
+LAST; `resolveAuthoredCtaLanguage` inverts that. For any page whose configured language differs
+from its post's detected language they return different answers, which is the entire fix.
+The counter-example is this ruling's own headline case, executed against the shipped code:
+
+```
+postMessage = 'Amazing atmosphere at Shahin Resort 👌🔥' , defaultReplyLanguage = 'ar'
+  isLowSignalLatinToken → false ; detectLanguageCode → 'en'
+  resolveFallbackLanguage    → 'en'   (returns at the post rung, never reaches the default)
+  resolveAuthoredCtaLanguage → 'ar'   (the default decides)
+```
+
+That is eval case **#814**, and the unit test `answers an emoji on 'Amazing atmosphere at
+Shahin Resort 👌🔥' in Arabic` pins the right-hand answer. What this change "only widens" is
+the RETURN TYPE — a language code instead of `'ar' | 'en'` — which is a no-op for the two
+locales that have authored strings. The ordering is a deliberate behaviour change, not a
+widening.
+
+**The generalisable rule.** Never infer a language for text you are authoring yourself from
+text a third party wrote. And when self-authored text is fed back into a detector to decide
+something downstream, the authored string must exist in every language you can resolve to —
+otherwise the resolver's reach silently exceeds the vocabulary's.
+
+## D-108 · The friend-tag repair fetch is gated on SEMANTIC signals only — comment length is not evidence of anything (2026-08-28)
+
+**Context.** A customer on Shahin Resort tagged two friends and talked to *them* about the
+post — «Ruba Alhomosh  Sara Kaddoura  راحت علينا حفلة نادر الاتات 😁» (comment
+`a2d0d3fb-bed5-43f2-a77a-35ae85c5cebd`, 2026-08-24). The page publicly answered
+«أرسلنا لك التفاصيل بالخاص». Jawab24 is supposed to stay out of peer-to-peer chatter.
+
+Three layers should have caught it, and each was blind for a different reason:
+
+1. `hasUserTag(messageTags)` — the authoritative structured guard. Facebook delivered the
+   webhook with **`message_tags` NULL**, so it saw nothing.
+2. `hasMention(text)` — the legacy regex fallback. It looks for `@`, and **a Facebook tag
+   carries no `@` in the message body**: the friends' names arrive as plain text.
+3. The **Graph repair fetch** in `commentProcessor.ts`, which exists precisely for layer 1
+   lying. It is gated on `!isConfidentlyNotATag(...)`, and that predicate carried a
+   `length > 50` rule. The comment is **60 characters**, so the fetch was skipped.
+
+**The defect is an internal contradiction, not a badly-chosen number.**
+`isConfidentlyNotATag`'s own doc comment states the correct bias — *"fail toward fetching
+rather than toward replying — a wrong reply is visible, a wasted fetch is cheap"* — and the
+length rule does the exact opposite: it fails toward **replying**.
+
+**Why length was the wrong predicate.** Every other signal in that function is SEMANTIC (a
+statement about what the customer is doing: a question mark, digits, a currency token, a
+URL). Length is structural — it says nothing about whether a tag exists. Its stated
+reasoning, "structured tags render as plain names, usually short", holds for a BARE tag and
+breaks for the common real shape, a tag plus a sentence addressed to the tagged friends. And
+it failed hardest exactly where it mattered most: **two tagged names are already 28
+characters and three are 53**, so the cap fired on the multi-tag comments most likely to be
+friend-tagging, with no real text needed at all.
+
+**Measured on 30 days of production before removing it:**
+
+| | |
+|---|---|
+| comments with `message_tags` NULL | 15,694 |
+| suppressed from the repair fetch **only** by the length rule | **553** |
+| …of those, received an AI reply | **244** |
+| fetch volume with the cap / without it | 14,271 / 14,824 — the cap saved **3.9%** |
+
+At least 29 of the 244 carry the visible two-capitalised-Latin-names signature; that is a
+**lower bound only**, because a friend with an Arabic name renders as Arabic text and is
+invisible to any text heuristic. So the true friend-tag count among them is higher and not
+measurable from the text — which is itself an argument for asking Graph rather than guessing.
+
+**Ruling.** The length rule is **removed**, not raised. Raising it to 120 would keep an
+uncorrelated proxy and simply lose the next slightly-longer comment. The remaining signals
+(`?`/`؟`, digits, currency tokens, URLs, empty) all correlate with "the customer is
+addressing US", and the question-mark rule is load-bearing in the other direction too:
+«Ruba شوفي، قديش السعر؟» tags a friend AND asks us, and must still reach the AI.
+
+⛔ **Do not reintroduce a length heuristic here.** If Graph fetch volume ever needs bounding,
+bound it on something that correlates with "is this a tag", or cache per comment id (BullMQ
+dedup upstream already makes this effectively once-per-comment).
+
+**What the fix does and does not prove.** Verified: the predicate now returns `false` for the
+production text, so the repair fetch runs. Inferred, not verified: that Graph returns the tags
+for that specific comment — evidence is that the names render as blue links (real structured
+tags exist) plus the existing in-code note that Graph does return them when the webhook does
+not. No live Graph call was made against production credentials.
+
+**Verification.** Red-first: 3 new cases in `backend/test/utils/commentText.test.ts` failed
+against the shipped predicate, including the exact production string; green after. The
+pre-existing `returns true for long text (> 50 chars)` case was **deliberately replaced**
+(not silently deleted) by one asserting that long prose with no semantic signal now returns
+`false`, plus one proving long text WITH a real signal still returns `true`. Backend unit
+7,768 pass / 407 files; tsc, lint 0/0, duplication clean.
+
+**The generalisable rule.** A guard added to save cost must have its saving MEASURED, not
+assumed — this one bought 3.9% of API calls and paid for it with a public reply to a private
+conversation. And when a function documents its own bias, a rule that contradicts that bias
+is a bug even when every individual line looks reasonable.
+
+**The cost side, measured — because removing a guard has one too.** The entry above measured
+the leak the cap caused; review asked for the opposite direction: how much SILENCE can the
+removal create? Widening the repair fetch means more comments reach the step-3a skip, which
+resolves silently, sets no `needs_attention`, and is therefore invisible to the merchant. Over
+the same 30 days:
+
+| | |
+|---|---|
+| comments already silently skipped as friend tags (baseline) | **4,720** |
+| comments the cap kept out of the fetch (the flip population) | 579 |
+| …of those, that received an AI reply | 243 |
+| …of THOSE, classified `COMPLIMENT` / `QUESTION` / `COMPLAINT` / `GREETING` | 177 / 42 / 22 / 2 |
+
+So the worst case is **at most +12% on a class that is already 4,720 a month** — and only for
+the subset that truly carries a tag, since a comment with no tag is fetched and then replied to
+exactly as before. The visible two-Latin-names signature concentrates where a skip is harmless
+(20 of 177 compliments, 2 of 42 questions). The exposure is the small remainder: a customer who
+tags a friend AND addresses us without a `?`, a digit, a currency token or a URL.
+
+**Two remedies were considered and both rejected on the numbers:**
+
+- **A word-count guard on the structured-tag path** (mirroring `FRIEND_MENTION_WORD_LIMIT = 3`,
+  which the regex `hasMention` path already has). Rejected: it re-opens this exact defect. The
+  Shahin comment carries ~5 words of trailing text after the tags, so a >3-word pass would
+  reply to it again. The asymmetry between the two paths is deliberate — a structured tag from
+  Graph is authoritative evidence, a regex `@` is a guess.
+- **Flagging instead of resolving** (`needs_attention = true` so the merchant can see it).
+  Rejected on volume: at 4,720 a month it would put ~4,700 rows of peer-to-peer chatter into
+  every merchant's attention queue, which is a worse product than the silence it replaces.
+
+**What shipped instead: make the class countable.** The skip now records
+`skipped_friend_tag` rather than sharing `skipped_spam`, and goes through the shared
+`silentlyResolveAndSkip` helper rather than a third hand-rolled copy of resolve + SSE. Silence
+that is *counted* is revisable on evidence; silence pooled with a different class is not. Watch
+it per page against `success` — a page whose friend-tag skips climb while its successes fall is
+the signal this trade-off went wrong.
+
+**The generalisable rule, second half.** Measuring the failure a guard causes does not excuse
+you from measuring the failure its removal causes. Both directions get a number, and when the
+answer is "stay silent", the silence gets a counter.
