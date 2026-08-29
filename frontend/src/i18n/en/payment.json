@@ -37,7 +37,7 @@
     "title": "Pay with Sham Cash",
     "intro": "Cards are not available in your region, but you can pay for your subscription by transferring to our Sham Cash wallet.",
     "planLine": "{plan} — {amount} {interval, select, year {per year} other {per month}}",
-    "step1": "Transfer the amount to the wallet below.",
+    "step1": "Transfer the amount to the wallet above.",
     "step2": "Copy the transfer reference from your Sham Cash receipt.",
     "step3": "Send it here, and we activate your account after we confirm the transfer.",
     "walletNumber": "Wallet number",
