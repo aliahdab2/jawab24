@@ -1,7 +1,10 @@
 import React from 'react';
 import clsx from 'clsx';
-import { listPageChannels, type PageChannelInput } from '@jawab24/shared';
 import { CHANNEL_GLYPH_PATHS } from '@/constants/brandGlyphs';
+// No '@jawab24/shared' here: this file is on every PUBLIC page's import path
+// (landing hero, WhatsAppHelpButton) and that package is un-tree-shakeable
+// CommonJS. Anything needing shared predicates lives beside it — see
+// ChannelBadges.tsx — and publicPageBarrels.test.ts enforces the split.
 
 /**
  * Custom Brand Icons to replace deprecated Lucide brand icons.
@@ -156,34 +159,6 @@ export function PlatformIcon({ platform, size = 'sm', muted = false, tint = 'sur
       >
         <path d={path} />
       </svg>
-    </span>
-  );
-}
-
-/**
- * Compact channel fingerprint for SUMMARY surfaces (dashboard lists, page
- * pickers): colored = connected & replying, muted = connected but auto-reply
- * off, absent = channel not connected. Detail views (the Channels cards)
- * keep their full rows — never render both in one component.
- */
-export function ChannelBadges({
-  page,
-  labels,
-}: {
-  page: PageChannelInput;
-  /** Localized "<platform>: <state>" aria labels, keyed by platform */
-  labels: { facebook: string; instagram: string; whatsapp: string };
-}) {
-  // The shared predicate decides which channels exist and which reply — the
-  // support console's page card and health flags read the same one.
-  const channels = listPageChannels(page);
-  if (channels.length === 0) return null;
-
-  return (
-    <span className="inline-flex items-center gap-1 flex-shrink-0" role="group">
-      {channels.map(({ platform, on }) => (
-        <PlatformIcon key={platform} platform={platform} size="md" muted={!on} ariaLabel={labels[platform]} />
-      ))}
     </span>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { ChannelBadges } from '@/components/ui/BrandIcons';
+import { ChannelBadges } from '@/components/ui/ChannelBadges';
 
 const LABELS = { facebook: 'Facebook: on', instagram: 'Instagram: off', whatsapp: 'WhatsApp: on' };
 
