@@ -7,6 +7,7 @@ import type { Page, UsageSummary } from '@jawab24/shared';
 import { Card, Button } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import {
+  autoReplyEnableDestination,
   countSetupStepsDone,
   deriveSetupState,
   isWithinSetupGrace,
@@ -280,7 +281,7 @@ export function SetupChecklistCard({
               ) : (
                 <li>
                   <Link
-                    href="/settings"
+                    href={autoReplyEnableDestination(masters)}
                     className="group flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-muted/60 transition-colors"
                   >
                     <Circle className="w-5 h-5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
