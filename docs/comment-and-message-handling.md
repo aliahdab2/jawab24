@@ -34,7 +34,11 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   makes this effectively once-per-comment without a dedicated cache layer.
 - ✅ Nudge language derives from stripped text — no more English nudge on Arabic
   pages with tagged commenters
-- ✅ CTA-boost scoping documented correctly (dual/private only, not public)
+- ✅ **Content-free CTA rewrite is channel-agnostic (since #391, 2026-07-02):**
+  `rewriteContentFreeCta` fires in **every** reply mode — public, private, and dual —
+  not dual/private only. (It was DM-gated until #391; the old gate silently dropped
+  solicited `.`/`٠٠٠` engagement on public-mode CTA campaigns — the لامار الشام
+  regression, eval #324.)
 - ✅ Shared preprocess module `backend/src/services/reply/commentPreprocess.ts`
   is the single source of truth for skip rules + language resolution, used by
   both `generateForComment` (production) and `generateForPlayground` (admin/eval).
@@ -281,7 +285,7 @@ polling fallback.
 | File | Responsibility |
 |------|----------------|
 | `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)`, `stripTagsByOffsets`, `hasUserTag`, `hasOwnPageTag`, `FacebookMessageTag` type |
-| `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewritePunctuationForDualDm`. Used by generator and playground — do not duplicate these rules. |
+| `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewriteContentFreeCta`. Used by generator and playground — do not duplicate these rules. |
 | `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, capture `message_tags`, enqueue job with tags, normalise attachment types |
 | `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Hosts the **early user-tag guard** (step 3a) that short-circuits before the trigger-keyword branch. Threads `messageTags` + `ourFacebookPageId` into the generator context. Emits `comment:skipped` SSE event on silent-skip so the frontend can patch the comment to `resolved` in real time. |
 | `frontend/src/hooks/useSSE.ts` | Listens for `comment:received`, `comment:reply_sent`, `comment:reply_failed`, `comment:skipped`. On `comment:skipped`, patches the cache to flip the card from "Pending" to "Resolved" without a round-trip and refreshes stats. |
@@ -393,21 +397,35 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
                       │
                       ▼
     ┌─────────────────┴─────────────────────────────────────────────┐
-    │ CTA BOOST (dual & private modes only — not public)            │
+    │ CONTENT-FREE CTA REWRITE  (rewriteContentFreeCta)             │
+    │ ALL reply modes — public, private, AND dual (since #391)      │
     │                                                               │
-    │ replyMode in {dual, private}  (effectiveChannel == 'dm')      │
-    │   && postMessage                                              │
-    │   && isPunctuationOnly → replace the comment with a synthetic │
+    │ postMessage present                                           │
+    │   && isContentFree → replace the comment with a synthetic     │
     │   question ("أريد التفاصيل" / "I want the details") so the AI │
-    │   answers the DM with the post's details instead of a "." .   │
+    │   answers with the post's details instead of a bare token.    │
     │                                                               │
-    │ Public mode: no replacement. The AI sees the raw "." + post   │
-    │ context and generates a public comment reply directly.        │
+    │ isContentFree = no letter in ANY script → covers "." "..."    │
+    │   emoji "❤️", ASCII "000", Arabic-Indic "٠٠٠" (NOT just       │
+    │   punctuation — widened from isPunctuationOnly in #86).       │
+    │                                                               │
+    │ Was DM-only (effectiveChannel=='dm') until #391 (2026-07);    │
+    │ the old gate silently dropped solicited engagement on         │
+    │ public-mode CTA campaigns (لامار الشام, eval #324). Now the   │
+    │ rewrite runs in public too and the reply is posted publicly.  │
+    │                                                               │
+    │ Synthetic-question LANGUAGE = resolveAuthoredCtaLanguage:     │
+    │   merchant default first, then post → KB (NOT the post's      │
+    │   detected language). See D-107 / #967 in Language selection. │
+    │                                                               │
+    │ ⚠️ No CTA CHECK: fires on ANY captioned post, even one that   │
+    │   never invited a comment — see Known limitation 6.           │
     └───────────────────────────────────────────────────────────────┘
                       │
                       ▼
               Language: detectCommentLanguage(strippedText, postMessage)
-                (script-less → fall back to post language)
+                (script-less → fall back to post language;
+                 content-free CTA path → resolveAuthoredCtaLanguage)
                       │
                       ▼
               AI generateReply()
@@ -585,7 +603,7 @@ Arabic page, post in Arabic, dual mode unless noted.
 | `@Ali كيف أسجل في الدورة القادمة؟`        | none                 | `كيف أسجل في الدورة القادمة؟` (5) | NO | AR nudge               | full AR reply |
 | `شو السعر؟`                              | none                 | `شو السعر؟`           | NO    | AR nudge                   | full AR reply |
 | `.` (no post context)                    | none                 | `.`                   | YES   | —                          | —         |
-| `.` (on CTA post "Comment . for price")  | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `.` (on captioned post)‡                 | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
 | `🎉` (no post context)                   | none                 | `🎉`                  | YES   | —                          | —         |
 | `https://spam.com`                       | none                 | `""` + no post → YES | YES   | —                          | —         |
 | `مرحبا` (public mode)                    | none                 | `مرحبا`               | NO    | full AR reply              | —         |
@@ -596,6 +614,10 @@ Arabic page, post in Arabic, dual mode unless noted.
 † Current word count is whitespace-based; `شو سعر الدورة؟` is 3 tokens (≤ 3).
  * Known limitation — short Arabic real questions collide with the friend-tag
    threshold. See [Known limitations](#known-limitations).
+ ‡ The `.`→synthetic rewrite fires on ANY captioned post, not only real CTA posts
+   (no CTA check — see [Known limitation 6](#known-limitations)). Row shows dual mode;
+   in **public** mode the same input produces a **full public reply** (channel-agnostic
+   since #391), and in private mode a DM only.
 
 ---
 
@@ -677,8 +699,8 @@ Post:         "اكتب تم للحصول على السعر"
 Input:        "تم"
 hasMention    false
 stripped      "تم"
-isPunctuationOnly  false (has letters)
-→ continue to AI
+isContentFree false (has letters)
+→ continue to AI (a real content-full comment — no rewrite)
 
 Language:     ar
 Public:       AR nudge
@@ -692,25 +714,30 @@ Post:         "Comment . to get the price"
 Input:        "."
 hasMention    false
 stripped      "."
-isPunctuationOnly  true, but postMessage exists
+isContentFree true, and postMessage exists
 → SPAM FILTER does NOT fire (has post context)
-→ CTA BOOST replaces "." with "أريد التفاصيل" before AI (DM channel)
+→ CONTENT-FREE CTA REWRITE replaces "." with "أريد التفاصيل" before AI
+  (fires in every mode; here the reply is delivered as a dual-mode DM)
 
 Public:       AR nudge
 DM:           full AR answer with price (AI answered the synthetic question)
 ```
 
-### Example 6b — Same dot, public mode
+### Example 6b — Same dot, public mode (post-#391)
 ```
 Mode:         public
 Post:         "Comment . to get the price"
 Input:        "."
 → SPAM FILTER does NOT fire (has post context)
-→ CTA BOOST skipped (only applies to dual/private)
-→ AI sees raw "." + post context
+→ CONTENT-FREE CTA REWRITE fires (channel-agnostic since #391):
+  "." → "أريد التفاصيل" before the AI
+→ AI answers the synthetic question from post context
 
-Public:       AR reply generated directly from post context
+Public:       full AR reply (with the price), posted publicly
 DM:           —
+
+Note: before #391 this path was DM-only, so public mode saw the raw "." and
+often spam-classified it → silence on solicited CTA comments (eval #324).
 ```
 
 ### Example 7 — Same dot, no post context (rare — orphan comment)
@@ -730,8 +757,9 @@ Result:       no reply. We won't guess intent from a dot in a vacuum.
 Input:        "🎉🔥"
 hasMention    false
 stripped      "🎉🔥"
-isPunctuationOnly  true
-→ same as Example 6/7 depending on postMessage
+isContentFree true  (no letter in any script)
+→ same as Example 6b/7 depending on postMessage
+  (with post context → CONTENT-FREE CTA REWRITE fires in every mode)
 ```
 
 ### Example 8b — Comment-originated DM follow-up inherits post context
@@ -838,6 +866,17 @@ mismatched nudge/reply.
 1. **Generator AI call** — `detectCommentLanguage(strippedText, postMessage)`
    with ambiguous-Latin-on-Arabic-KB override (`isAmbiguousLatin` → `ar`).
 
+   **Exception — the content-free CTA rewrite** (`rewriteContentFreeCta`): when the
+   comment carries no language signal at all (`.`/emoji/`٠٠٠`), the synthetic
+   question's language comes from `resolveAuthoredCtaLanguage` — **merchant default
+   first**, then post → KB — NOT the post's detected language. This is text *we*
+   author on the customer's behalf, so the merchant's configured default is the
+   authority, and this synthetic language then becomes the reply's language (fed back
+   as the explicit hint). Fixed in #967 (D-107): the old `detectLanguageCode(postMessage)`
+   sent an English brochure to every emoji comment on a page with decoratively
+   Latin-styled captions (`P O O L`, `M L U E`) — 238 replies on one page in 30 days.
+   See `backend/src/utils/replyLanguage.ts`.
+
 2. **Comment-adapter nudge** (`facebookCommentAdapter` / `instagramCommentAdapter`)
    — same function, same args: `detectCommentLanguage(stripped, postMessage)`.
    This is the fix that prevents English nudges on Arabic pages after a tagged
@@ -878,6 +917,23 @@ with `@name` Latin characters.
 5. **Comment word count is whitespace-only**, Unicode-naïve. A single compound
    Arabic word with a ZWJ or tatweel may miscount; rare in practice.
 
+6. **The content-free CTA rewrite has no CTA check.** `rewriteContentFreeCta`
+   fires whenever a comment is content-free AND the post has *any* caption — it
+   never verifies the post actually invited a comment. So a bare `❤️` on a
+   music-video post whose whole caption is «YAZAN RASHID #shahin_resort» is
+   rewritten to "أريد التفاصيل" and answered with the entire Business Info,
+   identically to «علّق بنقطة لتصلك التفاصيل». Measured on 30 days of production:
+   **452 of 731 content-free AI comment replies (62%) landed on posts with NO CTA
+   in the caption** — concentrated on pages that run zero CTA campaigns (Shahin
+   Resort, مزة جبل 86, ام.اي.اس), while genuine dot-CTA campaigns (الفريق الدمشقي,
+   266/276) depend on the rewrite. Severity rose when a page switched to `public`
+   mode: the ~548-char brochure now posts publicly under each emoji. Removing the
+   rewrite entirely is not the fix — that reintroduces the #324 silence regression.
+   Tracked by eval XGAP `#817`/`#818` (with control `#819`), which stay
+   `expectedFail` until a CTA-aware fix lands. The obvious CTA-phrase regex is a
+   hand-maintained linguistic list (against project preference); no fix is chosen
+   yet.
+
 ---
 
 ## Testing
@@ -891,7 +947,7 @@ Keep these tests green. Add new ones here when behavior changes.
 - `backend/test/services/reply/commentPreprocess.test.ts` — the shared module's
   behavior matrix: user-tag skip (with and without trailing text), page-tag
   exception, regex fallback, punctuation skip, language resolution edge cases,
-  dual-DM synthetic rewrite.
+  content-free CTA rewrite (channel-agnostic; `resolveAuthoredCtaLanguage`).
 - `backend/test/services/generator.test.ts` — `ReplyGenerator - Mention/tag skip
   behavior` describe block (regex fallback path).
 - `backend/test/services/reply/facebookCommentAdapter.test.ts` — stripped input
