@@ -106,18 +106,21 @@ function buildTitle(name: string | null, pageName: string | null): string {
  * `auto_reply_enabled=true` pages and got EVERY unanswered DM flagged
  * `sla_no_reply` — 638 flags on one pharmacy page in prod. Those are ~100% false
  * positives: on a manual-only page the merchant replies inside
- * Facebook/Instagram, and we do not ingest `message_echoes`, so their reply is
- * invisible here and the row never clears. A permanently-red Needs Attention
- * counter is worse than no counter — merchants stop trusting it entirely.
+ * Facebook/Instagram, and we do not ingest Messenger/Instagram `message_echoes`,
+ * so their reply is invisible here and the row never clears. A permanently-red
+ * Needs Attention counter is worse than no counter — merchants stop trusting it
+ * entirely. (WhatsApp Coexistence echoes ARE ingested since 2026-07 — see
+ * webhook.ts `processWhatsAppEchoes` — but they are a different channel and do
+ * not change this predicate.)
  *
  * Business hours ride along in the same predicate and are evaluated at SWEEP
  * time, which is the semantics we want: a message arriving 02:00 against
  * 09:00–17:00 hours is not flagged overnight (nobody is working, and it already
  * received an away message) but becomes flaggable once the workspace is open.
  *
- * Reversible: if `message_echoes` ingestion lands, manual-only workspaces can be
- * escalated again — their human replies would then be observable, so the flags
- * would clear instead of piling up.
+ * Reversible: if Messenger/Instagram `message_echoes` ingestion lands, manual-only
+ * workspaces can be escalated again — their human replies would then be
+ * observable, so the flags would clear instead of piling up.
  */
 async function shouldEscalateWorkspace(
     workspaceId: string,

@@ -44,7 +44,7 @@ import { isMobileBrowser } from '@/lib/browserEnv';
 // an await between the gesture and location.assign is what mobile Chrome
 // silently ignored (2026-07-30).
 import { openWhatsAppSignupUrl } from '@/lib/whatsappRedirect';
-import { useWorkspaceRole, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
+import { useWorkspaceRole, useSubscriptionUsage, useOpenOnQueryParam, useHandoffPauseDuration } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
 import { getLocalePath } from '@/utils/locale';
@@ -76,6 +76,9 @@ const PagesPage: NextPageWithLayout = () => {
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const isDemoUser = useIsDemoUser();
   const { canEdit, isOwner } = useWorkspaceRole();
+  // Shown on a Coexistence WhatsApp card: replying from the phone pauses Jawab24
+  // for this many minutes — the same window the settings card configures.
+  const handoffPauseMinutes = useHandoffPauseDuration();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [igInterestSent, setIgInterestSent] = useState(false);
@@ -1428,7 +1431,22 @@ const PagesPage: NextPageWithLayout = () => {
                               <span className="block">{t('whatsappTooltip')}</span>
                             </InfoPopover>
                           )}
+                          {page.whatsappConnected && page.whatsappCoexistence === true && (
+                            <InfoPopover label={t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}>
+                              <span className="block">{t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}</span>
+                            </InfoPopover>
+                          )}
                         </div>
+                        {/* Coexistence: the number is ALSO live on the merchant's WhatsApp
+                            Business app, whose own greeting/away automations would answer
+                            every customer a second time (D-109). Every Coexistence vendor
+                            tells merchants to switch those off — so do we, where the
+                            number lives. */}
+                        {page.whatsappConnected && page.whatsappCoexistence === true && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {t('whatsappCoexistenceHint')}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {page.whatsappConnected ? (

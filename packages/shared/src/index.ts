@@ -158,7 +158,11 @@ export interface Message {
   direction: 'incoming' | 'outgoing';
   replied: boolean;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | null;
+  // 'app_auto' = sent automatically by the merchant's WhatsApp Business APP on a
+  // Coexistence number (its greeting / away message), echoed to us by Meta. Not a
+  // human reply: it never arms the handoff pause and never "answers" a customer.
+  // Outgoing-only.
+  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'app_auto' | null;
   createdAt: string | Date | null;
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;

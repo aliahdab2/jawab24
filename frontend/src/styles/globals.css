@@ -772,6 +772,13 @@
     @apply bg-slate-100 text-slate-600
            dark:bg-slate-800/60 dark:text-slate-300;
   }
+  /* The merchant's WhatsApp Business app automation (greeting/away) echoed on a
+     Coexistence number — amber, so it never reads as a human (slate) or as one
+     of ours (violet/sky/emerald). */
+  .reply-source-app-auto {
+    @apply bg-amber-100 text-amber-700
+           dark:bg-amber-900/30 dark:text-amber-300;
+  }
 
   /* --- Reply bubble --- */
   .reply-bubble {

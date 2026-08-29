@@ -189,7 +189,7 @@
   "handoffPause": {
     "title": "Pause Auto-Reply When I Reply Manually",
     "desc": "Pauses auto-reply while you handle the conversation yourself.",
-    "info": "After you reply manually to a customer, Jawab24 stops sending auto-replies on that conversation for the duration below — so the customer doesn't get two replies for the same message.",
+    "info": "After you reply manually to a customer, Jawab24 stops sending auto-replies on that conversation for the duration below — so the customer doesn't get two replies for the same message. This also applies when you reply from your phone on a WhatsApp number that stays on your WhatsApp Business app.",
     "warning": "Prevents sending double replies to the same customer",
     "why": "Why? Prevents sending double replies to the same customer."
   },

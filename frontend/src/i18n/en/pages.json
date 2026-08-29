@@ -58,6 +58,8 @@
   "whatsappPopupBlocked": "The WhatsApp signup window could not open. Please click Connect again, and allow pop-ups for this site if your browser blocked it.",
   "whatsappNoNumberSelected": "No phone number was added to your WhatsApp Business account. Complete the signup and choose a number, then try again.",
   "whatsappPinMismatch": "This number has two-step verification enabled in the WhatsApp Business app. Turn it off there, then try connecting again.",
+  "whatsappCoexistenceHint": "Also on your phone — turn off the app's greeting and away messages",
+  "whatsappCoexistenceInfo": "Jawab24 answers on this number alongside your WhatsApp Business app. Turn off the app's Greeting Message and Away Message so customers don't get two replies. When you reply to a customer from your phone, Jawab24 pauses on that conversation for {minutes} minutes, then resumes.",
   "whatsappUpgradeButton": "Upgrade to connect",
   "whatsappPlanRequired": "WhatsApp smart replies are available on the Business plan and higher. Upgrade to connect your number.",
   "whatsappPlanRequiredIOS": "WhatsApp smart replies are not available on your current plan.",

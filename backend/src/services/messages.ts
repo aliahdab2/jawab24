@@ -491,7 +491,10 @@ export class MessagesService {
         workspaceId: string,
         senderId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
+        // 'app_auto' is outgoing-only: a WhatsApp Business APP automation echoed
+        // on a Coexistence number (see whatsappEchoClassifier.ts). It is never
+        // written to an incoming row, so markAsReplied and friends do not take it.
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'app_auto',
         conn: DbConn = db,
         senderName?: string,
         originContentId?: string,
@@ -506,10 +509,18 @@ export class MessagesService {
         // Coexistence case, where Meta echoes API-sent messages back alongside the
         // merchant's phone-sent ones. Absent → the synthetic id below, unchanged.
         platformMessageId?: string,
+        // The channel this outgoing message belongs to, for the case where NO
+        // conversation exists yet. A WhatsApp Coexistence echo can be the first
+        // row for a customer (the merchant's app greeting lands before the inbound
+        // is stored, or the inbound was never stored) — without this the fallback
+        // below created a `facebook` conversation on a WhatsApp page, and
+        // findOrCreate never rewrites platform, so the mislabel was permanent
+        // (2 of the first 5 echoes in production, 2026-08-29).
+        platform?: Platform,
     ): Promise<Message> {
-        // Platform unknown in this call — inherit from existing conversation if present,
-        // default to 'facebook' otherwise. This is safe because we never overwrite the
-        // platform of an existing conversation via findOrCreate.
+        // Platform: inherit from the existing conversation if present, else the
+        // caller's channel, else 'facebook' (legacy default). Safe because we never
+        // overwrite the platform of an existing conversation via findOrCreate.
         //
         // Name resolution priority:
         //   1. Caller-supplied senderName (comment webhook's fromName) — freshest truth
@@ -523,9 +534,9 @@ export class MessagesService {
         // `originContentId` records the post/media that triggered this DM (comment→DM).
         // First-write-wins at the conversation layer so follow-up DMs keep the post context.
         const existing = await conversationsService.findByPageAndSender(pageId, senderId);
-        const platform: Platform = existing?.platform ?? 'facebook';
+        const resolvedPlatform: Platform = existing?.platform ?? platform ?? 'facebook';
         const resolvedName = senderName ?? existing?.senderName ?? await this.getSenderNameBySenderId(pageId, senderId);
-        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, resolvedName, originContentId);
+        const conversation = await conversationsService.findOrCreate(pageId, senderId, resolvedPlatform, resolvedName, originContentId);
 
         const [newMessage] = await conn.insert(messages)
             .values({
@@ -538,7 +549,7 @@ export class MessagesService {
                 platformMessageId: platformMessageId || `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 // Without this the column defaulted to 'facebook', mislabeling every
                 // outgoing WhatsApp/Instagram reply (found in the 2026-07-08 pilot).
-                platform: conversation.platform ?? platform,
+                platform: conversation.platform ?? resolvedPlatform,
                 senderId,
                 ...(conversation.senderName ?? resolvedName ? { senderName: conversation.senderName ?? resolvedName } : {}),
                 message: replyText,
@@ -723,6 +734,47 @@ export class MessagesService {
             ),
         });
         return !!newer;
+    }
+
+    /**
+     * How recently, and how actively, this customer has been writing in — the two
+     * inputs of the WhatsApp Coexistence echo classifier (whatsappEchoClassifier.ts).
+     *
+     *   lastAt                    — the customer's latest inbound (our clock; the echo
+     *                               is timed against the same clock, never Meta's).
+     *   priorInboundBeforeWindow  — an inbound exists in (now − inactivityDays,
+     *                               now − windowMs]: the thread was already active
+     *                               BEFORE the classifier's window opened. Measured
+     *                               from the window edge, not from `lastAt`, so a
+     *                               customer's 2–3-message burst does not read as an
+     *                               active thread.
+     *
+     * One aggregate query on idx_messages_sender_inbox (page_id, sender_id, direction).
+     */
+    async getInboundRecency(
+        pageId: string,
+        senderId: string,
+        windowMs: number,
+        inactivityDays: number,
+        now: Date = new Date(),
+    ): Promise<{ lastAt: Date | null; priorInboundBeforeWindow: boolean }> {
+        const windowStart = new Date(now.getTime() - windowMs);
+        const inactivityStart = new Date(now.getTime() - inactivityDays * 24 * 60 * 60 * 1000);
+        const [row] = await db
+            .select({
+                lastAt: max(messages.createdAt),
+                priorBeforeWindow: sql<boolean>`coalesce(bool_or(${messages.createdAt} <= ${windowStart} AND ${messages.createdAt} > ${inactivityStart}), false)`,
+            })
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+            ));
+        return {
+            lastAt: row?.lastAt ? new Date(row.lastAt) : null,
+            priorInboundBeforeWindow: row?.priorBeforeWindow === true,
+        };
     }
 
     /**
@@ -999,7 +1051,7 @@ export class MessagesService {
             direction: record.direction as 'incoming' | 'outgoing',
             replied: record.replied ?? false,
             replyText: record.replyText,
-            replyMethod: record.replyMethod as 'template' | 'ai' | 'manual' | 'post_reply' | null,
+            replyMethod: record.replyMethod as Message['replyMethod'],
             createdTime: record.createdTime,
             repliedAt: record.repliedAt,
             createdAt: record.createdAt,

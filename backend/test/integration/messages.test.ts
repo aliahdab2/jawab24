@@ -664,5 +664,119 @@ describe('Messages Service — Integration (real Postgres)', () => {
             const [row] = await testDb.select().from(messages).where(eq(messages.id, saved.id));
             expect(row.platform).toBe('facebook');
         });
+
+        // A WhatsApp Coexistence echo can be the FIRST row for a customer. Without
+        // the caller's platform the row AND its new conversation were stamped
+        // `facebook` on a WhatsApp page — permanently, since findOrCreate never
+        // rewrites platform (2 of the first 5 production echoes, 2026-08-29).
+        it('uses the caller\'s platform when no prior conversation exists', async () => {
+            const saved = await messagesService.storeOutgoingMessage(
+                pageId, workspaceId, 'fresh-wa-customer', 'شكرا لتواصلك', 'app_auto', undefined,
+                undefined, undefined, undefined, undefined, 'wamid.first', 'whatsapp',
+            );
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, saved.id));
+            expect(row.platform).toBe('whatsapp');
+            expect(row.replyMethod).toBe('app_auto');
+            const [conv] = await testDb.select().from(conversations)
+                .where(and(eq(conversations.pageId, pageId), eq(conversations.senderId, 'fresh-wa-customer')));
+            expect(conv.platform).toBe('whatsapp');
+        });
+
+        it('an existing conversation keeps its platform even when the caller passes another', async () => {
+            await insertMessage(pageId, 'ig-customer', { platform: 'instagram', platformMessageId: 'ig-in-1' });
+
+            const saved = await messagesService.storeOutgoingMessage(
+                pageId, workspaceId, 'ig-customer', 'Hi', 'manual', undefined,
+                undefined, undefined, undefined, undefined, undefined, 'whatsapp',
+            );
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, saved.id));
+            expect(row.platform).toBe('instagram');
+        });
+    });
+
+    // =========================================================
+    // WhatsApp Coexistence — app automation echoes vs the handoff pause (D-109)
+    // =========================================================
+    describe('handoff pause vs app_auto echoes', () => {
+        const PAUSE_MINUTES = 15;
+
+        it('a manual outgoing inside the window pauses the AI', async () => {
+            await insertMessage(pageId, senderId, {
+                platform: 'whatsapp', direction: 'outgoing', replied: true,
+                replyMethod: 'manual', platformMessageId: 'wamid.typed',
+                createdAt: new Date(Date.now() - 60_000),
+            });
+            expect(await messagesService.isPaused(pageId, senderId, PAUSE_MINUTES)).toBe(true);
+        });
+
+        // The merchant's app greeting must not read as a human handoff — that
+        // silenced the AI for the whole window in every conversation (2026-08-29).
+        it('an app_auto outgoing inside the window does NOT pause the AI', async () => {
+            await insertMessage(pageId, senderId, {
+                platform: 'whatsapp', direction: 'outgoing', replied: true,
+                replyMethod: 'app_auto', platformMessageId: 'wamid.greeting',
+                createdAt: new Date(Date.now() - 4_000),
+            });
+            expect(await messagesService.isPaused(pageId, senderId, PAUSE_MINUTES)).toBe(false);
+        });
+    });
+
+    describe('getInboundRecency', () => {
+        const WINDOW_MS = 10_000;
+        const IDLE_DAYS = 14;
+
+        it('reports no inbound for a customer who never wrote in', async () => {
+            const r = await messagesService.getInboundRecency(pageId, 'nobody', WINDOW_MS, IDLE_DAYS);
+            expect(r).toEqual({ lastAt: null, priorInboundBeforeWindow: false });
+        });
+
+        it('a conversation opener: recent lastAt, nothing before the window', async () => {
+            const at = new Date(Date.now() - 3_000);
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-opener', createdAt: at });
+
+            const r = await messagesService.getInboundRecency(pageId, senderId, WINDOW_MS, IDLE_DAYS);
+            expect(r.lastAt?.getTime()).toBe(at.getTime());
+            expect(r.priorInboundBeforeWindow).toBe(false);
+        });
+
+        // A 2–3-message burst is still an opener: "prior" is measured from the
+        // window EDGE, not from the latest message.
+        it('an opener sent as a burst is still not an active thread', async () => {
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-b1', createdAt: new Date(Date.now() - 6_000) });
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-b2', createdAt: new Date(Date.now() - 4_000) });
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-b3', createdAt: new Date(Date.now() - 2_000) });
+
+            const r = await messagesService.getInboundRecency(pageId, senderId, WINDOW_MS, IDLE_DAYS);
+            expect(r.priorInboundBeforeWindow).toBe(false);
+        });
+
+        it('an active thread: an inbound older than the window but inside 14 days', async () => {
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-yday', createdAt: new Date(Date.now() - 24 * 3_600_000) });
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-now', createdAt: new Date(Date.now() - 2_000) });
+
+            const r = await messagesService.getInboundRecency(pageId, senderId, WINDOW_MS, IDLE_DAYS);
+            expect(r.priorInboundBeforeWindow).toBe(true);
+        });
+
+        // WhatsApp re-sends its greeting after 14 days of silence, so a customer
+        // returning after 15 days is an opener again.
+        it('a customer back after 14+ days of silence is an opener again', async () => {
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-old', createdAt: new Date(Date.now() - 15 * 24 * 3_600_000) });
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-now', createdAt: new Date(Date.now() - 2_000) });
+
+            const r = await messagesService.getInboundRecency(pageId, senderId, WINDOW_MS, IDLE_DAYS);
+            expect(r.priorInboundBeforeWindow).toBe(false);
+        });
+
+        it('ignores outgoing rows and other customers', async () => {
+            await insertMessage(pageId, senderId, { platformMessageId: 'out-1', direction: 'outgoing', replied: true, replyMethod: 'ai', createdAt: new Date(Date.now() - 3_600_000) });
+            await insertMessage(pageId, 'someone-else', { platformMessageId: 'in-other', createdAt: new Date(Date.now() - 3_600_000) });
+            await insertMessage(pageId, senderId, { platformMessageId: 'in-now', createdAt: new Date(Date.now() - 2_000) });
+
+            const r = await messagesService.getInboundRecency(pageId, senderId, WINDOW_MS, IDLE_DAYS);
+            expect(r.priorInboundBeforeWindow).toBe(false);
+        });
     });
 });

@@ -88,14 +88,17 @@ Notes:
 > "Select your setup" stage, and **Meta itself refuses a number that is not registered in the
 > Business app** rather than silently migrating it.
 >
-> ⚠️ **What is still UNPROVEN at GA** — know this before blaming a customer report on something else:
-> no Coexistence connect has ever completed, so the backend's skip-`registerPhoneNumber` branch and
-> **the whole of echo ingestion (`smb_message_echoes`) have never executed in production.** Their
-> failure modes are the AI muting itself after every reply, or double-replying alongside the
-> merchant. Contained: those branches only run for pages with `whatsapp_coexistence = true`, so
-> Facebook/Instagram/migration merchants cannot be affected. **Human-first reply mode (Phase 3) is
-> deliberately NOT built** — deferred until a real coexistence number exists and its timing is
-> observable. Also unverified: whether receive-and-discard satisfies Meta's 24h "synchronize or
+> ✅ **Proven in production 2026-08-29 — and both feared failure modes happened on day one.** The
+> first real Coexistence connect failed on the register call (`platform_type` lied — fixed by #968,
+> Coexistence is now sticky), and echo ingestion then produced the *self-mute*: the WhatsApp
+> Business **app's own greeting** is echoed exactly like a typed reply, was stored `manual`, and
+> silenced the AI for the whole handoff window in every conversation — the customer's follow-up
+> was answered 14 min later. Fixed by `whatsappEchoClassifier` (`app_auto`, D-109); the card now
+> tells Coexistence merchants to switch the app's Greeting/Away off. Contained: those branches only
+> run for pages with `whatsapp_coexistence = true`, so Facebook/Instagram/migration merchants cannot
+> be affected. **Human-first reply mode (Phase 3) is deliberately NOT built** — deferred until a
+> real coexistence number exists and its timing is observable (one now does).
+> Still unverified: whether receive-and-discard satisfies Meta's 24h "synchronize or
 > offboard" warning on the `history` field.
 >
 > ⛔ **Sanctions:** Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and

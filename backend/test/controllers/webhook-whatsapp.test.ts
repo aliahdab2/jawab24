@@ -26,6 +26,7 @@ const {
     mockStoreOutgoingMessage,
     mockGetUnrepliedFromSender,
     mockMarkOlderMessagesAsReplied,
+    mockGetInboundRecency,
     TX_SENTINEL,
 } = vi.hoisted(() => ({
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
@@ -44,6 +45,9 @@ const {
     mockStoreOutgoingMessage: vi.fn().mockResolvedValue({ id: 'out-1' }),
     mockGetUnrepliedFromSender: vi.fn().mockResolvedValue([]),
     mockMarkOlderMessagesAsReplied: vi.fn().mockResolvedValue(0),
+    // Default = a HUMAN-looking echo (a minute after the inbound, inside an active
+    // thread) so the pre-existing echo cases keep exercising the manual path.
+    mockGetInboundRecency: vi.fn().mockResolvedValue({ lastAt: new Date(Date.now() - 60_000), priorInboundBeforeWindow: true }),
     TX_SENTINEL: { __tx: true },
 }));
 
@@ -106,7 +110,16 @@ vi.mock('../../src/services/messages', () => ({
         findByPlatformMessageId: mockFindByPlatformMessageId,
         getUnrepliedFromSender: mockGetUnrepliedFromSender,
         markOlderMessagesAsReplied: mockMarkOlderMessagesAsReplied,
+        getInboundRecency: mockGetInboundRecency,
     },
+}));
+
+// The echo classifier re-reads the inbound row once after a short delay when it
+// is missing. The tests pin the re-read itself (call count + verdict), not the
+// length of the delay — that constant is pinned in whatsappEchoClassifier.test.ts.
+vi.mock('../../src/services/whatsappEchoClassifier', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/services/whatsappEchoClassifier')>()),
+    ECHO_RECENCY_RETRY_MS: 0,
 }));
 
 vi.mock('../../src/services/whatsapp', () => ({
@@ -612,10 +625,12 @@ describe('WhatsApp Webhook — field filter', () => {
  * the already-shipped handoff pause then stands the AI down with no new timing
  * code.
  *
- * Meta documents that echoes exclude Cloud API messages, so an echo is always
- * human-authored. The self-mute test below guards the case anyway: mistaking one
- * of our own replies for a merchant reply would silence the AI after every
- * message it sends.
+ * Meta documents that echoes exclude Cloud API messages — but they DO include
+ * the WhatsApp Business app's own greeting / away message, with no author flag.
+ * `classifyEcho` (whatsappEchoClassifier.ts) decides human vs app from the
+ * customer's inbound recency; the "app automation" block below covers that.
+ * The self-mute test guards the other direction: mistaking one of our own
+ * replies for a merchant reply would silence the AI after every message it sends.
  */
 function buildEchoPayload(echoes: object[], phoneNumberId = 'phone-number-id-123') {
     return {
@@ -650,9 +665,19 @@ describe('WhatsApp Webhook — Coexistence echoes', () => {
         mockStoreOutgoingMessage.mockResolvedValue({ id: 'out-1' });
         mockGetUnrepliedFromSender.mockResolvedValue([]);
         mockMarkOlderMessagesAsReplied.mockResolvedValue(0);
+        mockGetInboundRecency.mockResolvedValue({ lastAt: new Date(Date.now() - 60_000), priorInboundBeforeWindow: true });
     });
 
     const post = (payload: object) => postWebhook(app, payload);
+
+    // The echo row must never be the FIRST row for a customer on the wrong
+    // channel: without the platform hint storeOutgoingMessage created a
+    // `facebook` conversation on a WhatsApp page (2 of the first 5 production
+    // echoes, 2026-08-29).
+    it('passes the whatsapp platform so a first-contact echo cannot create a facebook conversation', async () => {
+        await post(buildEchoPayload([ECHO()]));
+        expect(mockStoreOutgoingMessage.mock.calls[0][11]).toBe('whatsapp');
+    });
 
     // Recording the merchant's reply and clearing the customer's backlog are ONE
     // fact ("a human answered this"). Split across two commits, a failure between
@@ -803,5 +828,100 @@ describe('WhatsApp Webhook — Coexistence echoes', () => {
 
         expect(mockEnqueueMessage).toHaveBeenCalled();
         expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The WhatsApp Business app's own greeting is echoed like a typed reply. Read
+     * as a handoff it silenced the AI for the whole pause window in EVERY
+     * conversation of the first real coexistence merchant (D-109). The rule:
+     * fast (≤10 s after the inbound) + the thread was idle ⇒ the app.
+     */
+    describe('app automation (greeting / away message) echoes', () => {
+        const GREETING = () => ECHO('wamid.greeting', 'شكرا لك على تواصلك مع Z net. من فضلك أخبرنا كيف يمكننا خدمتك.');
+        const openerSecondsAgo = () => ({ lastAt: new Date(Date.now() - 4_000), priorInboundBeforeWindow: false });
+
+        it('stores the app greeting as app_auto — the pause keys on manual, so the AI keeps answering', async () => {
+            mockGetInboundRecency.mockResolvedValue(openerSecondsAgo());
+
+            await post(buildEchoPayload([GREETING()]));
+
+            expect(mockStoreOutgoingMessage).toHaveBeenCalledTimes(1);
+            expect(mockStoreOutgoingMessage.mock.calls[0][4]).toBe('app_auto');
+            expect(mockStoreOutgoingMessage.mock.calls[0][10]).toBe('wamid.greeting');
+        });
+
+        // A greeting answers nothing. Marking the customer's question "replied"
+        // would make the reply worker skip it — silence by another route.
+        it('leaves the customer\'s pending backlog untouched for an app_auto echo', async () => {
+            mockGetInboundRecency.mockResolvedValue(openerSecondsAgo());
+            mockGetUnrepliedFromSender.mockResolvedValue([{ id: 'in-1' }]);
+
+            await post(buildEchoPayload([GREETING()]));
+
+            expect(mockMarkOlderMessagesAsReplied).not.toHaveBeenCalled();
+        });
+
+        it('tells the live inbox it was the app, not the merchant', async () => {
+            const { publishSSEEvent } = await import('../../src/lib/eventBus');
+            mockGetInboundRecency.mockResolvedValue(openerSecondsAgo());
+
+            await post(buildEchoPayload([GREETING()]));
+
+            expect(publishSSEEvent).toHaveBeenCalledWith('user-uuid', 'message:received',
+                expect.objectContaining({ message: expect.objectContaining({ replyMethod: 'app_auto' }) }));
+        });
+
+        // The failure the classifier must never produce: the merchant is mid-chat
+        // on the phone and answers within seconds — that is a human, and the AI
+        // must stand down.
+        it('a fast reply inside an ACTIVE thread is still a manual handoff', async () => {
+            mockGetInboundRecency.mockResolvedValue({ lastAt: new Date(Date.now() - 2_000), priorInboundBeforeWindow: true });
+            mockGetUnrepliedFromSender.mockResolvedValue([{ id: 'in-1' }]);
+
+            await post(buildEchoPayload([ECHO()]));
+
+            expect(mockStoreOutgoingMessage.mock.calls[0][4]).toBe('manual');
+            expect(mockMarkOlderMessagesAsReplied).toHaveBeenCalledTimes(1);
+        });
+
+        it('a slow reply to an opener is a manual handoff', async () => {
+            mockGetInboundRecency.mockResolvedValue({ lastAt: new Date(Date.now() - 45_000), priorInboundBeforeWindow: false });
+
+            await post(buildEchoPayload([ECHO()]));
+
+            expect(mockStoreOutgoingMessage.mock.calls[0][4]).toBe('manual');
+        });
+
+        // The inbound row is written by the reply worker, so under queue lag the
+        // echo can land first. One re-read after a short delay covers that; the
+        // row appearing on the second read is the greeting case.
+        it('re-reads once when no inbound row exists yet, and classifies on the second read', async () => {
+            mockGetInboundRecency
+                .mockResolvedValueOnce({ lastAt: null, priorInboundBeforeWindow: false })
+                .mockResolvedValueOnce({ lastAt: new Date(Date.now() - 500), priorInboundBeforeWindow: false });
+
+            await post(buildEchoPayload([GREETING()]));
+
+            expect(mockGetInboundRecency).toHaveBeenCalledTimes(2);
+            expect(mockStoreOutgoingMessage.mock.calls[0][4]).toBe('app_auto');
+        });
+
+        it('with no inbound row even after the re-read, stays on the safe side: manual', async () => {
+            mockGetInboundRecency.mockResolvedValue({ lastAt: null, priorInboundBeforeWindow: false });
+
+            await post(buildEchoPayload([ECHO()]));
+
+            expect(mockGetInboundRecency).toHaveBeenCalledTimes(2);
+            expect(mockStoreOutgoingMessage.mock.calls[0][4]).toBe('manual');
+        });
+
+        // One read is enough when the row is there — no delay on the common path.
+        it('does not re-read when the inbound row already exists', async () => {
+            mockGetInboundRecency.mockResolvedValue(openerSecondsAgo());
+
+            await post(buildEchoPayload([GREETING()]));
+
+            expect(mockGetInboundRecency).toHaveBeenCalledTimes(1);
+        });
     });
 });

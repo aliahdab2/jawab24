@@ -874,6 +874,23 @@ describe('PagesPage - WhatsApp-only cards', () => {
         expect(screen.queryByText('Reconnect Required')).not.toBeInTheDocument();
         // The WhatsApp toggle is present and interactive
         expect(screen.getAllByRole('switch').length).toBe(1);
+        // A dedicated (migrated) number has no phone-side automation to warn about
+        expect(screen.queryByText(enPages.whatsappCoexistenceHint)).not.toBeInTheDocument();
+    });
+
+    // Coexistence: the number is ALSO live on the merchant's WhatsApp Business
+    // app, whose greeting/away automations would answer every customer a second
+    // time (D-109) — so the card tells the merchant to switch them off there.
+    it('a COEXISTENCE number shows the switch-off-app-automations hint', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_ONLY_PAGE, whatsappCoexistence: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(enPages.whatsappCoexistenceHint)).toBeInTheDocument();
+        });
     });
 
     it('removing the card confirms then deletes the page row', async () => {
