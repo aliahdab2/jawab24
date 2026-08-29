@@ -70,6 +70,7 @@
     "errorImageTooLarge": "The image is too large (max 2 MB).",
     "errorImageType": "Use a JPG, PNG, or WEBP image.",
     "errorGeneric": "We could not send your details. Try again.",
+    "errorRateLimited": "Too many attempts. Please wait a moment and try again.",
     "fromSyriaLink": "Paying from inside Syria?",
     "qrShow": "Show QR code",
     "qrHide": "Hide QR code",

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { Check, Copy, Loader2, MessageCircle, Upload, X, Clock, AlertCircle, QrCode } from 'lucide-react';
 import {
+    isMarketplaceBilledCode,
     OFFLINE_PAYMENT_RECEIPT_MAX_BYTES,
     OFFLINE_PAYMENT_RECEIPT_MIME_TYPES,
     OFFLINE_PAYMENT_REFERENCE_MAX,
@@ -12,10 +14,12 @@ import {
 // /checkout, which public-layout pages also load. Same rule as TopUpRequestModal.
 import { Button } from '@/components/ui/Button';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
-import { offlinePaymentApi, type OfflinePaymentClaim, type OfflinePaymentConfig } from '@/lib/api';
+import { offlinePaymentApi, type OfflinePaymentClaim, type OfflinePaymentRailConfig } from '@/lib/api';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureUnexpectedError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { isIOSNative } from '@/lib/capacitor';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import { fileToBase64 } from '@/utils/fileToBase64';
 
 interface ShamCashPanelProps {
     planId: string;
@@ -26,18 +30,26 @@ interface ShamCashPanelProps {
     userEmail?: string;
 }
 
-/** Read a picked file as raw base64 (no data-URL prefix), the shape the API takes. */
-function readAsBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error ?? new Error('read_failed'));
-        reader.onload = () => {
-            const result = String(reader.result ?? '');
-            const comma = result.indexOf(',');
-            resolve(comma >= 0 ? result.slice(comma + 1) : result);
-        };
-        reader.readAsDataURL(file);
-    });
+type ReceiptMimeType = typeof OFFLINE_PAYMENT_RECEIPT_MIME_TYPES[number];
+
+const EXTENSION_MIME: Record<string, ReceiptMimeType> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+};
+
+/**
+ * The MIME type to send for a picked receipt, or null when it is not an image
+ * we accept. Some Android in-app pickers and camera captures report
+ * `file.type === ''`, so an empty type is inferred from the extension rather
+ * than refused — the server's magic-byte check is the verdict either way.
+ */
+function receiptMimeType(file: File): ReceiptMimeType | null {
+    const declared = file.type || EXTENSION_MIME[file.name.split('.').pop()?.toLowerCase() ?? ''] || '';
+    return (OFFLINE_PAYMENT_RECEIPT_MIME_TYPES as readonly string[]).includes(declared)
+        ? (declared as ReceiptMimeType)
+        : null;
 }
 
 /**
@@ -56,11 +68,16 @@ function readAsBase64(file: File): Promise<string> {
  * Renders the old "payments unavailable" notice unchanged when the rail is not
  * configured (no wallet number in env) — a payment panel with no account behind
  * it would be worse than the honest notice.
+ *
+ * Errors are read off `code` ONLY, never the HTTP status: the limiter's 429
+ * and the queue's 429 (`too_many_pending`) are different answers, and the
+ * status cannot tell them apart.
  */
 export function ShamCashPanel({ planId, planName, billingInterval, amountCents, userEmail }: ShamCashPanelProps) {
     const t = useTranslations('payment');
+    const router = useRouter();
 
-    const [config, setConfig] = useState<OfflinePaymentConfig | null>(null);
+    const [config, setConfig] = useState<OfflinePaymentRailConfig | null>(null);
     const [railOff, setRailOff] = useState(false);
     const [loading, setLoading] = useState(true);
     const [claim, setClaim] = useState<OfflinePaymentClaim | null>(null);
@@ -75,7 +92,7 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
     const [receipt, setReceipt] = useState<{ file: File; previewUrl: string } | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
+    const { copied, copy } = useCopyToClipboard(2000);
     // The QR is for a SECOND device. On a phone the merchant is browsing on
     // the very device that holds the wallet app and cannot scan its own
     // screen, so it starts collapsed there and the copy button leads; on a
@@ -93,29 +110,34 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                 // Both in one round trip: the rail's details, and whether this
                 // merchant already has a transfer waiting — otherwise a revisit
                 // invites them to pay a second time for the same subscription.
+                // listMine is NOT caught separately on purpose: if we could not
+                // check for a pending claim, a fresh form is the wrong answer
+                // (it reads as "we have nothing from you" → a second transfer),
+                // so that failure lands on the notice with everything else.
                 const [configRes, claimsRes] = await Promise.all([
                     offlinePaymentApi.getConfig(),
-                    offlinePaymentApi.listMine().catch(() => null),
+                    offlinePaymentApi.listMine(),
                 ]);
                 if (cancelled) return;
+                if (!configRes.data.enabled) {
+                    setRailOff(true);
+                    return;
+                }
                 setConfig(configRes.data);
                 // listMine is newest-first. A pending claim anywhere wins (the
                 // merchant must not pay twice); otherwise a refusal on the
                 // newest claim is surfaced — an older refusal followed by a
                 // newer approved claim is history, not a notice.
-                const claims = claimsRes?.data.claims ?? [];
+                const claims = claimsRes.data.claims;
                 const pending = claims.find((c) => c.status === 'pending_review');
                 if (pending) setClaim(pending);
                 else if (claims[0]?.status === 'rejected') setRejected(claims[0]);
             } catch (err) {
                 if (cancelled) return;
-                const status = (err as { response?: { status?: number } }).response?.status;
-                // 404 = rail deliberately off. Anything else is a real failure,
-                // but the merchant's next step is identical either way, so both
-                // land on the notice; only the unexpected one is reported.
-                if (status !== 404) {
-                    captureError(err, 'Failed to load the Sham Cash payment panel', { tags: { action: 'sham_cash_config' } });
-                }
+                // The merchant's next step is the notice whatever failed. Only a
+                // failure that is ours (5xx) or nobody's (network) is reported —
+                // a 401 for a visitor whose session lapsed is the page's job.
+                captureUnexpectedError(err, 'Failed to load the Sham Cash payment panel', { tags: { action: 'sham_cash_config' } });
                 setRailOff(true);
             } finally {
                 if (!cancelled) setLoading(false);
@@ -133,23 +155,10 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
         return () => URL.revokeObjectURL(url);
     }, [receipt]);
 
-    const handleCopy = useCallback(async () => {
-        if (!config) return;
-        try {
-            await navigator.clipboard.writeText(config.walletNumber);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // Clipboard denied (older in-app browsers): the number is on screen
-            // and selectable, so there is nothing to recover — just don't lie
-            // by showing "Copied".
-        }
-    }, [config]);
-
     const handlePickFile = (file: File | undefined) => {
         setError(null);
         if (!file) return;
-        if (!OFFLINE_PAYMENT_RECEIPT_MIME_TYPES.includes(file.type as typeof OFFLINE_PAYMENT_RECEIPT_MIME_TYPES[number])) {
+        if (!receiptMimeType(file)) {
             setError(t('shamCash.errorImageType'));
             return;
         }
@@ -178,29 +187,55 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
             const payload = {
                 planId,
                 billingInterval,
+                rail: 'sham_cash' as const,
                 transferReference: trimmed,
                 senderName: senderName.trim() || undefined,
                 receipt: receipt
-                    ? { base64: await readAsBase64(receipt.file), mimeType: receipt.file.type }
+                    ? { base64: await fileToBase64(receipt.file), mimeType: receiptMimeType(receipt.file) ?? receipt.file.type }
                     : null,
             };
+            // 201 = filed; 200 = the same claim was already filed (a retry after
+            // a lost response). Either way the merchant is now under review.
             const res = await offlinePaymentApi.submit(payload);
             setClaim(res.data.claim);
             setRejected(null);
         } catch (err) {
-            const status = (err as { response?: { status?: number } }).response?.status;
-            const code = (err as { response?: { data?: { error?: string } } }).response?.data?.error;
-            if (status === 409 || code === 'duplicate_reference') {
+            const code = getBackendErrorCode(err);
+            if (code === 'duplicate_reference') {
                 setError(t('shamCash.errorDuplicate'));
-            } else if (status === 429 || code === 'too_many_pending') {
+            } else if (code === 'too_many_pending') {
                 setError(t('shamCash.errorTooManyPending'));
+            } else if (code === 'RATE_LIMIT_EXCEEDED') {
+                setError(t('shamCash.errorRateLimited'));
+            } else if (code === 'reference_required') {
+                setError(t('shamCash.errorReferenceRequired'));
             } else if (code === 'image_too_large') {
                 setError(t('shamCash.errorImageTooLarge'));
-            } else if (code === 'unsupported_image_type' || code === 'file_content_mismatch' || code === 'image_unreadable') {
+            } else if (
+                code === 'unsupported_image_type' || code === 'invalid_image'
+                || code === 'file_content_mismatch' || code === 'image_unreadable'
+            ) {
                 setError(t('shamCash.errorImageType'));
-            } else {
+            } else if (code === 'offline_payments_unavailable') {
+                // The rail was switched off between load and submit.
+                setRailOff(true);
+            } else if (isMarketplaceBilledCode(code)) {
+                // A marketplace owns this account's paid plans (D-073) — same
+                // destination as the card page: /pricing carries the managed
+                // banner and the manage-plan link when there is one.
+                router.replace('/pricing');
+            } else if (code === 'VALIDATION_ERROR') {
+                // The schema rejected the body: a server answer, never an event.
                 setError(t('shamCash.errorGeneric'));
-                captureError(err, 'Failed to submit a Sham Cash payment claim', { tags: { action: 'sham_cash_submit' } });
+            } else {
+                // plan_not_found, plan_not_purchasable and anything unknown:
+                // generic message; only a 5xx or a network failure is worth
+                // an event.
+                setError(t('shamCash.errorGeneric'));
+                captureUnexpectedError(err, 'Failed to submit a Sham Cash payment claim', {
+                    tags: { action: 'sham_cash_submit' },
+                    extra: { code },
+                });
             }
         } finally {
             setSubmitting(false);
@@ -286,7 +321,7 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                 </p>
                 <button
                     type="button"
-                    onClick={handleCopy}
+                    onClick={() => copy(config.walletNumber)}
                     className={clsx(
                         'mt-2.5 w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5',
                         'rounded-xl border text-sm font-semibold transition-colors',

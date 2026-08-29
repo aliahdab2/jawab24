@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { normalizeTransferReference } from '@jawab24/shared';
 import clsx from 'clsx';
 import { Check, X, Loader2, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, Button } from '@/components/ui';
 import { adminApi, type AdminOfflinePaymentClaim } from '@/lib/api';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureUnexpectedError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
 type StatusFilter = 'pending_review' | 'approved' | 'rejected' | 'all';
 
 const FILTERS: StatusFilter[] = ['pending_review', 'approved', 'rejected', 'all'];
+const PAGE_SIZE = 25;
 
 // Flat key maps, not template-built keys: the i18n validator caps nesting at two
 // levels, and a literal map is also what makes these keys greppable.
@@ -32,61 +34,127 @@ const STATUS_LABEL_KEY = {
 /**
  * Review queue for offline (Sham Cash) transfers.
  *
- * Deliberately NOT a grant screen. Approving records that the transfer was
- * matched against the wallet statement; the plan is then opened from the
- * customer page's manual-upgrade action, which stays the single grant choke
- * point. The banner on this page says so, because a queue with an "Approve"
- * button invites exactly the opposite assumption.
+ * Approving is a GRANT: the server activates the claimed plan for the claimed
+ * period in the same transaction that records the decision, so the reviewer's
+ * click is the moment the merchant is upgraded. The banner says so, and the
+ * button is labelled "approve and activate" rather than "approve", because a
+ * queue with a bare "Approve" invites the assumption that something else still
+ * has to happen.
+ *
+ * Errors are read off `code` only (`already_reviewed`, `not_found`), never the
+ * HTTP status; a 409 replaces the card with the claim's current state instead
+ * of being reported.
  */
 export default function AdminOfflinePaymentsPage() {
     const t = useTranslations('admin');
+    const locale = useLocale();
 
     const [filter, setFilter] = useState<StatusFilter>('pending_review');
     const [claims, setClaims] = useState<AdminOfflinePaymentClaim[]>([]);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [receipts, setReceipts] = useState<Record<string, string>>({});
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    // Every list request gets a sequence number; a response that is not the
+    // newest is dropped. Without this a slow first-page fetch for one filter
+    // could land after the next filter's response and show its rows under the
+    // wrong label.
+    const loadSeq = useRef(0);
+    // Object URLs for every receipt opened this session, in a ref so the
+    // unmount cleanup sees what accumulated (a state closure would only ever
+    // see the initial `{}`); `receipts` mirrors it for rendering. In-flight ids
+    // stop a double click fetching the same blob twice.
+    const receiptUrls = useRef<Record<string, string>>({});
+    const receiptInFlight = useRef(new Set<string>());
+
+    // Depends on `filter` ONLY. It is the effect's dependency, so anything
+    // else here (`t`, say — a new function per render under some providers)
+    // would re-fire the load on every render and overwrite what `review` and
+    // load-more had just set. The failure state is rendered, not toasted, for
+    // that reason.
+    const load = useCallback(async (cursor: string | null = null) => {
+        const seq = ++loadSeq.current;
+        setLoadFailed(false);
+        if (cursor) setLoadingMore(true); else setLoading(true);
         try {
-            const res = await adminApi.listOfflinePayments(filter === 'all' ? undefined : filter);
-            setClaims(res.data.claims);
+            const res = await adminApi.listOfflinePayments({
+                status: filter === 'all' ? undefined : filter,
+                cursor,
+                limit: PAGE_SIZE,
+            });
+            if (seq !== loadSeq.current) return;
+            setClaims((prev) => (cursor ? [...prev, ...res.data.claims] : res.data.claims));
+            setNextCursor(res.data.nextCursor);
+            setTotal(res.data.total);
         } catch (err) {
-            captureError(err, 'Failed to load offline payment claims', { tags: { page: 'admin_offline_payments' } });
+            if (seq !== loadSeq.current) return;
+            captureUnexpectedError(err, 'Failed to load offline payment claims', { tags: { page: 'admin_offline_payments' } });
+            setLoadFailed(true);
         } finally {
-            setLoading(false);
+            if (seq === loadSeq.current) {
+                setLoading(false);
+                setLoadingMore(false);
+            }
         }
     }, [filter]);
 
     useEffect(() => { void load(); }, [load]);
 
-    // Object URLs for every receipt opened this session; released on unmount.
-    useEffect(() => () => {
-        Object.values(receipts).forEach((url) => URL.revokeObjectURL(url));
-        // Intentionally not depending on `receipts`: this must run once, at
-        // unmount, over whatever has accumulated — a dependency would revoke a
-        // URL the user is still looking at.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        // The object is mutated in place and never reassigned, so the identity
+        // captured here is the one holding every URL at unmount.
+        const urls = receiptUrls.current;
+        return () => {
+            Object.values(urls).forEach((url) => URL.revokeObjectURL(url));
+        };
     }, []);
 
     const showReceipt = async (id: string) => {
-        if (receipts[id]) return;
+        if (receiptUrls.current[id] || receiptInFlight.current.has(id)) return;
+        receiptInFlight.current.add(id);
         try {
             const res = await adminApi.getOfflinePaymentReceipt(id);
-            setReceipts((prev) => ({ ...prev, [id]: URL.createObjectURL(res.data) }));
+            const url = URL.createObjectURL(res.data);
+            const previous = receiptUrls.current[id];
+            if (previous) URL.revokeObjectURL(previous);
+            receiptUrls.current[id] = url;
+            setReceipts((prev) => ({ ...prev, [id]: url }));
         } catch (err) {
-            captureError(err, 'Failed to load an offline payment receipt', { tags: { page: 'admin_offline_payments' } });
+            captureUnexpectedError(err, 'Failed to load an offline payment receipt', { tags: { page: 'admin_offline_payments' } });
+            toast.error(t('offlinePayments.receiptError'));
+        } finally {
+            receiptInFlight.current.delete(id);
         }
     };
+
+    const replaceClaim = (updated: AdminOfflinePaymentClaim) =>
+        setClaims((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
 
     const review = async (id: string, decision: 'approved' | 'rejected') => {
         setBusyId(id);
         try {
-            await adminApi.reviewOfflinePayment(id, decision);
-            await load();
+            const res = await adminApi.reviewOfflinePayment(id, decision);
+            replaceClaim(res.data.data);
+            toast.success(t(decision === 'approved' ? 'offlinePayments.approvedToast' : 'offlinePayments.rejectedToast'));
         } catch (err) {
-            captureError(err, 'Failed to review an offline payment claim', { tags: { page: 'admin_offline_payments' } });
+            const code = getBackendErrorCode(err);
+            if (code === 'already_reviewed') {
+                // Someone else got there first. The body carries the claim as it
+                // is now — show that, not an error.
+                const current = (err as { response?: { data?: { data?: AdminOfflinePaymentClaim } } }).response?.data?.data;
+                if (current) replaceClaim(current);
+                toast.info(t('offlinePayments.alreadyReviewed'));
+            } else if (code === 'not_found') {
+                setClaims((prev) => prev.filter((c) => c.id !== id));
+                toast.error(t('offlinePayments.notFound'));
+            } else {
+                captureUnexpectedError(err, 'Failed to review an offline payment claim', { tags: { page: 'admin_offline_payments' } });
+                toast.error(t('offlinePayments.reviewError'));
+            }
         } finally {
             setBusyId(null);
         }
@@ -95,9 +163,16 @@ export default function AdminOfflinePaymentsPage() {
     return (
         <AdminLayout title={t('offlinePayments.title')}>
             <div className="space-y-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-foreground font-display">{t('offlinePayments.title')}</h1>
-                    <p className="text-muted-foreground text-sm mt-1">{t('offlinePayments.subtitle')}</p>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl font-bold text-foreground font-display">{t('offlinePayments.title')}</h1>
+                        <p className="text-muted-foreground text-sm mt-1">{t('offlinePayments.subtitle')}</p>
+                    </div>
+                    {!loading && claims.length > 0 && (
+                        <p className="text-xs text-muted-foreground" aria-live="polite">
+                            {t('offlinePayments.showing', { shown: claims.length, total })}
+                        </p>
+                    )}
                 </div>
 
                 <div className="alert-warning border rounded-xl px-4 py-3 text-sm">
@@ -121,6 +196,12 @@ export default function AdminOfflinePaymentsPage() {
                         </button>
                     ))}
                 </div>
+
+                {loadFailed && (
+                    <p className="alert-error border rounded-xl px-4 py-3 text-sm" role="alert">
+                        {t('offlinePayments.loadError')}
+                    </p>
+                )}
 
                 {loading ? (
                     <div className="flex justify-center py-12" role="status" aria-busy="true">
@@ -184,6 +265,12 @@ export default function AdminOfflinePaymentsPage() {
                                     </div>
                                 </dl>
 
+                                {claim.grantedAt && (
+                                    <p className="status-success border rounded-lg px-3 py-1.5 mt-3 text-xs font-semibold inline-block">
+                                        {t('offlinePayments.activatedOn', { date: new Date(claim.grantedAt).toLocaleDateString(locale) })}
+                                    </p>
+                                )}
+
                                 {claim.hasReceipt && (
                                     <div className="mt-3">
                                         {receipts[claim.id] ? (
@@ -214,7 +301,7 @@ export default function AdminOfflinePaymentsPage() {
                                         >
                                             <span className="inline-flex items-center gap-1.5">
                                                 <Check className="w-4 h-4" aria-hidden="true" />
-                                                {t('offlinePayments.approve')}
+                                                {t('offlinePayments.approveAndActivate')}
                                             </span>
                                         </Button>
                                         <Button
@@ -239,6 +326,19 @@ export default function AdminOfflinePaymentsPage() {
                                 )}
                             </Card>
                         ))}
+
+                        {nextCursor && (
+                            <div className="flex justify-center pt-2">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => load(nextCursor)}
+                                    loading={loadingMore}
+                                    className="min-h-[44px] px-5 py-2 text-sm rounded-xl"
+                                >
+                                    {t('offlinePayments.loadMore')}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

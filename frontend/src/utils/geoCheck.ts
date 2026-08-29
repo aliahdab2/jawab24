@@ -277,10 +277,16 @@ export function getCachedGeoCountry(): string | undefined {
 /**
  * Whether a blocked region has a local payment rail we can point the merchant
  * at. Stripe cannot process the charge, but that is not the same as "no way to
- * pay" — Syria has Sham Cash (شام كاش), arranged manually through support.
+ * pay" — inside Syria the merchant pays through the self-serve Sham Cash
+ * (شام كاش) panel on /checkout: transfer to our wallet, submit the reference,
+ * a human matches it against the statement and approval activates the plan.
  *
- * Shared by both sanctioned surfaces (the pricing card fallback and the
- * checkout notice) so the country list lives in exactly one place.
+ * This is the ONLY place the country → rail map lives. Everything that asks
+ * the question reads it from here: `useLocalPaymentRail` (pricing grids and
+ * checkout decide CTA vs. notice vs. panel), `useSelectPlan` (routes a blocked
+ * paid-plan click to /checkout instead of a dead-end toast) and
+ * `LocalPaymentAlternativeNote`. Adding a rail means extending this predicate,
+ * not adding a check elsewhere.
  */
 export function hasLocalPaymentAlternative(country?: string): boolean {
     return country?.toUpperCase() === 'SY';
