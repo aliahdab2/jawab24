@@ -410,18 +410,6 @@ export const config = {
          * button is the primary path and the QR is for a second device.
          */
         qrImageUrl: process.env.SHAM_CASH_QR_URL || '',
-        /**
-         * Countries whose merchants may be shown these wallet details. The
-         * wallet number is the owner's own financial identifier, so the endpoint
-         * that discloses it is gated on the REQUEST's server-resolved country,
-         * not on a client-side geo cache the caller controls. Comma-separated
-         * ISO codes; Syria only today, and a second rail country is a config
-         * change rather than a deploy.
-         */
-        countries: (process.env.SHAM_CASH_COUNTRIES || 'SY')
-            .split(',')
-            .map((c) => c.trim().toUpperCase())
-            .filter(Boolean),
     },
 
     // Frontend URL

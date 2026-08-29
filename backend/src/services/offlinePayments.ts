@@ -83,7 +83,7 @@ export type SubmitFailure =
  * with no yearly price so the pricing GRID still renders; here that would invent
  * a figure nobody agreed and then review a real transfer against it. A yearly
  * claim on a plan with no yearly price is refused instead. Display may
- * approximate; money may not (D-109).
+ * approximate; money may not (D-110).
  *
  * Returns null when the plan cannot be bought on this rail.
  */

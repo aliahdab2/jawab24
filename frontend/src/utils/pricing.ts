@@ -13,7 +13,7 @@
  *    rendering for a plan nobody has priced annually yet. It is deliberately NOT
  *    the rule for money: `services/offlinePayments.ts` refuses a yearly claim on
  *    a plan with no yearly price rather than quote an invented figure. The two
- *    look like the same arithmetic and are not the same rule (D-109).
+ *    look like the same arithmetic and are not the same rule (D-110).
  *
  * Yearly prices come from the DB (`plan.yearlyPrice`).
  * If a plan has no yearly price set, we fall back to monthly * 10

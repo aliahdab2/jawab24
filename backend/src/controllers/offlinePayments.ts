@@ -44,43 +44,21 @@ export function isShamCashConfigured(): boolean {
     return Boolean(config.shamCash.walletNumber);
 }
 
-/**
- * May THIS request be shown the wallet details?
- *
- * Least privilege on a personal financial identifier: the wallet number is the
- * owner's own, so it is disclosed only to a request whose SERVER-RESOLVED
- * country runs this rail — never to every authenticated account worldwide, and
- * never on the strength of a client-side geo cache the caller controls.
- *
- * Fails CLOSED on an unresolved country, the same rule the frontend's
- * `hasLocalPaymentAlternative` follows: no country, no wallet, and the merchant
- * gets the WhatsApp notice instead of a dead end.
- *
- * Deliberately NOT applied to claim submission. A claim is a human-reviewed
- * assertion, not a disclosure — refusing one because a real merchant's IP
- * resolved oddly between reading the panel and pressing send would cost a
- * genuine payment to prevent nothing.
- */
-function maySeeWalletDetails(request: AuthenticatedRequest): boolean {
-    const country = request.geo?.country?.toUpperCase();
-    return Boolean(country && config.shamCash.countries.includes(country));
-}
-
 export const offlinePaymentsController = {
     /**
      * GET /payment/offline/config — the wallet details the panel renders.
      *
-     * Authenticated AND geo-gated: these are the owner's real financial
-     * identifiers, so neither an anonymous visitor nor an authenticated account
-     * outside the rail's countries can scrape them. 404 covers both "off" and
-     * "not your region", so the client's "is this available" check and its
-     * "give me the details" call are the same call.
+     * Authenticated, and NOT geo-gated — deliberately. A first cut disclosed the
+     * wallet only to a request whose IP resolved to Syria, and that locked out
+     * the very merchants the rail is for: VPN use is routine inside Syria, so
+     * the Syrian merchant looks German to us, sees the card form, and gets a
+     * decline. The wallet number is a pay-TO address that is handed to every
+     * payer (it is printed on the wallet's own QR card), not a secret, so
+     * "logged in" is the right bar. 404 when the rail is off.
      */
     async getConfig(request: AuthenticatedRequest, reply: FastifyReply) {
-        // One 404 for both "the rail is off" and "not your region": the client's
-        // next step is identical, and a distinct code would turn this endpoint
-        // into an oracle for whether the wallet is configured.
-        if (!isShamCashConfigured() || !maySeeWalletDetails(request)) {
+        if (!request.user?.userId) return reply.status(401).send({ error: 'Unauthorized' });
+        if (!isShamCashConfigured()) {
             return reply.status(404).send({ error: 'offline_payments_unavailable' });
         }
         return reply.send({

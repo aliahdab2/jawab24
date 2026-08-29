@@ -3449,3 +3449,16 @@ rail beside it, and `/checkout`'s sanctioned branch never mounts Stripe. Top-ups
 notice, since a claim is filed against a plan. The rail is off unless `SHAM_CASH_WALLET_NUMBER` is
 set, and off means the previous WhatsApp notice, unchanged. Everything is hidden on iOS native
 (App Store 3.1.1), like every other payment surface.
+
+**Amended the next day (2026-08-29): the merchant's word beats our geo lookup.** The second commit
+gated `GET /payment/offline/config` on the request's IP country — least privilege on the owner's
+wallet number. Reviewed against the one Syrian account we have, that gate locks out exactly the
+merchants the rail is for: VPN use is routine inside Syria, so the Syrian merchant resolves to
+Europe, is *not* sanctioned by IP, never reaches the sanctioned branch, lands on the card form, and
+gets a decline — إن ميديا's 2026-08-15 attempt (`transaction_not_allowed`, issuer in Singapore) is
+that path. Two changes: (1) wallet disclosure is authenticated-only, not geo-gated — the number is a
+pay-TO address printed on the wallet's own QR card and handed to every payer, not a secret, so
+"logged in" is the right bar and `SHAM_CASH_COUNTRIES` is gone; (2) the card form carries a
+«Paying from inside Syria?» link that switches `/checkout` to the Sham Cash panel regardless of
+geo. Shown to everyone, because the whole problem is that we cannot tell a VPN'd Syrian from a
+German by IP. The Stripe sanctions block is untouched — this only chooses which panel to render.
