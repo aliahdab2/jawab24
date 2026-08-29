@@ -81,7 +81,12 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                             return (
                                 <li
                                     key={p.id}
-                                    className="group flex items-center gap-3 p-3 border border-theme-border rounded-lg hover:bg-muted/50 hover:border-brand-300 transition-colors"
+                                    // `flex-wrap` pairs with the badge cluster below dropping
+                                    // `shrink-0`: on a phone the cluster is wider than the whole
+                                    // card, so it takes a line of its own instead of hanging off
+                                    // the edge. On desktop everything still fits on one line and
+                                    // nothing wraps.
+                                    className="group flex flex-wrap items-center gap-3 p-3 border border-theme-border rounded-lg hover:bg-muted/50 hover:border-brand-300 transition-colors"
                                 >
                                     <div className={clsx(
                                         'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
@@ -126,7 +131,14 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
+                                    {/* NOT `shrink-0`. Measured on a 412px phone against a
+                                        2-page account: this cluster is 332px and 517px wide
+                                        inside a 330px card row, so `shrink-0` pushed it to
+                                        x=-38 and x=-145 and the admin had to pan sideways to
+                                        read a badge. `PageModeBadges` is already
+                                        `flex flex-wrap` — it just never got a constrained
+                                        width to wrap inside. `min-w-0` gives it one. */}
+                                    <div className="flex flex-wrap items-center gap-1 min-w-0">
                                         {/* Reply pill + per-channel badges. Channel-aware on
                                             purpose — see PageChannelStatus for the WhatsApp-only
                                             card this used to label "off". */}
