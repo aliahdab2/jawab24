@@ -57,7 +57,7 @@ Prefixes match [`backend/src/index.ts`](../../backend/src/index.ts) `server.regi
 
 ## Inbox row fields
 
-Comments and messages carry: `needsAttention`, `flagReason`, `aiIntent`, `aiConfidence`, `resolved`, `replyMethod` (`ai` | `template` | `manual`), `workspaceId`. Manual replies are excluded from the Smart Replies stat — see commit `72d57736`.
+Comments and messages carry: `needsAttention`, `flagReason`, `aiIntent`, `aiConfidence`, `resolved`, `replyMethod` (`ai` | `template` | `manual` | `post_reply`, plus `app_auto` on outgoing WhatsApp rows only — the merchant's WhatsApp Business app greeting/away echoed on a Coexistence number, D-109), `workspaceId`. Manual replies are excluded from the Smart Replies stat — see commit `72d57736`; `app_auto` is excluded from every reply stat.
 
 ## Discovering endpoints
 

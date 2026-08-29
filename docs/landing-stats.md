@@ -58,7 +58,10 @@ touching once a year is not worth that failure mode.
 
 A reply is a row in `messages` or `comments` with `replied = true`. `comments` has no
 `page_id`; it reaches a page through `posts`. "Automated" means
-`reply_method IN ('ai', 'post_reply', 'template')` — everything except `manual`.
+`reply_method IN ('ai', 'post_reply', 'template')` — the explicit list, not "everything
+except `manual`": `app_auto` (the merchant's WhatsApp Business app greeting/away echoed
+on a Coexistence number, D-109) is neither ours nor a human reply and lands in neither
+bucket, though it does count toward `all_replies` below.
 
 **`stat2Value` (automated replies), `stat3Value` (automated share), `statsScope` (pages):**
 

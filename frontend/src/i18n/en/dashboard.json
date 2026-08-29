@@ -28,6 +28,7 @@
   "aiReply": "Smart Reply",
   "postReply": "Post Reply",
   "fallbackReply": "Auto reply",
+  "appAutoReply": "Your WhatsApp app",
   "minAgo": "min ago",
   "todayComments": "Today's Comments",
   "vsYesterday": "vs yesterday",

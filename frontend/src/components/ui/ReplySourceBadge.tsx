@@ -1,11 +1,14 @@
 import React from 'react';
 import clsx from 'clsx';
-import { MessageSquareDashed, UserCheck } from 'lucide-react';
+import { MessageSquareDashed, Smartphone, UserCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PostReplyIcon } from '@/utils/postReply';
 import { SmartReplyIcon } from '@/utils/smartReply';
 
-export type ReplyMethod = 'ai' | 'manual' | 'template' | 'post_reply';
+// 'app_auto' = the merchant's own WhatsApp Business app sent it automatically
+// (greeting / away message) on a Coexistence number. Not "Manual": the merchant
+// did not type it, and it does not pause Jawab24.
+export type ReplyMethod = 'ai' | 'manual' | 'template' | 'post_reply' | 'app_auto';
 
 export type ReplySourceVariant = 'compact' | 'detail' | 'avatar';
 
@@ -15,7 +18,7 @@ interface ReplySourceBadgeProps {
   className?: string;
 }
 
-const METHOD_KEYS: ReadonlySet<ReplyMethod> = new Set(['ai', 'manual', 'template', 'post_reply']);
+const METHOD_KEYS: ReadonlySet<ReplyMethod> = new Set(['ai', 'manual', 'template', 'post_reply', 'app_auto']);
 const isKnownMethod = (m: string | null | undefined): m is ReplyMethod =>
   !!m && METHOD_KEYS.has(m as ReplyMethod);
 
@@ -41,6 +44,10 @@ export const ReplySourceBadge = React.memo(function ReplySourceBadge({
     // scripted reply — plain MessageSquare is the comments-CHANNEL glyph (nav,
     // settings board) and must not double as a reply-source.
     template: { Icon: MessageSquareDashed, label: tDashboard('fallbackReply'), colorClass: 'reply-source-template' },
+    // 'app_auto' = the merchant's WhatsApp Business app greeting/away message,
+    // echoed on a Coexistence number. Phone glyph: it came from their device, not
+    // from a person (UserCheck) and not from us (the dashed bubble).
+    app_auto: { Icon: Smartphone, label: tDashboard('appAutoReply'), colorClass: 'reply-source-app-auto' },
   }[method];
 
   const { Icon, label, colorClass } = config;

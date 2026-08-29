@@ -39,6 +39,16 @@ describe('ReplySourceBadge', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
+    // A WhatsApp Coexistence echo of the merchant's APP greeting/away message.
+    // It must not read as "Manual" — the merchant did not type it, and it does
+    // not pause Jawab24 (D-109).
+    it('renders app_auto badge with the WhatsApp-app label, not Manual', () => {
+      const { container } = render(<ReplySourceBadge method="app_auto" variant="compact" />);
+      expect(screen.getByText('Your WhatsApp app')).toBeInTheDocument();
+      expect(screen.queryByText('Manual')).not.toBeInTheDocument();
+      expect(container.firstChild).toHaveClass('reply-source-app-auto');
+    });
+
     it('applies the matching color class per method', () => {
       const { container: aiC } = render(<ReplySourceBadge method="ai" variant="compact" />);
       const { container: manualC } = render(<ReplySourceBadge method="manual" variant="compact" />);
@@ -103,6 +113,12 @@ describe('ReplySourceBadge', () => {
       render(<ReplySourceBadge method="template" variant="avatar" />);
       expect(screen.getByLabelText('Auto reply')).toBeInTheDocument();
       expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
+    });
+
+    it('renders app_auto avatar with the WhatsApp-app accessible label', () => {
+      render(<ReplySourceBadge method="app_auto" variant="avatar" />);
+      expect(screen.getByLabelText('Your WhatsApp app')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Manual')).not.toBeInTheDocument();
     });
 
     it('applies avatar layout classes and the matching color class', () => {

@@ -3289,3 +3289,78 @@ the signal this trade-off went wrong.
 **The generalisable rule, second half.** Measuring the failure a guard causes does not excuse
 you from measuring the failure its removal causes. Both directions get a number, and when the
 answer is "stay silent", the silence gets a counter.
+
+## D-109 · A WhatsApp Coexistence echo pauses the AI only when it looks human — the app's own greeting/away is `app_auto`, and the pause duration stays one global knob (2026-08-29)
+
+**Context.** The first real Coexistence merchant (Z NET, Yemen) connected on 2026-08-29 (after
+#968 fixed the register call) and got exactly one reply per conversation, then silence. Timeline
+from `messages` (UTC): 06:03:12 customer «صباح الخير» → 06:03:15 Jawab24 greeting → **06:03:16
+echo «شكرا لك على تواصلك مع Z net…» — the WhatsApp Business app's own auto-greeting** → 06:04:03
+customer asks for the app link → deferred → 06:18:25 answered, 9 s after the 15-minute handoff
+window closed. Proven three ways: code path, playground control (generation fine, delivery
+gated), device (the reply landed at window expiry).
+
+**Root cause.** `processWhatsAppEchoes` stored every `smb_message_echoes` item as
+`outgoing` + `reply_method='manual'` on the documented assumption that echoes are "always
+human-authored". They are not: Meta echoes the app's **automations** (Greeting Message, Away
+Message) identically to a typed reply, and the payload has **no author field** — `from · to ·
+id · timestamp · type · <type>`, verified against Meta's `smb_message_echoes` reference and the
+Coexistence onboarding page. D-045's sentence "the self-mute risk … cannot occur" was wrong in
+the dangerous direction: our own Cloud API sends are indeed never echoed, but the merchant's own
+app mutes us just as effectively.
+
+**Why the duration knob cannot fix it.** `handoffPauseDurationMinutes` is one global value that
+serves two opposite needs on the same channel: a human reply from the phone MUST pause (that is
+the point of Coexistence), the app's greeting must not. Any value breaks one of them. The knob is
+on the duration axis; the defect is on the authorship axis. The owner's ruling: make the pause
+**clearer** on WhatsApp (the card explains it), not **different** — a per-channel duration is
+reopened only with real human-echo timing data, which does not exist yet (0 human echoes so far).
+
+**Measured before choosing (prod, read-only):**
+
+| | |
+|---|---|
+| App-greeting echoes so far | 5 — identical text, 5 distinct customers, **1–4 s** after the customer's inbound |
+| Human inbox replies (FB/IG, 90 d) | 729 |
+| …that answered a conversation **opener** in < 10 s | **0** (n = 50 openers; fastest 10–30 s, 43 > 2 min) |
+| …under 10 s at all | 48, every one inside an active thread (≥ 1 inbound in the prior 24 h) |
+| WhatsApp's own greeting rule | "first message, or after 14 days of no activity" |
+
+**Ruling.**
+1. New outgoing-only `reply_method = 'app_auto'`. An echo that arrives **≤ 10 s** after the
+   customer's latest inbound, from a customer with **no inbound in (now − 14 d, now − 10 s]**, is
+   the app (`whatsappEchoClassifier.classifyEcho`). Everything else — slow, inside an active
+   thread, or with no inbound row — is `manual`. 0/729 human false positives on our data; the
+   remaining failure is the cheap one (a misread human = one double reply, never silence).
+2. `app_auto` never arms the handoff pause (the predicate is `= 'manual'`, so by construction),
+   never marks the customer's backlog answered, is excluded from every reply stat, and renders
+   as «Your WhatsApp app» — never "Manual".
+3. Echoes pass `platform='whatsapp'` to `storeOutgoingMessage`; a first-contact echo had been
+   creating a `facebook` conversation on a WhatsApp page (2 of the first 5 rows), permanently,
+   since `findOrCreate` never rewrites platform.
+4. The connected card on a Coexistence number tells the merchant to switch the app's Greeting
+   and Away messages off — the standard Coexistence onboarding instruction (WhatsTeam requires
+   it; respond.io treats echoes as inert). Prevention at the merchant's end; the classifier is
+   the guard for when it is not followed, so non-compliance degrades to a double greeting, not
+   silence. Neither alone is enough: the guard cannot stop the customer receiving two greetings,
+   and the guidance cannot be verified (no API reads the app's settings).
+
+**Accepted trade-offs.** (a) The app's **Away message** inside an active thread reads as
+`manual` and pauses once — the verbatim-repeat rule (same text to ≥ 2 other customers ⇒
+`app_auto`) was designed and measured but **deferred** until the `whatsapp_echo_classified` log
+shows those pauses occurring; ship the smallest rule the evidence supports. (b) The inbound row
+is written by the reply worker, not the webhook, so an echo can precede it; one 2 s re-read
+covers ordinary queue lag, and `retried` / `null` are logged so the miss rate is measurable.
+
+**Not standard, and said so.** Coexistence vendors do not infer authorship — they either ignore
+echoes (workflow bots) or instruct merchants. "An agent reply pauses the AI" is the standard
+always-on-AI rule; this classifier is that rule adapted to a channel with no author signal.
+
+**Verification.** Classifier unit tests (9), webhook echo suite (48, incl. 9 new: app_auto
+stored, backlog untouched, SSE verdict, fast-in-active-thread stays manual, slow stays manual,
+single re-read then classify, null-after-retry stays manual, no re-read when the row exists,
+`'whatsapp'` platform passed), real-Postgres integration (`isPaused` false for `app_auto` / true
+for `manual`, `getInboundRecency` opener / burst / active / 14-day-return / other-sender cases,
+`storeOutgoingMessage` platform fallback and existing-conversation precedence), frontend badge +
+card-hint tests asserted from the i18n JSON. Backend tsc / lint / duplication clean;
+`translation:validate` pass. Reference: `docs/whatsapp-coexistence-echoes.md`.

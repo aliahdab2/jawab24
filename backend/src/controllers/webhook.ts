@@ -17,6 +17,10 @@ import { captureError } from '../utils/sentryHelpers';
 import * as Sentry from '@sentry/node';
 import { handleNonTextMessage, handleWhatsAppNonTextMessage } from '../services/reply/nonTextHandler';
 import { whatsappService } from '../services/whatsapp';
+import {
+    classifyEcho, APP_AUTO_WINDOW_MS, APP_AUTO_INACTIVITY_DAYS, ECHO_RECENCY_RETRY_MS,
+    type EchoAuthorship,
+} from '../services/whatsappEchoClassifier';
 import { isSharedPostType } from '../utils/instagram';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
@@ -107,11 +111,12 @@ interface WhatsAppWebhookEntry {
                 };
             }>;
             statuses?: Array<unknown>;
-            // Coexistence: messages the merchant sent from the WhatsApp Business
-            // app (or a companion device) on a number that is ALSO on Cloud API.
-            // Meta explicitly does NOT echo our own Cloud API sends here, so these
-            // are always human-authored — that is what makes them safe to treat as
-            // a manual reply. `to` is the customer; `from` is the business number.
+            // Coexistence: messages the WhatsApp Business app (or a companion
+            // device) sent on a number that is ALSO on Cloud API. Meta does NOT echo
+            // our own Cloud API sends here — but it DOES echo the app's own
+            // automations (greeting / away message) exactly like a typed reply, and
+            // carries no author field to tell them apart. Authorship is inferred by
+            // whatsappEchoClassifier. `to` is the customer; `from` is the business.
             message_echoes?: Array<{
                 id: string;
                 from: string;
@@ -910,19 +915,22 @@ export class WebhookController {
     }
 
     /**
-     * WhatsApp Coexistence — the merchant answered from their own phone.
+     * WhatsApp Coexistence — something was sent from the merchant's phone.
      *
      * On a coexistence number the merchant keeps using the WhatsApp Business app
      * while we also hold the number on Cloud API, so both a human and the AI can
-     * answer the same customer. Meta reports the human's messages via
-     * `smb_message_echoes`; we turn each one into an `outgoing` +
-     * `replyMethod='manual'` row, which is exactly what the ALREADY-SHIPPED
-     * handoff pause (`conversationPause._getRecentManualReply`) looks for. No new
-     * timing code: writing the row is the whole integration.
+     * answer the same customer. Meta reports everything the app sends via
+     * `smb_message_echoes` — our own Cloud API replies are never echoed back.
      *
-     * Meta states echoes cover "messages from the WhatsApp Business app or
-     * companion devices only, not Cloud API messages", so these are always
-     * human-authored — our own replies are never echoed back.
+     * Two kinds of echo arrive on the same field, with no author flag (D-109):
+     *   - the merchant TYPED a reply → stored `replyMethod='manual'`, which is
+     *     what the handoff pause (`conversationPause._getRecentManualReply`) keys
+     *     on, and the customer's pending backlog is marked answered;
+     *   - the APP sent its own greeting / away message → stored `'app_auto'`: no
+     *     pause, backlog untouched, so the AI still answers the customer. Read as
+     *     a handoff, the greeting silenced Jawab24 for the whole pause window in
+     *     every conversation of the first real coexistence merchant (2026-08-29).
+     * Authorship comes from `classifyEcho` on the customer's inbound recency.
      */
     private async processWhatsAppEchoes(
         value: WhatsAppWebhookEntry['changes'][number]['value'],
@@ -964,20 +972,23 @@ export class WebhookController {
             const echoSentAt = Number.isFinite(epochSeconds) && epochSeconds > 0
                 ? new Date(epochSeconds * 1000).toISOString()
                 : null;
+            const { method, inputs } = await this.classifyEchoAuthorship(page.id, customerId);
             // Recording the merchant's reply and clearing the customer's backlog
             // are ONE fact: "a human has answered this conversation". Split across
             // two commits, a failure in between leaves the reply stored while the
             // customer's message still reads unanswered — and the AI then answers
             // a question a human already handled. Same transaction shape the AI
-            // reply path uses in messageProcessor.
+            // reply path uses in messageProcessor. An app automation answers
+            // nothing, so for `app_auto` the backlog is deliberately left pending.
             let stored: { id: string; senderName?: string | null };
             let cleared = 0;
             try {
                 ({ stored, cleared } = await db.transaction(async (tx) => {
                     const row = await messagesService.storeOutgoingMessage(
-                        page.id, workspaceId, customerId, text, 'manual', tx,
-                        undefined, undefined, undefined, undefined, echo.id,
+                        page.id, workspaceId, customerId, text, method, tx,
+                        undefined, undefined, undefined, undefined, echo.id, 'whatsapp',
                     );
+                    if (method !== 'manual') return { stored: row, cleared: 0 };
                     // storeOutgoingMessage is a pure INSERT and never touches the
                     // incoming row, so without this the customer's question sits in
                     // "Needs Action" forever even though it was answered.
@@ -1020,7 +1031,7 @@ export class WebhookController {
                         direction: 'outgoing' as const,
                         replied: true,
                         replyText: text,
-                        replyMethod: 'manual' as const,
+                        replyMethod: method,
                         // Meta's own send time (epoch seconds), not ours — an echo
                         // can arrive late, and ordering the thread by our clock
                         // would sort it after messages that really came later.
@@ -1032,10 +1043,39 @@ export class WebhookController {
                 invalidateWorkspaceStatsCache(workspaceId);
             }
 
-            this.log().info('[WhatsApp] Merchant replied from their phone — AI will stand down', {
-                messageId: echo.id, cleared,
-            });
+            // One stable event per echo, with the classifier's inputs, so the
+            // verdict is auditable from the log alone (and a misread is diagnosable
+            // without re-deriving the timing from the messages table).
+            this.log().info(
+                method === 'manual'
+                    ? '[WhatsApp] whatsapp_echo_classified: merchant replied from their phone — AI will stand down'
+                    : '[WhatsApp] whatsapp_echo_classified: app automation echoed — AI keeps answering',
+                { messageId: echo.id, method, cleared, ...inputs },
+            );
         }
+    }
+
+    /**
+     * Human or app? See whatsappEchoClassifier.ts for the rule and its evidence.
+     * The inbound row is written by the reply worker, not by the webhook, so on a
+     * missing row we re-read once after a short delay before deciding; the
+     * `retried` / `null` inputs are logged so the miss rate is measurable.
+     */
+    private async classifyEchoAuthorship(
+        pageId: string,
+        customerId: string,
+    ): Promise<{ method: EchoAuthorship; inputs: { msSinceLastInbound: number | null; priorInboundBeforeWindow: boolean; retried: boolean } }> {
+        const read = () => messagesService.getInboundRecency(pageId, customerId, APP_AUTO_WINDOW_MS, APP_AUTO_INACTIVITY_DAYS);
+        let recency = await read();
+        let retried = false;
+        if (!recency.lastAt) {
+            await new Promise<void>(resolve => setTimeout(resolve, ECHO_RECENCY_RETRY_MS));
+            retried = true;
+            recency = await read();
+        }
+        const msSinceLastInbound = recency.lastAt ? Date.now() - recency.lastAt.getTime() : null;
+        const method = classifyEcho({ msSinceLastInbound, priorInboundBeforeWindow: recency.priorInboundBeforeWindow });
+        return { method, inputs: { msSinceLastInbound, priorInboundBeforeWindow: recency.priorInboundBeforeWindow, retried } };
     }
 
     /**

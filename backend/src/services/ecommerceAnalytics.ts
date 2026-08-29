@@ -251,6 +251,9 @@ async function queryReplyStats(storeId: string, since: Date): Promise<ReplyStats
 
     const stats: ReplyStats = { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 };
     for (const row of rows) {
+        // The merchant's WhatsApp Business app greeting/away message, echoed to us
+        // on a Coexistence number — not a reply to anyone, so not counted anywhere.
+        if (row.replyMethod === 'app_auto') continue;
         stats.totalReplies += row.count;
         if (row.replyMethod === 'ai') stats.aiReplies += row.count;
         // Bucket 'template' alongside 'post_reply' so historical pre-migration DMs

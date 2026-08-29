@@ -491,7 +491,7 @@ export interface CommentData {
   fromName: string | null;
   replied: boolean;
   replyText: string | null;
-  replyMethod: 'ai' | 'template' | 'manual' | null;
+  replyMethod: 'ai' | 'template' | 'manual' | 'post_reply' | null;
   detectedLanguage: string | null;
   createdTime: string | null;
   repliedAt: string | null;
@@ -958,7 +958,7 @@ export interface Message {
   direction: 'incoming' | 'outgoing';
   replied: boolean;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
+  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'app_auto' | null;
   createdTime: string | null;
   repliedAt: string | null;
   createdAt: string;
