@@ -284,6 +284,7 @@ function CheckoutPage() {
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
+  const tPayment = useTranslations('payment');
   const { isAuthenticated, user } = useAuthStore();
 
   // Where the header "back" link goes — top-up buyers came from the dashboard
@@ -336,6 +337,12 @@ function CheckoutPage() {
   // screen instead of a "not available in your region" notice. Top-ups keep the
   // notice — a claim is filed against a PLAN, and there is no plan to review.
   const hasLocalRail = useLocalPaymentRail(isSanctioned !== null);
+  // The merchant's own word beats our geo lookup. VPN use is routine inside
+  // Syria, so the Syrian merchant usually resolves to Europe, is NOT sanctioned
+  // by IP, and lands on the card form — where the card declines. The link under
+  // that form sets this, and the Sham Cash panel renders regardless of geo.
+  // The Stripe block is untouched: this only chooses which panel to show.
+  const [forceLocalRail, setForceLocalRail] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -371,17 +378,34 @@ function CheckoutPage() {
   // render — a blocked js.stripe.com or a missing publishable key. Hiding the
   // escape hatch behind the thing that failed would repeat the incident.
   const hostedFallbackLink = !isTopup && plan ? (
-    <p className="mt-4 text-center text-xs text-muted-foreground">
-      {t('hostedFallbackPrompt')}{' '}
-      <button
-        type="button"
-        onClick={openHostedCheckout}
-        disabled={hostedLoading}
-        className="underline text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium"
-      >
-        {hostedLoading ? t('hostedFallbackOpening') : t('hostedFallbackLink')}
-      </button>
-    </p>
+    <>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        {t('hostedFallbackPrompt')}{' '}
+        <button
+          type="button"
+          onClick={openHostedCheckout}
+          disabled={hostedLoading}
+          className="underline text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium"
+        >
+          {hostedLoading ? t('hostedFallbackOpening') : t('hostedFallbackLink')}
+        </button>
+      </p>
+      {/* The VPN escape hatch (see forceLocalRail). Authenticated only: the
+          panel it opens reads the merchant's own claims. Shown alongside every
+          card form because we cannot tell a VPN'd Syrian from a German by IP —
+          that is the whole point. */}
+      {isAuthenticated && plan.price > 0 && (
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setForceLocalRail(true)}
+            className="underline text-brand-600 hover:text-brand-700 font-medium"
+          >
+            {tPayment('shamCash.fromSyriaLink')}
+          </button>
+        </p>
+      )}
+    </>
   ) : null;
 
   const [showMobileSummary, setShowMobileSummary] = useState(false);
@@ -582,7 +606,7 @@ function CheckoutPage() {
     router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   };
 
-  const shamCashReady = hasLocalRail && !isTopup;
+  const shamCashReady = (hasLocalRail || forceLocalRail) && !isTopup;
 
   const maintenanceMode = isCheckoutMaintenance();
   const intervalLabel = tPlans(billingInterval === 'year' ? 'year' : 'month');
@@ -609,7 +633,7 @@ function CheckoutPage() {
     return <FullPageSpinner />;
   }
 
-  if (isSanctioned) {
+  if (isSanctioned || forceLocalRail) {
     return (
       <>
         <Head>
