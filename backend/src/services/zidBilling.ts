@@ -6,6 +6,7 @@ import { plansService } from './plans';
 import { resolveZidCredentials, zidApiGet, type ZidCredentials } from './zid';
 import { isZidNonEntitlingPlan, mapZidPlanToSlug } from '../config/zidBilling';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
+import { collidesWithLiveRail } from '../config/billingRails';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
@@ -373,7 +374,7 @@ export async function adoptZidSubscription(
     // untangle. 'paypal' is a documented legacy value for this column.
     if (
         currentIsLive
-        && ['stripe', 'manual', 'paypal', 'shopify', 'salla'].includes(current.paymentMethod ?? '')
+        && collidesWithLiveRail(current?.paymentMethod, 'zid')
     ) {
         return refuse(
             `Zid subscription for store ${storeId} collides with a live ${current.paymentMethod} subscription`,

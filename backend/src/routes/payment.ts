@@ -4,8 +4,11 @@ import { offlinePaymentsController } from '../controllers/offlinePayments';
 import { authenticate, type AuthenticatedRequest } from '../middleware/auth';
 import {
     OFFLINE_PAYMENT_NOTE_MAX,
+    OFFLINE_PAYMENT_RAILS,
+    OFFLINE_PAYMENT_RECEIPT_BASE64_MAX,
     OFFLINE_PAYMENT_REFERENCE_MAX,
     OFFLINE_PAYMENT_SENDER_NAME_MAX,
+    OFFLINE_PAYMENT_STATUSES,
 } from '@jawab24/shared';
 import { CreateCheckoutSessionRequest } from '../types/payment';
 import { auth } from '../utils/swagger';
@@ -111,7 +114,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
 
     fastify.get(
         '/offline/config',
-        { schema: { tags: ['Payment'], summary: 'Sham Cash wallet details (404 when the rail is off)', security: auth }, preHandler: [authenticate] },
+        { schema: { tags: ['Payment'], summary: 'Sham Cash wallet details — always 200, `enabled:false` when the rail is off', security: auth }, preHandler: [authenticate] },
         async (request, reply) => {
             return offlinePaymentsController.getConfig(request as AuthenticatedRequest, reply);
         }
@@ -129,17 +132,23 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
                 security: auth,
                 body: {
                     type: 'object',
-                    required: ['planId', 'transferReference'],
+                    // billingInterval is REQUIRED: the claim's amount derives from it,
+                    // and a silently defaulted 'month' would file a yearly transfer
+                    // as a monthly claim.
+                    required: ['planId', 'transferReference', 'billingInterval'],
                     properties: {
                         planId: { type: 'string', format: 'uuid' },
                         billingInterval: { type: 'string', enum: ['month', 'year'] },
-                        transferReference: { type: 'string', minLength: 1, maxLength: OFFLINE_PAYMENT_REFERENCE_MAX },
+                        // Additive now so a second rail is not a breaking change later.
+                        rail: { type: 'string', enum: [...OFFLINE_PAYMENT_RAILS], default: 'sham_cash' },
+                        transferReference: { type: 'string', minLength: 1, maxLength: OFFLINE_PAYMENT_REFERENCE_MAX, pattern: '\\S' },
                         senderName: { type: 'string', maxLength: OFFLINE_PAYMENT_SENDER_NAME_MAX },
                         note: { type: 'string', maxLength: OFFLINE_PAYMENT_NOTE_MAX },
                         receipt: {
                             type: ['object', 'null'],
                             properties: {
-                                base64: { type: 'string' },
+                                // Refused by the schema before the body is decoded into a Buffer.
+                                base64: { type: 'string', maxLength: OFFLINE_PAYMENT_RECEIPT_BASE64_MAX },
                                 mimeType: { type: 'string' },
                             },
                         },
@@ -155,7 +164,47 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
 
     fastify.get(
         '/offline/claims',
-        { schema: { tags: ['Payment'], summary: "The caller's own offline payment claims", security: auth }, preHandler: [authenticate] },
+        {
+            schema: {
+                tags: ['Payment'],
+                summary: "The caller's own offline payment claims",
+                security: auth,
+                // The MERCHANT shape, enforced at serialization: fast-json-stringify
+                // emits only the listed properties, so a column added for the
+                // reviewer (reviewNote, userId, …) can never reach the merchant.
+                response: {
+                    200: {
+                        type: 'object',
+                        properties: {
+                            claims: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        id: { type: 'string' },
+                                        rail: { type: 'string' },
+                                        planId: { type: 'string' },
+                                        planName: { type: 'string' },
+                                        planSlug: { type: 'string' },
+                                        billingInterval: { type: 'string', enum: ['month', 'year'] },
+                                        amountCents: { type: 'integer' },
+                                        currency: { type: 'string' },
+                                        transferReference: { type: 'string' },
+                                        senderName: { type: ['string', 'null'] },
+                                        note: { type: ['string', 'null'] },
+                                        status: { type: 'string', enum: [...OFFLINE_PAYMENT_STATUSES] },
+                                        hasReceipt: { type: 'boolean' },
+                                        createdAt: { type: 'string', format: 'date-time' },
+                                        reviewedAt: { type: ['string', 'null'], format: 'date-time' },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            preHandler: [authenticate],
+        },
         async (request, reply) => {
             return offlinePaymentsController.listMine(request as AuthenticatedRequest, reply);
         }

@@ -101,6 +101,7 @@ const EnvSchema = z.object({
 
     // Admin emails (comma-separated list)
     ADMIN_EMAILS: z.string().optional(),
+    SHAM_CASH_WALLET_NUMBER: z.string().optional(),
 
     // WhatsApp canary allowlist (comma-separated emails). Empty = open to all.
     WHATSAPP_ALLOWLIST: z.string().optional(),
@@ -122,6 +123,15 @@ const EnvSchema = z.object({
     {
         message: 'REDIS_PASSWORD must be set to a non-default value in production',
         path: ['REDIS_PASSWORD'],
+    },
+).refine(
+    // The Sham Cash rail's only reviewer notification goes to ADMIN_EMAILS; with
+    // the wallet set and no address, merchants would pay into a queue nobody
+    // opens. Fail at boot rather than discover it from a merchant's WhatsApp.
+    data => !data.SHAM_CASH_WALLET_NUMBER || !!(data.ADMIN_EMAILS && data.ADMIN_EMAILS.trim()),
+    {
+        message: 'ADMIN_EMAILS must be set when SHAM_CASH_WALLET_NUMBER is set — the review queue has no other notification',
+        path: ['ADMIN_EMAILS'],
     },
 ).refine(
     data => data.NODE_ENV !== 'production' || !!data.RESEND_API_KEY,

@@ -380,6 +380,20 @@ describe('adoptZidSubscription', () => {
         expect(db.insert).not.toHaveBeenCalled();
     });
 
+    it('refuses to adopt over a LIVE sham_cash row — an offline rail is a paying relationship too (D-110)', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'sham_cash', status: 'active',
+            externalSubscriptionId: null, currentPeriodEnd: null, currentPeriodStart: null,
+        }]) as never);
+
+        const result = await adoptZidSubscription('u1', zidSub(), STORE, mkLog());
+
+        expect(result).toEqual({ outcome: 'refused', changed: false });
+        expect(mockCaptureError).toHaveBeenCalled();
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+    });
+
     it('adopts over a CANCELED stripe row — the merchant left Stripe and came back through Zid', async () => {
         const chain = q([]);
         vi.mocked(db.select).mockReturnValue(q([{

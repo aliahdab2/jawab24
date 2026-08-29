@@ -50,4 +50,26 @@ describe('normalizeTransferReference', () => {
     it('does not strip digits or letters', () => {
         expect(normalizeTransferReference('0001')).toBe('0001');
     });
+
+    it('folds the invisible and look-alike characters a phone keyboard inserts (replay bypass)', () => {
+        // Each of these defeated the first, separator-stripping version.
+        const zwsp = '8471\u200B9203';
+        const rlm = '84719203\u200F';
+        const softHyphen = '8471\u00AD9203';
+        const fullwidth = '\uFF18\uFF14\uFF17\uFF11\uFF19\uFF12\uFF10\uFF13';
+        const tatweel = '8471\u06409203';
+        const enDash = '8471\u20139203';
+        for (const spelling of [zwsp, rlm, softHyphen, fullwidth, tatweel, enDash]) {
+            expect(normalizeTransferReference(spelling)).toBe('84719203');
+        }
+    });
+
+    it('returns an empty string for a reference made only of separators — the caller must refuse it', () => {
+        expect(normalizeTransferReference('---')).toBe('');
+        expect(normalizeTransferReference(' . _ ')).toBe('');
+    });
+
+    it('can lengthen the input (ß → SS) — the caller must bound the NORMALIZED length', () => {
+        expect(normalizeTransferReference('ß'.repeat(64))).toHaveLength(128);
+    });
 });

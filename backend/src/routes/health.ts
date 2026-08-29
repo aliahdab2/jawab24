@@ -29,6 +29,7 @@ interface HealthStatus {
         redis: { status: string; responseTime?: number; message?: string };
         stripe: { status: string; message?: string };
         ai: { status: string; message?: string; circuit?: string };
+        shamCash: { status: string; message?: string };
     };
 }
 
@@ -54,6 +55,13 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         const ai = config.ai.enabled
             ? { status: 'up' as const, message: 'Enabled', circuit }
             : { status: 'not_configured' as const, message: 'AI service disabled' };
+        // The Sham Cash rail is env-switched; without this line the only
+        // post-deploy proof that the wallet was set is a Syrian merchant's report.
+        // Read from config directly (like `stripe` above) — importing the
+        // controller would drag the whole payment service chain into /health.
+        const shamCash = config.shamCash?.walletNumber
+            ? { status: 'up' as const, message: 'Configured' }
+            : { status: 'not_configured' as const, message: 'SHAM_CASH_WALLET_NUMBER not set' };
 
         const allServicesUp = dbProbe.status === 'up' && redisProbe.status === 'up';
         // Both DB and Redis are critical: DB for data, Redis for rate limiting and caching.
@@ -70,6 +78,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
                 redis: redisStatus,
                 stripe,
                 ai,
+                shamCash,
             },
         };
 

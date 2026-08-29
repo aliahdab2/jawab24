@@ -2224,11 +2224,12 @@ const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
 // Named for the rail CLASS, not for Sham Cash: Libya's bank transfers already
 // go through support by hand and belong in this table the day they get a UI.
 //
-// Status lifecycle: 'pending_review' → 'approved' | 'rejected'. A row is a
-// RECORD OF A CLAIM, never an entitlement: approving it does not itself extend
-// a subscription — `adminSubscriptionsService.manualUpgrade` remains the single
-// grant choke point, so an electronic Sham Cash integration later changes only
-// WHO moves the status, not what a status means.
+// Status lifecycle: 'pending_review' → 'approved' | 'rejected'. Approving a
+// claim GRANTS the plan in the same transaction — `granted_subscription_id` /
+// `granted_at` record which subscription period the money opened, so
+// "approved but never activated" is not a representable state (D-110,
+// amended). The grant itself still goes through
+// `adminSubscriptionsService.manualUpgrade`, the single grant choke point.
 export const offlinePayments = pgTable('offline_payments', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -2253,8 +2254,14 @@ export const offlinePayments = pgTable('offline_payments', {
     note: varchar('note', { length: 500 }),
     status: varchar('status', { length: 16 }).notNull().default('pending_review'),
     reviewNote: varchar('review_note', { length: 500 }),
-    reviewedByAdminUserId: uuid('reviewed_by_admin_user_id').references(() => users.id),
+    // set null, like admin_audit_logs.admin_user_id: a reviewer deleting their
+    // account must not be blocked by (or erase) the claims they decided.
+    reviewedByAdminUserId: uuid('reviewed_by_admin_user_id').references(() => users.id, { onDelete: 'set null' }),
     reviewedAt: timestamp('reviewed_at'),
+    // The grant an approval produced. Stamped in the same transaction as the
+    // status flip; null on pending/rejected rows (enforced by the CHECK below).
+    grantedSubscriptionId: uuid('granted_subscription_id').references(() => subscriptions.id, { onDelete: 'set null' }),
+    grantedAt: timestamp('granted_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -2264,9 +2271,12 @@ export const offlinePayments = pgTable('offline_payments', {
     // Anti-replay. Scoped by rail because two rails can legitimately issue the
     // same reference string; scoped across ALL users on purpose — a reference is
     // a claim on one real transfer, and a second account claiming it is exactly
-    // the abuse this prevents.
+    // the abuse this prevents. PARTIAL: a rejected claim releases its reference,
+    // so a merchant refused for "wrong amount" can re-file the same transfer
+    // after topping up, and a mistaken refusal is not a permanent burn.
     referenceUnique: uniqueIndex('uq_offline_payments_reference')
-        .on(table.rail, table.transferReferenceNormalized),
+        .on(table.rail, table.transferReferenceNormalized)
+        .where(sql`${table.status} <> 'rejected'`),
     statusCheck: check(
         'offline_payments_status_check',
         sql`${table.status} IN ('pending_review', 'approved', 'rejected')`
@@ -2278,6 +2288,16 @@ export const offlinePayments = pgTable('offline_payments', {
     amountPositiveCheck: check(
         'offline_payments_amount_positive',
         sql`${table.amountCents} > 0`
+    ),
+    // A decided claim always says when it was decided; a pending one never does.
+    reviewConsistencyCheck: check(
+        'offline_payments_review_consistency',
+        sql`(${table.status} = 'pending_review') = (${table.reviewedAt} IS NULL)`
+    ),
+    // Approved ⇔ granted, both ways — the whole point of granting in the same tx.
+    grantConsistencyCheck: check(
+        'offline_payments_grant_consistency',
+        sql`(${table.status} = 'approved') = (${table.grantedAt} IS NOT NULL)`
     ),
 }));
 

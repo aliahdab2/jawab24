@@ -6,7 +6,7 @@ import { resolveInstagramCredential } from '../services/instagramCredential';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
 import { imageStorage } from '../services/imageStorage';
 import { bufferMatchesMime } from '../services/kb/file-extractor';
-import { normalizeImage } from '../services/imageNormalize';
+import { validateAndNormalizeUpload } from '../services/imageUpload';
 import { captureError } from '../utils/sentryHelpers';
 import { UpdatePostDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
@@ -376,43 +376,36 @@ export class PostsController {
             // Decode + validate the image (allowlist, size, magic-byte match) before upload.
             let imageIntent: TriggerImageInput = triggerImage === null ? { action: 'remove' } : { action: 'keep' };
             if (triggerImage) {
-                if (typeof triggerImage.base64 !== 'string' || triggerImage.base64.length === 0) {
-                    return reply.status(400).send({ error: 'Invalid image data' });
+                // Shared pipeline (services/imageUpload.ts): allowlist, size, magic
+                // bytes, then normalizeImage — which MUST happen here rather than
+                // inside imageStorage.put: everything downstream (the quota check,
+                // the stored `triggerImageBytes`) has to describe the bytes written.
+                const upload = await validateAndNormalizeUpload({
+                    base64: triggerImage.base64,
+                    mimeType: triggerImage.mimeType,
+                    maxBytes: POST_REPLY_IMAGE_MAX_BYTES,
+                    sentry: {
+                        message: 'Post Reply image could not be normalized',
+                        fingerprint: 'post-reply-image-normalize-failed',
+                        tags: { source },
+                        extra: { workspaceId: req.workspaceId, contentId: id },
+                    },
+                });
+                if (!upload.ok) {
+                    switch (upload.code) {
+                        case 'unsupported_image_type':
+                            return reply.status(400).send({ error: 'Unsupported image type. Use JPG, PNG, or WEBP' });
+                        case 'invalid_image':
+                            return reply.status(400).send({ error: 'Invalid image data' });
+                        case 'image_too_large':
+                            return reply.status(413).send({ error: 'Image too large (max 2 MB)' });
+                        case 'file_content_mismatch':
+                            return reply.status(400).send({ error: 'file_content_mismatch', message: 'Image contents do not match the declared type.' });
+                        case 'image_unreadable':
+                            return reply.status(400).send({ error: 'image_unreadable', message: 'Image could not be processed. Try a different file.' });
+                    }
                 }
-                if (!POST_REPLY_IMAGE_MIME_TYPES.includes(triggerImage.mimeType as typeof POST_REPLY_IMAGE_MIME_TYPES[number])) {
-                    return reply.status(400).send({ error: 'Unsupported image type. Use JPG, PNG, or WEBP' });
-                }
-                const buffer = Buffer.from(triggerImage.base64, 'base64');
-                if (buffer.length === 0) {
-                    return reply.status(400).send({ error: 'Empty image data' });
-                }
-                if (buffer.length > POST_REPLY_IMAGE_MAX_BYTES) {
-                    return reply.status(413).send({ error: 'Image too large (max 2 MB)' });
-                }
-                if (!bufferMatchesMime(buffer, triggerImage.mimeType)) {
-                    return reply.status(400).send({ error: 'file_content_mismatch', message: 'Image contents do not match the declared type.' });
-                }
-                // Strip metadata (EXIF carries the phone's GPS coordinates, and the bucket
-                // is public) and bound the dimensions. MUST happen here rather than inside
-                // imageStorage.put: everything downstream — the quota check and the stored
-                // `triggerImageBytes` — has to describe the bytes actually written.
-                let normalized: Buffer;
-                try {
-                    normalized = await normalizeImage(buffer, triggerImage.mimeType);
-                } catch (err) {
-                    // A merchant uploading an odd file is expected and low-volume; sharp
-                    // failing for everyone (bad deploy, missing native binary) is not. Log
-                    // at warning so the two are distinguishable — a bare 400 would make a
-                    // systemic decode failure look like normal user error.
-                    captureError(err, 'Post Reply image could not be normalized', {
-                        level: 'warning',
-                        fingerprint: ['post-reply-image-normalize-failed'],
-                        tags: { component: 'imageNormalize', source },
-                        extra: { workspaceId: req.workspaceId, contentId: id, mimeType: triggerImage.mimeType, bytes: buffer.length },
-                    });
-                    return reply.status(400).send({ error: 'image_unreadable', message: 'Image could not be processed. Try a different file.' });
-                }
-                imageIntent = { action: 'set', buffer: normalized, mimeType: triggerImage.mimeType };
+                imageIntent = { action: 'set', buffer: upload.bytes, mimeType: upload.mimeType };
             }
 
             // Validation guarantees rawType is 'keyword' | 'all' past this point.

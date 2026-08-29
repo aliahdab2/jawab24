@@ -6,6 +6,7 @@ import { plansService } from './plans';
 import { shopifyGraphQL } from './shopify';
 import { decrypt } from './ecommerceCrypto';
 import { mapShopifyPlanToSlug, LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
+import { collidesWithLiveRail } from '../config/billingRails';
 import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
 import { isDemoStore } from './demoStore';
@@ -189,7 +190,7 @@ export async function adoptShopifySubscription(
     // symmetric or the outcome depends on which rail's sync ran last.
     if (
         currentIsLive &&
-        ['stripe', 'manual', 'paypal', 'zid', 'salla'].includes(current.paymentMethod ?? '')
+        collidesWithLiveRail(current?.paymentMethod, 'shopify')
     ) {
         return refuse(
             `Shopify subscription for ${shopDomain} collides with a live ${current.paymentMethod} subscription`,

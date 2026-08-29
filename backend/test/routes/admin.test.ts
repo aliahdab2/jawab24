@@ -94,7 +94,7 @@ vi.mock('../../src/db/schema', () => ({
     // The offline (Sham Cash) payment rail's tables. Present here only because
     // this file hand-rolls the schema mock: the admin/payment routes import the
     // offline-payments controller, and a missing export throws at import time.
-    offlinePayments: { id: 'id', userId: 'userId', rail: 'rail', planId: 'planId', billingInterval: 'bi', amountCents: 'ac', currency: 'currency', transferReference: 'tr', transferReferenceNormalized: 'trn', senderName: 'sn', note: 'note', status: 'status', reviewNote: 'rn', reviewedByAdminUserId: 'rba', reviewedAt: 'ra', createdAt: 'createdAt', updatedAt: 'updatedAt' },
+    offlinePayments: { id: 'id', userId: 'userId', rail: 'rail', planId: 'planId', billingInterval: 'bi', amountCents: 'ac', currency: 'currency', transferReference: 'tr', transferReferenceNormalized: 'trn', senderName: 'sn', note: 'note', status: 'status', reviewNote: 'rn', reviewedByAdminUserId: 'rba', reviewedAt: 'ra', grantedSubscriptionId: 'gsi', grantedAt: 'ga', createdAt: 'createdAt', updatedAt: 'updatedAt' },
     offlinePaymentReceipts: { offlinePaymentId: 'opi', mimeType: 'mimeType', byteLength: 'bl', bytes: 'bytes', createdAt: 'createdAt' },
     users: { id: 'id', email: 'email', name: 'name', phone: 'phone', facebookId: 'facebookId', createdAt: 'createdAt', partnerId: 'partnerId', partnerNote: 'partnerNote' },
     partners: { id: 'id', name: 'name', email: 'email', userId: 'userId', commissionPct: 'commissionPct', isActive: 'isActive', createdAt: 'createdAt', updatedAt: 'updatedAt' },
@@ -265,6 +265,10 @@ describe('Admin Routes', () => {
         (db as any).transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(db));
 
         app = fastify();
+
+        const { errorHandler } = await import('../../src/middleware/errorHandler');
+
+        app.setErrorHandler(errorHandler);
         app.register(adminRoutes, { prefix: '/admin' });
         await app.ready();
     });
@@ -546,6 +550,22 @@ describe('Admin Routes', () => {
 
             expect(response.statusCode).toBe(403);
         });
+
+        // The Sham Cash review queue decides where real money went — a
+        // non-admin must be stopped at the same gate as every other admin route.
+        it.each([
+            ['GET', '/admin/offline-payments'],
+            ['GET', '/admin/offline-payments/00000000-0000-4000-8000-000000000000/receipt'],
+            ['POST', '/admin/offline-payments/00000000-0000-4000-8000-000000000000/review'],
+        ])('%s %s returns 403 for non-admin user', async (method, url) => {
+            const response = await app.inject({
+                method: method as 'GET' | 'POST',
+                url,
+                headers: { authorization: 'Bearer valid-token', 'content-type': 'application/json' },
+                ...(method === 'POST' ? { payload: { decision: 'approved' } } : {}),
+            });
+            expect(response.statusCode).toBe(403);
+        });
     });
 
     // ---------------------------------------------------------------
@@ -669,8 +689,8 @@ describe('Admin Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.payload);
-            expect(body.success).toBe(false);
-            expect(body.error).toBe('planId, periodMonths, and paymentMethod are required');
+            // Validated by the route's JSON schema now (one owner per rule).
+            expect(body.code).toBe('VALIDATION_ERROR');
         });
 
         it('returns 400 when planId is missing', async () => {
@@ -686,8 +706,8 @@ describe('Admin Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.payload);
-            expect(body.success).toBe(false);
-            expect(body.error).toBe('planId, periodMonths, and paymentMethod are required');
+            // Validated by the route's JSON schema now (one owner per rule).
+            expect(body.code).toBe('VALIDATION_ERROR');
         });
 
         it('returns 400 when periodMonths is invalid', async () => {
@@ -703,8 +723,8 @@ describe('Admin Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.payload);
-            expect(body.success).toBe(false);
-            expect(body.error).toBe('periodMonths must be 1, 3, 6, or 12');
+            // Validated by the route's JSON schema now (one owner per rule).
+            expect(body.code).toBe('VALIDATION_ERROR');
         });
 
         it('returns 404 when user does not exist', async () => {

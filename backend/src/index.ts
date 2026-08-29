@@ -80,6 +80,7 @@ import { config } from "./config";
 import demoPlugin from "./plugins/demo";
 import swaggerPlugin from "./plugins/swagger";
 import { ensureAdminUsers } from "./utils/adminSetup";
+import { offlinePaymentsService } from "./services/offlinePayments";
 import { ensureMetaWebhookSubscriptions } from "./services/metaWebhooks";
 import { sanitizeRequestHeaders } from "./utils/logSanitizer";
 
@@ -341,6 +342,9 @@ const start = async () => {
 
     // Ensure admin users are set up from environment variables
     await ensureAdminUsers();
+    // Env-switched rail: say at boot which way the switch is, so a wallet set in
+    // the wrong env file is caught in the container log, not by a merchant.
+    server.log.info({ enabled: offlinePaymentsService.getRailConfig() !== null }, 'Sham Cash rail');
 
     // Start the reply processing worker
     // Create a logger adapter for the worker
@@ -481,6 +485,17 @@ const start = async () => {
       // Staggered 2 min behind the trial-ended sweep, same reasoning
       initialDelayMs: 11 * 60 * 1000,
       run: runDunningNotices,
+      logError: logJobError,
+    });
+
+    // Claims still waiting after 48h: the per-claim submit notification fires
+    // once and can be lost; this is the second signal. Staggered behind dunning.
+    scheduleRecurringJob({
+      label: '[OfflinePayments]',
+      tag: 'offline_payments_stale',
+      intervalMs: DAILY_MS,
+      initialDelayMs: 13 * 60 * 1000,
+      run: () => offlinePaymentsService.runStaleClaimsDigest(),
       logError: logJobError,
     });
 

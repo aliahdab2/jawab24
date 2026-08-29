@@ -6,6 +6,7 @@ import { plansService } from './plans';
 import { sallaApiGet, resolveStoreCredentials } from './salla';
 import { mapSallaPlanToSlug, parseSallaPrice } from '../config/sallaBilling';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
+import { collidesWithLiveRail } from '../config/billingRails';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from '../types/linkLogger';
@@ -334,7 +335,7 @@ export async function adoptSallaSubscription(
     // untangle. 'paypal' is a documented legacy value for this column.
     if (
         currentIsLive
-        && ['stripe', 'manual', 'paypal', 'shopify', 'zid'].includes(current.paymentMethod ?? '')
+        && collidesWithLiveRail(current?.paymentMethod, 'salla')
     ) {
         return refuse(
             `Salla subscription for store ${storeId} collides with a live ${current.paymentMethod} subscription`,

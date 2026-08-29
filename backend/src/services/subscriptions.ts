@@ -1,5 +1,7 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
+import { OFFLINE_PAYMENT_METHODS as SHARED_OFFLINE_PAYMENT_METHODS } from '@jawab24/shared';
 import { db } from '../db';
+import type { DbExecutor } from './admin/subscriptions';
 import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases, messages, comments, instagramComments } from '../db/schema';
 import { plansService } from './plans';
 import { trialLedgerService, type TrialIdentity } from './trialLedger';
@@ -84,7 +86,9 @@ export function resolveAiUsageNotificationType(
  * human does, through `adminSubscriptionsService.manualUpgrade`, after money
  * lands off-platform. 'manual' (admin comp / cash), 'bank_transfer',
  * 'syrian_bank' (all three already selectable in the admin upgrade modal), and
- * 'sham_cash' (the Syria rail).
+ * 'sham_cash' (the Syria rail). Built from the ONE list in `@jawab24/shared`
+ * (`OFFLINE_PAYMENT_METHODS`) that the admin upgrade route validates against and
+ * the admin modal renders from — never re-listed here.
  *
  * ONE set, because the three predicates below used to test the string 'manual'
  * directly and every other offline string fell through them: a `bank_transfer`
@@ -107,12 +111,7 @@ export function resolveAiUsageNotificationType(
  * date and deny it the grace window that exists precisely to absorb a late
  * callback — i.e. it would cut off a paying customer mid-renewal.
  */
-export const OFFLINE_PAYMENT_METHODS: ReadonlySet<string> = new Set([
-    'manual',
-    'bank_transfer',
-    'syrian_bank',
-    'sham_cash',
-]);
+export const OFFLINE_PAYMENT_METHODS: ReadonlySet<string> = new Set<string>(SHARED_OFFLINE_PAYMENT_METHODS);
 
 /** True when a subscription's period is advanced by a human, not a processor. */
 export function isOfflinePaymentMethod(paymentMethod: string | null | undefined): boolean {
@@ -556,7 +555,7 @@ export const subscriptionsService = {
     /**
      * Initialize usage tracking for a billing period
      */
-    async initializeUsagePeriod(userId: string, periodStart: Date, periodEnd: Date): Promise<void> {
+    async initializeUsagePeriod(userId: string, periodStart: Date, periodEnd: Date, executor: DbExecutor = db): Promise<void> {
         // Snap to UTC midnight so the quota window aligns with a calendar boundary,
         // not the exact subscription-start instant.
         const normalizedStart = startOfUtcDay(periodStart);
@@ -567,7 +566,7 @@ export const subscriptionsService = {
         // current period to end), the prior row's periodEnd is in the future —
         // without this, getCurrentUsage's `periodStart <= now <= periodEnd` query
         // can match the old maxed row instead of the fresh one.
-        await db
+        await executor
             .update(usage)
             .set({ periodEnd: normalizedStart, updatedAt: new Date() })
             .where(
@@ -579,7 +578,7 @@ export const subscriptionsService = {
             );
 
         // Check if period already exists (idempotency for webhook replays)
-        const existing = await db
+        const existing = await executor
             .select()
             .from(usage)
             .where(
@@ -592,7 +591,7 @@ export const subscriptionsService = {
 
         if (existing.length > 0) return;
 
-        await db.insert(usage).values({
+        await executor.insert(usage).values({
             userId,
             periodStart: normalizedStart,
             periodEnd: normalizedEnd,
