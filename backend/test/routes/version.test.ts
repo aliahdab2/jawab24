@@ -63,6 +63,15 @@ describe('Version Routes', () => {
             expect(body.version).toBe('abc1234567890def');
             expect(body.shortVersion).toBe('abc1234');
         });
+
+        // Regression: this endpoint is the deploy-verification source. It was shipped
+        // with `Cache-Control: public, max-age=86400, immutable`, which served the
+        // pre-deploy commit for up to 24h after a deploy and made a single read report
+        // "not live" when the deploy had in fact landed. It must never be cached.
+        it('sets Cache-Control: no-store (never serve a stale deploy)', async () => {
+            const response = await app.inject({ method: 'GET', url: '/version' });
+            expect(response.headers['cache-control']).toBe('no-store');
+        });
     });
 
     // -------------------------------------------------------
@@ -80,6 +89,11 @@ describe('Version Routes', () => {
             expect(body).toHaveProperty('v');
             expect(typeof body.v).toBe('string');
             expect(body.v).toBe('abc1234');
+        });
+
+        it('sets Cache-Control: no-store (never serve a stale deploy)', async () => {
+            const response = await app.inject({ method: 'GET', url: '/version/short' });
+            expect(response.headers['cache-control']).toBe('no-store');
         });
     });
 });
