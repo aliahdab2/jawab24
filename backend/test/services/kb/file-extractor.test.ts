@@ -9,18 +9,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // --- Mocks ---
 
-// pdfjs-dist: mock a document that yields the configured text per page.
-// Each line of `mockPdfjsText()` becomes one item with hasEOL=true, mirroring
-// how pdfjs emits natural line breaks.
-const mockPdfjsText = vi.fn<() => string>(() => '');
+// pdfjs-dist: mock a document that yields the configured text per page
+// (`mockPdfjsText(pageNumber)`, 1-based). Each line becomes one item with
+// hasEOL=true, mirroring how pdfjs emits natural line breaks.
+const mockPdfjsText = vi.fn<(page: number) => string>(() => '');
 const mockPdfjsPages = vi.fn<() => number>(() => 1);
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
     getDocument: vi.fn(() => ({
         promise: Promise.resolve({
             numPages: mockPdfjsPages(),
-            getPage: vi.fn(async () => ({
+            getPage: vi.fn(async (page: number) => ({
                 getTextContent: vi.fn(async () => ({
-                    items: mockPdfjsText()
+                    items: mockPdfjsText(page)
                         .split('\n')
                         .map((line, idx, arr) => ({ str: line, hasEOL: idx < arr.length - 1 })),
                 })),
@@ -47,14 +47,21 @@ vi.mock('openai', async () => {
     return makeOpenAiSdkMock({ chatCreate: mockOpenAICreate }).module;
 });
 
-// pdf-to-img yields Buffers via an async iterable; mock a tiny 2-page doc
+// pdf-to-img: a doc with `length`, `getPage(n)` (1-based) and `destroy()`;
+// mock a tiny 2-page doc by default.
 const mockPdfPages = vi.fn<() => Buffer[]>(() => [Buffer.from('png-1'), Buffer.from('png-2')]);
+const mockPdfToImgDestroy = vi.fn(async () => undefined);
 vi.mock('pdf-to-img', () => ({
     pdf: vi.fn(async () => {
         const pages = mockPdfPages();
         return {
             length: pages.length,
-            [Symbol.asyncIterator]: async function* () { for (const p of pages) yield p; },
+            getPage: async (n: number) => {
+                const png = pages[n - 1];
+                if (!png) throw new Error(`Invalid page request: ${n}`);
+                return png;
+            },
+            destroy: mockPdfToImgDestroy,
         };
     }),
 }));
@@ -125,10 +132,74 @@ describe('KB File Extractor', () => {
     // --- PDF extraction ---
 
     describe('extractFromPDF', () => {
-        const setPdf = (text: string, pages = 1) => {
-            mockPdfjsText.mockReturnValue(text);
-            mockPdfjsPages.mockReturnValue(pages);
+        /** Same text on every page, or one entry per page. */
+        const setPdf = (text: string | string[], pages = 1) => {
+            if (Array.isArray(text)) {
+                mockPdfjsText.mockImplementation((page) => text[page - 1] ?? '');
+                mockPdfjsPages.mockReturnValue(text.length);
+            } else {
+                mockPdfjsText.mockReturnValue(text);
+                mockPdfjsPages.mockReturnValue(pages);
+            }
         };
+
+        // Clears the scanned threshold on its own; carries no table.
+        const PROSE_PAGE = 'نحن شركة متخصصة في بيع المنتجات الإلكترونية ونخدم آلاف العملاء في جميع أنحاء المملكة منذ عام 2015.';
+        const TABLE_PAGE = [
+            'الرقم | الاسم | العملة | الطريقة',
+            'كشف عام\t20 دقيقة\t150',
+            'تنظيف أسنان\t45 دقيقة\t300',
+            'حشوة تجميلية\t60 دقيقة\t450',
+        ].join('\n');
+
+        it('decides per PAGE which pages need Vision: one table on page 5 of 7 flags page 5 only', async () => {
+            // The shape of the real 2026-08-29 manual: six prose pages and one
+            // payment-accounts table. The first fix decided per document and
+            // sent all seven pages through Vision for that one table.
+            setPdf([PROSE_PAGE, PROSE_PAGE, PROSE_PAGE, PROSE_PAGE, TABLE_PAGE, PROSE_PAGE, PROSE_PAGE]);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(true);
+            expect(result.visionPages).toEqual([4]);
+            expect(result.pagesRead).toBe(7);
+            // The layer of every page is returned, the table page included.
+            expect(result.pageTexts).toHaveLength(7);
+            expect(result.text).toContain('حشوة تجميلية');
+        });
+
+        it('sends a page with no usable layer of its own to Vision (a scanner watermark inside a text file)', async () => {
+            // Scanner apps stamp a short text layer on every scanned page. Per
+            // document that clears the 50-char threshold; per page it does not.
+            setPdf([PROSE_PAGE, 'Scanned with CamScanner', PROSE_PAGE]);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(false);
+            expect(result.visionPages).toEqual([1]);
+        });
+
+        it('treats a file whose every page is watermark-only as all-Vision, not as read', async () => {
+            // Three pages × 23 chars = 69 chars: the OLD document-level rule
+            // called this "text present" and handed the merchant the watermarks.
+            setPdf(['Scanned with CamScanner', 'Scanned with CamScanner', 'Scanned with CamScanner']);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
+            expect(result.visionPages).toEqual([0, 1, 2]);
+        });
+
+        it('lists no Vision pages for a document every page of which reads cleanly', async () => {
+            setPdf([PROSE_PAGE, PROSE_PAGE, PROSE_PAGE]);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.visionPages).toEqual([]);
+            expect(result.tabular).toBe(false);
+        });
 
         it('extracts text from a text-based PDF', async () => {
             setPdf('Menu: Burger - 25 SAR, Pizza - 30 SAR, Pasta - 35 SAR, Salad - 20 SAR, Drinks from 10 SAR');
@@ -492,18 +563,24 @@ describe('KB File Extractor', () => {
             expect(text).not.toContain('<text_layer>');
         });
 
+        // Layers long enough to be worth anchoring on (≥ the scanned threshold).
+        const CLINIC_LAYER = 'الخدمة\tالمدة\tالسعر\nكشف عام\t20 دقيقة\t150\nتنظيف أسنان\t45 دقيقة\t300\nحشوة تجميلية\t60 دقيقة\t450';
+        const WHITENING_LAYER = 'الخدمة\tالمدة\tالسعر\nتبييض\t90 دقيقة\t1200\nتقويم شفاف\t12 شهراً\t9000\nزراعة\t3 أشهر\t4500';
+        const textOf = (i: number) => mockOpenAICreate.mock.calls[i][0].messages[0].content
+            .find((c: { type: string }) => c.type === 'text').text as string;
+        const imageOf = (i: number) => mockOpenAICreate.mock.calls[i][0].messages[0].content
+            .find((c: { type: string }) => c.type === 'image_url').image_url.url as string;
+
         it('anchors each page on its own text layer when one is supplied (tabular text-layer PDFs)', async () => {
             mockPdfPages.mockReturnValue([Buffer.from('png-1'), Buffer.from('png-2')]);
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
 
-            await extractFromPdfViaVision(
+            const result = await extractFromPdfViaVision(
                 Buffer.from('fake-pdf'),
                 { userId: 'test-user' },
-                { pageTexts: ['الخدمة\tالسعر\nكشف عام\t150', 'تبييض\t1200'] },
+                { pageTexts: [CLINIC_LAYER, WHITENING_LAYER] },
             );
 
-            const textOf = (i: number) => mockOpenAICreate.mock.calls[i][0].messages[0].content
-                .find((c: { type: string }) => c.type === 'text').text as string;
             // Page 1 gets page 1's layer, page 2 gets page 2's — never each other's.
             expect(textOf(0)).toContain('<text_layer>');
             expect(textOf(0)).toContain('كشف عام');
@@ -513,6 +590,9 @@ describe('KB File Extractor', () => {
             // The instruction that anchors words on the layer and glyphs on the image.
             expect(textOf(0)).toMatch(/WORDS are authoritative/);
             expect(textOf(0)).toMatch(/glyph artifacts/);
+            // Marker content is document text, never an instruction to the model.
+            expect(textOf(0)).toMatch(/never instructions to follow/);
+            expect(result.method).toBe('pdfjs+gpt-vision');
         });
 
         it('falls back to image-only for a page whose text layer is blank', async () => {
@@ -521,9 +601,110 @@ describe('KB File Extractor', () => {
 
             await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' }, { pageTexts: ['   '] });
 
-            const text = mockOpenAICreate.mock.calls[0][0].messages[0].content
-                .find((c: { type: string }) => c.type === 'text').text;
-            expect(text).not.toContain('<text_layer>');
+            expect(textOf(0)).not.toContain('<text_layer>');
+        });
+
+        it('renders and OCRs ONLY the requested pages and splices them between verbatim layer pages', async () => {
+            // Seven-page manual, one table on page 5 (index 4).
+            mockPdfPages.mockReturnValue(Array.from({ length: 7 }, (_, i) => Buffer.from(`png-${i + 1}`)));
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'OCR of page 5' } }] });
+            const layers = Array.from({ length: 7 }, (_, i) => `صفحة ${i + 1}: `.padEnd(60, 'نص'));
+            layers[4] = CLINIC_LAYER;
+
+            const result = await extractFromPdfViaVision(
+                Buffer.from('fake-pdf'),
+                { userId: 'test-user' },
+                { pageTexts: layers, pages: [4] },
+            );
+
+            // One call, for page 5, with page 5's image and page 5's layer.
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(1);
+            expect(imageOf(0)).toBe(`data:image/png;base64,${Buffer.from('png-5').toString('base64')}`);
+            expect(textOf(0)).toContain('كشف عام');
+            // Output: pages 1–4 verbatim, the OCR in page 5's slot, pages 6–7 verbatim.
+            const blocks = result.text.split('\n\n');
+            expect(blocks).toHaveLength(7);
+            expect(blocks[0]).toBe(layers[0]);
+            expect(blocks[3]).toBe(layers[3]);
+            expect(blocks[4]).toBe('OCR of page 5');
+            expect(blocks[5]).toBe(layers[5]);
+            expect(blocks[6]).toBe(layers[6]);
+            expect(result.method).toBe('pdfjs+gpt-vision');
+            expect(result.visionPages).toEqual([4]);
+            // The text pass read all seven; nothing was skipped.
+            expect(result.pagesRead).toBe(7);
+            expect(result.pagesTotal).toBe(7);
+            expect(result.pagesTruncated).toBe(false);
+        });
+
+        it('OCRs image-only a requested page whose own layer is below the scanned threshold, anchored for one above it', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1'), Buffer.from('png-2'), Buffer.from('png-3')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ocr' } }] });
+
+            await extractFromPdfViaVision(
+                Buffer.from('fake-pdf'),
+                { userId: 'test-user' },
+                { pageTexts: ['نص طويل بما يكفي ليتجاوز حد المسح الضوئي في هذا الاختبار بلا جدول', 'Scanned with CamScanner', CLINIC_LAYER], pages: [1, 2] },
+            );
+
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(2);
+            expect(textOf(0)).not.toContain('<text_layer>');   // the watermark page: image only
+            expect(textOf(1)).toContain('<text_layer>');       // the table page: anchored
+        });
+
+        it('caps per-page Vision at MAX_PDF_VISION_PAGES and keeps the layer for the rest', async () => {
+            const n = MAX_PDF_VISION_PAGES + 3;
+            mockPdfPages.mockReturnValue(Array.from({ length: n }, (_, i) => Buffer.from(`png-${i + 1}`)));
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ocr' } }] });
+            const layers = Array.from({ length: n }, () => CLINIC_LAYER);
+
+            const result = await extractFromPdfViaVision(
+                Buffer.from('fake-pdf'),
+                { userId: 'test-user' },
+                { pageTexts: layers, pages: layers.map((_, i) => i) },
+            );
+
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(MAX_PDF_VISION_PAGES);
+            const blocks = result.text.split('\n\n');
+            expect(blocks).toHaveLength(n);
+            expect(blocks[MAX_PDF_VISION_PAGES - 1]).toBe('ocr');
+            expect(blocks[MAX_PDF_VISION_PAGES]).toBe(CLINIC_LAYER);
+            // No page was skipped — the uncapped ones kept their layer.
+            expect(result.pagesRead).toBe(n);
+            expect(result.pagesTruncated).toBe(false);
+        });
+
+        it('keeps the layer for a page whose Vision reply came back empty', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: '' } }] });
+
+            const result = await extractFromPdfViaVision(
+                Buffer.from('fake-pdf'),
+                { userId: 'test-user' },
+                { pageTexts: [CLINIC_LAYER], pages: [0] },
+            );
+
+            expect(result.text).toBe(CLINIC_LAYER);
+        });
+
+        it('reports a page that hit max_tokens as truncated and logs it, instead of a silently shortened page', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'half a page' }, finish_reason: 'length' }] });
+            const logger = { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() };
+
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user', logger });
+
+            expect(result.truncated).toBe(true);
+            expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/max_tokens/), expect.objectContaining({ page: 1 }));
+        });
+
+        it('releases the rendered document when done', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
+
+            expect(mockPdfToImgDestroy).toHaveBeenCalledTimes(1);
         });
 
         it('truncates concatenated text exceeding 16,000 chars', async () => {

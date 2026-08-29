@@ -521,9 +521,10 @@ Text extraction from documents and images for KB content:
 
 - **Endpoint**: `POST /kb/extract-text` (`backend/src/routes/kb-upload.ts`)
 - **Extractor**: `backend/src/services/kb/file-extractor.ts`
-- **Formats**: PDF (pdf-parse v2), Word/docx (mammoth), images (GPT-4o-mini Vision)
-- **Limits**: 5MB file, 5 PDF pages, 16K char output
-- **Plan gating**: PDF/Word free for all; images/scanned PDFs require Business+ plan
+- **Formats**: PDF (`pdfjs-dist` text layer; `gpt-4.1-mini` Vision only for the pages that need it), Word/docx (mammoth), Excel/xlsx (exceljs), images (`gpt-4.1-mini` Vision)
+- **Limits**: 5MB file, 20 PDF pages via the text layer / 10 via Vision (`pagesRead` / `pagesTotal` returned and shown to the merchant), 16K char output
+- **PDF policy (D-112)**: a text layer is never replaced by OCR. Per page: a scrambled Arabic table (`looksTabular`, shape only) or a page with no usable layer of its own goes to Vision — anchored on its layer where one exists — and is spliced back; every other page is the layer verbatim (`method: pdfjs+gpt-vision`). If Vision is denied (plan/quota) or fails, the merchant gets the text layer, never an error
+- **Plan gating**: PDF/Word/Excel text free for all; images, scanned PDFs and per-page Vision require Business+ plan
 - **Daily quota**: Business 10/day, Pro 25/day (Redis counter `vision_extract:{userId}:{date}`)
 - **Frontend**: `FileUploadButton.tsx` (paperclip icon next to mic in KB sections + onboarding)
 
