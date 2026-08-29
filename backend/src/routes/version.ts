@@ -80,8 +80,11 @@ export default async function versionRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Health'], summary: 'Get full version and deployment info' },
     }, async (_request, reply) => {
         const info = getVersionInfo();
+        // Never cache: this is the deploy-verification endpoint. Its whole purpose
+        // is to reflect the currently-running commit, which changes on every deploy.
+        // `immutable`/max-age served a stale commit for up to 24h after a deploy.
         return reply
-            .header('Cache-Control', 'public, max-age=86400, immutable')
+            .header('Cache-Control', 'no-store')
             .send(info);
     });
 
@@ -90,8 +93,9 @@ export default async function versionRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Health'], summary: 'Get short version string' },
     }, async (_request, reply) => {
         const info = getVersionInfo();
+        // Never cache — same reason as /version above.
         return reply
-            .header('Cache-Control', 'public, max-age=86400, immutable')
+            .header('Cache-Control', 'no-store')
             .send({ v: info.shortVersion });
     });
 }
