@@ -608,6 +608,23 @@ describe('WhatsAppRedirectController.callback', () => {
         expect(pagesService.connectWhatsApp).toHaveBeenCalledWith('ws-1', 'page-1', expect.objectContaining({ coexistence: true }));
     });
 
+    // Regression, production 2026-08-29: the FIRST real coexistence connect came
+    // back platform_type CLOUD_API for a number Meta then refused to register
+    // («Register endpoint is not available for SMB businesses», metaCode 100).
+    // The old ternary let CLOUD_API override the signed request, so we registered
+    // — and every coexistence connect died there, leaving the merchant with a
+    // number linked at Meta and no page here. A requested coexistence path must
+    // never be undone by platform_type.
+    it('requested coexistence SURVIVES a CLOUD_API platform_type — never registered', async () => {
+        primeHappyMeta({ platformType: 'CLOUD_API' });
+        const { state, nonce } = mintState({ coexistence: true });
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'c', state }, nonce), reply);
+        expect(whatsappService.registerPhoneNumber).not.toHaveBeenCalled();
+        expect(pagesService.connectWhatsApp).toHaveBeenCalledWith('ws-1', 'page-1', expect.objectContaining({ coexistence: true }));
+        expect((reply.redirect as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('whatsappConnected=1');
+    });
+
     it('platform_type missing → falls back to the REQUESTED path from the signed state', async () => {
         primeHappyMeta({ platformType: undefined });
         const { state, nonce } = mintState({ coexistence: true });

@@ -75,6 +75,22 @@ function isDuplicateNumberError(error: unknown): boolean {
     return pgErrorCode(error) === PG_UNIQUE_VIOLATION;
 }
 
+/**
+ * True when Meta refused `POST /{phone-number-id}/register` because the number
+ * belongs to a Business-app (SMB) account — «Register endpoint is not available
+ * for SMB businesses». That refusal IS the coexistence signal.
+ *
+ * Matched on the message, not the code, because `metaCode` here is the generic
+ * 100 ("Invalid parameter") that dozens of unrelated failures also carry — code
+ * alone would swallow real errors. The substring is narrow and the match is
+ * case-insensitive; if Meta rewords it the guard simply stops firing and the
+ * error surfaces as before, which is the safe direction to fail.
+ */
+function isSmbRegisterRefusal(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : '';
+    return /not available for SMB/i.test(message);
+}
+
 function metaErrorCode(error: unknown): number | undefined {
     // whatsappService now throws a sanitized WhatsAppApiError carrying `metaCode`;
     // fall back to the raw axios shape for safety (and mocked tests).
@@ -107,6 +123,18 @@ export async function completeWhatsAppSignup(
         } catch (error) {
             if (metaErrorCode(error) === META_PIN_MISMATCH) {
                 return { ok: false };
+            }
+            // Meta refusing to register BECAUSE the number is an SMB (Business
+            // app) number is proof it is a coexistence number, whatever
+            // `platform_type` claimed. Registration is the only step coexistence
+            // skips, so there is nothing left to do — swallowing it here is not a
+            // silenced error, it is the correct no-op. The primary defence is the
+            // sticky-coexistence rule at the call site; this is the net for the
+            // case where the merchant genuinely asked to migrate a number Meta
+            // treats as SMB. Without it, the whole connect dies after the WABA is
+            // already subscribed — which is exactly what shipped on 2026-08-29.
+            if (isSmbRegisterRefusal(error)) {
+                return { ok: true, info: await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken) };
             }
             throw error;
         }

@@ -251,6 +251,37 @@ describe('WhatsAppController.connect', () => {
         expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
     });
 
+    // Belt-and-braces for the 2026-08-29 outage: Meta refusing to register a
+    // number BECAUSE it is an SMB (Business app) number is proof the number is a
+    // coexistence number — registration is the only step coexistence skips, so
+    // there is nothing left to do and the connect must complete. Before this, the
+    // refusal propagated and killed the connect after the WABA was subscribed.
+    it('completes the connect when Meta refuses to register an SMB number', async () => {
+        vi.mocked(whatsappService.registerPhoneNumber).mockRejectedValue(
+            // A plain Error, deliberately: the service module is mocked here, so
+            // importing WhatsAppApiError from it would yield undefined. The
+            // predicate reads `instanceof Error` + message, and the real class
+            // extends Error — so this is a faithful stand-in, not a weaker one.
+            new Error('Register endpoint is not available for SMB businesses.'),
+        );
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).not.toHaveBeenCalledWith(422);
+        expect(reply.status).not.toHaveBeenCalledWith(500);
+        expect(pagesService.connectWhatsApp).toHaveBeenCalled();
+    });
+
+    it('still propagates an unrelated register failure (the SMB guard is narrow)', async () => {
+        vi.mocked(whatsappService.registerPhoneNumber).mockRejectedValue(
+            new Error('Invalid parameter'),
+        );
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
+    });
+
     it('409s WHATSAPP_NUMBER_TAKEN when the DB unique index rejects a race (23505)', async () => {
         // Both concurrent connects passed the pre-check; the DB index catches the loser.
         vi.mocked(pagesService.connectWhatsApp).mockRejectedValue({ code: '23505' });
