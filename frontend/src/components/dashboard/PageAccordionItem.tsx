@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ChannelBadges } from '@/components/ui';
+import { useChannelBadgeLabels } from '@/hooks';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
@@ -66,11 +67,7 @@ export function PageAccordionItem({
   const isActive = page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled;
 
   // Channel fingerprint labels: "<platform>: <enabled|disabled>"
-  const badgeLabels = {
-    facebook: `${tComments('platformFacebook')}: ${page.autoReplyEnabled ? tc('enabled') : tc('disabled')}`,
-    instagram: `${tComments('platformInstagram')}: ${page.instagramAutoReplyEnabled ? tc('enabled') : tc('disabled')}`,
-    whatsapp: `${tComments('platformWhatsApp')}: ${page.whatsappAutoReplyEnabled ? tc('enabled') : tc('disabled')}`,
-  };
+  const badgeLabels = useChannelBadgeLabels(page);
 
   return (
     <div

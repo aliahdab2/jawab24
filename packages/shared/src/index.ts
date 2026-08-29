@@ -20,6 +20,15 @@ export {
     type NotificationTargetKey,
 } from './notifications';
 
+// --- Page channel fingerprint (which channels a card carries, and which reply) ---
+export {
+    listPageChannels,
+    isAnyChannelReplying,
+    type ChannelPlatform,
+    type PageChannelInput,
+    type PageChannelState,
+} from './pageChannels';
+
 // --- Flag Reason Structured Metadata ---
 /**
  * Structured parameters/debug info attached to a flag_reason. Keyed by the

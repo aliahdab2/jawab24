@@ -137,10 +137,15 @@ export interface CustomerDetail {
         instagramAccountId: string | null;
         whatsappPhoneNumberId: string | null;
         whatsappDisplayPhoneNumber: string | null;
+        /** A WhatsApp business token is stored — the channel exists on this card. */
+        whatsappConnected: boolean;
         whatsappAutoReplyEnabled: boolean | null;
         /** True = number also live on the merchant's WhatsApp Business app (Coexistence) */
         whatsappCoexistence: boolean | null;
         whatsappDisconnectReason: string | null;
+        instagramAutoReplyEnabled: boolean | null;
+        /** The FACEBOOK channel's toggle — false by definition on a card with no
+         *  Facebook page. "Is this page replying?" is `isAnyChannelReplying`. */
         autoReplyEnabled: boolean | null;
         /** 'user' | 'plan_limit' | 'trial_block' | null — why auto-reply is off */
         autoReplyDisabledReason: string | null;

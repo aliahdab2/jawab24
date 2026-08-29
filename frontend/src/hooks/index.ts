@@ -53,3 +53,4 @@ export { useSubscriptionUsage } from './useSubscriptionUsage';
 export { useNavBadgeCounts, aggregateNavBadge, resolveNavHref, type NavBadge, type NavBadgeMap, type NavBadgeColor } from './useNavBadgeCounts';
 export { useDashboardLanguageSync } from './useDashboardLanguageSync';
 export { useStickToBottom } from './useStickToBottom';
+export { useChannelBadgeLabels } from './useChannelBadgeLabels';

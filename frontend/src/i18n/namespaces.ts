@@ -77,7 +77,9 @@ export const PAGE_NAMESPACES = {
   // ── Admin pages (include ADMIN_LAYOUT) ────────────────────────
   adminWaitlist:      [...ADMIN_LAYOUT],
   adminCustomers:     [...ADMIN_LAYOUT],
-  adminCustomerDetail:[...ADMIN_LAYOUT],
+  // 'comments' supplies the platform names behind the page card's channel badges
+  // (PLATFORM_LABEL_KEYS via useChannelBadgeLabels).
+  adminCustomerDetail:[...ADMIN_LAYOUT, 'comments'],
   adminPlayground:    [...ADMIN_LAYOUT, 'kb'],
   adminObservability: [...ADMIN_LAYOUT],
   adminAiCost:        [...ADMIN_LAYOUT],

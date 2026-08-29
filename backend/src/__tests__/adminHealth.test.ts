@@ -100,8 +100,15 @@ function healthyPage(overrides: Partial<HealthInputPage> = {}): HealthInputPage 
         id: 'page-1',
         name: 'متجر تجريبي',
         disconnected: false,
+        // A Facebook-only card: the historical shape every older case assumes.
+        facebookPageId: 'fb-page-1',
         autoReplyEnabled: true,
         autoReplyDisabledReason: null,
+        instagramAccountId: null,
+        instagramUsername: null,
+        instagramAutoReplyEnabled: false,
+        whatsappConnected: false,
+        whatsappAutoReplyEnabled: false,
         ...overrides,
         // AFTER the spread: `kb` must be the MERGED summary, so a case may pass a
         // partial (`{ kb: { catalogItems: 0 } }`) and still get every other field
@@ -203,6 +210,60 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(f?.severity).toBe('yellow');
         expect(keys(flags)).not.toContain('auto_reply_user_off');
         expect(keys(flags)).not.toContain('auto_reply_system_off');
+    });
+
+    // The Facebook toggle is false BY DEFINITION on a card with no Facebook page.
+    // Reading it as the page's state flagged a WhatsApp-only merchant whose
+    // WhatsApp was answering every message as "auto-reply off" (2026-08-29).
+    const AUTO_REPLY_FLAGS = ['auto_reply_user_off', 'auto_reply_system_off', 'auto_reply_off_unknown'];
+    const whatsappOnlyPage = (overrides: Partial<HealthInputPage> = {}) => healthyPage({
+        facebookPageId: null,
+        autoReplyEnabled: false,
+        autoReplyDisabledReason: null,
+        whatsappConnected: true,
+        whatsappAutoReplyEnabled: true,
+        ...overrides,
+    });
+
+    it('a WhatsApp-only card whose WhatsApp is replying raises NO auto-reply flag despite the Facebook column', () => {
+        const flags = computeHealthFlags(healthyInput({ pages: [whatsappOnlyPage()] }));
+        expect(keys(flags).filter(k => AUTO_REPLY_FLAGS.includes(k))).toEqual([]);
+    });
+
+    it('a WhatsApp-only card whose WhatsApp is off IS flagged', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [whatsappOnlyPage({ whatsappAutoReplyEnabled: false })],
+        }));
+        expect(keys(flags)).toContain('auto_reply_off_unknown');
+    });
+
+    it('a card with Facebook off but WhatsApp on is not silent — no auto-reply flag', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                autoReplyEnabled: false, autoReplyDisabledReason: 'user',
+                whatsappConnected: true, whatsappAutoReplyEnabled: true,
+            })],
+        }));
+        expect(keys(flags).filter(k => AUTO_REPLY_FLAGS.includes(k))).toEqual([]);
+    });
+
+    it('a card with every connected channel off keeps the recorded reason', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                autoReplyEnabled: false, autoReplyDisabledReason: 'trial_block',
+                instagramUsername: 'shop', instagramAutoReplyEnabled: false,
+            })],
+        }));
+        expect(keys(flags)).toContain('auto_reply_system_off');
+    });
+
+    it('a card with no connected channel at all is a disconnect, not an auto-reply flag', () => {
+        // WhatsApp-only card after the number was removed: no Facebook page, no token.
+        const flags = computeHealthFlags(healthyInput({
+            pages: [whatsappOnlyPage({ disconnected: true, whatsappConnected: false, whatsappAutoReplyEnabled: false })],
+        }));
+        expect(keys(flags)).toContain('page_disconnected');
+        expect(keys(flags).filter(k => AUTO_REPLY_FLAGS.includes(k))).toEqual([]);
     });
 
     it('kb_empty only when EVERY Business Info store is empty', () => {
