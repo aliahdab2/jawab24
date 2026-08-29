@@ -403,9 +403,7 @@ export function KnowledgeBasePanel({
             <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div className="flex-1 text-xs leading-relaxed">
               <p className="font-medium mb-1">
-                {(showLiveNotice ? liveDetection.reasons : kbWarnings?.reasons ?? []).includes('course_catalog')
-                  ? tKb('catalogWarning.courseCatalogTitle')
-                  : tKb('catalogWarning.priceListTitle')}
+                {tKb('catalogWarning.priceListTitle')}
               </p>
               <p>
                 {showLiveNotice

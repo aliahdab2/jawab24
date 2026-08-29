@@ -1,17 +1,21 @@
 /**
- * Heuristic classifier that flags raw KB text containing catalog-like patterns
- * (price lists, course catalogs) which should ideally live in structured tables
- * rather than free text.
+ * Heuristic classifier that flags raw KB text containing a price list, which
+ * should ideally live in the structured catalog rather than free text.
  *
  * Shared so both consumers run the SAME detector (single source of truth):
  * - backend `PUT /pages/:id` → `kbWarnings` in the save response
  * - the KB editor's live (pre-save) notice in `KnowledgeBasePanel`
  *
- * Tuned against real merchant KBs from the local dev DB (electronics store
- * with 3 product prices + training institute with 5 course prices). The
- * three-price threshold is deliberate — single price mentions appear
- * legitimately in policy text (delivery thresholds, refund caps), where
- * restructuring would be inappropriate.
+ * Shape only: a price is a number next to a currency token, and a list is
+ * three or more of them. The three-price threshold is deliberate — single
+ * price mentions appear legitimately in policy text (delivery thresholds,
+ * refund caps), where restructuring would be inappropriate.
+ *
+ * It used to carry a second, vocabulary-driven signal ("course catalog":
+ * two words like دورة/كورس/workshop plus one price). Jawab24 serves every
+ * kind of business, and a detector that knows the words of one vertical is
+ * calibrated to it — a software vendor's subscription plans read as courses
+ * (2026-08-29). A detector that knows no words cannot favour anyone.
  */
 
 import { normalizeArabicIndic } from './utils/validation';
@@ -49,43 +53,18 @@ const NUMBER_BEFORE_CURRENCY_EN = new RegExp(
 /** Currency symbol prefix: `$1500`, `€200`, `£300`. */
 const SYMBOL_BEFORE_NUMBER = /(?:[$€£])\s*\d{2,7}(?:[.,]\d{1,3})?/g;
 
-/** Course / training / workshop terms in Arabic and English. */
-const COURSE_KEYWORDS = new RegExp(
-    [
-        'دور(?:ة|ات)',
-        'كورس(?:ات)?',
-        'تدريب(?:ية|ات)?',
-        'محاضر(?:ة|ات)',
-        'ورش(?:ة|ات)',
-        'برنامج(?:\\s+تدريبي)?',
-        'courses?',
-        'classes?',
-        'workshops?',
-        'training',
-        'programs?(?:\\s+training)?',
-        'sessions?',
-        'bootcamps?',
-    ].join('|'),
-    'gi',
-);
-
 /** Minimum body length before classification is meaningful. */
 const MIN_TEXT_LENGTH = 50;
 
 /** Three or more priced lines indicates a price list, not policy text. */
 const PRICE_LIST_THRESHOLD = 3;
 
-/** Two or more course terms + at least one price indicates a course catalog. */
-const COURSE_CATALOG_KEYWORD_THRESHOLD = 2;
-const COURSE_CATALOG_PRICE_THRESHOLD = 1;
-
-export type CatalogReason = 'price_list' | 'course_catalog';
+export type CatalogReason = 'price_list';
 
 export interface CatalogDetection {
     hasCatalog: boolean;
     reasons: CatalogReason[];
     priceCount: number;
-    courseKeywordCount: number;
 }
 
 /**
@@ -101,7 +80,7 @@ export interface CatalogDetection {
  */
 export function detectCatalogLikePatterns(text: string): CatalogDetection {
     if (!text || text.trim().length < MIN_TEXT_LENGTH) {
-        return { hasCatalog: false, reasons: [], priceCount: 0, courseKeywordCount: 0 };
+        return { hasCatalog: false, reasons: [], priceCount: 0 };
     }
 
     const comparable = normalizeArabicIndic(text);
@@ -113,26 +92,11 @@ export function detectCatalogLikePatterns(text: string): CatalogDetection {
     ];
     const priceCount = priceMatches.length;
 
-    const courseMatches = [...comparable.matchAll(COURSE_KEYWORDS)];
-    const courseKeywordCount = courseMatches.length;
-
-    const reasons: CatalogReason[] = [];
-
-    if (priceCount >= PRICE_LIST_THRESHOLD) {
-        reasons.push('price_list');
-    }
-
-    if (
-        courseKeywordCount >= COURSE_CATALOG_KEYWORD_THRESHOLD
-        && priceCount >= COURSE_CATALOG_PRICE_THRESHOLD
-    ) {
-        reasons.push('course_catalog');
-    }
+    const reasons: CatalogReason[] = priceCount >= PRICE_LIST_THRESHOLD ? ['price_list'] : [];
 
     return {
         hasCatalog: reasons.length > 0,
         reasons,
         priceCount,
-        courseKeywordCount,
     };
 }

@@ -65,7 +65,7 @@ interface RawExtract {
  *  lists rarely exceed this. Overflow is counted in `dropped`. */
 export const MAX_EXTRACT_ITEMS = 120;
 
-export const CATALOG_EXTRACTION_PROMPT = `You extract a merchant's catalog of offerings (products / services / courses) from messy free text — pasted price lists, chat logs, exported spreadsheets, in Arabic or English or mixed. Return ONLY valid JSON, no markdown, in this exact shape:
+export const CATALOG_EXTRACTION_PROMPT = `You extract a merchant's catalog of offerings — whatever this business sells: goods, services, plans, courses, vehicles, anything else — from messy free text: pasted price lists, chat logs, exported spreadsheets, in Arabic or English or mixed. Return ONLY valid JSON, no markdown, in this exact shape:
 { "items": [ { "type": "product", "name": "...", "price": "3500", "currency": "EGP", "description": null, "isAvailable": true, "startsAt": null, "endsAt": null, "attributes": null } ] }
 
 Rules:
@@ -73,7 +73,7 @@ Rules:
 - "name": the offering's name as written, in its original language, WITHOUT the price; at most 200 characters.
 - "price": the numeric amount as a string of plain digits (convert Arabic-Indic digits: ٣٥٠٠ → "3500"), or null when no price is stated (price on request). For a price RANGE ("من 200 إلى 500"), use null and keep the range wording in "description".
 - "currency": the currency exactly as written next to the price (ريال, ج.م, EGP, $, ...), or null if none. If one currency clearly applies to the whole list, apply it to every priced item.
-- "type": one of "product", "service", "course", "vehicle", "custom". Use "course" for دورة/كورس/training/workshop offerings; "service" for work performed for the customer (توصيل/تصليح/صيانة/جلسة...); "vehicle" for cars/motorcycles/bikes sold; otherwise "product". Use "custom" only when nothing fits.
+- "type": one of "product", "service", "course", "vehicle", "custom" — decide by WHAT THE CUSTOMER GETS, never by the words used. "product": a physical thing handed over or shipped. "service": work done for the customer, OR access to something for a period — a subscription, plan, package, membership, or license priced per month/year (شهري/سنوي/باقة/اشتراك) is a "service", not a "course". "course": instruction the customer attends — it has a level, a duration, a schedule, or a cohort start date. "vehicle": a car, motorcycle, or bike sold. "custom" only when nothing fits. A free trial period is not an item unless it is listed as an offering.
 - "description": a short detail that belongs to THAT item (size, duration, level, what's included), at most 600 characters, or null. Never put opening hours, addresses, phone numbers, or store policies in a description.
 - "isAvailable": false ONLY if the text marks that item unavailable (غير متوفر / نفذ / خلص / منتهي / out of stock / sold out); otherwise true.
 - "startsAt" / "endsAt": "YYYY-MM-DD" calendar dates, ONLY when the text explicitly states a start/registration date ("تاريخ البدء", "تاريخ التسجيل") or an end/expiry date ("ينتهي", "آخر موعد", "العرض حتى") for THAT item. Day-first formats: «11/07/26» = day 11, month 07, year 2026 → "2026-07-11". Ambiguous, relative ("قريبًا", "الأسبوع القادم") or absent → null. NEVER guess a date.
