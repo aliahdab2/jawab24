@@ -80,7 +80,10 @@ export function FileUploadButton({
         if (response.data.truncated) {
           showHintBriefly(t('extractTruncated'));
         } else if (response.data.pagesTruncated) {
-          showHintBriefly(t('tooManyPages'));
+          showHintBriefly(t('tooManyPages', {
+            read: response.data.pagesRead ?? 0,
+            total: response.data.pagesTotal ?? 0,
+          }));
         } else {
           showHintBriefly(t('extractSuccess'));
         }

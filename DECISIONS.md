@@ -3490,3 +3490,46 @@ German by IP. The Stripe sanctions block is untouched — this only chooses whic
    and the offline rail applies the same marketplace-billing guard the Stripe entry points apply.
    Receipt retention is deferred with a stated trigger: `/health` does not track table size; the
    first admin-stats tile to add is `pg_total_relation_size('offline_payment_receipts')`.
+
+## D-112 · A PDF's text layer is never replaced by OCR, and "looks like a table" is a shape, not a vocabulary (2026-08-29)
+
+**Decision.** In `backend/src/services/kb/file-extractor.ts`, a text layer that pdfjs can read is
+**always the source of the words**. `isScanned` means one thing — no usable text layer — and only a
+scanned PDF is pure OCR. A text-layer PDF whose layout pdfjs scrambled (`looksTabular`) goes to
+Vision **with its per-page text layer attached** as the word authority; the image supplies layout
+and resolves glyph artifacts. `looksTabular` is a run of ≥3 consecutive row-shaped lines, where a
+row is either ≥3 short delimited cells or a short line dense in numeric tokens. It knows no words.
+Vision is `gpt-4.1-mini`, like every other vision caller. Page caps are reported (`pagesRead` /
+`pagesTotal`), never silent. (D-111 is reserved by the content-free comment gate, on its own branch.)
+
+**Why.** On 2026-08-29 a new WhatsApp merchant uploaded a born-digital 7-page Arabic manual —
+embedded fonts, `/ToUnicode`, zero images — and pdfjs read 6,387 correct characters from it. The
+old heuristic counted any line with three tokens and a digit as a "table row", scored the numbered
+manual at 49% against a 30% threshold, marked it *scanned*, and **threw the correct text away** in
+favour of `gpt-4o-mini` OCR of the rendered pages. The OCR guessed words from their shapes:
+«الكروت»→«الكُتُب», «شروحات»→«هيروتات», and «لا يحتاج العميل إلى تثبيت تطبيق»→«يحتاج العمل إلى
+تطبيق» — the meaning inverted, then served to customers. The 5-page cap dropped pages 6–7 silently,
+which held the merchant's own «تعليمات إلزامية» — including the instruction that would have
+prevented the inversion — and the FAQ. The merchant did everything right.
+
+**The vertical lesson, ruled by the owner: «Jawab24 should be for any kind of business».** The
+path had been built and tested on one training institute: the Vision prompt said "e.g. a course
+name", every fixture was a course timetable, and the row rule was a timetable row's shape. Any
+document that was not a timetable was "broken". Both the detector and the prompt now describe shape
+only, and the fixtures span a clinic fee table, a restaurant menu, a size chart, a delivery table
+and a software vendor's manual. A check that is measured on one vertical is calibrated to it.
+
+**Two things that were tried and rejected on the way.**
+1. *Counting wide gaps as column delimiters without looking at the cells.* Subsetted Arabic fonts
+   leave ligature glyphs unmapped; pdfjs pads the stray stand-in letters with 3+ spaces, so a
+   plain sentence carries two "gaps". The real file still tripped the first rewrite for exactly
+   this reason. A delimited row now also needs every cell to be ≤4 words — a sentence never is.
+2. *Regex-repairing the ligature damage in the text layer* («ل ا»→«لا»). `ل\s+ا` also joins «قال
+   احمد», and the «K»/«N»/«j» stand-ins are not recoverable mechanically. The layer is left as-is;
+   the Vision prompt names the artifact class and sends the model to the image for it.
+
+**What is deliberately not done.** The catalog extractor typed this vendor's subscriptions as
+`course`; measured fleet-wide, the other two `course` pages are a training centre and a motorcycle
+shop that sells real maintenance courses — one misjudged page, not a vocabulary gap — so it is
+untouched. Plans without Vision receive the text layer for a tabular PDF (with a possibly scrambled
+table) instead of the old 403 for a document already read; a UI hint for that case is a later slice.

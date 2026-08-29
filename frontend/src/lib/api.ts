@@ -1717,9 +1717,23 @@ export const adminApi = {
 };
 
 // KB File Upload API — extract text from PDF, Word, image
+/** Mirrors backend `ExtractionResult` minus its internal `pageTexts`. */
+export interface KbExtractResult {
+  text: string;
+  method: 'pdfjs' | 'mammoth' | 'gpt-vision' | 'exceljs';
+  isScanned?: boolean;
+  tabular?: boolean;
+  truncated?: boolean;
+  pagesTruncated?: boolean;
+  pagesRead?: number;
+  pagesTotal?: number;
+}
+
 export const kbApi = {
   extractText: async (file: string, mimeType: string, fileName?: string) => {
-    const response = await api.post('/kb/extract-text', { file, mimeType, fileName }, { timeout: LONG_RUNNING_TIMEOUT });
+    const response = await api.post<{ success: boolean; data?: KbExtractResult }>(
+      '/kb/extract-text', { file, mimeType, fileName }, { timeout: LONG_RUNNING_TIMEOUT },
+    );
     return response.data;
   },
 };
