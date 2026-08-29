@@ -377,6 +377,23 @@ function CheckoutPage() {
   // backend), so it must stay reachable precisely when the embedded form cannot
   // render — a blocked js.stripe.com or a missing publishable key. Hiding the
   // escape hatch behind the thing that failed would repeat the incident.
+  // The VPN escape hatch (see forceLocalRail). Authenticated only: the panel it
+  // opens reads the merchant's own claims. Rendered under BOTH the card form and
+  // the "payments unavailable" notice — the second is the unresolved-geo case
+  // (fails closed, so no Sham Cash panel by itself), and a Syrian merchant there
+  // must not be stranded on a notice either.
+  const fromSyriaLink = !isTopup && plan && isAuthenticated && plan.price > 0 && !forceLocalRail ? (
+    <p className="mt-2 text-center text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setForceLocalRail(true)}
+        className="underline text-brand-600 hover:text-brand-700 font-medium"
+      >
+        {tPayment('shamCash.fromSyriaLink')}
+      </button>
+    </p>
+  ) : null;
+
   const hostedFallbackLink = !isTopup && plan ? (
     <>
       <p className="mt-4 text-center text-xs text-muted-foreground">
@@ -390,21 +407,7 @@ function CheckoutPage() {
           {hostedLoading ? t('hostedFallbackOpening') : t('hostedFallbackLink')}
         </button>
       </p>
-      {/* The VPN escape hatch (see forceLocalRail). Authenticated only: the
-          panel it opens reads the merchant's own claims. Shown alongside every
-          card form because we cannot tell a VPN'd Syrian from a German by IP —
-          that is the whole point. */}
-      {isAuthenticated && plan.price > 0 && (
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => setForceLocalRail(true)}
-            className="underline text-brand-600 hover:text-brand-700 font-medium"
-          >
-            {tPayment('shamCash.fromSyriaLink')}
-          </button>
-        </p>
-      )}
+      {fromSyriaLink}
     </>
   ) : null;
 
@@ -432,7 +435,11 @@ function CheckoutPage() {
   useEffect(() => {
     if (isTopup) return;
     if (plan || fetchError || !planId) return;
-    if (isSanctioned === true) return;
+    // Wait for geo, but do NOT skip the fetch for a sanctioned visitor: the
+    // Sham Cash panel on the sanctioned branch is filed against this plan and
+    // cannot render without it. Found in a dev run — with the old
+    // `isSanctioned === true` early return the panel never appeared at all.
+    // /plans/:id is a public catalogue read, not a Stripe call (Rule 4).
     if (isSanctioned === null) return;
 
     const fetchPlan = async () => {
@@ -656,7 +663,10 @@ function CheckoutPage() {
                   userEmail={user?.email}
                 />
               ) : (
-                <PaymentsUnavailableNotice />
+                <>
+                  <PaymentsUnavailableNotice />
+                  {fromSyriaLink}
+                </>
               )}
             </div>
           </div>
