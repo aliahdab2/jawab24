@@ -166,6 +166,18 @@ describe('catalogExtractor', () => {
             expect(prompt).toContain('Input:\nsome list');
         });
 
+        it('types offerings by what the customer receives, not by vertical vocabulary', async () => {
+            // A software vendor's monthly/yearly plans came back as "course" rows
+            // (2026-08-29) under the old rule «Use "course" for دورة/كورس/training».
+            mockReply({ items: [] });
+            await catalogExtractor.extract('some list', CTX);
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain('never by the words used');
+            expect(prompt).toMatch(/subscription, plan, package, membership, or license[^.]*is a "service", not a "course"/);
+            expect(prompt).not.toContain('Use "course" for');
+        });
+
         it('injects the page framing (skip promos, emit priceless promoted items)', async () => {
             mockReply({ items: [] });
             await catalogExtractor.extract('POST (2026-07-01):\nvisit us!', { ...CTX, source: 'page' });

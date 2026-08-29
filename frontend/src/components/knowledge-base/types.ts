@@ -29,16 +29,15 @@ export interface KbGap {
 
 /**
  * Catalog-detection warnings returned by the KB save endpoint when the raw
- * text contains price-list or course-catalog patterns. Mirrors the backend
- * shape (`CatalogDetection` in backend/src/services/kb/content-classifier.ts).
+ * text contains a price list. Mirrors the shared `CatalogDetection` shape
+ * (packages/shared/src/kbContentClassifier.ts).
  */
-export type KbCatalogReason = 'price_list' | 'course_catalog';
+export type KbCatalogReason = 'price_list';
 
 export interface KbWarnings {
   hasCatalog: boolean;
   reasons: KbCatalogReason[];
   priceCount: number;
-  courseKeywordCount: number;
 }
 
 /**

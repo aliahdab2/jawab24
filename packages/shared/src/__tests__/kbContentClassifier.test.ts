@@ -80,10 +80,19 @@ describe('detectCatalogLikePatterns', () => {
 - دورات IELTS/TOEFL: 2500 ريال`;
             const result = detectCatalogLikePatterns(text);
             expect(result.hasCatalog).toBe(true);
-            expect(result.reasons).toContain('price_list');
-            expect(result.reasons).toContain('course_catalog');
+            // Flagged for the same reason as any other vertical: it is a list of prices.
+            expect(result.reasons).toEqual(['price_list']);
             expect(result.priceCount).toBeGreaterThanOrEqual(5);
-            expect(result.courseKeywordCount).toBeGreaterThanOrEqual(2);
+        });
+
+        it('flags a software vendor\'s subscription plans exactly like a course list (no vertical vocabulary)', () => {
+            const text = `الفترة التجريبية المجانية: شهر كامل.
+شهر: 2,000 ريال يمني قديم أو 15 ريال سعودي.
+3 أشهر: 5,000 ريال يمني قديم أو 36 ريال سعودي.
+سنة: 15,000 ريال يمني قديم أو 107 ريالات سعودية.`;
+            const result = detectCatalogLikePatterns(text);
+            expect(result.hasCatalog).toBe(true);
+            expect(result.reasons).toEqual(['price_list']);
         });
 
         it('flags an English price list (3+ prices in SAR)', () => {
@@ -97,14 +106,18 @@ Contact us for custom quotes.`;
             expect(result.reasons).toContain('price_list');
         });
 
-        it('flags a course catalog even with only one price (course_catalog signal)', () => {
+        it('does not flag on vocabulary alone — a list of programs with ONE price is not a price list', () => {
+            // The retired "course_catalog" signal fired here (two course words +
+            // one price). Words identify a vertical, not a price list; the
+            // same text about "packages" or "treatments" was never flagged, and
+            // one vertical must not get a lower bar than the rest.
             const text = `We offer the following programs:
 - Bootcamp: web development (12 weeks)
 - Workshop: data science fundamentals
 - Course: machine learning intro — $499`;
             const result = detectCatalogLikePatterns(text);
-            expect(result.hasCatalog).toBe(true);
-            expect(result.reasons).toContain('course_catalog');
+            expect(result.priceCount).toBe(1);
+            expect(result.hasCatalog).toBe(false);
         });
 
         it('flags Arabic-Indic digit prices (١٥٠٠ ريال) — digit normalization pre-pass', () => {

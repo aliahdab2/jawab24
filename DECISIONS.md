@@ -3533,3 +3533,16 @@ and a software vendor's manual. A check that is measured on one vertical is cali
 shop that sells real maintenance courses — one misjudged page, not a vocabulary gap — so it is
 untouched. Plans without Vision receive the text layer for a tabular PDF (with a possibly scrambled
 table) instead of the old 403 for a document already read; a UI hint for that case is a later slice.
+
+**Follow-through in the same PR (owner: «please do what it needs»).** The same fingerprint was in
+two more places on the ingestion path, and both now describe shapes, not words:
+- `kbContentClassifier` (the «هذا يشبه قائمة أسعار» detector) had a second signal, `course_catalog`
+  — two words from a hand-kept list (دورة/كورس/workshop…) plus one price — that gave one vertical
+  a lower bar than every other. Retired; a price list is three priced lines whatever the business.
+- `CATALOG_EXTRACTION_PROMPT` typed items by vocabulary («Use "course" for دورة/كورس/training»).
+  It now types by what the customer receives, and says explicitly that a plan, subscription,
+  package, membership or license priced per period is a `service` — which is what turned a
+  software vendor's three plans into `course` rows.
+- The `CatalogItemType` union was NOT extended with `subscription`: `service` already covers
+  "access for a period", and a new enum value costs a Zod enum, the type chips, i18n labels and
+  the time-bound-field list for no answer the AI cannot already give.

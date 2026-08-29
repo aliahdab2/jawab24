@@ -11,7 +11,6 @@
   "thinKbTip": "The more details you add, the better Jawab answers your customers. Think about what your customers ask most often.",
   "catalogWarning": {
     "priceListTitle": "This looks like a price list",
-    "courseCatalogTitle": "This looks like a course catalog",
     "body": "We found {priceCount, plural, one {# price} other {# prices}} in your text. Soon you'll be able to store these as structured items so answers stay accurate when prices change.",
     "liveBody": "We found {priceCount, plural, one {# price} other {# prices}} in your text. Exact prices belong in your lists, so answers stay correct when they change.",
     "liveBodyWithCta": "We found {priceCount, plural, one {# price} other {# prices}} in your text. Jawab can turn them into catalog items for you — you review everything before it's added.",
