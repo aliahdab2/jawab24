@@ -654,7 +654,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             // Desktop: multi-column grid
             'md:px-6 md:pt-0 md:pb-8',
             'md:gap-6 lg:gap-8 md:items-stretch',
-            activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3',
+            // The full column count waits for `xl`, NOT `lg`. `lg` (1024px) is the
+            // exact width at which DashboardLayout reveals its 256px sidebar and
+            // offsets this content by `lg:ms-64` — so a `lg:` column count is
+            // asking the viewport for room the container does not have. Measured
+            // on iPad Pro 13" portrait (1024x1366), signed in: `lg:grid-cols-4`
+            // produced FOUR 136px cards, one Arabic word per line, prices spilling
+            // past the card border. At `xl` the sidebar is already paid for.
+            // Pinned by src/__tests__/styles/dashboardGridBreakpoint.test.ts.
+            activePlans.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-2 xl:grid-cols-3',
             'max-w-7xl md:mx-auto lg:px-0',
           )}
         >
