@@ -64,6 +64,11 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
     const [railOff, setRailOff] = useState(false);
     const [loading, setLoading] = useState(true);
     const [claim, setClaim] = useState<OfflinePaymentClaim | null>(null);
+    // The merchant's NEWEST claim when it was refused. Shown as a notice above
+    // the form rather than instead of it: "check the reference and send it
+    // again" needs the form on the same screen, and a refused claim must not
+    // silently vanish into an empty form on the next visit.
+    const [rejected, setRejected] = useState<OfflinePaymentClaim | null>(null);
 
     const [reference, setReference] = useState('');
     const [senderName, setSenderName] = useState('');
@@ -94,8 +99,14 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                 ]);
                 if (cancelled) return;
                 setConfig(configRes.data);
-                const pending = claimsRes?.data.claims.find((c) => c.status === 'pending_review');
+                // listMine is newest-first. A pending claim anywhere wins (the
+                // merchant must not pay twice); otherwise a refusal on the
+                // newest claim is surfaced — an older refusal followed by a
+                // newer approved claim is history, not a notice.
+                const claims = claimsRes?.data.claims ?? [];
+                const pending = claims.find((c) => c.status === 'pending_review');
                 if (pending) setClaim(pending);
+                else if (claims[0]?.status === 'rejected') setRejected(claims[0]);
             } catch (err) {
                 if (cancelled) return;
                 const status = (err as { response?: { status?: number } }).response?.status;
@@ -175,6 +186,7 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
             };
             const res = await offlinePaymentApi.submit(payload);
             setClaim(res.data.claim);
+            setRejected(null);
         } catch (err) {
             const status = (err as { response?: { status?: number } }).response?.status;
             const code = (err as { response?: { data?: { error?: string } } }).response?.data?.error;
@@ -218,26 +230,15 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
     );
 
     if (claim) {
-        const rejected = claim.status === 'rejected';
         return (
             <div className="max-w-md mx-auto p-5 sm:p-6 bg-card border border-theme-border rounded-2xl shadow-sm" aria-live="polite">
                 <div className="flex items-start gap-4">
-                    <span
-                        className={clsx(
-                            'flex-shrink-0 w-11 h-11 rounded-full border flex items-center justify-center',
-                            rejected ? 'alert-error' : 'status-brand',
-                        )}
-                        aria-hidden="true"
-                    >
-                        {rejected ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                    <span className="status-brand border flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center" aria-hidden="true">
+                        <Clock className="w-5 h-5" />
                     </span>
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-lg font-semibold text-foreground mb-1.5">
-                            {t(rejected ? 'shamCash.rejectedTitle' : 'shamCash.pendingTitle')}
-                        </h2>
-                        <p className="text-muted-foreground text-sm leading-relaxed mb-3">
-                            {t(rejected ? 'shamCash.rejectedBody' : 'shamCash.pendingBody')}
-                        </p>
+                        <h2 className="text-lg font-semibold text-foreground mb-1.5">{t('shamCash.pendingTitle')}</h2>
+                        <p className="text-muted-foreground text-sm leading-relaxed mb-3">{t('shamCash.pendingBody')}</p>
                         <p className="text-subtle text-xs mb-4 break-all" dir="auto">
                             {t('shamCash.pendingReference', { reference: claim.transferReference })}
                         </p>
@@ -354,6 +355,19 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
 
             <form onSubmit={handleSubmit} noValidate className="border-t border-theme-border pt-5">
                 <h3 className="text-sm font-semibold text-foreground mb-3">{t('shamCash.afterTransfer')}</h3>
+
+                {rejected && (
+                    <div className="alert-error border rounded-xl p-3.5 mb-4 flex items-start gap-3" role="status">
+                        <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold mb-0.5">{t('shamCash.rejectedTitle')}</p>
+                            <p className="text-sm leading-relaxed">{t('shamCash.rejectedBody')}</p>
+                            <p className="text-xs opacity-80 mt-1 break-all" dir="auto">
+                                {t('shamCash.pendingReference', { reference: rejected.transferReference })}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <label htmlFor="sham-reference" className="block text-sm font-semibold text-foreground mb-1">
                     {t('shamCash.referenceLabel')}

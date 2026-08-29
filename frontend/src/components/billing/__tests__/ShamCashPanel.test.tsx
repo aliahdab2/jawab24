@@ -131,4 +131,28 @@ describe('ShamCashPanel', () => {
         expect(await screen.findByText(en.shamCash.pendingTitle)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: en.shamCash.submit })).not.toBeInTheDocument();
     });
+
+    it('shows why the newest claim was refused, with the form still there to send again', async () => {
+        listMine.mockResolvedValue({
+            data: { claims: [{ id: 'c2', status: 'rejected', transferReference: '11112222' }] },
+        });
+        renderPanel();
+
+        expect(await screen.findByText(en.shamCash.rejectedTitle)).toBeInTheDocument();
+        // Not a dead end: the copy says "send it again", so the form must be on the same screen.
+        expect(screen.getByRole('button', { name: en.shamCash.submit })).toBeInTheDocument();
+    });
+
+    it('does not resurface an old refusal once a newer claim is pending', async () => {
+        listMine.mockResolvedValue({
+            data: { claims: [
+                { id: 'c3', status: 'pending_review', transferReference: '33334444' },
+                { id: 'c2', status: 'rejected', transferReference: '11112222' },
+            ] },
+        });
+        renderPanel();
+
+        expect(await screen.findByText(en.shamCash.pendingTitle)).toBeInTheDocument();
+        expect(screen.queryByText(en.shamCash.rejectedTitle)).not.toBeInTheDocument();
+    });
 });
