@@ -424,7 +424,12 @@ export default function AdminPlaygroundPage() {
                             id="page-select"
                             value={selectedPageId}
                             onChange={(e) => setSelectedPageId(e.target.value)}
-                            className="flex-1 px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            // `min-w-0` is load-bearing, not decoration: a flex item defaults to
+                            // `min-width: auto`, and for a <select> that floor is the width of its
+                            // LONGEST <option>. With page names in the list this measured 677px on
+                            // a 412px phone, so `flex-1` could never shrink it and the control hung
+                            // off the card. The options still render at full width when opened.
+                            className="flex-1 min-w-0 px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         >
                             <option value="">{t('playground.selectPagePlaceholder')}</option>
                             {filteredPages.map((p) => (

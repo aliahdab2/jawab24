@@ -87,7 +87,13 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                 </Link>
                                 <div className="flex items-center gap-2 min-w-0">
                                     <Shield className="w-5 h-5 text-brand-400 shrink-0" />
-                                    <span className="font-display font-bold text-lg truncate">
+                                    {/* Hidden below `sm` rather than truncated. The nav wins the
+                                        width by design (see the comment above), which left the
+                                        wordmark 40px for a 50px word — «الإدارة» rendered as
+                                        «الإد…», which reads as a broken string rather than a
+                                        title. The Shield icon beside it already marks the bar as
+                                        admin, so dropping the word loses nothing on a phone. */}
+                                    <span className="font-display font-bold text-lg truncate hidden sm:inline">
                                         {tAdmin('title')}
                                     </span>
                                 </div>
