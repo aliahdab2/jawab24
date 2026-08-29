@@ -3,7 +3,18 @@ import { useTranslations } from 'next-intl';
 import { Button, Modal } from '@/components/ui';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { OFFLINE_PAYMENT_METHODS, type OfflinePaymentMethod } from '@jawab24/shared';
 import { type Plan, FIELD_CLASS } from './types';
+
+// Literal map, not a template-built key: keeps every key greppable and lets the
+// i18n validator see it. `satisfies` makes a new method in the shared list a
+// compile error here until it has a label.
+const PAYMENT_METHOD_LABEL_KEY = {
+    manual: 'customer.upgradeFormPaymentMethodsManual',
+    bank_transfer: 'customer.upgradeFormPaymentMethodsBankTransfer',
+    syrian_bank: 'customer.upgradeFormPaymentMethodsSyrianBank',
+    sham_cash: 'customer.upgradeFormPaymentMethodsShamCash',
+} as const satisfies Record<OfflinePaymentMethod, string>;
 
 interface Props {
     isOpen: boolean;
@@ -23,7 +34,7 @@ export function UpgradeModal({ isOpen, onClose, userId, plans, currentPlanId, on
     const [error, setError] = useState<string | null>(null);
     const [selectedPlan, setSelectedPlan] = useState<string>(currentPlanId);
     const [periodMonths, setPeriodMonths] = useState<1 | 3 | 6 | 12>(1);
-    const [paymentMethod, setPaymentMethod] = useState<'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash'>('manual');
+    const [paymentMethod, setPaymentMethod] = useState<OfflinePaymentMethod>('manual');
     const [paymentReference, setPaymentReference] = useState('');
     const [note, setNote] = useState('');
 
@@ -123,13 +134,12 @@ export function UpgradeModal({ isOpen, onClose, userId, plans, currentPlanId, on
                     </label>
                     <select
                         value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash')}
+                        onChange={(e) => setPaymentMethod(e.target.value as OfflinePaymentMethod)}
                         className={FIELD_CLASS}
                     >
-                        <option value="manual">{t('customer.upgradeFormPaymentMethodsManual')}</option>
-                        <option value="bank_transfer">{t('customer.upgradeFormPaymentMethodsBankTransfer')}</option>
-                        <option value="syrian_bank">{t('customer.upgradeFormPaymentMethodsSyrianBank')}</option>
-                        <option value="sham_cash">{t('customer.upgradeFormPaymentMethodsShamCash')}</option>
+                        {OFFLINE_PAYMENT_METHODS.map((method) => (
+                            <option key={method} value={method}>{t(PAYMENT_METHOD_LABEL_KEY[method])}</option>
+                        ))}
                     </select>
                 </div>
 

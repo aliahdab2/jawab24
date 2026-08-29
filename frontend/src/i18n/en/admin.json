@@ -706,7 +706,17 @@
   "offlinePayments": {
     "title": "Sham Cash payments",
     "subtitle": "Transfers merchants submitted for review.",
-    "grantNotice": "Approving records that you matched the transfer against the wallet statement. It does NOT open the account — grant the plan from the customer page.",
+    "grantNotice": "Approving confirms you matched the transfer against the wallet statement AND activates the claimed plan for the claimed period (a month or a year). The merchant is upgraded the moment you approve.",
+    "showing": "Showing {shown} of {total}",
+    "loadMore": "Load more",
+    "loadError": "Could not load the claims.",
+    "receiptError": "Could not load the receipt.",
+    "reviewError": "Could not save the decision. Try again.",
+    "alreadyReviewed": "This claim was already reviewed — the card now shows its current state.",
+    "notFound": "This claim no longer exists.",
+    "approvedToast": "Approved — the plan is active.",
+    "rejectedToast": "Rejected.",
+    "activatedOn": "Plan activated on {date}",
     "filterPending": "Awaiting review",
     "filterApproved": "Approved",
     "filterRejected": "Rejected",
@@ -723,7 +733,7 @@
     "monthly": "monthly",
     "viewReceipt": "View receipt",
     "receiptAlt": "Transfer receipt submitted by the merchant",
-    "approve": "Approve",
+    "approveAndActivate": "Approve and activate",
     "reject": "Reject",
     "openCustomer": "Open customer"
   }

@@ -16,7 +16,7 @@ import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import { getEmbeddedToken } from './embeddedSession';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, NotificationChannel, WhatsAppNotificationStatus, WhatsAppTemplateStatus, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, EmailAttachment, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, NotificationChannel, WhatsAppNotificationStatus, WhatsAppTemplateStatus, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, EmailAttachment, FactStructuredValues, PostSuggestionDto, PostSuggestionEvent, PostSuggestionPostType, PostSuggestionResponse, OfflinePaymentMethod, OfflinePaymentRail, OfflinePaymentStatus } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats, NotificationChannel, WhatsAppNotificationStatus, WhatsAppTemplateStatus, PostSuggestionResponse };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -893,46 +893,63 @@ export const subscriptionApi = {
  * Offline (non-card) payment rail — Sham Cash for merchants inside Syria.
  *
  * `getConfig` answers "is this rail live, and what are the wallet details" in
- * ONE call: a 404 means off, and the panel is not rendered. Nothing here grants
- * a plan — a claim is reviewed by a human and the plan is opened through the
- * admin manual-upgrade path.
+ * ONE call, and always with a 200: `{ enabled: false }` when the rail is off
+ * (no wallet configured), the wallet details otherwise. Any non-2xx is
+ * therefore a real failure, never "off". A claim is reviewed by a human in the
+ * admin queue; approving it grants the plan for the claimed period.
+ *
+ * Error bodies from these endpoints are `{ error: <sentence>, code: <snake_case> }`
+ * (the rate limiter and schema validation answer `{ error: true, message, code }`
+ * with `RATE_LIMIT_EXCEEDED` / `VALIDATION_ERROR`). Callers branch on `code`
+ * ONLY — never on the HTTP status.
  */
-export interface OfflinePaymentConfig {
-  rail: 'sham_cash';
+export interface OfflinePaymentRailConfig {
+  enabled: true;
+  rail: OfflinePaymentRail;
   walletNumber: string;
   walletName: string | null;
   qrImageUrl: string | null;
   currency: string;
 }
 
+export type OfflinePaymentConfig = { enabled: false } | OfflinePaymentRailConfig;
+
+/** A claim as the MERCHANT sees it — no reviewer fields, no user identity. */
 export interface OfflinePaymentClaim {
   id: string;
-  userId: string;
+  rail: OfflinePaymentRail;
   planId: string;
   planName: string;
   planSlug: string;
-  billingInterval: string;
+  billingInterval: 'month' | 'year';
   amountCents: number;
   currency: string;
   transferReference: string;
   senderName: string | null;
   note: string | null;
-  status: 'pending_review' | 'approved' | 'rejected';
-  reviewNote: string | null;
-  reviewedAt: string | null;
+  status: OfflinePaymentStatus;
   hasReceipt: boolean;
   createdAt: string;
+  reviewedAt: string | null;
 }
 
-/** A claim as the review queue sees it — same row plus who submitted it. */
-export interface AdminOfflinePaymentClaim extends OfflinePaymentClaim {
+/**
+ * A claim as the review queue sees it — the merchant row plus who submitted
+ * it, the reviewer's note, and what approving it granted.
+ */
+export type AdminOfflinePaymentClaim = OfflinePaymentClaim & {
+  userId: string;
   userEmail: string | null;
   userName: string | null;
-}
+  reviewNote: string | null;
+  grantedAt: string | null;
+  grantedSubscriptionId: string | null;
+};
 
 export interface SubmitOfflinePaymentPayload {
   planId: string;
   billingInterval: 'month' | 'year';
+  rail?: OfflinePaymentRail;
   transferReference: string;
   senderName?: string;
   note?: string;
@@ -942,6 +959,11 @@ export interface SubmitOfflinePaymentPayload {
 
 export const offlinePaymentApi = {
   getConfig: () => api.get<OfflinePaymentConfig>('/payment/offline/config'),
+  /**
+   * 201 with the new claim; 200 with the EXISTING claim when the same merchant
+   * resends an identical claim (a retry after a lost response is not a second
+   * payment). Both resolve — treat them alike.
+   */
   submit: (payload: SubmitOfflinePaymentPayload) =>
     api.post<{ claim: OfflinePaymentClaim }>('/payment/offline/claims', payload),
   listMine: () => api.get<{ claims: OfflinePaymentClaim[] }>('/payment/offline/claims'),
@@ -1244,14 +1266,26 @@ export const partnerApi = {
 export const adminApi = {
 
   // ── Offline payment claims (Sham Cash review queue) ──────────────────────
-  // Reviewing RECORDS a decision; the plan is still granted through the manual
-  // upgrade flow, which stays the single grant choke point.
-  listOfflinePayments: (status?: OfflinePaymentClaim['status']) =>
-    api.get<{ claims: AdminOfflinePaymentClaim[] }>(
-      `/admin/offline-payments${status ? `?status=${status}` : ''}`,
-    ),
+  // Cursor-paginated: pending is oldest-first (a queue), every other filter
+  // newest-first. `total` counts the whole filter, not the page.
+  listOfflinePayments: (params: { status?: OfflinePaymentStatus; cursor?: string | null; limit?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.cursor) query.set('cursor', params.cursor);
+    if (params.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return api.get<{ claims: AdminOfflinePaymentClaim[]; nextCursor: string | null; total: number }>(
+      `/admin/offline-payments${qs ? `?${qs}` : ''}`,
+    );
+  },
+  /**
+   * Approving GRANTS the plan in the same transaction (12 months for a yearly
+   * claim, 1 for monthly, paymentMethod sham_cash). 200 returns the reviewed
+   * claim; 409 `already_reviewed` carries the current claim in `data`; 404
+   * `not_found`.
+   */
   reviewOfflinePayment: (id: string, decision: 'approved' | 'rejected', reviewNote?: string) =>
-    api.post<{ success: boolean; grantsSubscription: boolean }>(
+    api.post<{ success: true; data: AdminOfflinePaymentClaim }>(
       `/admin/offline-payments/${id}/review`,
       { decision, reviewNote },
     ),
@@ -1413,7 +1447,7 @@ export const adminApi = {
   upgradeUser: async (userId: string, data: {
     planId: string;
     periodMonths: 1 | 3 | 6 | 12;
-    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank' | 'sham_cash';
+    paymentMethod: OfflinePaymentMethod;
     paymentReference?: string;
     note?: string;
   }) => {

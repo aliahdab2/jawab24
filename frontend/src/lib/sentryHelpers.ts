@@ -73,6 +73,29 @@ export function captureError(
 }
 
 /**
+ * Report a failed request only when it is OUR fault or nobody's: a network
+ * failure (no status behind it) at `warning`, a 5xx as an error.
+ *
+ * Every 4xx is an answer the caller is expected to handle — a 401 for an
+ * anonymous visitor, a 409 on a replay, a 429 from the limiter, a 422 for a
+ * plan that is not for sale — and reporting those fills Sentry with events
+ * that describe correct behaviour. Callers map the 4xx `code` to a message
+ * themselves and then hand everything else here.
+ */
+export function captureUnexpectedError(
+  error: unknown,
+  fallbackMessage: string,
+  context?: { tags?: Record<string, string>; extra?: Record<string, unknown> }
+): void {
+  const status = getStatusCode(error);
+  if (status === undefined) {
+    captureError(error, fallbackMessage, { ...context, level: 'warning' });
+  } else if (status >= 500) {
+    captureError(error, fallbackMessage, context);
+  }
+}
+
+/**
  * Add a breadcrumb to Sentry for context without creating an event.
  * Use for non-critical errors that should appear in the trail of a real error.
  */

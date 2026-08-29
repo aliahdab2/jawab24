@@ -7,6 +7,7 @@ import { useRouter } from 'next/router';
 import CheckoutPage from '@/pages/checkout';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
+import paymentEn from '@/i18n/en/payment.json';
 
 // Mock modules
 vi.mock('next/router', () => ({ useRouter: vi.fn() }));
@@ -41,6 +42,12 @@ vi.mock('@/components/PaymentsUnavailableNotice', () => ({
   PaymentsUnavailableNotice: () => <div data-testid="sanctions-notice">Payments unavailable</div>,
 }));
 
+// The Sham Cash panel has its own suite; here only WHICH surface the page
+// picks is under test.
+vi.mock('@/components/billing/ShamCashPanel', () => ({
+  ShamCashPanel: ({ planId }: { planId: string }) => <div data-testid="sham-cash-panel">Sham Cash for {planId}</div>,
+}));
+
 vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
 }));
@@ -61,9 +68,13 @@ vi.mock('@stripe/react-stripe-js', () => ({
 
 // These are the key mocks we control per-test
 const mockGeoCheck = vi.fn();
+// The country the geo check cached — what `useLocalPaymentRail` reads to
+// decide whether a blocked visitor has a local rail (SY → Sham Cash).
+const mockGeoCountry = vi.fn<() => string | undefined>();
 vi.mock('@/utils/geoCheck', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
   isUserSanctioned: () => mockGeoCheck(),
+  getCachedGeoCountry: () => mockGeoCountry(),
 }));
 
 const mockApiPost = vi.fn();
@@ -106,8 +117,9 @@ describe('CheckoutPage', () => {
       isAuthenticated: true,
     });
 
-    // Default: not sanctioned
+    // Default: not sanctioned, country unknown
     mockGeoCheck.mockResolvedValue(false);
+    mockGeoCountry.mockReturnValue(undefined);
 
     // Default: plan loads OK
     mockPublicApiGet.mockResolvedValue({
@@ -149,8 +161,103 @@ describe('CheckoutPage', () => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
     });
 
-    // Plan fetch should NOT be called
-    expect(mockPublicApiGet).not.toHaveBeenCalled();
+    // The plan IS fetched for a blocked visitor: /plans/:id is a public
+    // catalogue read (not a Stripe call), and the Sham Cash panel that a
+    // Syrian merchant gets on this branch is filed against it. What must not
+    // happen is a payment intent.
+    expect(mockPublicApiGet).toHaveBeenCalledWith('/plans/plan-1');
+    expect(mockApiPost).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('sham-cash-panel')).not.toBeInTheDocument();
+  });
+
+  // ─── Sanctions: local rail (Sham Cash, inside Syria) ─────
+  describe('local payment rail', () => {
+    it('renders the Sham Cash panel, not the notice, for a blocked visitor resolved to Syria', async () => {
+      mockGeoCheck.mockResolvedValue(true);
+      mockGeoCountry.mockReturnValue('SY');
+
+      render(<CheckoutPage />);
+
+      expect(await screen.findByTestId('sham-cash-panel')).toBeInTheDocument();
+      expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
+      expect(mockPublicApiGet).toHaveBeenCalledWith('/plans/plan-1');
+      // Never a Stripe intent on this branch — the sanctions gate is intact.
+      await act(async () => {});
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('never shows the notice while the plan is loading — the spinner holds until the surface is known', async () => {
+      mockGeoCheck.mockResolvedValue(true);
+      mockGeoCountry.mockReturnValue('SY');
+      let resolvePlan: (v: unknown) => void = () => {};
+      mockPublicApiGet.mockReturnValue(new Promise((r) => { resolvePlan = r; }));
+
+      render(<CheckoutPage />);
+
+      // Geo has answered, the plan has not: a spinner, not a notice that would
+      // be swapped for the panel a moment later.
+      await waitFor(() => expect(mockPublicApiGet).toHaveBeenCalledWith('/plans/plan-1'));
+      expect(screen.getByRole('status')).toBeInTheDocument();
+      expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
+
+      await act(async () => { resolvePlan({ data: { data: mockPlan } }); });
+      expect(await screen.findByTestId('sham-cash-panel')).toBeInTheDocument();
+    });
+
+    it('offers the "paying from inside Syria?" link under the notice and opens the panel from it', async () => {
+      // Blocked, country unresolved (the fail-closed path): the notice, plus
+      // the VPN escape hatch for a Syrian merchant who resolved elsewhere.
+      mockGeoCheck.mockResolvedValue(true);
+      mockGeoCountry.mockReturnValue(undefined);
+
+      render(<CheckoutPage />);
+
+      const link = await screen.findByRole('button', { name: paymentEn.shamCash.fromSyriaLink });
+      expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
+
+      fireEvent.click(link);
+
+      expect(await screen.findByTestId('sham-cash-panel')).toBeInTheDocument();
+      expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('keeps the notice for a top-up even inside Syria — a claim is filed against a plan', async () => {
+      (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+        query: { topup: '5k' },
+        push: mockPush,
+        pathname: '/checkout',
+      });
+      mockGeoCheck.mockResolvedValue(true);
+      mockGeoCountry.mockReturnValue('SY');
+
+      render(<CheckoutPage />);
+
+      expect(await screen.findByTestId('sanctions-notice')).toBeInTheDocument();
+      await act(async () => {});
+      expect(screen.queryByTestId('sham-cash-panel')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: paymentEn.shamCash.fromSyriaLink })).not.toBeInTheDocument();
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('shows the login gate, not the panel, to a logged-out visitor in Syria', async () => {
+      (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isAuthenticated: false });
+      mockGeoCheck.mockResolvedValue(true);
+      mockGeoCountry.mockReturnValue('SY');
+
+      render(<CheckoutPage />);
+
+      expect(await screen.findByText('Log in to complete your subscription')).toBeInTheDocument();
+      // The panel reads the merchant's own claims; mounting it here would 401
+      // into a "payments unavailable" notice with no way to log in.
+      expect(screen.queryByTestId('sham-cash-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Log In'));
+      expect(mockPush).toHaveBeenCalledWith(
+        `/login?redirect=${encodeURIComponent('/checkout?planId=plan-1&interval=month')}`,
+      );
+    });
   });
 
   it('should create subscription intent and render payment form', async () => {

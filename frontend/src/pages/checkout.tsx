@@ -29,6 +29,7 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 import { isMarketplaceBilledCode, type Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent, getSarMonthlyEquivalent } from '@/utils/pricing';
+import { resolvePaymentSurface, shouldOfferFromSyriaLink } from '@/utils/paymentSurface';
 
 type TopupPack = '5k' | '10k';
 interface TopupInfo {
@@ -59,6 +60,29 @@ function FullPageSpinner() {
   return (
     <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
       <Loader2 className="w-8 h-8 animate-spin text-brand-600" aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * "Log in to complete your subscription" card. One component for both payment
+ * surfaces: the card form and the Sham Cash panel each read the merchant's own
+ * data, so an anonymous visitor must see the same gate on either — the panel
+ * used to be mounted anyway, 401, and collapse into a "payments unavailable"
+ * notice with no way to log in.
+ */
+function LoginGateCard({ message, buttonLabel, onLogin }: { message: string; buttonLabel: string; onLogin: () => void }) {
+  return (
+    <div className="bg-card rounded-2xl p-6 sm:p-8 border border-theme-border text-center">
+      <p className="text-muted-foreground mb-4">{message}</p>
+      <Button
+        size="lg"
+        className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
+        onClick={onLogin}
+      >
+        <LogIn className="w-5 h-5" aria-hidden="true" />
+        {buttonLabel}
+      </Button>
     </div>
   );
 }
@@ -372,17 +396,23 @@ function CheckoutPage() {
     }
   };
 
-  // Rendered BOTH inside the payment panel and in the panel's failure states:
-  // the hosted handoff needs no Stripe.js at all (the session is created by our
-  // backend), so it must stay reachable precisely when the embedded form cannot
-  // render — a blocked js.stripe.com or a missing publishable key. Hiding the
-  // escape hatch behind the thing that failed would repeat the incident.
-  // The VPN escape hatch (see forceLocalRail). Authenticated only: the panel it
-  // opens reads the merchant's own claims. Rendered under BOTH the card form and
-  // the "payments unavailable" notice — the second is the unresolved-geo case
-  // (fails closed, so no Sham Cash panel by itself), and a Syrian merchant there
-  // must not be stranded on a notice either.
-  const fromSyriaLink = !isTopup && plan && isAuthenticated && plan.price > 0 && !forceLocalRail ? (
+  // Which surface this page shows — the one decision point (see paymentSurface.ts).
+  const surface = resolvePaymentSurface({
+    isSanctioned,
+    hasLocalRail,
+    forceLocalRail,
+    isTopup,
+    plan,
+    fetchError,
+    isAuthenticated,
+  });
+
+  // The VPN escape hatch (see forceLocalRail), rendered under BOTH the card form
+  // and the "payments unavailable" notice — the second is the unresolved-geo
+  // case (fails closed, so no Sham Cash panel by itself), and a Syrian merchant
+  // there must not be stranded on a notice either. The guard lives with the
+  // surface decision so the two cannot drift.
+  const fromSyriaLink = shouldOfferFromSyriaLink({ isTopup, plan, forceLocalRail, isAuthenticated }, surface) ? (
     <p className="mt-2 text-center text-xs text-muted-foreground">
       <button
         type="button"
@@ -394,6 +424,11 @@ function CheckoutPage() {
     </p>
   ) : null;
 
+  // Rendered BOTH inside the payment panel and in the panel's failure states:
+  // the hosted handoff needs no Stripe.js at all (the session is created by our
+  // backend), so it must stay reachable precisely when the embedded form cannot
+  // render — a blocked js.stripe.com or a missing publishable key. Hiding the
+  // escape hatch behind the thing that failed would repeat the incident.
   const hostedFallbackLink = !isTopup && plan ? (
     <>
       <p className="mt-4 text-center text-xs text-muted-foreground">
@@ -613,8 +648,6 @@ function CheckoutPage() {
     router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   };
 
-  const shamCashReady = (hasLocalRail || forceLocalRail) && !isTopup;
-
   const maintenanceMode = isCheckoutMaintenance();
   const intervalLabel = tPlans(billingInterval === 'year' ? 'year' : 'month');
 
@@ -636,11 +669,11 @@ function CheckoutPage() {
     return fromPlans !== `${p.slug}.description` ? fromPlans : (p.description ?? '');
   };
 
-  if (isSanctioned === null) {
+  if (surface === 'loading') {
     return <FullPageSpinner />;
   }
 
-  if (isSanctioned || forceLocalRail) {
+  if (surface !== 'card') {
     return (
       <>
         <Head>
@@ -654,7 +687,7 @@ function CheckoutPage() {
               <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{pageTitle}</h1>
               </div>
-              {shamCashReady && plan ? (
+              {surface === 'local_rail' && plan ? (
                 <ShamCashPanel
                   planId={plan.id}
                   planName={getPlanName(plan)}
@@ -662,6 +695,8 @@ function CheckoutPage() {
                   amountCents={getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice)}
                   userEmail={user?.email}
                 />
+              ) : surface === 'login' ? (
+                <LoginGateCard message={t('loginToCheckout')} buttonLabel={t('loginButton')} onLogin={handleLogin} />
               ) : (
                 <>
                   <PaymentsUnavailableNotice />
@@ -874,17 +909,11 @@ function CheckoutPage() {
                   {!maintenanceMode && (
                     <>
                       {!isAuthenticated ? (
-                        <div className="bg-card rounded-2xl p-6 sm:p-8 border border-theme-border text-center">
-                          <p className="text-muted-foreground mb-4">{isTopup ? t('loginToTopup') : t('loginToCheckout')}</p>
-                          <Button
-                            size="lg"
-                            className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
-                            onClick={handleLogin}
-                          >
-                            <LogIn className="w-5 h-5" aria-hidden="true" />
-                            {t('loginButton')}
-                          </Button>
-                        </div>
+                        <LoginGateCard
+                          message={isTopup ? t('loginToTopup') : t('loginToCheckout')}
+                          buttonLabel={t('loginButton')}
+                          onLogin={handleLogin}
+                        />
                       ) : clientSecret && intentType && getStripePromise() ? (
                         <div className="bg-card rounded-2xl p-5 sm:p-6 border border-theme-border">
                           <Elements
