@@ -32,6 +32,7 @@
   "minutes": "min",
   "handoffPauseDuration": "Human Takeover Pause",
   "handoffPauseDurationDesc": "When you take over a conversation, smart reply pauses for this duration",
+  "duration5min": "5 min",
   "duration15min": "15 min",
   "duration30min": "30 min",
   "duration1hr": "1 hour",
@@ -191,7 +192,8 @@
     "desc": "Pauses auto-reply while you handle the conversation yourself.",
     "info": "After you reply manually to a customer, Jawab24 stops sending auto-replies on that conversation for the duration below — so the customer doesn't get two replies for the same message. This also applies when you reply from your phone on a WhatsApp number that stays on your WhatsApp Business app.",
     "warning": "Prevents sending double replies to the same customer",
-    "why": "Why? Prevents sending double replies to the same customer."
+    "why": "Why? Prevents sending double replies to the same customer.",
+    "resumeNote": "Smart replies resume {minutes, select, 5 {5 minutes} 15 {15 minutes} 30 {30 minutes} 60 {1 hour} 120 {2 hours} 1440 {24 hours} other {the selected time}} after the last message you send yourself — each new message restarts the timer."
   },
   "replyDelay": {
     "title": "Reply Delay",

@@ -9,6 +9,11 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
   const t = useTranslations('settings');
 
   const presets = [
+    // 5 is the floor the shared schema already enforces (settings.ts: min(5)).
+    // Offered because the pause window is ROLLING — every new manual reply
+    // re-arms it — so a short window never expires mid-handoff: it only ends
+    // once the merchant has actually gone quiet for the full duration.
+    { value: 5, label: t('duration5min') },
     { value: 15, label: t('duration15min') },
     { value: 30, label: t('duration30min') },
     { value: 60, label: t('duration1hr') },
@@ -39,6 +44,17 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
         size="md"
         ariaLabel={t('handoffPause.title')}
       />
+      {/* The window is ROLLING — it restarts on every manual reply — and nothing
+          on this card said so. A merchant reading only the chip concludes the AI
+          is muted from the moment he touches the conversation, when it is really
+          muted from the moment he STOPS. Stated inline rather than behind the (i)
+          because that misreading is what a support case turned on (D-109: make
+          the pause clearer, not different). `select` and not `plural`: the labels
+          switch unit (minutes → hours) and Arabic needs «ساعتين» here, not the
+          «ساعتان» the chip shows. */}
+      <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+        {t('handoffPause.resumeNote', { minutes: String(settings.handoffPauseDurationMinutes) })}
+      </p>
     </Card>
   );
 }

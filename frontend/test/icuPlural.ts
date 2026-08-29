@@ -55,6 +55,32 @@ export function resolveICUPlural(str: string, params: Record<string, unknown>): 
   return str.slice(0, m.index) + resolved + resolveICUPlural(str.slice(end + 1), params);
 }
 
+/**
+ * Resolve ICU select format: "{minutes, select, 5 {5 minutes} other {…}}".
+ *
+ * Same shape as plural, three differences: the selector is matched as a literal
+ * string rather than through `Intl.PluralRules`, there is no `#`, and a missed
+ * match falls back to `other` (ICU requires that branch). Numeric selectors are
+ * legal — verified against `intl-messageformat`, which is what production runs —
+ * and are what a preset-valued message like the handoff-pause note uses, because
+ * its branches switch UNIT (minutes → hours) rather than count, and Arabic needs
+ * a different case form inside a sentence than on a standalone chip.
+ */
+export function resolveICUSelect(str: string, params: Record<string, unknown>): string {
+  const m = /\{(\w+),\s*select\s*,/.exec(str);
+  if (!m) return str;
+  const end = matchingBrace(str, m.index);
+  if (end === -1) return str; // malformed — leave it alone rather than hang
+
+  const value = String(params[m[1]] ?? '');
+  const branches = pluralBranches(str.slice(m.index + m[0].length, end));
+  const body = branches.get(value) ?? branches.get('other') ?? '';
+
+  return str.slice(0, m.index)
+    + resolveICUSelect(body, params)
+    + resolveICUSelect(str.slice(end + 1), params);
+}
+
 /** Index of the `}` closing the `{` at `open`, or -1 when unbalanced. */
 function matchingBrace(str: string, open: number): number {
   let depth = 0;

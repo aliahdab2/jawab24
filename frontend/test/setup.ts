@@ -77,7 +77,7 @@ for (const [path, mod] of Object.entries(enModules)) {
 }
 // flagReason translations live in @jawab24/shared (not a local JSON file)
 import { flagReasonEn } from '@jawab24/shared';
-import { resolveICUPlural } from './icuPlural';
+import { resolveICUPlural, resolveICUSelect } from './icuPlural';
 EN_MESSAGES['flagReason'] = flagReasonEn as Record<string, unknown>;
 
 function resolveNestedKey(obj: Record<string, unknown>, key: string): string | undefined {
@@ -98,11 +98,14 @@ vi.mock('next-intl', () => ({
         ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}`
         : key;
       if (!params) return raw;
-      // First resolve ICU plural expressions, then do simple {key} substitution
-      const afterPlural = resolveICUPlural(raw, params);
+      // Resolve ICU plural, then ICU select, then simple {key} substitution.
+      // Select runs after plural so a select arm nested in a plural body is
+      // already unwrapped, and before substitution so a selector's own name is
+      // not replaced by its value before the branch is chosen.
+      const afterIcu = resolveICUSelect(resolveICUPlural(raw, params), params);
       return Object.entries(params).reduce(
         (str, [k, v]) => str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-        afterPlural,
+        afterIcu,
       );
     };
     t.has = () => true;
