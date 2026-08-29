@@ -30,6 +30,7 @@ export type AiPipeline =
     | 'gender_variant_transform' // Save-time addressee-gender rewrite for the dual-variant DM cache (services/genderVariantTransform.ts)
     | 'post_generation'      // «بوست اليوم» suggested-post TEXT (pinned gpt-4.1-mini, JSON mode; pilot gated by config.postSuggestions)
     | 'post_image_generation' // «بوست اليوم» suggested-post IMAGE (pinned gpt-image-2 via images.generate; ~100× the text cost — kept separate so per-pipeline cost stays readable)
+    | 'post_cta_classification' // Once-per-post caption classification: does the post invite a symbol comment (dot/digits/word/heart/any)? Pinned gpt-4.1-mini, lazy on the first symbol comment, persisted on content_cta_classifications. NOT a reply — never counts toward the merchant's reply quota (D-111)
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it
 

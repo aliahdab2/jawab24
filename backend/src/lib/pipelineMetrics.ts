@@ -53,6 +53,13 @@ export type Outcome =
     // 4,700 rows a month in every merchant's attention queue — so the counter is the ONLY
     // signal that the class is growing. Watch it against `success` per page, not in isolation.
     | 'skipped_friend_tag'
+    // D-111: a content-free comment («.», «٠٠٠», «❤️») on a post whose text did not invite
+    // that symbol. Skipped BEFORE the model — no call, no reply, no quota. Its own counter
+    // so the Post Reply nudge and the shadow-week audit can read it apart from spam.
+    | 'skipped_uninvited_symbol'
+    // Same decision in shadow mode: the comment proceeded exactly as before the gate and
+    // this only records that it WOULD have been skipped. Expected to read ~0 once enforce is on.
+    | 'cta_gate_shadow_skip'
     | 'held_low_confidence'
     | 'held_self_identification'
     | 'greeting_sent'

@@ -298,7 +298,8 @@ describe('PostsService', () => {
             const result = await postsService.deletePost('post-1', 'workspace-1');
 
             expect(result).toBe(true);
-            expect(db.delete).toHaveBeenCalledTimes(1);
+            // The post row, then its D-111 CTA verdict row (no FK — shared with instagram_media).
+            expect(db.delete).toHaveBeenCalledTimes(2);
         });
 
         it('should return false when post not owned by workspace', async () => {

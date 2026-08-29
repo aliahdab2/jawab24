@@ -79,6 +79,9 @@ export interface CommentReplyContext {
     /** Our own Facebook page id — required to distinguish a page-tag pointing at us
      *  (a real question) from a page-tag pointing at another page (skip). */
     ourFacebookPageId?: string;
+    /** D-111: the content row this comment belongs to, so the generator's content-free
+     *  gate can read / write the post's stored CTA classification. */
+    contentRef?: { contentId: string; platform: 'facebook' | 'instagram' };
 }
 
 export interface SendCommentResult {

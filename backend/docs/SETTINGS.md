@@ -63,6 +63,26 @@ equivalents in `commentProcessor`:
 **D-027:** Post Reply is exempt from the **workspace** `commentsAutoReply` toggle only —
 the page master switch (gate 1) still kills it.
 
+**Comments only — the content-free gate (D-111), between the Post Reply rule and the AI.**
+A comment with no letter in any script («.», «....», «٠٠٠», «❤️», «😡») is answered with
+details ONLY when the post's *text* explicitly invited that symbol. The invitation is
+classified once per post (`services/contentCtaClassifier.ts`, pinned `gpt-4.1-mini`, lazily
+on the first content-free comment no rule handled — concurrent first comments share one
+call — persisted in `content_cta_classifications`, metered as `post_cta_classification`,
+never against the reply quota) and matched locally per comment
+(`services/reply/commentCta.ts`): `dot`/`digits` accept a dot or digit run, `heart` hearts
+only, `any` any symbol, `word`/`none`/`uncertain` nothing (a dot on «اكتب تم» is skipped —
+that merchant configures a Post Reply). Matched → the existing «أريد التفاصيل» rewrite and
+a Smart Reply in the merchant's `commentReplyMode`, billed as before. Not matched → skipped
+**before the AI-enabled / quota branches and any model call**: no reply in any mode, no
+DM, no fallback template, no Needs-Attention row, no quota; resolved under
+`uninvited_symbol` (`skipped_uninvited_symbol` + a per-post tally on the verdict row).
+Reply mode never decides eligibility. No merchant setting reads into this gate; the env
+switch `COMMENT_CTA_GATE_MODE` (`shadow` default = decide, count and log only; `enforce` =
+skip) and `COMMENT_CTA_CONFIDENCE_THRESHOLD` (0.7, validated to [0,1]) are operator-side.
+A comment carrying letters («تم», «السعر؟ ❤️») never enters this gate — no lookup, no
+classification, the normal path.
+
 ### Gate 2 must be READ from the gate, never re-derived
 
 Every surface that answers "is this account replying?" reads

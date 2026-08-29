@@ -132,6 +132,32 @@ export const config = {
         evalKeyId: process.env.OPENAI_EVAL_KEY_ID || '',
     },
 
+    // Content-free comment gate (D-111). A dot / digits / emoji comment is answered
+    // with details ONLY when the post's text invited that symbol; the invitation is
+    // classified once per post (services/contentCtaClassifier.ts) and matched
+    // locally per comment (services/reply/commentCta.ts).
+    commentCta: {
+        // 'shadow' (default): classify and decide, but never skip — log what WOULD
+        // have been skipped so a week of real traffic sets the threshold before a
+        // single customer notices. 'enforce' switches the skip on. Also the instant
+        // rollback: flip back to shadow and every symbol comment is answered as before.
+        gateMode: (process.env.COMMENT_CTA_GATE_MODE === 'enforce' ? 'enforce' : 'shadow') as 'shadow' | 'enforce',
+        // Below this the verdict reads as `uncertain` → no reply. Measured start (2026-08-29):
+        // 136 real posts across two pages produced ZERO verdicts under 0.9, so 0.7 is a floor
+        // nothing real sits near; the shadow week revisits it. Validated: anything that is
+        // not a number in [0, 1] falls back to 0.7 rather than becoming NaN (every verdict
+        // passes) or 70 (every verdict fails) — this is the one value the shadow week is
+        // expected to edit by hand.
+        confidenceThreshold: (() => {
+            const raw = parseFloat(process.env.COMMENT_CTA_CONFIDENCE_THRESHOLD || '0.7');
+            return Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.7;
+        })(),
+        // Kill switch for the classifier CALL only (shadow mode is the behaviour switch).
+        // Off → every post reads as `uncertain`; in enforce mode that silences all symbol
+        // comments, so this is for an OpenAI incident, not a rollback.
+        classifierEnabled: process.env.COMMENT_CTA_CLASSIFIER_ENABLED !== 'false',
+    },
+
     // Post-send grounding verification (SYSTEM_ANALYSIS gap 13). A second model
     // call audits a sent reply against the merchant's Business Info and flags
     // unsupported assertions into Needs Attention. Detection only — it never

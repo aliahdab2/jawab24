@@ -38,6 +38,7 @@ import { messages, comments } from '../db/schema';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { makeTrackedOpenAI, type TrackedOpenAI } from './openaiClient';
+import { withAbortTimeout } from '../lib/abortTimeout';
 import { Logger, noopLogger } from '../types';
 
 /** Flag written when the verifier finds an unsupported assertion. Deliberately
@@ -399,12 +400,8 @@ class GroundingVerifierService {
             reply: params.reply,
         });
 
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
-
-        let response;
-        try {
-            response = await this.client(params.userId, params.pageId).chat.completions.create({
+        const response = await withAbortTimeout(VERIFY_TIMEOUT_MS, signal =>
+            this.client(params.userId, params.pageId).chat.completions.create({
                 model: VERIFIER_MODEL,
                 temperature: 0,
                 messages: [
@@ -415,10 +412,8 @@ class GroundingVerifierService {
                     type: 'json_schema',
                     json_schema: { name: 'grounding_verdict', strict: true, schema: GROUNDING_VERDICT_SCHEMA },
                 },
-            }, { signal: controller.signal });
-        } finally {
-            clearTimeout(timer);
-        }
+            }, { signal }),
+        );
 
         const content = response.choices[0]?.message?.content;
         if (!content) throw new Error('Empty response from grounding verifier');

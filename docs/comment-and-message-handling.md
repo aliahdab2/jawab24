@@ -39,6 +39,14 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   not dual/private only. (It was DM-gated until #391; the old gate silently dropped
   solicited `.`/`٠٠٠` engagement on public-mode CTA campaigns — the لامار الشام
   regression, eval #324.)
+- ✅ **The rewrite is gated on the post's INVITATION (D-111, 2026-08-29):** a
+  content-free comment reaches the rewrite only when the post's text explicitly asked
+  for that symbol (`services/reply/commentCta.ts` + the once-per-post classifier
+  `services/contentCtaClassifier.ts`). Uninvited symbols («❤️» under an event video,
+  a bookmark «.» on a caption that asked nothing) are skipped BEFORE the model — no
+  reply in any mode, no quota — under `uninvited_symbol`. Ships in shadow mode
+  (`COMMENT_CTA_GATE_MODE=shadow`: decide + log only) and is switched to `enforce`
+  after a week of live shadow data.
 - ✅ Shared preprocess module `backend/src/services/reply/commentPreprocess.ts`
   is the single source of truth for skip rules + language resolution, used by
   both `generateForComment` (production) and `generateForPlayground` (admin/eval).
@@ -397,6 +405,32 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
                       │
                       ▼
     ┌─────────────────┴─────────────────────────────────────────────┐
+    │ CONTENT-FREE GATE  (D-111 — applyContentFreeGate)             │
+    │ Runs BEFORE the AI-enabled / quota branches and any model     │
+    │ call, on CONTENT-FREE comments only. Text («تم», «كم السعر؟»)  │
+    │ never enters it — no lookup, no classification.               │
+    │                                                               │
+    │ 1. What did the post's TEXT ask for? Read the stored verdict  │
+    │    (content_cta_classifications: none|dot|digits|word|heart|  │
+    │    any|uncertain) — classified ONCE per post by gpt-4.1-mini  │
+    │    on the first content-free comment no Post Reply rule       │
+    │    handled (concurrent first comments share one call); the    │
+    │    playground/eval classifies the caption per request.        │
+    │    uncertain / confidence < 0.7 / no caption / call failed    │
+    │    all read as NONE. Only model-authored verdicts persist.    │
+    │ 2. Does the comment's SHAPE match it? (commentCta)            │
+    │    dot|digits ← a dot run OR a digit run (one class; #324)    │
+    │    heart      ← hearts only          any ← any symbol         │
+    │    word|none  ← nothing (a dot on «اكتب تم» is skipped —      │
+    │                 owner ruling; that merchant uses Post Reply)  │
+    │ MATCH   → continue to the rewrite below.                      │
+    │ NO MATCH→ enforce: SKIP (reason `uninvited_symbol`, metric    │
+    │           skipped_uninvited_symbol + per-post tally).         │
+    │           shadow: log + metric cta_gate_shadow_skip + tally,  │
+    │           then continue exactly as before.                    │
+    └─────────────────┬─────────────────────────────────────────────┘
+                      ▼
+    ┌─────────────────┴─────────────────────────────────────────────┐
     │ CONTENT-FREE CTA REWRITE  (rewriteContentFreeCta)             │
     │ ALL reply modes — public, private, AND dual (since #391)      │
     │                                                               │
@@ -418,8 +452,9 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
     │   merchant default first, then post → KB (NOT the post's      │
     │   detected language). See D-107 / #967 in Language selection. │
     │                                                               │
-    │ ⚠️ No CTA CHECK: fires on ANY captioned post, even one that   │
-    │   never invited a comment — see Known limitation 6.           │
+    │ Reached only through the CONTENT-FREE GATE above (D-111): in  │
+    │   enforce mode an uninvited symbol never gets here; in shadow │
+    │   mode it still does (and is counted as a would-be skip).     │
     └───────────────────────────────────────────────────────────────┘
                       │
                       ▼
@@ -603,7 +638,8 @@ Arabic page, post in Arabic, dual mode unless noted.
 | `@Ali كيف أسجل في الدورة القادمة؟`        | none                 | `كيف أسجل في الدورة القادمة؟` (5) | NO | AR nudge               | full AR reply |
 | `شو السعر؟`                              | none                 | `شو السعر؟`           | NO    | AR nudge                   | full AR reply |
 | `.` (no post context)                    | none                 | `.`                   | YES   | —                          | —         |
-| `.` (on captioned post)‡                 | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `.` (post text invites a dot)‡           | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `.` (post text invites nothing)‡         | none                 | `.`                   | YES (enforce) | —                  | — (`uninvited_symbol`; shadow: answered as the row above + `cta_gate_shadow_skip`) |
 | `🎉` (no post context)                   | none                 | `🎉`                  | YES   | —                          | —         |
 | `https://spam.com`                       | none                 | `""` + no post → YES | YES   | —                          | —         |
 | `مرحبا` (public mode)                    | none                 | `مرحبا`               | NO    | full AR reply              | —         |
@@ -614,10 +650,11 @@ Arabic page, post in Arabic, dual mode unless noted.
 † Current word count is whitespace-based; `شو سعر الدورة؟` is 3 tokens (≤ 3).
  * Known limitation — short Arabic real questions collide with the friend-tag
    threshold. See [Known limitations](#known-limitations).
- ‡ The `.`→synthetic rewrite fires on ANY captioned post, not only real CTA posts
-   (no CTA check — see [Known limitation 6](#known-limitations)). Row shows dual mode;
-   in **public** mode the same input produces a **full public reply** (channel-agnostic
-   since #391), and in private mode a DM only.
+ ‡ Since D-111 the `.`→synthetic rewrite is gated on the post's stored CTA verdict
+   (`content_cta_classifications`, classified once per post from the caption text —
+   see the CONTENT-FREE GATE box). Rows show dual mode; in **public** mode an invited
+   input produces a **full public reply** (channel-agnostic since #391), in private
+   mode a DM only, and an uninvited one is skipped in every mode (enforce).
 
 ---
 
@@ -759,7 +796,9 @@ hasMention    false
 stripped      "🎉🔥"
 isContentFree true  (no letter in any script)
 → same as Example 6b/7 depending on postMessage
-  (with post context → CONTENT-FREE CTA REWRITE fires in every mode)
+  (with post context → CONTENT-FREE GATE: the rewrite fires in every mode only
+   if the post's text invited a symbol that a 🎉🔥 satisfies — `any`. On a «علّق
+   بنقطة» post or a post with no invitation it is skipped in enforce mode.)
 ```
 
 ### Example 8b — Comment-originated DM follow-up inherits post context
@@ -917,22 +956,23 @@ with `@name` Latin characters.
 5. **Comment word count is whitespace-only**, Unicode-naïve. A single compound
    Arabic word with a ZWJ or tatweel may miscount; rare in practice.
 
-6. **The content-free CTA rewrite has no CTA check.** `rewriteContentFreeCta`
-   fires whenever a comment is content-free AND the post has *any* caption — it
-   never verifies the post actually invited a comment. So a bare `❤️` on a
-   music-video post whose whole caption is «YAZAN RASHID #shahin_resort» is
-   rewritten to "أريد التفاصيل" and answered with the entire Business Info,
-   identically to «علّق بنقطة لتصلك التفاصيل». Measured on 30 days of production:
-   **452 of 731 content-free AI comment replies (62%) landed on posts with NO CTA
-   in the caption** — concentrated on pages that run zero CTA campaigns (Shahin
-   Resort, مزة جبل 86, ام.اي.اس), while genuine dot-CTA campaigns (الفريق الدمشقي,
-   266/276) depend on the rewrite. Severity rose when a page switched to `public`
-   mode: the ~548-char brochure now posts publicly under each emoji. Removing the
-   rewrite entirely is not the fix — that reintroduces the #324 silence regression.
-   Tracked by eval XGAP `#817`/`#818` (with control `#819`), which stay
-   `expectedFail` until a CTA-aware fix lands. The obvious CTA-phrase regex is a
-   hand-maintained linguistic list (against project preference); no fix is chosen
-   yet.
+6. ~~**The content-free CTA rewrite has no CTA check.**~~ **Resolved by D-111
+   (2026-08-29)** — see the CONTENT-FREE GATE box in the decision tree. What remains
+   open, by design:
+   - **A CTA that lives only in the image/video** is invisible to the caption-only
+     classifier, so a dot wave on such a post is skipped (once `enforce` is on). The
+     Post Reply nudge (a post drawing symbol comments with no rule → one-tap rule
+     creation) is the intended path for those merchants and ships with `enforce`, not
+     after it. Image classification is a later phase; the stored verdict is designed
+     to accept extra sources without a shape change.
+   - **`word` CTAs are strict** (owner ruling): a dot on «علق باسم الدورة» is skipped —
+     a merchant who wants every comment answered there configures a Post Reply
+     («الكل» or a keyword). 62 such dots in 60 days on rule-less posts.
+   - **A lone 😡** is content-free with no invitation → skipped, no alert (1 in 733
+     emoji-only comments; 0 answered in 30 days). Emoji + words («غالي 😡») take the
+     normal path and still raise `angry_customer`.
+   - **The like-without-reply for skipped emoji** (workspace «الإعجاب بالتعليقات»
+     on) is decided but not built — it ships with the nudge.
 
 ---
 

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqueIndex, real, doublePrecision, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
 // Fixed jsonb column type — drizzle 0.29's own `jsonb` double-encodes through
 // postgres-js and stores jsonb *strings* (see jsonbColumn.ts for the full story).
 import { jsonb } from './jsonbColumn';
@@ -555,6 +555,51 @@ export const instagramMedia = pgTable('instagram_media', {
     return {
         pageIdIdx: index('idx_instagram_media_page_id').on(table.pageId),
         instagramMediaIdIdx: index('idx_instagram_media_id').on(table.instagramMediaId),
+    };
+});
+
+// 3c. Content CTA Classifications — what a post's TEXT asks readers to comment (D-111)
+//
+// One row per post/media, written lazily the first time a content-free comment
+// («.», «٠٠٠», «❤️») lands on it and no Post Reply rule handles it. The comment
+// pipeline reads this row instead of guessing: a symbol comment is answered with
+// details ONLY when `cta_symbol` says the merchant invited that symbol. Keyed on
+// the content row's uuid rather than a column on `posts` so Facebook posts and
+// Instagram media share one table and one classifier. `caption_hash` ties the
+// verdict to the exact caption it was made on — an edited caption reclassifies.
+// A single classification is ~$0.0003 and is metered in ai_usage_log under
+// `post_cta_classification`, never against the merchant's reply quota.
+export const contentCtaClassifications = pgTable('content_cta_classifications', {
+    /** `posts.id` or `instagram_media.id` — no FK on purpose (two parent tables). */
+    contentId: uuid('content_id').primaryKey(),
+    platform: varchar('platform', { length: 20 }).notNull(), // 'facebook' | 'instagram'
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    /** sha256 hex of the caption the verdict was made on. */
+    captionHash: varchar('caption_hash', { length: 64 }).notNull(),
+    /** none | dot | digits | word | heart | any | uncertain — see services/reply/commentCta.ts */
+    ctaSymbol: varchar('cta_symbol', { length: 16 }).notNull(),
+    /** The literal token when cta_symbol = 'word' («تم»), else null. Audit trail and the
+     *  future nudge copy; the gate never matches on it (text comments are never gated). */
+    ctaWord: text('cta_word'),
+    /** Model confidence 0–1. Rows under the configured threshold read as `uncertain`.
+     *  `double precision`, NOT `real`: float4 stores 0.7 as 0.699999988, which would fail a
+     *  `>= 0.7` threshold on every comment after the first (the in-memory verdict passes,
+     *  the re-read row does not). */
+    confidence: doublePrecision('confidence').notNull(),
+    /** The caption fragment the model cited — for audit, never shown to customers. */
+    evidence: text('evidence'),
+    model: varchar('model', { length: 100 }).notNull(),
+    classifiedAt: timestamp('classified_at').defaultNow().notNull(),
+    /** Per-post tally of content-free comments the gate SKIPPED (enforce) — the input the
+     *  Post Reply nudge reads («this post is drawing symbol comments and has no rule»), and
+     *  the per-post audit for the shadow week, without scraping logs. */
+    uninvitedSkips: integer('uninvited_skips').notNull().default(0),
+    /** Same tally for shadow mode (the comment was answered as before; this only counts
+     *  what enforce WOULD have skipped). Expected to stop moving once enforce is on. */
+    shadowSkips: integer('shadow_skips').notNull().default(0),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_content_cta_page_id').on(table.pageId),
     };
 });
 

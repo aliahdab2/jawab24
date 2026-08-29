@@ -48,6 +48,9 @@ const DIRECT_CALL_PIPELINES = new Set([
     // (services/postSuggestions.ts), so an A−R gap here means SDK retries or
     // our own 20s/35s timeouts, never an ai-worker hop.
     'post_generation', 'post_image_generation',
+    // D-111 once-per-post caption classification (services/contentCtaClassifier.ts) —
+    // a direct backend makeTrackedOpenAI call under withAbortTimeout(15s).
+    'post_cta_classification',
 ]);
 
 /**

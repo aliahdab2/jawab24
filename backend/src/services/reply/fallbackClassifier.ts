@@ -4,6 +4,8 @@ import {
     EMOJI_ONLY,
     MENTION_PATTERN,
     PUNCTUATION_ONLY,
+    HEART_CODEPOINTS,
+    stripEmojiModifiers,
     hasExternalPromoUrl,
     hasSpamKeyword,
 } from './spamPatterns';
@@ -22,14 +24,17 @@ import {
 
 const COMPLIMENT_ARABIC = /(ممتاز|رائع|ماشاء\s?الله|تبارك|يعطيك\s?العافية|ما\s?قصرت|الله\s?يوفق|حلو|جميل|احسنت|مبدع)/i;
 const COMPLIMENT_ENGLISH = /\b(great|amazing|excellent|awesome|wonderful|fantastic|love\s+it|well\s+done|good\s+job|thank|thanks)\b/i;
-// Use Unicode code points to avoid combined character class lint errors
+// Hearts come from the shared list (spamPatterns.HEART_CODEPOINTS) so this
+// detector and the D-111 comment-shape test agree on what a heart is; the
+// non-heart compliment emoji stay local. Variation selectors are stripped
+// before the test, not listed as members.
 const COMPLIMENT_EMOJI_SET = new Set([
-    '\u2764', '\uFE0F', '\u{1F499}', '\u{1F49A}', '\u{1F49B}', '\u{1F49C}',
-    '\u{1F9E1}', '\u{1F90D}', '\u{1F5A4}', '\u{1F44D}', '\u{1F44F}',
-    '\u{1F4AF}', '\u{1F60D}', '\u{1F970}', '\u2728', '\u2B50', ' ',
+    ...HEART_CODEPOINTS,
+    '\u{1F44D}', '\u{1F44F}', '\u{1F4AF}', '\u{1F60D}', '\u{1F970}', '\u2728', '\u2B50', ' ',
 ]);
 function isComplimentEmoji(text: string): boolean {
-    return text.trim().length > 0 && [...text].every(ch => COMPLIMENT_EMOJI_SET.has(ch));
+    const bare = stripEmojiModifiers(text);
+    return bare.trim().length > 0 && [...bare].every(ch => COMPLIMENT_EMOJI_SET.has(ch));
 }
 
 // ── Purchase intent patterns ────────────────────────────────────────────────

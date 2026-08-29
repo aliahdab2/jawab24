@@ -9,6 +9,11 @@ Prerequisites — check if ports 3000 and 3002 are already listening. If not, st
 
 ```bash
 # Check and start backend (source env from backend/.env)
+# D-111: the content-free gate ships in SHADOW mode (answers as before, only counts).
+# The eval pins the ENFORCE behaviour — cases flagged `requiresGateEnforce` are scored
+# only when this env is `enforce` on BOTH the backend and the eval process; otherwise
+# the harness reports them in the XGAP bucket instead of failing the headline number.
+export COMMENT_CTA_GATE_MODE=enforce
 if ! lsof -i :3000 -sTCP:LISTEN >/dev/null 2>&1; then
   cd /Users/aliahdab/Documents/AutoReply
   export $(grep -v '^#' backend/.env | xargs)
