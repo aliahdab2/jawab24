@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IntlMessageFormat } from 'intl-messageformat';
-import { resolveICUPlural } from './icuPlural';
+import { resolveICUPlural, resolveICUSelect } from './icuPlural';
 
 /**
  * The mock that stands in for `next-intl` in every suite must render what
@@ -143,5 +143,39 @@ describe('resolveICUPlural — the shapes the corpus does not currently contain'
     it('resolves EVERY plural block in a message, not just the first', () => {
         const raw = '{a, plural, other {# in}} and {b, plural, other {# out}}';
         expect(resolveICUPlural(raw, { a: 2, b: 3 })).toBe('2 in and 3 out');
+    });
+});
+
+describe('resolveICUSelect — checked against the formatter production runs', () => {
+    // The handoff-pause note. Numeric selectors ARE legal ICU, and the branches
+    // switch unit rather than count, which is why this is select and not plural.
+    const NOTE = 'Smart replies resume '
+        + '{minutes, select, 5 {5 minutes} 15 {15 minutes} 60 {1 hour} 120 {2 hours} other {the selected time}}'
+        + ' after the last message you send yourself — each new message restarts the timer.';
+
+    it.each([['5'], ['15'], ['60'], ['120'], ['999'], ['']])(
+        'matches intl-messageformat for minutes=%s',
+        (minutes) => {
+            const truth = new IntlMessageFormat(NOTE, 'en').format({ minutes }) as string;
+            expect(resolveICUSelect(NOTE, { minutes })).toBe(truth);
+        },
+    );
+
+    it('falls back to `other` when the value matches no branch', () => {
+        expect(resolveICUSelect(NOTE, { minutes: '7' })).toContain('the selected time');
+    });
+
+    it('takes a branch body whole, even when it contains the word other', () => {
+        const raw = '{k, select, a {one other thing} other {fallback}}';
+        expect(resolveICUSelect(raw, { k: 'a' })).toBe('one other thing');
+    });
+
+    it('resolves EVERY select block in a message, not just the first', () => {
+        const raw = '{a, select, x {first} other {-}} and {b, select, y {second} other {-}}';
+        expect(resolveICUSelect(raw, { a: 'x', b: 'y' })).toBe('first and second');
+    });
+
+    it('leaves a message with no select untouched', () => {
+        expect(resolveICUSelect('plain text {name}', { name: 'x' })).toBe('plain text {name}');
     });
 });
