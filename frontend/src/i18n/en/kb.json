@@ -73,7 +73,7 @@
   "unsupportedFormat": "Use PDF, Word, Excel, or image files",
   "fileTooLarge": "File too large (max 5 MB)",
   "fileContentMismatch": "This file can't be read. Try converting it to JPEG, PNG, or WebP.",
-  "tooManyPages": "Only the first 5 pages were processed",
+  "tooManyPages": "Only {read} of {total} pages were read — split the file or paste the rest",
   "imageUpgradeRequired": "Image extraction requires the Business plan",
   "dailyLimitReached": "Daily image extraction limit reached. Try again tomorrow."
 }

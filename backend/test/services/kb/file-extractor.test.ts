@@ -79,11 +79,14 @@ import {
     extractFromImage,
     extractFromPdfViaVision,
     extractFromSpreadsheet,
+    looksTabular,
     sniffMimeType,
     bufferMatchesMime,
     MAX_FILE_SIZE_BYTES,
     MAX_PDF_PAGES,
+    MAX_PDF_VISION_PAGES,
     MAX_OUTPUT_CHARS,
+    VISION_MODEL,
 } from '../../../src/services/kb/file-extractor';
 import ExcelJS from 'exceljs';
 
@@ -106,8 +109,17 @@ describe('KB File Extractor', () => {
 
     it('exports correct limits', () => {
         expect(MAX_FILE_SIZE_BYTES).toBe(5 * 1024 * 1024); // 5MB
-        expect(MAX_PDF_PAGES).toBe(5);
+        expect(MAX_PDF_PAGES).toBe(20);
+        expect(MAX_PDF_VISION_PAGES).toBe(10);
         expect(MAX_OUTPUT_CHARS).toBe(16_000);
+    });
+
+    it('uses the same vision model as the rest of the platform, not the retired gpt-4o-mini', () => {
+        // gpt-4o-mini guesses Arabic words from their shapes. The merchant
+        // manual it OCR'd on 2026-08-29 came back with «الكروت» → «الكُتُب»
+        // and «لا يحتاج العميل» → «يحتاج العمل» — inverted meaning, served to
+        // customers. Every other vision caller had already moved on.
+        expect(VISION_MODEL).toBe('gpt-4.1-mini');
     });
 
     // --- PDF extraction ---
@@ -125,24 +137,37 @@ describe('KB File Extractor', () => {
 
             expect(result.method).toBe('pdfjs');
             expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(false);
             expect(result.text).toContain('Burger');
             expect(result.truncated).toBe(false);
         });
 
-        it('limits PDF to first 5 pages', async () => {
-            setPdf('Page content', 12);
+        it('reads up to MAX_PDF_PAGES pages and reports what it skipped', async () => {
+            setPdf('Page content long enough to clear the scanned threshold easily', 25);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
+            expect(result.pagesRead).toBe(MAX_PDF_PAGES);
+            expect(result.pagesTotal).toBe(25);
             expect(result.pagesTruncated).toBe(true);
         });
 
-        it('does not flag pagesTruncated for small PDFs', async () => {
-            setPdf('Short PDF content', 2);
+        it('reads a 7-page document in full (the old 5-page cap silently dropped its last two pages)', async () => {
+            setPdf('Page content long enough to clear the scanned threshold easily', 7);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
+            expect(result.pagesRead).toBe(7);
+            expect(result.pagesTotal).toBe(7);
             expect(result.pagesTruncated).toBe(false);
+        });
+
+        it('returns one text-layer entry per page read, aligned by index', async () => {
+            setPdf('Page content long enough to clear the scanned threshold easily', 3);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.pageTexts).toHaveLength(3);
         });
 
         it('detects scanned PDFs (text < 50 chars)', async () => {
@@ -163,11 +188,11 @@ describe('KB File Extractor', () => {
             expect(result.text).toBe('');
         });
 
-        it('escalates when Arabic rows are space-separated but clearly tabular (pdfjs output)', async () => {
-            // Matches the real pdfjs output shape for the course schedule: each
-            // row is space-separated with a date/time and no tabs.
+        it('flags a space-separated Arabic schedule as tabular but KEEPS its text layer', async () => {
+            // Real pdfjs output shape for a timetable: rows are space-separated
+            // with times/dates and no tabs. The layout needs Vision; the words do not.
             const spaceTabular = [
-                'الكورس الأيام الوقت التاريخ المبلغ',
+                'الدورة الأيام الوقت التاريخ المبلغ',
                 'الأحد--الثلاثاء 6--7 30/4/2026',
                 'الأحد--الثلاثاء 4--5 30/4/2026',
                 'السبت--الخميس 7--8 18/4/2026',
@@ -177,34 +202,92 @@ describe('KB File Extractor', () => {
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
-            expect(result.isScanned).toBe(true);
+            expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(true);
+            expect(result.text).toContain('50,000');
+            expect(result.pageTexts?.[0]).toContain('الخميس فقط');
         });
 
-        it('escalates to Vision when Arabic table-like output is detected', async () => {
-            const garbled = [
-                'الكورس\tالأيام\tالوقت\tالتاريخ\tالمبلغ',
-                'السبت\t--\tالأربعاء\t3--4\t25/4/2026',
-                'الأحد\t--\tالثلاثاء\t9--10\t28/4/2026',
-                'الخميس فقط\t2--4\t30/4/2026',
-                'إنكليزي متوسط 1\tالأحد--الثلاثاء\t9--10\t29/4/2026\t35,000',
+        it('flags a tab-delimited Arabic price table (clinic fees) as tabular', async () => {
+            const clinicFees = [
+                'الخدمة\tالمدة\tالسعر',
+                'كشف عام\t20 دقيقة\t150',
+                'تنظيف أسنان\t45 دقيقة\t300',
+                'حشوة تجميلية\t60 دقيقة\t450',
+                'تبييض\t90 دقيقة\t1200',
             ].join('\n');
-            setPdf(garbled);
+            setPdf(clinicFees);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
-            expect(result.isScanned).toBe(true);
+            expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(true);
         });
 
-        it('does not escalate clean Arabic prose', async () => {
+        it('does NOT flag a numbered Arabic reference document with prices in prose (the 2026-08-29 regression)', async () => {
+            // Shape of the software vendor's manual that the old heuristic sent
+            // to OCR at a 49% "row" ratio: numbered headings, bullet steps, a
+            // subscription paragraph with one or two numbers per sentence, a
+            // download URL. Not one of these lines is a table row.
+            const manual = [
+                'زد نت Z NET',
+                'قاعدة المعرفة الشاملة لنظام «جواب» للرد التلقائي على استفسارات العملاء',
+                'إصدار أغسطس 2026',
+                '1 . ما هو Z NET ؟',
+                'Z NET هو تطبيق أندرويد ذكي مخصص لأصحاب ومزودي شبكات الإنترنت لأتمتة بيع وتوزيع كروت الشبكة.',
+                'التطبيق يكون على هاتف صاحب الشبكة، ولا يحتاج العميل إلى تثبيت تطبيق.',
+                '2 . دورة البيع الآلية',
+                '1 ) تصل رسالة إشعار التحويل إلى هاتف صاحب الشبكة.',
+                '2 ) يحلل النظام الرسالة ويستخرج المبلغ ورقم المشترك والمرجع حسب القالب.',
+                '3 ) يسجل قيد إيداع للعميل ويحدث رصيده.',
+                '4 ) يبحث عن كرت مناسب في المخزون ويحجزه لمنع البيع المزدوج.',
+                '11 . التجزئة والاشتراكات',
+                'الفترة التجريبية المجانية: شهر كامل.',
+                'شهر: 2,000 ريال يمني ويعادل 15 ريال سعودي.',
+                '3 أشهر: 6,000 ريال يمني ويعادل 36 ريال سعودي.',
+                'سنة: 15,000 ريال يمني ويعادل 107 ريال سعودي.',
+                'رابط التحميل والتحديث الرسمي المعتمد:',
+                'https://www.mediafire.com/file/myb7uuy0jvs2a3n/ZNet-1.0.6-180826.apk/file',
+                'رقم خدمة العملاء الرسمي: 785575899',
+            ].join('\n');
+            setPdf(manual, 7);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(false);
+            expect(result.method).toBe('pdfjs');
+            // The exact text layer, untouched — this is what used to be thrown away.
+            expect(result.text).toContain('ولا يحتاج العميل إلى تثبيت تطبيق');
+            expect(result.text).toContain('كروت الشبكة');
+        });
+
+        it('does not flag an Arabic restaurant menu written as prose', async () => {
+            const menu = [
+                'قائمة الطعام',
+                'المشاوي: كباب حلبي بالفستق 45 ريال، شيش طاووق 40 ريال، مشاوي مشكلة للشخصين 120 ريال.',
+                'المقبلات: حمص بالطحينة 15 ريال، متبل 15 ريال، تبولة 18 ريال، فتوش 18 ريال.',
+                'المشروبات: عصير طازج 12 ريال، شاي بالنعناع 6 ريال، قهوة عربية للدلة 25 ريال.',
+                'التوصيل داخل المدينة 10 ريال ويستغرق من 30 إلى 45 دقيقة.',
+            ].join('\n');
+            setPdf(menu);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.tabular).toBe(false);
+        });
+
+        it('does not flag clean Arabic prose', async () => {
             const prose = 'نحن شركة متخصصة في بيع المنتجات الإلكترونية. نعمل منذ عام 2015 ونخدم آلاف العملاء في جميع أنحاء المملكة. ساعات العمل من الأحد إلى الخميس من 9 صباحاً إلى 5 مساءً.';
             setPdf(prose);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
             expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(false);
         });
 
-        it('does not escalate English tables', async () => {
+        it('does not flag English tables (LTR column order survives pdfjs; Vision is plan-gated)', async () => {
             const englishTable = [
                 'Item\tPrice\tStock\tCategory',
                 'Laptop\t999\t12\tElectronics',
@@ -216,6 +299,7 @@ describe('KB File Extractor', () => {
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
             expect(result.isScanned).toBe(false);
+            expect(result.tabular).toBe(false);
         });
 
         it('truncates text exceeding 16,000 chars', async () => {
@@ -284,7 +368,7 @@ describe('KB File Extractor', () => {
     // --- Image extraction (GPT Vision) ---
 
     describe('extractFromImage', () => {
-        it('extracts text from an image using GPT-4o-mini', async () => {
+        it('extracts text from an image using the platform vision model', async () => {
             mockOpenAICreate.mockResolvedValue({
                 choices: [{ message: { content: 'Price List:\nItem A - 100 SAR' } }],
             });
@@ -293,9 +377,8 @@ describe('KB File Extractor', () => {
 
             expect(result.method).toBe('gpt-vision');
             expect(result.text).toContain('Price List');
-            // Verify gpt-4o-mini model is used
             expect(mockOpenAICreate).toHaveBeenCalledWith(
-                expect.objectContaining({ model: 'gpt-4o-mini' }),
+                expect.objectContaining({ model: VISION_MODEL }),
             );
         });
 
@@ -371,27 +454,76 @@ describe('KB File Extractor', () => {
             expect(result.text).toMatch(/Page 1:[^]*\n\n[^]*Page 2:/);
         });
 
-        it('caps rendering at MAX_PDF_PAGES', async () => {
+        it('caps rendering at MAX_PDF_VISION_PAGES and reports the skip', async () => {
             mockPdfPages.mockReturnValue(
-                Array.from({ length: 10 }, (_, i) => Buffer.from(`png-${i + 1}`)),
+                Array.from({ length: MAX_PDF_VISION_PAGES + 4 }, (_, i) => Buffer.from(`png-${i + 1}`)),
             );
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'page' } }] });
 
-            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
-            expect(mockOpenAICreate).toHaveBeenCalledTimes(MAX_PDF_PAGES);
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(MAX_PDF_VISION_PAGES);
+            expect(result.pagesRead).toBe(MAX_PDF_VISION_PAGES);
+            expect(result.pagesTotal).toBe(MAX_PDF_VISION_PAGES + 4);
+            expect(result.pagesTruncated).toBe(true);
         });
 
-        it('passes each image to Vision as a PNG data URL', async () => {
+        it('passes each image to Vision as a PNG data URL, using the platform vision model', async () => {
             mockPdfPages.mockReturnValue([Buffer.from('png-bytes')]);
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
 
             await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
-            const messages = mockOpenAICreate.mock.calls[0][0].messages;
-            const img = messages[0].content.find((c: { type: string }) => c.type === 'image_url');
+            const call = mockOpenAICreate.mock.calls[0][0];
+            expect(call.model).toBe(VISION_MODEL);
+            const img = call.messages[0].content.find((c: { type: string }) => c.type === 'image_url');
             expect(img.image_url.url).toMatch(/^data:image\/png;base64,/);
             expect(img.image_url.detail).toBe('high');
+        });
+
+        it('sends no text layer for a scanned PDF (there is none to send)', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-bytes')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
+
+            const text = mockOpenAICreate.mock.calls[0][0].messages[0].content
+                .find((c: { type: string }) => c.type === 'text').text;
+            expect(text).not.toContain('<text_layer>');
+        });
+
+        it('anchors each page on its own text layer when one is supplied (tabular text-layer PDFs)', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1'), Buffer.from('png-2')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+            await extractFromPdfViaVision(
+                Buffer.from('fake-pdf'),
+                { userId: 'test-user' },
+                { pageTexts: ['الخدمة\tالسعر\nكشف عام\t150', 'تبييض\t1200'] },
+            );
+
+            const textOf = (i: number) => mockOpenAICreate.mock.calls[i][0].messages[0].content
+                .find((c: { type: string }) => c.type === 'text').text as string;
+            // Page 1 gets page 1's layer, page 2 gets page 2's — never each other's.
+            expect(textOf(0)).toContain('<text_layer>');
+            expect(textOf(0)).toContain('كشف عام');
+            expect(textOf(0)).not.toContain('تبييض');
+            expect(textOf(1)).toContain('تبييض');
+            expect(textOf(1)).not.toContain('كشف عام');
+            // The instruction that anchors words on the layer and glyphs on the image.
+            expect(textOf(0)).toMatch(/WORDS are authoritative/);
+            expect(textOf(0)).toMatch(/glyph artifacts/);
+        });
+
+        it('falls back to image-only for a page whose text layer is blank', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' }, { pageTexts: ['   '] });
+
+            const text = mockOpenAICreate.mock.calls[0][0].messages[0].content
+                .find((c: { type: string }) => c.type === 'text').text;
+            expect(text).not.toContain('<text_layer>');
         });
 
         it('truncates concatenated text exceeding 16,000 chars', async () => {
@@ -428,6 +560,85 @@ describe('KB File Extractor', () => {
                 .rejects.toThrow('OpenAI API key not configured');
 
             if (config.openai) config.openai.apiKey = originalKey || 'sk-test-key';
+        });
+    });
+
+    // --- Table detection (shape-based, vertical-agnostic) ---
+
+    describe('looksTabular', () => {
+        it('does not treat a pipe-separated contact block of mostly words as a table', () => {
+            // A bank-details block: one number among seven word tokens per line
+            // is a sentence-shaped line, not a numeric-dense row.
+            const bank = [
+                'الرقم | الاسم | العملة',
+                '3025729691 | عبد الرحمن جميل | ريال سعودي',
+                '785576899 | عبد الرحمن جميل | ريال يمني',
+            ].join('\n');
+            expect(looksTabular(bank)).toBe(false);
+        });
+
+        it('is broken by a blank line (tables are contiguous)', () => {
+            const rows = ['الأحد 6--7 30/4/2026', 'الاثنين 7--8 30/4/2026'];
+            expect(looksTabular([...rows, '', ...rows].join('\n'))).toBe(false);
+            expect(looksTabular([...rows, ...rows].join('\n'))).toBe(true);
+        });
+
+        it('treats a numeric-dense short line as a row regardless of vertical', () => {
+            // Real-estate listing, sizes chart, delivery table — same shape.
+            const sizes = ['المقاس الصدر الطول', 'S 90 65', 'M 96 68', 'L 102 71', 'XL 108 74'].join('\n');
+            expect(looksTabular(sizes)).toBe(true);
+
+            const delivery = ['المدينة السعر المدة', 'صنعاء 500 1-2', 'عدن 800 2-3', 'تعز 700 2-3'].join('\n');
+            expect(looksTabular(delivery)).toBe(true);
+        });
+
+        it('does not count a sentence with a price or two as a row', () => {
+            const prose = [
+                'شهر: 2,000 ريال يمني ويعادل 15 ريال سعودي.',
+                '3 أشهر: 6,000 ريال يمني ويعادل 36 ريال سعودي.',
+                'سنة: 15,000 ريال يمني ويعادل 107 ريال سعودي.',
+                'بعد تحويل قيمة الاشتراك يتم إرسال كود التفعيل خلال 10 دقائق.',
+            ].join('\n');
+            expect(looksTabular(prose)).toBe(false);
+        });
+
+        it('does not count gap-padded prose from a subsetted-font PDF as rows (the real Z net text layer)', () => {
+            // Verbatim pdfjs output: unmapped ligature glyphs («لا», «لأ») come
+            // out as stray Latin letters padded with 3+ spaces. Four consecutive
+            // sentences, each with 2+ "gaps" — the old delimiter rule read this
+            // as a table and the whole document went to OCR.
+            const padded = [
+                'ا حتى يرد أحد موظفي خدمة العملاء.   K   ل طلب من العميل الانتظار قلي   N   ي   السؤال غير مغطى أو احتاجت الحالة إلى فحص يدوي،',
+                'ا من المخزون، ثم يرسل كود الكرت K   ب ا مناس K   ت يستقبل التطبيق رسائل التحويل المالي، يحلل بيانات الحوالة، يحدد العميل والمبلغ، يختار كر',
+                '3 ث رصيده.   j   د يسجل قيد إيداع للعميل ويح   )',
+                'للعميل برسالة SMS ا.   K ي تلقائ',
+            ].join('\n');
+            expect(looksTabular(padded)).toBe(false);
+        });
+
+        it('still flags a space-aligned table whose cells are short', () => {
+            const aligned = [
+                'الخدمة        المدة        السعر',
+                'كشف عام       20 دقيقة     150',
+                'تنظيف أسنان   45 دقيقة     300',
+                'حشوة تجميلية  60 دقيقة     450',
+            ].join('\n');
+            expect(looksTabular(aligned)).toBe(true);
+        });
+
+        it('does not count numbered headings or steps as rows', () => {
+            const steps = ['1 . الخطوة الأولى', '2 . الخطوة الثانية', '3 . الخطوة الثالثة', '4 . الخطوة الرابعة'].join('\n');
+            expect(looksTabular(steps)).toBe(false);
+        });
+
+        it('does not treat tokens with letters as numeric (URLs, SKUs, versions)', () => {
+            const skus = ['ZNet-1.0.6-180826.apk v1.0.6', 'iPhone15 A2846 v17.2', 'SKU-2291 B77 rev3', 'model X200 v2'].join('\n');
+            expect(looksTabular('منتجاتنا:\n' + skus)).toBe(false);
+        });
+
+        it('accepts Arabic-Indic digits', () => {
+            const rows = ['الأحد ٦--٧ ٣٠/٤/٢٠٢٦', 'الاثنين ٧--٨ ٣٠/٤/٢٠٢٦', 'الثلاثاء ٨--٩ ٣٠/٤/٢٠٢٦'].join('\n');
+            expect(looksTabular(rows)).toBe(true);
         });
     });
 

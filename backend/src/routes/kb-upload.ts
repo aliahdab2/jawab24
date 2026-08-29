@@ -14,6 +14,7 @@ import {
     SPREADSHEET_MIME_TYPES,
     MAX_FILE_SIZE_BYTES,
     type ExtractionResult,
+    type PdfVisionOptions,
 } from '../services/kb/file-extractor';
 import { BadRequestError } from '../services/openaiClient';
 import { auth } from '../utils/swagger';
@@ -103,22 +104,35 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 });
             }
 
-            const respondWith = (result: ExtractionResult, extra?: Record<string, unknown>) => {
-                const data = extra ? { ...result, ...extra } : result;
+            const respondWith = (result: ExtractionResult) => {
+                // The per-page text layer is a Vision input, not a client payload.
+                const data: Partial<ExtractionResult> = { ...result };
+                delete data.pageTexts;
                 request.log.info({
                     fileName,
                     method: result.method,
                     textLength: result.text.length,
                     truncated: result.truncated,
-                    pagesTruncated: result.pagesTruncated,
+                    tabular: result.tabular,
+                    pagesRead: result.pagesRead,
+                    pagesTotal: result.pagesTotal,
                 }, 'KB file extraction');
                 return reply.send({ success: true, data });
             };
 
-            // Shared Vision flow: check plan + quota → extract → increment counter
-            const runVisionExtraction = async (buf: Buffer, mime: string, extra?: Record<string, unknown>) => {
+            // Shared Vision flow: check plan + quota → extract → increment counter.
+            // `fallback` is what a text-layer PDF returns when the plan/quota gate
+            // denies Vision: the merchant still gets their text (tables may need
+            // a manual tidy) instead of a 403 for a document we already read.
+            const runVisionExtraction = async (
+                buf: Buffer,
+                mime: string,
+                pdfOpts?: PdfVisionOptions,
+                fallback?: ExtractionResult,
+            ) => {
                 const visionCheck = await checkVisionAccessAndQuota(request);
                 if (!visionCheck.allowed) {
+                    if (fallback) return respondWith(fallback);
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
                 // userId is validated inside checkVisionAccessAndQuota and carried
@@ -126,10 +140,10 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 const { userId } = visionCheck;
                 // PDFs need per-page rasterization; images can go straight to Vision.
                 const result = mime === 'application/pdf'
-                    ? await extractFromPdfViaVision(buf, { userId })
+                    ? await extractFromPdfViaVision(buf, { userId }, pdfOpts)
                     : await extractFromImage(buf, mime, { userId });
                 await incrementVisionCounter(request);
-                return respondWith(result, extra);
+                return respondWith(result);
             };
 
             try {
@@ -137,7 +151,16 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 if (mimeType === 'application/pdf') {
                     const pdfResult = await extractFromPDF(buffer);
                     if (pdfResult.isScanned) {
-                        return runVisionExtraction(buffer, 'application/pdf', { pagesTruncated: pdfResult.pagesTruncated });
+                        // No text layer: pure OCR.
+                        return runVisionExtraction(buffer, 'application/pdf');
+                    }
+                    if (pdfResult.tabular) {
+                        // Text layer present but pdfjs scrambled a table: Vision
+                        // recovers the layout with the text layer as spelling
+                        // reference. Never discard the layer we already have.
+                        return runVisionExtraction(
+                            buffer, 'application/pdf', { pageTexts: pdfResult.pageTexts }, pdfResult,
+                        );
                     }
                     return respondWith(pdfResult);
                 }

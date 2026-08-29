@@ -1387,12 +1387,13 @@ Merchants can extract text from documents and images to populate KB content:
 | **Component** | `FileUploadButton.tsx` in `frontend/src/components/knowledge-base/` |
 | **Backend** | `POST /kb/extract-text` — `backend/src/routes/kb-upload.ts` |
 | **Extractor** | `backend/src/services/kb/file-extractor.ts` |
-| **Formats** | PDF, Word (.docx), images (JPEG, PNG, WebP) |
+| **Formats** | PDF, Word (.docx), Excel (.xlsx), images (JPEG, PNG, WebP) |
 | **Size limit** | 5MB per file |
-| **PDF page limit** | First 5 pages only |
+| **PDF page limit** | 20 pages via the text layer; 10 pages via Vision. `pagesRead` / `pagesTotal` are returned and the UI tells the merchant what was skipped |
 | **Text output cap** | 16,000 chars (same as KB limit) |
-| **PDF/Word** | Free — `pdf-parse` v2 + `mammoth` (no API cost) |
-| **Images/scanned PDFs** | GPT-4o-mini Vision — Business+ plans only |
+| **PDF/Word/Excel** | Free — `pdfjs-dist` + `mammoth` + `exceljs` (no API cost). A PDF's text layer is **always kept**; it is never replaced by OCR |
+| **Arabic tables in a text-layer PDF** | `looksTabular` (a run of ≥3 row-shaped lines — shape only, no vocabulary) sends the page to Vision **with its text layer as the spelling authority**, so Vision only recovers layout. Plans without Vision get the text layer back, not a 403. Before 2026-08-29 the heuristic counted any line with 3 tokens + a digit as a row, so a numbered manual was treated as *scanned* and its correct text discarded for gpt-4o-mini OCR (inverted meaning, invented words) |
+| **Images/scanned PDFs** | gpt-4.1-mini Vision — Business+ plans only |
 | **Daily Vision quota** | Business: 10/day, Pro: 25/day (Redis counter) |
 | **UX** | Paperclip icon next to mic icon in each KB section + onboarding |
 | **Flow** | Upload → extract text → append to textarea → user reviews → save |

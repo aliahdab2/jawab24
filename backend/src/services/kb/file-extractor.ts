@@ -14,66 +14,146 @@ export interface VisionContext {
 
 const SCANNED_PDF_THRESHOLD = 50; // chars — below this, PDF is likely scanned/image-based
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-const MAX_PDF_PAGES = 5;
+/**
+ * Text-layer pages are free to read (no API call), so the cap only bounds
+ * CPU; MAX_OUTPUT_CHARS is the real ceiling on what reaches the KB. Vision
+ * pages each cost one gpt-4.1-mini call at `detail: 'high'`, so they get a
+ * tighter cap. Both are reported back as `pagesRead` / `pagesTotal` so the
+ * merchant is told exactly what was skipped — a silent cap is how a merchant's
+ * FAQ and "mandatory instructions" sections went missing on 2026-08-29.
+ */
+const MAX_PDF_PAGES = 20;
+const MAX_PDF_VISION_PAGES = 10;
 const MAX_OUTPUT_CHARS = 16_000; // Same as KB character limit
 
 const ARABIC_SCRIPT = /[\u0600-\u06FF]/;
 
 /**
- * PDF text streams cannot reconstruct tables with merged cells. This is
- * especially bad for Arabic, where RTL column order also gets scrambled.
- * When the document looks tabular, we escalate to Vision instead of
- * returning broken output.
- *
- * A line is treated as a data row when it either:
- *  - has 2+ tabs / 2+ runs of ≥3 spaces (tab-delimited layouts), OR
- *  - has ≥3 whitespace-separated tokens AND contains at least one digit
- *    (typical for schedule / price rows extracted by pdfjs with single
- *    spaces between fields).
- *
- * The table-as-a-whole trigger fires at ≥30% of non-empty lines being data
- * rows, with a minimum of 3 lines to avoid false positives on short blurbs.
+ * A whitespace-separated token that is a number, date, time, range or amount
+ * (`6--7`, `30/4/2026`, `50,000`, `٢٠٠٠`) — digits plus separators, no letters.
+ * Anything carrying a letter (`ZNet-1.0.6.apk`, `iPhone15`) is a word.
  */
-function looksLikeBrokenArabicTable(text: string): boolean {
-    if (!ARABIC_SCRIPT.test(text)) return false;
-    const lines = text.split('\n').filter((l) => l.trim().length > 0);
-    if (lines.length < 3) return false;
-    const dataRows = lines.filter((l) => {
-        const tabs = (l.match(/\t/g) || []).length;
-        const gaps = (l.match(/ {3,}/g) || []).length;
-        if (tabs >= 2 || gaps >= 2) return true;
-        const tokens = l.trim().split(/\s+/);
-        return tokens.length >= 3 && /\d/.test(l);
-    }).length;
-    return dataRows / lines.length >= 0.3;
+const NUMERIC_TOKEN = /^[\d٠-٩][\d٠-٩/:,.\-–—%]*$/;
+
+/** How many consecutive data rows make a table (tables are contiguous). */
+const MIN_TABLE_RUN = 3;
+/** A data row is short: table cells, not sentences. */
+const MAX_ROW_TOKENS = 8;
+/** ...and dense in numbers: at least this share of its tokens are numeric. */
+const MIN_NUMERIC_SHARE = 0.4;
+/** A delimited row has at least this many cells... */
+const MIN_CELLS = 3;
+/** ...and no cell is a sentence. */
+const MAX_CELL_WORDS = 4;
+
+/** Column separators pdfjs emits: a tab, or a run of 3+ spaces. */
+const CELL_DELIMITER = /\t| {3,}/;
+
+/**
+ * A single pdfjs line that reads like a TABLE ROW rather than prose.
+ *
+ * Shape only — no vocabulary, no vertical. Either the columns are visibly
+ * delimited (3+ cells, each at most a few words), or the line is short and
+ * dominated by numeric cells (a schedule row, a price row, a size chart).
+ *
+ * The cell-length check on delimited rows is not decoration: pdfjs pads
+ * unmapped ligature glyphs with wide spaces, so a plain sentence in a
+ * subsetted-font PDF comes out as «قلي   N   ي   السؤال غير مغطى…» — two
+ * "gaps" and no table anywhere. A real row's cells are short; that sentence
+ * has a six-word cell. A sentence that happens to contain a price (2 numeric
+ * tokens out of 7) or a numbered heading (1 out of 5) never qualifies either.
+ */
+function isTableRow(line: string): boolean {
+    const cells = line.trim().split(CELL_DELIMITER).filter((c) => c.trim().length > 0);
+    if (cells.length >= MIN_CELLS) {
+        return cells.every((c) => c.trim().split(/\s+/).length <= MAX_CELL_WORDS);
+    }
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length < 2 || tokens.length > MAX_ROW_TOKENS) return false;
+    const numeric = tokens.filter((t) => NUMERIC_TOKEN.test(t)).length;
+    return numeric / tokens.length >= MIN_NUMERIC_SHARE;
 }
 
-const VISION_MODEL = 'gpt-4o-mini';
+/**
+ * Does the text layer contain a table? A table is a RUN of row-shaped lines
+ * (see `isTableRow`), so that is what we look for.
+ *
+ * This is a SIGNAL, not a verdict: the text layer is kept and handed to
+ * Vision as the spelling authority (see `extractFromPdfViaVision`). It used
+ * to be a verdict — any document with 30%+ "rows" (3 tokens + a digit) was
+ * treated as scanned and its correct text layer thrown away in favour of OCR.
+ * A numbered reference document trips that at 49%; a merchant's Arabic
+ * manual came back with inverted meaning and invented words (2026-08-29).
+ *
+ * Gated on Arabic script deliberately: LTR text layers keep their column
+ * order, and every escalation spends a plan-gated Vision call.
+ */
+export function looksTabular(text: string): boolean {
+    if (!ARABIC_SCRIPT.test(text)) return false;
+    let run = 0;
+    for (const line of text.split('\n')) {
+        if (line.trim().length === 0) { run = 0; continue; }
+        run = isTableRow(line) ? run + 1 : 0;
+        if (run >= MIN_TABLE_RUN) return true;
+    }
+    return false;
+}
+
+const VISION_MODEL = 'gpt-4.1-mini';
 
 const VISION_PROMPT = `Extract ALL text from this image exactly as written.
-Preserve Arabic text as-is.
+Preserve Arabic text as-is. Never paraphrase, summarise, or "correct" a word.
 
 For TABLES, follow this format strictly:
   1. Output the header row ONCE as the first line, with fields separated by " | ".
   2. Output each data row on ONE SINGLE LINE, with the same " | " separator.
-  3. If a cell is visually merged across multiple rows (e.g. a course name,
-     category, or price that spans a group of rows), REPEAT that value on
-     every single row it covers. Every data row MUST include every column —
-     never leave a row with a missing category, name, or price.
+  3. If a cell is visually merged across multiple rows (a name, category,
+     size, or price that spans a group of rows), REPEAT that value on every
+     single row it covers. Every data row MUST include every column: never
+     leave a cell empty that is filled in the image.
   4. Do NOT output fields on separate lines. Do NOT drop any row.
   5. Read the table in its natural reading direction (right-to-left for Arabic).
 
 For non-table content: output plain text, preserving headings and list structure.
 No markdown, no formatting symbols.`;
 
+/**
+ * Appended when the page ALSO has a machine-readable text layer. The layer is
+ * exact on WORDS and useless on layout; the image is the reverse. Anchoring
+ * on the layer is what stops the model guessing words from their shapes — the
+ * failure that turned «الكروت» into «الكُتُب».
+ *
+ * The layer is not flawless, though: subsetted Arabic fonts leave ligature
+ * glyphs unmapped, so pdfjs emits «ل ا» for «لا» and a stray Latin letter
+ * («K», «N») where a whole ligature stood — a merchant's 8.7k-char manual
+ * carried 13 of the former and at least 40 of the latter (matchers validated
+ * at 0 on the clean transcript). Those are glyph artifacts, not words, and
+ * the image is the right source for them. Hence "words from the layer,
+ * glyphs from the image, nothing from nowhere".
+ */
+const TEXT_LAYER_PROMPT = `The page's machine-extracted text layer follows between the markers.
+Its WORDS are authoritative: output the words it contains, spelled as it
+spells them. Use the image to recover table structure, column order, and
+reading order. The text layer may carry glyph artifacts — a letter split off
+its word by spaces (e.g. "ل ا" for "لا"), or a stray Latin letter standing in
+for an Arabic glyph — resolve those from the image. Never output a word that
+appears in neither the text layer nor the image.
+<text_layer>
+`;
+
 export type ExtractionMethod = 'pdfjs' | 'mammoth' | 'gpt-vision' | 'exceljs';
 
 export interface ExtractionResult {
     text: string;
     method: ExtractionMethod;
-    isScanned?: boolean;       // PDF only — true if text extraction yielded little/no text
+    isScanned?: boolean;       // PDF only — true if the PDF has no usable text layer
+    tabular?: boolean;         // PDF only — text layer present but contains a table (Vision recovers layout)
     truncated?: boolean;       // true if output was capped at MAX_OUTPUT_CHARS
-    pagesTruncated?: boolean;  // PDF only — true if pages were capped at MAX_PDF_PAGES
+    pagesTruncated?: boolean;  // PDF only — true if pages were capped (see pagesRead / pagesTotal)
+    pagesRead?: number;        // PDF only — pages actually processed
+    pagesTotal?: number;       // PDF only — pages in the file
+    /** PDF only — per-page text layer, for the Vision pass. Internal; the route strips it. */
+    pageTexts?: string[];
 }
 
 /**
@@ -92,9 +172,10 @@ function validateSize(buffer: Buffer): void {
 
 /**
  * Extract text from a PDF buffer using pdfjs-dist directly.
- * Limits to first MAX_PDF_PAGES pages. Marks `isScanned` (→ Vision fallback)
- * when the extracted text is too short OR when it looks like a broken Arabic
- * table — pdfjs text stream cannot reconstruct merged cells or RTL column order.
+ * Reads up to MAX_PDF_PAGES pages. Marks `isScanned` when there is no usable
+ * text layer (→ Vision OCR), and `tabular` when the text layer contains a
+ * table (→ Vision recovers the layout, with this text as spelling reference).
+ * A text layer that exists is always returned — it is never discarded.
  *
  * We use pdfjs-dist directly (same version pdf-to-img uses) so there is exactly
  * one PDF engine in the process.
@@ -109,12 +190,14 @@ export async function extractFromPDF(buffer: Buffer): Promise<ExtractionResult> 
         useSystemFonts: true,
     }).promise;
 
-    const totalPages = doc.numPages;
-    const pagesToRead = Math.min(totalPages, MAX_PDF_PAGES);
-    const pagesTruncated = totalPages > MAX_PDF_PAGES;
+    const pagesTotal = doc.numPages;
+    const pagesRead = Math.min(pagesTotal, MAX_PDF_PAGES);
+    const pagesTruncated = pagesTotal > pagesRead;
 
-    const chunks: string[] = [];
-    for (let i = 1; i <= pagesToRead; i++) {
+    // One entry per page read (empty string for a blank page) so the Vision
+    // pass can pair page i's image with page i's text layer.
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= pagesRead; i++) {
         const page = await doc.getPage(i);
         const content = await page.getTextContent();
         // Preserve line structure: pdfjs sets hasEOL at natural line breaks.
@@ -127,20 +210,23 @@ export async function extractFromPDF(buffer: Buffer): Promise<ExtractionResult> 
             if (item.hasEOL) pageText += '\n';
             else pageText += ' ';
         }
-        pageText = pageText.trim();
-        if (pageText) chunks.push(pageText);
+        pageTexts.push(pageText.trim());
         page.cleanup();
     }
     await doc.destroy();
 
-    const rawText = chunks.join('\n\n').trim();
+    const rawText = pageTexts.filter((t) => t.length > 0).join('\n\n').trim();
+    const pageMeta = { pagesTruncated, pagesRead, pagesTotal };
 
-    if (rawText.length < SCANNED_PDF_THRESHOLD || looksLikeBrokenArabicTable(rawText)) {
-        return { text: rawText, method: 'pdfjs', isScanned: true, pagesTruncated };
+    if (rawText.length < SCANNED_PDF_THRESHOLD) {
+        return { text: rawText, method: 'pdfjs', isScanned: true, ...pageMeta };
     }
 
     const { text, truncated } = capText(rawText);
-    return { text, method: 'pdfjs', isScanned: false, truncated, pagesTruncated };
+    return {
+        text, method: 'pdfjs', isScanned: false, truncated,
+        tabular: looksTabular(rawText), pageTexts, ...pageMeta,
+    };
 }
 
 /**
@@ -200,27 +286,41 @@ export async function extractFromSpreadsheet(buffer: Buffer): Promise<Extraction
 }
 
 /**
- * Render up to MAX_PDF_PAGES pages of a PDF into PNG buffers.
+ * Render up to MAX_PDF_VISION_PAGES pages of a PDF into PNG buffers.
  * Uses pdf-to-img (pdfjs-dist + @napi-rs/canvas). `scale: 2` ≈ 150 DPI,
  * which is enough for Vision to read 10pt text reliably without burning tokens.
  */
-async function renderPdfToImages(buffer: Buffer): Promise<Buffer[]> {
+async function renderPdfToImages(buffer: Buffer): Promise<{ pages: Buffer[]; pagesTotal: number }> {
     const { pdf } = await import('pdf-to-img');
     const doc = await pdf(buffer, { scale: 2 });
     const pages: Buffer[] = [];
     for await (const page of doc) {
         pages.push(page);
-        if (pages.length >= MAX_PDF_PAGES) break;
+        if (pages.length >= MAX_PDF_VISION_PAGES) break;
     }
-    return pages;
+    return { pages, pagesTotal: doc.length };
+}
+
+export interface PdfVisionOptions {
+    /**
+     * Per-page text layer from `extractFromPDF`, when the PDF has one. Sent
+     * alongside each page image as the spelling authority — Vision then only
+     * recovers layout. Omit for scanned PDFs (there is nothing to send).
+     */
+    pageTexts?: string[];
 }
 
 /**
- * Extract text from a PDF by rasterizing each page and sending to GPT Vision.
- * Used when pdf-parse output is unreliable (scanned pages, Arabic tables).
+ * Extract text from a PDF by rasterizing each page and sending it to Vision.
+ * Two callers: scanned PDFs (no text layer → pure OCR) and text-layer PDFs
+ * whose layout pdfjs scrambled (tables → OCR anchored on the text layer).
  * Requires OPENAI_API_KEY.
  */
-export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext): Promise<ExtractionResult> {
+export async function extractFromPdfViaVision(
+    buffer: Buffer,
+    ctx: VisionContext,
+    opts: PdfVisionOptions = {},
+): Promise<ExtractionResult> {
     const apiKey = config.openai?.apiKey;
     if (!apiKey) {
         throw new Error('OpenAI API key not configured — cannot extract text from PDF via Vision');
@@ -228,9 +328,11 @@ export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext
 
     validateSize(buffer);
 
-    const pages = await renderPdfToImages(buffer);
-    if (pages.length === 0) {
-        return { text: '', method: 'gpt-vision', truncated: false };
+    const { pages, pagesTotal } = await renderPdfToImages(buffer);
+    const pagesRead = pages.length;
+    const pageMeta = { pagesRead, pagesTotal, pagesTruncated: pagesTotal > pagesRead };
+    if (pagesRead === 0) {
+        return { text: '', method: 'gpt-vision', truncated: false, ...pageMeta };
     }
 
     const openai = makeTrackedOpenAI(apiKey, {
@@ -239,15 +341,19 @@ export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext
         pipeline: ctx.pipeline ?? 'kb_file_extraction',
     });
     const pageTexts: string[] = [];
-    for (const png of pages) {
+    for (const [i, png] of pages.entries()) {
         const base64 = png.toString('base64');
+        const layer = opts.pageTexts?.[i]?.trim();
+        const prompt = layer
+            ? `${VISION_PROMPT}\n\n${TEXT_LAYER_PROMPT}${layer}\n</text_layer>`
+            : VISION_PROMPT;
         const response = await openai.chat.completions.create({
             model: VISION_MODEL,
             max_tokens: 4096,
             messages: [{
                 role: 'user',
                 content: [
-                    { type: 'text', text: VISION_PROMPT },
+                    { type: 'text', text: prompt },
                     { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}`, detail: 'high' } },
                 ],
             }],
@@ -258,7 +364,7 @@ export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext
 
     const rawText = pageTexts.join('\n\n').trim();
     const { text, truncated } = capText(rawText);
-    return { text, method: 'gpt-vision', truncated };
+    return { text, method: 'gpt-vision', truncated, ...pageMeta };
 }
 
 /**
@@ -400,4 +506,4 @@ export const VISION_MIME_TYPES = new Set([
     'image/webp',
 ]);
 
-export { MAX_FILE_SIZE_BYTES, MAX_PDF_PAGES, MAX_OUTPUT_CHARS };
+export { MAX_FILE_SIZE_BYTES, MAX_PDF_PAGES, MAX_PDF_VISION_PAGES, MAX_OUTPUT_CHARS, VISION_MODEL };
