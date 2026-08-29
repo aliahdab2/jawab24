@@ -1720,7 +1720,7 @@ export const adminApi = {
 /** Mirrors backend `ExtractionResult` minus its internal `pageTexts`. */
 export interface KbExtractResult {
   text: string;
-  method: 'pdfjs' | 'mammoth' | 'gpt-vision' | 'exceljs';
+  method: 'pdfjs' | 'mammoth' | 'gpt-vision' | 'exceljs' | 'pdfjs+gpt-vision';
   isScanned?: boolean;
   tabular?: boolean;
   truncated?: boolean;

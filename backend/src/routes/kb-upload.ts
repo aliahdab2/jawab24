@@ -20,6 +20,7 @@ import { BadRequestError } from '../services/openaiClient';
 import { auth } from '../utils/swagger';
 import { checkDailyCap, incrementDailyCap, dailyCapKey } from '../lib/dailyCap';
 import { captureError } from '../utils/sentryHelpers';
+import { createRequestLogger } from '../types/logger';
 
 /** Base64 is ~33% larger than raw bytes */
 const MAX_BASE64_LENGTH = Math.ceil(MAX_FILE_SIZE_BYTES * 1.34);
@@ -105,15 +106,19 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
             }
 
             const respondWith = (result: ExtractionResult) => {
-                // The per-page text layer is a Vision input, not a client payload.
+                // The per-page text layer and the page index list are Vision
+                // inputs, not a client payload.
                 const data: Partial<ExtractionResult> = { ...result };
                 delete data.pageTexts;
+                delete data.visionPages;
                 request.log.info({
                     fileName,
                     method: result.method,
                     textLength: result.text.length,
                     truncated: result.truncated,
+                    isScanned: result.isScanned,
                     tabular: result.tabular,
+                    visionPages: result.visionPages?.length,
                     pagesRead: result.pagesRead,
                     pagesTotal: result.pagesTotal,
                 }, 'KB file extraction');
@@ -121,9 +126,10 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
             };
 
             // Shared Vision flow: check plan + quota → extract → increment counter.
-            // `fallback` is what a text-layer PDF returns when the plan/quota gate
-            // denies Vision: the merchant still gets their text (tables may need
-            // a manual tidy) instead of a 403 for a document we already read.
+            // `fallback` is what a text-layer PDF returns whenever Vision cannot
+            // run — the plan/quota gate denies it, OR the Vision call itself
+            // fails: the merchant still gets their text (a table may need a
+            // manual tidy) instead of an error for a document we already read.
             const runVisionExtraction = async (
                 buf: Buffer,
                 mime: string,
@@ -132,18 +138,39 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
             ) => {
                 const visionCheck = await checkVisionAccessAndQuota(request);
                 if (!visionCheck.allowed) {
-                    if (fallback) return respondWith(fallback);
+                    if (fallback) {
+                        request.log.info(
+                            { fileName, denied: visionCheck.response.error, visionPages: pdfOpts?.pages?.length },
+                            'KB Vision denied — returning the text layer',
+                        );
+                        return respondWith(fallback);
+                    }
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
                 // userId is validated inside checkVisionAccessAndQuota and carried
                 // forward in the result — narrows safely without a non-null assertion.
                 const { userId } = visionCheck;
-                // PDFs need per-page rasterization; images can go straight to Vision.
-                const result = mime === 'application/pdf'
-                    ? await extractFromPdfViaVision(buf, { userId }, pdfOpts)
-                    : await extractFromImage(buf, mime, { userId });
+                const ctx = { userId, logger: createRequestLogger(request.log) };
+                let result: ExtractionResult;
+                try {
+                    // PDFs need per-page rasterization; images can go straight to Vision.
+                    result = mime === 'application/pdf'
+                        ? await extractFromPdfViaVision(buf, ctx, pdfOpts)
+                        : await extractFromImage(buf, mime, ctx);
+                } catch (error) {
+                    if (!fallback) throw error;
+                    captureError(error, 'KB Vision failed — returned the text layer instead', {
+                        level: 'warning',
+                        tags: { route: 'kb-upload-vision' },
+                        extra: { userId, fileName, visionPages: pdfOpts?.pages?.length },
+                    });
+                    request.log.warn({ err: error, fileName }, 'KB Vision failed — returning the text layer');
+                    return respondWith(fallback);
+                }
                 await incrementVisionCounter(request);
-                return respondWith(result);
+                // A text-layer PDF keeps its own verdicts on the Vision result;
+                // the extractor only knows which pages it was asked to OCR.
+                return respondWith(fallback ? { ...result, isScanned: false, tabular: fallback.tabular } : result);
             };
 
             try {
@@ -151,15 +178,20 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 if (mimeType === 'application/pdf') {
                     const pdfResult = await extractFromPDF(buffer);
                     if (pdfResult.isScanned) {
-                        // No text layer: pure OCR.
+                        // No text layer anywhere: pure OCR of every page.
                         return runVisionExtraction(buffer, 'application/pdf');
                     }
-                    if (pdfResult.tabular) {
-                        // Text layer present but pdfjs scrambled a table: Vision
-                        // recovers the layout with the text layer as spelling
-                        // reference. Never discard the layer we already have.
+                    if (pdfResult.visionPages?.length) {
+                        // Text layer present, but some pages pdfjs could not
+                        // read well (a scrambled table, a scanned page). Vision
+                        // revisits ONLY those pages — anchored on their layer
+                        // where there is one — and every other page stays the
+                        // layer verbatim. Never discard the layer we already have.
                         return runVisionExtraction(
-                            buffer, 'application/pdf', { pageTexts: pdfResult.pageTexts }, pdfResult,
+                            buffer,
+                            'application/pdf',
+                            { pageTexts: pdfResult.pageTexts, pages: pdfResult.visionPages },
+                            pdfResult,
                         );
                     }
                     return respondWith(pdfResult);

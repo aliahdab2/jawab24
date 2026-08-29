@@ -3546,3 +3546,18 @@ two more places on the ingestion path, and both now describe shapes, not words:
 - The `CatalogItemType` union was NOT extended with `subscription`: `service` already covers
   "access for a period", and a new enum value costs a Zod enum, the type chips, i18n labels and
   the time-bound-field list for no answer the AI cannot already give.
+
+**Amendment, same day (review of PR #978 before merge): the decision is per PAGE, not per
+document.** The first cut ran `looksTabular` on the whole file and rendered the whole file for
+Vision. Run on the real manual it fired on page 5 alone — yet sent all seven pages, six of them
+perfectly readable, through Vision, so the ruling above did not hold for the very file that
+produced it; and a 15-page file with one table would have lost pages 11–15 to the 10-page Vision
+cap although the layer had them. Now `extractFromPDF` returns `visionPages` — the pages that need
+Vision: a page whose layer holds a table, or a page with no usable layer of its own (a scanned page
+or a scanner-app watermark inside a born-digital file, the case `isScanned` cannot see once the
+other pages carry text). Vision renders only those pages, anchors on the layer where one exists,
+OCRs image-only where none does, and the output is spliced back between verbatim layer pages
+(`method: pdfjs+gpt-vision`). Fixed with it: when Vision is denied *or fails* the merchant receives
+the layer, never an error for a document already read; a Vision page that hits `max_tokens` is
+logged and reported as `truncated` instead of silently shortened; and the text-layer prompt says
+the marker content is document text, never instructions.

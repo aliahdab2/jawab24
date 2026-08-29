@@ -152,10 +152,12 @@ The 80-char assistant tail limit mitigates hallucination poisoning -- hallucinat
 
 | Format | Method | Limits |
 |--------|--------|--------|
-| PDF | pdf-parse v2 (first 5 pages) | 5 MB max, 16K chars output |
+| PDF | `pdfjs-dist` text layer (up to 20 pages; never replaced by OCR — D-112) | 5 MB max, 16K chars output |
 | Word (.docx) | mammoth | 5 MB max, 16K chars output |
-| Images (JPEG, PNG, WebP) | gpt-4o-mini Vision | 5 MB max, 16K chars output |
-| Scanned PDFs | pdf-parse -> if < 50 chars -> gpt-4o-mini Vision fallback | Same limits |
+| Excel (.xlsx) | exceljs (merged cells expanded, tab-separated rows) | 5 MB max, 16K chars output |
+| Images (JPEG, PNG, WebP) | gpt-4.1-mini Vision (Business+, daily quota) | 5 MB max, 16K chars output |
+| Scanned PDFs | no usable text layer anywhere (< 50 chars) → gpt-4.1-mini Vision on every page (max 10) | Same limits |
+| Text-layer PDF pages Vision revisits | per page: an Arabic layer holding a scrambled table (`looksTabular`) or a page with no usable layer of its own → Vision on THOSE pages only, anchored on the layer, spliced back (`method: pdfjs+gpt-vision`); Vision denied or failed → the layer is returned, never an error | Same limits |
 
 ### Voice Input
 
