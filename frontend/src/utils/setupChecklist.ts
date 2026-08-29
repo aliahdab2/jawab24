@@ -13,6 +13,28 @@ export interface AutoReplyMasters {
 }
 
 /**
+ * Where the "turn on auto-reply" surfaces send a merchant who still has no
+ * active channel. Mirrors the two off-states the reply pipeline can be in (D-026):
+ *  - masters OFF → the workspace master is what's missing → `/settings`
+ *  - masters ON  → the per-channel page toggle is what's missing → `/pages`
+ *
+ * Instagram and WhatsApp pages arrive with their page toggle OFF — only Facebook
+ * arrives enabled — so a merchant whose masters are already on but whose channel
+ * is still silent is one page-level switch away from live, and that switch lives
+ * on `/pages`, never `/settings`. The setup checklist and the AutoReplyStatusCard
+ * both call this, so the two can never point at different screens for the same
+ * state (the exact drift that left a WhatsApp merchant hunting `/settings` while
+ * the switch he needed sat on `/pages`).
+ */
+export function autoReplyEnableDestination(
+  masters: AutoReplyMasters | null | undefined,
+): '/pages' | '/settings' {
+  return masters && (masters.commentsAutoReply || masters.messagesAutoReply)
+    ? '/pages'
+    : '/settings';
+}
+
+/**
  * The onboarding milestones, derived live from data the dashboard already
  * holds (no extra fetch). Single source of truth shared by SetupChecklistCard
  * (renders the two setup paths + decides when to hide) and PostReplyNudgeBanner

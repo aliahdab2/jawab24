@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import {
+  autoReplyEnableDestination,
   countSetupStepsDone,
   deriveSetupState,
   isWithinSetupGrace,
@@ -225,5 +226,32 @@ describe('countSetupStepsDone', () => {
     const s = deriveSetupState([page({ repliesCount: 12 })], usage(50));
     expect(s.firstReplySent).toBe(true);
     expect(countSetupStepsDone(s)).toBe(1);
+  });
+});
+
+describe('autoReplyEnableDestination', () => {
+  // Masters OFF (or unknown) → the missing switch is the workspace master → /settings.
+  it('sends to /settings when both masters are off', () => {
+    expect(autoReplyEnableDestination({ commentsAutoReply: false, messagesAutoReply: false })).toBe('/settings');
+  });
+
+  it('sends to /settings when masters are unknown (null / undefined)', () => {
+    expect(autoReplyEnableDestination(null)).toBe('/settings');
+    expect(autoReplyEnableDestination(undefined)).toBe('/settings');
+  });
+
+  // Masters ON → the master is already on, so the missing switch is the
+  // per-channel page toggle → /pages. This is the WhatsApp/Instagram trap: the
+  // merchant flipped the masters and still has no active channel.
+  it('sends to /pages when the messages master is on', () => {
+    expect(autoReplyEnableDestination({ commentsAutoReply: false, messagesAutoReply: true })).toBe('/pages');
+  });
+
+  it('sends to /pages when the comments master is on', () => {
+    expect(autoReplyEnableDestination({ commentsAutoReply: true, messagesAutoReply: false })).toBe('/pages');
+  });
+
+  it('sends to /pages when both masters are on', () => {
+    expect(autoReplyEnableDestination({ commentsAutoReply: true, messagesAutoReply: true })).toBe('/pages');
   });
 });

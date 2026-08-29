@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslations } from 'next-intl';
 import { SystemStatusBanner } from '@/components/ui';
+import { autoReplyEnableDestination } from '@/utils/setupChecklist';
 
 interface AutoReplyStatusCardProps {
   activePages: number;
@@ -29,7 +30,7 @@ export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply
       description={settingsOff ? t('autoReplyConfiguredNote') : t('autoReplyNoPagesActive')}
       cta={{
         label: settingsOff ? t('goToSettings') : t('goToPages'),
-        href: settingsOff ? '/settings' : '/pages',
+        href: autoReplyEnableDestination({ commentsAutoReply, messagesAutoReply }),
       }}
     />
   );
