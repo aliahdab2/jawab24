@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { Check, Copy, Loader2, MessageCircle, Upload, X, Clock, AlertCircle } from 'lucide-react';
+import { Check, Copy, Loader2, MessageCircle, Upload, X, Clock, AlertCircle, QrCode } from 'lucide-react';
 import {
     OFFLINE_PAYMENT_RECEIPT_MAX_BYTES,
     OFFLINE_PAYMENT_RECEIPT_MIME_TYPES,
@@ -71,6 +71,14 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    // The QR is for a SECOND device. On a phone the merchant is browsing on
+    // the very device that holds the wallet app and cannot scan its own
+    // screen, so it starts collapsed there and the copy button leads; on a
+    // wider screen it starts open. Client-only state (the panel renders after
+    // its fetch), so reading matchMedia here cannot mismatch SSR.
+    const [showQr, setShowQr] = useState(
+        () => typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches,
+    );
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -212,26 +220,32 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
     if (claim) {
         const rejected = claim.status === 'rejected';
         return (
-            <div className="max-w-md mx-auto p-6 bg-card border border-theme-border rounded-2xl shadow-sm" aria-live="polite">
+            <div className="max-w-md mx-auto p-5 sm:p-6 bg-card border border-theme-border rounded-2xl shadow-sm" aria-live="polite">
                 <div className="flex items-start gap-4">
-                    {rejected
-                        ? <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" aria-hidden="true" />
-                        : <Clock className="w-6 h-6 text-brand-600 flex-shrink-0" aria-hidden="true" />}
-                    <div className="flex-1">
-                        <h2 className="text-lg font-semibold text-foreground mb-2">
+                    <span
+                        className={clsx(
+                            'flex-shrink-0 w-11 h-11 rounded-full border flex items-center justify-center',
+                            rejected ? 'alert-error' : 'status-brand',
+                        )}
+                        aria-hidden="true"
+                    >
+                        {rejected ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-lg font-semibold text-foreground mb-1.5">
                             {t(rejected ? 'shamCash.rejectedTitle' : 'shamCash.pendingTitle')}
                         </h2>
                         <p className="text-muted-foreground text-sm leading-relaxed mb-3">
                             {t(rejected ? 'shamCash.rejectedBody' : 'shamCash.pendingBody')}
                         </p>
-                        <p className="text-subtle text-xs mb-4" dir="auto">
+                        <p className="text-subtle text-xs mb-4 break-all" dir="auto">
                             {t('shamCash.pendingReference', { reference: claim.transferReference })}
                         </p>
                         <a
                             href={whatsappUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-sm font-semibold text-brand-600 hover:underline"
+                            className="inline-flex items-center gap-2 min-h-[44px] text-sm font-semibold text-brand-600 hover:underline"
                         >
                             <MessageCircle className="w-4 h-4" aria-hidden="true" />
                             {t('shamCash.orWhatsApp')}
@@ -242,66 +256,105 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
         );
     }
 
+    const inputClass = clsx(
+        // 16px text on mobile: below that iOS zooms the page on focus.
+        'w-full px-3.5 py-3 text-base sm:text-sm rounded-xl border border-theme-border bg-card text-foreground',
+        'placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500',
+    );
+
     return (
-        <div className="max-w-md mx-auto p-6 bg-card border border-theme-border rounded-2xl shadow-sm">
-            <h2 className="text-xl font-bold text-foreground mb-2 font-display">{t('shamCash.title')}</h2>
+        <div className="max-w-md mx-auto p-5 sm:p-6 bg-card border border-theme-border rounded-2xl shadow-sm">
+            <h2 className="text-xl font-bold text-foreground mb-1.5 font-display">{t('shamCash.title')}</h2>
             <p className="text-muted-foreground text-sm leading-relaxed mb-4">{t('shamCash.intro')}</p>
 
-            <p className="text-foreground font-semibold text-sm mb-4" dir="auto">
+            {/* What is being paid for — one line, kept in view above the wallet. */}
+            <p className="status-brand border rounded-xl px-4 py-2.5 text-sm font-semibold mb-5" dir="auto">
                 {t('shamCash.planLine', { plan: planName, amount, interval: billingInterval })}
             </p>
 
             {/* Wallet — the copy button is the primary action on mobile. */}
-            <div className="rounded-xl border border-theme-border bg-slate-50 dark:bg-surface-200 p-4 mb-4">
+            <section className="rounded-2xl border border-theme-border bg-muted/60 p-4 mb-5" aria-label={t('shamCash.walletTitle')}>
+                <p className="text-xs font-semibold text-muted-foreground mb-3">{t('shamCash.walletTitle')}</p>
+
                 <p className="text-xs text-muted-foreground mb-1">{t('shamCash.walletNumber')}</p>
-                <div className="flex items-center gap-2 mb-3">
-                    <span className="font-mono text-lg font-bold text-foreground tracking-wide" dir="ltr">
-                        {config.walletNumber}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={handleCopy}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-theme-border text-xs font-semibold text-foreground hover:bg-card transition-colors"
-                    >
-                        {copied
-                            ? <Check className="w-3.5 h-3.5 text-green-600" aria-hidden="true" />
-                            : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
-                        {t(copied ? 'shamCash.copied' : 'shamCash.copy')}
-                    </button>
-                </div>
+                {/* break-all: the id is one unbreakable 32-char token, which on a
+                    390px phone otherwise runs off-screen and takes the copy
+                    button with it. */}
+                <p className="font-mono text-base sm:text-lg font-bold text-foreground break-all leading-snug select-all" dir="ltr">
+                    {config.walletNumber}
+                </p>
+                <button
+                    type="button"
+                    onClick={handleCopy}
+                    className={clsx(
+                        'mt-2.5 w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5',
+                        'rounded-xl border text-sm font-semibold transition-colors',
+                        copied ? 'status-success' : 'border-theme-border bg-card text-foreground hover:bg-background',
+                    )}
+                >
+                    {copied
+                        ? <Check className="w-4 h-4" aria-hidden="true" />
+                        : <Copy className="w-4 h-4" aria-hidden="true" />}
+                    {t(copied ? 'shamCash.copied' : 'shamCash.copy')}
+                </button>
 
                 {config.walletName && (
-                    <>
+                    <div className="mt-4">
                         <p className="text-xs text-muted-foreground mb-1">{t('shamCash.walletName')}</p>
-                        <p className="text-sm font-semibold text-foreground mb-3" dir="auto">{config.walletName}</p>
-                    </>
+                        <p className="text-sm font-semibold text-foreground" dir="auto">{config.walletName}</p>
+                    </div>
                 )}
 
                 {config.qrImageUrl && (
-                    <div className="flex flex-col items-center gap-1.5 pt-2 border-t border-theme-border">
-                        {/* Not next/image: the QR is an env-configured URL that can point
-                            at any host, and a wrong-sized remote loader would be a worse
-                            failure than an unoptimized 200px image. */}
-                        <img
-                            src={config.qrImageUrl}
-                            alt={t('shamCash.qrAlt')}
-                            width={176}
-                            height={176}
-                            className="w-44 h-44 object-contain rounded-lg bg-white p-2"
-                        />
-                        <p className="text-subtle text-[11px] text-center">{t('shamCash.qrHint')}</p>
+                    <div className="mt-4 pt-3 border-t border-theme-border">
+                        <button
+                            type="button"
+                            onClick={() => setShowQr((v) => !v)}
+                            aria-expanded={showQr}
+                            aria-controls="sham-cash-qr"
+                            className="inline-flex items-center gap-2 min-h-[44px] text-sm font-semibold text-brand-600 hover:underline"
+                        >
+                            <QrCode className="w-4 h-4" aria-hidden="true" />
+                            {t(showQr ? 'shamCash.qrHide' : 'shamCash.qrShow')}
+                        </button>
+                        {showQr && (
+                            <div id="sham-cash-qr" className="flex flex-col items-center gap-2 mt-2">
+                                {/* Not next/image: the QR is an env-configured URL that can point
+                                    at any host, and a wrong-sized remote loader would be a worse
+                                    failure than an unoptimized 200px image. */}
+                                <img
+                                    src={config.qrImageUrl}
+                                    alt={t('shamCash.qrAlt')}
+                                    width={176}
+                                    height={176}
+                                    className="w-44 h-44 max-w-full object-contain rounded-xl bg-white p-2 border border-theme-border"
+                                />
+                                <p className="text-subtle text-xs text-center">{t('shamCash.qrHint')}</p>
+                            </div>
+                        )}
                     </div>
                 )}
-            </div>
+            </section>
 
-            <ol className="text-sm text-muted-foreground space-y-1.5 mb-4 list-decimal ps-5">
-                <li>{t('shamCash.step1')}</li>
-                <li>{t('shamCash.step2')}</li>
-                <li>{t('shamCash.step3')}</li>
+            <h3 className="text-sm font-semibold text-foreground mb-2">{t('shamCash.howTo')}</h3>
+            <ol className="space-y-2.5 mb-2">
+                {(['step1', 'step2', 'step3'] as const).map((key, i) => (
+                    <li key={key} className="flex items-start gap-3 text-sm text-muted-foreground leading-relaxed">
+                        <span
+                            className="status-brand border flex-shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5"
+                            aria-hidden="true"
+                        >
+                            {i + 1}
+                        </span>
+                        <span>{t(`shamCash.${key}`)}</span>
+                    </li>
+                ))}
             </ol>
-            <p className="text-subtle text-xs mb-5">{t('shamCash.amountNote')}</p>
+            <p className="text-subtle text-xs mb-5 ps-9">{t('shamCash.amountNote')}</p>
 
-            <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit} noValidate className="border-t border-theme-border pt-5">
+                <h3 className="text-sm font-semibold text-foreground mb-3">{t('shamCash.afterTransfer')}</h3>
+
                 <label htmlFor="sham-reference" className="block text-sm font-semibold text-foreground mb-1">
                     {t('shamCash.referenceLabel')}
                 </label>
@@ -310,13 +363,14 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                     type="text"
                     dir="auto"
                     inputMode="numeric"
+                    autoComplete="off"
                     required
                     maxLength={OFFLINE_PAYMENT_REFERENCE_MAX}
                     value={reference}
                     onChange={(e) => setReference(e.target.value)}
                     placeholder={t('shamCash.referencePlaceholder')}
                     aria-describedby="sham-reference-hint"
-                    className="w-full px-3 py-2.5 rounded-xl border border-theme-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className={clsx(inputClass, 'font-mono tracking-wide')}
                 />
                 <p id="sham-reference-hint" className="text-subtle text-xs mt-1 mb-4">{t('shamCash.referenceHint')}</p>
 
@@ -327,11 +381,12 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                     id="sham-sender"
                     type="text"
                     dir="auto"
+                    autoComplete="name"
                     maxLength={OFFLINE_PAYMENT_SENDER_NAME_MAX}
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
                     placeholder={t('shamCash.senderPlaceholder')}
-                    className="w-full px-3 py-2.5 rounded-xl border border-theme-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500 mb-4"
+                    className={clsx(inputClass, 'mb-4')}
                 />
 
                 <p className="block text-sm font-semibold text-foreground mb-1">{t('shamCash.receiptLabel')}</p>
@@ -344,12 +399,12 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                     className="sr-only"
                 />
                 {receipt ? (
-                    <div className="flex items-center gap-3 mb-1">
-                        <img src={receipt.previewUrl} alt="" className="w-14 h-14 object-cover rounded-lg border border-theme-border" />
+                    <div className="flex items-center gap-3 rounded-xl border border-theme-border p-2.5 mb-1">
+                        <img src={receipt.previewUrl} alt="" className="w-14 h-14 object-cover rounded-lg border border-theme-border flex-shrink-0" />
                         <button
                             type="button"
                             onClick={clearReceipt}
-                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                            className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-muted-foreground hover:text-foreground"
                         >
                             <X className="w-4 h-4" aria-hidden="true" />
                             {t('shamCash.receiptRemove')}
@@ -358,7 +413,11 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                 ) : (
                     <label
                         htmlFor="sham-receipt"
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-theme-border text-sm font-semibold text-muted-foreground hover:text-foreground cursor-pointer mb-1"
+                        className={clsx(
+                            'w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-3 py-3 mb-1',
+                            'rounded-xl border border-dashed border-theme-border text-sm font-semibold text-muted-foreground',
+                            'hover:text-foreground hover:border-brand-500 cursor-pointer transition-colors',
+                        )}
                     >
                         <Upload className="w-4 h-4" aria-hidden="true" />
                         {t('shamCash.receiptChoose')}
@@ -370,7 +429,7 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                     <p className="alert-error border rounded-xl px-3 py-2 text-sm mb-4" role="alert">{error}</p>
                 )}
 
-                <Button type="submit" loading={submitting} className="w-full py-3 rounded-xl">
+                <Button type="submit" loading={submitting} className="w-full min-h-[48px] py-3 rounded-xl">
                     {t(submitting ? 'shamCash.submitting' : 'shamCash.submit')}
                 </Button>
             </form>
@@ -380,7 +439,7 @@ export function ShamCashPanel({ planId, planName, billingInterval, amountCents, 
                 target="_blank"
                 rel="noopener noreferrer"
                 className={clsx(
-                    'mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5',
+                    'mt-3 w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5',
                     'text-sm font-semibold text-brand-600 hover:underline',
                 )}
             >

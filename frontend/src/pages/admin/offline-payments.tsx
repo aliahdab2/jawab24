@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { normalizeTransferReference } from '@jawab24/shared';
 import clsx from 'clsx';
 import { Check, X, Loader2, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -165,7 +166,17 @@ export default function AdminOfflinePaymentsPage() {
                                     </div>
                                     <div>
                                         <dt className="text-xs text-muted-foreground">{t('offlinePayments.reference')}</dt>
-                                        <dd className="font-mono font-semibold text-foreground" dir="ltr">{claim.transferReference}</dd>
+                                        <dd className="font-mono font-semibold text-foreground break-all" dir="ltr">
+                                            {claim.transferReference}
+                                            {/* The statement shows Latin digits; a reference typed
+                                                in Arabic-Indic digits is shown folded as well so the
+                                                reviewer matches without transliterating by eye. */}
+                                            {normalizeTransferReference(claim.transferReference) !== claim.transferReference && (
+                                                <span className="block text-xs font-normal text-muted-foreground">
+                                                    {normalizeTransferReference(claim.transferReference)}
+                                                </span>
+                                            )}
+                                        </dd>
                                     </div>
                                     <div>
                                         <dt className="text-xs text-muted-foreground">{t('offlinePayments.sender')}</dt>
@@ -179,7 +190,7 @@ export default function AdminOfflinePaymentsPage() {
                                             <img
                                                 src={receipts[claim.id]}
                                                 alt={t('offlinePayments.receiptAlt')}
-                                                className="max-w-xs rounded-lg border border-theme-border"
+                                                className="w-full max-w-xs rounded-lg border border-theme-border"
                                             />
                                         ) : (
                                             <button
@@ -195,11 +206,11 @@ export default function AdminOfflinePaymentsPage() {
                                 )}
 
                                 {claim.status === 'pending_review' && (
-                                    <div className="flex flex-wrap gap-2 mt-4">
+                                    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 mt-4">
                                         <Button
                                             onClick={() => review(claim.id, 'approved')}
                                             loading={busyId === claim.id}
-                                            className="px-4 py-2 text-sm rounded-xl"
+                                            className="w-full sm:w-auto min-h-[44px] px-4 py-2 text-sm rounded-xl"
                                         >
                                             <span className="inline-flex items-center gap-1.5">
                                                 <Check className="w-4 h-4" aria-hidden="true" />
@@ -210,7 +221,7 @@ export default function AdminOfflinePaymentsPage() {
                                             variant="secondary"
                                             onClick={() => review(claim.id, 'rejected')}
                                             loading={busyId === claim.id}
-                                            className="px-4 py-2 text-sm rounded-xl"
+                                            className="w-full sm:w-auto min-h-[44px] px-4 py-2 text-sm rounded-xl"
                                         >
                                             <span className="inline-flex items-center gap-1.5">
                                                 <X className="w-4 h-4" aria-hidden="true" />
@@ -219,7 +230,7 @@ export default function AdminOfflinePaymentsPage() {
                                         </Button>
                                         <a
                                             href={`/admin/customers/detail?userId=${claim.userId}`}
-                                            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-brand-600 hover:underline"
+                                            className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 text-sm font-semibold text-brand-600 hover:underline"
                                         >
                                             <ExternalLink className="w-4 h-4" aria-hidden="true" />
                                             {t('offlinePayments.openCustomer')}
