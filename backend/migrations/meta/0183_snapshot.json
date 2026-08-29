@@ -1,5 +1,5 @@
 {
-  "id": "43ce76dd-dd7e-4bfd-87b3-8780db5bd082",
+  "id": "d8de17a3-f130-4afc-a265-e85f26a90b05",
   "prevId": "3ab26b84-065f-4f00-af91-40a40d4dcaf1",
   "version": "7",
   "dialect": "postgresql",
@@ -5439,6 +5439,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "granted_subscription_id": {
+          "name": "granted_subscription_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "granted_at": {
+          "name": "granted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5514,6 +5526,7 @@
             }
           ],
           "isUnique": true,
+          "where": "\"offline_payments\".\"status\" <> 'rejected'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5556,7 +5569,20 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "offline_payments_granted_subscription_id_subscriptions_id_fk": {
+          "name": "offline_payments_granted_subscription_id_subscriptions_id_fk",
+          "tableFrom": "offline_payments",
+          "tableTo": "subscriptions",
+          "columnsFrom": [
+            "granted_subscription_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -5575,6 +5601,14 @@
         "offline_payments_amount_positive": {
           "name": "offline_payments_amount_positive",
           "value": "\"offline_payments\".\"amount_cents\" > 0"
+        },
+        "offline_payments_review_consistency": {
+          "name": "offline_payments_review_consistency",
+          "value": "(\"offline_payments\".\"status\" = 'pending_review') = (\"offline_payments\".\"reviewed_at\" IS NULL)"
+        },
+        "offline_payments_grant_consistency": {
+          "name": "offline_payments_grant_consistency",
+          "value": "(\"offline_payments\".\"status\" = 'approved') = (\"offline_payments\".\"granted_at\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false

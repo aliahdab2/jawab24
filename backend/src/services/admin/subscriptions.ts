@@ -19,6 +19,9 @@ export interface ManualUpgradeResult {
     periodEnd: string;
 }
 
+/** `db` or a transaction handle from `db.transaction(async (tx) => …)`. */
+export type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 class AdminSubscriptionsService {
     /**
      * Manually upgrade (or create) a user's subscription to a plan for N months.
@@ -29,11 +32,15 @@ class AdminSubscriptionsService {
         userId: string,
         body: ManualUpgradeBody,
         adminUserId: string | undefined,
+        // Pass a transaction to make the grant atomic with the caller's own
+        // writes — the Sham Cash review flips a claim to `approved` and grants
+        // in ONE transaction, so "approved but never activated" cannot exist.
+        executor: DbExecutor = db,
     ): Promise<ManualUpgradeResult> {
         const { planId, periodMonths, paymentMethod, paymentReference, note } = body;
 
         // Verify user exists
-        const [user] = await db
+        const [user] = await executor
             .select({ id: users.id, email: users.email })
             .from(users)
             .where(eq(users.id, userId))
@@ -43,7 +50,7 @@ class AdminSubscriptionsService {
         }
 
         // Verify plan exists
-        const [plan] = await db
+        const [plan] = await executor
             .select({ id: plans.id, name: plans.name, slug: plans.slug })
             .from(plans)
             .where(eq(plans.id, planId))
@@ -53,7 +60,7 @@ class AdminSubscriptionsService {
         }
 
         // Existing subscription for audit log
-        const [existingSubscription] = await db
+        const [existingSubscription] = await executor
             .select()
             .from(subscriptions)
             .where(eq(subscriptions.userId, userId))
@@ -65,7 +72,7 @@ class AdminSubscriptionsService {
 
         let newSubscription;
         if (existingSubscription) {
-            [newSubscription] = await db
+            [newSubscription] = await executor
                 .update(subscriptions)
                 .set({
                     planId,
@@ -82,7 +89,7 @@ class AdminSubscriptionsService {
                 .where(eq(subscriptions.id, existingSubscription.id))
                 .returning();
         } else {
-            [newSubscription] = await db
+            [newSubscription] = await executor
                 .insert(subscriptions)
                 .values({
                     userId,
@@ -97,10 +104,10 @@ class AdminSubscriptionsService {
 
         // Reset quota for the new billing period so the customer immediately
         // gets their fresh allowance after renewal.
-        await subscriptionsService.initializeUsagePeriod(userId, now, periodEnd);
+        await subscriptionsService.initializeUsagePeriod(userId, now, periodEnd, executor);
 
         // Audit log
-        await db.insert(adminAuditLogs).values({
+        await executor.insert(adminAuditLogs).values({
             adminUserId,
             targetUserId: userId,
             action: 'manual_upgrade',

@@ -3,7 +3,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { auth } from '../utils/swagger';
 import { adminController } from '../controllers/admin';
 import { offlinePaymentsController } from '../controllers/offlinePayments';
-import { OFFLINE_PAYMENT_STATUSES } from '@jawab24/shared';
+import { OFFLINE_PAYMENT_METHODS, OFFLINE_PAYMENT_STATUSES } from '@jawab24/shared';
 import { AI_COST_PERIODS } from '../services/admin';
 import { sendMerchantEmailBodySchema } from './schemas/sendMerchantEmail';
 
@@ -172,7 +172,29 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
         adminProtected.post(
             '/users/:userId/upgrade',
-            { schema: { tags: ['Admin'], summary: 'Manual subscription upgrade for a user', security: auth, params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] } } },
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Manual subscription upgrade for a user',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    // paymentMethod validated against THE offline list: a typo
+                    // ('shamcash') stored verbatim would not be "offline" to the
+                    // expiry predicate and would collect the Stripe-retry grace —
+                    // the free-refill bug D-110 fixed, re-entering by the back door.
+                    body: {
+                        type: 'object',
+                        required: ['planId', 'periodMonths', 'paymentMethod'],
+                        properties: {
+                            planId: { type: 'string', format: 'uuid' },
+                            periodMonths: { type: 'integer', enum: [1, 3, 6, 12] },
+                            paymentMethod: { type: 'string', enum: [...OFFLINE_PAYMENT_METHODS] },
+                            paymentReference: { type: 'string', maxLength: 255 },
+                            note: { type: 'string', maxLength: 1000 },
+                        },
+                    },
+                },
+            },
             adminController.manualUpgrade,
         );
 
@@ -519,20 +541,23 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         // Offline payments (Sham Cash review queue)
         // ============================================
         //
-        // Reviewing a claim RECORDS a decision; it never opens an account. The
-        // plan is still granted through /users/:userId/upgrade below, which
-        // stays the single grant choke point.
+        // Approving a claim grants the plan atomically through the same
+        // manualUpgrade the /users/:userId/upgrade route uses — one choke point.
 
         adminProtected.get(
             '/offline-payments',
             {
                 schema: {
                     tags: ['Admin'],
-                    summary: 'List offline payment claims (Sham Cash), newest first',
+                    summary: 'List offline payment claims (Sham Cash) — keyset paged; pending oldest first',
                     security: auth,
                     querystring: {
                         type: 'object',
-                        properties: { status: { type: 'string', enum: [...OFFLINE_PAYMENT_STATUSES] } },
+                        properties: {
+                            status: { type: 'string', enum: [...OFFLINE_PAYMENT_STATUSES] },
+                            cursor: { type: 'string', maxLength: 200 },
+                            limit: { type: 'integer', minimum: 1, maximum: 200 },
+                        },
                     },
                 },
             },
@@ -557,7 +582,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             {
                 schema: {
                     tags: ['Admin'],
-                    summary: 'Record approve/reject on a claim (does NOT grant the plan)',
+                    summary: 'Decide a claim. Approving ACTIVATES the plan for the claimed period in the same transaction',
                     security: auth,
                     params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } }, required: ['id'] },
                     body: {

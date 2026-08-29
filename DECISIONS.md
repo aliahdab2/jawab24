@@ -3462,3 +3462,31 @@ pay-TO address printed on the wallet's own QR card and handed to every payer, no
 «Paying from inside Syria?» link that switches `/checkout` to the Sham Cash panel regardless of
 geo. Shown to everyone, because the whole problem is that we cannot tell a VPN'd Syrian from a
 German by IP. The Stripe sanctions block is untouched — this only chooses which panel to render.
+
+**Amended after the persona review (2026-08-29) — five rulings, all in this PR.**
+1. **Approve = grant, in one transaction.** §2 said approving grants nothing and left the grant to a
+   second human step with no key back to the claim, so "approved but never activated" and "granted
+   twice" were unqueryable. Now `review('approved')` calls `manualUpgrade` on the same transaction
+   (the choke point is unchanged — it just runs inside the review), stamps `granted_subscription_id`
+   / `granted_at`, and a DB CHECK makes approved ⇔ granted. Prevention over detection (Rule 14).
+2. **The anti-replay normalizer is a whitelist**, not a separator list: NFKC, then letters and digits
+   only (`Lu/Ll/Lo/N` — tatweel is `Lm`). A zero-width space, the RLM an Arabic keyboard inserts on
+   its own, fullwidth digits — each defeated the first version, so the index was decorative against
+   a deliberate replay. The normalized form is what is length-checked and what may not be empty.
+   The unique index is PARTIAL (`status <> 'rejected'`): a refusal releases the reference.
+3. **One vocabulary.** `OFFLINE_PAYMENT_METHODS` lives in `@jawab24/shared`; the backend set, the
+   admin upgrade route's body schema, the admin modal's options and the three marketplace
+   adopt-over guards (`config/billingRails.ts`) all derive from it. Those guards used to carry
+   literal lists that omitted every offline method — a Salla install would have rewritten a paid
+   Sham Cash row to a 14-day trial.
+4. **The rail's state is observable and its dependency is enforced.** `GET /payment/offline/config`
+   is always 200 (`enabled: false` when off — a 404 was indistinguishable from "route not
+   deployed"); `/health` reports `services.shamCash`; boot logs the switch; boot FAILS if the wallet
+   is set and `ADMIN_EMAILS` is empty; every submit/review/receipt-view writes a log line; a daily
+   digest names claims waiting over 48 h.
+5. **Same-merchant replay is idempotent** (200 with the existing claim — a lost response must not
+   read as "we already have this transfer, try again"), the pending cap is enforced under a per-user
+   advisory lock (a plain count-then-insert let 10 concurrent submits through a cap of 3, measured),
+   and the offline rail applies the same marketplace-billing guard the Stripe entry points apply.
+   Receipt retention is deferred with a stated trigger: `/health` does not track table size; the
+   first admin-stats tile to add is `pg_total_relation_size('offline_payment_receipts')`.

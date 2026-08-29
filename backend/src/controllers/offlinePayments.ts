@@ -3,169 +3,171 @@
  *
  * Two audiences, deliberately in one file because they share the claim's shape:
  * the merchant submits and reads their own claims; an admin lists, views the
- * receipt, and moves the status. Business rules live in
- * `services/offlinePayments.ts`; validation of the uploaded bytes lives here,
- * because it is an HTTP-input concern.
+ * receipt, and decides. Business rules live in `services/offlinePayments.ts`
+ * (including the reviewer notification); shape/bounds validation lives in the
+ * route JSON schemas; this file maps service outcomes to HTTP.
+ *
+ * Error contract — the same as the file these routes extend
+ * (`controllers/payment.ts`): `{ error: <human sentence>, code: <snake_code> }`.
+ * The client discriminates on `code` only, never on the HTTP status, because
+ * the same URL is also answered by the route limiter (`RATE_LIMIT_EXCEEDED`)
+ * and the schema validator (`VALIDATION_ERROR`).
  */
 import { FastifyReply } from 'fastify';
 import {
-    OFFLINE_PAYMENT_NOTE_MAX,
+    normalizeTransferReference,
     OFFLINE_PAYMENT_RECEIPT_MAX_BYTES,
-    OFFLINE_PAYMENT_RECEIPT_MIME_TYPES,
     OFFLINE_PAYMENT_REFERENCE_MAX,
-    OFFLINE_PAYMENT_SENDER_NAME_MAX,
     OFFLINE_PAYMENT_STATUSES,
+    type OfflinePaymentRail,
     type OfflinePaymentStatus,
 } from '@jawab24/shared';
-import { config } from '../config';
-import { offlinePaymentsService } from '../services/offlinePayments';
-import { bufferMatchesMime } from '../services/kb/file-extractor';
-import { normalizeImage } from '../services/imageNormalize';
-import { sendThrottledAdminAlert } from '../services/adminAlerts';
-import { captureError } from '../utils/sentryHelpers';
-import { UUIDSchema } from '../utils/validation';
+import { offlinePaymentsService, type SubmitFailure } from '../services/offlinePayments';
+import { validateAndNormalizeUpload, type UploadedImageCode } from '../services/imageUpload';
 import type { AuthenticatedRequest } from '../middleware/auth';
 
 interface SubmitBody {
-    planId?: string;
-    billingInterval?: string;
-    transferReference?: string;
+    planId: string;
+    billingInterval: 'month' | 'year';
+    rail?: OfflinePaymentRail;
+    transferReference: string;
     senderName?: string;
     note?: string;
     receipt?: { base64?: string; mimeType?: string } | null;
 }
 
-/**
- * Is the Sham Cash rail live? Empty wallet number = OFF, and the whole surface
- * disappears. Fails safe: we never show a merchant a payment panel with no
- * account behind it.
- */
-export function isShamCashConfigured(): boolean {
-    return Boolean(config.shamCash.walletNumber);
+type ErrorCode =
+    | 'reference_required'
+    | 'reference_too_long'
+    | 'offline_payments_unavailable'
+    | 'not_found'
+    | SubmitFailure['reason']
+    | UploadedImageCode;
+
+/** One table: code → status + sentence. The client shows its own i18n by code. */
+const ERRORS: Record<Exclude<ErrorCode, 'marketplace_billed'>, { status: number; message: string }> = {
+    reference_required: { status: 400, message: 'Enter the transfer reference from your receipt' },
+    reference_too_long: { status: 400, message: 'The transfer reference is too long' },
+    offline_payments_unavailable: { status: 403, message: 'Offline payments are not available right now' },
+    not_found: { status: 404, message: 'Claim not found' },
+    plan_not_found: { status: 404, message: 'Plan not found' },
+    plan_not_purchasable: { status: 422, message: 'This plan cannot be bought on this rail' },
+    duplicate_reference: { status: 409, message: 'This transfer reference has already been submitted' },
+    too_many_pending: { status: 429, message: 'You already have transfers awaiting review' },
+    unsupported_image_type: { status: 400, message: 'Use a JPG, PNG, or WEBP image' },
+    invalid_image: { status: 400, message: 'The image could not be read' },
+    image_too_large: { status: 413, message: 'The image is too large (max 2 MB)' },
+    file_content_mismatch: { status: 400, message: 'The image contents do not match its type' },
+    image_unreadable: { status: 400, message: 'The image could not be processed' },
+};
+
+function fail(reply: FastifyReply, code: Exclude<ErrorCode, 'marketplace_billed'>, extra: Record<string, unknown> = {}) {
+    const { status, message } = ERRORS[code];
+    return reply.status(status).send({ error: message, code, ...extra });
+}
+
+/** Is the Sham Cash rail live? Empty wallet number = OFF. */
+function isShamCashConfigured(): boolean {
+    return offlinePaymentsService.getRailConfig() !== null;
 }
 
 export const offlinePaymentsController = {
     /**
-     * GET /payment/offline/config — the wallet details the panel renders.
-     *
-     * Authenticated, and NOT geo-gated — deliberately. A first cut disclosed the
-     * wallet only to a request whose IP resolved to Syria, and that locked out
-     * the very merchants the rail is for: VPN use is routine inside Syria, so
-     * the Syrian merchant looks German to us, sees the card form, and gets a
-     * decline. The wallet number is a pay-TO address that is handed to every
-     * payer (it is printed on the wallet's own QR card), not a secret, so
-     * "logged in" is the right bar. 404 when the rail is off.
+     * GET /payment/offline/config — always 200. `{ enabled: false }` when the
+     * rail is off; a 404 was indistinguishable from a route that does not
+     * exist yet (a frontend-before-backend deploy), so "off" and "not deployed"
+     * looked the same to the client and to Sentry. Authenticated, NOT
+     * geo-gated: VPN use is routine inside Syria, and a pay-TO wallet number
+     * printed on the wallet's own QR card is not a secret.
      */
     async getConfig(request: AuthenticatedRequest, reply: FastifyReply) {
         if (!request.user?.userId) return reply.status(401).send({ error: 'Unauthorized' });
-        if (!isShamCashConfigured()) {
-            return reply.status(404).send({ error: 'offline_payments_unavailable' });
-        }
-        return reply.send({
-            rail: 'sham_cash',
-            walletNumber: config.shamCash.walletNumber,
-            walletName: config.shamCash.walletName || null,
-            qrImageUrl: config.shamCash.qrImageUrl || null,
-            currency: 'usd',
-        });
+        const rail = offlinePaymentsService.getRailConfig();
+        if (!rail) return reply.send({ enabled: false });
+        return reply.send({ enabled: true, ...rail });
     },
 
     /** POST /payment/offline/claims — merchant submits a completed transfer. */
     async submit(request: AuthenticatedRequest, reply: FastifyReply) {
         const userId = request.user?.userId;
         if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-        if (!isShamCashConfigured()) {
-            return reply.status(404).send({ error: 'offline_payments_unavailable' });
-        }
+        if (!isShamCashConfigured()) return fail(reply, 'offline_payments_unavailable');
 
-        const body = (request.body ?? {}) as SubmitBody;
+        const body = request.body as SubmitBody;
 
-        if (!body.planId || !UUIDSchema.safeParse(body.planId).success) {
-            return reply.status(400).send({ error: 'invalid_plan' });
-        }
-        const billingInterval = body.billingInterval === 'year' ? 'year' : 'month';
-
-        const transferReference = (body.transferReference ?? '').trim();
-        if (!transferReference) {
-            return reply.status(400).send({ error: 'reference_required' });
-        }
-        if (transferReference.length > OFFLINE_PAYMENT_REFERENCE_MAX) {
-            return reply.status(400).send({ error: 'reference_too_long' });
-        }
-        const senderName = (body.senderName ?? '').trim().slice(0, OFFLINE_PAYMENT_SENDER_NAME_MAX) || null;
-        const note = (body.note ?? '').trim().slice(0, OFFLINE_PAYMENT_NOTE_MAX) || null;
+        // Validate the NORMALIZED reference — the raw one is bounded by the
+        // schema, but '---' normalizes to '' and 'ß' to 'SS' (longer).
+        const transferReference = body.transferReference.trim();
+        const normalized = normalizeTransferReference(transferReference);
+        if (normalized.length === 0) return fail(reply, 'reference_required');
+        if (normalized.length > OFFLINE_PAYMENT_REFERENCE_MAX) return fail(reply, 'reference_too_long');
 
         // The receipt is OPTIONAL evidence — the reference is what reconciles —
-        // but if one is sent it goes through the same allowlist + magic-byte +
-        // EXIF-strip path every merchant upload uses. EXIF matters more here than
-        // anywhere else: a photographed receipt carries the phone's GPS.
+        // but if one is sent it goes through the same pipeline every merchant
+        // upload uses. EXIF matters more here than anywhere: a photographed
+        // receipt carries the phone's GPS.
         let receipt: { bytes: Buffer; mimeType: string } | null = null;
         if (body.receipt && body.receipt.base64) {
-            const mimeType = body.receipt.mimeType ?? '';
-            if (!OFFLINE_PAYMENT_RECEIPT_MIME_TYPES.includes(mimeType as typeof OFFLINE_PAYMENT_RECEIPT_MIME_TYPES[number])) {
-                return reply.status(400).send({ error: 'unsupported_image_type' });
-            }
-            const buffer = Buffer.from(body.receipt.base64, 'base64');
-            if (buffer.length === 0) return reply.status(400).send({ error: 'invalid_image' });
-            if (buffer.length > OFFLINE_PAYMENT_RECEIPT_MAX_BYTES) {
-                return reply.status(413).send({ error: 'image_too_large' });
-            }
-            if (!bufferMatchesMime(buffer, mimeType)) {
-                return reply.status(400).send({ error: 'file_content_mismatch' });
-            }
-            try {
-                receipt = { bytes: await normalizeImage(buffer, mimeType), mimeType };
-            } catch (err) {
-                captureError(err, 'Offline payment receipt could not be normalized', {
-                    level: 'warning',
-                    fingerprint: ['offline-payment-receipt-normalize-failed'],
-                    tags: { component: 'imageNormalize' },
-                    extra: { userId, mimeType, bytes: buffer.length },
-                });
-                return reply.status(400).send({ error: 'image_unreadable' });
-            }
+            const upload = await validateAndNormalizeUpload({
+                base64: body.receipt.base64,
+                mimeType: body.receipt.mimeType,
+                maxBytes: OFFLINE_PAYMENT_RECEIPT_MAX_BYTES,
+                sentry: {
+                    message: 'Offline payment receipt could not be normalized',
+                    fingerprint: 'offline-payment-receipt-normalize-failed',
+                    extra: { userId },
+                },
+            });
+            if (!upload.ok) return fail(reply, upload.code);
+            receipt = { bytes: upload.bytes, mimeType: upload.mimeType };
         }
 
         const result = await offlinePaymentsService.submit({
             userId,
-            rail: 'sham_cash',
+            rail: body.rail ?? 'sham_cash',
             planId: body.planId,
-            billingInterval,
+            billingInterval: body.billingInterval,
             transferReference,
-            senderName,
-            note,
+            senderName: body.senderName?.trim() || null,
+            note: body.note?.trim() || null,
             receipt,
         });
 
         if (!result.ok) {
-            // 409 for the duplicate: it is a conflict with an existing claim, not
-            // malformed input, and the client shows a distinct message for it —
-            // "we already have this transfer" must never read as "try again".
-            const status = result.reason === 'duplicate_reference' ? 409
-                : result.reason === 'too_many_pending' ? 429
-                    : 400;
-            return reply.status(status).send({ error: result.reason });
+            const { failure } = result;
+            if (failure.reason === 'marketplace_billed') {
+                request.log.info({ userId, code: failure.code }, 'Offline payment claim refused: marketplace-billed account');
+                return reply.status(400).send({ error: failure.message, code: failure.code });
+            }
+            // A cross-account duplicate is the anti-replay guard firing — worth a line.
+            if (failure.reason === 'duplicate_reference') {
+                request.log.warn({ userId, reason: failure.reason }, 'Offline payment claim refused');
+            }
+            return fail(reply, failure.reason);
         }
 
-        // Tell the reviewer there is something to review. Fire-and-forget: the
-        // claim is already recorded, and a mail outage must not fail the
-        // merchant's submission. Dedup key is the claim id, so a retried request
-        // that lands twice still mails once.
-        void sendThrottledAdminAlert({
-            dedupKey: `offline-payment:notify:${result.row.id}`,
-            cooldownSeconds: 24 * 60 * 60,
-            level: 'warning',
-            message: 'Offline payment claim submitted',
-            tags: { component: 'offlinePayments', rail: 'sham_cash' },
-            extra: { claimId: result.row.id, userId, planSlug: result.row.planSlug },
-            subject: `Sham Cash payment to review — ${result.row.planName}`,
-            html: buildReviewEmail(result.row.planName, result.row.billingInterval, result.row.amountCents, result.row.transferReference, result.row.hasReceipt),
-        }).catch(() => { /* best-effort */ });
-
-        return reply.status(201).send({ claim: result.row });
+        const { claim, replayed } = result;
+        if (!replayed) {
+            offlinePaymentsService.notifyReviewer(claim, userId);
+            request.log.info(
+                {
+                    userId,
+                    claimId: claim.id,
+                    rail: claim.rail,
+                    planId: claim.planId,
+                    billingInterval: claim.billingInterval,
+                    amountCents: claim.amountCents,
+                    hasReceipt: claim.hasReceipt,
+                },
+                'Offline payment claim submitted',
+            );
+        }
+        // 201 for a new claim; 200 when the same merchant resent the same
+        // transfer (lost response, double tap) and we returned the existing one.
+        return reply.status(replayed ? 200 : 201).send({ claim });
     },
 
-    /** GET /payment/offline/claims — the merchant's own claims (the «under review» state). */
+    /** GET /payment/offline/claims — the merchant's own claims. Shape enforced by the route's response schema. */
     async listMine(request: AuthenticatedRequest, reply: FastifyReply) {
         const userId = request.user?.userId;
         if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
@@ -173,31 +175,28 @@ export const offlinePaymentsController = {
         return reply.send({ claims });
     },
 
-    /** GET /admin/offline-payments?status=pending_review */
+    /** GET /admin/offline-payments?status=&cursor=&limit= */
     async adminList(request: AuthenticatedRequest, reply: FastifyReply) {
-        const { status } = (request.query ?? {}) as { status?: string };
-        if (status && !OFFLINE_PAYMENT_STATUSES.includes(status as OfflinePaymentStatus)) {
-            return reply.status(400).send({ error: 'invalid_status' });
-        }
-        const claims = await offlinePaymentsService.list({ status: status as OfflinePaymentStatus | undefined });
-        return reply.send({ claims });
+        const { status, cursor, limit } = (request.query ?? {}) as { status?: string; cursor?: string; limit?: number };
+        const page = await offlinePaymentsService.list({
+            status: status && (OFFLINE_PAYMENT_STATUSES as readonly string[]).includes(status) ? (status as OfflinePaymentStatus) : undefined,
+            cursor: cursor ?? null,
+            limit,
+        });
+        return reply.send(page);
     },
 
     /**
      * GET /admin/offline-payments/:id/receipt — the image, from OUR origin.
-     *
      * The bytes live in Postgres precisely so this route is the only way to see
-     * them: a receipt is a financial document and the media bucket is public
-     * (backend/docs/OBJECT_STORAGE.md §4). `no-store` so it is not left in a
-     * shared cache after the reviewer closes the page.
+     * them. `no-store` so it is not left in a shared cache after the reviewer
+     * closes the page. A financial document: the read is logged.
      */
     async adminGetReceipt(request: AuthenticatedRequest, reply: FastifyReply) {
         const { id } = request.params as { id: string };
-        if (!UUIDSchema.safeParse(id).success) {
-            return reply.status(400).send({ error: 'invalid_id' });
-        }
         const receipt = await offlinePaymentsService.getReceipt(id);
-        if (!receipt) return reply.status(404).send({ error: 'not_found' });
+        if (!receipt) return fail(reply, 'not_found');
+        request.log.info({ adminUserId: request.user?.userId, claimId: id }, 'Offline payment receipt viewed');
         return reply
             .header('content-type', receipt.mimeType)
             .header('cache-control', 'no-store')
@@ -206,51 +205,36 @@ export const offlinePaymentsController = {
     },
 
     /**
-     * POST /admin/offline-payments/:id/review — record the decision.
-     *
-     * Recording a decision is NOT granting: the plan is still opened through the
-     * admin manual-upgrade path, which stays the single grant choke point. The
-     * response says so explicitly so a future caller cannot mistake this for an
-     * entitlement write.
+     * POST /admin/offline-payments/:id/review — decide. APPROVE ACTIVATES the
+     * plan for the claimed period in the same transaction (see the service).
+     * 409 carries the current row so a stale queue can replace the card in
+     * place instead of reloading.
      */
     async adminReview(request: AuthenticatedRequest, reply: FastifyReply) {
+        const adminUserId = request.user?.userId;
+        if (!adminUserId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params as { id: string };
-        if (!UUIDSchema.safeParse(id).success) {
-            return reply.status(400).send({ error: 'invalid_id' });
+        const { decision, reviewNote } = request.body as { decision: 'approved' | 'rejected'; reviewNote?: string };
+
+        const result = await offlinePaymentsService.review(id, decision, adminUserId, reviewNote ?? null);
+        if (result.outcome === 'not_found') return fail(reply, 'not_found');
+        if (result.outcome === 'already_reviewed') {
+            return reply.status(409).send({
+                error: 'This claim was already reviewed',
+                code: 'already_reviewed',
+                data: result.claim,
+            });
         }
-        const { decision, reviewNote } = (request.body ?? {}) as { decision?: string; reviewNote?: string };
-        if (decision !== 'approved' && decision !== 'rejected') {
-            return reply.status(400).send({ error: 'invalid_decision' });
-        }
-        const moved = await offlinePaymentsService.review(id, decision, request.user?.userId, reviewNote ?? null);
-        if (!moved) {
-            // Already reviewed, or gone. Not an error the admin caused — the
-            // queue is simply stale; the client refetches.
-            return reply.status(409).send({ error: 'already_reviewed' });
-        }
-        return reply.send({ success: true, grantsSubscription: false });
+        request.log.info(
+            {
+                adminUserId,
+                claimId: id,
+                targetUserId: result.claim.userId,
+                decision,
+                grantedSubscriptionId: result.claim.grantedSubscriptionId,
+            },
+            'Offline payment claim reviewed',
+        );
+        return reply.send({ success: true, data: result.claim });
     },
 };
-
-/** Plain, self-contained review email — no template engine on this path. */
-function buildReviewEmail(
-    planName: string,
-    billingInterval: string,
-    amountCents: number,
-    transferReference: string,
-    hasReceipt: boolean,
-): string {
-    const amount = `$${(amountCents / 100).toFixed(2)}`;
-    const rows: Array<[string, string]> = [
-        ['Plan', `${planName} (${billingInterval === 'year' ? 'yearly' : 'monthly'})`],
-        ['Amount', amount],
-        ['Transfer reference', transferReference],
-        ['Receipt image', hasReceipt ? 'attached — open the admin review page' : 'not provided'],
-    ];
-    const body = rows
-        .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#64748b">${k}</td><td style="padding:4px 0"><strong>${v}</strong></td></tr>`)
-        .join('');
-    return `<p>A merchant submitted a Sham Cash transfer for review.</p>`
-        + `<table style="border-collapse:collapse;font-family:system-ui,sans-serif;font-size:14px">${body}</table>`
-        + `<p style="color:#64748b;font-size:13px">Match the reference against the wallet statement, then grant the plan from the admin customer page. Recording the decision does not open the account by itself.</p>`;
-}

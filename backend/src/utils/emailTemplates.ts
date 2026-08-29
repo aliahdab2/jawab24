@@ -1066,3 +1066,46 @@ export function leadDigestEmailTemplate(params: {
         }),
     };
 }
+
+/**
+ * Reviewer notification: a merchant filed a Sham Cash transfer for review.
+ * Every merchant-typed value is escaped — the reference is the one field this
+ * mail exists to convey, and the first cut interpolated it raw (a 39-char
+ * `<a href>` in the reference field was a styled phishing link in the inbox).
+ */
+export function offlinePaymentReviewEmailTemplate(params: {
+    planName: string;
+    billingInterval: string;
+    amountCents: number;
+    transferReference: string;
+    senderName: string | null;
+    hasReceipt: boolean;
+    reviewUrl: string;
+}): { subject: string; html: string } {
+    const amount = `$${(params.amountCents / 100).toFixed(2)}`;
+    const rows: Array<[string, string]> = [
+        ['Plan', `${escapeHtml(params.planName)} (${params.billingInterval === 'year' ? 'yearly' : 'monthly'})`],
+        ['Amount', escapeHtml(amount)],
+        ['Transfer reference', `<code>${escapeHtml(params.transferReference)}</code>`],
+        ['Sender', params.senderName ? escapeHtml(params.senderName) : '—'],
+        ['Receipt image', params.hasReceipt ? 'attached — open the review queue' : 'not provided'],
+    ];
+    const table = rows
+        .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#64748b">${k}</td><td style="padding:4px 0"><strong>${v}</strong></td></tr>`)
+        .join('');
+    const bodyHtml = `<p style="margin:0 0 16px 0;">A merchant submitted a Sham Cash transfer for review.</p>`
+        + `<table style="border-collapse:collapse;font-family:system-ui,sans-serif;font-size:14px">${table}</table>`
+        + `<p style="margin:16px 0 0 0;"><a href="${escapeHtml(params.reviewUrl)}">Open the review queue</a></p>`
+        + `<p style="color:#64748b;font-size:13px">Match the reference against the wallet statement. Approving activates the plan for the claimed period.</p>`;
+    const subject = `Sham Cash payment to review — ${params.planName}`;
+    const html = emailShell({
+        lang: 'en',
+        dir: 'ltr',
+        bodyFontFamily: 'system-ui, sans-serif',
+        title: subject,
+        preheader: escapeHtml(`${params.planName} — ${amount}`),
+        bodyCellAttrs: standardBodyCell('left', 'system-ui, sans-serif'),
+        bodyHtml,
+    });
+    return { subject, html };
+}

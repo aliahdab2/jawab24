@@ -154,7 +154,28 @@ export function isAllowedAiModel(model: string | null | undefined): model is All
  * THE REFERENCE IS THE ANTI-REPLAY KEY, not a nicety: without uniqueness on it,
  * one screenshot renews a subscription forever.
  */
-export const OFFLINE_PAYMENT_RAILS = ['sham_cash'] as const;
+/**
+ * Every payment method whose billing period is advanced by a HUMAN (support,
+ * after money lands off-platform) rather than by a processor's callbacks.
+ * 'manual' = admin comp / cash, 'bank_transfer' / 'syrian_bank' = the admin
+ * upgrade modal's older options, 'sham_cash' = the Syria rail.
+ *
+ * THE ONE LIST. The backend builds its expiry predicate from it, the admin
+ * upgrade route validates against it, the admin modal renders its options from
+ * it. It used to be copied by hand into five files, and a `paymentMethod` typo
+ * ('shamcash') written through the schema-less upgrade route would have
+ * silently re-opened the free-refill bug D-110 fixed — the string would not be
+ * "offline", so the row would collect the Stripe-retry grace.
+ *
+ * ⛔ A MANAGED rail (stripe, shopify, zid, salla, the coming Paymera) never goes
+ * here: its callbacks advance the period, and classifying it as offline would
+ * expire a properly-billed subscription on date.
+ */
+export const OFFLINE_PAYMENT_METHODS = ['manual', 'bank_transfer', 'syrian_bank', 'sham_cash'] as const;
+export type OfflinePaymentMethod = typeof OFFLINE_PAYMENT_METHODS[number];
+
+/** The offline methods that have a self-serve claim flow at /checkout. A rail IS an offline method. */
+export const OFFLINE_PAYMENT_RAILS = ['sham_cash'] as const satisfies readonly OfflinePaymentMethod[];
 export type OfflinePaymentRail = typeof OFFLINE_PAYMENT_RAILS[number];
 
 export const OFFLINE_PAYMENT_REFERENCE_MAX = 64;
@@ -163,6 +184,12 @@ export const OFFLINE_PAYMENT_NOTE_MAX = 500;
 
 /** Receipt screenshot: OPTIONAL evidence. The reference is what reconciles. */
 export const OFFLINE_PAYMENT_RECEIPT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
+/**
+ * The same cap on the base64 WIRE form, for the route schema — so an oversized
+ * body is refused by the JSON schema before it is parsed into a Buffer, not
+ * after (4/3 expansion + padding).
+ */
+export const OFFLINE_PAYMENT_RECEIPT_BASE64_MAX = Math.ceil(OFFLINE_PAYMENT_RECEIPT_MAX_BYTES / 3) * 4;
 export const OFFLINE_PAYMENT_RECEIPT_MIME_TYPES = UPLOADED_IMAGE_MIME_TYPES;
 
 /**
@@ -177,10 +204,25 @@ export type OfflinePaymentStatus = typeof OFFLINE_PAYMENT_STATUSES[number];
 /**
  * Normalized form of a transfer reference — what the uniqueness constraint sees.
  * Merchants retype the same reference with spaces, dashes, or Arabic-Indic
- * digits; all three spellings must collide, or the replay guard is decorative.
+ * digits; all spellings must collide, or the replay guard is decorative.
+ *
+ * The rule is "letters and digits only, after NFKC, upper-cased" — a
+ * whitelist, not a list of separators to strip. The first cut stripped a hand
+ * list (`[\s\-_./\\]`) and was bypassed by every character that list did
+ * not name: a zero-width space, the RLM/LRM marks an Arabic keyboard inserts
+ * on its own, a soft hyphen, fullwidth digits «８４７１９２０３», tatweel. One
+ * invisible character = a second claim on the same transfer that the index
+ * cannot see and the reviewer cannot tell apart from the statement line.
+ * NFKC folds compatibility forms (fullwidth → ASCII) before the whitelist;
+ * `foldArabicDigits` keeps the Arabic-Indic ranges, which NFKC leaves alone.
+ * The whitelist is Lu/Ll/Lo/N rather than \p{L}: tatweel (U+0640) is a
+ * "modifier letter" (Lm) that \p{L} would keep.
+ *
+ * Can return '' (a reference of only separators) and can be LONGER than the
+ * input ('ß' → 'SS'): callers must validate the normalized length, not the raw.
  */
 export function normalizeTransferReference(raw: string): string {
-    return foldArabicDigits(raw.trim())
+    return foldArabicDigits(raw.normalize('NFKC'))
         .toUpperCase()
-        .replace(/[\s\-_./\\]+/g, '');
+        .replace(/[^\p{Lu}\p{Ll}\p{Lo}\p{N}]/gu, '');
 }

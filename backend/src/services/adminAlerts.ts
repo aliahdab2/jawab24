@@ -13,7 +13,7 @@ import { emailService } from './email';
 export async function sendThrottledAdminAlert(opts: {
     dedupKey: string;
     cooldownSeconds: number;
-    level: 'warning' | 'error';
+    level: 'info' | 'warning' | 'error';
     message: string;
     tags: Record<string, string>;
     extra: Record<string, unknown>;
