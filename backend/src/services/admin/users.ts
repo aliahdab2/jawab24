@@ -333,6 +333,16 @@ class AdminUsersService {
                 whatsappAutoReplyEnabled: pages.whatsappAutoReplyEnabled,
                 whatsappCoexistence: pages.whatsappCoexistence,
                 whatsappDisconnectReason: pages.whatsappDisconnectReason,
+                // "Does a WhatsApp channel exist on this card?" — the token, not the
+                // number, same rule serializePage's `whatsappConnected` applies. Feeds
+                // listPageChannels on both the card and the health flags.
+                whatsappConnected: sql<boolean>`(${pages.whatsappAccessToken} IS NOT NULL AND ${pages.whatsappAccessToken} <> '')`,
+                instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled,
+                // The FACEBOOK channel's toggle. Never the page's reply state on its
+                // own: a WhatsApp-only card has it false by definition, and reading
+                // it as "the page is off" labelled a merchant whose WhatsApp answered
+                // every message as off (2026-08-29). Readers go through
+                // isAnyChannelReplying / listPageChannels.
                 autoReplyEnabled: pages.autoReplyEnabled,
                 autoReplyDisabledReason: pages.autoReplyDisabledReason,
                 // "Is this card's PRIMARY credential valid?" — one of THREE twins:
@@ -883,8 +893,16 @@ class AdminUsersService {
                 id: p.id,
                 name: p.name,
                 disconnected: p.disconnected,
+                // Every channel identity + toggle, so the flags ask the connected
+                // channels rather than the Facebook column (listPageChannels).
+                facebookPageId: p.facebookPageId,
                 autoReplyEnabled: p.autoReplyEnabled,
                 autoReplyDisabledReason: p.autoReplyDisabledReason,
+                instagramAccountId: p.instagramAccountId,
+                instagramUsername: p.instagramUsername,
+                instagramAutoReplyEnabled: p.instagramAutoReplyEnabled,
+                whatsappConnected: p.whatsappConnected,
+                whatsappAutoReplyEnabled: p.whatsappAutoReplyEnabled,
                 replyMode: p.replyMode,
                 replyModeEffective: p.replyModeEffective,
                 // A page pin makes the workspace persona unreachable for this

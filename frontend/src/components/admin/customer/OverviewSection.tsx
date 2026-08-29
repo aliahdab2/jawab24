@@ -8,9 +8,9 @@ import {
     type FormatDate,
     type IntlLocale,
     EMPTY_LEADS,
-    PAGE_OFF_REASON_KEYS,
 } from './types';
 import { PageModeBadges } from './PageModeBadges';
+import { PageChannelStatus } from './PageChannelStatus';
 
 interface Props {
     customer: CustomerDetail;
@@ -127,25 +127,10 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                        <span
-                                            className={clsx(
-                                                'text-xs px-2 py-0.5 rounded-full border whitespace-nowrap',
-                                                p.disconnected
-                                                    ? 'status-error'
-                                                    : p.autoReplyEnabled
-                                                        ? 'status-success'
-                                                        : 'status-warning',
-                                            )}
-                                        >
-                                            {p.disconnected
-                                                ? t('customer.pageDisconnected')
-                                                : p.autoReplyEnabled
-                                                    ? t('customer.pageReplyOn')
-                                                    : t(
-                                                        (p.autoReplyDisabledReason && PAGE_OFF_REASON_KEYS[p.autoReplyDisabledReason])
-                                                        || 'customer.pageReplyOff',
-                                                    )}
-                                        </span>
+                                        {/* Reply pill + per-channel badges. Channel-aware on
+                                            purpose — see PageChannelStatus for the WhatsApp-only
+                                            card this used to label "off". */}
+                                        <PageChannelStatus page={p} />
                                         {/* Mode + persona, on EVERY page. Shared with the
                                             Business Info cards via PageModeBadges — see the
                                             rationale there for why 'sales' is no longer

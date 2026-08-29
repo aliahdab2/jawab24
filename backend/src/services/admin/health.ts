@@ -1,6 +1,6 @@
 import {
-    DEFAULT_AI_MODEL, PAST_DUE_GRACE_DAYS, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus,
-    coerceMultiLang, hasPagePersonaPin,
+    DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus,
+    coerceMultiLang, hasPagePersonaPin, listPageChannels,
 } from '@jawab24/shared';
 import { overlayWorkspaceFields } from '../pipelineFields';
 
@@ -135,8 +135,21 @@ export interface HealthInputPage {
     id: string;
     name: string | null;
     disconnected: boolean;
+    /**
+     * Channel identities + toggles, REQUIRED rather than inherited from the
+     * optional `PageChannelInput` so a caller cannot drop one and silently turn
+     * a channel invisible. `autoReplyEnabled` is the FACEBOOK toggle — false by
+     * definition on a card with no Facebook page — and the auto-reply flags ask
+     * `listPageChannels` instead of it.
+     */
+    facebookPageId: string | null;
     autoReplyEnabled: boolean | null;
     autoReplyDisabledReason: string | null;
+    instagramAccountId: string | null;
+    instagramUsername: string | null;
+    instagramAutoReplyEnabled: boolean | null;
+    whatsappConnected: boolean;
+    whatsappAutoReplyEnabled: boolean | null;
     /**
      * The page's own persona pin (`pages.brand_voice_notes_multi`, D-084). Raw
      * jsonb — normalized here, not trusted, per the double-encoding precedent in
@@ -561,7 +574,14 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
         if (p.disconnected) {
             add('red', 'page_disconnected', scope);
         }
-        if (p.autoReplyEnabled === false) {
+        // "Off" = every CONNECTED channel is off. Keying on the Facebook column
+        // alone flagged a WhatsApp-only card whose WhatsApp was answering every
+        // message (2026-08-29). A card with no connected channel at all is the
+        // `page_disconnected` case above, not an auto-reply one; and a card with
+        // one channel off and another on is not silent — the console's channel
+        // badges show which one, so no flag fires here.
+        const channels = listPageChannels(p);
+        if (channels.length > 0 && !channels.some(c => c.on)) {
             const reason = p.autoReplyDisabledReason;
             if (reason === 'user') {
                 add('yellow', 'auto_reply_user_off', scope);

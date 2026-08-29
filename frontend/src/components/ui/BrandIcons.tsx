@@ -1,5 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
+import { listPageChannels, type PageChannelInput } from '@jawab24/shared';
 import { CHANNEL_GLYPH_PATHS } from '@/constants/brandGlyphs';
 
 /**
@@ -169,34 +170,19 @@ export function ChannelBadges({
   page,
   labels,
 }: {
-  page: {
-    facebookPageId?: string | null;
-    autoReplyEnabled?: boolean | null;
-    instagramAccountId?: string | null;
-    instagramUsername?: string | null;
-    instagramAutoReplyEnabled?: boolean | null;
-    whatsappConnected?: boolean;
-    whatsappAutoReplyEnabled?: boolean | null;
-  };
+  page: PageChannelInput;
   /** Localized "<platform>: <state>" aria labels, keyed by platform */
   labels: { facebook: string; instagram: string; whatsapp: string };
 }) {
-  const channels: Array<{ platform: 'facebook' | 'instagram' | 'whatsapp'; on: boolean; label: string }> = [];
-  if (page.facebookPageId) {
-    channels.push({ platform: 'facebook', on: !!page.autoReplyEnabled, label: labels.facebook });
-  }
-  if (page.instagramAccountId || page.instagramUsername) {
-    channels.push({ platform: 'instagram', on: !!page.instagramAutoReplyEnabled, label: labels.instagram });
-  }
-  if (page.whatsappConnected) {
-    channels.push({ platform: 'whatsapp', on: !!page.whatsappAutoReplyEnabled, label: labels.whatsapp });
-  }
+  // The shared predicate decides which channels exist and which reply — the
+  // support console's page card and health flags read the same one.
+  const channels = listPageChannels(page);
   if (channels.length === 0) return null;
 
   return (
     <span className="inline-flex items-center gap-1 flex-shrink-0" role="group">
-      {channels.map(({ platform, on, label }) => (
-        <PlatformIcon key={platform} platform={platform} size="md" muted={!on} ariaLabel={label} />
+      {channels.map(({ platform, on }) => (
+        <PlatformIcon key={platform} platform={platform} size="md" muted={!on} ariaLabel={labels[platform]} />
       ))}
     </span>
   );
