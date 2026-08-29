@@ -40,7 +40,9 @@ import { isUniqueViolation } from '../utils/dbErrors';
  *
  * The trade: no `postMessage` session info, so the callback discovers the
  * connected assets from the token itself (debug_token granular scopes → WABA →
- * phone numbers) and reads coexistence from Meta's `platform_type` outcome.
+ * phone numbers). Coexistence comes from the SIGNED REQUEST, with Meta's
+ * `platform_type` able only to add it — see the callback for why that field
+ * cannot be trusted to remove it.
  *
  * Rollout flag: `WHATSAPP_CONNECT_REDIRECT` — off = both routes 404 and the
  * popup flow remains the only path (instant rollback).
@@ -527,20 +529,27 @@ export class WhatsAppRedirectController {
             if (!picked.ok) return fail(picked.error);
             const candidate = picked.candidate;
 
-            // Coexistence is Meta's OUTCOME, read from the number itself: SMB_APP =
-            // the number still lives on the merchant's phone (never Cloud-register
-            // it), CLOUD_API = migrated. When Meta omits platform_type we fall back
-            // to the REQUESTED path from the signed state — safe in the dangerous
-            // direction, because a coexistence request never registers, and a
-            // migration request only produces SMB_APP if Meta ignored the requested
-            // featureType, which the wizard does not do.
-            const coexistence = candidate.platformType === 'SMB_APP'
-                ? true
-                : candidate.platformType === 'CLOUD_API'
-                    ? false
-                    : state.coexistence;
-            if (candidate.platformType === undefined) {
-                request.log.warn({ phoneNumberId: candidate.id }, '[WhatsApp redirect] platform_type missing; using requested path');
+            // Coexistence is STICKY: a number the merchant explicitly onboarded as
+            // a coexistence number must NEVER be Cloud-registered, because
+            // registering takes it off their phone. Meta's `platform_type` may only
+            // ADD coexistence (SMB_APP when a migration request was ignored) — it
+            // may never remove it.
+            //
+            // This used to read the other way round: CLOUD_API overrode the signed
+            // request, on the assumption that the field is authoritative once the
+            // wizard has finished. It is NOT. On 2026-08-29 the first real
+            // coexistence connect in production came back `platform_type:
+            // CLOUD_API` for a number Meta then refused to register — «Register
+            // endpoint is not available for SMB businesses» (metaCode 100), i.e.
+            // Meta itself classified the very same number as SMB. Every coexistence
+            // connect died on that line, and the merchant was left with a number
+            // linked at Meta and no page here.
+            const coexistence = state.coexistence || candidate.platformType === 'SMB_APP';
+            if (state.coexistence && candidate.platformType !== 'SMB_APP') {
+                request.log.warn(
+                    { phoneNumberId: candidate.id, platformType: candidate.platformType ?? null },
+                    '[WhatsApp redirect] platform_type did not confirm coexistence; honouring the requested path',
+                );
             }
 
             // One number = one page, platform-wide. Same-page reconnect is allowed.
