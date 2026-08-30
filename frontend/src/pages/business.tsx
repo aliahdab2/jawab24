@@ -248,7 +248,7 @@ function BusinessPageInner() {
     () => { void invalidatePageQueries(); },
   );
 
-  // «معلومات إضافية» always starts collapsed: every fact now has its own
+  // «أسئلة شائعة ومعلومات أخرى» always starts collapsed: every fact now has its own
   // structured editor, so the free-text box is the overflow surface (FAQs,
   // one-off details) — not the place a merchant should land by default.
   const [infoOpen, setInfoOpen] = useState(false);
