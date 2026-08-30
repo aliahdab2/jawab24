@@ -225,7 +225,9 @@ export default function AuthCallback() {
         return;
       }
       if (data.zidOnboarding) {
-        routerRef.current.replace('/zid/onboarding', '/zid/onboarding', { locale: finalLocale });
+        // The embedded Zid wizard is retired (D-119): a freshly provisioned Zid
+        // merchant lands directly on the connect flow in the full app.
+        routerRef.current.replace('/pages?connectFacebook=true', '/pages?connectFacebook=true', { locale: finalLocale });
         return;
       }
 

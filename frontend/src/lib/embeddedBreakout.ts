@@ -55,7 +55,11 @@ export async function openTopLevelAuthenticated(
     // `await` has lost the user gesture and is blocked by default. `noopener` is
     // not passed because it makes window.open return null, leaving nothing to
     // point at the URL — the opener is severed manually instead.
-    const tab = window.open('', '_blank');
+    //
+    // The NAMED target makes repeat clicks reuse ONE tab instead of piling up a
+    // new authenticated tab per click — a merchant who opens Jawab24 from the
+    // Zid card daily would otherwise collect a row of stale duplicates.
+    const tab = window.open('', 'jawab24');
     if (tab) tab.opener = null;
 
     const go = (url: string) => {
