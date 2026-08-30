@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseKnowledgeBase, serializeSections } from './knowledgeBaseParser';
-import { SECTION_CONFIGS, EMOJI_TO_SECTION, CUSTOM_SECTION_MARKER } from './types';
+import { SECTION_CONFIGS, EMOJI_TO_SECTION, CUSTOM_SECTION_MARKER, isCustomSection } from './types';
+import type { KnowledgeSection } from './types';
 
 /**
  * The serialized KB is a FILE FORMAT, not a view. Every merchant's
@@ -50,7 +51,14 @@ describe('knowledgeBaseParser — stored header bytes', () => {
     const once = parseKnowledgeBase(stored);
     const twice = parseKnowledgeBase(serializeSections(once));
 
-    expect(twice).toEqual(once);
+    // Custom sections are minted `custom:${Date.now()}_${n}` on every parse, so
+    // two parses a millisecond apart legitimately differ in that id — it is an
+    // editor handle, not stored content. Compare everything BUT that stamp.
+    // (First version of this test compared ids and failed in the deploy gate
+    // while passing locally — the two parses had landed in the same ms.)
+    const stable = (sections: KnowledgeSection[]) =>
+      sections.map(({ id, ...rest }) => ({ ...rest, id: isCustomSection(id) ? 'custom' : id }));
+    expect(stable(twice)).toEqual(stable(once));
     expect(once.find((s) => s.id === 'products')?.content).toBe('دورة اللغة الإنجليزية.');
     expect(once.find((s) => s.title === 'الفروع')?.content).toBe('دمشق — البرامكة');
     // The preamble is filed under notes, ahead of the notes section's own lines.

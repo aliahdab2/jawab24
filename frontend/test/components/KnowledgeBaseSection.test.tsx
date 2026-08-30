@@ -1,11 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { Store } from 'lucide-react';
 import { KnowledgeBaseSection } from '@/components/knowledge-base/KnowledgeBaseSection';
 import type { KnowledgeSection, SectionConfig } from '@/components/knowledge-base/types';
 
+// A hand-built config, not SECTION_CONFIGS[0]: the char-count behaviour under
+// test must not depend on which marker/icon the real preset carries.
 const config: SectionConfig = {
   id: 'products',
   emoji: '🛍️',
+  icon: Store,
   titleKey: 'section.productsLabel',
   descKey: 'section.productsDesc',
   placeholderKey: 'section.productsPlaceholder',
