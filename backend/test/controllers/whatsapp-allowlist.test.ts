@@ -43,6 +43,14 @@ vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { can
 vi.mock('../../src/services/channelTrial', () => ({ channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn().mockReturnValue([]) } }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn() } }));
+// The connect path consults the marketplace channel gate (D-117), which would
+// otherwise run a real ecommerce query against this suite's minimal schema mock
+// (no `ecommerceStores`). This suite is about the ALLOWLIST gate — keep WhatsApp
+// available so the allowlisted case proceeds.
+vi.mock('../../src/services/whatsappAvailability', () => ({
+    getWhatsAppUnavailableReason: vi.fn(async () => null),
+    WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE: { error: '', code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE', marketplace: 'zid' },
+}));
 
 import { whatsappController } from '../../src/controllers/whatsapp';
 import { pagesService } from '../../src/services/pages';

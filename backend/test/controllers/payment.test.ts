@@ -36,6 +36,11 @@ vi.mock('../../src/services/stripe', () => ({
 // Defaults to "no marketplace stores" so no pre-existing case changes behaviour.
 vi.mock('../../src/services/ecommerce', () => ({
     hasActiveStoreForBillingSubject: vi.fn(async () => false),
+    // resolveMarketplaceBilling (real, imported by payment.ts) calls this
+    // unconditionally in its store-rail section — a null means "no Zid store",
+    // the default for these Stripe-billing tests. Without it the guard at the
+    // top of every payment handler throws (undefined()) and each test 500s.
+    getActiveStoreForBillingSubject: vi.fn(async () => null),
 }));
 
 vi.mock('../../src/db', () => ({
@@ -172,8 +177,9 @@ describe('Payment Controller', () => {
         vi.clearAllMocks();
         // clearAllMocks drains calls but NOT implementations, so a test that
         // connects a marketplace store must not leak into the next one.
-        const { hasActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
+        const { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
         vi.mocked(hasActiveStoreForBillingSubject).mockImplementation(async () => false);
+        vi.mocked(getActiveStoreForBillingSubject).mockImplementation(async () => null);
         paymentController = new PaymentController();
 
         mockReply = {
@@ -317,8 +323,12 @@ describe('Payment Controller', () => {
         });
 
         it('rejects a Zid merchant with 400 ZID_BILLED before any Stripe call', async () => {
-            const { hasActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
+            // Since #983 the Zid store-rail verdict comes from
+            // getActiveStoreForBillingSubject (the row), not hasActiveStoreForBillingSubject.
+            const { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
             vi.mocked(hasActiveStoreForBillingSubject).mockImplementation(async p => p === 'zid');
+            vi.mocked(getActiveStoreForBillingSubject).mockImplementation(async p =>
+                p === 'zid' ? { id: 's-zid', platformData: { merchantId: '3195980' } } : null);
 
             await paymentController.createCheckoutSession(mockRequest, mockReply);
 
@@ -340,8 +350,12 @@ describe('Payment Controller', () => {
             ['cancelSubscription', {}],
             ['createBillingPortalSession', {}],
         ] as const)('%s rejects a Zid merchant with 400 ZID_BILLED', async (method, body) => {
-            const { hasActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
+            // Since #983 the Zid store-rail verdict comes from
+            // getActiveStoreForBillingSubject (the row), not hasActiveStoreForBillingSubject.
+            const { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject } = await import('../../src/services/ecommerce');
             vi.mocked(hasActiveStoreForBillingSubject).mockImplementation(async p => p === 'zid');
+            vi.mocked(getActiveStoreForBillingSubject).mockImplementation(async p =>
+                p === 'zid' ? { id: 's-zid', platformData: { merchantId: '3195980' } } : null);
             mockRequest.body = body;
 
             await (paymentController[method] as (req: unknown, rep: unknown) => Promise<unknown>)(
