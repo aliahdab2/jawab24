@@ -475,7 +475,7 @@ describe('Zid Controller', () => {
             const msUntilExpiry = storeArg.tokenExpiresAt.getTime() - Date.now();
             expect(msUntilExpiry).toBeGreaterThan(360 * 24 * 60 * 60 * 1000);
             expect(msUntilExpiry).toBeLessThan(370 * 24 * 60 * 60 * 1000);
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/pages?connectFacebook=true');
         });
 
         it('should register webhooks with the credential pair AND the new store id', async () => {
@@ -684,7 +684,7 @@ describe('Zid Controller', () => {
             // lands in the app with a real session instead.
             expect(mockSetEmbeddedTokenHash).not.toHaveBeenCalled();
             expect(rep.redirect).toHaveBeenCalledWith(
-                'https://jawab24.com/auth/sync?code=handoff-code-xyz&redirect=%2Fzid%2Fonboarding',
+                'https://jawab24.com/auth/sync?code=handoff-code-xyz&redirect=%2Fpages%3FconnectFacebook%3Dtrue',
             );
         });
 
@@ -734,7 +734,7 @@ describe('Zid Controller', () => {
             // Worse product (the merchant meets the login page) but not an
             // escalation. The install guarantees a workspace, so this is a guard.
             expect(mockMintBrowserHandoffCode).not.toHaveBeenCalled();
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/pages?connectFacebook=true');
         });
 
         it('should NOT register an embedded token or override the redirect for a merchant-initiated connect', async () => {
@@ -759,7 +759,7 @@ describe('Zid Controller', () => {
             // The merchant already has a session; they belong in onboarding, and
             // an embedded token is still registered so the dashboard entry works.
             expect(mockRegisterEmbeddedToken).toHaveBeenCalled();
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/pages?connectFacebook=true');
         });
 
         it('should redirect with error on token exchange failure', async () => {
@@ -818,7 +818,7 @@ describe('Zid Controller', () => {
 
             expect(mockVerifyToken).toHaveBeenCalledWith('jwt_token_from_header');
             expect(mockGetUserWorkspaces).toHaveBeenCalledWith('user-456');
-            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/pages?connectFacebook=true');
         });
 
         it('should enqueue sync after creating store for logged-in user', async () => {

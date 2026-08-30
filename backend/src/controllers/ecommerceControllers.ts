@@ -74,6 +74,13 @@ export interface EcommerceControllerAdapter {
     // --- Optional platform hooks (all default to the pre-hook behavior) ---
 
     /**
+     * Where a completed install lands when postInstall does not override the
+     * redirect. Defaults to `/${platform}/onboarding` (Shopify/Salla wizards);
+     * Zid retired its wizard (D-119) and lands on the connect flow instead.
+     */
+    onboardingPath?: string;
+
+    /**
      * Auto-provision a merchant account from the platform-asserted store
      * identity, for App Market installs that arrive with no Jawab24 session
      * ("direct merchant access, no sign-in prompt" — the Zid review standard).
@@ -223,7 +230,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                 const redirectOverride = adapter.postInstall
                     ? await adapter.postInstall(store, tokens, storeInfo, false, request.log)
                     : null;
-                return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
+                return reply.redirect(redirectOverride ?? `${frontendUrl}${adapter.onboardingPath ?? `/${platform}/onboarding`}`);
             } else {
                 // --- NOT LOGGED IN (platform-initiated install) ---
                 const existingStore = await getStoreByDomain(platform, storeInfo.storeDomain);
@@ -250,7 +257,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                         // override is normally set (Zid sends them to the framed
                         // dashboard); this fallback only fires for a platform that
                         // reactivates without its own post-install redirect.
-                        return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
+                        return reply.redirect(redirectOverride ?? `${frontendUrl}${adapter.onboardingPath ?? `/${platform}/onboarding`}`);
                     }
                     if (existingStore.isActive) {
                         return reply.redirect(`${frontendUrl}/login?${platform}_error=already_connected`);
@@ -269,7 +276,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                         const redirectOverride = adapter.postInstall
                             ? await adapter.postInstall(store, tokens, storeInfo, true, request.log)
                             : null;
-                        return reply.redirect(redirectOverride ?? `${frontendUrl}/${platform}/onboarding`);
+                        return reply.redirect(redirectOverride ?? `${frontendUrl}${adapter.onboardingPath ?? `/${platform}/onboarding`}`);
                     }
                 }
 

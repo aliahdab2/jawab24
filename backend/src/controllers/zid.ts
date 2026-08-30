@@ -607,6 +607,9 @@ export const {
     // for its existing owner (fresh tokens, fresh embedded token) instead of
     // bouncing them to a login page saying it is already connected.
     reinstallPolicy: 'reactivate-for-owner',
+    // D-119: the embedded wizard is retired — every install path that does not
+    // carry a postInstall handoff lands on the connect flow in the full app.
+    onboardingPath: '/pages?connectFacebook=true',
 
     onDisconnect: (storeId, log) => revokeEmbeddedToken(storeId, log, 'disconnect'),
 
@@ -662,6 +665,8 @@ export const {
             embeddedPlatform: 'zid',
             workspaceId,
         });
-        return `${config.frontendUrl}/auth/sync?code=${encodeURIComponent(code)}&redirect=${encodeURIComponent('/zid/onboarding')}`;
+        // D-119: the embedded wizard is retired — a browser install lands on the
+        // connect flow in the full app, the same destination the launchpad uses.
+        return `${config.frontendUrl}/auth/sync?code=${encodeURIComponent(code)}&redirect=${encodeURIComponent('/pages?connectFacebook=true')}`;
     },
 });
