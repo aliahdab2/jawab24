@@ -39,7 +39,7 @@ describe('openTopLevelAuthenticated', () => {
 
         // A popup opened after an `await` has lost the user gesture and is
         // blocked by default — so it must already exist at this point.
-        expect(openSpy).toHaveBeenCalledWith('', '_blank');
+        expect(openSpy).toHaveBeenCalledWith('', 'jawab24');
         resolveMint({ data: { code: 'handoff-code' } });
         await pending;
     });
@@ -51,8 +51,10 @@ describe('openTopLevelAuthenticated', () => {
         await openTopLevelAuthenticated('/pages');
 
         // `noopener` would make window.open return null, leaving nothing to
-        // point at the URL — so it is severed by hand instead.
-        expect(openSpy).toHaveBeenCalledWith('', '_blank');
+        // point at the URL — so it is severed by hand instead. The NAMED
+        // target makes repeat clicks reuse one tab instead of piling up
+        // duplicates.
+        expect(openSpy).toHaveBeenCalledWith('', 'jawab24');
         expect(tab.opener).toBeNull();
     });
 
