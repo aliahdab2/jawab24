@@ -39,9 +39,17 @@ export function isFramed(): boolean {
  * whole feature and has to stay pinned.
  *
  * @param path in-app destination, e.g. `/pages`
+ * @param options.locale the frame's UI language, carried into the tab as the
+ *   URL locale prefix. Without it the tab opens on the default locale, and
+ *   `_app.tsx` then re-routes to the browser's persisted FIRST-PARTY language —
+ *   an Arabic merchant landed on `/en/pages` (2026-08-30).
  */
-export async function openTopLevelAuthenticated(path: string): Promise<void> {
+export async function openTopLevelAuthenticated(
+    path: string,
+    options: { locale?: string } = {},
+): Promise<void> {
     if (typeof window === 'undefined') return;
+    const localePrefix = options.locale ? `/${options.locale}` : '';
 
     // Opened SYNCHRONOUSLY inside the click handler: a popup opened after an
     // `await` has lost the user gesture and is blocked by default. `noopener` is
@@ -67,7 +75,7 @@ export async function openTopLevelAuthenticated(path: string): Promise<void> {
 
     try {
         const { data } = await api.post<{ code: string }>('/auth/browser-handoff');
-        go(`/auth/sync?code=${encodeURIComponent(data.code)}&redirect=${encodeURIComponent(path)}`);
+        go(`${localePrefix}/auth/sync?code=${encodeURIComponent(data.code)}&redirect=${encodeURIComponent(path)}`);
     } catch (err) {
         captureError(err, 'Embedded break-out handoff failed', { tags: { context: 'embedded-breakout' } });
         // Last resort: the destination without a session. It shows a login wall

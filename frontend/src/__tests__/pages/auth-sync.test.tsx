@@ -7,8 +7,10 @@ vi.mock('axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
 const mockSetAuth = vi.hoisted(() => vi.fn());
 const mockSetWorkspaces = vi.hoisted(() => vi.fn());
+const mockSetLanguage = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/store', () => ({
     useAuthStore: () => ({ setAuth: mockSetAuth, setWorkspaces: mockSetWorkspaces }),
+    useUIStore: { getState: () => ({ setLanguage: mockSetLanguage }) },
 }));
 
 const mockCaptureError = vi.hoisted(() => vi.fn());
@@ -18,11 +20,12 @@ vi.mock('@/lib/sentryHelpers', () => ({ captureError: mockCaptureError }));
 // effect on every setStatus render — the real router is referentially stable).
 const { mockRouterReplace, routerState } = vi.hoisted(() => ({
     mockRouterReplace: vi.fn(),
-    routerState: { query: {} as Record<string, string> },
+    routerState: { query: {} as Record<string, string>, locale: undefined as string | undefined },
 }));
 const stableRouter = vi.hoisted(() => ({
     isReady: true,
     get query() { return routerState.query; },
+    get locale() { return routerState.locale; },
     replace: mockRouterReplace,
 }));
 vi.mock('next/router', () => ({ useRouter: () => stableRouter }));
@@ -43,7 +46,25 @@ describe('AuthSync page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         routerState.query = {};
+        routerState.locale = undefined;
         mockApiRoutes();
+    });
+
+    // Mutation-checked: removing the setLanguage call fails the first assertion;
+    // dropping the `{ locale }` from router.replace fails the second.
+    it("adopts the URL locale into the UI store and forwards WITH it — the frame's language survives the break-out", async () => {
+        routerState.locale = 'ar';
+        routerState.query = { code: 'opaque-handoff-code', redirect: '/pages?connectFacebook=true' };
+        mockedAxios.post.mockResolvedValue({ data: { token: 'session-token', defaultWorkspaceId: 'ws-1' } });
+
+        render(<AuthSync />);
+
+        // _app.tsx re-routes the NEXT page to the persisted language; without this
+        // an Arabic merchant breaking out of the Zid frame landed on /en/pages.
+        await waitFor(() => expect(mockSetLanguage).toHaveBeenCalledWith('ar'));
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith(
+            '/pages?connectFacebook=true', undefined, { locale: 'ar' },
+        ));
     });
 
     it('token path (mobile deep link): uses the token as the session and forwards to redirect', async () => {

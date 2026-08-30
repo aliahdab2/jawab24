@@ -60,6 +60,7 @@
     "welcomeBenefit3": "Products sync automatically — takes about 2 minutes",
     "welcomeCta": "Get Started",
     "doneCheckProducts": "{count, plural, one {# product synced} other {# products synced}}",
-    "doneCheckPage": "{name} linked"
+    "doneCheckPage": "{name} linked",
+    "doneSignInHint": "Your Jawab24 account is your Zid store — open it any time from the Zid dashboard. To use the Jawab24 web or mobile app, sign in with the Facebook account linked to your page."
   }
 }

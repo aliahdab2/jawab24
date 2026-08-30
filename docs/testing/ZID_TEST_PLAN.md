@@ -120,7 +120,11 @@ surprise.
   **6 registered / 0 failed** (`lastAttempt` 2026-08-22T09:23:52Z). Zid accepted 7367.
   ⚠️ Scope of the proof: this settles the **webhook** half only. The same value is also read
   as `app_id` on the billing subscription (§H) — unproven until a subscription envelope lands.
-- ☐ What auth `app.market.*` lifecycle deliveries carry (F-2 / C11) — still open.
+- ✅ **2026-08-30 — NONE.** `app.market.*` lifecycle deliveries carry **no `Authorization`
+  header** (F-2 / C11, captured live on the dev-store Deactivate: UA `GuzzleHttp/7`, 497-byte
+  JSON body, headers host/x-request-id/traceparent only). The handler had been answering 401.
+  Resolved by D-114 (verify via Zid's API, `services/zidLifecycle.ts`); the body SHAPE is still
+  uncaptured — the handler now logs it.
 
 ---
 
@@ -422,6 +426,14 @@ call with them 401s — verify, don't assume).
 Basic auth → decide between a separate lifecycle route with store cross-check vs relying
 on sync-failure reauth marking — **decide from the capture, don't pre-build**.
 
+✅ **DECIDED 2026-08-30 from the capture (D-114): NO Basic auth.** Neither pre-built option
+was taken: same route, same store resolution, but the uninstall is **verified against Zid**
+(`probeZidToken` on `/v1/managers/account/profile` — 401 ⇒ token dead ⇒ uninstall real)
+before any write, and an unconfirmed delivery leaves an `uninstallSignalAt` marker for the
+15-min `ZidUninstallSweep`. Re-run of F-2 owed after deploy: expect the log line `Zid
+lifecycle webhook received` followed by `finalizeZidUninstall` effects (store inactive, hash
+NULL, mirror cancelled) — and record the body keys the handler now logs.
+
 ### F-3. Reinstall
 **Steps:** Reinstall + reconnect.
 
@@ -435,6 +447,11 @@ webhooks re-registered 6/6.
 - **G-1.** Cross-workspace store access: workspace B hits `GET /zid/store/products`
   scoped to workspace A's store → 403 or correctly-scoped empty result.
 - **G-2.** Webhook spoofing: valid-shaped body, wrong Basic credentials → 401, no writes.
+- **G-2b.** (D-114) Lifecycle spoofing: `POST /zid/webhooks?e=app.market.application.uninstall`
+  with a real store id and NO auth, while the store's token is live → **200, store stays
+  active**, `platformData.uninstallSignalAt` written, nothing else changes; a second POST
+  within 60 s is throttled (no probe). `?e=app.market.subscription.active` with a fake
+  `plan_name` → one `syncZidBilling` (reads Zid, ignores the body), no plan change.
 - **G-3.** Workspace B's AI replies never surface workspace A's Zid catalog (DM test).
 - **G-4.** ✅ **pinned 2026-08-23** — Cross-workspace `:storeId` routes: workspace B hits
   `/notification-templates/<A's store>` (GET/PUT/reset), `/notification-log/<A's store>`
@@ -649,12 +666,17 @@ assets are still Salla's. Do not read this heading as "ready".
 | L-4 | Navigate inside the iframe (dashboard → business info → settings) | Every page renders framed; no blank frame, no XFO/CSP error in the console | Console log if it fails |
 | L-5 | Let the access token expire (>15 min idle), then act | Session re-mints silently from the stored UUID; merchant is NOT bounced to `/login` | — |
 | L-6 | Reinstall the app after an uninstall | A NEW UUID is registered; the store is reactivated for its ORIGINAL owner and workspace (never re-bound, never `already_connected`) | C14: the reinstall callback |
-| L-7 | Uninstall, then replay the OLD iframe URL | `POST /zid/embedded/session` → 401; `embedded_token_hash` is NULL in the DB | C15: the uninstall delivery |
+| L-7 | Uninstall, then replay the OLD iframe URL | `POST /zid/embedded/session` → 401; `embedded_token_hash` is NULL in the DB. ⚠️ 2026-08-30: the delivery ARRIVED (C15 headers captured) but was **401'd by our Basic gate** — the hash survived until the account was deleted by hand. Fixed by D-114; re-run after deploy | C15: headers ✅ 2026-08-30 (no auth, UA GuzzleHttp/7); body shape still owed |
 | L-8 | Disconnect from inside Jawab24 (Integrations → Disconnect), then replay the iframe URL | 401 — a merchant-side disconnect must close the dashboard entry too | — |
 | L-9 | **Takeover guard:** set the dev store's email to an address that already has a Jawab24 account, then install logged-out | NO auto-login. Falls back to the claim-after-login flow; the existing account is untouched | — |
 | L-10 | `curl -sI https://jawab24.com/zid/embedded` | No `X-Frame-Options` header; CSP `frame-ancestors` names dashboard.zid.sa + web.zid.sa, and does NOT contain `zid.dev` | — |
 | L-11 | **Scope:** inside the frame, try to reach the admin console or switch to another of the owner's workspaces (set `X-Workspace-Id` to a different one) | 403 `WORKSPACE_SCOPE_DENIED` / `ADMIN_REQUIRED`. The embedded session sees ONLY the store's workspace; even an owner who is a Jawab24 admin gets no admin surface | DevTools network tab |
 | L-12 | **Credential hygiene:** after the frame loads, inspect the address bar, `nginx` access log for `/zid/embedded`, and any Sentry event | No `?token=<uuid>` anywhere — stripped from the URL, path-only in the log, `REDACTED` in Sentry | — |
+| L-19 | **(D-A) Logout inside the frame:** open the app from the Zid dashboard, look for Logout in the sidebar and the mobile «More» sheet | **No Logout control** in either. Let the session expire (or clear the credential): the frame lands on `/zid/embedded?expired=1` («تعذّر فتح التطبيق» + reopen from Zid) — never `/login`. 2026-08-30 baseline: the login page rendered inside the dashboard | screenshot of the frame |
+| L-20 | **Pricing inside the frame:** open «باقات الاشتراك» from the frame on the dev store | Only الأعمال + الاحترافي cards; no monthly/yearly toggle; the banner carries **«إدارة الباقة في زد»**; clicking it navigates the TOP window (not a new tab) to `dashboard.zid.sa/ar-sa/stores/3195980/apps/7367/plans`. 2026-08-30 baseline: four USD plans, no link | the plans page URL |
+| L-21 | **Wizard after the break-out:** from step 2 press «اربط صفحة فيسبوك», connect in the tab, return to the frame | The new tab opened on `/ar/...` and went straight to the Facebook dialog (no second "Facebook page" choice); back in the frame the page is listed WITHOUT pressing رجوع; reload the frame mid-wizard → it resumes at the derived step | — |
+| L-22 | **Truthful auto-reply row:** finish the wizard with a page whose channel trial is spent (the dev store's page), press «تفعيل الآن» | The row says the page is still off and links to Channels; it never says «مفعّلة» while `pages.auto_reply_enabled=false` | DB read of the page flags |
+| L-23 | **Adopt at install (Z-16):** reinstall on a store whose Zid subscription is a real plan | Within seconds of the callback the local subscription mirrors Zid's plan and its trial end (`payment_method='zid'`); the frame's usage strip shows Zid's plan, not «المبتدئ · 30 يوم». On the dev store (system «اختبار» plan) nothing changes — expected | `subscriptions` row |
 | L-13 | **Idle expiry:** leave a store's embedded entry unused for >30 days (or set `embedded_token_last_used_at` back in the DB), then open it | 401 — the merchant reopens/reinstalls to mint a fresh UUID | — |
 | L-14 | **Workspace guarantee:** provision a merchant whose store email matches a *pending workspace invite*, then open the app | The merchant still owns a personal workspace (the invite does not suppress it); store reads do not 404 | — |
 | L-15 | **No pages yet:** open the freshly-provisioned app in the frame; on the "connect a page" step | An actionable **"Connect a Facebook page"** button (not a dead sentence); it opens Jawab24 in a NEW top-level tab (facebook.com cannot be framed) **and that tab arrives SIGNED IN — never on `/login`**. Run it as a merchant with no password/Facebook/phone, which is every auto-provisioned merchant | C16: the new tab opening |

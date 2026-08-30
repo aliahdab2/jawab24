@@ -16,6 +16,9 @@ const mockResolveZidCredentials = vi.fn().mockResolvedValue({
     managerToken: 'zid_access_token',
     authorizationToken: 'zid_auth_token',
 });
+// D-114: an uninstall delivery is confirmed by Zid having killed our token.
+// 'revoked' by default so the pre-existing uninstall cases keep deactivating.
+const mockProbeZidToken = vi.fn().mockResolvedValue('revoked');
 
 vi.mock('../../src/services/zid', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../src/services/zid')>();
@@ -30,6 +33,7 @@ vi.mock('../../src/services/zid', async (importOriginal) => {
         registerEmbeddedToken: (...args: unknown[]) => mockRegisterEmbeddedToken(...args),
         deleteEmbeddedToken: (...args: unknown[]) => mockDeleteEmbeddedToken(...args),
         resolveZidCredentials: (...args: unknown[]) => mockResolveZidCredentials(...args),
+        probeZidToken: (...args: unknown[]) => mockProbeZidToken(...args),
     };
 });
 
@@ -168,6 +172,8 @@ vi.mock('../../src/config', () => ({
             hostName: 'jawab24.com',
             webhookSecret: 'test_zid_webhook_secret',
             scopes: 'offline_access products.read orders.read webhooks.manage',
+            // D-114 default (ZID_LIFECYCLE_VERIFY unset). One test flips it off.
+            lifecycleVerify: true,
         },
         // Read by the shared token refresher's selector (imported via services/zid).
         salla: { skipPullRefreshForEasyMode: false },
@@ -210,6 +216,11 @@ import {
     linkPage,
     embeddedSession,
 } from '../../src/controllers/zid';
+import { config } from '../../src/config';
+import { redis } from '../../src/lib/redis';
+
+/** `applySyncedStoreInfo` is the platformData writer the uninstall marker goes through. */
+import { applySyncedStoreInfo } from '../../src/services/ecommerce';
 
 const VALID_TOKENS = {
     accessToken: 'zid_access_token',
@@ -275,6 +286,9 @@ describe('Zid Controller', () => {
         mockVerifyWebhookBasicAuth.mockReturnValue(true);
         mockGetStoreById.mockResolvedValue(null);
         mockResolveStoreByDomainOrMerchant.mockResolvedValue(null);
+        mockProbeZidToken.mockResolvedValue('revoked');
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        config.zid.lifecycleVerify = true;
     });
 
     // --- authRedirect ---
@@ -354,6 +368,44 @@ describe('Zid Controller', () => {
             expect(mockCreatePendingInstall).not.toHaveBeenCalled();
             expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('dashboard.zid.sa'));
             expect(rep.status).not.toHaveBeenCalledWith(400);
+        });
+
+        /**
+         * Z-16: an App Market merchant subscribed at Zid BEFORE OAuth, so the
+         * plan and its 14-day trial exist the moment the install lands. Adopt
+         * them now instead of leaving the jawab24.com signup trial («المبتدئ ·
+         * 30 يوم») in place until a webhook or the 6h reconciler catches up.
+         */
+        it('adopts the Zid subscription at install — verify-first, fire-and-forget, never blocking the redirect', async () => {
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            let resolveSync: (v: unknown) => void = () => {};
+            mockSyncZidBilling.mockReturnValueOnce(new Promise((res) => { resolveSync = res; }));
+            const req = mockRequest({ query: { code: 'code123', state: 'zid_state_abc' }, cookies: {} });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            // The redirect went out while the Merchant API round-trip was still pending.
+            expect(mockSyncZidBilling).toHaveBeenCalledWith('store-1', expect.anything());
+            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('dashboard.zid.sa'));
+            resolveSync({ outcome: 'non_entitling_plan', changed: false });
+        });
+
+        it('a failed adopt-at-install is logged, not fatal — the reconciler retries', async () => {
+            mockProvisionMerchantUser.mockResolvedValueOnce({ id: 'new-merchant-1' });
+            mockSyncZidBilling.mockRejectedValueOnce(new Error('Zid 500'));
+            const req = mockRequest({ query: { code: 'code123', state: 'zid_state_abc' }, cookies: {} });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+            // Let the rejected promise's catch run.
+            await new Promise((r) => setImmediate(r));
+
+            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('dashboard.zid.sa'));
+            expect(req.log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ storeId: 'store-1' }),
+                expect.stringContaining('adopt-at-install failed'),
+            );
         });
 
         it('should reject when signed cookie is invalid', async () => {
@@ -842,6 +894,151 @@ describe('Zid Controller', () => {
                 { scheme: 'Basic' },
                 expect.stringContaining('Zid webhook rejected'),
             );
+        });
+    });
+
+    // --- Webhook: App Market lifecycle deliveries (D-114) ---
+    //
+    // Configured in the Partner Dashboard, not registered per store, so Zid sends
+    // them with NO Authorization header (captured live 2026-08-30, C11). They are
+    // triggers verified against Zid's API; nothing in the body is trusted.
+
+    describe('webhookHandler — lifecycle events carry no Basic auth (D-114)', () => {
+        const ACTIVE_STORE = {
+            id: 'store-1', platform: 'zid', isActive: true, storeDomain: 'my-zid-store.zid.store',
+        };
+
+        /** A Partner-Dashboard delivery: event in the target_url query, no Authorization at all. */
+        function lifecycleRequest(event: string, body: Record<string, unknown> = { store_id: '67890' }) {
+            return mockRequest({ headers: {}, query: { e: event }, body });
+        }
+
+        it('accepts an unauthenticated uninstall without consulting the Basic verifier, and finalizes it once Zid reports our token dead', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+            const order: string[] = [];
+            mockProbeZidToken.mockImplementationOnce(async () => { order.push('probe'); return 'revoked'; });
+            mockDeleteEmbeddedToken.mockImplementationOnce(async () => { order.push('delete-at-zid'); });
+            mockSetEmbeddedTokenHash.mockImplementationOnce(async () => { order.push('clear-hash'); });
+            mockCancelZidSubscriptionLocal.mockImplementationOnce(async () => { order.push('cancel-billing'); return true; });
+            mockDeactivateStore.mockImplementationOnce(async () => { order.push('deactivate'); });
+
+            const req = lifecycleRequest('app.market.application.uninstall');
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockVerifyWebhookBasicAuth).not.toHaveBeenCalled();
+            expect(order).toEqual(['probe', 'delete-at-zid', 'clear-hash', 'cancel-billing', 'deactivate']);
+            expect(mockDeactivateStore).toHaveBeenCalledWith('zid', 'my-zid-store.zid.store');
+            expect(rep.status).toHaveBeenCalledWith(200);
+            // The envelope shape is logged for the still-open C11/C15 capture.
+            expect(req.log.info).toHaveBeenCalledWith(
+                expect.objectContaining({ event: 'app.market.application.uninstall', authScheme: 'none', bodyKeys: ['store_id'] }),
+                'Zid lifecycle webhook received',
+            );
+        });
+
+        it.each([
+            ['valid', 'Zid still honours our token (delivery outran the invalidation, or a spoof)'],
+            ['unreachable', 'Zid cannot be reached to confirm'],
+        ])('leaves the store ACTIVE and records the signal when the probe says %s — %s', async (probe) => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+            mockProbeZidToken.mockResolvedValue(probe);
+
+            const req = lifecycleRequest('app.market.application.uninstall');
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(mockCancelZidSubscriptionLocal).not.toHaveBeenCalled();
+            expect(mockSetEmbeddedTokenHash).not.toHaveBeenCalled();
+            expect(mockDeleteEmbeddedToken).not.toHaveBeenCalled();
+            expect(vi.mocked(applySyncedStoreInfo)).toHaveBeenCalledWith(
+                'store-1', {}, { uninstallSignalAt: expect.any(String) },
+            );
+            expect(req.log.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ storeId: 'store-1' }),
+                expect.stringContaining('NOT confirmed'),
+            );
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('returns 200 and touches nothing for an unauthenticated uninstall naming an unknown store', async () => {
+            const rep = mockReply();
+            await webhookHandler(lifecycleRequest('app.market.application.uninstall', { store_id: 'nope' }), rep);
+
+            expect(mockProbeZidToken).not.toHaveBeenCalled();
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(vi.mocked(applySyncedStoreInfo)).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('throttles repeated uninstall deliveries for one store to one probe per window', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+            vi.mocked(redis.set).mockResolvedValueOnce(null);
+
+            const rep = mockReply();
+            await webhookHandler(lifecycleRequest('app.market.application.uninstall'), rep);
+
+            expect(vi.mocked(redis.set)).toHaveBeenCalledWith('zid:lifecycle:uninstall:store-1', '1', 'EX', 60, 'NX');
+            expect(mockProbeZidToken).not.toHaveBeenCalled();
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('triggers a billing verify on an unauthenticated subscription event, passing only the store id', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+
+            const rep = mockReply();
+            await webhookHandler(
+                lifecycleRequest('app.market.subscription.active', {
+                    store_id: '67890',
+                    // Misleading on purpose — must never reach the database.
+                    plan_name: 'الاحترافي',
+                    subscription_status: 'active',
+                }),
+                rep,
+            );
+
+            expect(mockVerifyWebhookBasicAuth).not.toHaveBeenCalled();
+            expect(mockSyncZidBilling).toHaveBeenCalledWith('store-1', expect.anything());
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('throttles repeated subscription triggers for one store to one verify per window', async () => {
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+            vi.mocked(redis.set).mockResolvedValueOnce(null);
+
+            const rep = mockReply();
+            await webhookHandler(lifecycleRequest('app.market.subscription.renew'), rep);
+
+            expect(vi.mocked(redis.set)).toHaveBeenCalledWith('zid:lifecycle:subscription:store-1', '1', 'EX', 60, 'NX');
+            expect(mockSyncZidBilling).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('kill switch: with ZID_LIFECYCLE_VERIFY=off a lifecycle delivery goes back through the Basic gate and is rejected', async () => {
+            config.zid.lifecycleVerify = false;
+            mockVerifyWebhookBasicAuth.mockReturnValue(false);
+            mockResolveStoreByDomainOrMerchant.mockResolvedValue(ACTIVE_STORE);
+
+            const rep = mockReply();
+            await webhookHandler(lifecycleRequest('app.market.application.uninstall'), rep);
+
+            expect(mockVerifyWebhookBasicAuth).toHaveBeenCalledWith(undefined);
+            expect(rep.status).toHaveBeenCalledWith(401);
+            expect(mockProbeZidToken).not.toHaveBeenCalled();
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
+        });
+
+        it('a PER-STORE event without Authorization is still rejected — the Basic gate is unchanged for API-registered events', async () => {
+            mockVerifyWebhookBasicAuth.mockReturnValue(false);
+            mockGetStoreById.mockResolvedValue(ACTIVE_STORE);
+
+            const rep = mockReply();
+            await webhookHandler(mockRequest({ headers: {}, query: { e: 'product.update', sid: 'store-1' } }), rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
+            expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
         });
     });
 

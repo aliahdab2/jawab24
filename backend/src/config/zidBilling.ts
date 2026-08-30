@@ -51,11 +51,11 @@ export const ZID_BILLED_CODE: MarketplaceBilledCode = 'ZID_BILLED';
  * The Partner-Dashboard plan ids, which are what a subscription payload
  * identifies a plan by when it carries an id at all.
  *
- * PROVISIONAL pricing (owner defers the final numbers until WHT is confirmed):
- * 3740 «الأعمال» 189 SAR · 3741 «الاحترافي» 379 SAR, recurring monthly with a
- * 14-day trial. A stray free plan 3956 «اختبار» exists in the dashboard and is
- * queued for deletion; it is absent here ON PURPOSE — an unmapped id fails loud
- * rather than activating someone on a guessed tier.
+ * Pricing (D-095 / D-103, website parity): 3740 «الأعمال» 146 SAR · 3741
+ * «الاحترافي» 296 SAR ex-VAT, recurring monthly with a 14-day trial. The free
+ * system plan 3956 «اختبار» cannot be deleted (Zid `cannot_delete_system_plan`);
+ * it is absent here ON PURPOSE — an unmapped id fails loud rather than
+ * activating someone on a guessed tier.
  */
 const ZID_PLAN_ID_TO_SLUG: Record<string, ZidBillablePlanSlug> = {
     '3740': 'business',
@@ -155,17 +155,48 @@ export function isZidBilled(row: {
     return row.paymentMethod === 'zid' && row.status !== 'canceled';
 }
 
+export type ZidDashboardLocale = 'ar' | 'en';
+export type ZidDashboardAppPage = 'embedded' | 'plans';
+
 /**
- * Where a Zid merchant manages their own subscription.
+ * A merchant-dashboard deep link into OUR app:
+ * `https://dashboard.zid.sa/{ar-sa|en-sa}/stores/{merchantId}/apps/{appId}/{page}`.
+ *
+ * Observed live 2026-08-30 on the dev store: the app's Overview page links
+ * "Upgrade plan" / "Manage" to `/plans`, and Zid's own post-install redirect
+ * lands on `/embedded`. `stores/{id}` and the locale segment may be any valid
+ * value — Zid's Hermes resolves the real store and language from the merchant's
+ * dashboard session — but the merchant's own values are used when known.
+ */
+export function buildZidDashboardAppUrl(
+    merchantId: string,
+    page: ZidDashboardAppPage,
+    locale: ZidDashboardLocale = 'ar',
+): string {
+    const localeSegment = locale === 'en' ? 'en-sa' : 'ar-sa';
+    return `https://dashboard.zid.sa/${localeSegment}/stores/${encodeURIComponent(merchantId)}/apps/${encodeURIComponent(config.zid.appId)}/${page}`;
+}
+
+/**
+ * Where a Zid merchant manages their own subscription: the plans page of OUR
+ * app inside THEIR dashboard.
  *
  * Unlike Salla (free-tier only, so there is nowhere to send anyone), Zid SELLS
- * our paid plans — refusing Stripe without offering a destination would be a
- * dead end of exactly the class the embedded flow just fixed. Returns undefined
- * until `ZID_APP_MARKET_URL` is configured: the App Market URL shape is not in
- * Zid's docs and has never been observed, and inventing one would send
- * merchants to a 404. Consumers must treat undefined as "suppress Stripe but
+ * our paid plans — refusing Stripe without offering a destination was a dead
+ * end of exactly the class the embedded flow fixed: the pricing banner said
+ * "managed in the Zid App Market" with nothing to click. The URL shape was
+ * kept unguessed until it was observed (D-073); it was, on 2026-08-30. Needs
+ * the store's merchant id (`platformData.merchantId`, captured at install);
+ * without one there is still no link. `ZID_APP_MARKET_URL`, when set, wins as
+ * an explicit override. Consumers must treat undefined as "suppress Stripe but
  * show no link", never as "no suppression".
  */
-export function buildZidManageUrl(): string | undefined {
-    return config.zid.appMarketUrl || undefined;
+export function buildZidManageUrl(
+    merchantId?: string | null,
+    locale: ZidDashboardLocale = 'ar',
+): string | undefined {
+    if (config.zid.appMarketUrl) return config.zid.appMarketUrl;
+    const id = merchantId?.trim();
+    if (!id || !config.zid.appId) return undefined;
+    return buildZidDashboardAppUrl(id, 'plans', locale);
 }

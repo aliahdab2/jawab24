@@ -13,7 +13,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebAuthedUrl } from '@/lib/webUrl';
 import { captureError } from '@/lib/sentryHelpers';
-import { getMarketplaceBilling, MARKETPLACE_COPY } from '@/lib/marketplaceBilling';
+import { getMarketplaceBilling, MARKETPLACE_COPY, openMarketplaceManageUrl } from '@/lib/marketplaceBilling';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 
 interface UseSelectPlanArgs {
@@ -72,14 +72,14 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     // generic error from the 400 — no explanation, no destination.
     //
     // An absent manageUrl means "suppress, but we have no link to offer"
-    // (Salla has no plan to manage; Zid until ZID_APP_MARKET_URL is observed
-    // rather than guessed) — it NEVER means "let them through".
+    // (Salla has no plan to manage; a Zid store with no captured merchant id)
+    // — it NEVER means "let them through".
     const marketplace = getMarketplaceBilling(usage);
     if (marketplace) {
       if (marketplace.manageUrl) {
-        // openExternalUrl, not a raw anchor: on native this must open in the
-        // system browser / Custom Tab like every other external billing surface.
-        await openExternalUrl(marketplace.manageUrl);
+        // Inside the platform frame this navigates the dashboard that frames
+        // us; elsewhere it is the external-URL path (system browser on native).
+        await openMarketplaceManageUrl(marketplace.manageUrl, router.locale);
       } else {
         toast.info(tPricing(MARKETPLACE_COPY[marketplace.marketplace].toast));
       }

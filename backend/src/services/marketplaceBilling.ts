@@ -1,7 +1,18 @@
 import { hasLiveStripeBilling, isSallaBilled, SALLA_BILLED_CODE, buildSallaManageUrl } from '../config/sallaBilling';
 import { isShopifyBilled, SHOPIFY_BILLED_CODE, buildShopifyManageUrl } from '../config/shopifyBilling';
 import { isZidBilled, ZID_BILLED_CODE, buildZidManageUrl } from '../config/zidBilling';
-import { hasActiveStoreForBillingSubject } from './ecommerce';
+import { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject } from './ecommerce';
+
+/**
+ * The Zid manage link needs the store's merchant id (captured at install as
+ * `platformData.merchantId`); an account with no active Zid store, or a store
+ * that predates the id, gets no link — never a guessed one (D-073).
+ */
+async function zidManageUrlFor(userId: string): Promise<string | undefined> {
+    const store = await getActiveStoreForBillingSubject('zid', userId);
+    const merchantId = (store?.platformData as { merchantId?: unknown } | null | undefined)?.merchantId;
+    return buildZidManageUrl(typeof merchantId === 'string' ? merchantId : undefined);
+}
 
 /**
  * **The** marketplace-billing guard: may this account's paid plans go through
@@ -37,9 +48,10 @@ export interface MarketplaceBillingVerdict {
     /**
      * Where the merchant manages their own plan. Undefined when the marketplace
      * has no self-serve destination we can name — Salla (free-tier only, so
-     * there is no plan to manage) and Zid until `ZID_APP_MARKET_URL` is
-     * configured. Consumers must treat undefined as "suppress Stripe but show
-     * no link", NEVER as "no suppression".
+     * there is no plan to manage) and a Zid store whose merchant id was never
+     * captured. For Zid it is the plans page of our app inside the merchant's
+     * dashboard (`buildZidManageUrl`, observed 2026-08-30). Consumers must treat
+     * undefined as "suppress Stripe but show no link", NEVER as "no suppression".
      */
     manageUrl?: string;
 }
@@ -91,7 +103,7 @@ export async function resolveMarketplaceBilling(
             marketplace: 'zid',
             code: ZID_BILLED_CODE,
             message: 'Paid plans for Zid merchants are billed through the Zid App Market',
-            manageUrl: buildZidManageUrl(),
+            manageUrl: await zidManageUrlFor(userId),
         };
     }
 
@@ -119,12 +131,14 @@ export async function resolveMarketplaceBilling(
         };
     }
 
-    if (await hasActiveStoreForBillingSubject('zid', userId)) {
+    const zidStore = await getActiveStoreForBillingSubject('zid', userId);
+    if (zidStore) {
+        const merchantId = (zidStore.platformData as { merchantId?: unknown } | null | undefined)?.merchantId;
         return {
             marketplace: 'zid',
             code: ZID_BILLED_CODE,
             message: 'Paid plans for Zid merchants are billed through the Zid App Market',
-            manageUrl: buildZidManageUrl(),
+            manageUrl: buildZidManageUrl(typeof merchantId === 'string' ? merchantId : undefined),
         };
     }
 

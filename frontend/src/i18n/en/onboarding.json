@@ -60,5 +60,7 @@
   "storeAutoReplyActive": "Auto-replies are on",
   "storeAutoReplyOff": "Auto-replies are off — turn them on so Jawab24 starts answering your customers",
   "storeAutoReplyEnable": "Turn on now",
-  "storeAutoReplyEnableFailed": "Couldn't turn auto-replies on. Please try again."
+  "storeAutoReplyEnableFailed": "Couldn't turn auto-replies on. Please try again.",
+  "storeAutoReplyPageOff": "Auto-replies are on, but your page is still off — turn it on from Channels (a paid plan may be required).",
+  "storeAutoReplyManageChannels": "Open Channels"
 }

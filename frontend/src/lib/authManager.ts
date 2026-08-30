@@ -100,6 +100,30 @@ class AuthManager {
   }
 
   /**
+   * The embedded entry page for a platform frame — the only honest place a
+   * signed-out merchant can land there: it explains how to reopen the app.
+   */
+  private static embeddedEntryPath(platform: string): string {
+    return `/${platform}/embedded?expired=1`;
+  }
+
+  /**
+   * Where a signed-out (or never-signed-in) user belongs.
+   *
+   * Inside a platform dashboard frame that is the embedded entry, never
+   * `/login`: the merchant was auto-provisioned from their store and has no
+   * credentials to pass a login wall with, and a sign-in prompt inside the
+   * frame is the exact defect the embedded flow exists to remove (Zid
+   * rejection 2026-08-10; the login page was observed inside the Zid dashboard
+   * again on 2026-08-30, reached through the three hard-coded
+   * `router.push('/login')` sites). Every one of them reads this instead (D-A).
+   */
+  signedOutPath(): string {
+    const platform = typeof window !== 'undefined' ? getEmbeddedPlatform() : null;
+    return platform ? AuthManager.embeddedEntryPath(platform) : '/login';
+  }
+
+  /**
    * Centralized logout - clears all auth state
    * This is the ONLY place logout should happen to ensure consistency
    */
@@ -182,7 +206,7 @@ class AuthManager {
           // Embedded: back to the entry page, which shows "reopen the app from
           // your dashboard" rather than a login form we know cannot be used.
           if (!currentPath.includes(`/${embeddedPlatform}/embedded`)) {
-            window.location.href = `/${embeddedPlatform}/embedded?expired=1`;
+            window.location.href = AuthManager.embeddedEntryPath(embeddedPlatform);
           }
         } else if (!currentPath.includes('/login') && currentPath !== '/' && !currentPath.match(/^\/[a-z]{2}\/?$/)) {
           window.location.href = '/login';

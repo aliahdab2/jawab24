@@ -36,7 +36,7 @@ import {
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyBasicAuthHeader } from '../utils/basicAuthVerify';
-import { ecommerceApiGet } from '../utils/httpRetry';
+import { ecommerceApiGet, EcommerceApiHttpError } from '../utils/httpRetry';
 import {
     normalizeHttpUrl,
     normalizePhoneEntries,
@@ -181,6 +181,51 @@ export async function exchangeCodeForToken(code: string): Promise<ZidTokenRespon
  */
 export function verifyWebhookBasicAuth(authorizationHeader: string | undefined): boolean {
     return verifyBasicAuthHeader(authorizationHeader, ZID_WEBHOOK_BASIC_USER, config.zid.webhookSecret);
+}
+
+// --- App Market lifecycle deliveries (Partner Dashboard, NOT per-store) ---
+
+/**
+ * App-lifecycle (`app.market.application.*`) and subscription
+ * (`app.market.subscription.*`) events are configured once in the Zid PARTNER
+ * DASHBOARD — they are never registered through /v1/managers/webhooks, so no
+ * username/password can be attached to them, and Zid delivers them with NO
+ * `Authorization` header at all. Captured live 2026-08-30 (ZID_TEST_PLAN C11):
+ * UA `GuzzleHttp/7`, headers host/x-request-id/traceparent only. The Basic
+ * gate therefore cannot apply to them; they are verified against Zid's API
+ * instead (services/zidLifecycle.ts, D-114). Per-store events keep the gate.
+ */
+export const ZID_LIFECYCLE_EVENT_PREFIX = 'app.market.';
+
+export function isZidLifecycleEvent(event: string): boolean {
+    return event.startsWith(ZID_LIFECYCLE_EVENT_PREFIX);
+}
+
+export type ZidTokenProbe = 'valid' | 'revoked' | 'unreachable';
+
+/**
+ * Ask Zid whether OUR credential for this store is still alive.
+ *
+ * Reads the store profile — a `/v1/managers/*` endpoint, which resolves the
+ * store from the token and ignores `Store-Id`, so a 401 here means exactly
+ * "token revoked". (The store API at `/v1/products/` also 401s on a MISSING
+ * `Store-Id`, which would make it useless as a probe — see resolveZidCredentials.)
+ * Zid invalidates the store's tokens when the merchant uninstalls, which is what
+ * turns an unauthenticated uninstall delivery into proof: the delivery says
+ * "uninstalled", the dead token confirms it. 403 is folded into `revoked`
+ * because the install flow itself reads this endpoint with the same token, so a
+ * valid token is never forbidden here.
+ */
+export async function probeZidToken(creds: ZidCredentials): Promise<ZidTokenProbe> {
+    try {
+        await zidApiGet('https://api.zid.sa/v1/managers/account/profile', creds);
+        return 'valid';
+    } catch (err) {
+        if (err instanceof EcommerceApiHttpError && (err.status === 401 || err.status === 403)) {
+            return 'revoked';
+        }
+        return 'unreachable';
+    }
 }
 
 // --- Webhook Registration ---
