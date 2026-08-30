@@ -58,6 +58,8 @@
     "transcribing": "Transcribing...",
     "reviewHint": "Review and edit if needed",
     "micDenied": "Microphone access denied. Check your browser settings.",
+    "micNotFound": "No microphone found. Connect one and try again.",
+    "micUnavailable": "Microphone is unavailable. Close other apps using it and try again.",
     "failed": "Voice transcription failed. Try again."
   },
   "uploadFile": "Upload file",

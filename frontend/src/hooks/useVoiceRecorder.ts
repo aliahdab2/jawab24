@@ -107,6 +107,32 @@ function blobToBase64(blob: Blob): Promise<string> {
   );
 }
 
+/**
+ * A getUserMedia / native-recorder start rejection is almost always a user
+ * ENVIRONMENT condition — no microphone attached, permission denied, or the
+ * device is busy/unreadable — not an application bug. Those must reach the user
+ * as a specific, actionable message but must NOT be reported to Sentry, where
+ * they are pure noise (JAWAB24-FRONTEND-3E: "NotFoundError: Requested device not
+ * found" fired once from a machine with no microphone). Only a genuinely
+ * unexpected failure is captured.
+ */
+function classifyStartError(err: unknown): { code: string; report: boolean } {
+  if (err instanceof DOMException) {
+    switch (err.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return { code: 'mic_permission_denied', report: false };
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return { code: 'mic_not_found', report: false };
+      case 'NotReadableError':
+      case 'AbortError':
+        return { code: 'mic_unavailable', report: false };
+    }
+  }
+  return { code: 'recording_failed', report: true };
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -256,12 +282,13 @@ export function useVoiceRecorder({
       webRef.current = null;
       setState('idle');
 
-      if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        onErrorRef.current?.('mic_permission_denied');
-      } else {
+      // Expected user-environment failures (no mic, denied, device busy) are
+      // surfaced to the user but kept out of Sentry — see classifyStartError.
+      const { code, report } = classifyStartError(err);
+      if (report) {
         captureError(err instanceof Error ? err : new Error(String(err)), 'Voice recording failed to start');
-        onErrorRef.current?.('recording_failed');
       }
+      onErrorRef.current?.(code);
     }
   }, [state, native, clearTimers, stopRecording]);
 

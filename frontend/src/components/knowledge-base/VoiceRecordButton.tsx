@@ -5,6 +5,16 @@ import { useTranslations } from 'next-intl';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useHintDisplay } from '@/hooks/useHintDisplay';
 
+/**
+ * Recorder error code → `kb.voice.*` message key. Unmapped codes (empty/short
+ * recording, empty transcription) fall back to the generic `voice.failed`.
+ */
+const VOICE_ERROR_HINT_KEYS: Record<string, string> = {
+  mic_permission_denied: 'voice.micDenied',
+  mic_not_found: 'voice.micNotFound',
+  mic_unavailable: 'voice.micUnavailable',
+};
+
 interface VoiceRecordButtonProps {
   /** Called with transcribed text — component does NOT set textarea value directly */
   onTranscribed: (text: string) => void;
@@ -38,10 +48,18 @@ export function VoiceRecordButton({
     showHint(tKb('voice.reviewHint'));
   }, [onTranscribed, showHint, tKb]);
 
+  // Surface recorder failures to the user instead of failing silently. The hook
+  // no longer reports environment conditions (no mic / denied / busy) to Sentry,
+  // so this message is the only feedback the user gets.
+  const handleError = useCallback((code: string) => {
+    showHint(tKb(VOICE_ERROR_HINT_KEYS[code] ?? 'voice.failed'));
+  }, [showHint, tKb]);
+
   const { state, elapsed, startRecording, stopRecording, isSupported } = useVoiceRecorder({
     languageHint,
     quality: 'accurate',
     onTranscribed: handleTranscribed,
+    onError: handleError,
   });
 
   if (!isSupported) return null;
