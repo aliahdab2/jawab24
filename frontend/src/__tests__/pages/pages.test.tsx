@@ -117,6 +117,21 @@ vi.mock('@/lib/browserEnv', () => ({
     isMobileBrowser: () => mockIsMobileBrowser,
 }));
 
+// Platform-frame flag (the Zid dashboard iframe). null = an ordinary web tab,
+// which is what every pre-existing test exercises.
+let mockEmbeddedPlatform: 'zid' | null = null;
+vi.mock('@/lib/embeddedSession', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/embeddedSession')>()),
+    getEmbeddedPlatform: () => mockEmbeddedPlatform,
+}));
+
+// The embedded break-out mints a handoff code and opens a signed-in top-level
+// tab; assertions here are about WHETHER it ran and WHERE it pointed.
+const mockOpenTopLevelAuthenticated = vi.fn();
+vi.mock('@/lib/embeddedBreakout', () => ({
+    openTopLevelAuthenticated: (...args: unknown[]) => mockOpenTopLevelAuthenticated(...args),
+}));
+
 vi.mock('@/components/layout/DashboardLayout', () => ({
     DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -1855,6 +1870,140 @@ describe('PagesPage - Instagram-only demand signal', () => {
  * Mutation-checked: restoring `if (whatsappVisible && whatsappEntitled === true)`
  * fails the first case (no picker) and the third (title reads "My Pages").
  */
+/**
+ * Facebook connect from INSIDE a platform dashboard frame (Zid). facebook.com
+ * sends X-Frame-Options: DENY, so `window.location.href = oauthUrl` inside the
+ * iframe dead-ends on «www.facebook.com refused to connect» — seen live on the
+ * dev store while the page's token was revoked (2026-08-30). The frame has to
+ * break OUT to a signed-in top-level tab, which then resumes via
+ * ?connectFacebook=true and navigates itself to Facebook.
+ *
+ * Mutation-checked: deleting the `getEmbeddedPlatform()` branch in
+ * handleReconnectFacebook fails the two embedded cases; deleting the resume
+ * hook fails the web-resume case; deleting the resume's in-frame guard fails
+ * the embedded-resume case. The plain-web case pins the pre-existing path.
+ */
+describe('PagesPage - Facebook connect inside a platform frame breaks out to a top-level tab', () => {
+    const DEAD_PAGE = {
+        id: 'page_dead',
+        facebookPageId: 'fb_dead',
+        name: 'Jawab24 Test',
+        autoReplyEnabled: true,
+        instagramAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: '',
+        isConnected: false,
+        whatsappConnected: false,
+    };
+    let originalLocation: Location;
+    // A plain object so `href` is a writable data property the handler can set.
+    let location: { href: string; assign: ReturnType<typeof vi.fn> };
+
+    const setPages = (pages: unknown[]) =>
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: pages },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+    beforeEach(() => {
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', 'app123');
+        // WhatsApp + Instagram-direct dark → «Connect» collapses to the Facebook dialog.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+        vi.stubEnv('NEXT_PUBLIC_INSTAGRAM_DIRECT_ENABLED', '');
+        mockUsagePlan(false);
+        setPages([]);
+        originalLocation = window.location;
+        location = { ...originalLocation, href: '', assign: vi.fn() };
+        Object.defineProperty(window, 'location', { value: location, writable: true, configurable: true });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true });
+        mockEmbeddedPlatform = null;
+        mockRouterQuery = {};
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    const openConnectDialog = async () => {
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getByText(enPages.connectPage)).toBeInTheDocument());
+        fireEvent.click(screen.getAllByText(enPages.connectPage)[0]);
+        return screen.getByTestId('confirmation-modal');
+    };
+
+    const confirm = async () => {
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.continueToFacebook));
+        });
+    };
+
+    it('EMBEDDED: «Connect» explains the new tab, and confirming breaks out instead of navigating the frame', async () => {
+        mockEmbeddedPlatform = 'zid';
+        const modal = await openConnectDialog();
+        expect(modal).toHaveTextContent(enPages.connectNewTabHint);
+
+        await confirm();
+
+        expect(mockOpenTopLevelAuthenticated).toHaveBeenCalledWith('/pages?connectFacebook=true');
+        // The frame itself must never be pointed at facebook.com.
+        expect(location.href).toBe('');
+    });
+
+    it('EMBEDDED: the reconnect banner takes the same break-out', async () => {
+        mockEmbeddedPlatform = 'zid';
+        setPages([DEAD_PAGE]);
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getByText(enPages.reconnectRequired)).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText(enPages.reconnect, { selector: 'button' }));
+        expect(screen.getByTestId('confirmation-modal')).toHaveTextContent(enPages.connectNewTabHint);
+        await confirm();
+
+        expect(mockOpenTopLevelAuthenticated).toHaveBeenCalledWith('/pages?connectFacebook=true');
+        expect(location.href).toBe('');
+    });
+
+    it('WEB (unchanged): confirming navigates this tab to the Facebook OAuth dialog, no break-out, no hint', async () => {
+        const modal = await openConnectDialog();
+        expect(modal).not.toHaveTextContent(enPages.connectNewTabHint);
+
+        await confirm();
+
+        expect(location.href).toContain('https://www.facebook.com/');
+        expect(location.href).toContain('/dialog/oauth');
+        expect(mockOpenTopLevelAuthenticated).not.toHaveBeenCalled();
+    });
+
+    it('?connectFacebook=true in the broken-out tab continues to Facebook with no click, then strips the param', async () => {
+        mockRouterQuery = { connectFacebook: 'true' };
+        renderPage(<PagesPage />);
+
+        // 3s: the resume waits for the pages query + router readiness (as the
+        // WhatsApp resume above does).
+        await waitFor(() => {
+            expect(location.href).toContain('/dialog/oauth');
+        }, { timeout: 3000 });
+        expect(mockOpenTopLevelAuthenticated).not.toHaveBeenCalled();
+        expect(mockRouterReplace).toHaveBeenCalledWith(
+            expect.objectContaining({ query: expect.not.objectContaining({ connectFacebook: expect.anything() }) }),
+            undefined,
+            { shallow: true },
+        );
+    });
+
+    it('?connectFacebook=true while STILL inside the frame does nothing — it can only dead-end there', async () => {
+        mockEmbeddedPlatform = 'zid';
+        mockRouterQuery = { connectFacebook: 'true' };
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getByText(enPages.connectPage)).toBeInTheDocument());
+        await act(async () => { /* flush the resume effect */ });
+
+        expect(location.href).toBe('');
+        expect(mockOpenTopLevelAuthenticated).not.toHaveBeenCalled();
+    });
+});
+
 describe('PagesPage - connect entry point counts every available channel', () => {
     beforeEach(() => {
         // WhatsApp fully dark — Instagram-direct is the only non-Facebook channel.

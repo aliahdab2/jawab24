@@ -47,6 +47,8 @@ import { openWhatsAppSignupUrl } from '@/lib/whatsappRedirect';
 import { useWorkspaceRole, useSubscriptionUsage, useOpenOnQueryParam, useHandoffPauseDuration } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
+import { getEmbeddedPlatform } from '@/lib/embeddedSession';
+import { openTopLevelAuthenticated } from '@/lib/embeddedBreakout';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -63,6 +65,9 @@ const PagesPage: NextPageWithLayout = () => {
   const tTest = useTranslations('testSmartReply');
   const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
+  // Platform-frame flag (the Zid dashboard iframe), read at render for the
+  // connect dialogs' copy only — the connect handler re-reads it at click time.
+  const isPlatformEmbedded = typeof window !== 'undefined' && getEmbeddedPlatform() !== null;
   const { isAuthenticated, fbToken, user } = useAuthStore();
   // Canary: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is on, the WhatsApp
   // surface shows only to platform admins (the founder). Otherwise governed by
@@ -354,6 +359,19 @@ const PagesPage: NextPageWithLayout = () => {
       return;
     }
 
+    // Inside a platform dashboard frame (Zid), facebook.com refuses to render —
+    // it sends X-Frame-Options: DENY — so navigating THIS window to the OAuth
+    // dialog dead-ends on «www.facebook.com refused to connect» (seen live on
+    // the dev store, 2026-08-30). Break out to a signed-in top-level tab first;
+    // it arrives with ?connectFacebook=true and resumes below. Same shape as the
+    // Zid onboarding's connect-page step. Called before any await so the tab is
+    // opened inside the confirm click's user gesture.
+    if (getEmbeddedPlatform() !== null) {
+      addErrorBreadcrumb('facebook-connect', 'embedded frame: breaking out to a top-level tab');
+      void openTopLevelAuthenticated('/pages?connectFacebook=true');
+      return;
+    }
+
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
       toast.error(t('reconnectFailed'));
@@ -455,6 +473,23 @@ const PagesPage: NextPageWithLayout = () => {
     setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
+
+  /*
+   * ?connectFacebook=true → the top-level tab that the embedded break-out opened
+   * (handleReconnectFacebook). Continue straight to Facebook: a full-page
+   * navigation needs no user gesture (unlike fb.login's popup, which is why the
+   * WhatsApp resume below must re-ask its question), and the merchant already
+   * pressed «Continue to Facebook» inside the frame — arriving here idle would
+   * read as the connect having silently failed.
+   */
+  const resumeFacebookConnect = useCallback(() => {
+    // Still inside the frame (stale param, back-navigation): the frame's own
+    // buttons break out correctly; navigating the frame to facebook.com cannot.
+    if (getEmbeddedPlatform() !== null) return;
+    addErrorBreadcrumb('facebook-connect', 'resuming from the embedded break-out param');
+    void handleReconnectFacebook();
+  }, [handleReconnectFacebook]);
+  useOpenOnQueryParam('connectFacebook', pagesReady, resumeFacebookConnect);
 
   /*
    * ?connectWhatsApp=true → resume a WhatsApp connect that STARTED IN THE APP.
@@ -1786,7 +1821,7 @@ const PagesPage: NextPageWithLayout = () => {
           handleReconnectFacebook();
         }}
         title={t('connectDialogTitle')}
-        message={t('connectDialogBody')}
+        message={isPlatformEmbedded ? `${t('connectDialogBody')} ${t('connectNewTabHint')}` : t('connectDialogBody')}
         confirmText={t('continueToFacebook')}
         variant="info"
       />
@@ -1800,7 +1835,7 @@ const PagesPage: NextPageWithLayout = () => {
           handleReconnectFacebook();
         }}
         title={t('reconnectDialogTitle')}
-        message={t('reconnectDialogBody')}
+        message={isPlatformEmbedded ? `${t('reconnectDialogBody')} ${t('connectNewTabHint')}` : t('reconnectDialogBody')}
         confirmText={t('continueToFacebook')}
         variant="info"
       />

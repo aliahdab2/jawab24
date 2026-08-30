@@ -445,6 +445,16 @@ after install and whenever they open it from their dashboard. Flow:
   the same "sign-in prompt" defect app 7367 was rejected for, one screen later. The tab
   now mints a single-use handoff code first and lands on `/auth/sync`, arriving signed
   in. Ruling **D-067**.
+- **Every Facebook entry point inside the frame breaks out (2026-08-30).** Only the
+  onboarding's connect-page step used `openTopLevelAuthenticated`; the `/pages` «ربط قناة»
+  and «إعادة الاتصال» dialogs set `window.location.href` to the OAuth URL, which inside the
+  frame navigates the *iframe* to facebook.com → «www.facebook.com refused to connect»
+  (seen live on the dev store while the page's token was revoked). Both now break out to
+  `/pages?connectFacebook=true`; the broken-out tab continues to Facebook on arrival (a
+  full-page navigation needs no user gesture, unlike `fb.login`'s popup) and ignores the
+  param if it is somehow still framed. Pinned by `frontend/src/__tests__/pages/pages.test.tsx`
+  «Facebook connect inside a platform frame». WhatsApp (popup-based Embedded Signup) and
+  Instagram-direct are NOT covered by this — see L-18.
 - 🔴 **Escalation closed at the same seam.** `POST /auth/browser-handoff` stored only the
   userId, and the exchange minted `generateToken(user)` — **unscoped, `isAdmin` intact,
   plus a refresh cookie**. A restricted embedded session (or anyone holding the iframe
