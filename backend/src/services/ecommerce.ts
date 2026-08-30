@@ -328,6 +328,23 @@ export async function applySyncedStoreInfo(
 }
 
 /**
+ * The one writer of `ecommerce_stores.policies_summary` for the platform syncs
+ * that build the text from structured store settings (Zid shipping/payment
+ * options, D-116). `null` is a real value — "this store has no options" — and
+ * is written as such; callers that could not READ the options must not call
+ * this at all, so a failed fetch never erases the text the model answers from.
+ * Cache invalidation is deliberately NOT done here: the platform `fullSync`
+ * orders this write before `replaceProductsAndRebuildSummary`, whose tail
+ * (`invalidateCachesForStore`) re-indexes the policy text once for the store.
+ */
+export async function setStorePoliciesSummary(storeId: string, policiesSummary: string | null): Promise<void> {
+    await db.update(ecommerceStores).set({
+        policiesSummary,
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
+}
+
+/**
  * Save webhook registration status into the store's platformData JSONB field.
  * Platform-agnostic — used by Shopify, Salla, Zid.
  */

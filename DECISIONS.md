@@ -3600,3 +3600,38 @@ Business Info edit purges the page's reply cache and a per-sent rate would be bi
 change). Baseline + a local snapshot of each page's stores are taken before the slice deploys, so
 later slices can be judged by a paired replay through `generateForPlayground` rather than by a
 remembered number.
+
+## D-116 · Zid store policies are synced from STRUCTURED settings only (shipping & payment); the return policy stays merchant-authored, and Zid "hours" are never synced (2026-08-30)
+
+**Decided:** 2026-08-30 · **Status:** Active
+
+**Context.** Zid's WhatsApp-provider questionnaire (app 7367 rejected 2026-08-30 as a category
+hold) asks what the app reads from the store. The Zid dashboard was checked live on the dev store:
+policies are **legal pages** (`/settings/legal-pages/{privacy-policy,terms-and-conditions,
+exchange-and-returns,…}`) with no partner read API — the storefront Pages API answers «لم يتم
+إيجاد هذه الصفحة» for every legal slug even with store context, because it serves custom pages
+only — while the storefront's «الشحن والدفع» page is generated from two documented Merchant APIs.
+Separately, Zid's «ساعات العمل» setting is a store-**closure** schedule («أيام مخصصة مع تحديد
+الأيام وساعات الإغلاق»; form fields `recurring_settings.times.Sunday.period_1.{from,to}`), so the
+`availability.times` the operations API returns are hours the store is CLOSED.
+
+**Decision.**
+1. `fullSync` for Zid writes `ecommerce_stores.policies_summary` from `GET
+   /v1/managers/store/delivery-options` (enabled shipping methods) and `GET
+   /v1/managers/store/payment-methods` (enabled methods + fee), rendered as فصحى lines, through
+   one writer (`setStorePoliciesSummary`). This narrows D-102's "policies remain out" to
+   **free-text policies remain out**.
+2. It runs **before** `syncProducts` (same D-102 ordering contract: the product tail's cache
+   invalidation is the one that indexes it) and is **fail-soft, write-nothing**: any read failure
+   keeps the previous summary rather than erasing what the model answers from.
+3. The return/exchange policy is **not** synced and the #965 nudge remains the mechanism for it.
+   Revisit only if Zid documents a scope for `GET /v1/managers/store/pages`.
+4. Zid `availability.times` are **never** mapped to `BusinessProfile.hours`. A mapper that did so
+   was written and withdrawn the same day — it would have told customers the store is open
+   exactly when it is closed. Zid has no opening-hours setting; hours stay merchant-authored.
+
+**Known, accepted.** Parsers read documented fields only and are `[provisional]` until a live
+capture pins them; the delivery-options `simple` payload carries no fees, so shipping fees are
+not stated (the storefront shows them — a `payload_type=full` capture may add them later).
+`status` vocabulary on delivery options is uncaptured: unknown values are listed, only explicit
+off-states are dropped.

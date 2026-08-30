@@ -475,7 +475,26 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   provenance source `store_sync` (`mapZidStoreFacts` in `services/zid.ts` →
   `services/storeFactsSync.ts`; same precedence and snapshot rules as Salla's entry above).
   `mobile_object`'s live shape is uncaptured — read tolerantly, drops reported
-  (`store-facts-field-drop`). Zid exposes no WhatsApp/hours/policies on the profile.
+  (`store-facts-field-drop`). Zid exposes no WhatsApp/hours/policies on the profile — and
+  has **no working-hours setting at all**: its «ساعات العمل» page is a store-CLOSURE schedule
+  (`account/store/operations` → `availability.times` are hours the store is closed; verified
+  on the dev store 2026-08-30). Never sync those as opening hours.
+- **Shipping & payment → `policiesSummary` (D-116, 2026-08-30)**: `syncPolicies` in
+  `services/zid.ts` reads the two documented, structured settings the storefront's own
+  «الشحن والدفع» page is generated from — `GET /v1/managers/store/delivery-options?payload_type=simple`
+  (`shipping.read`; enabled method names) and `GET /v1/managers/store/payment-methods`
+  (`account.read`; enabled methods + `fees_string`) — and writes one فصحى summary
+  («خيارات الشحن: …» / «طرق الدفع: … (رسوم …)») through the single writer
+  `setStorePoliciesSummary` (`services/ecommerce.ts`). Runs in `fullSync` **before**
+  `syncProducts`, whose `invalidateCachesForStore` tail indexes it. **Fail-soft and
+  write-nothing** on any read failure (missing scope, outage): the previous summary stays.
+  Downstream this flips `storeAnswersPolicies()` → the AI receives `[store_policies]` and the
+  #965 delivery/payment nudge goes quiet for Zid stores. ❌ The **return/exchange policy is
+  NOT synced**: Zid keeps it as a dashboard legal page (fixed slugs `exchange-and-returns`,
+  `terms-and-conditions`, `privacy-policy`…) with no partner read API — the storefront Pages
+  API serves custom pages only (verified live 2026-08-30). It stays merchant-authored in
+  Business Info. Parsers are `[provisional]` (documented fields only) until the first live
+  capture lands in `docs/testing/zid_live_payloads.jsonl`.
 - **Billing (App Market subscriptions)** — added 2026-08-11, **D-070**. Zid owns the money: a merchant who installs from the App Market picks one of our plans inside Zid and pays there. **Verify-first, like Shopify D-054 and unlike this section's earlier plan**: Zid documents `GET /v1/market/app/subscription` (dual-header auth + `app_id`, gated on `Subscription.read`), so that API is the authority and `app.market.subscription.*` deliveries are only TRIGGERS — they carry no state into the database, they call the one idempotent choke point `syncZidBilling(storeId)`. Three triggers: the subscription webhook, the uninstall webhook (cancels the mirror — no paid local sub outlives the app), and the 6-hourly `ZidBillingReconcile` cron, which is the authority of last resort and makes a missed delivery a ≤6h delay rather than a lost subscription. The mirror lands on `subscriptions` with `payment_method='zid'` and `zid_store_id` (migration `0161`: partial unique index over live rows + CHECK), keyed on OUR store UUID because every trigger already holds it; the billing subject is the **workspace owner** (shared `resolveBillingSubjectUserId`, also used by the Shopify rail). A `zid` entry in `LAZY_EXPIRY_CANARIES` fires when both the webhook AND the sweep missed. **Two fail-loud gates**: an unmapped plan (`unknown_plan`) and an unrecognised `subscription_status` (`unknown_status`) both write NOTHING and raise Sentry — an unfamiliar status is explicitly NOT read as "inactive", because pausing a merchant Zid is actively billing would be a self-inflicted outage. `plan_name` returns in **Arabic**, so the map keys on the dashboard plan id first (3740 «الأعمال» → `business`, 3741 «الاحترافي» → `pro`) and falls back to the Arabic name folded through the shared `normalizeArabic`; Starter is unsellable on marketplaces (**D-071**, `ecommerceEnabled=false`) and pricing is grossed up for Zid's commission + VAT (**D-072**, provisional). ⚠️ **Nothing on this rail has been round-tripped against a live store**, so the envelope is inferred from docs, read tolerantly, and marked `[provisional]`. ⛔ The blocker is NOT `EC3` and never was a Rejected app: EC3 turned out to be *subscription* state (subscribe the store first and even a `Draft` app installs — proven 2026-08-22), and 7367 is `Draft`, not Rejected. The actual blocker is narrower — **Zid refuses PAID checkout for a `Draft` app** («هذا التطبيق غير متاح للشراء حاليًا»), while the free plan subscribes fine. Consequence: the first live paid envelope will most likely be produced by Zid's own reviewer, which is exactly why D-070 reads nothing out of it. Coverage: `backend/test/services/zidBilling.test.ts` (40 cases over `ZID_TEST_PLAN` §H) + webhook wiring in `backend/test/controllers/zid.test.ts`.
 - **Configuration**:
   - `ZID_CLIENT_ID` - OAuth app ID
