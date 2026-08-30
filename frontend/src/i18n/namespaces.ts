@@ -86,7 +86,7 @@ export const PAGE_NAMESPACES = {
   adminOfflinePayments: [...ADMIN_LAYOUT],
 
   // ── Partner portal (reseller-facing, standalone layout) ───────
-  partner:            ['partner'],
+  partner:            ['partner', 'comments'],
 
   // ── Integration onboarding ────────────────────────────────────
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],

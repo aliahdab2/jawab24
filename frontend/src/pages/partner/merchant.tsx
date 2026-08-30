@@ -4,17 +4,20 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { ArrowLeft, StickyNote } from 'lucide-react';
+import { ArrowLeft, StickyNote, Facebook, Instagram } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
+import { isAnyChannelReplying, type ChannelPlatform } from '@jawab24/shared';
 import { partnerApi, type PartnerMerchantDetail, type PartnerMerchantPage } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { Card } from '@/components/ui';
+import { Card, WhatsAppIcon, ChannelBadges, PLATFORM_TINT } from '@/components/ui';
+import { useChannelBadgeLabels } from '@/hooks';
 import { PartnerStatusPill } from '@/components/partner/PartnerStatusPill';
 import { formatTimestampDate, formatDaysAgo } from '@/utils/dateUtils';
+import { getPageChannelUrls } from '@/utils/pageUrl';
 
 /**
  * Partner-facing merchant detail — read-only drill-down from the portal list.
@@ -54,53 +57,128 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
+/** External profile link — one per connected channel, styled per platform. */
+function PageChannelLink({ href, label, brandHover, children }: {
+    href: string;
+    label: string;
+    brandHover: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={label}
+            title={label}
+            className={clsx('p-1.5 rounded-md text-muted-foreground hover:bg-muted transition-colors', brandHover)}
+        >
+            {children}
+        </a>
+    );
+}
+
 function PageCard({ page }: { page: PartnerMerchantPage }) {
     const t = useTranslations('partner');
+    const tc = useTranslations('common');
     const { intlLocale } = useLanguage();
-    const channel = page.instagramUsername
-        ? `@${page.instagramUsername}`
-        : page.whatsappDisplayPhoneNumber || page.facebookPageId;
+    // External profile links, per-channel status labels, and the "is any channel
+    // replying?" predicate all come from the SAME shared helpers the admin
+    // customer console uses, so the two surfaces cannot drift.
+    const links = getPageChannelUrls(page);
+    const labels = useChannelBadgeLabels(page);
+    const replying = isAnyChannelReplying(page);
+    // Avatar identity: Facebook, else Instagram-direct, else WhatsApp-only.
+    const primaryPlatform: ChannelPlatform = page.facebookPageId
+        ? 'facebook'
+        : page.instagramUsername
+            ? 'instagram'
+            : 'whatsapp';
 
     return (
-        <div className="border border-theme-border rounded-lg p-3">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                    <div className="font-medium text-foreground" dir="auto">{page.name || '—'}</div>
-                    {channel && (
-                        <div className="text-xs text-muted-foreground font-mono" dir="ltr">{channel}</div>
-                    )}
+        <div className={clsx(
+            'border rounded-lg p-3 transition-colors',
+            page.disconnected ? 'border-red-200 dark:border-red-900/40' : 'border-theme-border hover:border-brand-300',
+            page.archivedAt && 'opacity-70',
+        )}>
+            <div className="flex items-start gap-3">
+                {/* Tinted channel avatar — mirrors the admin customer card */}
+                <div className={clsx(
+                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
+                    PLATFORM_TINT[primaryPlatform],
+                )}>
+                    {primaryPlatform === 'facebook'
+                        ? <Facebook className="w-5 h-5" />
+                        : primaryPlatform === 'instagram'
+                            ? <Instagram className="w-5 h-5" />
+                            : <WhatsAppIcon className="w-5 h-5" />}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className={clsx(
-                        'inline-flex px-2 py-0.5 text-xs font-medium rounded-full',
-                        page.disconnected ? 'status-error' : 'status-success',
-                    )}>
-                        {page.disconnected ? t('pageDisconnected') : t('pageConnected')}
-                    </span>
-                    <span className={clsx(
-                        'inline-flex px-2 py-0.5 text-xs font-medium rounded-full',
-                        page.autoReplyEnabled ? 'status-success' : 'bg-muted text-muted-foreground',
-                    )}>
-                        {page.autoReplyEnabled ? t('pageAutoReplyOn') : t('pageAutoReplyOff')}
-                    </span>
-                    {page.archivedAt && (
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
-                            {t('pageArchived')}
-                        </span>
-                    )}
+
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="min-w-0">
+                            <div className="font-medium text-foreground truncate" dir="auto">{page.name || '—'}</div>
+                            {/* Every connected identifier, not just one */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground font-mono mt-0.5" dir="ltr">
+                                {page.facebookPageId && <span className="truncate">{page.facebookPageId}</span>}
+                                {page.facebookPageId && page.instagramUsername && <span aria-hidden>·</span>}
+                                {page.instagramUsername && <span className="truncate">@{page.instagramUsername}</span>}
+                                {(page.facebookPageId || page.instagramUsername) && page.whatsappDisplayPhoneNumber && <span aria-hidden>·</span>}
+                                {page.whatsappDisplayPhoneNumber && <span className="truncate">{page.whatsappDisplayPhoneNumber}</span>}
+                            </div>
+                        </div>
+                        {/* Status: summary pill (asks CONNECTED channels, never the
+                            Facebook column) + the per-channel fingerprint */}
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                            <span className={clsx(
+                                'inline-flex px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap',
+                                page.disconnected ? 'status-error' : replying ? 'status-success' : 'bg-muted text-muted-foreground',
+                            )}>
+                                {page.disconnected ? t('pageDisconnected') : replying ? t('pageAutoReplyOn') : t('pageAutoReplyOff')}
+                            </span>
+                            <ChannelBadges page={page} labels={labels} />
+                            {page.archivedAt && (
+                                <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground whitespace-nowrap">
+                                    {t('pageArchived')}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-end justify-between gap-3 flex-wrap mt-2">
+                        {/* Business Info health — size and unanswered questions, never the text */}
+                        <div className="text-xs text-muted-foreground min-w-0">
+                            {page.kb.kbLength === 0 ? (
+                                <span className="text-amber-600 dark:text-amber-500">{t('kbEmpty')}</span>
+                            ) : (
+                                <>
+                                    {t('kbChars', { count: page.kb.kbLength })}
+                                    {page.kb.kbUpdatedAt && <> · {t('kbUpdated')} {formatTimestampDate(page.kb.kbUpdatedAt, intlLocale)}</>}
+                                    {page.kb.unresolvedGaps > 0 && <> · {t('kbGaps', { count: page.kb.unresolvedGaps })}</>}
+                                </>
+                            )}
+                        </div>
+                        {(links.facebook || links.instagram || links.whatsapp) && (
+                            <div className="flex items-center gap-1 shrink-0">
+                                {links.facebook && (
+                                    <PageChannelLink href={links.facebook} label={`${tc('openOn')} Facebook`} brandHover="hover:text-[#1877F2]">
+                                        <Facebook className="w-4 h-4" />
+                                    </PageChannelLink>
+                                )}
+                                {links.instagram && (
+                                    <PageChannelLink href={links.instagram} label={`${tc('openOn')} Instagram`} brandHover="hover:text-[#E4405F]">
+                                        <Instagram className="w-4 h-4" />
+                                    </PageChannelLink>
+                                )}
+                                {links.whatsapp && (
+                                    <PageChannelLink href={links.whatsapp} label={`${tc('openOn')} WhatsApp`} brandHover="hover:text-[#128C7E]">
+                                        <WhatsAppIcon className="w-4 h-4" />
+                                    </PageChannelLink>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
-            {/* Business Info health — size and unanswered questions, never the text */}
-            <div className="mt-2 text-xs text-muted-foreground">
-                {page.kb.kbLength === 0 ? (
-                    <span className="text-amber-600 dark:text-amber-500">{t('kbEmpty')}</span>
-                ) : (
-                    <>
-                        {t('kbChars', { count: page.kb.kbLength })}
-                        {page.kb.kbUpdatedAt && <> · {t('kbUpdated')} {formatTimestampDate(page.kb.kbUpdatedAt, intlLocale)}</>}
-                        {page.kb.unresolvedGaps > 0 && <> · {t('kbGaps', { count: page.kb.unresolvedGaps })}</>}
-                    </>
-                )}
             </div>
         </div>
     );
@@ -227,7 +305,7 @@ export default function PartnerMerchantDetailPage() {
                                 </Field>
                             </Section>
 
-                            <Section title={t('sectionPages')}>
+                            <Section title={data.pages.length ? `${t('sectionPages')} (${data.pages.length})` : t('sectionPages')}>
                                 {data.pages.length === 0 ? (
                                     <p className="text-sm text-muted-foreground">{t('noPages')}</p>
                                 ) : (

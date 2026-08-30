@@ -75,8 +75,8 @@ function adminDetailFixture() {
         health: [{ id: 'kb_empty', level: 'red' }],
         pages: [{
             id: 'page-1', name: 'حلويات قصر الشام دمشق', facebookPageId: 'fb-page-1',
-            instagramUsername: null, instagramAccountId: 'ig-1',
-            whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null,
+            instagramUsername: null, instagramAccountId: 'ig-1', instagramAutoReplyEnabled: true,
+            whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null, whatsappConnected: false,
             whatsappAutoReplyEnabled: false, whatsappCoexistence: false, whatsappDisconnectReason: null,
             autoReplyEnabled: true, autoReplyDisabledReason: null,
             disconnected: false, disconnectReason: null, archivedAt: null,
@@ -167,6 +167,20 @@ describe('partnerPortalService.getMerchantDetail', () => {
             expect(result!.pages[0].kb).toMatchObject({ kbLength: 2995, unresolvedGaps: 3 });
             expect(result!.pages[0]).not.toHaveProperty('knowledgeBase');
             expect(result!.pages[0]).not.toHaveProperty('accessToken');
+        });
+
+        it('surfaces per-channel reply/connection state so the portal shows WHICH channel is active', async () => {
+            const result = await partnerPortalService.getMerchantDetail('partner-1', 'merchant-1');
+
+            // The portal renders the same per-channel fingerprint the admin console
+            // does (listPageChannels), which needs these two fields — the aggregate
+            // `autoReplyEnabled` alone mislabels an Instagram-/WhatsApp-only card.
+            expect(result!.pages[0]).toMatchObject({
+                autoReplyEnabled: true,
+                instagramAutoReplyEnabled: true,
+                whatsappConnected: false,
+                whatsappAutoReplyEnabled: false,
+            });
         });
 
         it('derives the same lapsed-trial status the list shows', async () => {

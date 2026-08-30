@@ -11,6 +11,7 @@ import {
 } from './types';
 import { PageModeBadges } from './PageModeBadges';
 import { PageChannelStatus } from './PageChannelStatus';
+import { getPageChannelUrls } from '@/utils/pageUrl';
 
 interface Props {
     customer: CustomerDetail;
@@ -69,11 +70,7 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                 {customer.pages && customer.pages.length > 0 ? (
                     <ul className="space-y-2">
                         {customer.pages.map((p) => {
-                            const fbHref = p.facebookPageId ? `https://www.facebook.com/${p.facebookPageId}` : null;
-                            const igHref = p.instagramUsername ? `https://www.instagram.com/${p.instagramUsername}` : null;
-                            // wa.me needs bare digits; the stored display number is formatted.
-                            const waDigits = p.whatsappDisplayPhoneNumber?.replace(/\D/g, '') || null;
-                            const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
+                            const { facebook: fbHref, instagram: igHref, whatsapp: waHref } = getPageChannelUrls(p);
                             // A card with no Facebook page is a WhatsApp-only card — showing it
                             // behind a Facebook avatar misreads the whole row at a glance.
                             const isWhatsAppOnly = !p.facebookPageId && !!p.whatsappPhoneNumberId;

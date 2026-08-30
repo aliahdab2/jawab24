@@ -1164,6 +1164,8 @@ export interface PartnerMerchantPage {
   whatsappDisplayPhoneNumber: string | null;
   autoReplyEnabled: boolean | null;
   autoReplyDisabledReason: string | null;
+  instagramAutoReplyEnabled: boolean | null;
+  whatsappConnected: boolean;
   whatsappAutoReplyEnabled: boolean | null;
   disconnected: boolean;
   disconnectReason: string | null;
