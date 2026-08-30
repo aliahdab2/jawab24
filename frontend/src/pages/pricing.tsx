@@ -54,6 +54,7 @@ function PlanCard({
   hasLocalRail,
   billingInterval,
   locale,
+  whatsappMarketable,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -68,6 +69,10 @@ function PlanCard({
   hasLocalRail: boolean;
   billingInterval: 'month' | 'year';
   locale?: string;
+  /** Whether to advertise WhatsApp on the plan cards. False for a Zid-connected
+   *  account, which can never use the channel (D-117), so the cards read
+   *  "Facebook & Instagram" — never mention a channel the account can't have. */
+  whatsappMarketable: boolean;
 }) {
   const tPricing = useTranslations('pricing');
   const tPayment = useTranslations('payment');
@@ -229,7 +234,7 @@ function PlanCard({
         <FeatureRow
           included={true}
           text={plan.maxPages === null ? t('pricing.featurePagesUnlimited') : t('pricing.featurePages', { count: plan.maxPages })}
-          subtext={isWhatsAppMarketable() && plan.whatsappEnabled
+          subtext={whatsappMarketable && plan.whatsappEnabled
             ? t('pricing.facebookInstagramWhatsapp')
             : t('pricing.facebookInstagram')}
         />
@@ -242,7 +247,7 @@ function PlanCard({
 
         {/* WhatsApp is a Business+ entitlement — crossed out on Starter as an
             upsell. Hidden entirely until public launch (isWhatsAppMarketable). */}
-        {isWhatsAppMarketable() && (
+        {whatsappMarketable && (
           <FeatureRow
             included={plan.whatsappEnabled}
             text={t('pricing.featureWhatsApp')}
@@ -379,6 +384,11 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   // from the one field the backend's guard computes, so this page and the
   // useSelectPlan refusal can never disagree about who is billed where.
   const marketplaceBilling = getMarketplaceBilling(usage);
+
+  // WhatsApp copy on the plan cards is suppressed for a Zid-connected account:
+  // it can never use the channel (D-117), so the cards must not advertise it.
+  // Layered on the existing marketing flag rather than replacing it.
+  const whatsappMarketable = isWhatsAppMarketable() && !usage?.subscription?.whatsappUnavailable;
 
   // Yearly billing is only offered when at least one paid plan actually has a
   // yearly Stripe price. Without this gate the toggle promised "save ~17%"
@@ -700,6 +710,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 hasLocalRail={hasLocalRail}
                 billingInterval={effectiveInterval}
                 locale={locale}
+                whatsappMarketable={whatsappMarketable}
               />
             </div>
           ))}

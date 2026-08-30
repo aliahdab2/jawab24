@@ -38,6 +38,7 @@ const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
 import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled, usesChannelWording } from '@/lib/featureFlags';
+import { isWhatsAppConnectable } from '@/lib/whatsappAvailability';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -173,6 +174,11 @@ const PagesPage: NextPageWithLayout = () => {
   const whatsappEntitled = usage === undefined
     ? undefined
     : Boolean(usage?.subscription?.plan?.whatsappEnabled);
+  // Layered on top of `whatsappVisible`: an account with a store connected
+  // through Zid can never connect WhatsApp (D-117, backend-enforced). `undefined`
+  // while usage loads — actionable surfaces require `=== true`. See
+  // isWhatsAppConnectable.
+  const whatsappConnectable = isWhatsAppConnectable(whatsappVisible, usage);
 
   // Warm the signup chunk AND the Facebook SDK before the merchant clicks.
   // `fb.login` opens a popup, so it must run inside the browser's transient user
@@ -524,10 +530,14 @@ const PagesPage: NextPageWithLayout = () => {
     // nothing; the in-app Connect buttons route through requestConnectWhatsApp,
     // which hands off correctly.
     if (Capacitor.isNativePlatform()) return;
+    // A Zid account can never connect WhatsApp (D-117). A stale/bookmarked
+    // `?connectWhatsApp=true` must not reopen the path modal; the backend would
+    // 403 the connect anyway.
+    if (whatsappConnectable === false) return;
     const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
     addErrorBreadcrumb('whatsapp-connect', 'resuming from handoff param', { target });
     setWhatsAppPathPageId(target);
-  }, [router.query.waPage]);
+  }, [router.query.waPage, whatsappConnectable]);
   useOpenOnQueryParam('connectWhatsApp', pagesReady, resumeWhatsAppConnect);
 
   /*
@@ -560,6 +570,7 @@ const PagesPage: NextPageWithLayout = () => {
         WHATSAPP_NO_NUMBER: 'whatsappNoNumberSelected',
         WHATSAPP_AMBIGUOUS: 'whatsappAmbiguousNumber',
         WHATSAPP_PLAN_REQUIRED: iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired'),
+        WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE: 'whatsappUnavailableForMarketplace',
       };
       toast.error(t(keyByCode[errorCode] ?? 'whatsappConnectFailed'));
     }
@@ -880,6 +891,16 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   const requestConnectWhatsApp = async (pageId: string | null) => {
+    if (whatsappConnectable === false) {
+      // Belt to the render-level hiding: a Zid account can never connect WhatsApp
+      // (D-117). This is the single funnel every entry reaches — card CTAs, the
+      // channel picker, and the pre-mint effect / path modal that key off
+      // whatsAppPathPageId (never set below when we return here). The backend
+      // 403s WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE regardless; this just avoids a
+      // pointless round trip.
+      toast.error(t('whatsappUnavailableForMarketplace'));
+      return;
+    }
     addErrorBreadcrumb('whatsapp-connect', 'connect requested', {
       native: Capacitor.isNativePlatform(),
       mobileBrowser: isMobileBrowser(),
@@ -1045,7 +1066,7 @@ const PagesPage: NextPageWithLayout = () => {
   // the footer «أرغب بربط إنستغرام مباشرة» CTA the only route to Instagram-direct
   // for a merchant without WhatsApp entitlement. Add a row there, add it here.
   const handleOpenConnect = () => {
-    const hasWhatsAppOption = whatsappVisible && whatsappEntitled === true;
+    const hasWhatsAppOption = whatsappConnectable === true && whatsappEntitled === true;
     const hasInstagramOption = isInstagramDirectEnabled();
     if (hasWhatsAppOption || hasInstagramOption) {
       setShowChannelPicker(true);
@@ -1447,7 +1468,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {/* WhatsApp row — master-switch gated so a dark deploy shows
                       no WhatsApp surface; the whatsappConnected OR never hides
                       an already-connected number. */}
-                  {!isInstagramOnly && (whatsappVisible || page.whatsappConnected) && (
+                  {!isInstagramOnly && ((whatsappVisible && whatsappConnectable !== false) || page.whatsappConnected) && (
                   <div
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
@@ -1792,7 +1813,7 @@ const PagesPage: NextPageWithLayout = () => {
           setShowChannelPicker(false);
           void startInstagramConnect();
         }}
-        whatsappAvailable={whatsappVisible && whatsappEntitled === true}
+        whatsappAvailable={whatsappConnectable === true && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
         instagramAvailable={isInstagramDirectEnabled()}
       />

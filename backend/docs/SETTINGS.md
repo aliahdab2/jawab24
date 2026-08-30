@@ -269,6 +269,18 @@ The merchant-facing toggles are the whole on-switch — there is no workspace-le
 toggle and no per-page override. Whether to seed `order_confirmed` / `order_shipped` ON for
 new stores is an open product decision, parked until the SMS provider can deliver.
 
+**Zid stores: WhatsApp is switched off entirely (D-117, TEMPORARY).** For a workspace whose owner
+has an active Zid store, WhatsApp connect is refused server-side (Zid paused WhatsApp-integrated
+apps; app 7367 ships for Facebook + Instagram only until the category reopens). Effects on this
+surface: `GET /notification-templates/:storeId/whatsapp-status` returns
+`{ available: false, unavailableReason: 'zid_marketplace' }` for such a store, so the
+`OrderNotificationsCard` **hides the WhatsApp channel option and the "connect WhatsApp" nudge**
+rather than offering a channel the connect API will 403. The one predicate,
+`getWhatsAppUnavailableReason(ownerId)` (`services/whatsappAvailability.ts`, keyed on
+`hasActiveStoreForBillingSubject('zid', …)`), also gates the connect endpoints in
+`controllers/whatsapp.ts` and `controllers/whatsappRedirect.ts`. Reversible with
+`WHATSAPP_ZID_BLOCK=false` (default ON) — no code change to re-enable when Zid reopens the category.
+
 ## Test reply («اختبار الرد الذكي») — settings it applies
 
 `POST /pages/:id/test-reply` (`controllers/pages.ts` → `buildPlaygroundContext` →

@@ -17,12 +17,31 @@ vi.mock('../../src/services/customerNotifications', () => ({
     },
 }));
 
+// getWhatsAppStatus dependencies. Only the store/owner/availability path is
+// exercised below (the Zid early-return, D-117); resolveWhatsAppSender returns
+// null so a non-blocked store falls through to "available:false, no reason".
+const mockGetStoreById = vi.fn();
+const mockResolveOwner = vi.fn();
+const mockGetWaUnavailable = vi.fn().mockResolvedValue(null);
+vi.mock('../../src/services/ecommerce', () => ({
+    getStoreById: (...a: unknown[]) => mockGetStoreById(...a),
+    resolveBillingSubjectUserId: (...a: unknown[]) => mockResolveOwner(...a),
+}));
+vi.mock('../../src/services/whatsappAvailability', () => ({
+    getWhatsAppUnavailableReason: (...a: unknown[]) => mockGetWaUnavailable(...a),
+}));
+vi.mock('../../src/services/whatsappNotificationSender', () => ({
+    resolveWhatsAppSender: vi.fn().mockResolvedValue(null),
+    ensureTemplatesProvisioned: vi.fn(),
+}));
+
 import {
     getTemplates,
     updateTemplate,
     resetTemplates,
     getLog,
     getStats,
+    getWhatsAppStatus,
 } from '../../src/controllers/customerNotifications';
 import { db } from '../../src/db';
 import { customerNotificationService } from '../../src/services/customerNotifications';
@@ -243,5 +262,36 @@ describe('getStats', () => {
                 }),
             }),
         );
+    });
+});
+
+describe('getWhatsAppStatus — availability (D-117)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGetWaUnavailable.mockResolvedValue(null);
+    });
+
+    it('reports unavailableReason for a Zid store, without touching the sender/template query', async () => {
+        mockGetStoreById.mockResolvedValue({ id: 's1', userId: 'u1', workspaceId: 'ws-1' });
+        mockResolveOwner.mockResolvedValue('owner-1');
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's1' }), reply);
+
+        // Mutation: delete the unavailableReason early-return in getWhatsAppStatus
+        // and this fails (it falls through to available:false with no reason).
+        expect(reply.send).toHaveBeenCalledWith({ available: false, unavailableReason: 'zid_marketplace', templates: {} });
+        expect(mockResolveOwner).toHaveBeenCalledWith({ id: 's1', userId: 'u1', workspaceId: 'ws-1' });
+    });
+
+    it('a non-blocked store with no connected sender is available:false with NO reason', async () => {
+        mockGetStoreById.mockResolvedValue({ id: 's2', userId: 'u2', workspaceId: 'ws-2' });
+        mockResolveOwner.mockResolvedValue('owner-2');
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's2' }), reply);
+
+        expect(reply.send).toHaveBeenCalledWith({ available: false, templates: {} });
     });
 });

@@ -54,6 +54,7 @@
   "whatsappConnecting": "جارٍ الربط...",
   "whatsappConnectSuccess": "تم ربط واتساب بنجاح",
   "whatsappConnectFailed": "تعذّر ربط واتساب. حاول مرة أخرى.",
+  "whatsappUnavailableForMarketplace": "واتساب غير متاح حالياً للمتاجر المرتبطة عبر زد.",
   "whatsappNumberTaken": "رقم واتساب هذا مرتبط بصفحة أخرى بالفعل.",
   "whatsappPopupBlocked": "تعذّر فتح نافذة تسجيل واتساب. اضغط «ربط» مرة أخرى، واسمح بالنوافذ المنبثقة لهذا الموقع إن كان المتصفح قد حجبها.",
   "whatsappNoNumberSelected": "لم يُضَف أي رقم هاتف إلى حساب واتساب للأعمال. أكمل التسجيل واختر رقماً، ثم حاول مرة أخرى.",

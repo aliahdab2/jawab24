@@ -108,6 +108,14 @@ vi.mock('../../src/services/marketplaceBilling', () => ({
     resolveMarketplaceBilling: vi.fn(async () => null),
 }));
 
+// Channel-availability gate (Zid block, D-117). getUsageSummary consults it to
+// set subscription.whatsappUnavailable. Default "available" so existing usage
+// tests are unchanged; the dedicated test flips it.
+const mockGetWaUnavailable = vi.fn(async () => null as null | 'zid_marketplace');
+vi.mock('../../src/services/whatsappAvailability', () => ({
+    getWhatsAppUnavailableReason: (...args: unknown[]) => mockGetWaUnavailable(...(args as [])),
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args) => ({ op: 'and', args })),
@@ -1312,6 +1320,22 @@ describe('isSubscriptionActive', () => {
             expect(subscriptionsService.getUserSubscription).toHaveBeenCalledWith('owner-1');
             expect(result!.aiReplies.used).toBe(300);
             expect(result!.pages.used).toBe(2);
+            // Default helper returns null → the field is omitted, not false.
+            expect(result!.subscription.whatsappUnavailable).toBeUndefined();
+        });
+
+        it('carries subscription.whatsappUnavailable when the account is a Zid store (D-117)', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(2);
+            await mockWorkspaceOwner('owner-1');
+            // Mutation: drop the whatsappUnavailable field from getUsageSummary's
+            // return and this fails.
+            mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+
+            const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+            expect(result!.subscription.whatsappUnavailable).toEqual({ reason: 'zid_marketplace' });
         });
 
         /**

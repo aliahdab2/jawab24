@@ -54,6 +54,7 @@
   "whatsappConnecting": "Connecting...",
   "whatsappConnectSuccess": "WhatsApp connected successfully",
   "whatsappConnectFailed": "Could not connect WhatsApp. Please try again.",
+  "whatsappUnavailableForMarketplace": "WhatsApp isn't available for stores connected through Zid right now.",
   "whatsappNumberTaken": "This WhatsApp number is already connected to another page.",
   "whatsappPopupBlocked": "The WhatsApp signup window could not open. Please click Connect again, and allow pop-ups for this site if your browser blocked it.",
   "whatsappNoNumberSelected": "No phone number was added to your WhatsApp Business account. Complete the signup and choose a number, then try again.",

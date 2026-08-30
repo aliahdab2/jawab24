@@ -31,6 +31,19 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+// Channel-availability gate (Zid block, D-117). Mocked so it never touches the
+// DB; default is "available" so the existing plan/trial tests are unchanged, and
+// the marketplace-block tests below flip it to 'zid_marketplace'.
+const mockGetWaUnavailable = vi.fn().mockResolvedValue(null);
+vi.mock('../../src/services/whatsappAvailability', () => ({
+    getWhatsAppUnavailableReason: (...args: unknown[]) => mockGetWaUnavailable(...args),
+    WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE: {
+        error: 'WhatsApp isn\'t available for stores connected through Zid.',
+        code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE',
+        marketplace: 'zid',
+    },
+}));
+
 vi.mock('../../src/services/channelTrial', () => ({
     channelTrialService: {
         evaluate: vi.fn(),
@@ -315,6 +328,19 @@ describe('WhatsAppController.connect', () => {
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
     });
 
+    it('403s WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE on an ENTITLED plan with a Zid store, before any Meta call', async () => {
+        // The plan gate passes (entitled by default); the Zid block is independent
+        // of it (D-117). Mutation: delete the getWhatsAppUnavailableReason guard in
+        // connect() and exchangeCodeForToken runs — this fails.
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE' }));
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
     it('403s WHATSAPP_PLAN_REQUIRED when there is no subscription at all (fail closed)', async () => {
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(null as never);
         const reply = buildReply();
@@ -450,6 +476,19 @@ describe('WhatsAppController.toggleAutoReply', () => {
         expect(reply.status).toHaveBeenCalledWith(403);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
         expect(subscriptionsService.canEnablePage).not.toHaveBeenCalled();
+        expect(channelTrialService.evaluate).not.toHaveBeenCalled();
+        expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
+    });
+
+    it('403s WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE on ENABLE for an entitled Zid account, before slot/trial gates', async () => {
+        // Mutation: delete the getWhatsAppUnavailableReason guard in the enable
+        // branch and toggleWhatsAppAutoReply runs — this fails.
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE' }));
         expect(channelTrialService.evaluate).not.toHaveBeenCalled();
         expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
     });
@@ -609,6 +648,19 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
 
         expect(reply.status).toHaveBeenCalledWith(403);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
+    });
+
+    it('403s WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE for an entitled Zid account, before any Meta call', async () => {
+        // Mutation: delete the getWhatsAppUnavailableReason guard in connectNew()
+        // and createWhatsAppOnlyPage runs — this fails.
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE' }));
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
         expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
     });

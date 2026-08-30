@@ -1064,6 +1064,7 @@ const DashboardPage: NextPageWithLayout = () => {
             isOwner={isOwner}
             isAdmin={user?.isAdmin ?? false}
             whatsappEntitled={Boolean(usage?.subscription?.plan?.whatsappEnabled)}
+            unavailable={Boolean(usage?.subscription?.whatsappUnavailable)}
           />
 
           {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.

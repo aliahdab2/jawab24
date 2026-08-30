@@ -362,7 +362,11 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
                 {t('channelLabel')}
               </span>
               <div role="group" aria-labelledby={`channel-label-${type}`} className="flex flex-wrap items-center gap-2">
-                {(['sms', 'whatsapp'] as const).map((channel) => (
+                {(['sms', 'whatsapp'] as const)
+                  // A Zid store can never connect WhatsApp (D-117) — don't offer
+                  // the channel at all, rather than a permanently-inert button.
+                  .filter((channel) => !(channel === 'whatsapp' && waStatus?.unavailableReason === 'zid_marketplace'))
+                  .map((channel) => (
                   <button
                     key={channel}
                     type="button"
@@ -395,7 +399,7 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
                   </span>
                 )}
               </div>
-              {waStatus?.available === false && (
+              {waStatus?.available === false && !waStatus?.unavailableReason && (
                 <p className="mt-1.5 text-[11px] text-muted-foreground">{t('connectWhatsAppHint')}</p>
               )}
               {draft.channel === 'whatsapp' && (

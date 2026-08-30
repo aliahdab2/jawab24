@@ -18,6 +18,7 @@ import {
     hasWhatsAppPlanAccess,
     isWhatsAppConnectAllowed,
 } from './whatsapp';
+import { getWhatsAppUnavailableReason, WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } from '../services/whatsappAvailability';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { authService } from '../services/auth';
 import { refreshTokenService } from '../services/refreshToken';
@@ -275,6 +276,9 @@ export class WhatsAppRedirectController {
         }
         if (!(await hasWhatsAppPlanAccess(args.workspaceOwnerId))) {
             return { ok: false, status: 403, code: 'WHATSAPP_PLAN_REQUIRED', payload: { error: 'WhatsApp requires the Business plan or higher.', code: 'WHATSAPP_PLAN_REQUIRED', requiredPlan: 'business' } };
+        }
+        if (await getWhatsAppUnavailableReason(args.workspaceOwnerId)) {
+            return { ok: false, status: 403, code: WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code, payload: { ...WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } };
         }
 
         const { pageId, locale } = args;
@@ -626,6 +630,9 @@ export class WhatsAppRedirectController {
         }
         if (!(await hasWhatsAppPlanAccess(membership[0].ownerId))) {
             return 'WHATSAPP_PLAN_REQUIRED';
+        }
+        if (await getWhatsAppUnavailableReason(membership[0].ownerId)) {
+            return WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code;
         }
         if (state.pageId) {
             const page = await pagesService.getPage(state.workspaceId, state.pageId);

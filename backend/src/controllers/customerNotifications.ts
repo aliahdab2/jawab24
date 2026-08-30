@@ -4,6 +4,8 @@ import { customerNotificationTemplates, customerNotificationsLog, whatsappNotifi
 import { eq, and, desc, count } from 'drizzle-orm';
 import { customerNotificationService } from '../services/customerNotifications';
 import { ensureTemplatesProvisioned, resolveWhatsAppSender } from '../services/whatsappNotificationSender';
+import { getStoreById, resolveBillingSubjectUserId } from '../services/ecommerce';
+import { getWhatsAppUnavailableReason } from '../services/whatsappAvailability';
 import {
     canonicalTemplateFor,
     isWhatsAppNotificationType,
@@ -138,6 +140,16 @@ export async function resetTemplates(request: FastifyRequest, reply: FastifyRepl
  */
 export async function getWhatsAppStatus(request: FastifyRequest, reply: FastifyReply) {
     const { storeId } = request.params as { storeId: string };
+
+    // WhatsApp may be unconnectable for this store's account entirely (a Zid
+    // store, D-117). Say so, so the card shows "unavailable" instead of nudging
+    // the merchant to go connect a channel the connect API will refuse.
+    const store = await getStoreById(storeId);
+    if (store) {
+        const ownerId = await resolveBillingSubjectUserId(store);
+        const unavailableReason = await getWhatsAppUnavailableReason(ownerId);
+        if (unavailableReason) return reply.send({ available: false, unavailableReason, templates: {} });
+    }
 
     const sender = await resolveWhatsAppSender(storeId);
     if (!sender) return reply.send({ available: false, templates: {} });

@@ -7,6 +7,7 @@ import { pagesService } from '../services/pages';
 import { whatsappService } from '../services/whatsapp';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
+import { getWhatsAppUnavailableReason, WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } from '../services/whatsappAvailability';
 import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
@@ -184,6 +185,9 @@ export class WhatsAppController {
         if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
             return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
         }
+        if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
+            return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
+        }
 
         try {
             const page = await pagesService.getPage(workspaceId, id);
@@ -271,6 +275,9 @@ export class WhatsAppController {
         }
         if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
             return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
+        }
+        if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
+            return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
         }
 
         try {
@@ -407,6 +414,9 @@ export class WhatsAppController {
             if (enabled) {
                 if (!(await hasWhatsAppPlanAccess(workspaceOwnerId))) {
                     return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
+                }
+                if (await getWhatsAppUnavailableReason(workspaceOwnerId)) {
+                    return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
                 }
 
                 // A WhatsApp-only card is born with NO Business Info — there is no
