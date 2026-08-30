@@ -470,6 +470,16 @@ after install and whenever they open it from their dashboard. Flow:
   Same for the onboarding break-out and the WhatsApp handoff. Fix = let `setAuthCookies`
   take the token's TTL and pass it at both scoped re-mint sites (`controllers/auth.ts`
   exchange + link). Shared auth infra — its own PR with its own review.
+- ⚠️ **Known defect, follow-up owed: linking a Facebook account that already belongs to
+  ANOTHER Jawab24 user fails silently (found live 2026-08-30).** `POST /auth/facebook/link`
+  writes `users.facebook_id`, which is UNIQUE; when the Facebook account is already linked to a
+  different user the update dies on `users_facebook_id_key` → 500 «Facebook link failed» → the
+  break-out tab lands on `/dashboard` with no message and the page stays `token_revoked`. Seen
+  twice on the dev store (the founder's Facebook owns "Jawab24 Test", the page lives in the
+  auto-provisioned Zid merchant's workspace). Fix: detect the unique violation → 409 with a
+  merchant-facing explanation («this Facebook account is linked to another Jawab24 account»),
+  surfaced by `auth/callback.tsx`. Design question for the owner: should a break-out reconnect
+  refresh the PAGE token without re-linking the USER identity?
 - 🔴 **Escalation closed at the same seam.** `POST /auth/browser-handoff` stored only the
   userId, and the exchange minted `generateToken(user)` — **unscoped, `isAdmin` intact,
   plus a refresh cookie**. A restricted embedded session (or anyone holding the iframe
