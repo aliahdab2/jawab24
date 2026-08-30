@@ -411,25 +411,32 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     handleDowngradeConfirm,
   } = useSelectPlan({ plans, usage, billingInterval: effectiveInterval });
 
-  // Client-side: fetch real plans if ISR served fallback data
+  // Client-side: always refresh plans from the live API on mount.
+  //
+  // The ISR snapshot (revalidate: 3600) can be a full hour stale relative to the
+  // DB — most sharply right after a deploy, when the frontend image was built
+  // (baking `/plans`) BEFORE the backend seed applied a plan change. Gating this
+  // on `fallback-*` ids only healed the API-unreachable case and left a
+  // stale-but-real snapshot showing wrong entitlement (e.g. WhatsApp/trial flags)
+  // until the next revalidation. serverPlans still paints instantly; this just
+  // reconciles to live truth a beat later, so a plan change reflects immediately.
   useEffect(() => {
-    const isFallback = serverPlans.some(p => p.id.startsWith('fallback-'));
-    if (!isFallback) return;
-
+    let cancelled = false;
     const fetchPlans = async () => {
       try {
         const response = await publicApi.get('/plans');
         const realPlans: Plan[] = response.data.data ?? [];
-        if (realPlans.length > 0) {
+        if (!cancelled && realPlans.length > 0) {
           setPlans(realPlans);
         }
       } catch {
-        // Keep fallback plans — better than nothing
+        // Keep whatever we rendered — the ISR/fallback snapshot is better than nothing.
       }
     };
 
     fetchPlans();
-  }, [serverPlans]);
+    return () => { cancelled = true; };
+  }, []);
 
   // Client-side: fetch user-specific data (subscription, usage, geo)
   useEffect(() => {
