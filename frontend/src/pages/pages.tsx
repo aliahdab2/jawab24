@@ -18,11 +18,11 @@ import {
   FileText,
   RefreshCw,
   BookOpen,
+  Facebook,
   Instagram,
   ChevronRight,
   Clock,
   ShoppingBag,
-  ExternalLink,
   AlertTriangle,
   LinkIcon,
   Unlink,
@@ -52,7 +52,7 @@ import { openTopLevelAuthenticated, isFramed } from '@/lib/embeddedBreakout';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
-import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
+import { getPageAvatarUrl, getPageChannelUrls } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
@@ -1141,6 +1141,10 @@ const PagesPage: NextPageWithLayout = () => {
                       // state it exists for (PR #772 re-review, High).
                       const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
                       const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
+                      // External profile links, one per connected channel — same
+                      // resolver the admin console and reseller portal use. An
+                      // Instagram-direct or WhatsApp-only page used to get no link.
+                      const channelUrls = getPageChannelUrls(page);
                       return (
                         <Card
                           key={page.id}
@@ -1186,17 +1190,44 @@ const PagesPage: NextPageWithLayout = () => {
                       one persistent entry point; the chip was the third. */}
                 </div>
 
-                {/* External link to Facebook page — only for Facebook-connected pages */}
-                {getPageExternalUrl(page) && (
-                  <a
-                    href={getPageExternalUrl(page)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-muted-foreground transition-colors flex-shrink-0"
-                    aria-label={`${tc('openOn')} Facebook`}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                {/* External links — one per connected channel (Facebook / Instagram /
+                    WhatsApp), same as the admin console and reseller portal. */}
+                {(channelUrls.facebook || channelUrls.instagram || channelUrls.whatsapp) && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {channelUrls.facebook && (
+                      <a
+                        href={channelUrls.facebook}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#1877F2] transition-colors"
+                        aria-label={`${tc('openOn')} Facebook`}
+                      >
+                        <Facebook className="w-4 h-4" />
+                      </a>
+                    )}
+                    {channelUrls.instagram && (
+                      <a
+                        href={channelUrls.instagram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#E4405F] transition-colors"
+                        aria-label={`${tc('openOn')} Instagram`}
+                      >
+                        <Instagram className="w-4 h-4" />
+                      </a>
+                    )}
+                    {channelUrls.whatsapp && (
+                      <a
+                        href={channelUrls.whatsapp}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#128C7E] transition-colors"
+                        aria-label={`${tc('openOn')} WhatsApp`}
+                      >
+                        <WhatsAppIcon className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
 
