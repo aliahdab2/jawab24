@@ -1,13 +1,11 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX, isPlausiblePlatformPostId } from '@jawab24/shared';
+import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_BUTTON_TEXT_MAX, isPlausiblePlatformPostId } from '@jawab24/shared';
 import { postsService, PostNotOwnedError, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { resolveInstagramCredential } from '../services/instagramCredential';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
 import { imageStorage } from '../services/imageStorage';
-import { bufferMatchesMime } from '../services/kb/file-extractor';
 import { validateAndNormalizeUpload } from '../services/imageUpload';
-import { captureError } from '../utils/sentryHelpers';
 import { UpdatePostDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
