@@ -34,9 +34,25 @@ vi.mock('../../src/services/stripe', () => ({
 // end through the controller — including the order the rails are asked in —
 // while services/marketplaceBilling.test.ts pins the rule itself.
 // Defaults to "no marketplace stores" so no pre-existing case changes behaviour.
-vi.mock('../../src/services/ecommerce', () => ({
-    hasActiveStoreForBillingSubject: vi.fn(async () => false),
-}));
+// In production these two are ONE query: `hasActiveStoreForBillingSubject` is
+// literally `getActiveStoreForBillingSubject(...) !== null`. So the second is
+// DERIVED from the first here — a flat pair of independent stubs models a state
+// production cannot reach (a merchant who "has" a store that cannot be fetched),
+// and that is exactly what broke this suite: #983 moved the Zid verdict from
+// `has…` to `getActive…`, so tests that flip only `has…` stopped seeing a Zid
+// merchant. A factory mock is also exhaustive — omitting an export the module
+// under test imports makes vitest throw on the binding, which surfaces as every
+// handler returning 500 rather than as a mock error.
+const ecommerceMock = vi.hoisted(() => {
+    const hasActiveStoreForBillingSubject = vi.fn(async (_platform: string, _userId: string) => false);
+    const getActiveStoreForBillingSubject = vi.fn(async (platform: string, userId: string) =>
+        (await hasActiveStoreForBillingSubject(platform, userId))
+            ? { id: `store_${platform}`, platformData: { merchantId: 'zid_merchant_1' } }
+            : null,
+    );
+    return { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject };
+});
+vi.mock('../../src/services/ecommerce', () => ecommerceMock);
 
 vi.mock('../../src/db', () => ({
     db: {

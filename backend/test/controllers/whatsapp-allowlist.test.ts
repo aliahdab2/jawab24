@@ -43,6 +43,14 @@ vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { can
 vi.mock('../../src/services/channelTrial', () => ({ channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn().mockReturnValue([]) } }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn() } }));
+// D-117 put `getWhatsAppUnavailableReason` in front of the connect handler, and it
+// reaches the real `ecommerce` service → `ecommerceStores`, which this suite's schema
+// mock does not carry. Stub the store lookup, not the availability service, so the
+// D-117 gate itself still runs and this suite keeps proving the allowlist order.
+vi.mock('../../src/services/ecommerce', () => ({
+    hasActiveStoreForBillingSubject: vi.fn(async () => false),
+    getActiveStoreForBillingSubject: vi.fn(async () => null),
+}));
 
 import { whatsappController } from '../../src/controllers/whatsapp';
 import { pagesService } from '../../src/services/pages';
