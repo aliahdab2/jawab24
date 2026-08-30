@@ -341,12 +341,17 @@ export const config = {
         // four GUESSED names Zid never documented (part of the 2026-08-10
         // "OAuth does not meet our required standards" rejection).
         scopes: 'embedded_apps_tokens_write',
-        // Where a Zid merchant manages the App Market subscription that bills
-        // them for Jawab24. Unset by default ON PURPOSE: the App Market URL
-        // shape is absent from Zid's docs and has never been observed on a live
-        // install (EC3 blocks installing a Rejected app), and a guessed URL
-        // would send paying merchants to a 404. See config/zidBilling.ts.
+        // OPTIONAL override for where a Zid merchant manages the App Market
+        // subscription that bills them for Jawab24. Unset by default: since
+        // 2026-08-30 the link is built per store from the observed dashboard
+        // shape (`buildZidManageUrl` — merchant id + app id → the plans page of
+        // our app inside their dashboard); set this only to replace it wholesale.
         appMarketUrl: process.env.ZID_APP_MARKET_URL || '',
+        // Kill switch for D-114: App Market lifecycle deliveries (`app.market.*`)
+        // carry NO Basic auth and are verified against Zid's API instead. Set
+        // `ZID_LIFECYCLE_VERIFY=off` to restore the pre-D-114 behaviour (every
+        // delivery through the Basic gate — which rejects all lifecycle events).
+        lifecycleVerify: process.env.ZID_LIFECYCLE_VERIFY !== 'off',
     },
 
     // Stripe Payment

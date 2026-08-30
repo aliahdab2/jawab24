@@ -3601,6 +3601,96 @@ change). Baseline + a local snapshot of each page's stores are taken before the 
 later slices can be judged by a paired replay through `generateForPlayground` rather than by a
 remembered number.
 
+## D-114 · Zid App Market lifecycle webhooks are verified against Zid's API, not at the edge (2026-08-30)
+
+**Decided:** 2026-08-30 · **Status:** Active
+
+**Context.** The first `app.market.application.uninstall` delivery ever received (dev store 3195980,
+02:54:24Z, fired by Deactivate in the Zid dashboard) carried **no `Authorization` header** — UA
+`GuzzleHttp/7`, a 497-byte JSON body, tracing headers, nothing else. `verifyZidWebhookAuth`
+demanded the Basic username/password we attach when *we* register per-store webhooks through
+`/v1/managers/webhooks`, and answered 401. App-lifecycle and `app.market.subscription.*` events are
+configured in the Partner Dashboard, where no credential field exists, so **every one of them had
+been rejected since the rail shipped**: no real uninstall had ever deactivated a store (embedded-app
+token hash and billing mirror survived), and a Zid purchase reached us only through the 6-hourly
+reconciler. `docs/integrations/zid.md` said the opposite on both counts.
+
+**Ruling.** A lifecycle delivery is a **trigger** — the D-070 posture the subscription rail already
+holds ("webhooks are triggers, the API is the authority") — and the Basic gate applies only to the
+per-store events that can carry it. Uninstall is proven by Zid itself: `verifyZidUninstall` probes
+`GET /v1/managers/account/profile` with the store's stored credential, and only a **401/403 from
+Zid** (it invalidates the store's tokens at uninstall) runs `finalizeZidUninstall` — revoke the
+in-dashboard token, cancel the billing mirror, deactivate, in that order. A token Zid still honours
+means the delivery outran the invalidation or is a spoof; in both cases the store stays **active**
+and `platformData.uninstallSignalAt` is written, and the 15-min `ZidUninstallSweep` re-probes
+marked stores until the token dies (a marker that stays valid 24 h is cleared as stale). Subscription
+events call `syncZidBilling` as before; nothing in either body is read. Both triggers are throttled
+per store (Redis `SET NX`, 60 s), so an unauthenticated POST costs at most one Merchant API call per
+store per minute and changes nothing on its own. `ZID_LIFECYCLE_VERIFY=off` restores the Basic gate
+for everything.
+
+**Why the probe is a `/managers/` endpoint.** Store-scoped calls (`/v1/products/`) also answer 401
+to a *missing* `Store-Id` header on a perfectly valid token (proven 2026-08-22), so a 401 there is
+ambiguous. `/v1/managers/*` resolves the store from the token and ignores `Store-Id`, which makes
+its 401 the one unambiguous "credential revoked" signal we have. The status now travels as data
+(`EcommerceApiHttpError.status`) instead of inside an error message.
+
+**Rejected.** (a) A dedicated unauthenticated lifecycle route with a store cross-check — same
+verification problem, one more route. (b) Relying on the token refresher's `needsReauth` marking —
+up to 6 h of a live in-dashboard entry after an uninstall, and no billing cancellation. (c) A
+per-route rate limit on `/zid/webhooks` — the route is shared with per-store events, and a
+merchant's bulk product import legitimately bursts hundreds of deliveries a minute from one Zid IP;
+the per-store throttle bounds the unauthenticated path without touching the authenticated one.
+
+**Evidence still owed.** The lifecycle body shape (C15) — the handler logs `bodyKeys` and the store
+identifiers on every lifecycle delivery so the next real one completes the capture; and whether Zid
+invalidates the token before or after delivering, which decides how often the sweep rather than the
+handler does the finalizing. F-2 / L-7 re-run after deploy.
+
+## D-115 · Inside a platform frame the platform is the identity, the billing rail and the home screen — the app never offers its own (2026-08-30)
+
+**Decided:** 2026-08-30 · **Status:** Active (owner rulings D-A, D-B, D-C taken the same night)
+
+**Context.** The full Zid cycle — uninstall, reinstall, onboarding, Facebook connect, pricing — was
+driven live on the dev store the night before the review meeting. The embedded app worked, but it
+behaved like jawab24.com squeezed into a frame: a **Logout** that rendered the Jawab24 login page
+inside the Zid dashboard (the 08-10 rejection shape); a **pricing page** with four Stripe plans in
+USD whose buttons were refused by a toast and whose banner had nothing to click; a **30-day Starter
+trial** on an account whose Zid plan carries a 14-day one; a wizard that **lost its step** when Zid
+re-rendered the iframe, never **re-read** the pages after the break-out, sent the merchant to
+`/en/pages` and asked them to choose "Facebook page" a second time; and a done-step that said
+«الردود التلقائية مفعّلة» while the only page stayed off.
+
+**Rulings.**
+1. **Identity (D-A).** Inside a platform frame the platform is the login. The Logout control is not
+   rendered (sidebar and mobile sheet), and every sign-out path — the layout guard, the confirm
+   dialog, the auth interceptor — resolves its destination through one function,
+   `authManager.signedOutPath()`, which is the embedded entry page in a frame and `/login`
+   elsewhere. A login page inside the frame is never an acceptable state. The merchant's route to
+   the web/mobile app is the Facebook account linked to their page today (told at the end of
+   onboarding) and "Sign in with Zid" next; phone OTP is not offered — SMS is dead in KSA.
+2. **Billing rail.** A marketplace-billed account sees the plans that marketplace sells
+   (`ecommerceEnabled`, D-103) and nothing else — no yearly toggle, no plans it cannot buy. The
+   "manage" link is built per store from the observed dashboard shape (`buildZidManageUrl`) and,
+   inside the frame, navigates the **top** window: the destination is the dashboard framing us.
+   Zid's plan and trial are adopted **at install** (`syncZidBilling` in `postInstall`) so the local
+   row mirrors Zid from the first minute; the signup seed stays only as the fallback, so no account
+   is ever left without an entitlement row.
+3. **Home screen.** The wizard derives its step from server state, re-reads on focus, breaks out in
+   the frame's locale straight into the Facebook dialog, and its auto-reply row states the
+   EFFECTIVE state (workspace masters AND a page that will reply) — the D-026 rule applied to the
+   marketplace onboarding.
+4. **Third-party navigation (D-B, D-C — designed, Phase B).** WhatsApp connects from the signed-in
+   break-out tab (the scoped session already reads the workspace's inbox; L-17 relaxes for it); a
+   Facebook account already linked to another Jawab24 user gets a clear 409 on first connect, and a
+   reconnect of a page the workspace already owns refreshes that page's token without touching
+   identity. The `/connect/*` corridor with a real return page replaces landing on the dashboard.
+
+**Guardrail.** Every frontend branch is gated on the embedded session (`isEmbeddedSession()` /
+`getEmbeddedPlatform()` / `isFramed()`), so Facebook-only merchants, the web app and the bundled
+Android frontend run the code they ran before; tests pin the ungated path.
+
+
 ## D-116 · Zid store policies are synced from STRUCTURED settings only (shipping & payment); the return policy stays merchant-authored, and Zid "hours" are never synced (2026-08-30)
 
 **Decided:** 2026-08-30 · **Status:** Active
@@ -3635,3 +3725,4 @@ capture pins them; the delivery-options `simple` payload carries no fees, so shi
 not stated (the storefront shows them — a `payload_type=full` capture may add them later).
 `status` vocabulary on delivery options is uncaptured: unknown values are listed, only explicit
 off-states are dropped.
+

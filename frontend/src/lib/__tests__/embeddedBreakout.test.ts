@@ -66,6 +66,19 @@ describe('openTopLevelAuthenticated', () => {
         expect(tab.location.href).toBe('/auth/sync?code=handoff-code&redirect=%2Fpages');
     });
 
+    // Mutation-checked: dropping `localePrefix` from the handoff URL fails this.
+    it("carries the frame's locale into the handoff URL, so the tab opens in the merchant's language", async () => {
+        const tab = makeTab();
+        openSpy.mockReturnValue(tab as unknown as Window);
+
+        await openTopLevelAuthenticated('/pages?connectFacebook=true', { locale: 'ar' });
+
+        // Without the prefix the tab opened on the default locale and _app.tsx
+        // then re-routed to the browser's persisted first-party language — an
+        // Arabic merchant landed on /en/pages (2026-08-30).
+        expect(tab.location.href).toBe('/ar/auth/sync?code=handoff-code&redirect=%2Fpages%3FconnectFacebook%3Dtrue');
+    });
+
     it('when the popup is blocked, navigates the TOP window — never the frame', async () => {
         openSpy.mockReturnValue(null);
         const frameHref = window.location.href;

@@ -37,6 +37,8 @@ import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
 import { PHONE_AUTH_ENABLED, usesChannelWording } from '@/lib/featureFlags';
+import { isEmbeddedSession } from '@/lib/embeddedSession';
+import { authManager } from '@/lib/authManager';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -367,9 +369,17 @@ export const Sidebar = memo(function Sidebar() {
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing, isAdmin);
 
+  // D-A: inside a platform dashboard frame (Zid) the platform IS the login —
+  // the merchant was provisioned from their store and has nothing to sign out
+  // of or back into. A logout there can only end on "reopen the app", so the
+  // control is not offered at all. Read in an effect, not at render: the server
+  // has no sessionStorage, and a render-time read would mismatch on hydration.
+  const [inPlatformFrame, setInPlatformFrame] = useState(false);
+  useEffect(() => { setInPlatformFrame(isEmbeddedSession()); }, []);
+
   const handleLogout = useCallback(() => {
     logout();
-    router.push('/login');
+    router.push(authManager.signedOutPath());
   }, [logout, router]);
 
   const handleWorkspaceSwitch = useCallback((id: string) => {
@@ -576,21 +586,23 @@ export const Sidebar = memo(function Sidebar() {
           </div>
         )}
 
-        <button
-          onClick={handleLogout}
-          className={clsx(
-            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl sidebar-nav-danger group/nav relative",
-            !sidebarOpen && "justify-center"
-          )}
-        >
-          <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
-          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tNav('logout')}</span>}
-          {!sidebarOpen && (
-            <span className="nav-tooltip">
-              {tNav('logout')}
-            </span>
-          )}
-        </button>
+        {!inPlatformFrame && (
+          <button
+            onClick={handleLogout}
+            className={clsx(
+              "w-full flex items-center gap-3 px-3 py-3 rounded-2xl sidebar-nav-danger group/nav relative",
+              !sidebarOpen && "justify-center"
+            )}
+          >
+            <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
+            {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tNav('logout')}</span>}
+            {!sidebarOpen && (
+              <span className="nav-tooltip">
+                {tNav('logout')}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </aside>
   );

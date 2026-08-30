@@ -38,6 +38,8 @@ import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isNativePlatform } from '@/lib/capacitor';
+import { authManager } from '@/lib/authManager';
+import { isEmbeddedSession } from '@/lib/embeddedSession';
 import { persistDashboardLanguage } from '@/lib/dashboardLanguage';
 import { captureError } from '@/lib/sentryHelpers';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
@@ -114,6 +116,13 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
   const isEmbedded = useIsEmbedded();
+  // A PLATFORM dashboard frame (Zid) — distinct from `isEmbedded` above, which
+  // is the native app's in-app-browser flag. There the platform is the login,
+  // so Logout is not offered (D-A; see Sidebar). Read in an effect: no
+  // sessionStorage on the server, and a render-time read would mismatch on
+  // hydration.
+  const [inPlatformFrame, setInPlatformFrame] = useState(false);
+  useEffect(() => { setInPlatformFrame(isEmbeddedSession()); }, []);
 
   // Bottom-nav "More" button highlights as active whenever the user is on
   // a route surfaced inside the More overlay. Single source of truth for
@@ -167,7 +176,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
   useEffect(() => {
     if (_hasHydrated && !isAuthenticated && !isPublic) {
-      router.push('/login');
+      // Never `/login` inside a platform frame (D-A): the embedded session
+      // self-heals through authManager, and when it cannot, the embedded entry
+      // page is the destination — this guard used to race it with a login
+      // flash inside the Zid dashboard.
+      router.push(authManager.signedOutPath());
     }
   }, [_hasHydrated, isAuthenticated, isPublic, router]);
 
@@ -389,6 +402,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             isRTL={isRTL}
             router={router}
             onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
+            showLogout={!inPlatformFrame}
             isAdmin={isAdmin}
           />
         )}
@@ -413,7 +427,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                   {tc('cancel')}
                 </button>
                 <button
-                  onClick={() => { logout(); router.push('/login'); }}
+                  onClick={() => { logout(); router.push(authManager.signedOutPath()); }}
                   className="flex-1 py-3 rounded-xl font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"
                 >
                   {tNav('logout')}
@@ -484,6 +498,7 @@ function MobileMenuOverlay({
   isRTL,
   router,
   onLogout,
+  showLogout = true,
   isAdmin,
 }: {
   isOpen: boolean;
@@ -491,6 +506,8 @@ function MobileMenuOverlay({
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
   onLogout: () => void;
+  /** False inside a platform dashboard frame, where the platform is the login (D-A). */
+  showLogout?: boolean;
   isAdmin: boolean;
 }) {
   const tNav = useTranslations('nav');
@@ -716,25 +733,27 @@ function MobileMenuOverlay({
       </div>
           )}
 
-          {/* Logout Button */}
-          <button
-            onClick={onLogout}
-            className={clsx(
-              "w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200",
-              "btn-logout font-semibold active:scale-[0.98]",
-              isLandscape ? "mt-4 py-3" : "mt-5 py-4"
-            )}
-          >
-            <LogOut className={clsx(
-              isRTL && "rotate-180",
-              isLandscape ? "w-6 h-6" : "w-7 h-7"
-            )} />
-      <span className={clsx(
-              isLandscape ? "text-sm" : "text-base"
-      )}>
-              {tNav('logout')}
-      </span>
-    </button>
+          {/* Logout Button — absent inside a platform dashboard frame (D-A) */}
+          {showLogout && (
+            <button
+              onClick={onLogout}
+              className={clsx(
+                "w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200",
+                "btn-logout font-semibold active:scale-[0.98]",
+                isLandscape ? "mt-4 py-3" : "mt-5 py-4"
+              )}
+            >
+              <LogOut className={clsx(
+                isRTL && "rotate-180",
+                isLandscape ? "w-6 h-6" : "w-7 h-7"
+              )} />
+              <span className={clsx(
+                isLandscape ? "text-sm" : "text-base"
+              )}>
+                {tNav('logout')}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>

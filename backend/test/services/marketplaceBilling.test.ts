@@ -2,18 +2,39 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/services/ecommerce', () => ({
     hasActiveStoreForBillingSubject: vi.fn(),
+    getActiveStoreForBillingSubject: vi.fn(),
+}));
+
+// The Zid manage link is built from config (app id) + the store's merchant id;
+// pinned here so the assertions below do not depend on the test runner's env.
+vi.mock('../../src/config', () => ({
+    config: {
+        zid: { appId: '7367', appMarketUrl: '' },
+        salla: { appStoreUrl: '', appId: '' },
+        shopify: {},
+    },
 }));
 
 import { resolveMarketplaceBilling } from '../../src/services/marketplaceBilling';
-import { hasActiveStoreForBillingSubject } from '../../src/services/ecommerce';
+import { hasActiveStoreForBillingSubject, getActiveStoreForBillingSubject } from '../../src/services/ecommerce';
 
 const hasStore = vi.mocked(hasActiveStoreForBillingSubject);
+const getStore = vi.mocked(getActiveStoreForBillingSubject);
+
+/** The dev store's identity, as captured at install. */
+const ZID_STORE = { id: 'store-zid', platformData: { merchantId: '3195980' } };
+const ZID_PLANS_URL = 'https://dashboard.zid.sa/ar-sa/stores/3195980/apps/7367/plans';
 
 /** Nobody has a marketplace store unless a test says so. */
-const noStores = () => hasStore.mockResolvedValue(false);
+const noStores = () => {
+    hasStore.mockResolvedValue(false);
+    getStore.mockResolvedValue(null);
+};
 /** Only `platform` has an active store for the subject. */
-const onlyStore = (platform: string) =>
+const onlyStore = (platform: string, store = ZID_STORE) => {
     hasStore.mockImplementation(async (p: string) => p === platform);
+    getStore.mockImplementation(async (p: string) => (p === platform ? store : null));
+};
 
 describe('resolveMarketplaceBilling', () => {
     beforeEach(() => {
@@ -201,7 +222,8 @@ describe('resolveMarketplaceBilling', () => {
             const verdict = await resolveMarketplaceBilling('user_1', { status: 'trialing' });
 
             expect(verdict?.marketplace).toBe('zid');
-            expect(hasStore).toHaveBeenCalledWith('zid', 'user_1');
+            // The Zid leg reads the ROW (it needs the merchant id for the link).
+            expect(getStore).toHaveBeenCalledWith('zid', 'user_1');
         });
 
         it('exempts an established Stripe payer who later connects a Zid store', async () => {
@@ -213,12 +235,34 @@ describe('resolveMarketplaceBilling', () => {
         });
 
         /**
-         * The App Market URL shape has never been observed (EC3 blocks installing
-         * a Rejected app), so it stays unconfigured rather than guessed — and an
-         * absent link must never be read as "no suppression".
+         * The dashboard URL shape was observed live on 2026-08-30 (the app's
+         * Overview page links "Manage" to `/plans`), so the verdict now names the
+         * merchant's own plans page — built from the store's captured merchant id.
          */
-        it('suppresses Stripe even with no manage URL configured', async () => {
+        it('links a store-based verdict to the plans page of our app inside the merchant\'s dashboard', async () => {
             onlyStore('zid');
+
+            const verdict = await resolveMarketplaceBilling('user_1', null);
+
+            expect(verdict?.marketplace).toBe('zid');
+            expect(verdict?.manageUrl).toBe(ZID_PLANS_URL);
+        });
+
+        it('links a mirror-based verdict the same way, from the same store', async () => {
+            onlyStore('zid');
+
+            const verdict = await resolveMarketplaceBilling('user_1', { paymentMethod: 'zid', status: 'active' });
+
+            expect(verdict?.manageUrl).toBe(ZID_PLANS_URL);
+            expect(getStore).toHaveBeenCalledWith('zid', 'user_1');
+        });
+
+        /**
+         * A store row that predates the captured merchant id has no link to
+         * offer — and an absent link must never be read as "no suppression".
+         */
+        it('suppresses Stripe with no link when the store carries no merchant id', async () => {
+            onlyStore('zid', { id: 'store-zid', platformData: {} });
 
             const verdict = await resolveMarketplaceBilling('user_1', null);
 

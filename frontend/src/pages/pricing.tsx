@@ -30,8 +30,7 @@ import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
-import { openExternalUrl } from '@/lib/openExternalUrl';
-import { getMarketplaceBilling, MARKETPLACE_COPY } from '@/lib/marketplaceBilling';
+import { getMarketplaceBilling, MARKETPLACE_COPY, openMarketplaceManageUrl, visiblePlansFor } from '@/lib/marketplaceBilling';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
 interface PricingPageProps {
@@ -376,12 +375,18 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  // Which marketplace — if any — owns this account's paid plans (D-073). Read
+  // from the one field the backend's guard computes, so this page and the
+  // useSelectPlan refusal can never disagree about who is billed where.
+  const marketplaceBilling = getMarketplaceBilling(usage);
+
   // Yearly billing is only offered when at least one paid plan actually has a
   // yearly Stripe price. Without this gate the toggle promised "save ~17%"
-  // while the backend could only charge the monthly price.
+  // while the backend could only charge the monthly price. A marketplace bills
+  // monthly only, so the toggle is meaningless there.
   const yearlyOffered = useMemo(
-    () => plans.some(p => p.isActive !== false && p.price > 0 && p.yearlyAvailable),
-    [plans]
+    () => !marketplaceBilling && plans.some(p => p.isActive !== false && p.price > 0 && p.yearlyAvailable),
+    [plans, marketplaceBilling]
   );
   const effectiveInterval = yearlyOffered ? billingInterval : 'month';
 
@@ -439,8 +444,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     fetchUserData();
   }, [isAuthenticated]);
 
-  // Filter out inactive plans (keep only plans where isActive is true)
-  const activePlans = useMemo(() => plans.filter(p => p.isActive !== false), [plans]);
+  // Active plans — and, for a marketplace-billed merchant, only the plans that
+  // marketplace actually sells (see visiblePlansFor).
+  const activePlans = useMemo(() => visiblePlansFor(plans, marketplaceBilling), [plans, marketplaceBilling]);
 
   // Use slug for plan matching — slugs are stable ('starter', 'business', 'pro'),
   // whereas plan.id is a UUID that differs between environments and after re-seeding.
@@ -453,10 +459,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const currentPlanSlug = usage?.subscription?.autoReply?.allowed === false
     ? undefined
     : usage?.subscription?.plan?.slug;
-  // Which marketplace — if any — owns this account's paid plans (D-073). Read
-  // from the one field the backend's guard computes, so this banner and the
-  // useSelectPlan refusal can never disagree about who is billed where.
-  const marketplaceBilling = getMarketplaceBilling(usage);
   const hasActiveSubscription = Boolean(currentPlanSlug);
 
   // Current plan price for upgrade/downgrade comparison — O(1) lookup per render
@@ -562,22 +564,23 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             </div>
 
             {/* A marketplace owns this account's paid plans (D-073). The grid
-                below stays browsable, but every select action is refused by the
-                useSelectPlan guard — say so up front, and offer the destination
-                when there is one. Salla has no plan to manage; Zid has none
-                until its App Market URL is observed rather than guessed. */}
+                below shows only the plans that marketplace sells, and every
+                select action is refused by the useSelectPlan guard — say so up
+                front, and offer the destination when there is one. Salla has no
+                plan to manage; Zid's is the plans page of our app inside the
+                merchant's dashboard (observed 2026-08-30). */}
             {marketplaceBilling && (
               <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
                 <span className="font-medium">
                   {tPricing(MARKETPLACE_COPY[marketplaceBilling.marketplace].body)}
                 </span>
                 {marketplaceBilling.manageUrl && (
-                  // openExternalUrl, not a raw anchor: on native the deep link
-                  // must open in the system browser / Custom Tab like every
-                  // other external billing surface (same path as useSelectPlan).
+                  // Not a raw anchor: inside the platform frame this navigates
+                  // the dashboard that frames us; on native it must open in the
+                  // system browser / Custom Tab (same path as useSelectPlan).
                   <button
                     type="button"
-                    onClick={() => { void openExternalUrl(marketplaceBilling.manageUrl!); }}
+                    onClick={() => { void openMarketplaceManageUrl(marketplaceBilling.manageUrl!, locale); }}
                     className="font-bold underline underline-offset-2 whitespace-nowrap"
                   >
                     {tPricing('marketplaceManageCta', {
@@ -663,6 +666,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             // past the card border. At `xl` the sidebar is already paid for.
             // Pinned by src/__tests__/styles/dashboardGridBreakpoint.test.ts.
             activePlans.length === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-2 xl:grid-cols-3',
+            // A marketplace's two plans: two comfortable columns, not two cards
+            // stretched across a four-card track.
+            activePlans.length === 2 && 'xl:max-w-3xl',
             'max-w-7xl md:mx-auto lg:px-0',
           )}
         >

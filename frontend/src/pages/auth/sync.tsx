@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useTranslations } from 'next-intl';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
 import { clearEmbeddedSession } from '@/lib/embeddedSession';
@@ -85,15 +85,28 @@ export default function AuthSync() {
         // 4. Hydrate the store
         setAuth(user, sessionToken, fbToken as string || '');
 
+        // 5. The surface that opened this tab knew the merchant's language and
+        //    put it in the URL (the Zid frame's locale, the app's locale). Adopt
+        //    it into the persisted UI store too: `_app.tsx` re-routes the next
+        //    page to the STORED language, which in a fresh browser is whatever it
+        //    last persisted first-party — an Arabic merchant breaking out of the
+        //    Zid frame landed on /en/pages (2026-08-30).
+        const urlLocale = router.locale === 'ar' || router.locale === 'en' ? router.locale : undefined;
+        if (urlLocale) useUIStore.getState().setLanguage(urlLocale);
+
         setStatus(t('syncRedirecting'));
-        
+
         // Brief delay to ensure storage persistence
         setTimeout(() => {
             // redirect from query is already URL-decoded by Next.js router.
             // isSafeRedirectPath rejects protocol-relative "//evil.com" that a bare
             // startsWith('/') check would accept (open redirect).
             const redirectPath = isSafeRedirectPath(redirect) ? redirect : '/dashboard';
-            router.replace(redirectPath);
+            if (urlLocale) {
+                router.replace(redirectPath, undefined, { locale: urlLocale });
+            } else {
+                router.replace(redirectPath);
+            }
         }, 100);
 
       } catch (err) {

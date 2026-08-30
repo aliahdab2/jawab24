@@ -715,6 +715,23 @@ const start = async () => {
       recovered: r => ({ count: r.healed, message: `Zid billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
     });
 
+    // Zid uninstall follow-through (D-114). An `app.market.application.uninstall`
+    // delivery carries no auth and is confirmed by Zid having invalidated our
+    // token; a delivery that arrives BEFORE the invalidation (or while Zid's API
+    // is unreachable) leaves an `uninstallSignalAt` marker instead of
+    // deactivating on trust. This sweep re-asks Zid for marked stores only and
+    // finishes the uninstall once the token is provably dead — 15-min cadence,
+    // because a healthy fleet carries no markers and a marked store costs one
+    // Merchant API call.
+    const { sweepZidUninstallSignals } = await import('./services/zidLifecycle');
+    scheduleReconcileCron({
+      label: 'ZidUninstallSweep',
+      tag: 'zid_uninstall_sweep',
+      enabled: () => !!config.zid.clientId && config.zid.lifecycleVerify,
+      run: () => sweepZidUninstallSignals({ log: server.log }),
+      recovered: r => ({ count: r.finalized, message: `Zid uninstall sweep finalized ${r.finalized} uninstall(s) whose delivery preceded Zid's token invalidation` }),
+    });
+
     // Salla App Store billing reconciliation — the authority of last resort.
     // Salla delivers app.subscription.*/app.trial.* webhooks, but a delivery
     // that never arrives — or one that arrived BEFORE the merchant claimed the

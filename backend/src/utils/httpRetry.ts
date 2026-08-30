@@ -7,6 +7,26 @@ const RETRY_BASE_DELAY_MS = 1000;
 export const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
+ * A non-retriable HTTP failure from a platform API, with the status kept as
+ * DATA rather than buried in the message. A caller that needs to tell "our
+ * credential is dead" (401) from "the endpoint moved" (404) reads `.status`
+ * (services/zid.ts `probeZidToken` — the uninstall verification depends on it).
+ * The message is byte-identical to the bare Error it replaces, so callers and
+ * tests that match on the string are unaffected.
+ */
+export class EcommerceApiHttpError extends Error {
+    readonly status: number;
+    readonly platform: string;
+
+    constructor(platform: string, status: number) {
+        super(`${platform} API HTTP error: ${status}`);
+        this.name = 'EcommerceApiHttpError';
+        this.platform = platform;
+        this.status = status;
+    }
+}
+
+/**
  * Options for `ecommerceApiGet`.
  */
 export interface EcommerceApiGetOptions {
@@ -87,7 +107,7 @@ export async function ecommerceApiGet<T = unknown>(
         }
 
         if (!response.ok) {
-            throw new Error(`${platform} API HTTP error: ${response.status}`);
+            throw new EcommerceApiHttpError(platform, response.status);
         }
 
         return await response.json() as T;

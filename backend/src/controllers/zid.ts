@@ -3,10 +3,15 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import * as zidService from '../services/zid';
 import {
     resolveStoreByDomainOrMerchant,
-    deactivateStore,
     getStoreById,
     setEmbeddedTokenHash,
 } from '../services/ecommerce';
+import {
+    revokeEmbeddedToken,
+    verifyZidUninstall,
+    finalizeZidUninstall,
+    markZidUninstallSignal,
+} from '../services/zidLifecycle';
 import { authService } from '../services/auth';
 import { workspaceService } from '../services/workspace';
 import {
@@ -22,10 +27,11 @@ import {
     orderDeliveredEvent,
 } from '../services/orderNotificationScheduler';
 import { customerNotificationService } from '../services/customerNotifications';
-import { redis } from '../lib/redis';
+import { claimDailyOnce } from '../lib/dailyCap';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
-import { cancelZidSubscriptionLocal, syncZidBilling } from '../services/zidBilling';
+import { syncZidBilling } from '../services/zidBilling';
+import { buildZidDashboardAppUrl } from '../config/zidBilling';
 import { config } from '../config';
 import {
     PENDING_ZID_COOKIE_OPTIONS,
@@ -72,8 +78,7 @@ function zidDashboardEmbeddedUrl(merchantId: string | undefined, log: FastifyReq
         // silent fallback is how the last Zid failure took eight days to name.
         log.warn('Zid store profile carried no merchantId — using a filler store segment in the dashboard URL');
     }
-    const storeSegment = hasMerchantId ? encodeURIComponent(merchantId as string) : '1';
-    return `https://dashboard.zid.sa/ar-sa/stores/${storeSegment}/apps/${encodeURIComponent(config.zid.appId)}/embedded`;
+    return buildZidDashboardAppUrl(hasMerchantId ? (merchantId as string) : '1', 'embedded');
 }
 
 /**
@@ -123,41 +128,10 @@ async function provisionEmbeddedToken(
     }
 }
 
-/**
- * Revoke a store's embedded-app token — at Zid (best-effort) and locally
- * (always). Called on uninstall and on merchant-initiated disconnect.
- */
-export async function revokeEmbeddedToken(
-    storeId: string,
-    log: FastifyRequest['log'],
-    reason: 'uninstall' | 'disconnect' = 'uninstall',
-): Promise<void> {
-    try {
-        const creds = await zidService.resolveZidCredentials(storeId);
-        if (creds) await zidService.deleteEmbeddedToken(creds);
-    } catch (error) {
-        // On UNINSTALL this is expected — Zid invalidates our OAuth tokens as
-        // part of the uninstall, so the DELETE has nothing to authenticate with.
-        // On DISCONNECT the tokens are still live, so a failure means a usable
-        // credential survives at Zid's side and is worth a Sentry event.
-        if (reason === 'disconnect') {
-            captureError(error, 'Zid embedded-token revocation failed on merchant disconnect', {
-                tags: { service: 'zid', action: 'revoke-embedded-token' },
-                extra: { storeId },
-            });
-        }
-        log.warn({ err: error, storeId, reason }, 'Zid embedded-token revocation at Zid failed — clearing local hash anyway');
-    }
-    try {
-        await setEmbeddedTokenHash(storeId, null);
-    } catch (error) {
-        // THIS one matters: a surviving hash keeps the session path open.
-        captureError(error, 'Failed to clear Zid embedded token hash', {
-            tags: { service: 'zid', action: 'clear-embedded-token' },
-            extra: { storeId },
-        });
-    }
-}
+// `revokeEmbeddedToken` lives in services/zidLifecycle.ts (D-114): the uninstall
+// sweep is a cron, and a cron must not import a controller. Re-exported so the
+// disconnect adapter below and any external importer keep their entry point.
+export { revokeEmbeddedToken };
 
 /**
  * POST /zid/embedded/session — trade the iframe's UUID for a real session.
@@ -192,11 +166,25 @@ export async function embeddedSession(request: FastifyRequest, reply: FastifyRep
     });
 }
 
-// --- Webhook (single endpoint — Basic-auth verified, dispatches by event) ---
+// --- Webhook (single endpoint — dispatches by event) ---
+//
+// Two classes of delivery arrive here, with two different proofs:
+//   • PER-STORE events (products, orders, carts) — registered by us through
+//     /v1/managers/webhooks with a Basic username/password, which Zid echoes on
+//     every delivery. Verified at the edge, fail closed.
+//   • APP MARKET LIFECYCLE events (`app.market.*`) — configured once in the
+//     Partner Dashboard, where no credential can be attached; Zid delivers them
+//     with NO Authorization header (captured live 2026-08-30, C11). They are
+//     TRIGGERS: uninstall is confirmed by Zid having invalidated our token
+//     (services/zidLifecycle.ts), subscription events only ask `syncZidBilling`
+//     to read Zid's API (D-070). Nothing in a lifecycle body is trusted, and
+//     each store's trigger is throttled so an unauthenticated POST costs at most
+//     one Merchant API call per window. Kill switch: ZID_LIFECYCLE_VERIFY=off.
 
 /**
- * Zid authenticates webhook deliveries with HTTP Basic auth (the username/password
- * pair set at subscription time) — there is NO signature header. Fail closed.
+ * Zid authenticates PER-STORE webhook deliveries with HTTP Basic auth (the
+ * username/password pair set at subscription time) — there is NO signature
+ * header. Fail closed.
  */
 function verifyZidWebhookAuth(request: FastifyRequest, reply: FastifyReply): boolean {
     const header = request.headers.authorization;
@@ -246,9 +234,10 @@ interface ZidWebhookBody {
     [key: string]: unknown;
 }
 
-export async function webhookHandler(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifyZidWebhookAuth(request, reply)) return;
+/** One trigger per store per window for the unauthenticated lifecycle path. */
+const LIFECYCLE_TRIGGER_WINDOW_SECONDS = 60;
 
+export async function webhookHandler(request: FastifyRequest, reply: FastifyReply) {
     const body = (request.body ?? {}) as ZidWebhookBody;
     const query = (request.query ?? {}) as { e?: string; sid?: string };
 
@@ -256,6 +245,29 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     // target_url carries the event (`e`) and our store UUID (`sid`) — resolve from
     // the query string first, then fall back to body fields.
     const event = query.e || body.event || '';
+
+    // Lifecycle deliveries cannot carry the Basic pair (see the section header);
+    // with the kill switch off they go back through the gate, i.e. are rejected.
+    const lifecycle = zidService.isZidLifecycleEvent(event) && config.zid.lifecycleVerify;
+    if (!lifecycle && !verifyZidWebhookAuth(request, reply)) return;
+
+    if (lifecycle) {
+        // The lifecycle envelope has never been captured (ZID_TEST_PLAN C11/C15):
+        // log its SHAPE — keys and store identifiers, never the values wholesale —
+        // so the next delivery finishes the capture without a code change.
+        const authHeader = request.headers.authorization;
+        request.log.info({
+            event,
+            query: { e: query.e ?? null, sid: query.sid ?? null },
+            bodyKeys: Object.keys(body),
+            storeRef: {
+                store_id: body.store_id ?? null,
+                store_uuid: body.store_uuid ?? null,
+                data_store_id: (body.data?.store_id as string | number | undefined) ?? null,
+            },
+            authScheme: authHeader ? authHeader.split(' ')[0] : 'none',
+        }, 'Zid lifecycle webhook received');
+    }
 
     const resolveStore = async () => {
         if (query.sid) {
@@ -272,18 +284,30 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     if (event === ZID_UNINSTALL_EVENT) {
         const store = await resolveStore();
         if (store) {
-            // Revoke the in-dashboard entry BEFORE deactivating: deactivateStore
-            // blanks the OAuth tokens, after which the Zid DELETE cannot be
-            // authenticated. Best-effort at Zid's side (it invalidates our tokens
-            // at uninstall anyway), but clearing OUR hash is what actually closes
-            // the session path, so it happens either way.
-            await revokeEmbeddedToken(store.id, request.log);
-            // Cancel the billing mirror BEFORE deactivating too, for a different
-            // reason: no paid local subscription may outlive the app (§H-6). It
-            // is keyed on zid_store_id rather than the store row, so the order
-            // is defensive rather than required.
-            await cancelZidSubscriptionLocal(store.id, 'zid_app_uninstalled', request.log);
-            await deactivateStore('zid', store.storeDomain);
+            if (lifecycle) {
+                // claimDailyOnce = the shared SET-NX-with-TTL primitive; it fails
+                // OPEN (Redis down ⇒ proceed), which is right here: it bounds
+                // repeats of a verify that is safe to repeat, it never gates one.
+                if (!(await claimDailyOnce(`zid:lifecycle:uninstall:${store.id}`, LIFECYCLE_TRIGGER_WINDOW_SECONDS))) {
+                    request.log.info({ storeId: store.id }, 'Zid uninstall delivery throttled — a probe for this store ran within the window');
+                    return reply.status(200).send({ ok: true });
+                }
+                // The delivery is the claim; Zid's dead token is the proof. A token
+                // Zid still honours means the delivery outran the invalidation or
+                // is a spoof — either way the store stays ACTIVE, and the marker
+                // lets the ZidUninstallSweep cron finish a genuine one later.
+                const verdict = await verifyZidUninstall(store.id, request.log);
+                if (verdict !== 'confirmed') {
+                    await markZidUninstallSignal(store.id);
+                    request.log.warn(
+                        { storeId: store.id, verdict },
+                        'Zid uninstall delivery NOT confirmed by Zid — store left active, signal recorded for the sweep',
+                    );
+                    return reply.status(200).send({ ok: true });
+                }
+            }
+            // Revoke → cancel mirror → deactivate, in that order (see finalizeZidUninstall).
+            await finalizeZidUninstall(store, request.log);
         }
         return reply.status(200).send({ ok: true });
     }
@@ -291,6 +315,13 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     if (event.startsWith(ZID_SUBSCRIPTION_EVENT_PREFIX)) {
         const store = await resolveStore();
         if (store) {
+            if (lifecycle && !(await claimDailyOnce(`zid:lifecycle:subscription:${store.id}`, LIFECYCLE_TRIGGER_WINDOW_SECONDS))) {
+                // Bounded cost for an unauthenticated trigger: the verify already
+                // ran for this store within the window, and the 6h reconciler
+                // covers anything a coalesced delivery could have carried.
+                request.log.info({ storeId: store.id, event }, 'Zid subscription delivery throttled — verify already ran within the window');
+                return reply.status(200).send({ ok: true });
+            }
             // Fire-and-forget: Zid's redelivery policy is uncaptured, so the ack
             // must not wait on a Merchant API round-trip. A failure here is not
             // lost — the 6h reconciler sweeps the same store.
@@ -351,11 +382,12 @@ interface ZidAbandonedCartPayload {
 const CART_DROP_CAPTURE_TTL_SECONDS = 60 * 60;
 
 /**
- * Sentry-capture a dropped cart event at most once per store+reason per hour
- * (Redis SET NX — same shape as ai.ts `alertQuotaExhausted`): if Zid routinely
- * sends guest carts without a phone, one capture per hour is signal and one per
- * cart is a flood. Every drop still lands in the warn log. Fails open (Redis
- * down ⇒ capture rather than lose the drift signal); never throws.
+ * Sentry-capture a dropped cart event at most once per store+reason per hour:
+ * if Zid routinely sends guest carts without a phone, one capture per hour is
+ * signal and one per cart is a flood. Every drop still lands in the warn log.
+ * Fails open (Redis down ⇒ capture rather than lose the drift signal); never
+ * throws — `claimDailyOnce` is the shared SET-NX primitive with exactly that
+ * contract (its TTL is a parameter; "daily" is only its default).
  */
 async function captureCartDropThrottled(
     reason: 'phone' | 'cart_id',
@@ -363,17 +395,7 @@ async function captureCartDropThrottled(
     event: string,
     payloadKeys: string[],
 ): Promise<void> {
-    let shouldCapture = true;
-    try {
-        const acquired = await redis.set(
-            `alert:zid_cart_drop:${reason}:${storeId}`, '1',
-            'EX', CART_DROP_CAPTURE_TTL_SECONDS, 'NX',
-        );
-        shouldCapture = acquired === 'OK';
-    } catch {
-        // Redis unavailable — prefer a possible duplicate capture over silence.
-    }
-    if (!shouldCapture) return;
+    if (!(await claimDailyOnce(`alert:zid_cart_drop:${reason}:${storeId}`, CART_DROP_CAPTURE_TTL_SECONDS))) return;
     captureError(
         new Error(`Zid abandoned-cart event without a customer ${reason === 'phone' ? 'phone' : 'cart id'}: ${event}`),
         reason === 'phone'
@@ -590,6 +612,17 @@ export const {
 
     postInstall: async (store, tokens, storeInfo, platformInitiated, log) => {
         const registered = await provisionEmbeddedToken(store.id, tokens, log);
+
+        // Adopt the Zid subscription NOW. An App Market merchant subscribed to a
+        // plan BEFORE OAuth (EC3), so the plan and its 14-day trial already exist
+        // at Zid when the install lands — but until this call the local row kept
+        // the jawab24.com signup trial («المبتدئ · 30 يوم») until a webhook (once
+        // 401'd, now throttled) or the 6h reconciler caught up. Fire-and-forget:
+        // the redirect must not wait on a Merchant API round-trip; a known
+        // non-entitling plan (the dev store's «اختبار») writes nothing.
+        syncZidBilling(store.id, log).catch(err => {
+            log.warn({ err, storeId: store.id }, 'Zid billing adopt-at-install failed — the reconciler will retry');
+        });
 
         if (!platformInitiated) {
             // Merchant started from inside Jawab24 and still has their session.

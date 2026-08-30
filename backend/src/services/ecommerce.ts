@@ -516,8 +516,21 @@ export async function hasActiveStoreForBillingSubject(
     platform: EcommercePlatform,
     userId: string,
 ): Promise<boolean> {
+    return (await getActiveStoreForBillingSubject(platform, userId)) !== null;
+}
+
+/**
+ * The active store behind `hasActiveStoreForBillingSubject`'s answer — id and
+ * `platformData` only, which is what a marketplace verdict needs to name the
+ * merchant's own management page (Zid: `platformData.merchantId` builds the
+ * dashboard plans URL). Same two legs, same indexes; one query for both callers.
+ */
+export async function getActiveStoreForBillingSubject(
+    platform: EcommercePlatform,
+    userId: string,
+): Promise<{ id: string; platformData: unknown } | null> {
     const result = await db
-        .select({ id: ecommerceStores.id })
+        .select({ id: ecommerceStores.id, platformData: ecommerceStores.platformData })
         .from(ecommerceStores)
         .leftJoin(workspaces, eq(ecommerceStores.workspaceId, workspaces.id))
         .where(and(
@@ -529,7 +542,7 @@ export async function hasActiveStoreForBillingSubject(
             ),
         ))
         .limit(1);
-    return result.length > 0;
+    return result[0] ?? null;
 }
 
 /**

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { zidApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { getEmbeddedPlatform } from '@/lib/embeddedSession';
@@ -41,6 +41,7 @@ export default function ZidOnboarding() {
   const [linkedPageName, setLinkedPageName] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const isEmbedded = typeof window !== 'undefined' && getEmbeddedPlatform() !== null;
+  const locale = useLocale();
 
   useEffect(() => {
     // Wait for persisted auth to rehydrate before judging the session — a bare
@@ -69,6 +70,56 @@ export default function ZidOnboarding() {
     if (step === 2) {
       fetchPages();
     }
+  }, [step, fetchPages]);
+
+  // Derive the starting step from SERVER state, once per mount. The wizard used
+  // to start at «مرحباً بك» no matter what: its step lived only in React state,
+  // and the Zid dashboard re-renders its iframe mid-flow (a fresh
+  // /zid/embedded/session was observed between two clicks, 2026-08-30) — so a
+  // merchant who had just connected a page was sent back to the welcome screen.
+  const [stepResolved, setStepResolved] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated || stepResolved) return;
+    let cancelled = false;
+    pagesApi
+      .getAll()
+      .then((res) => {
+        if (cancelled) return;
+        const list = (res.data || []) as Page[];
+        setPages(list);
+        const linked = list.find((p) => Boolean(p.ecommerceStoreId));
+        if (linked) {
+          setLinkedPageName(linked.name);
+          setStep(3);
+        } else if (list.length > 0) {
+          setStep(2);
+        }
+      })
+      .catch(() => {
+        // No pages read → start from the top. Showing the welcome once too
+        // often is recoverable; skipping a step the merchant has not done is not.
+      })
+      .finally(() => {
+        if (!cancelled) setStepResolved(true);
+      });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, stepResolved]);
+
+  // The page is connected in ANOTHER tab (facebook.com refuses to be framed) and
+  // the merchant comes back here. This step fetched once on entry, so the frame
+  // kept saying «لا توجد صفحات متصلة» until they pressed Back and forward again
+  // (2026-08-30). Re-read whenever the frame regains focus while on this step.
+  useEffect(() => {
+    if (step !== 2) return;
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') void fetchPages();
+    };
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onReturn);
+    return () => {
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onReturn);
+    };
   }, [step, fetchPages]);
 
   const handleLinkPage = async () => {
@@ -270,14 +321,17 @@ export default function ZidOnboarding() {
                           place. Either way the merchant has a way forward. */}
                       <Button
                         onClick={() => {
-                          // Land on the pages screen, whose own empty state
-                          // carries the connect-a-page action. Embedded: break
-                          // out to a top-level tab that ARRIVES SIGNED IN
-                          // (facebook.com can't be framed, and this merchant has
-                          // no credentials to pass a login wall with); web:
-                          // navigate in place.
+                          // Embedded: break out to a top-level tab that ARRIVES
+                          // SIGNED IN (facebook.com can't be framed, and this
+                          // merchant has no credentials to pass a login wall
+                          // with) — in the frame's language, and straight into
+                          // the Facebook dialog (`?connectFacebook=true` is the
+                          // pages screen's own resume trigger), so the merchant
+                          // is not asked to choose "Facebook page" a second time.
+                          // Web: navigate in place; the pages screen's empty state
+                          // carries the connect action.
                           if (isEmbedded) {
-                            void openTopLevelAuthenticated('/pages');
+                            void openTopLevelAuthenticated('/pages?connectFacebook=true', { locale });
                           } else {
                             router.push('/pages');
                           }
@@ -390,6 +444,15 @@ export default function ZidOnboarding() {
                       </div>
                     )}
                     <StoreAutoReplyRow />
+                    {/* Their account IS their store; nothing ever told them how
+                        to reach the web/mobile app outside the dashboard (Z-18).
+                        Facebook is the one sign-in they now hold — SMS OTP is
+                        unavailable in KSA, so phone is deliberately not offered. */}
+                    {isEmbedded && (
+                      <p className="text-xs text-muted-foreground leading-relaxed px-1">
+                        {t('onboarding.doneSignInHint')}
+                      </p>
+                    )}
                   </div>
 
                   <Button

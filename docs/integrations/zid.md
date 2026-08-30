@@ -362,6 +362,26 @@ it to DELETE tolerances.** The three questions worth the most:
 
 Full detail in "`[provisional]` parsers" below and `ZID_TEST_PLAN.md` §H (H-1…H-11).
 
+## Embedded surface — the meeting slice (2026-08-30, D-114/D-115)
+
+A full uninstall → reinstall → onboarding → Facebook connect → pricing cycle was driven
+live on the dev store the night before the review meeting (memory
+`project_zid_embedded_facebook_connect`, plan `HANDOFF-2026-08-30-zid-demo-embedded`).
+What it changed, and where:
+
+| Surface | Before | Now | Code |
+|---|---|---|---|
+| Lifecycle webhooks | 401'd (no Basic auth on Partner-Dashboard deliveries) | verified against Zid's API; sweep finishes early deliveries | `services/zidLifecycle.ts`, webhook section above |
+| Logout inside the frame | Jawab24 login page rendered inside the Zid dashboard | control hidden in a platform frame; every sign-out path lands on `/zid/embedded?expired=1` via `authManager.signedOutPath()` | `Sidebar.tsx`, `DashboardLayout.tsx`, `authManager.ts` |
+| Pricing inside the frame | 4 Stripe plans in USD, «managed in the App Market» with nothing to click | only the two plans Zid sells (`ecommerceEnabled`, D-103), no yearly toggle, **«إدارة الباقة في زد»** → the top window navigates to `dashboard.zid.sa/{locale}-sa/stores/{merchantId}/apps/7367/plans` | `config/zidBilling.ts#buildZidManageUrl`, `services/marketplaceBilling.ts`, `lib/marketplaceBilling.ts`, `pricing.tsx` |
+| Trial | jawab24.com signup trial («المبتدئ · 30 يوم») until a webhook/reconciler adopted Zid's | `syncZidBilling` runs at install (`postInstall`, fire-and-forget) so Zid's plan + 14-day trial mirror from the first minute; the signup seed stays as the fallback | `controllers/zid.ts#postInstall` |
+| Wizard | step lost on iframe re-render; no re-fetch after the break-out; break-out → `/en/pages` + a second "Facebook page" choice; «مفعّلة» while the page was off | step derived from server state; re-fetch on focus/visibility; break-out → `/{locale}/auth/sync` → `/pages?connectFacebook=true` (straight to the Facebook dialog); the auto-reply row reads the EFFECTIVE state (masters AND a page that replies) and says «الصفحة ما زالت متوقفة» otherwise | `zid/onboarding.tsx`, `StoreAutoReplyRow.tsx`, `embeddedBreakout.ts`, `auth/sync.tsx` |
+| Sign-in story | nothing told a Zid merchant how to reach the web/mobile app | done-step copy: sign in with the Facebook account linked to the page (SMS OTP is unavailable in KSA, so phone is deliberately not offered). "Sign in with Zid" is the full answer — PR 5 in the plan | `i18n/*/zid.json#onboarding.doneSignInHint` |
+
+Still owed after the meeting (plan §Phase B): the `/connect/*` corridor with a real return
+page, 409 for a Facebook account linked elsewhere + D-C reconnect refresh, the 15-min
+break-out cookie, WhatsApp from the break-out (D-B), the SAR plan view, "Sign in with Zid".
+
 ## Verified API contract (docs.zid.sa, fetched 2026-08-01)
 
 ### OAuth
@@ -557,12 +577,15 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
 ### Webhooks
 - Registered per-store via `POST /v1/managers/webhooks` with `original_id` = the Partner
   **Application ID** (`ZID_APP_ID` env — distinct from the OAuth client id).
-- **Deliveries are authenticated with HTTP Basic auth** — the `username`/`password` set at
-  subscription time come back as `Authorization: Basic base64(user:pass)` on every
-  delivery. There is **no HMAC signature header** (the old `x-zid-signature` never
-  existed). We register with username `jawab24` (code constant `ZID_WEBHOOK_BASIC_USER`)
-  and password `ZID_WEBHOOK_SECRET`; verification is timing-safe
-  (`utils/basicAuthVerify.ts`).
+- **Per-store deliveries are authenticated with HTTP Basic auth** — the `username`/`password`
+  set at subscription time come back as `Authorization: Basic base64(user:pass)` on every
+  delivery of an event WE registered through `/v1/managers/webhooks`. There is **no HMAC
+  signature header** (the old `x-zid-signature` never existed). We register with username
+  `jawab24` (code constant `ZID_WEBHOOK_BASIC_USER`) and password `ZID_WEBHOOK_SECRET`;
+  verification is timing-safe (`utils/basicAuthVerify.ts`).
+  ⛔ **This does NOT extend to the App Market lifecycle events** — see the D-114 bullet under
+  "App lifecycle" below: those carry no `Authorization` header at all, and until 2026-08-30 the
+  handler 401'd every one of them.
 - Registered events (`ZID_WEBHOOK_EVENTS`, mirrored in `integrations/zid.ts`
   `ZID_WEBHOOK_TOPICS`, drift-tested): `product.create`, `product.update`,
   `product.publish`, `product.delete`, `order.create`, `order.status.update`,
@@ -576,8 +599,33 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
   `customer.*`/`category.*`.
 - **App lifecycle** (`app.market.application.install` / `app.market.application.uninstall`)
   is configured in the Zid **Partner Dashboard**, not via the API — the handler treats
-  `app.market.application.uninstall` as the uninstall signal (→ `deactivateStore`). Zid
-  invalidates our tokens at uninstall.
+  `app.market.application.uninstall` as the uninstall signal. Zid invalidates our tokens at
+  uninstall.
+- ⭐ **Lifecycle deliveries carry NO auth — verified against Zid's API instead (D-114,
+  captured live 2026-08-30 02:54:24Z on the dev store, C11).** A Partner-Dashboard webhook
+  has no username/password field, so `app.market.application.uninstall` and every
+  `app.market.subscription.*` event arrive as `POST /zid/webhooks?e=<event>` with UA
+  `GuzzleHttp/7`, a JSON body, and **no `Authorization` header** — the Basic gate rejected all
+  of them with 401 (`scheme: none`), so no real uninstall had ever deactivated a store and no
+  subscription event had ever triggered a verify; only the 6h reconciler moved billing.
+  Now `webhookHandler` skips the Basic gate for `app.market.*` (`isZidLifecycleEvent`) and
+  treats the delivery as a **trigger** (D-070 shape): **uninstall** → `verifyZidUninstall`
+  probes `GET /v1/managers/account/profile` with our stored credential (a `/managers/`
+  endpoint, so a 401 is unambiguously "token revoked" — the store API also 401s on a missing
+  `Store-Id`); only a dead token runs `finalizeZidUninstall` (revoke → cancel mirror →
+  deactivate). A token Zid still honours (delivery outran the invalidation, or a spoof)
+  leaves the store ACTIVE and writes `platformData.uninstallSignalAt`; the 15-min
+  `ZidUninstallSweep` cron (`sweepZidUninstallSignals`) re-probes marked stores and
+  finishes the uninstall once the token dies, clearing a marker that stays valid for 24 h.
+  **Subscription events** just call `syncZidBilling` as before (nothing in the body is read).
+  Both triggers are throttled per store (Redis `SET NX`, 60 s), so an unauthenticated POST
+  costs at most one Merchant API call per store per minute. Kill switch:
+  `ZID_LIFECYCLE_VERIFY=off` restores the Basic gate for everything (= the old 401s).
+  Code: `services/zidLifecycle.ts`, `controllers/zid.ts` (webhook section), `probeZidToken`
+  in `services/zid.ts`, `EcommerceApiHttpError` in `utils/httpRetry.ts`. Still owed: the
+  lifecycle BODY shape — the handler now logs `bodyKeys` + store identifiers on every
+  lifecycle delivery (`Zid lifecycle webhook received`) so the next real one completes C11/C15
+  in `zid_live_payloads.jsonl`.
 
 #### App lifecycle & subscription events — the dashboard's full list (captured 2026-08-11)
 
