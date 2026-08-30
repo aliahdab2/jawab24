@@ -4,6 +4,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { isTimeoutAbort } from '@jawab24/shared';
+import { detectLanguage } from '../utils/language';
 import { logAiUsage } from './aiUsageLog';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
 
@@ -62,6 +63,29 @@ function buildTranscribeParams(file: Awaited<ReturnType<typeof toFile>>, languag
         ...(languageHint ? { language: languageHint } : {}),
         temperature: 0,
     };
+}
+
+/**
+ * Does the transcript's script agree with the language we asked for?
+ *
+ * The `language` param is a HINT to gpt-4o-mini-transcribe, not a constraint: on
+ * a short or noisy Arabic voice note the model still emits Turkish, Chinese or
+ * Latin gibberish («Alıştırakstanı», «好了好了好了», «Tavar ma ba harijina») —
+ * 7 of 35 WhatsApp voice notes on one Yemeni page, 2026-08-29. Downstream that
+ * text is treated as the customer's words: the reply pipeline mirrored it and
+ * SENT a Turkish reply to an Arabic-speaking customer. A transcript that
+ * contradicts the hint is worth less than no transcript, so it is discarded and
+ * the caller takes its existing "transcription failed" path (the text-only nudge).
+ *
+ * Only the Arabic hint is enforced: Arabic script is unambiguous, and an Arabic
+ * transcript under an 'en' hint is far more likely a wrong hint than a wrong
+ * transcript (the hint comes from the sender's PREVIOUS text). Letter-free output
+ * (a card code, «111») has no script to judge and is accepted.
+ */
+export function transcriptMatchesHint(text: string, languageHint?: string): boolean {
+    if (languageHint !== 'ar') return true;
+    if (!/\p{L}/u.test(text)) return true;
+    return detectLanguage(text).script === 'Arabic';
 }
 
 /** Map audio MIME type to file extension for OpenAI transcription API */
@@ -184,6 +208,41 @@ class TranscriptionService {
     }
 
     /**
+     * Turn the API's text into a result, or null when there is nothing usable.
+     * Shared by both call paths so the empty check and the script check can never
+     * drift apart between them (the URL path and the buffer path already shipped
+     * one classification bug each — §13c).
+     *
+     * Runs AFTER `logUsage`: the call was billed whatever we decide about the text.
+     */
+    private acceptTranscript(rawText: string | undefined, languageHint?: string): TranscriptionResult | null {
+        const text = rawText?.trim();
+        if (!text) return null;
+
+        if (!transcriptMatchesHint(text, languageHint)) {
+            const script = detectLanguage(text).script;
+            console.warn('[transcription] transcript script contradicts language hint — discarding', {
+                languageHint, script, textLength: text.length,
+            });
+            // One fingerprinted WARNING so a rate change is visible in Sentry without
+            // paging per voice note — same treatment as the 400 / timeout cases.
+            captureError(
+                new Error(`Transcript script ${script} contradicts hint ${languageHint}`),
+                'Transcription language mismatch',
+                {
+                    level: 'warning',
+                    fingerprint: ['transcription-language-mismatch'],
+                    tags: { service: 'transcription' },
+                    extra: { languageHint, script, textLength: text.length },
+                },
+            );
+            return null;
+        }
+
+        return { text };
+    }
+
+    /**
      * Transcribe an audio file from a URL using OpenAI transcription.
      * Returns the transcription text or null on any failure.
      *
@@ -278,10 +337,7 @@ class TranscriptionService {
                 // regardless of whether the transcript came back empty.
                 this.logUsage(logCtx, transcription);
 
-                const text = transcription.text?.trim();
-                if (!text) return null;
-
-                return { text };
+                return this.acceptTranscript(transcription.text, languageHint);
             } finally {
                 clearTimeout(transcribeTimer);
             }
@@ -371,10 +427,7 @@ class TranscriptionService {
             recordAiReturn('transcription', MODEL_TRANSCRIBE);
             this.logUsage(logCtx, transcription);
 
-            const text = transcription.text?.trim();
-            if (!text) return null;
-
-            return { text };
+            return this.acceptTranscript(transcription.text, languageHint);
         } catch (error) {
             const isTimeout = isTimeoutAbort(controller.signal);
             recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, isTimeout ? 'AiTimeoutError' : 'OpenAIApiError');
