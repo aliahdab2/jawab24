@@ -4141,6 +4141,16 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Follow-up referencing a photo earlier in the thread — the history-resolution line must let "سعرها" resolve to the pictured course.',
     },
+    {
+        id: 820, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: '[صورة: لقطة شاشة لإيصال تحويل من هاتف العميل: المبلغ 3750 ليرة، رقم المرجع 88213، إلى حساب المعهد] وصلكم؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            flagsAbsent: ['price_not_in_kb'],
+        },
+        notes: 'A figure the vision step read off the CUSTOMER\'S OWN receipt (3750 is in no KB) must not trip the price guard when the model reads it back — prod 2026-08-30: a network owner\'s photo of his card SMS («قيمة 250 دج») was answered with «للتأكد من السعر بدقة، تواصل معنا على أرقامنا» inside a WhatsApp chat. Grounding of merchant prices is unchanged: a typed «بكم؟ 500؟» still flags.',
+    },
 
     // ===== Category 59: Gender Addressing (Arabic DM) — v51 =====
     // Feature is Arabic-DM-only (see DECISIONS.md D-015). Grading is asymmetric (see FEMININE_ADDRESS):

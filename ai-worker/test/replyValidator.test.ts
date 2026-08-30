@@ -1019,3 +1019,42 @@ describe('validateReply orchestration', () => {
         });
     });
 });
+
+// A figure the vision step read off the CUSTOMER'S OWN photo is not a price claim
+// about the merchant's goods. Prod 2026-08-30 (Z NET): a network owner sent a
+// screenshot of his card SMS («قيمة 250 دج»); the model read it back and the guard
+// swapped the reply for «للتأكد من السعر بدقة، تواصل معنا على أرقامنا» — inside a
+// WhatsApp chat. Only the described-image segments widen the allow-list; the
+// customer's TYPED numbers never do (anchored hallucinations must still flag).
+describe('flagHallucinatedPrice — numbers read off the customer\'s own photo', () => {
+    const kb = 'الاشتراك الشهري 2000 ريال يمني قديم أو 15 ريال سعودي';
+    const photo = '[صورة: صورة لهاتف يُظهر رسالة نصية: "شكرك على استخدامك شبكة واي مكسب رقم الكرت 87391241142 قيمة 250 دج"]';
+    const reply = 'شفت صورة رسالة الكرت رقم 87391241142 وقيمته 250 دج. إذا تبي تتأكد من حالة الكرت وضح لي أكثر.';
+
+    it('REGRESSION: reading the photographed figure back is flagged without the customer text', () => {
+        expect(flagHallucinatedPrice(reply, kb)).toBe(true);
+    });
+
+    it('passes when the figure came from the described image in the customer turn', () => {
+        expect(flagHallucinatedPrice(reply, kb, undefined, photo)).toBe(false);
+    });
+
+    it('finds the description when consolidated with typed text and a second photo', () => {
+        const consolidated = `${photo}\nوهو يفتهم لك\n[Image: another screenshot, card value 250 دج]`;
+        expect(flagHallucinatedPrice(reply, kb, undefined, consolidated)).toBe(false);
+    });
+
+    it('a TYPED customer number does NOT launder an anchored hallucination', () => {
+        expect(flagHallucinatedPrice('نعم، الاشتراك 500 ريال', kb, undefined, 'الاشتراك 500 ريال صح؟')).toBe(true);
+    });
+
+    it('ADDITIVE ONLY: a photo cannot launder an unrelated invented merchant price', () => {
+        expect(flagHallucinatedPrice('الاشتراك السنوي 9000 ريال', kb, undefined, photo)).toBe(true);
+    });
+
+    it('validateReply forwards the customer turn into Check 1', () => {
+        const parsed: ParsedReply = { reply, intent: 'QUESTION', confidence: 'high', hedging: false, language: 'ar', flags: [] };
+        expect(validateReply(parsed, req(photo, { knowledgeBase: kb, channel: 'dm' })).flags).not.toContain('price_not_in_kb');
+        expect(validateReply(parsed, req('شوف', { knowledgeBase: kb, channel: 'dm' })).flags).toContain('price_not_in_kb');
+    });
+});

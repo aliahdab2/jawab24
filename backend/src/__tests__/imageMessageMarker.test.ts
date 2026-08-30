@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isImageMessageBody, extractImageDescription, isAnyImageMessage } from '@jawab24/shared';
+import { isImageMessageBody, extractImageDescription, extractImageDescriptions, isAnyImageMessage } from '@jawab24/shared';
 import { t } from '../utils/i18n';
 import { getAttachmentPlaceholder } from '../utils/attachmentLabels';
 
@@ -32,5 +32,25 @@ describe('image-message marker protocol (i18n ↔ shared matcher)', () => {
         for (const text of ['بكم هذا المنتج؟', 'hello', '[Voice Message]', '[منشور مُشارَك]']) {
             expect(isAnyImageMessage(text)).toBe(false);
         }
+    });
+});
+
+// `extractImageDescriptions` is the un-anchored sibling used by the price guard: the
+// reply pipeline consolidates one debounce window into a single customer text, so a
+// described photo can sit beside typed text or another photo.
+describe('extractImageDescriptions (consolidated customer turn)', () => {
+    it('returns every described image in order, ignoring bare placeholders and typed text', () => {
+        const text = '[صورة: إيصال بمبلغ 3750 ليرة]\nوصلكم؟\n[Image]\n[Image: second screenshot, 250 دج]';
+        expect(extractImageDescriptions(text)).toEqual(['إيصال بمبلغ 3750 ليرة', 'second screenshot, 250 دج']);
+    });
+
+    it('agrees with the anchored matcher on a lone described image', () => {
+        const body = t('attachmentImageDescribed', 'ar', { description: 'لقطة شاشة' });
+        expect(extractImageDescriptions(body)).toEqual([extractImageDescription(body)]);
+    });
+
+    it('returns nothing for text without a described image', () => {
+        expect(extractImageDescriptions('بكم؟ 500؟')).toEqual([]);
+        expect(extractImageDescriptions('[صورة]')).toEqual([]);
     });
 });

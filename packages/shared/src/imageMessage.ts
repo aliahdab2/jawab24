@@ -30,6 +30,24 @@ export function extractImageDescription(text: string): string | null {
     return m ? m[1].trim() : null;
 }
 
+/**
+ * Every described-image segment inside a customer turn, in order. Unlike
+ * `extractImageDescription` this is not anchored: the reply pipeline consolidates
+ * the messages of one debounce window into a single text, so a photo can sit
+ * next to typed text or a second photo. A description containing `]` is cut at
+ * it — the callers only ever WIDEN an allow-list with the result, so truncation
+ * errs on the safe side.
+ */
+export function extractImageDescriptions(text: string): string[] {
+    const out: string[] = [];
+    const re = /\[(?:Image|صورة):\s*([^\]]+)\]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+        out.push(m[1].trim());
+    }
+    return out;
+}
+
 /** True when the text is an image message in either form (described or bare placeholder). */
 export function isAnyImageMessage(text: string): boolean {
     const trimmed = text.trim();

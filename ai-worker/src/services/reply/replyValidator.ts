@@ -4,6 +4,7 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
+import { extractImageDescriptions } from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
@@ -197,14 +198,29 @@ const CURRENCY = [
  * number after each cue as the quoted price (so "والتوصيل 3 أيام" — a delivery duration —
  * isn't read as a price).
  */
-export function flagHallucinatedPrice(reply: string, kbText: string, priceMath?: unknown): boolean {
+export function flagHallucinatedPrice(reply: string, kbText: string, priceMath?: unknown, customerText?: string): boolean {
     const nReply = normalizeDigits(reply);
     // Accepted values = literal KB numbers ∪ price_math-verified derivations
-    // (Check 1b). Computed ONCE and fed to BOTH tiers below — the union only
-    // ever ADDS values for this reply; KB grounding itself is untouched.
+    // (Check 1b) ∪ numbers the vision step read off the CUSTOMER'S OWN photo.
+    // Computed ONCE and fed to BOTH tiers below — the union only ever ADDS
+    // values for this reply; KB grounding itself is untouched.
     const kbValues = collectKbValues(kbText);
     for (const v of verifiedPriceMathValues(priceMath, kbValues)) {
         kbValues.add(v);
+    }
+    // A described image («[صورة: … قيمة 250 دج]») is machine-generated from the
+    // customer's screenshot; the model reading that figure back to them is not a
+    // price claim about the merchant's goods. Without this, a network owner who
+    // sent a photo of his own card SMS got «للتأكد من السعر بدقة، تواصل معنا على
+    // أرقامنا» — inside a WhatsApp chat (Z NET, 2026-08-30). Deliberately ONLY the
+    // image descriptions, never the customer's typed text: «بكم؟ 500؟» followed by
+    // «نعم 500 ريال» is the classic anchored hallucination and must still flag.
+    if (customerText) {
+        for (const description of extractImageDescriptions(customerText)) {
+            for (const v of collectKbValues(description)) {
+                kbValues.add(v);
+            }
+        }
     }
 
     // Tier A: currency-adjacent numbers (optional multiplier word between number and currency).
@@ -449,7 +465,7 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // short-circuits on `reply` below.
     if (reply && !opts?.skipPriceCheck) {
         const kbText = getKBText(request, { includeProductCatalog: true, includeFactCollections: true });
-        if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
+        if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math, request.comment) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }
     }

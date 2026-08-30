@@ -2374,7 +2374,7 @@ export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } fro
 export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from './activation';
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep, NoPagesReason } from './activation';
 // --- Image-message marker protocol (DM vision descriptions) ---
-export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, isAnyImageMessage } from './imageMessage';
+export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, extractImageDescriptions, isAnyImageMessage } from './imageMessage';
 // --- Business Info audit (merchant «تقييم» button + admin panel) ---
 export {
     IMPOSSIBLE_CAPABILITIES,
