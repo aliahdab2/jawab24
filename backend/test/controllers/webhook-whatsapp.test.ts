@@ -432,10 +432,11 @@ describe('WhatsApp Webhook — media messages', () => {
 
         expect(mockWaGetMediaInfo).toHaveBeenCalledWith('media-1', 'wa-business-token');
         expect(mockWaDownloadMedia).toHaveBeenCalledWith('https://lookaside.example/media', 'wa-business-token');
-        // Codec suffix stripped for Whisper
+        // Codec suffix stripped for Whisper; strictLanguage=true — a DM voice note,
+        // so a wrong-script transcript is discarded rather than driving the reply.
         expect(mockTranscribeFromBuffer).toHaveBeenCalledWith(
             expect.any(Buffer), 'audio/ogg', expect.any(String), undefined,
-            { userId: 'user-uuid', pageId: 'page-uuid' },
+            { userId: 'user-uuid', pageId: 'page-uuid' }, true,
         );
         expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
             jobType: 'whatsapp_message',

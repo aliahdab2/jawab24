@@ -361,6 +361,7 @@ export async function handleNonTextMessage(
             const result = await transcriptionService.transcribe(
                 attachmentUrl, lang, undefined,
                 page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+                true /* strictLanguage: this is a customer's DM voice note — a wrong-script transcript must not drive the reply */,
             );
             if (result) {
                 logger.info(`[${platform}] Voice message transcribed`, { senderId, textLength: result.text.length });
@@ -590,6 +591,7 @@ export async function handleWhatsAppNonTextMessage(
                     const result = await transcriptionService.transcribeFromBuffer(
                         buffer, cleanMime, lang, undefined,
                         page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+                        true /* strictLanguage: customer's DM voice note — see the FB/IG path above */,
                     );
                     if (result) {
                         logger.info('[whatsapp] Voice message transcribed', { senderId, textLength: result.text.length });

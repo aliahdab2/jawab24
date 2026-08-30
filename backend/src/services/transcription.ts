@@ -71,16 +71,27 @@ function buildTranscribeParams(file: Awaited<ReturnType<typeof toFile>>, languag
  * The `language` param is a HINT to gpt-4o-mini-transcribe, not a constraint: on
  * a short or noisy Arabic voice note the model still emits Turkish, Chinese or
  * Latin gibberish («Alıştırakstanı», «好了好了好了», «Tavar ma ba harijina») —
- * 7 of 35 WhatsApp voice notes on one Yemeni page, 2026-08-29. Downstream that
- * text is treated as the customer's words: the reply pipeline mirrored it and
- * SENT a Turkish reply to an Arabic-speaking customer. A transcript that
- * contradicts the hint is worth less than no transcript, so it is discarded and
- * the caller takes its existing "transcription failed" path (the text-only nudge).
+ * 7 of 35 WhatsApp voice notes on one Yemeni page, 2026-08-29. On the DM path
+ * that text is treated as the customer's words: the reply pipeline mirrored it
+ * and SENT a Turkish reply to an Arabic-speaking customer.
  *
- * Only the Arabic hint is enforced: Arabic script is unambiguous, and an Arabic
- * transcript under an 'en' hint is far more likely a wrong hint than a wrong
- * transcript (the hint comes from the sender's PREVIOUS text). Letter-free output
- * (a card code, «111») has no script to judge and is accepted.
+ * This is only a PREDICATE. Whether a mismatch is acted on is the caller's
+ * decision — see `strictLanguage` on `acceptTranscript`: the DM voice handlers
+ * enforce it (a mismatched transcript is worth less than no transcript there),
+ * but KB voice input does NOT, because its hint is the merchant's UI locale, not
+ * a reading of the audio — a merchant on the Arabic UI dictating English product
+ * names must not have their recording silently dropped.
+ *
+ * Deliberately ONLY the Arabic hint is checked — this is not an en/ar assumption.
+ * Jawab24 is multi-language, but Arabic is the one hint whose script (a distinct
+ * Unicode block) can be validated with near-zero false-discards. Latin-script
+ * languages — 'en' today, any 'fr'/'tr'/… tomorrow — can't be told apart from
+ * each other or from gibberish on a short transcript (the same reason the reply
+ * detector has an en@0.5 Latin floor), so a script check there would wrongly drop
+ * valid recordings. Any non-'ar' hint therefore passes unchecked. An Arabic
+ * transcript under a non-Arabic hint also passes: the hint is a default (from the
+ * sender's PREVIOUS text), not proof of this utterance. Letter-free output (a card
+ * code, «111») has no script to judge and matches.
  */
 export function transcriptMatchesHint(text: string, languageHint?: string): boolean {
     if (languageHint !== 'ar') return true;
@@ -213,13 +224,22 @@ class TranscriptionService {
      * drift apart between them (the URL path and the buffer path already shipped
      * one classification bug each — §13c).
      *
+     * `strictLanguage` (DM voice handlers only) additionally discards a transcript
+     * whose script contradicts an Arabic hint. It is OFF by default so KB voice
+     * input — whose hint is the merchant's UI locale, not a reading of the audio —
+     * keeps a successful transcript even when it is not Arabic.
+     *
      * Runs AFTER `logUsage`: the call was billed whatever we decide about the text.
      */
-    private acceptTranscript(rawText: string | undefined, languageHint?: string): TranscriptionResult | null {
+    private acceptTranscript(
+        rawText: string | undefined,
+        languageHint?: string,
+        strictLanguage = false,
+    ): TranscriptionResult | null {
         const text = rawText?.trim();
         if (!text) return null;
 
-        if (!transcriptMatchesHint(text, languageHint)) {
+        if (strictLanguage && !transcriptMatchesHint(text, languageHint)) {
             const script = detectLanguage(text).script;
             console.warn('[transcription] transcript script contradicts language hint — discarding', {
                 languageHint, script, textLength: text.length,
@@ -254,6 +274,10 @@ class TranscriptionService {
         languageHint?: string,
         _quality?: TranscriptionQuality,
         logCtx?: TranscriptionLogContext,
+        // DM voice handlers pass true so a transcript whose script contradicts an
+        // Arabic hint is discarded (customer's words drive the reply). KB voice
+        // input leaves it false — see acceptTranscript.
+        strictLanguage = false,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -337,7 +361,7 @@ class TranscriptionService {
                 // regardless of whether the transcript came back empty.
                 this.logUsage(logCtx, transcription);
 
-                return this.acceptTranscript(transcription.text, languageHint);
+                return this.acceptTranscript(transcription.text, languageHint, strictLanguage);
             } finally {
                 clearTimeout(transcribeTimer);
             }
@@ -406,6 +430,9 @@ class TranscriptionService {
         languageHint?: string,
         _quality?: TranscriptionQuality,
         logCtx?: TranscriptionLogContext,
+        // See transcribe(): DM voice handlers enforce the Arabic-script check;
+        // KB voice input (the other caller) leaves it off.
+        strictLanguage = false,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -427,7 +454,7 @@ class TranscriptionService {
             recordAiReturn('transcription', MODEL_TRANSCRIBE);
             this.logUsage(logCtx, transcription);
 
-            return this.acceptTranscript(transcription.text, languageHint);
+            return this.acceptTranscript(transcription.text, languageHint, strictLanguage);
         } catch (error) {
             const isTimeout = isTimeoutAbort(controller.signal);
             recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, isTimeout ? 'AiTimeoutError' : 'OpenAIApiError');
