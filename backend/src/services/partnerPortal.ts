@@ -225,6 +225,12 @@ function toPartnerMerchantDetail(
             whatsappDisplayPhoneNumber: p.whatsappDisplayPhoneNumber,
             autoReplyEnabled: p.autoReplyEnabled,
             autoReplyDisabledReason: p.autoReplyDisabledReason,
+            // Per-channel state so the portal can show WHICH channel is replying,
+            // the same way the admin console does (listPageChannels). All three are
+            // "auto-reply / connection state", which the owner ruled visible to a
+            // reseller; no merchant content is exposed.
+            instagramAutoReplyEnabled: p.instagramAutoReplyEnabled,
+            whatsappConnected: p.whatsappConnected,
             whatsappAutoReplyEnabled: p.whatsappAutoReplyEnabled,
             disconnected: p.disconnected,
             disconnectReason: p.disconnectReason,

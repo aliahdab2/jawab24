@@ -15,6 +15,24 @@ export function getPageExternalUrl(
 }
 
 /**
+ * Build the external profile URL for each channel a page is connected on.
+ * Any channel the page lacks resolves to null. Shared by the merchant Pages
+ * screen and the admin customer console so both render the same per-channel
+ * links from one source (Rule 10.8).
+ */
+export function getPageChannelUrls(
+  page: Pick<Page, 'facebookPageId' | 'instagramUsername' | 'whatsappDisplayPhoneNumber'>,
+): { facebook: string | null; instagram: string | null; whatsapp: string | null } {
+  // wa.me needs bare digits; the stored display number is formatted.
+  const waDigits = page.whatsappDisplayPhoneNumber?.replace(/\D/g, '') || null;
+  return {
+    facebook: page.facebookPageId ? `https://www.facebook.com/${page.facebookPageId}` : null,
+    instagram: page.instagramUsername ? `https://www.instagram.com/${page.instagramUsername}` : null,
+    whatsapp: waDigits ? `https://wa.me/${waDigits}` : null,
+  };
+}
+
+/**
  * Build the Facebook Graph API avatar URL for a page.
  * Returns null for WhatsApp-only pages (no facebookPageId).
  */
