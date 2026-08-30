@@ -170,8 +170,8 @@ Available on Android via Google Play. Features:
 
 ## Pricing
 
-Jawab24 offers a 30-day free trial with no credit card required. Plans:
-- Free Trial: 30 days, all features, no credit card
+Jawab24 offers a 14-day free trial with no credit card required. Plans:
+- Free Trial: 14 days, all features, no credit card
 - Starter: $15/month — for small pages
 - Business: $39/month — for growing businesses with higher volume
 - Pro: $79/month — for high-volume businesses and agencies

@@ -481,7 +481,7 @@ export const subscriptionsService = {
 
         const now = new Date();
 
-        // Free-trial anti-abuse. The 30-day trial is a one-time benefit per signup
+        // Free-trial anti-abuse. The 14-day trial is a one-time benefit per signup
         // IDENTITY, not per account: account deletion hard-deletes the user +
         // subscription rows, so re-signing-up with the same phone / Facebook id
         // would otherwise mint a brand-new trial (and fresh monthly quota) every

@@ -233,7 +233,7 @@ export async function handleCheckoutComplete(
     // conversion all live in sendPurchaseConversion; see it for why each one
     // matters — in particular why a $0 trial checkout must NOT consume the claim.
     // This path reports only a plan with no trial, which is charged here; a
-    // trialed plan reports from handlePaymentSucceeded ~30 days later instead.
+    // trialed plan reports from handlePaymentSucceeded ~14 days later instead.
     // Fire-and-forget, like every other analytics emit: it must never be able to
     // fail a webhook Stripe would then retry.
     void sendPurchaseConversion({
@@ -649,9 +649,9 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     );
 
     // GA4 `purchase` — for a TRIALED plan this is the only place the money event
-    // can fire. Starter carries `trialDays: 30` and is the default plan, so its
+    // can fire. Starter carries `trialDays: 14` and is the default plan, so its
     // checkout collects $0 and reports nothing; the first real charge arrives
-    // here, ~30 days later, and so does every renewal after it.
+    // here, ~14 days later, and so does every renewal after it.
     //
     // Renewals are NOT acquisitions. sendPurchaseConversion claims
     // `subscriptions.ga4_purchase_reported_at` with `WHERE … IS NULL`, so only

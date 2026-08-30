@@ -109,10 +109,10 @@ describe('WhatsApp connect — canary allowlist gate', () => {
         expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
     });
 
-    it('allowlisted but on a plan without WhatsApp → 403 WHATSAPP_PLAN_REQUIRED (plan gate after allowlist)', async () => {
+    it('allowlisted but on a plan without WhatsApp (Basic) → 403 WHATSAPP_PLAN_REQUIRED (plan gate after allowlist)', async () => {
         mockWhere.mockResolvedValue([{ email: 'aliahdab@gmail.com' }]);
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(
-            { status: 'active', plan: { slug: 'starter', whatsappEnabled: false } } as never,
+            { status: 'active', plan: { slug: 'basic', whatsappEnabled: false } } as never,
         );
         const reply = buildReply();
         await whatsappController.connect(buildRequest() as never, reply);

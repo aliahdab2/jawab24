@@ -3,7 +3,7 @@ seoTitle: "WhatsApp Is Now Live on Jawab24 — Smart Replies on Your Customers' 
 seoDescription: "Now live: connect your WhatsApp Business number to Jawab24 and let Smart Replies answer customers in their own language — from the same inbox as Facebook & Instagram, grounded in your real store data."
 seoKeywords: "WhatsApp auto reply, WhatsApp business bot Arabic, WhatsApp AI replies, connect WhatsApp to Salla store, WhatsApp Business API auto reply, WhatsApp smart reply"
 title: "WhatsApp Is Now Live on Jawab24"
-excerpt: "Your Facebook and Instagram pages already answer customers by themselves — and WhatsApp is no longer the exception. WhatsApp joins the same inbox, with the same Smart Replies, available now on the Business plan and up."
+excerpt: "Your Facebook and Instagram pages already answer customers by themselves — and WhatsApp is no longer the exception. WhatsApp joins the same inbox, with the same Smart Replies, available now on the Starter plan and up."
 ---
 
 ## The Channel Whose Inbox Kept Waiting
@@ -12,7 +12,7 @@ If you use Jawab24, your Facebook and Instagram pages already answer customers o
 
 The shopper asking about a price in an Instagram comment is the same person sending "Hi, is this available?" on WhatsApp at 11 PM. The only difference: the Instagram message got answered in seconds, while the WhatsApp one waited until you woke up.
 
-That changed today: **WhatsApp is now live on Jawab24, on the Business plan and up.**
+That changed today: **WhatsApp is now live on Jawab24, on the Starter plan and up.**
 
 ## What You Get Today
 
@@ -53,6 +53,6 @@ Connecting takes minutes:
 2. Sign in with your Meta account and pick your WhatsApp Business number.
 3. Add your Business Info if you haven't yet — Smart Replies start answering immediately.
 
-WhatsApp is available on the **Business plan and up** — details on the [pricing page](/en/pricing).
+WhatsApp is available on the **Starter plan and up** — details on the [pricing page](/en/pricing).
 
 The customer messaging you on WhatsApp at 11 PM no longer waits for morning.

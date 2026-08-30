@@ -138,7 +138,8 @@ import { refreshTokenService } from '../../src/services/refreshToken';
 import { workspaceService } from '../../src/services/workspace';
 
 const entitled = { status: 'active', plan: { slug: 'business', whatsappEnabled: true } };
-const starter = { status: 'active', plan: { slug: 'starter', whatsappEnabled: false } };
+// Basic is the only paid plan without WhatsApp (D-118) — the non-entitled fixture.
+const basic = { status: 'active', plan: { slug: 'basic', whatsappEnabled: false } };
 
 function buildReply() {
     const reply = {
@@ -261,7 +262,7 @@ describe('WhatsAppRedirectController.start', () => {
     });
 
     it('plan gate fires before any URL is minted', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starter as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basic as never);
         const reply = buildReply();
         await whatsappRedirectController.start(buildStartRequest({}), reply);
         expect(reply.status).toHaveBeenCalledWith(403);
@@ -390,7 +391,7 @@ describe('WhatsAppRedirectController.appStart', () => {
 
     it('plan gate → signed-in redirect to /pages?whatsappError=WHATSAPP_PLAN_REQUIRED', async () => {
         primeAppStartHappy();
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starter as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basic as never);
         const reply = buildReply();
         await whatsappRedirectController.appStart(
             buildAppStartRequest({ code: 'x'.repeat(43), workspaceId: 'ws-1' }),
@@ -555,7 +556,7 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
     });
 
     it('callback: app-state errors also come home through the App Link, not a web page', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starter as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basic as never);
         const { state } = mintState({ app: true });
         const reply = buildReply();
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);

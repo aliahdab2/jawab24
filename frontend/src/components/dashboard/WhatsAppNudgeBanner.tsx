@@ -26,7 +26,7 @@ export function WhatsAppNudgeBanner({ pages, isOwner, isAdmin, whatsappEntitled,
 
     // Canary-aware: during admin-only rollout the CTA (which deep-links to the
     // connect flow) must not show to non-admins. Plan-aware: don't announce a
-    // launch to plans that can't use it (WhatsApp is Business+).
+    // launch to plans that can't use it (WhatsApp is Starter+; Basic excluded).
     // `unavailable`: a Zid account can never connect WhatsApp (D-117) — never
     // announce a launch for a channel the account cannot use.
     if (dismissed || !isOwner || !isWhatsAppVisible(isAdmin) || !whatsappEntitled || unavailable || !hasConnectedPage || hasWhatsApp) return null;

@@ -26,7 +26,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
-    price: 1500, yearlyPrice: 15000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 30,
+    price: 1500, yearlyPrice: 15000, yearlyAvailable: true, currency: 'USD', interval: 'month', trialDays: 14,
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true,
     instagramEnabled: true, whatsappEnabled: false,
@@ -147,7 +147,7 @@ test.describe('Payment Flow — Unauthenticated', () => {
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
-    // Click the Starter plan CTA (has trial → "Start Free for 30 Days")
+    // Click the Starter plan CTA (has trial → "Start Free for 14 Days")
     const starterBtn = page.locator('button').filter({ hasText: t('pricing.startTrial') }).first();
     await scrollIntoView(starterBtn);
     await expect(starterBtn).toBeVisible();

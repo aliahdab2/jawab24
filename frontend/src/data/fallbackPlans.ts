@@ -8,7 +8,7 @@ import type { Plan } from '@jawab24/shared';
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
  *
- * Last updated: 2026-08-18
+ * Last updated: 2026-08-30
  * Source: backend/src/config/plans.ts (seeded to DB by seed-plans.ts)
  */
 export const FALLBACK_PLANS: Plan[] = [
@@ -54,14 +54,18 @@ export const FALLBACK_PLANS: Plan[] = [
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
-        whatsappEnabled: false,
+        // WhatsApp included from Starter up, 14-day trial (D-118). Kept in sync
+        // with backend/src/config/plans.ts — this file is display-only.
+        whatsappEnabled: true,
         ecommerceEnabled: false,
         prioritySupport: false,
-        trialDays: 0,
+        trialDays: 14,
         regionalPricing: {},
         isActive: true,
         isPublic: true,
-        isDefault: false,
+        // Starter is the backend default plan (config/plans.ts). The prior
+        // fallback marked Business default — corrected here.
+        isDefault: true,
         sortOrder: 1,
     },
     {
@@ -88,7 +92,7 @@ export const FALLBACK_PLANS: Plan[] = [
         regionalPricing: {},
         isActive: true,
         isPublic: true,
-        isDefault: true,
+        isDefault: false,
         sortOrder: 2,
     },
     {

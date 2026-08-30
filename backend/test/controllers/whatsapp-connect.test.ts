@@ -92,8 +92,11 @@ const basePage = {
 
 // Plan-gate fixtures: WhatsApp is a Business+ entitlement (plans.whatsapp_enabled).
 const entitledSubscription = { status: 'active', plan: { slug: 'business', whatsappEnabled: true } };
-const starterSubscription = { status: 'active', plan: { slug: 'starter', whatsappEnabled: false } };
-const trialingStarterSubscription = { status: 'trialing', plan: { slug: 'starter', whatsappEnabled: false } };
+// Basic is the only paid plan without WhatsApp (D-118) — the non-entitled fixture.
+const basicSubscription = { status: 'active', plan: { slug: 'basic', whatsappEnabled: false } };
+// The trial rides on Starter, and Starter now includes WhatsApp — so a trialing
+// account is ENTITLED. Used to prove the gate lets a fresh trial through.
+const trialingStarterSubscription = { status: 'trialing', plan: { slug: 'starter', whatsappEnabled: true } };
 
 const connectedPage = {
     ...basePage,
@@ -315,15 +318,15 @@ describe('WhatsAppController.connect', () => {
         expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
     });
 
-    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp, before any Meta call', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp (Basic), before any Meta call', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basicSubscription as never);
         const reply = buildReply();
         await whatsappController.connect(buildRequest() as never, reply);
 
         expect(reply.status).toHaveBeenCalledWith(403);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
             code: 'WHATSAPP_PLAN_REQUIRED',
-            requiredPlan: 'business',
+            requiredPlan: 'starter',
         }));
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
     });
@@ -350,13 +353,14 @@ describe('WhatsAppController.connect', () => {
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
     });
 
-    it('403s for a trialing user — trial rides on Starter, which has no WhatsApp', async () => {
+    it('lets a trialing user through — the trial rides on Starter, which now includes WhatsApp (D-118)', async () => {
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(trialingStarterSubscription as never);
         const reply = buildReply();
         await whatsappController.connect(buildRequest() as never, reply);
 
-        expect(reply.status).toHaveBeenCalledWith(403);
-        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        // Gate passed: the Meta exchange runs and the plan-required 403 never fires.
+        expect(whatsappService.exchangeCodeForToken).toHaveBeenCalled();
+        expect(reply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
     });
 
     it('keys the plan gate on the workspace OWNER, not the acting user', async () => {
@@ -454,10 +458,10 @@ describe('WhatsAppController.toggleAutoReply', () => {
     });
 
     it('reports the plan gate before the readiness gate', async () => {
-        // A Starter merchant must be told to upgrade: filling Business Info would
+        // A Basic merchant must be told to upgrade: filling Business Info would
         // not unlock WhatsApp for them, so "add your info" would be a wrong
         // instruction that wastes their time.
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basicSubscription as never);
         vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
         const reply = buildReply();
         await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
@@ -468,8 +472,8 @@ describe('WhatsAppController.toggleAutoReply', () => {
         );
     });
 
-    it('403s WHATSAPP_PLAN_REQUIRED on enable for a plan without WhatsApp, before slot/trial gates', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+    it('403s WHATSAPP_PLAN_REQUIRED on enable for a plan without WhatsApp (Basic), before slot/trial gates', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basicSubscription as never);
         const reply = buildReply();
         await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
 
@@ -493,8 +497,8 @@ describe('WhatsAppController.toggleAutoReply', () => {
         expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
     });
 
-    it('still allows disabling on a plan without WhatsApp', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+    it('still allows disabling on a plan without WhatsApp (Basic)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basicSubscription as never);
         const reply = buildReply();
         await whatsappController.toggleAutoReply(toggleRequest(false) as never, reply);
 
@@ -641,8 +645,8 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
         expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
     });
 
-    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp, before any Meta call', async () => {
-        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp (Basic), before any Meta call', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(basicSubscription as never);
         const reply = buildReply();
         await whatsappController.connectNew(newRequest() as never, reply);
 

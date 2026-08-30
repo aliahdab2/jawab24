@@ -65,7 +65,7 @@ export const WHATSAPP_LAUNCH_AR_HTML = `<!DOCTYPE html>
       <p style="margin:0 0 6px">&bull; الميزة في <strong>مرحلة تجريبية</strong>، ولذلك تحمل وسم «تجريبي». أخبرنا بأي خلل تلاحظه.</p>
       <p style="margin:0 0 6px">&bull; إن كنت تستخدم تطبيق جواب24 على <strong>أندرويد</strong>، فحدِّثه إلى أحدث إصدار من <a href="https://play.google.com/store/apps/details?id=com.jawab24.android" style="color:#0f766e;font-weight:700;text-decoration:underline">جوجل بلاي</a> — فميزة واتساب غير موجودة في الإصدارات الأقدم.</p>
       <p style="margin:0 0 6px">&bull; الخيار الموصى به يتطلب أن يكون رقمك مستخدمًا في تطبيق <strong>«واتساب للأعمال»</strong> (WhatsApp Business).</p>
-      <p style="margin:0 0 6px">&bull; الردود الذكية عبر واتساب متاحة في <strong>خطة الأعمال وما فوق</strong>.</p>
+      <p style="margin:0 0 6px">&bull; الردود الذكية عبر واتساب متاحة في <strong>باقة المبتدئ وما فوق</strong>.</p>
       <p style="margin:0">&bull; إن واجهت أي عقبة أثناء الربط، فأجب على هذه الرسالة وسنتابع معك خطوة بخطوة.</p>
     </td></tr>
   </table>

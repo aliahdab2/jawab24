@@ -145,10 +145,10 @@ export function isGa4Configured(): boolean {
  * Stripe events, and for most of our merchants it is the SECOND one:
  *
  *   - `checkout.session.completed` — a plan with no trial, charged at checkout.
- *   - `invoice.payment_succeeded` — a TRIALED plan's first real charge, ~30 days
+ *   - `invoice.payment_succeeded` — a TRIALED plan's first real charge, ~14 days
  *     after signup, and then every renewal after that.
  *
- * Starter is the only plan carrying `trialDays: 30` and it is `isDefault: true`,
+ * Starter is the only plan carrying `trialDays: 14` and it is `isDefault: true`,
  * and `payment.ts` grants the trial to anyone with no prior subscription — i.e.
  * every new signup. So the trial path is the normal path (measured 2026-08-20:
  * 79 of 85 subscriptions carry a `trial_ends_at`). Hooking only the checkout
@@ -161,7 +161,7 @@ export function isGa4Configured(): boolean {
  * precisely the input Smart Bidding optimises against.
  *
  * ⛔ THE ORDERING IS LOAD-BEARING: the amount guard runs BEFORE the claim. A $0
- * trial checkout must not consume the stamp, or the real payment 30 days later
+ * trial checkout must not consume the stamp, or the real payment 14 days later
  * finds it already set and is suppressed forever — turning the fix into the very
  * bug it removes.
  *
