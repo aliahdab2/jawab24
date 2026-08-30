@@ -48,7 +48,7 @@ import { useWorkspaceRole, useSubscriptionUsage, useOpenOnQueryParam, useHandoff
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
 import { getEmbeddedPlatform } from '@/lib/embeddedSession';
-import { openTopLevelAuthenticated } from '@/lib/embeddedBreakout';
+import { openTopLevelAuthenticated, isFramed } from '@/lib/embeddedBreakout';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -483,9 +483,14 @@ const PagesPage: NextPageWithLayout = () => {
    * read as the connect having silently failed.
    */
   const resumeFacebookConnect = useCallback(() => {
-    // Still inside the frame (stale param, back-navigation): the frame's own
-    // buttons break out correctly; navigating the frame to facebook.com cannot.
-    if (getEmbeddedPlatform() !== null) return;
+    // Still framed (stale param, back-navigation): the frame's own buttons break
+    // out correctly; navigating the frame to facebook.com cannot. Keyed on the
+    // real condition, not the sessionStorage flag — see isFramed().
+    if (isFramed()) return;
+    // Strip the param SYNCHRONOUSLY, before the navigation below. The hook's own
+    // router.replace is async and can lose the race with unload, leaving
+    // ?connectFacebook=true in history — Back from facebook.com would re-fire it.
+    window.history.replaceState(null, '', window.location.pathname);
     addErrorBreadcrumb('facebook-connect', 'resuming from the embedded break-out param');
     void handleReconnectFacebook();
   }, [handleReconnectFacebook]);

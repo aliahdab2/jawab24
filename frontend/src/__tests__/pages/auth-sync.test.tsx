@@ -96,4 +96,23 @@ describe('AuthSync page', () => {
         expect(mockSetAuth).not.toHaveBeenCalled();
         await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/login'), { timeout: 4000 });
     });
+
+    // Mutation-checked: removing `clearEmbeddedSession()` from syncAuth fails this.
+    it('clears a cloned embedded (platform-frame) marker on arrival — this tab is top-level and first-party', async () => {
+        // Browsers without storage partitioning copy sessionStorage into a
+        // window.open target — which is exactly how the embedded break-out opens
+        // THIS tab. A surviving marker would keep the API client on the frame's
+        // Bearer token and make /pages believe it is still framed.
+        const { setEmbeddedSession, getEmbeddedPlatform, getEmbeddedToken } = await import('@/lib/embeddedSession');
+        setEmbeddedSession('zid', 'frame-credential', 'frame-token');
+        routerState.query = { code: 'opaque-handoff-code', redirect: '/pages?connectFacebook=true' };
+        mockedAxios.post.mockResolvedValue({ data: { token: 'session-token', defaultWorkspaceId: 'ws-1' } });
+
+        render(<AuthSync />);
+
+        await waitFor(() => expect(mockSetAuth).toHaveBeenCalledWith(USER, 'session-token', ''));
+        expect(getEmbeddedPlatform()).toBeNull();
+        expect(getEmbeddedToken()).toBeNull();
+        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/pages?connectFacebook=true'));
+    });
 });

@@ -2,6 +2,17 @@ import { api } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
 /**
+ * True when this window is rendered inside another document — a platform
+ * dashboard frame. The REAL condition for "can this tab reach facebook.com",
+ * as opposed to the embedded-session flag in sessionStorage, which browsers
+ * without storage partitioning clone into a tab opened via `window.open` (the
+ * break-out tab itself).
+ */
+export function isFramed(): boolean {
+    return typeof window !== 'undefined' && window.self !== window.top;
+}
+
+/**
  * Open a path as a NEW top-level browser tab, escaping the platform iframe —
  * with the merchant's session carried across.
  *

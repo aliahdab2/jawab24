@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
+import { clearEmbeddedSession } from '@/lib/embeddedSession';
 import { isSafeRedirectPath, type WorkspaceSummary } from '@jawab24/shared';
 
 export default function AuthSync() {
@@ -17,6 +18,13 @@ export default function AuthSync() {
     if (!router.isReady) return;
 
     const syncAuth = async () => {
+      // This page only ever runs top-level and first-party, so an embedded
+      // (platform-frame) marker here can only be a clone: browsers without
+      // storage partitioning copy sessionStorage into a tab opened by
+      // window.open — exactly how the embedded break-out opens this tab. Left in
+      // place it would make the API client prefer the frame's Bearer token over
+      // the session minted below, and make /pages believe it is still framed.
+      clearEmbeddedSession();
       try {
         setStatus(t('syncSyncing'));
 

@@ -128,8 +128,12 @@ vi.mock('@/lib/embeddedSession', async (importOriginal) => ({
 // The embedded break-out mints a handoff code and opens a signed-in top-level
 // tab; assertions here are about WHETHER it ran and WHERE it pointed.
 const mockOpenTopLevelAuthenticated = vi.fn();
+// Whether this window is rendered inside another document. jsdom is never
+// framed, so the framed cases flip this explicitly.
+let mockFramed = false;
 vi.mock('@/lib/embeddedBreakout', () => ({
     openTopLevelAuthenticated: (...args: unknown[]) => mockOpenTopLevelAuthenticated(...args),
+    isFramed: () => mockFramed,
 }));
 
 vi.mock('@/components/layout/DashboardLayout', () => ({
@@ -1880,8 +1884,9 @@ describe('PagesPage - Instagram-only demand signal', () => {
  *
  * Mutation-checked: deleting the `getEmbeddedPlatform()` branch in
  * handleReconnectFacebook fails the two embedded cases; deleting the resume
- * hook fails the web-resume case; deleting the resume's in-frame guard fails
- * the embedded-resume case. The plain-web case pins the pre-existing path.
+ * hook fails the web-resume case; deleting the resume's `isFramed()` guard
+ * fails the framed-resume case; deleting the synchronous replaceState fails
+ * the web-resume case. The plain-web case pins the pre-existing path.
  */
 describe('PagesPage - Facebook connect inside a platform frame breaks out to a top-level tab', () => {
     const DEAD_PAGE = {
@@ -1920,9 +1925,11 @@ describe('PagesPage - Facebook connect inside a platform frame breaks out to a t
     afterEach(() => {
         Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true });
         mockEmbeddedPlatform = null;
+        mockFramed = false;
         mockRouterQuery = {};
         vi.unstubAllEnvs();
         vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     const openConnectDialog = async () => {
@@ -1977,6 +1984,7 @@ describe('PagesPage - Facebook connect inside a platform frame breaks out to a t
 
     it('?connectFacebook=true in the broken-out tab continues to Facebook with no click, then strips the param', async () => {
         mockRouterQuery = { connectFacebook: 'true' };
+        const replaceState = vi.spyOn(window.history, 'replaceState');
         renderPage(<PagesPage />);
 
         // 3s: the resume waits for the pages query + router readiness (as the
@@ -1985,6 +1993,10 @@ describe('PagesPage - Facebook connect inside a platform frame breaks out to a t
             expect(location.href).toContain('/dialog/oauth');
         }, { timeout: 3000 });
         expect(mockOpenTopLevelAuthenticated).not.toHaveBeenCalled();
+        // Stripped SYNCHRONOUSLY before the navigation, so Back from facebook.com
+        // cannot land on a URL that re-fires the resume — the async router
+        // replace below is the hook's own cleanup, not what this relies on.
+        expect(replaceState).toHaveBeenCalledWith(null, '', expect.not.stringContaining('connectFacebook'));
         expect(mockRouterReplace).toHaveBeenCalledWith(
             expect.objectContaining({ query: expect.not.objectContaining({ connectFacebook: expect.anything() }) }),
             undefined,
@@ -1992,7 +2004,11 @@ describe('PagesPage - Facebook connect inside a platform frame breaks out to a t
         );
     });
 
-    it('?connectFacebook=true while STILL inside the frame does nothing — it can only dead-end there', async () => {
+    it('?connectFacebook=true while STILL framed does nothing — it can only dead-end there', async () => {
+        // Both signals as they are inside the real frame. The guard must key on
+        // the FRAME, because the flag alone also shows up in a break-out tab on
+        // browsers that clone sessionStorage into window.open targets.
+        mockFramed = true;
         mockEmbeddedPlatform = 'zid';
         mockRouterQuery = { connectFacebook: 'true' };
         renderPage(<PagesPage />);
