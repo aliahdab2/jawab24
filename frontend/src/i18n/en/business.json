@@ -123,8 +123,8 @@
     "addNumberSamePurpose": "Another number, same purpose"
   },
   "info": {
-    "title": "Additional information",
-    "hint": "For anything the fields above don't cover: FAQs, special details, whatever else Jawab should know."
+    "title": "FAQs & other details",
+    "hint": "What the fields above don't cover: your customers' common questions and any other details Jawab should know."
   },
   "noPage": "Connect a page to set up your business information.",
   "noPageChannels": "Connect a channel to set up your business information.",

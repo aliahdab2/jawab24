@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { t } from './i18n';
+import { t, tAr } from './i18n';
 
 /**
  * Business Info (knowledge base) E2E — the full surface after GA (#759, #761).
@@ -259,8 +259,8 @@ test.describe('Business Info deep links on /pages', () => {
 
 /**
  * The editor itself, on its canonical host. The panel starts collapsed behind
- * the «Additional information» toggle (every fact now has a structured editor;
- * free text is the overflow surface).
+ * the «FAQs & other details» toggle (`business.info.title`; every fact now has
+ * a structured editor; free text is the overflow surface).
  */
 test.describe('Business Info editor on /business', () => {
   /** Body of the PUT /pages/:id the save issued — null until it happens. */
@@ -289,10 +289,11 @@ test.describe('Business Info editor on /business', () => {
     await openInfoEditor(page);
 
     // `exact` matters: getByText is a case-insensitive SUBSTRING match, and the
-    // panel description contains the products label ("About your business")
-    // while carrying `landscape:hidden` — a loose locator resolves to that
-    // hidden paragraph at Playwright's landscape viewport. The labels are each
-    // a <p> whose whole text is the label, so exact matching pins them.
+    // products placeholder repeats words of the label — a loose locator can
+    // resolve to a hidden or collapsed element instead of the card title. The
+    // labels are each a <p> whose whole text is the label, so exact matching
+    // pins them. (The panel's own description used to be a second match here;
+    // /business no longer renders it — `intro="none"`.)
     await expect(page.getByText(t('kb.section.productsLabel'), { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(t('kb.section.notesLabel'), { exact: true }).first()).toBeVisible();
 
@@ -336,6 +337,31 @@ test.describe('Business Info editor on /business', () => {
     await expect(page.getByRole('button', { name: t('pages.savedStatus') })).toBeVisible({ timeout: 5000 });
     // And the payload that reached the API is the serialized editor content.
     expect(savedKbPayload?.knowledgeBase).toContain('Basic package');
+  });
+
+  // The section was renamed «أسئلة شائعة ومعلومات أخرى» (2026-08-29) and the
+  // panel's own repeated title/introduction dropped on /business. Arabic is the
+  // locale most merchants use, and `translation:validate` only proves key
+  // parity — not that the rendered page carries the words. The stored
+  // dashboard language wins over the URL locale, so pin it to 'ar' AFTER
+  // initAuthStorage (init scripts run in registration order).
+  test('the Arabic page names the section and its cards in Arabic, with no raw keys', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('ui-storage', JSON.stringify({
+        state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0,
+      }));
+    });
+    await page.goto(`/ar/business?page=${PAGE_FILLED.id}`);
+
+    const toggle = page.getByRole('button', { name: tAr('business.info.title') });
+    await expect(toggle).toBeVisible({ timeout: 15000 });
+    await toggle.click();
+
+    await expect(page.getByText(tAr('kb.section.productsLabel'), { exact: true }).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(tAr('kb.section.notesLabel'), { exact: true }).first()).toBeVisible();
+    // The panel's own title used to repeat the page's name inside the section.
+    await expect(page.getByRole('heading', { name: tAr('kb.title') })).toHaveCount(0);
+    await expect(page.getByText(/\bkb\.[a-zA-Z.]+|\bbusiness\.[a-zA-Z.]+/)).toHaveCount(0);
   });
 });
 

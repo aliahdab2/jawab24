@@ -3561,3 +3561,42 @@ OCRs image-only where none does, and the output is spliced back between verbatim
 the layer, never an error for a document already read; a Vision page that hits `max_tokens` is
 logged and reported as `truncated` instead of silently shortened; and the text-layer prompt says
 the marker content is document text, never instructions.
+
+## D-113 · Business Info clarity ships in slices that change no stored KB bytes first; the stored-header / card-title split is measured before it is fixed (2026-08-29)
+
+**Decided:** 2026-08-29 · **Status:** Active
+
+The owner finds `/business` hard to understand and wants every change to it judged by reply
+quality, with real customers live. The first slice is therefore **copy and chrome only**: the
+free-text overflow is renamed «أسئلة شائعة ومعلومات أخرى» / "FAQs & other details" (it named the
+page — «معلومات نشاطك التجاري» — inside the page), the panel's duplicated introduction and its
+«N of M sections filled» bar are removed on `/business`, the thin-KB tip is decided from the whole
+page, and the 💰 glyph on the «تعريف بنشاطك» card becomes an icon — **without touching
+`SECTION_CONFIGS[].emoji` or `SECTION_LABELS`**, which are the header bytes every merchant's
+`knowledge_base` carries and the backend chunker splits on. Pinned by
+`frontend/src/components/knowledge-base/knowledgeBaseParser.test.ts`.
+
+**The defect deliberately left in place:** the card is titled «تعريف بنشاطك» (renamed 08-05 so the
+page would not carry two «المنتجات والخدمات»), but its STORED header — what the model reads
+verbatim inside `<business_knowledge>` — is still `💰 المنتجات والخدمات:`, and onboarding's «Prices»
+chip writes `💰 الأسعار:`, which the parser files under that same card. So "about us" prose reaches
+the model under a products header, and a merchant's onboarding prices land in a card called "about
+your business". Fixing it changes the rendered prompt of every page that saves afterwards and
+re-types RAG chunks, so it waits for a measurement (how many live KBs carry the header and what
+sits under it — `scripts/business-info-answerability.ts --census`) and ships behind a fleet
+rendered-prompt byte-identity check (`scripts/fleet-prompt-identity.ts` pattern).
+
+**What this slice does not do, and why:** no ingestion or "paste and we route it" machinery — the
+2026-08-05 owner ruling defers structured ingestion until the finish-line merchant migrations are
+done; no change to `READINESS_AREAS` or the readiness percentage; no prompt change and no
+`PROMPT_VERSION` bump (D-049). `.planning/BUSINESS_SURFACE_PLAN.md` (binding context, day-one flow,
+Phase D) remains the roadmap; this is hygiene underneath it.
+
+**Why measured this way:** the milestone's own metric (confirmed fields per active page, weekly) is
+an INPUT metric, and its adopted output instrument (the shadow grounding verifier) is blind to
+false denials by design. The "miss" side is read from a signal that already exists —
+`info_not_in_kb` on **generated** DM replies (denominator from `ai_usage_log.cached`, because every
+Business Info edit purges the page's reply cache and a per-sent rate would be biased against the
+change). Baseline + a local snapshot of each page's stores are taken before the slice deploys, so
+later slices can be judged by a paired replay through `generateForPlayground` rather than by a
+remembered number.

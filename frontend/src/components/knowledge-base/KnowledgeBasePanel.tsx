@@ -39,6 +39,22 @@ interface KnowledgeBasePanelProps {
   bodyClassName?: string;
   /** Class for the footer bar wrapper. */
   footerClassName?: string;
+  /**
+   * `'full'` renders the panel's own description + «what goes here?» popover —
+   * right for the modal hosts, where the panel IS the screen. `/business` passes
+   * `'none'`: its section header already says what the box is for, and a second
+   * introduction under it was the fourth explanation before the first keystroke
+   * (Business Info clarity, 2026-08-29).
+   */
+  intro?: 'full' | 'none';
+  /**
+   * Whether the «add more detail» tip may show. Defaults to the panel's own rule
+   * (free text under 100 chars). `/business` decides from the WHOLE page — a
+   * short free text above 245 list rows is not a thin page, and telling that
+   * merchant to write more prose contradicts «structured fields are the
+   * destination, free text is the overflow».
+   */
+  showThinTip?: boolean;
 }
 
 /**
@@ -52,10 +68,11 @@ interface KnowledgeBasePanelProps {
  * write. Every write path here (`PUT /pages/:id`, `POST /pages/:id/kb-gaps/
  * :gapId/dismiss`) is `requireRole('admin')` server-side, so this component is
  * the single UI choke point that keeps the editor honest about it: it serves
- * ALL four entry points (the /pages screen, /business, and the comment and
- * message detail modals via InlineKbEditorModal). Gating here rather than in
- * each host is what makes it impossible for a new host to reintroduce the
- * type-then-403 dead end.
+ * ALL three hosts — /business (inline), KnowledgeBaseModal, and the comment and
+ * message detail modals via InlineKbEditorModal (the /pages deep links
+ * `?openKb` / `?openKbActive` route to /business since GA). Gating here rather
+ * than in each host is what makes it impossible for a new host to reintroduce
+ * the type-then-403 dead end.
  */
 export function KnowledgeBasePanel({
   page,
@@ -66,6 +83,8 @@ export function KnowledgeBasePanel({
   onImportNavigate,
   bodyClassName = 'flex-1 min-h-0 p-3 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto overscroll-contain relative',
   footerClassName = 'flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 pb-safe-modal lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-card',
+  intro = 'full',
+  showThinTip,
 }: KnowledgeBasePanelProps) {
   const tKb = useTranslations('kb');
   const tc = useTranslations('common');
@@ -312,23 +331,26 @@ export function KnowledgeBasePanel({
       <div className={bodyClassName}>
         {/* Description — what the free text is FOR, with an InfoPopover for the
             fuller role split. The structured-home sentence only renders for
-            merchants who actually have one (owner ruling 2026-08-03). */}
-        <div className="flex items-start gap-1.5 mb-2 landscape:hidden">
-          <p className="text-xs sm:text-sm text-surface-500 text-start">
-            {tKb('description')}
-            {hasAlternativeHome && (
-              <> {tKb('descriptionStructuredHint')}</>
-            )}
-          </p>
-          <InfoPopover label={tKb('freeTextInfo.title')} panelWidth="md">
-            <div className="space-y-1.5 text-start">
-              <p className="font-medium">{tKb('freeTextInfo.title')}</p>
-              <p>{tKb('freeTextInfo.what')}</p>
-              {hasAlternativeHome && <p>{tKb('freeTextInfo.structured')}</p>}
-              <p>{tKb('freeTextInfo.why')}</p>
-            </div>
-          </InfoPopover>
-        </div>
+            merchants who actually have one (owner ruling 2026-08-03). Modal
+            hosts only: on /business the section header carries this. */}
+        {intro === 'full' && (
+          <div className="flex items-start gap-1.5 mb-2 landscape:hidden">
+            <p className="text-xs sm:text-sm text-surface-500 text-start">
+              {tKb('description')}
+              {hasAlternativeHome && (
+                <> {tKb('descriptionStructuredHint')}</>
+              )}
+            </p>
+            <InfoPopover label={tKb('freeTextInfo.title')} panelWidth="md">
+              <div className="space-y-1.5 text-start">
+                <p className="font-medium">{tKb('freeTextInfo.title')}</p>
+                <p>{tKb('freeTextInfo.what')}</p>
+                {hasAlternativeHome && <p>{tKb('freeTextInfo.structured')}</p>}
+                <p>{tKb('freeTextInfo.why')}</p>
+              </div>
+            </InfoPopover>
+          </div>
+        )}
 
         {/* View-only banner for members — the shared component Settings and the
             /business sections use, so "who may change this?" reads identically
@@ -380,9 +402,11 @@ export function KnowledgeBasePanel({
           </div>
         )}
 
-        {/* Thin-KB tip — show when total content is under 100 chars. Not for a
-            member: "add more detail" is advice for whoever can add it. */}
-        {canEdit && !rawMode && totalChars < 100 && (
+        {/* Thin-KB tip — by default when the free text is under 100 chars; a
+            host that sees the whole page (/business) overrides with its own
+            verdict. Not for a member: "add more detail" is advice for whoever
+            can add it. */}
+        {canEdit && !rawMode && (showThinTip ?? totalChars < 100) && (
           <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
             <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-xs leading-relaxed">

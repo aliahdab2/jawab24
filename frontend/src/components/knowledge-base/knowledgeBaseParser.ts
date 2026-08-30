@@ -97,20 +97,6 @@ export function getTotalCharCount(sections: KnowledgeSection[]): number {
   return serializeSections(sections).length;
 }
 
-/**
- * Calculate progress: how many sections have content.
- */
-export function calculateProgress(sections: KnowledgeSection[]): {
-  filled: number;
-  total: number;
-  percent: number;
-} {
-  const total = sections.length;
-  const filled = sections.filter((s) => s.content.trim().length > 0).length;
-  const percent = total > 0 ? Math.round((filled / total) * 100) : 0;
-  return { filled, total, percent };
-}
-
 // --- Internal helpers ---
 
 function toSectionsArray(
