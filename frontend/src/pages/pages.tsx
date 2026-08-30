@@ -38,7 +38,7 @@ const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
 import { isWhatsAppVisible, isWhatsAppRedirectConnect, isInstagramDirectEnabled, usesChannelWording } from '@/lib/featureFlags';
-import { isWhatsAppConnectable } from '@/lib/whatsappAvailability';
+import { isWhatsAppConnectable, isWhatsAppBlockedForMarketplace } from '@/lib/whatsappAvailability';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
 // Static import (not dynamic) so the tap handler can navigate synchronously —
@@ -179,6 +179,10 @@ const PagesPage: NextPageWithLayout = () => {
   // while usage loads — actionable surfaces require `=== true`. See
   // isWhatsAppConnectable.
   const whatsappConnectable = isWhatsAppConnectable(whatsappVisible, usage);
+  // Static copy that merely MENTIONS WhatsApp (header, empty state, the
+  // Facebook option's "add WhatsApp later") swaps to a WhatsApp-free variant
+  // for Zid-connected accounts only (D-117).
+  const whatsappCopyHidden = isWhatsAppBlockedForMarketplace(usage);
 
   // Warm the signup chunk AND the Facebook SDK before the merchant clicks.
   // `fb.login` opens a popup, so it must run inside the browser's transient user
@@ -1108,7 +1112,9 @@ const PagesPage: NextPageWithLayout = () => {
       {/* Header */}
       <PageHeader
         title={channelWording ? t('titleChannels') : t('title')}
-        description={channelWording ? t('descriptionChannels') : t('description')}
+        description={channelWording
+          ? t(whatsappCopyHidden ? 'descriptionChannelsNoWhatsApp' : 'descriptionChannels')
+          : t('description')}
         action={isOwner
           ? <Button
               onClick={handleOpenConnect}
@@ -1752,7 +1758,9 @@ const PagesPage: NextPageWithLayout = () => {
             title={noPagesReasonKey ? t('noPagesFoundTitle') : t('noPages')}
             description={noPagesReasonKey
               ? t(noPagesReasonKey)
-              : channelWording ? t('noPagesDescChannels') : t('noPagesDesc')}
+              : channelWording
+                ? t(whatsappCopyHidden ? 'noPagesDescChannelsNoWhatsApp' : 'noPagesDescChannels')
+                : t('noPagesDesc')}
             action={isOwner
               ? <Button onClick={handleOpenConnect}>
                   {channelWording ? t('connectChannel') : t('connectPage')}
@@ -1814,6 +1822,7 @@ const PagesPage: NextPageWithLayout = () => {
           void startInstagramConnect();
         }}
         whatsappAvailable={whatsappConnectable === true && whatsappEntitled === true}
+        whatsappCopyHidden={whatsappCopyHidden}
         whatsappConnecting={connectingWhatsApp === 'new'}
         instagramAvailable={isInstagramDirectEnabled()}
       />
