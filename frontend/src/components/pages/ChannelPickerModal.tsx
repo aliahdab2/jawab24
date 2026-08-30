@@ -12,6 +12,8 @@ interface ChannelPickerModalProps {
   onPickInstagram: () => void;
   /** Embedded Signup env config present — hides the WhatsApp option until Meta approval */
   whatsappAvailable: boolean;
+  /** Zid-connected account (D-117) — swap copy that merely mentions WhatsApp */
+  whatsappCopyHidden: boolean;
   /** A WhatsApp Embedded Signup popup is currently running */
   whatsappConnecting: boolean;
   /** Instagram-direct connect flag on — hidden until the backend is configured */
@@ -30,6 +32,7 @@ export function ChannelPickerModal({
   onPickWhatsApp,
   onPickInstagram,
   whatsappAvailable,
+  whatsappCopyHidden,
   whatsappConnecting,
   instagramAvailable,
 }: ChannelPickerModalProps) {
@@ -44,7 +47,7 @@ export function ChannelPickerModal({
           accent="blue"
           icon={<FacebookIcon size={20} />}
           title={t('channelFacebook')}
-          description={t('channelFacebookDesc')}
+          description={t(whatsappCopyHidden ? 'channelFacebookDescNoWhatsApp' : 'channelFacebookDesc')}
           onClick={onPickFacebook}
         />
 

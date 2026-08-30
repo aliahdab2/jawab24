@@ -26,3 +26,18 @@ export function isWhatsAppConnectable(
     if (usage === undefined) return undefined; // still loading — decide nothing yet
     return !usage?.subscription?.whatsappUnavailable;
 }
+
+/**
+ * Whether WhatsApp is blocked for this account because its store is connected
+ * through Zid (D-117). Distinct from `isWhatsAppConnectable`: this is true ONLY
+ * for the marketplace block, so static copy that merely MENTIONS WhatsApp (the
+ * Channels header, the Facebook option's "WhatsApp can be added later") swaps to
+ * a WhatsApp-free variant for Zid merchants and nobody else. While the usage
+ * summary loads this returns false — copy is passive, so briefly showing the
+ * default text to a Zid merchant is acceptable; never gate an ACTION on this.
+ */
+export function isWhatsAppBlockedForMarketplace(
+    usage: UsageSummary | null | undefined,
+): boolean {
+    return Boolean(usage?.subscription?.whatsappUnavailable);
+}

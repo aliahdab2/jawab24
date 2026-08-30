@@ -410,6 +410,12 @@ frame, so hiding buttons is not enough.
   frontend gates every WhatsApp entry (card CTAs, channel picker, pre-mint, path modal, the
   `?connectWhatsApp=true` deep link, the dashboard launch nudge, the pricing cards' WhatsApp copy,
   the order-notifications card's WhatsApp channel) on `isWhatsAppConnectable(whatsappVisible, usage)`.
+- Static copy that merely MENTIONS WhatsApp also swaps for Zid accounts (live-review finding,
+  2026-08-30): the Channels header, the no-pages empty state, and the Facebook option's
+  "WhatsApp can be added later" line render `*NoWhatsApp` i18n variants when
+  `isWhatsAppBlockedForMarketplace(usage)` (same `subscription.whatsappUnavailable` flag) is true.
+  Copy is passive, so this helper returns plain `false` while usage loads — never gate an
+  ACTION on it; actions use `isWhatsAppConnectable === true`.
 
 **Reversible by one flag — this is temporary.** `WHATSAPP_ZID_BLOCK` (default ON) is the switch.
 When Zid reopens the WhatsApp category, set `WHATSAPP_ZID_BLOCK=false` to re-enable WhatsApp for Zid

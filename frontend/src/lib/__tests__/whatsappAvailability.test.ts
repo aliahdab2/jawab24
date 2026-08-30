@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { UsageSummary } from '@jawab24/shared';
-import { isWhatsAppConnectable } from '../whatsappAvailability';
+import { isWhatsAppConnectable, isWhatsAppBlockedForMarketplace } from '../whatsappAvailability';
 
 // Minimal usage shape — only the fields isWhatsAppConnectable reads.
 const usage = (whatsappUnavailable?: { reason: 'zid_marketplace' }): UsageSummary =>
@@ -31,5 +31,19 @@ describe('isWhatsAppConnectable', () => {
 
     it('with null usage (no block field present) resolves to available — only `undefined` is the loading sentinel; the backend is the real gate', () => {
         expect(isWhatsAppConnectable(true, null)).toBe(true);
+    });
+});
+
+describe('isWhatsAppBlockedForMarketplace', () => {
+    it('is true only for a Zid-blocked account (D-117 copy swap)', () => {
+        // Mutation: invert or drop the read and either every merchant loses the
+        // WhatsApp copy, or Zid merchants keep seeing it — both wrong.
+        expect(isWhatsAppBlockedForMarketplace(usage({ reason: 'zid_marketplace' }))).toBe(true);
+        expect(isWhatsAppBlockedForMarketplace(usage())).toBe(false);
+    });
+
+    it('is false while usage loads and for null usage — copy is passive, default text is acceptable', () => {
+        expect(isWhatsAppBlockedForMarketplace(undefined)).toBe(false);
+        expect(isWhatsAppBlockedForMarketplace(null)).toBe(false);
     });
 });
