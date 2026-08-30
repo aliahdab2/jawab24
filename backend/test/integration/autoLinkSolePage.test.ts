@@ -55,7 +55,7 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
         const store = await zidStore(user.id, workspace.id);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        const linked = await autoLinkSolePageToSoleStore(workspace.id);
+        const linked = await autoLinkSolePageToSoleStore(workspace.id, [page.id]);
 
         expect(linked).toBe(page.id);
         expect(await pageLink(page.id)).toBe(store.id);
@@ -67,7 +67,7 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
         const p1 = await createTestPage(user.id, { workspaceId: workspace.id });
         const p2 = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        expect(await autoLinkSolePageToSoleStore(workspace.id)).toBeNull();
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [p1.id, p2.id])).toBeNull();
         expect(await pageLink(p1.id)).toBeNull();
         expect(await pageLink(p2.id)).toBeNull();
     });
@@ -80,7 +80,7 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
             ecommerceStoreId: storeA.id,
         });
 
-        expect(await autoLinkSolePageToSoleStore(workspace.id)).toBeNull();
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [page.id])).toBeNull();
         expect(await pageLink(page.id)).toBe(storeA.id);
     });
 
@@ -97,7 +97,7 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
         });
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        expect(await autoLinkSolePageToSoleStore(workspace.id)).toBeNull();
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [page.id])).toBeNull();
         expect(await pageLink(page.id)).toBeNull();
     });
 
@@ -107,7 +107,29 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
         await deactivateStore('zid', store.storeDomain);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        expect(await autoLinkSolePageToSoleStore(workspace.id)).toBeNull();
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [page.id])).toBeNull();
+        expect(await pageLink(page.id)).toBeNull();
+    });
+
+    it('does nothing when the sole page was NOT created by this sync — a re-sync must never reverse a deliberate unlink', async () => {
+        const { user, workspace } = await fixture();
+        const store = await zidStore(user.id, workspace.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
+
+        // The page exists and is unlinked (as after a deliberate unlink), but the
+        // sync that just ran created OTHER pages / no pages — not this one.
+        expect(await autoLinkSolePageToSoleStore(workspace.id, ['some-other-page-id'])).toBeNull();
+        expect(await pageLink(page.id)).toBeNull();
+        void store;
+    });
+
+    it('does nothing when the sole page has manual catalog items — the store branch would silently win over them', async () => {
+        const { user, workspace } = await fixture();
+        await zidStore(user.id, workspace.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
+        await testDb.insert(schema.catalogItems).values({ pageId: page.id, name: 'منتج يدوي' });
+
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [page.id])).toBeNull();
         expect(await pageLink(page.id)).toBeNull();
     });
 
@@ -115,7 +137,7 @@ describe('autoLinkSolePageToSoleStore (D-119)', () => {
         const { user, workspace } = await fixture();
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
-        expect(await autoLinkSolePageToSoleStore(workspace.id)).toBeNull();
+        expect(await autoLinkSolePageToSoleStore(workspace.id, [page.id])).toBeNull();
         expect(await pageLink(page.id)).toBeNull();
     });
 });

@@ -40,6 +40,7 @@
     "storeSynced": "Zid store connected · {count, plural, one {# product synced} other {# products synced}}",
     "storeUnavailable": "Could not read the store status — open Jawab24 for details",
     "pageLinked": "Facebook Page linked to the store",
+    "pageNotLinkedYet": "Connected — not linked to the store yet",
     "noPageYet": "No Facebook Page linked yet",
     "replyOn": "Auto-reply on",
     "replyOff": "Auto-reply off",
