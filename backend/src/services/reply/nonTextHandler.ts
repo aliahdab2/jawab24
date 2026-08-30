@@ -40,13 +40,23 @@ async function storeAttachmentStub(opts: {
     placeholder: string;
     attachmentType: string;
     isEnrichable: boolean;
+    /**
+     * The channel the attachment arrived on. MUST be passed: `createMessage` defaults
+     * a missing platform to 'facebook', and when the attachment is the customer's
+     * first message that default also becomes the conversation's platform — which
+     * `findOrCreate` never rewrites. Every WhatsApp voice note used to land this
+     * way (Z NET, 2026-08-30: 43 rows, 7 conversations), so a dashboard reply on
+     * those threads resolved to the Facebook sender and failed with
+     * PAGE_DISCONNECTED on a page that has no Facebook at all.
+     */
+    platform: 'facebook' | 'instagram' | 'whatsapp';
     platformTimestamp?: number;
 }): Promise<{ stub: import('@jawab24/shared').Message; isNew: boolean }> {
-    const { page, workspaceId, messageId, senderId, senderName, placeholder, attachmentType, isEnrichable, platformTimestamp } = opts;
+    const { page, workspaceId, messageId, senderId, senderName, placeholder, attachmentType, isEnrichable, platform, platformTimestamp } = opts;
 
     const { message: stub, isNew } = await messagesService.findOrCreateFromWebhook(
         page.id, workspaceId, messageId, senderId, placeholder, senderName, attachmentType,
-        undefined /* platform: preserve legacy default */, isEnrichable ? 'pending' : undefined,
+        platform, isEnrichable ? 'pending' : undefined,
     );
 
     if (isNew && typeof platformTimestamp === 'number') {
@@ -266,7 +276,7 @@ export async function handleNonTextMessage(
         // alphabetic letters, so it fails the no-letters spam heuristic.
         if (attachmentType === 'sticker') {
             const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
-                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
+                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker', platform,
             );
             if (isNew && typeof platformTimestamp === 'number') {
                 await messagesService.setCreatedTime(stored.id, new Date(platformTimestamp));
@@ -308,7 +318,7 @@ export async function handleNonTextMessage(
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         const { stub, isNew } = await storeAttachmentStub({
             page, workspaceId, messageId, senderId, senderName,
-            placeholder, attachmentType, isEnrichable, platformTimestamp,
+            placeholder, attachmentType, isEnrichable, platform, platformTimestamp,
         });
         stubId = stub.id;
 
@@ -351,6 +361,7 @@ export async function handleNonTextMessage(
             const result = await transcriptionService.transcribe(
                 attachmentUrl, lang, undefined,
                 page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+                true /* strictLanguage: this is a customer's DM voice note — a wrong-script transcript must not drive the reply */,
             );
             if (result) {
                 logger.info(`[${platform}] Voice message transcribed`, { senderId, textLength: result.text.length });
@@ -507,7 +518,7 @@ export async function handleWhatsAppNonTextMessage(
         // Stickers carry no conversational intent — store silently (same as FB/IG).
         if (attachmentType === 'sticker') {
             const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
-                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
+                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker', 'whatsapp',
             );
             if (isNew && typeof platformTimestamp === 'number') {
                 await messagesService.setCreatedTime(stored.id, new Date(platformTimestamp));
@@ -540,7 +551,7 @@ export async function handleWhatsAppNonTextMessage(
         const placeholder = getAttachmentPlaceholder(placeholderType, lang);
         const { stub, isNew } = await storeAttachmentStub({
             page, workspaceId, messageId, senderId, senderName,
-            placeholder, attachmentType, isEnrichable, platformTimestamp,
+            placeholder, attachmentType, isEnrichable, platform: 'whatsapp', platformTimestamp,
         });
         stubId = stub.id;
 
@@ -580,6 +591,7 @@ export async function handleWhatsAppNonTextMessage(
                     const result = await transcriptionService.transcribeFromBuffer(
                         buffer, cleanMime, lang, undefined,
                         page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+                        true /* strictLanguage: customer's DM voice note — see the FB/IG path above */,
                     );
                     if (result) {
                         logger.info('[whatsapp] Voice message transcribed', { senderId, textLength: result.text.length });

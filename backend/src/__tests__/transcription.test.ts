@@ -31,7 +31,7 @@ vi.mock('../utils/mediaDownload', async (importActual) => {
     return { ...actual, fetchMediaBuffer: mockFetchMediaBuffer };
 });
 
-import { transcriptionService } from '../services/transcription';
+import { transcriptionService, transcriptMatchesHint } from '../services/transcription';
 import { MediaDownloadError } from '../utils/mediaDownload';
 import { captureError } from '../utils/sentryHelpers';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -133,5 +133,103 @@ describe('transcriptionService.transcribe — OpenAI abort/timeout classificatio
             'Transcription failed',
             { tags: { service: 'transcription' } },
         );
+    });
+});
+
+// The `language` param is only a hint to gpt-4o-mini-transcribe. On short / noisy
+// Arabic voice notes it still emitted Turkish, Chinese and Latin gibberish (7 of 35
+// WhatsApp voice notes on one Yemeni page, 2026-08-29), and the reply pipeline then
+// mirrored that text — one Turkish reply was SENT to an Arabic-speaking customer.
+// A transcript that contradicts the hint is discarded so the caller takes its
+// existing "transcription failed" path (the text-only nudge) instead.
+describe('transcriptMatchesHint', () => {
+    it('accepts Arabic under an Arabic hint', () => {
+        expect(transcriptMatchesHint('كم سعر الاشتراك الشهري؟', 'ar')).toBe(true);
+    });
+
+    it('rejects Turkish / Chinese / Latin output under an Arabic hint', () => {
+        expect(transcriptMatchesHint('Alıştırakstanı', 'ar')).toBe(false);
+        expect(transcriptMatchesHint('好了好了好了', 'ar')).toBe(false);
+        expect(transcriptMatchesHint('Tavar ma ba harijina lafari gida.', 'ar')).toBe(false);
+    });
+
+    it('accepts mixed text that carries Arabic (a brand name inside an Arabic sentence)', () => {
+        expect(transcriptMatchesHint('ابغى رابط تطبيق Z NET', 'ar')).toBe(true);
+    });
+
+    it('accepts letter-free output (a card code) — there is no script to judge', () => {
+        expect(transcriptMatchesHint('735803373', 'ar')).toBe(true);
+        expect(transcriptMatchesHint('111 ...', 'ar')).toBe(true);
+    });
+
+    it('does not enforce a non-Arabic hint — the hint comes from the sender\'s PREVIOUS text', () => {
+        expect(transcriptMatchesHint('كم السعر', 'en')).toBe(true);
+        expect(transcriptMatchesHint('how much is it', 'en')).toBe(true);
+        expect(transcriptMatchesHint('كم السعر', undefined)).toBe(true);
+    });
+});
+
+// The script check is enforced ONLY when the caller opts in with strictLanguage —
+// the DM voice handlers do (a wrong-script transcript must not drive a customer
+// reply). KB voice input does NOT: its hint is the merchant's UI locale, not a
+// reading of the audio, so a merchant on the Arabic UI dictating English product
+// names must keep their transcript. The `undefined, undefined` before the flag are
+// the _quality and logCtx positional args.
+describe('transcriptionService — strictLanguage discards a script-mismatched transcript (DM path)', () => {
+    const oggBuffer = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(16)]);
+
+    beforeEach(() => {
+        mockFetchMediaBuffer.mockResolvedValue({ buffer: oggBuffer, contentType: 'audio/ogg' });
+    });
+
+    it('transcribe(): Turkish text under an Arabic hint → null + one fingerprinted warning', async () => {
+        mockCreate.mockResolvedValue({ text: 'Bu dağlıcağa.' });
+
+        const result = await transcriptionService.transcribe('https://cdn/a.ogg', 'ar', undefined, undefined, true);
+
+        expect(result).toBeNull();
+        expect(captureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            'Transcription language mismatch',
+            expect.objectContaining({ level: 'warning', fingerprint: ['transcription-language-mismatch'] }),
+        );
+        // The call WAS billed — never a failed_before_log.
+        expect(recordAiFailedBeforeLog).not.toHaveBeenCalled();
+    });
+
+    it('transcribe(): Arabic text under an Arabic hint is returned unchanged', async () => {
+        mockCreate.mockResolvedValue({ text: ' كم سعر الاشتراك ' });
+
+        expect(await transcriptionService.transcribe('https://cdn/a.ogg', 'ar', undefined, undefined, true)).toEqual({ text: 'كم سعر الاشتراك' });
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('transcribeFromBuffer(): the same rule on the buffer path (WhatsApp voice notes)', async () => {
+        mockCreate.mockResolvedValue({ text: '好了好了好了' });
+
+        expect(await transcriptionService.transcribeFromBuffer(oggBuffer, 'audio/ogg', 'ar', undefined, undefined, true)).toBeNull();
+
+        mockCreate.mockResolvedValue({ text: 'ابغا افعل الاشتراك' });
+        expect(await transcriptionService.transcribeFromBuffer(oggBuffer, 'audio/ogg', 'ar', undefined, undefined, true)).toEqual({ text: 'ابغا افعل الاشتراك' });
+    });
+
+    // Regression guard for the #985 review finding: without strictLanguage (the KB
+    // voice-input caller), a non-Arabic transcript under an 'ar' hint is KEPT, not
+    // discarded — a merchant dictating English Business Info on the Arabic UI must
+    // not lose their recording, and nothing is captured to Sentry.
+    it('transcribeFromBuffer(): NON-strict (KB voice) keeps a non-Arabic transcript', async () => {
+        mockCreate.mockResolvedValue({ text: 'iPhone 15 Pro Max, warranty one year' });
+
+        expect(await transcriptionService.transcribeFromBuffer(oggBuffer, 'audio/webm', 'ar')).toEqual({
+            text: 'iPhone 15 Pro Max, warranty one year',
+        });
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('transcribe(): NON-strict keeps a non-Arabic transcript too', async () => {
+        mockCreate.mockResolvedValue({ text: 'Bu dağlıcağa.' });
+
+        expect(await transcriptionService.transcribe('https://cdn/a.ogg', 'ar')).toEqual({ text: 'Bu dağlıcağa.' });
+        expect(captureError).not.toHaveBeenCalled();
     });
 });

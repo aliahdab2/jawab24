@@ -1092,7 +1092,7 @@ describe('Webhook Controller', () => {
 
             // Pending stub stored immediately (store-then-enrich): placeholder + 'pending'.
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio', 'facebook', 'pending',
             );
             // Transcription failed → finalized 'failed' (placeholder text stands).
             expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'failed');
@@ -1142,7 +1142,7 @@ describe('Webhook Controller', () => {
 
             // Pending stub stored FIRST with the placeholder (store-then-enrich).
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_transcribed', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_transcribed', 'user_123', '[رسالة صوتية]', undefined, 'audio', 'facebook', 'pending',
             );
             // Then finalized 'done' with the transcript.
             expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'done', 'كم سعر الجاكيت الأسود؟');
@@ -1194,7 +1194,7 @@ describe('Webhook Controller', () => {
 
             // Pending stub stored (placeholder), then finalized 'failed'.
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio', 'facebook', 'pending',
             );
             expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'failed');
 
@@ -1273,7 +1273,7 @@ describe('Webhook Controller', () => {
 
             // English placeholder (terminal stub — no owner/url → not enrichable, status undefined)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_img_1', 'user_en', '[Image]', undefined, 'image', undefined, undefined,
+                mockPage.id, mockPage.workspaceId, 'msg_img_1', 'user_en', '[Image]', undefined, 'image', 'facebook', undefined,
             );
 
             // English nudge
@@ -1315,7 +1315,7 @@ describe('Webhook Controller', () => {
 
             // Stored as sticker (not image)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_like_sticker', 'user_123', '[Sticker]', undefined, 'sticker',
+                mockPage.id, mockPage.workspaceId, 'msg_like_sticker', 'user_123', '[Sticker]', undefined, 'sticker', 'facebook',
             );
 
             // No nudge sent
@@ -1386,7 +1386,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored (video → not enrichable → terminal stub, status undefined)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video', undefined, undefined,
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video', 'instagram', undefined,
             );
 
             // Nudge sent via Instagram API
@@ -1435,7 +1435,7 @@ describe('Webhook Controller', () => {
 
             // The attachment reaches the merchant inbox…
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_2', 'ig_user_789', '[فيديو]', undefined, 'video', undefined, undefined,
+                mockPage.id, mockPage.workspaceId, 'msg_voice_2', 'ig_user_789', '[فيديو]', undefined, 'video', 'instagram', undefined,
             );
             // …and the nudge goes out on the INSTAGRAM credential, not the empty one.
             expect(mockSendDirectMessage).toHaveBeenCalledWith(

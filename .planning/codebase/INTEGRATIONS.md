@@ -247,7 +247,7 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   - The WhatsApp adapter carries this token in `PlatformPage.accessToken`; a missing token surfaces as `''` so sends fail instead of silently using the FB token
 
 - **Incoming Media (implemented)**:
-  - Voice notes: media ID → `GET /{media-id}` (bearer) → authorized download → Whisper `transcribeFromBuffer` → normal AI pipeline (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts`)
+  - Voice notes: media ID → `GET /{media-id}` (bearer) → authorized download → Whisper `transcribeFromBuffer` → normal AI pipeline (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts`). The attachment stub is stored with `platform='whatsapp'` (it used to inherit the `facebook` default, which also mislabelled the conversation when the voice note was the customer's first message — migration 0184 relabelled the existing rows). A transcript whose script contradicts the Arabic language hint (Turkish/Chinese/Latin output on a noisy Arabic note — 7 of 35 on one Yemeni page) is discarded and takes the transcription-failed path (text-only nudge) instead of being answered in that language (`transcriptMatchesHint`).
   - Media captions, quick-reply buttons, interactive list/button replies → routed to the AI pipeline as text
   - Caption-less images: media ID → authorized download → AI vision description (`imageUnderstanding.describeFromBuffer`, gpt-4.1-mini) → normal AI pipeline, gated by env kill switch + per-plan daily cap. On denial/failure → placeholder + text-only nudge. (Captioned WhatsApp images still take the caption-as-text path — enriching those with vision is a noted follow-up.)
   - Caption-less video/document → stored placeholder + text-only nudge (1h cooldown); stickers stored silently
@@ -553,7 +553,7 @@ Voice-to-text for KB content via microphone:
 
 - **Endpoint**: `POST /voice/transcribe` (`backend/src/routes/voice.ts`)
 - **Service**: `backend/src/services/transcription.ts`
-- **Model**: gpt-4o-mini-transcribe (89% fewer hallucinations vs whisper-1)
+- **Model**: gpt-4o-mini-transcribe (89% fewer hallucinations vs whisper-1). The `language` param is a hint, not a constraint — under an `ar` hint the service discards output that carries letters but no Arabic script (`transcriptMatchesHint`, both the URL and buffer paths), returning null like any other failed transcription.
 - **Frontend**: `VoiceRecordButton.tsx` (mic icon in KB sections + onboarding)
 
 ---
