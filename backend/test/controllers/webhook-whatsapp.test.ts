@@ -500,7 +500,7 @@ describe('WhatsApp Webhook — media messages', () => {
         expect(mockEnqueueMessage).not.toHaveBeenCalled();
         expect(mockWaSendTextMessage).not.toHaveBeenCalled();
         expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid', 'ws-uuid', 'wamid.stk', '+966500000000', '[Sticker]', undefined, 'sticker',
+            'page-uuid', 'ws-uuid', 'wamid.stk', '+966500000000', '[Sticker]', undefined, 'sticker', 'whatsapp',
         );
         expect(mockMarkAsResolved).toHaveBeenCalled();
     });

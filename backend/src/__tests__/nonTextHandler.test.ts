@@ -170,9 +170,9 @@ describe('handleNonTextMessage — sticker', () => {
             mockLogger,
         );
 
-        // Sticker path is unchanged — 7-arg call, no enrichment lifecycle, no SSE.
+        // Sticker path: no enrichment lifecycle, no SSE — but it DOES carry the channel.
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-1', 'user-1', '[Sticker]', 'Test User', 'sticker',
+            'page-uuid-1', 'ws-uuid-1', 'msg-1', 'user-1', '[Sticker]', 'Test User', 'sticker', 'facebook',
         );
         expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
         expect(publishSSEEvent).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('handleNonTextMessage — non-enrichable (video/file, image w/o url or 
 
         // Stub stored with placeholder; 9th arg (enrichmentStatus) is undefined = terminal.
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-3', 'user-1', '[Image]', 'Test User', 'image', undefined, undefined,
+            'page-uuid-1', 'ws-uuid-1', 'msg-3', 'user-1', '[Image]', 'Test User', 'image', 'facebook', undefined,
         );
         expect(messagesService.finalizeEnrichment).not.toHaveBeenCalled();
         expect(enqueueMessage).not.toHaveBeenCalled();
@@ -391,7 +391,7 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
 
         // 1. Stub stored immediately with the PLACEHOLDER + 'pending' status.
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[Image]', 'Test User', 'image', undefined, 'pending',
+            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[Image]', 'Test User', 'image', 'facebook', 'pending',
         );
         // 2. Stored BEFORE the vision call ran (the whole point of store-then-enrich).
         const storeOrder = vi.mocked(messagesService.findOrCreateFromWebhook).mock.invocationCallOrder[0];
@@ -432,7 +432,7 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[Image]', 'Test User', 'image', undefined, 'pending',
+            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[Image]', 'Test User', 'image', 'facebook', 'pending',
         );
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
         expect(enqueueMessage).not.toHaveBeenCalled();
@@ -579,7 +579,7 @@ describe('handleNonTextMessage — audio (store-then-enrich)', () => {
         await handleNonTextMessage('fb-page-id', audioEvent, 'facebook', mockLogger);
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-aud', 'user-1', '[Image]', 'Test User', 'audio', undefined, 'pending',
+            'page-uuid-1', 'ws-uuid-1', 'msg-aud', 'user-1', '[Image]', 'Test User', 'audio', 'facebook', 'pending',
         );
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'done', 'مرحبا كم السعر');
         expect(enqueueMessage).toHaveBeenCalledWith(expect.objectContaining({ text: 'مرحبا كم السعر' }));
@@ -616,7 +616,7 @@ describe('handleNonTextMessage — shared post (store-then-enrich)', () => {
         await handleNonTextMessage('fb-page-id', sharedEvent, 'facebook', mockLogger);
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'ws-uuid-1', 'msg-post', 'user-1', '[Image]', 'Test User', 'post', undefined, 'pending',
+            'page-uuid-1', 'ws-uuid-1', 'msg-post', 'user-1', '[Image]', 'Test User', 'post', 'facebook', 'pending',
         );
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith(
             'msg-uuid', 'done', '[Shared post: "دورة الإسعافات الأولية"]',
@@ -709,5 +709,69 @@ describe('handleWhatsAppNonTextMessage — image failures', () => {
 
         expect(mockWaSendText).not.toHaveBeenCalled();
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
+    });
+});
+
+// The attachment stub used to be stored with NO platform ("preserve legacy default"),
+// so `createMessage` labelled every WhatsApp / Instagram attachment 'facebook' — and
+// when the attachment was the customer's first message, the conversation too, which
+// `findOrCreate` never rewrites. On a WhatsApp-only page that made the dashboard reply
+// route to the Facebook sender and fail with PAGE_DISCONNECTED (Z NET, 2026-08-30:
+// 43 rows, 7 conversations). The channel now travels with the stub on every path.
+describe('attachment stubs carry their channel', () => {
+    const waPage = {
+        ...mockPage,
+        userId: 'page-owner-1',
+        whatsappPhoneNumberId: 'wa-phone-1',
+        whatsappAccessToken: 'wa-token',
+    };
+
+    beforeEach(() => {
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(waPage as never);
+        vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue({ ...mockPage, userId: 'page-owner-1' } as never);
+    });
+
+    it('WhatsApp voice note is stored as a whatsapp row (pending, then transcribed)', async () => {
+        mockWaGetMediaInfo.mockResolvedValue({ url: 'https://wa/media', mimeType: 'audio/ogg' });
+        mockWaDownloadMedia.mockResolvedValue(Buffer.from('OggS'));
+        vi.mocked(transcriptionService.transcribeFromBuffer).mockResolvedValue({ text: 'كم سعر الاشتراك' } as never);
+
+        await handleWhatsAppNonTextMessage(
+            'wa-phone-1',
+            { senderId: '9677000', messageId: 'wa-aud-1', attachmentType: 'audio', mediaId: 'media-aud', senderName: 'أبو أحمد' },
+            mockLogger,
+        );
+
+        expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid-1', 'ws-uuid-1', 'wa-aud-1', '9677000', '[Image]', 'أبو أحمد', 'audio', 'whatsapp', 'pending',
+        );
+        expect(enqueueMessage).toHaveBeenCalledWith(expect.objectContaining({ jobType: 'whatsapp_message', text: 'كم سعر الاشتراك' }));
+    });
+
+    it('WhatsApp sticker is stored as a whatsapp row', async () => {
+        await handleWhatsAppNonTextMessage(
+            'wa-phone-1',
+            { senderId: '9677000', messageId: 'wa-stk-1', attachmentType: 'sticker' },
+            mockLogger,
+        );
+
+        expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid-1', 'ws-uuid-1', 'wa-stk-1', '9677000', '[Sticker]', undefined, 'sticker', 'whatsapp',
+        );
+    });
+
+    it('Instagram voice note is stored as an instagram row, not facebook', async () => {
+        vi.mocked(transcriptionService.transcribe).mockResolvedValue({ text: 'مرحبا' } as never);
+
+        await handleNonTextMessage(
+            'ig-account-id',
+            { senderId: 'ig-user-1', messageId: 'ig-aud-1', attachmentType: 'audio', attachmentUrl: 'https://cdn.ig/voice.mp4' },
+            'instagram',
+            mockLogger,
+        );
+
+        expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid-1', 'ws-uuid-1', 'ig-aud-1', 'ig-user-1', '[Image]', 'IG User', 'audio', 'instagram', 'pending',
+        );
     });
 });
