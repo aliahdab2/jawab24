@@ -1190,6 +1190,9 @@ export class PagesService {
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
+        // Pages CREATED by this sync (as opposed to re-synced existing ones) —
+        // the only auto-link triggers, see the D-119 block before the return.
+        const createdPageIds: string[] = [];
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
@@ -1524,6 +1527,10 @@ export class PagesService {
                                 // through the existingPage branch above, which KEEPS the override.)
                                 leadStages: null,
                                 leadFields: null,
+                                // Same cross-workspace rule for the store link: a page
+                                // reclaimed into a new workspace must not keep answering
+                                // from the PREVIOUS workspace's store catalog.
+                                ecommerceStoreId: null,
                                 // A claimed page is live again in its new workspace — an
                                 // archive flag set by the PREVIOUS owner must not keep it
                                 // hidden here.
@@ -1539,6 +1546,11 @@ export class PagesService {
                         return row;
                     });
                     syncedPages.push(claimed);
+                    // A claimed page just ARRIVED in this workspace — same intent
+                    // as a created one, so it is an eligible auto-link trigger
+                    // (a deliberate unlink can only have happened in the previous
+                    // workspace, and the link was cleared above).
+                    createdPageIds.push(claimed.id);
                     // Fresh token written in the transaction above — release the
                     // reconnect-alert dedup claims (see the sync branch above).
                     if (claimed) clearReconnectAlertClaims(claimed.id, userId);
@@ -1640,6 +1652,7 @@ export class PagesService {
                         })
                         .returning();
                     syncedPages.push(created);
+                    createdPageIds.push(created.id);
                     // Record the auto-reply state a page is born with at connect
                     // (previous = null), so its full on/off history starts here.
                     logAutoReplyToggle({
@@ -1683,12 +1696,14 @@ export class PagesService {
 
         // D-119: a marketplace-provisioned merchant's first page links to their
         // store automatically — the embedded wizard that used to carry this as a
-        // manual step is retired. Strictly the sole-page/sole-store case; see
-        // autoLinkSolePageToSoleStore. Best-effort: a failure here must not
-        // undo a sync that has already committed.
-        if (syncedPages.length > 0) {
+        // manual step is retired. Only pages CREATED by this sync are eligible:
+        // a re-sync of an existing page must never reverse a deliberate unlink
+        // (persona review of #998). Strictness of the rule itself (sole page,
+        // sole store, no manual catalog) lives in autoLinkSolePageToSoleStore.
+        // Best-effort: a failure here must not undo a sync that has committed.
+        if (createdPageIds.length > 0) {
             try {
-                const linkedPageId = await autoLinkSolePageToSoleStore(workspaceId);
+                const linkedPageId = await autoLinkSolePageToSoleStore(workspaceId, createdPageIds);
                 if (linkedPageId) logger.info(`[Pages] Auto-linked sole page ${linkedPageId} to the workspace's sole active store (D-119)`);
             } catch (error) {
                 logger.error(`[Pages] Auto-link of sole page to sole store failed for workspace ${workspaceId}`, { error });

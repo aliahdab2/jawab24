@@ -7,7 +7,7 @@
  */
 import { eq, and, or, lt, gt, sql, desc, isNull, isNotNull, notInArray, inArray } from 'drizzle-orm';
 import { db } from '../db';
-import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog } from '../db/schema';
+import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, workspaces, customerNotificationsLog, catalogItems } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import { isDemoStore } from './demoStore';
 import { storeBaseUrl } from './storeDomain';
@@ -1020,20 +1020,43 @@ export async function linkStoreToPage(storeId: string, pageId: string, workspace
  * launchpad model retires that wizard, so the canonical first-run flow — a
  * marketplace-provisioned workspace connecting its first Facebook page — must
  * not silently lose the link that lets replies read store data. The rule is
- * deliberately strict, so nothing ambiguous is ever guessed: exactly one page
- * in the workspace, still unlinked, and exactly one active store. A merchant
- * with several pages or stores keeps full manual control (link/unlink UI).
+ * deliberately strict, so nothing ambiguous is ever guessed:
+ *
+ * - exactly one page in the workspace, still unlinked, and exactly one
+ *   active store — several pages or stores keep full manual control;
+ * - the page must be in `eligiblePageIds` — the pages CREATED (or claimed
+ *   into this workspace) by the sync that just ran. A re-sync of an existing
+ *   page is NOT an eligible trigger: the merchant may have deliberately
+ *   unlinked it, and a routine token refresh must never reverse that choice
+ *   (persona review of #998);
+ * - the page must have NO manual catalog items — a connected store silently
+ *   wins over the manual catalog in contextEnricher (see
+ *   CatalogStoreConflictError), so auto-linking a catalog page would flip
+ *   the merchant's answer source without consent.
  *
  * Returns the linked page id, or null when the rule did not apply. Callers
  * treat it as best-effort: it runs AFTER a page sync has committed, and a
  * failure must never surface into the sync result.
  */
-export async function autoLinkSolePageToSoleStore(workspaceId: string): Promise<string | null> {
+export async function autoLinkSolePageToSoleStore(
+    workspaceId: string,
+    eligiblePageIds: string[],
+): Promise<string | null> {
+    if (eligiblePageIds.length === 0) return null;
+
     const workspacePages = await db
         .select({ id: pages.id, ecommerceStoreId: pages.ecommerceStoreId })
         .from(pages)
         .where(eq(pages.workspaceId, workspaceId));
     if (workspacePages.length !== 1 || workspacePages[0].ecommerceStoreId) return null;
+    if (!eligiblePageIds.includes(workspacePages[0].id)) return null;
+
+    const catalogRows = await db
+        .select({ id: catalogItems.id })
+        .from(catalogItems)
+        .where(eq(catalogItems.pageId, workspacePages[0].id))
+        .limit(1);
+    if (catalogRows.length > 0) return null;
 
     const activeStores = await db
         .select({ id: ecommerceStores.id })

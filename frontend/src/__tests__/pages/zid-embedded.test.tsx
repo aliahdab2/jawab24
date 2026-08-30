@@ -135,6 +135,19 @@ describe('Zid embedded launchpad (D-119)', () => {
         expect(openTopLevelAuthenticated).toHaveBeenCalledWith('/pages?connectFacebook=true', { locale: 'ar' });
     });
 
+    it('a connected-but-UNLINKED page must not be captioned as linked — the card cannot contradict its own CTA', async () => {
+        routerState.query = { token: 'uuid-from-zid', language: 'ar' };
+        mockApi({ pages: [UNLINKED_PAGE] });
+
+        render(<ZidEmbedded />);
+
+        expect(await screen.findByText('Jawab24 Test')).toBeInTheDocument();
+        expect(screen.getByText('launchpad.pageNotLinkedYet')).toBeInTheDocument();
+        expect(screen.queryByText('launchpad.pageLinked')).not.toBeInTheDocument();
+        // And the CTA agrees: setup is not done.
+        expect(screen.getByText('launchpad.completeSetup')).toBeInTheDocument();
+    });
+
     it('linked page → CTA opens the dashboard top-level', async () => {
         routerState.query = { token: 'uuid-from-zid', language: 'ar' };
         mockApi({ pages: [LINKED_PAGE] });

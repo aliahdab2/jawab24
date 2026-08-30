@@ -232,7 +232,11 @@ export default function ZidEmbedded() {
                   {linkedPage ? (
                     <>
                       <p className="text-sm font-medium text-foreground truncate">{linkedPage.name}</p>
-                      <p className="text-xs text-muted-foreground">{t('launchpad.pageLinked')}</p>
+                      {/* The card must not contradict its own CTA: a connected
+                          page that is NOT yet linked to the store says so. */}
+                      <p className="text-xs text-muted-foreground">
+                        {t(linkedPage.ecommerceStoreId ? 'launchpad.pageLinked' : 'launchpad.pageNotLinkedYet')}
+                      </p>
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">{t('launchpad.noPageYet')}</p>
