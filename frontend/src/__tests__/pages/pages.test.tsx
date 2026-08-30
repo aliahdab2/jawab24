@@ -443,6 +443,53 @@ describe('PagesPage - Toggle Error Handling', () => {
     });
 });
 
+describe('PagesPage - per-channel external links', () => {
+    beforeEach(() => {
+        mockToastError.mockClear();
+        mockUsagePlan(true);
+    });
+    afterEach(() => { vi.clearAllMocks(); });
+
+    it('a multi-channel page links to each connected channel (Facebook, Instagram, WhatsApp)', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{
+                id: 'p_multi', name: 'Multi Page',
+                facebookPageId: 'fb_multi', instagramUsername: 'multishop',
+                whatsappConnected: true, whatsappPhoneNumberId: 'pn_m', whatsappDisplayPhoneNumber: '+966 50 000 0000',
+                autoReplyEnabled: true, instagramAutoReplyEnabled: true, whatsappAutoReplyEnabled: false,
+                commentsCount: 0, knowledgeBase: 'We sell things.', isConnected: true,
+            }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Multi Page')[0]).toBeInTheDocument());
+
+        expect(screen.getByLabelText('Open on Facebook')).toHaveAttribute('href', 'https://www.facebook.com/fb_multi');
+        expect(screen.getByLabelText('Open on Instagram')).toHaveAttribute('href', 'https://www.instagram.com/multishop');
+        expect(screen.getByLabelText('Open on WhatsApp')).toHaveAttribute('href', 'https://wa.me/966500000000');
+    });
+
+    // ⛔ REGRESSION GUARD — an Instagram-direct page has no facebookPageId, so the
+    // old single-link call (getPageExternalUrl without a source) resolved to the
+    // Facebook branch and rendered NO link at all. It must now get its IG link.
+    it('an Instagram-direct page still gets its Instagram link and no Facebook one', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{
+                id: 'p_ig', name: 'IG Only Page',
+                facebookPageId: null, instagramDirect: true, instagramUsername: 'igdirect',
+                autoReplyEnabled: false, instagramAutoReplyEnabled: true,
+                commentsCount: 0, knowledgeBase: 'We sell things.', isConnected: true,
+            }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('IG Only Page')[0]).toBeInTheDocument());
+
+        expect(screen.getByLabelText('Open on Instagram')).toHaveAttribute('href', 'https://www.instagram.com/igdirect');
+        expect(screen.queryByLabelText('Open on Facebook')).not.toBeInTheDocument();
+    });
+});
+
 describe('PagesPage - WhatsApp', () => {
     const WA_PAGE = {
         id: 'page_wa',
