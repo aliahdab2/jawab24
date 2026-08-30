@@ -28,6 +28,7 @@ import {
     getStoreById,
     replaceProductsAndRebuildSummary,
     applySyncedStoreInfo,
+    setStorePoliciesSummary,
     PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
     type NormalizedProduct,
@@ -485,6 +486,154 @@ export async function fetchStoreInfo(creds: ZidCredentials) {
     };
 }
 
+// --- Shipping & payment options → policiesSummary (D-116) ---
+
+/**
+ * Zid keeps a merchant's return/exchange policy as a dashboard "legal page" that
+ * no partner API reads (verified live 2026-08-30: the storefront Pages API serves
+ * custom pages only). What IS structured and documented is what the storefront's
+ * own «الشحن والدفع» page is generated from — the enabled shipping methods
+ * (docs.zid.sa/list-store-delivery-options, scope `shipping.read`) and the
+ * enabled payment methods with their fees (docs.zid.sa/list-of-payment-method,
+ * scope `account.read`). That is what lands in `policiesSummary`; the return
+ * policy stays merchant-authored in Business Info.
+ *
+ * [provisional] Both parsers read only DOCUMENTED fields and tolerate the rest —
+ * the first live capture (docs/testing/zid_live_payloads.jsonl) pins them.
+ */
+const ZID_DELIVERY_OPTIONS_URL = 'https://api.zid.sa/v1/managers/store/delivery-options?payload_type=simple';
+const ZID_PAYMENT_METHODS_URL = 'https://api.zid.sa/v1/managers/store/payment-methods';
+/** Per-line cap — the summary competes for the ~200-char policy slot in getEnrichedKnowledgeBase. */
+const POLICY_LINE_MAX_CHARS = 300;
+const POLICY_MAX_ITEMS = 12;
+/**
+ * `status` on a delivery option is documented only as "current operational
+ * state" — its vocabulary is uncaptured. Unknown values are LISTED (a courier the
+ * merchant configured is more likely live than not); only these read as off.
+ */
+const INACTIVE_STATES = new Set(['inactive', 'disabled', 'deactivated', 'off', 'false', '0']);
+
+export interface ZidStorePolicyFacts {
+    /** Enabled shipping method names, in Zid's order, deduped. */
+    shipping: string[];
+    /** Enabled payment method names, «(رسوم …)» appended when the method carries a fee. */
+    payment: string[];
+}
+
+/** `enabled` is documented as 1/0 and exemplified as `true` — accept both spellings. */
+function zidEnabled(v: unknown): boolean {
+    return v === true || v === 1 || v === '1' || v === 'true';
+}
+
+/** A fee string Zid renders as zero («0 SAR», «0.00») is no fee. */
+function zidFeeIsZero(fees: string): boolean {
+    return /^0+([.,]0+)?(\s|$)/.test(fees);
+}
+
+/** `delivery_options[].{name,status}` → enabled method names. Pure and throw-free. */
+export function mapZidDeliveryOptions(raw: unknown): string[] {
+    const list = (raw as { delivery_options?: unknown } | null)?.delivery_options;
+    if (!Array.isArray(list)) {
+        reportStoreFactDrop('zid', 'delivery_options', raw);
+        return [];
+    }
+    const names: string[] = [];
+    for (const item of list) {
+        const opt = item as { name?: unknown; status?: unknown };
+        const name = localizedText(opt?.name as string | { ar?: string; en?: string } | undefined).trim();
+        if (!name) {
+            reportStoreFactDrop('zid', 'delivery_options.name', item);
+            continue;
+        }
+        const status = typeof opt.status === 'string' ? opt.status.trim().toLowerCase()
+            : opt.status === false ? 'false' : undefined;
+        if (status && INACTIVE_STATES.has(status)) continue;
+        if (!names.includes(name)) names.push(name);
+    }
+    return names;
+}
+
+/** `payload[].{enabled,name,fees_string}` → enabled method labels. Pure and throw-free. */
+export function mapZidPaymentMethods(raw: unknown): string[] {
+    const list = (raw as { payload?: unknown } | null)?.payload;
+    if (!Array.isArray(list)) {
+        reportStoreFactDrop('zid', 'payment_methods', raw);
+        return [];
+    }
+    const labels: string[] = [];
+    for (const item of list) {
+        const method = item as { enabled?: unknown; name?: unknown; fees_string?: unknown };
+        if (!zidEnabled(method?.enabled)) continue;
+        const name = localizedText(method?.name as string | { ar?: string; en?: string } | undefined).trim();
+        if (!name) {
+            reportStoreFactDrop('zid', 'payment_methods.name', item);
+            continue;
+        }
+        const fees = typeof method.fees_string === 'string' ? method.fees_string.trim() : '';
+        const label = fees && !zidFeeIsZero(fees) ? `${name} (رسوم ${fees})` : name;
+        if (!labels.includes(label)) labels.push(label);
+    }
+    return labels;
+}
+
+function zidPolicyLine(label: string, items: string[]): string {
+    const shown = items.slice(0, POLICY_MAX_ITEMS);
+    const more = items.length - shown.length;
+    const text = `${label}: ${shown.join('، ')}${more > 0 ? ` (+${more})` : ''}`;
+    return text.length > POLICY_LINE_MAX_CHARS ? `${text.slice(0, POLICY_LINE_MAX_CHARS - 1)}…` : text;
+}
+
+/**
+ * Render the facts as the `policiesSummary` text the reply pipeline reads
+ * (`[store_policies]`, same slot Shopify's `Shipping:`/`Returns:` lines use).
+ * فصحى labels — the AI mirrors the customer's register itself. `null` when the
+ * store has neither, which `storeAnswersPolicies` reads as "cannot answer".
+ */
+export function buildZidPoliciesSummary(facts: ZidStorePolicyFacts): string | null {
+    const lines: string[] = [];
+    if (facts.shipping.length > 0) lines.push(zidPolicyLine('خيارات الشحن', facts.shipping));
+    if (facts.payment.length > 0) lines.push(zidPolicyLine('طرق الدفع', facts.payment));
+    return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * Sync the store's shipping & payment options into `policiesSummary`.
+ * FAIL-SOFT AND WRITE-NOTHING on any fetch failure: a missing scope or a Zid
+ * outage must neither abort the product sync it precedes nor erase the text the
+ * model is answering from today. Both reads must succeed before anything is
+ * written — a half summary (payment without shipping) would read as a policy.
+ */
+export async function syncPolicies(
+    storeId: string,
+    creds?: ZidCredentials,
+): Promise<{ policiesSummary: string | null | undefined }> {
+    const resolved = creds ?? await resolveZidCredentials(storeId);
+    if (!resolved) throw new Error('Store not found');
+
+    let delivery: unknown;
+    let payment: unknown;
+    try {
+        [delivery, payment] = await Promise.all([
+            zidApiGet<unknown>(ZID_DELIVERY_OPTIONS_URL, resolved),
+            zidApiGet<unknown>(ZID_PAYMENT_METHODS_URL, resolved),
+        ]);
+    } catch (err) {
+        captureError(err, 'Zid shipping/payment fetch failed — store policies not synced', {
+            level: 'warning',
+            tags: { service: 'zid', action: 'sync-policies' },
+            extra: { storeId },
+        });
+        return { policiesSummary: undefined };
+    }
+
+    const policiesSummary = buildZidPoliciesSummary({
+        shipping: mapZidDeliveryOptions(delivery),
+        payment: mapZidPaymentMethods(payment),
+    });
+    await setStorePoliciesSummary(storeId, policiesSummary);
+    return { policiesSummary };
+}
+
 // --- Embedded Apps (docs.zid.sa/embedded-apps) ---
 
 /**
@@ -726,6 +875,10 @@ export async function fullSync(storeId: string) {
     // syncProducts: the product sync's invalidateCachesForStore tail is what
     // retires the semantic cache / re-ingests RAG for these same pages.
     await applyStoreFactsToLinkedPages(storeId, storeInfo.storeFacts);
+
+    // Shipping & payment options → policiesSummary (D-116). Before syncProducts
+    // for the same reason: that tail is what indexes the policy text.
+    await syncPolicies(storeId, creds);
 
     return syncProducts(storeId);
 }

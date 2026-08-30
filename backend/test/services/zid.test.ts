@@ -13,6 +13,7 @@ const {
     mockRedisDel,
     mockDbWhere,
     mockApplyStoreFacts,
+    mockSetStorePoliciesSummary,
 } = vi.hoisted(() => ({
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
@@ -24,6 +25,7 @@ const {
     mockRedisDel: vi.fn(),
     mockDbWhere: vi.fn(),
     mockApplyStoreFacts: vi.fn().mockResolvedValue({ pagesUpdated: 0 }),
+    mockSetStorePoliciesSummary: vi.fn().mockResolvedValue(undefined),
 }));
 
 // --- vi.mock() calls ---
@@ -64,6 +66,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
     applySyncedStoreInfo: (...args: unknown[]) => mockApplySyncedStoreInfo(...args),
+    setStorePoliciesSummary: (...args: unknown[]) => mockSetStorePoliciesSummary(...args),
     PRODUCT_SAFETY_CAP: 5000,
 }));
 
@@ -120,6 +123,10 @@ import {
     getShipmentTracking,
     getProductById,
     mapZidStoreFacts,
+    mapZidDeliveryOptions,
+    mapZidPaymentMethods,
+    buildZidPoliciesSummary,
+    syncPolicies,
     type ZidCredentials,
 } from '../../src/services/zid';
 
@@ -975,6 +982,9 @@ describe('Zid Service', () => {
                         },
                     },
                 }))
+                // syncPolicies: delivery options + payment methods (D-116)
+                .mockResolvedValueOnce(jsonResponse({ delivery_options: [] }))
+                .mockResolvedValueOnce(jsonResponse({ payload: [] }))
                 // syncProducts page 1
                 .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
 
@@ -1015,6 +1025,8 @@ describe('Zid Service', () => {
                         },
                     },
                 }))
+                .mockResolvedValueOnce(jsonResponse({ delivery_options: [] }))
+                .mockResolvedValueOnce(jsonResponse({ payload: [] }))
                 .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
 
             await fullSync('store-1');
@@ -1028,6 +1040,171 @@ describe('Zid Service', () => {
             const factsOrder = mockApplyStoreFacts.mock.invocationCallOrder[0];
             const productsOrder = mockReplaceProductsAndRebuildSummary.mock.invocationCallOrder[0];
             expect(factsOrder).toBeLessThan(productsOrder);
+        });
+
+        it('writes the shipping/payment summary BEFORE syncing products (D-116 — the product tail indexes it)', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({
+                    user: { store: { id: 99, title: 'Store', currency: 'SAR', url: 'https://demo.zid.store' } },
+                }))
+                .mockResolvedValueOnce(jsonResponse({
+                    delivery_options: [{ id: 1, name: 'مندوب المتجر', system_option_code: 'custom', status: 'active' }],
+                }))
+                .mockResolvedValueOnce(jsonResponse({
+                    payload: [{ id: 1, enabled: true, code: 'cod', name: 'الدفع عند الاستلام', type: 'cod', fees: 5, fees_string: '5 SAR' }],
+                }))
+                .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
+
+            await fullSync('store-1');
+
+            expect(mockSetStorePoliciesSummary).toHaveBeenCalledWith(
+                'store-1',
+                'خيارات الشحن: مندوب المتجر\nطرق الدفع: الدفع عند الاستلام (رسوم 5 SAR)',
+            );
+            const policiesOrder = mockSetStorePoliciesSummary.mock.invocationCallOrder[0];
+            const productsOrder = mockReplaceProductsAndRebuildSummary.mock.invocationCallOrder[0];
+            expect(policiesOrder).toBeLessThan(productsOrder);
+        });
+
+        it('still syncs products when the shipping/payment reads are refused, and writes no summary', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({
+                    user: { store: { id: 99, title: 'Store', currency: 'SAR', url: 'https://demo.zid.store' } },
+                }))
+                .mockResolvedValueOnce(jsonResponse({ message: 'Invalid scope(s)' }, 401))
+                .mockResolvedValueOnce(jsonResponse({ payload: [] }))
+                .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
+
+            await fullSync('store-1');
+
+            expect(mockSetStorePoliciesSummary).not.toHaveBeenCalled();
+            expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalled();
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('shipping/payment'),
+                expect.objectContaining({ level: 'warning' }),
+            );
+        });
+    });
+
+    // ============================================================
+    // Shipping & payment options → policiesSummary (D-116)
+    // ============================================================
+
+    describe('mapZidDeliveryOptions (D-116)', () => {
+        it('lists documented options by name, dedupes, and skips a switched-off state', () => {
+            const names = mapZidDeliveryOptions({
+                delivery_options: [
+                    { id: 1, name: 'شركة اســناد للخدمات اللوجستية', system_option_code: 'zid_isnaad', status: 'active' },
+                    { id: 2, name: 'مندوب المتجر', system_option_code: 'custom', status: 'inactive' },
+                    { id: 3, name: 'شركة اســناد للخدمات اللوجستية', system_option_code: 'zid_isnaad', status: 'active' },
+                    { id: 4, name: { ar: 'سمسا', en: 'SMSA' }, system_option_code: 'smsa' },
+                ],
+            });
+            expect(names).toEqual(['شركة اســناد للخدمات اللوجستية', 'سمسا']);
+        });
+
+        it('lists an option whose status vocabulary is unknown rather than dropping a live courier', () => {
+            expect(mapZidDeliveryOptions({ delivery_options: [{ id: 1, name: 'أرامكس', status: 'live' }] }))
+                .toEqual(['أرامكس']);
+        });
+
+        it('drops a nameless option and a non-array envelope, reporting both, never throwing', () => {
+            expect(mapZidDeliveryOptions({ delivery_options: [{ id: 1, status: 'active' }] })).toEqual([]);
+            expect(mapZidDeliveryOptions({ status: 'object' })).toEqual([]);
+            expect(mockCaptureError).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('mapZidPaymentMethods (D-116)', () => {
+        it('keeps enabled methods only (1/0 and boolean spellings) and appends a non-zero fee', () => {
+            const labels = mapZidPaymentMethods({
+                payload: [
+                    { id: 1, enabled: true, code: 'mada', name: 'مدى', type: 'card', fees: 0, fees_string: '0 SAR' },
+                    { id: 2, enabled: 1, code: 'cod', name: 'الدفع عند الاستلام', type: 'cod', fees: 5, fees_string: '5 SAR' },
+                    { id: 3, enabled: 0, code: 'tamara', name: 'تمارا', type: 'bnpl', fees: 0, fees_string: '' },
+                    { id: 4, enabled: false, code: 'apple', name: 'Apple Pay', type: 'wallet' },
+                ],
+            });
+            expect(labels).toEqual(['مدى', 'الدفع عند الاستلام (رسوم 5 SAR)']);
+        });
+
+        it('drops a nameless method and a non-array envelope, reporting both', () => {
+            expect(mapZidPaymentMethods({ payload: [{ id: 1, enabled: true }] })).toEqual([]);
+            expect(mapZidPaymentMethods({ code: 'x' })).toEqual([]);
+            expect(mockCaptureError).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('buildZidPoliciesSummary (D-116)', () => {
+        it('renders one فصحى line per fact group and null when the store has neither', () => {
+            expect(buildZidPoliciesSummary({ shipping: ['مندوب المتجر', 'أرامكس'], payment: ['مدى'] }))
+                .toBe('خيارات الشحن: مندوب المتجر، أرامكس\nطرق الدفع: مدى');
+            expect(buildZidPoliciesSummary({ shipping: [], payment: ['مدى'] })).toBe('طرق الدفع: مدى');
+            expect(buildZidPoliciesSummary({ shipping: [], payment: [] })).toBeNull();
+        });
+
+        it('caps a long list at 12 items with a "+N" tail and never exceeds the per-line cap', () => {
+            const shipping = Array.from({ length: 15 }, (_, i) => `شركة شحن رقم ${i + 1}`);
+            const line = buildZidPoliciesSummary({ shipping, payment: [] })!;
+            expect(line).toContain('(+3)');
+            expect(line).not.toContain('شركة شحن رقم 13');
+            const huge = [Array.from({ length: 400 }, () => 'ا').join('')];
+            expect(buildZidPoliciesSummary({ shipping: huge, payment: [] })!.length).toBeLessThanOrEqual(300);
+        });
+    });
+
+    describe('syncPolicies (D-116)', () => {
+        it('GETs both documented endpoints with dual headers and writes the rendered summary', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({
+                    delivery_options: [{ id: 1, name: 'مندوب المتجر', system_option_code: 'custom', status: 'active' }],
+                }))
+                .mockResolvedValueOnce(jsonResponse({
+                    payload: [{ id: 1, enabled: true, code: 'mada', name: 'مدى', type: 'card', fees: 0, fees_string: '0 SAR' }],
+                }));
+
+            const result = await syncPolicies('store-1', CREDS);
+
+            const [deliveryCall, paymentCall] = mockFetch.mock.calls as Array<[string, RequestInit]>;
+            expect(deliveryCall[0]).toBe('https://api.zid.sa/v1/managers/store/delivery-options?payload_type=simple');
+            expect(paymentCall[0]).toBe('https://api.zid.sa/v1/managers/store/payment-methods');
+            expectDualHeaders(deliveryCall);
+            expectDualHeaders(paymentCall);
+            expect(result).toEqual({ policiesSummary: 'خيارات الشحن: مندوب المتجر\nطرق الدفع: مدى' });
+            expect(mockSetStorePoliciesSummary).toHaveBeenCalledWith('store-1', 'خيارات الشحن: مندوب المتجر\nطرق الدفع: مدى');
+        });
+
+        it('writes null — a real "no options" — when both reads succeed and are empty', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({ delivery_options: [] }))
+                .mockResolvedValueOnce(jsonResponse({ payload: [] }));
+
+            const result = await syncPolicies('store-1', CREDS);
+
+            expect(result).toEqual({ policiesSummary: null });
+            expect(mockSetStorePoliciesSummary).toHaveBeenCalledWith('store-1', null);
+        });
+
+        it('writes NOTHING when either read fails — a refused scope must not erase the current summary', async () => {
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({ delivery_options: [{ id: 1, name: 'مندوب المتجر' }] }))
+                .mockResolvedValueOnce(jsonResponse({ message: 'Invalid scope(s)' }, 401));
+
+            const result = await syncPolicies('store-1', CREDS);
+
+            expect(result).toEqual({ policiesSummary: undefined });
+            expect(mockSetStorePoliciesSummary).not.toHaveBeenCalled();
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('shipping/payment'),
+                expect.objectContaining({ level: 'warning', extra: { storeId: 'store-1' } }),
+            );
+        });
+
+        it('resolves credentials from the store row when none are passed, and throws "Store not found" otherwise', async () => {
+            mockGetStoreById.mockResolvedValue(null);
+            await expect(syncPolicies('no-such-store')).rejects.toThrow('Store not found');
         });
     });
 
