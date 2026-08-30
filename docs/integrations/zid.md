@@ -445,6 +445,31 @@ after install and whenever they open it from their dashboard. Flow:
   the same "sign-in prompt" defect app 7367 was rejected for, one screen later. The tab
   now mints a single-use handoff code first and lands on `/auth/sync`, arriving signed
   in. Ruling **D-067**.
+- **Every Facebook entry point inside the frame breaks out (2026-08-30).** Only the
+  onboarding's connect-page step used `openTopLevelAuthenticated`; the `/pages` «ربط قناة»
+  and «إعادة الاتصال» dialogs set `window.location.href` to the OAuth URL, which inside the
+  frame navigates the *iframe* to facebook.com → «www.facebook.com refused to connect»
+  (seen live on the dev store while the page's token was revoked). Both now break out to
+  `/pages?connectFacebook=true`; the broken-out tab continues to Facebook on arrival (a
+  full-page navigation needs no user gesture, unlike `fb.login`'s popup) and ignores the
+  param if it is somehow still framed. Pinned by `frontend/src/__tests__/pages/pages.test.tsx`
+  «Facebook connect inside a platform frame». WhatsApp (popup-based Embedded Signup) and
+  Instagram-direct are NOT covered by this — see L-18. Two hardenings from the review:
+  `/auth/sync` clears any embedded marker on arrival (browsers without storage
+  partitioning clone sessionStorage into a `window.open` tab — the break-out tab itself —
+  and a cloned marker would make the API client keep the frame's Bearer and `/pages` think
+  it is still framed), and the resume keys on `window.self !== window.top`, the real
+  condition, not the flag.
+- ⚠️ **Known seam, pre-existing, follow-up owed: the scoped session's `token` cookie
+  outlives the merchant's patience by 15 min, not 60.** `cookiesService.setAuthCookies`
+  sets `maxAge` from the 15-min `ACCESS_TOKEN_EXPIRY` while the scoped JWT it carries is
+  minted for `EMBEDDED_BREAKOUT_TOKEN_EXPIRY` (60 min), and by design the break-out issues
+  no refresh cookie. A merchant who spends more than 15 minutes on facebook.com (2FA,
+  password reset, page picker) returns to `/auth/callback` with an expired cookie →
+  `/auth/facebook/link` 401 → `/login`, which an auto-provisioned merchant cannot pass.
+  Same for the onboarding break-out and the WhatsApp handoff. Fix = let `setAuthCookies`
+  take the token's TTL and pass it at both scoped re-mint sites (`controllers/auth.ts`
+  exchange + link). Shared auth infra — its own PR with its own review.
 - 🔴 **Escalation closed at the same seam.** `POST /auth/browser-handoff` stored only the
   userId, and the exchange minted `generateToken(user)` — **unscoped, `isAdmin` intact,
   plus a refresh cookie**. A restricted embedded session (or anyone holding the iframe

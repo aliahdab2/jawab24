@@ -115,6 +115,7 @@
   "connectDialogTitle": "Connect a Page",
   "connectDialogBody": "You'll be redirected to Facebook. To add or change pages, click \"Edit previous settings\" on the Facebook screen.",
   "continueToFacebook": "Continue to Facebook",
+  "connectNewTabHint": "Jawab24 will open in a new tab to sign in to Facebook — come back to this screen when you're done.",
   "createPage": "Create a Page",
   "noPagesFoundTitle": "No Pages Found",
   "noPagesPermissionsDeclined": "You didn't grant Jawab24 permission to see your Pages. Tap Connect and enable the Pages permission in the Facebook window.",
