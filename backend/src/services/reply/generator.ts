@@ -15,6 +15,16 @@ import { resolveFallbackLanguage } from '../../utils/replyLanguage';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
+import { decideContentFreeGate, UNINVITED_SYMBOL_SKIP, type UninvitedSymbolSkip, type ContentCtaClassification, type CtaGateDecision } from './commentCta';
+import { contentCtaClassifier } from '../contentCtaClassifier';
+
+/**
+ * D-111: called with every gate decision on a content-free comment. Injected by
+ * commentProcessor (the owner of pipelineMetrics), never imported here — pulling
+ * `lib/pipelineMetrics` into the generator would drag a live Redis client into
+ * every unit suite that loads it with a partial config mock.
+ */
+export type CtaGateObserver = (platform: 'facebook' | 'instagram', contentId: string, decision: CtaGateDecision) => void;
 
 /**
  * Single source of truth for AI dispatch: when a store is linked, route
@@ -301,6 +311,10 @@ export interface GenerateReplyContext {
     // comment (dual/private mode). See messageProcessor.resolveOriginPostMessage.
     postId?: string;
     postMessage?: string;
+    /** D-111: the content row a comment belongs to, so the content-free gate can read /
+     *  write the post's stored CTA classification. Set by commentProcessor only; absent
+     *  on the DM path and in the playground (which classifies the caption by hash). */
+    contentRef?: { contentId: string; platform: 'facebook' | 'instagram' };
     pageId?: string;
     accessToken?: string;
     // For messages
@@ -374,6 +388,15 @@ export interface GenerateReplyResult {
      * field for the eval.
      */
     toolOutcomes?: ToolOutcome[];
+    /**
+     * D-111: the comment was a symbol («.», «❤️») the post did not invite, and the gate
+     * skipped it BEFORE any model call. `replyText` is null and no `aiIntent` is set —
+     * nothing classified it, and a fake SPAM verdict would trip every reader that
+     * keys on the intent (the like guard, the `solicitedCta` backstop, the verifier).
+     * commentProcessor resolves the comment silently under this reason before any
+     * of those readers run.
+     */
+    skipReason?: UninvitedSymbolSkip;
 }
 
 export interface PlaygroundInput {
@@ -461,6 +484,27 @@ export interface PlaygroundResult {
     /** What each e-commerce tool call decided (D-092) — present only when a tool
      *  round ran, so the eval can pin the resolver's choice next to the reply. */
     toolOutcomes?: ToolOutcome[];
+    /** See GenerateReplyResult.skipReason — the D-111 gate skipped an uninvited symbol
+     *  comment before any model call. Surfaced so the eval can assert the skip itself. */
+    skipReason?: UninvitedSymbolSkip;
+}
+
+/**
+ * A playground result for a comment the pipeline did not answer. One builder for
+ * the preprocess skip (friend tag, spam URL, symbol with no post) and the D-111
+ * gate skip, so the two cannot drift when `PlaygroundResult` grows a field. A
+ * preprocess skip carries the model-free SPAM verdict production also records;
+ * a gate skip classified nothing and carries no intent.
+ */
+function skippedPlaygroundResult(ragMode: string, skipReason?: UninvitedSymbolSkip): PlaygroundResult {
+    return {
+        reply: null, replyMethod: 'skipped', ragMode,
+        chunksRetrieved: 0, chunks: [], intent: skipReason ? null : 'SPAM_OR_IRRELEVANT',
+        confidence: null, flags: [], needsAttention: false, cached: false,
+        detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
+        replyShortened: false,
+        ...(skipReason ? { skipReason } : {}),
+    };
 }
 
 // The lazy retrieval singleton lives in kb/retrieval.ts (`getRetrievalService`)
@@ -527,6 +571,7 @@ export function buildEnrichedQuery(
  */
 export class ReplyGenerator {
     private logger: Logger = noopLogger;
+    private ctaGateObserver: CtaGateObserver | null = null;
 
     setLogger(logger: Logger): void {
         this.logger = logger;
@@ -562,6 +607,32 @@ export class ReplyGenerator {
         }
         let commentForAI = pre.commentForAI;
 
+        // Post text — fetched lazily when the webhook did not carry it. Resolved before
+        // the AI/quota branches because the D-111 gate below needs it.
+        let postMessage = context.postMessage;
+        if (!postMessage && postId && pageId && accessToken) {
+            this.logger.debug('[Generator] Fetching post content for AI context');
+            const post = await postsService.findOrCreateFromWebhook(
+                pageId, postId, undefined, accessToken
+            );
+            postMessage = post.message || undefined;
+        }
+
+        // D-111 gate: a content-free comment is a details request ONLY when the post's
+        // text invited that symbol. Runs BEFORE the AI-enabled and quota branches on
+        // purpose — an uninvited «.» must get nothing, not the limit-fallback template
+        // or a Needs-Attention row. In shadow mode it only records what it would do.
+        const gate = await this.applyContentFreeGate({
+            rawText: text, commentForAI, postMessage,
+            userId, pageId, contentRef: context.contentRef,
+        });
+        if (gate.action === 'skip') {
+            this.logger.info('[Generator] Uninvited symbol comment skipped', {
+                pageId, postId, symbol: gate.symbol, shape: gate.shape,
+            });
+            return { replyText: null, replyMethod: 'ai', needsAttention: false, skipReason: UNINVITED_SYMBOL_SKIP };
+        }
+
         // 1. Use AI if enabled
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
@@ -582,16 +653,6 @@ export class ReplyGenerator {
                 }
                 const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
                 return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
-            }
-
-            // Fetch post content lazily if needed
-            let postMessage = context.postMessage;
-            if (!postMessage && postId && pageId && accessToken) {
-                this.logger.debug('[Generator] Fetching post content for AI context');
-                const post = await postsService.findOrCreateFromWebhook(
-                    pageId, postId, undefined, accessToken
-                );
-                postMessage = post.message || undefined;
             }
 
             // When reply mode is dual or private, the AI reply will be sent as a DM,
@@ -641,6 +702,82 @@ export class ReplyGenerator {
         });
         const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
         return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
+    }
+
+    /** See CtaGateObserver. */
+    setCtaGateObserver(observer: CtaGateObserver | null): void {
+        this.ctaGateObserver = observer;
+    }
+
+    /**
+     * D-111 content-free gate, shared by the production comment path and the
+     * playground/eval path. Decides whether a content-free comment («.», «٠٠٠»,
+     * «❤️») is the symbol the post invited. A comment carrying letters never enters
+     * it — no lookup, no classification, no decision — so the gate adds nothing to
+     * the path of an ordinary question (Rule 17).
+     *
+     * With a `contentRef` (production) the verdict is read from / written to
+     * `content_cta_classifications` — one model call per post, ever, on its first
+     * content-free comment. The playground/eval path has no content row and
+     * classifies the caption per request, unpersisted. A production caller with
+     * no `contentRef` gets no verdict (→ uncertain), never the playground path.
+     *
+     * Every decision on a content-free comment is handed to the observer
+     * commentProcessor injects (pipeline metric + per-post tally), including in
+     * shadow mode, where the caller then proceeds exactly as before this change.
+     */
+    private async applyContentFreeGate(opts: {
+        rawText: string;
+        commentForAI: string;
+        postMessage: string | undefined;
+        userId: string | undefined;
+        pageId: string | undefined;
+        contentRef?: GenerateReplyContext['contentRef'];
+        playground?: boolean;
+    }): Promise<CtaGateDecision> {
+        const probe = (opts.commentForAI || opts.rawText).trim();
+        // Not content-free, or no caption (the preprocess step already skipped bare
+        // symbols with no post context): nothing to decide.
+        if (probe.length === 0 || !isContentFree(probe) || !opts.postMessage) return { action: 'pass' };
+
+        let classification: ContentCtaClassification | null = null;
+        if (opts.userId && opts.pageId) {
+            if (opts.contentRef) {
+                classification = await contentCtaClassifier.getOrClassify({
+                    contentId: opts.contentRef.contentId,
+                    platform: opts.contentRef.platform,
+                    pageId: opts.pageId,
+                    userId: opts.userId,
+                    caption: opts.postMessage,
+                });
+            } else if (opts.playground) {
+                classification = await contentCtaClassifier.classifyForPlayground(opts.postMessage, {
+                    userId: opts.userId, pageId: opts.pageId,
+                });
+            }
+        }
+
+        // Optional-chained like `config.groundingVerify?.enabled`: unit suites mock
+        // `config` partially, and a missing block must read as the shipped default
+        // (shadow), never throw on the reply path.
+        const decision = decideContentFreeGate({
+            commentText: probe,
+            classification,
+            confidenceThreshold: config.commentCta?.confidenceThreshold ?? 0.7,
+            mode: config.commentCta?.gateMode ?? 'shadow',
+        });
+        if (decision.action === 'shadow_skip') {
+            this.logger.info('[Generator] CTA gate (shadow): would skip uninvited symbol comment', {
+                pageId: opts.pageId, contentId: opts.contentRef?.contentId,
+                symbol: decision.symbol, shape: decision.shape,
+            });
+        }
+        if (opts.contentRef && this.ctaGateObserver) {
+            try {
+                this.ctaGateObserver(opts.contentRef.platform, opts.contentRef.contentId, decision);
+            } catch { /* an observer must never affect the reply */ }
+        }
+        return decision;
     }
 
     /**
@@ -955,15 +1092,24 @@ export class ReplyGenerator {
                 hasPostContext: !!postMessage,
             });
             if (pre.skipReason) {
-                return {
-                    reply: null, replyMethod: 'skipped', ragMode,
-                    chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
-                    confidence: null, flags: [], needsAttention: false, cached: false,
-                    detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
-                    replyShortened: false,
-                };
+                return skippedPlaygroundResult(ragMode);
             }
             questionForAI = pre.commentForAI;
+        }
+
+        // D-111 gate — the SAME decision as production's generateForComment, so the
+        // eval pins the rule and not a stand-in (Rule 19). The playground has no
+        // content row: the caption is classified per request, unpersisted. A page
+        // with no owner (`userId` absent) gets no verdict rather than a made-up one
+        // — ai_usage_log.user_id is a uuid FK.
+        if (isCommentTest) {
+            const gate = await this.applyContentFreeGate({
+                rawText: question, commentForAI: questionForAI, postMessage,
+                userId, pageId, playground: true,
+            });
+            if (gate.action === 'skip') {
+                return skippedPlaygroundResult(ragMode, UNINVITED_SYMBOL_SKIP);
+            }
         }
 
         // Content-free CTA input (e.g. "." / "٠٠٠" on a CTA post): replace with a

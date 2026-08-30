@@ -273,6 +273,7 @@
     "aiCostPipeline_ecommerce_tools": "أدوات المتجر",
     "aiCostPipeline_post_generation": "اقتراح البوستات (النص)",
     "aiCostPipeline_post_image_generation": "اقتراح البوستات (الصورة)",
+    "aiCostPipeline_post_cta_classification": "فحص دعوة المنشور (التعليقات)",
     "aiCostPipeline_playground": "بيئة التجربة",
     "aiCostPipeline_eval": "التقييم",
     "aiCostPipeline_failover": "النموذج الاحتياطي",

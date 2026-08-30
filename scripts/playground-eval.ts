@@ -140,6 +140,15 @@ interface TestCase {
      * noise, and a silenced flake is indistinguishable from a silenced defect.
      */
     expectedFail?: true;
+    /**
+     * D-111: the case asserts the ENFORCE behaviour of the content-free gate (a skip),
+     * but the gate ships in shadow mode. When the eval process does not carry
+     * `COMMENT_CTA_GATE_MODE=enforce` (the runbook exports it for both the backend and
+     * this script), such a case is reported in the XGAP bucket instead of moving the
+     * headline number — so a shadow-week run stays honest without hiding a regression
+     * on the controls, which carry no flag.
+     */
+    requiresGateEnforce?: true;
 }
 
 interface PlaygroundResponse {
@@ -2515,124 +2524,153 @@ const TEST_CASES: TestCase[] = [
     // ⚠️ `replyDominantScript`, not a substring: a correct Arabic reply may quote
     // Latin product/brand names, and a substring assertion cannot express "this
     // reply is in Arabic".
-    // ── KNOWN OPEN GAP: praise on a post that never invited a comment ──
+    // ── D-111: a content-free comment is a request for details ONLY when the post's
+    // text invited that symbol ──
     //
-    // `rewriteContentFreeCta` is NAMED for CTA posts and its docstring says it fires
-    // "when a post's CTA is 'comment a dot / zero / heart to get details' and the customer
-    // did exactly that". The code contains NO CTA CHECK: the only conditions are that the
-    // post has some caption and the comment is content-free. So a ❤️ on a music-video post
-    // whose whole caption is «YAZAN RASHID #shahin_resort» is treated identically to
-    // «علق بنقطة لتصلك التفاصيل», rewritten to "I want the details", and answered with the
-    // entire Business Info.
+    // Until D-111, `rewriteContentFreeCta` fired on ANY caption: a ❤️ on a music-video post
+    // captioned «YAZAN RASHID #shahin_resort» was rewritten to «أريد التفاصيل» and answered
+    // with the whole Business Info — 452 of 731 content-free AI replies in 30 days, posted
+    // publicly once that merchant switched to `public` mode. #817/#818 pinned that gap as
+    // XGAP; D-111 closes it, so they now assert the skip itself: the gate runs BEFORE the
+    // model, the playground reports `replyMethod: 'skipped'`, and no reply exists to
+    // measure. The "brochure vs short thanks" framing (`replyMaxLength: 160`) is gone on
+    // purpose — the ruling is that nobody asked, so nothing is sent.
     //
-    // Measured on 30 days of production: 452 of 731 content-free AI comment replies (62%)
-    // landed on posts with NO CTA anywhere in the caption. The split is by page intent, not
-    // by chance — الفريق الدمشقي runs real dot-CTA campaigns (266 of 276 WITH a CTA, where
-    // the rewrite is exactly right), while Shahin Resort (240), مزة جبل 86 (93) and
-    // ام. اي. اس (81) have ZERO CTA posts, so every rewrite there is unwarranted.
+    // The invitation is read from the caption by the ONCE-PER-POST classifier
+    // (services/contentCtaClassifier.ts) — the playground memoises it on the caption hash,
+    // so these cases exercise the production classifier + the production matcher
+    // (Rule 19), not a stand-in. ⚠️ Requires the backend under test to run with
+    // COMMENT_CTA_GATE_MODE=enforce; in the default shadow mode the pipeline behaves as
+    // before D-111 and #817/#818/#820/#821 fail — that failure IS the shadow mode working.
     //
-    // Severity rose on 2026-08-27 17:38 UTC, when the merchant switched
-    // `comment_reply_mode` to `public`: the brochure had always been generated (avg 548
-    // chars) but used to go out as a DM behind a short public nudge. It is now posted
-    // publicly under each emoji.
-    //
-    // ⚠️ expectedFail ON PURPOSE — no fix is chosen yet. The obvious one (a CTA-phrase
-    // regex) is a hand-maintained linguistic list, which is against project preference; the
-    // alternatives (a merchant setting, letting the model judge, prompt demonstrations)
-    // each carry their own cost, and dropping the rewrite entirely is what caused the
-    // silence regression that case #324 pins. These cases exist so the gap is measured by a
-    // running test instead of rotting on a branch. Remove the flag in the change that fixes it.
-    //
-    // ⚠️ PAGE CHOICE IS PART OF THE INSTRUMENT. #817/#818 and their control #819 all run on
-    // `training`, and they must keep running on the SAME page: the only thing that may differ
-    // between the gap cases and the control is whether the caption carries a CTA. `resort`
-    // («منتجع الواحة السياحي») is wrong for these despite the matching subject matter — it is
-    // the D-084 per-page-PERSONA fixture, and its persona («أنتِ سارة، موظفة استعلامات… عملكِ
-    // أن تعطي المعلومة ثم توجّهي الزبون لرقم المنتجع») governs reply length and shape, which
-    // is exactly what `replyMaxLength: 160` measures. On `resort` a short reply proves nothing:
-    // the persona could produce it with the CTA gap fully open, and the harness would print
-    // "🎉 NOW PASSES — gap appears fixed" on an unfixed defect. `training` is persona-free, and
-    // is what #813–816 already use.
+    // ⚠️ PAGE CHOICE IS PART OF THE INSTRUMENT. Every case in this block runs on `training`,
+    // and they must keep running on the SAME page: the only thing that may differ between a
+    // skip case and its control is the caption. `resort` («منتجع الواحة السياحي») is wrong
+    // for these — it is the D-084 per-page-PERSONA fixture, and a persona governs reply
+    // length and shape. `training` is persona-free, and is what #813–816 already use.
     {
-        id: 817, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 817, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '❤️',
         page: 'training',
         postMessage: 'YAZAN RASHID\n#shahin_resort',
         expected: {
-            // A brochure is 450–500 chars; an honest acknowledgement of praise is short.
-            replyMaxLength: 160,
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'XGAP — praise on a NO-CTA post must not be answered with the whole Business Info. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything. On the persona-free `training` fixture so the CTA presence is the ONLY variable against control #819 — see the note above.',
+        notes: 'D-111: praise on a NO-CTA post is skipped before the model. Real prod shape (Shahin Resort, caption «YAZAN RASHID #shahin_resort» + a video, 14 replies). Nobody asked anything; nothing is sent, nothing is billed.',
     },
     {
-        id: 818, category: 34, expectedFail: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 818, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '😍😍',
         page: 'training',
         postMessage: 'Amazing atmosphere at the resort 👌🔥',
         expected: {
-            replyMaxLength: 160,
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'XGAP — same class, atmosphere post (22 prod replies). Pairs with #819, which proves the fix must NOT silence real CTA campaigns; same page as #819 so the pair is a controlled comparison.',
+        notes: 'D-111: same class, atmosphere post (22 prod replies). Pairs with control #819 — same page, the caption is the only variable.',
     },
-    // OVER-CORRECTION GUARD — must stay GREEN through any fix to #817/#818. A page that
-    // genuinely runs «علق بنقطة» campaigns (الفريق الدمشقي: 266 of 276) depends on the
-    // rewrite, and a CTA post must keep getting the detailed answer.
+    // OVER-CORRECTION GUARD — must stay GREEN. A page that genuinely runs «علق بنقطة»
+    // campaigns (الفريق الدمشقي: 1,098 dot replies / 60 d, 33% become conversations)
+    // depends on the rewrite, and a dot on a CTA post must keep getting the detailed answer.
+    // The comment was «❤️» before D-111; under strict matching a heart is NOT the dot the
+    // merchant asked for, so the control now sends the invited symbol and #820 pins the heart.
     {
         id: 819, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
-        message: '❤️',
+        message: '.',
         page: 'training',
         postMessage: 'دورات معتمدة 🔥 لمعرفة التفاصيل والأسعار علق بنقطة ❤️⭕️',
         expected: {
             intent: ['QUESTION', 'GREETING', 'OTHER'],
             replyMethod: ['ai'],
         },
-        notes: 'CONTROL, must stay green: an explicit CTA post still earns the detailed answer. If a fix for #817/#818 turns this red it has over-corrected and would break the dot-CTA campaigns the feature exists for (eval #324 / لامار الشام).',
+        notes: 'CONTROL, must stay green: an explicit dot CTA + a dot still earns the detailed answer. If a change turns this red it has over-corrected and would break the dot-CTA campaigns the feature exists for (eval #324 / لامار الشام).',
     },
     {
-        id: 813, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 820, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '❤️',
+        page: 'training',
+        postMessage: 'دورات معتمدة 🔥 لمعرفة التفاصيل والأسعار علق بنقطة ❤️⭕️',
+        expected: {
+            replyMethod: ['skipped'],
+        },
+        notes: 'D-111 strict matching: the merchant asked for a DOT; a heart is engagement, not the invited symbol (8 such comments/month fleet-wide, and no heart campaign exists in prod). The decorative ❤️⭕️ in the caption must not read as a heart CTA.',
+    },
+    {
+        id: 821, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '....',
+        page: 'training',
+        postMessage: '#عروض 🔥 دورات بكلفة 35 الف فقط — ICDL 💻 الإسعافات الأولية 🥼 محاسبة الأمين 💴\nعلق باسم الدورة لمعرفة تفاصيلها ❤️⭕️',
+        expected: {
+            replyMethod: ['skipped'],
+        },
+        notes: 'D-111 owner ruling: a `word` CTA («علق باسم الدورة») is matched on the literal word only. A dot here is skipped — the merchant who wants every comment answered on such a post configures a Post Reply («الكل» or a keyword); the AI does not fill the gap. Real caption shape: the institute\'s biggest post (501 dots / 60 d, now under an «الكل» rule).',
+    },
+    {
+        id: 822, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: 'تم',
+        page: 'training',
+        postMessage: 'دورة #الفوتوشوب 🔥🧡 بكلفة 50 ألف ل.س 💛 علق ب ( تم ) لمعرفة الأوقات ⏰',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'D-111 `word` CTA: «تم» carries letters, so it never enters the gate — it reaches the model verbatim with the post as context and is answered (a real question, not a symbol). The only thing the `word` verdict changes on this post is that a DOT is skipped (#821). Real caption (13 dots + 26 AI replies / 60 d on the institute).',
+    },
+    {
+        id: 823, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'P O O L 🌊 Comment . to get the prices 👇 #resort',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+            replyDominantScript: 'arabic',
+        },
+        notes: 'D-107 language ruling on an INVITED symbol: a Latin-styled caption that explicitly asks for a dot (classifier → `dot`), page default `ar`. The gate lets it through and the reply must still be Arabic — the merchant default, never the caption\'s detected language. #813–816 used to carry this assertion on uninvited captions; after D-111 those are skipped, so this is the case that keeps the D-107 fix under test end-to-end.',
+    },
+    // D-107 pinned the LANGUAGE of these four replies (merchant default, never the
+    // caption's detected one). D-111 re-rules the same four captions: none of them invites
+    // a comment, so under the gate nothing is sent at all. The language ruling stands for
+    // every content-free reply that remains — #819/#822/#324 assert it on captions that DO
+    // invite the symbol — so the evidence D-107 was built on is not lost, it moved.
+    {
+        id: 813, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '🔥🔥',
         page: 'training',
         postMessage: 'P O O L\n#shahin_resort',
         expected: {
-            replyDominantScript: 'arabic',
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'D-107: decorative spaced-Latin caption (127 prod replies). detectLanguageCode says "en" and isLowSignalLatinToken cannot rescue it — its ≤3-word cap admits "A R C" but not "P O O L" — so the pre-fix code sent an English brochure. The merchant default (ar) decides.',
+        notes: 'D-111 (was D-107 language case): decorative spaced-Latin caption, no invitation (127 prod replies). Skipped before the model — the classifier reads «P O O L» as `none` at confidence 1.0 (measured 2026-08-29).',
     },
     {
-        id: 814, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 814, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '❤️',
         page: 'training',
         postMessage: 'Amazing atmosphere at Shahin Resort 👌🔥\n#shahin_resort',
         expected: {
-            replyDominantScript: 'arabic',
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'D-107, the opinionated half (22 prod replies): the caption is GENUINE English, and the reply must STILL be Arabic. A bare emoji carries no customer language signal, and the post is the merchant\'s styling choice — not evidence about the commenter. This is the case a "reject decorative Latin" predicate would NOT have fixed.',
+        notes: 'D-111 (was D-107): genuine-English caption, no invitation (22 prod replies). Skipped.',
     },
     {
-        id: 815, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 815, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '....',
         page: 'training',
         postMessage: 'NADER AL ATAT \n#shahin_resort',
         expected: {
-            replyDominantScript: 'arabic',
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'D-107: an Arabic proper name written in Latin (14 prod replies) — «نادر الأتات». The detector names it English; it is not a language signal at all.',
+        notes: 'D-111 (was D-107): a performer\'s name as the whole caption, no invitation (14 prod replies). A dot wave on such a post is «متابعة» (bookmarking), not a request — the resort\'s «P O O L» video drew 108 dots of 259 comments with nothing asked. Skipped.',
     },
     {
-        id: 816, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 816, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '٠٠٠',
         page: 'training',
         postMessage: 'M L U E\n#shahin_resort',
         expected: {
-            replyDominantScript: 'arabic',
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'D-107: Arabic-Indic digits on a decorative Latin caption (16 prod replies on this caption). Guards the interaction with the لامار الشام «٠٠٠» rewrite (case 258) — the rewrite must fire AND resolve Arabic.',
+        notes: 'D-111 (was D-107): Arabic-Indic digits on a decorative caption with no invitation (16 prod replies). Skipped. The «٠٠٠»-on-a-DOT-post rewrite that لامار الشام depends on is pinned by #324/#325, where the caption DOES say «علق بنقطة».',
     },
     {
         id: 260, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
@@ -2644,14 +2682,14 @@ const TEST_CASES: TestCase[] = [
         notes: '@mention-only comment (mention + filler) — no question, should be SPAM',
     },
     {
-        id: 261, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 261, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '.',
         page: 'training',
         postMessage: 'دورة IELTS الجديدة - سجل الآن! أماكن محدودة.',
         expected: {
-            replyMethod: ['ai'],
+            replyMethod: ['skipped'],
         },
-        notes: 'Dot on post with postMessage — pipeline passes to AI to judge context, should not hard-skip',
+        notes: 'D-111 re-ruling (was: "pipeline passes to AI to judge context"): the caption announces a course and says «سجل الآن», but never asks anyone to COMMENT anything — so a dot on it is a bookmark, not a request, and is skipped before the model. Contrast #257 («علق لتصلك الأسعار» → `any`) and #819 («علق بنقطة» → `dot`).',
     },
 
     // ===== Language detection edge cases (Category 7 extension) =====
@@ -2987,16 +3025,14 @@ const TEST_CASES: TestCase[] = [
     },
 
     {
-        id: 286, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        id: 286, category: 34, requiresGateEnforce: true, categoryName: 'Engagement Post Punctuation', channel: 'comment',
         message: '🙌',
         page: 'training',
         postMessage: 'دورة IELTS الجديدة وصلت! علق بنقطة لتصلك التفاصيل والأسعار 👇',
         expected: {
-            intent: ['QUESTION', 'GREETING', 'OTHER'],
-            replyMethod: ['ai'],
-            replyNotContains: ['SPAM', 'spam'],
+            replyMethod: ['skipped'],
         },
-        notes: 'Arabic post with English course name + sticker/emoji comment — same engagement pattern as dot, should reply with KB info',
+        notes: 'D-111 re-ruling (was: "same engagement pattern as dot, should reply"). The merchant asked for a DOT; 🙌 is a reaction, not the invited symbol — skipped before the model, like #820. Was the third case after #258/#257 to change verdict in the enforce arm on 2026-08-29.',
     },
 
     // ===== Category 40: Engagement Post — KB Answer Quality =====
@@ -3006,7 +3042,7 @@ const TEST_CASES: TestCase[] = [
     // available general info. Fixed by prompt rule: provide partial info BEFORE deflecting.
     {
         id: 287, category: 40, categoryName: 'Engagement Post KB Answer Quality', channel: 'comment',
-        message: '🔥',
+        message: '.',
         page: 'training',
         postMessage: 'علق بنقطة لتعرف أوقات الدوام والدورات المتاحة 🔥',
         expected: {
@@ -3015,7 +3051,7 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['8', 'الأحد', 'الخميس', 'صباح', 'مساء', 'دوام', 'ساعات'],
             replyNotContains: ['ما عندي تفاصيل', 'ما في تفاصيل', 'لا تتوفر لديّ', 'لا تتوفر لدي'],
         },
-        notes: 'Emoji on schedule CTA post — same as above, must not deflect when KB has the info',
+        notes: 'Dot on schedule CTA post — same as above, must not deflect when KB has the info. Was «🔥» before D-111; a fire emoji is not the dot the merchant asked for and is now skipped (pinned by #820/#286), so the KB-quality assertion moved onto the invited symbol.',
     },
     {
         id: 289, category: 40, categoryName: 'Engagement Post KB Answer Quality', channel: 'comment',
@@ -6579,9 +6615,11 @@ async function main() {
     const xgapStillFailing: TestResult[] = [];
     const xgapNowPassing: TestResult[] = [];
 
+    const gateEnforced = process.env.COMMENT_CTA_GATE_MODE === 'enforce';
+    const outsideScore = (r: TestResult) => !!r.test.expectedFail || (!!r.test.requiresGateEnforce && !gateEnforced);
     for (const [catNum, cat] of [...categories.entries()].sort((a, b) => a[0] - b[0])) {
-        const scored = cat.results.filter(r => !r.test.expectedFail);
-        const xgap = cat.results.filter(r => r.test.expectedFail);
+        const scored = cat.results.filter(r => !outsideScore(r));
+        const xgap = cat.results.filter(outsideScore);
         for (const r of xgap) {
             (r.verdict === 'PASS' ? xgapNowPassing : xgapStillFailing).push(r);
         }

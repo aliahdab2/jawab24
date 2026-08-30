@@ -3,6 +3,7 @@ import {
     hasMention,
     isPunctuationOnly,
     isContentFree,
+    countLetterWords,
     hasUserTag,
     hasOwnPageTag,
     stripTagsByOffsets,
@@ -264,8 +265,7 @@ export function buildCommentRagQuery(
     postMessage: string | undefined,
 ): string {
     const body = commentText || rawText;
-    const wordCount = (commentText || '').trim().split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
-    const isVague = wordCount <= VAGUE_COMMENT_WORD_CAP;
+    const isVague = countLetterWords(commentText || '') <= VAGUE_COMMENT_WORD_CAP;
     return (isVague && postMessage)
         ? `${postMessage.slice(0, POST_ENRICH_CHARS)} ${body}`.trim()
         : body;

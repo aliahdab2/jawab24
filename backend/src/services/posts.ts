@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { db } from '../db';
-import { posts, pages, instagramMedia } from '../db/schema';
+import { posts, pages, instagramMedia, contentCtaClassifications } from '../db/schema';
 import { eq, desc, and, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
@@ -260,6 +260,9 @@ export class PostsService {
         if (!owned[0]) return false;
 
         await db.delete(posts).where(eq(posts.id, postId));
+        // The D-111 verdict row has no FK to posts (it is shared with instagram_media),
+        // so it is removed here rather than by cascade; page deletion cascades via page_id.
+        await db.delete(contentCtaClassifications).where(eq(contentCtaClassifications.contentId, postId));
         return true;
     }
 

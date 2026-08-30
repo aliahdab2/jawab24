@@ -190,3 +190,7 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
         raw: client,
     };
 }
+
+/** The deadline helper every pinned-model call site should use with this wrapper —
+ *  see `lib/abortTimeout.ts` for why it exists and why it lives outside this module. */
+export { withAbortTimeout } from '../lib/abortTimeout';

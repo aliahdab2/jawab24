@@ -104,6 +104,17 @@ export function hasMention(text: string): boolean {
 }
 
 /**
+ * Number of whitespace-separated tokens that carry at least one letter in any
+ * script. The "does this comment say anything" measure shared by the RAG
+ * vagueness rule (`buildCommentRagQuery`) and any future short-text gate — one
+ * definition so the two cannot drift on what counts as a word (Rule 10.8).
+ * Digits-only and symbol-only tokens do not count.
+ */
+export function countLetterWords(text: string): number {
+    return text.trim().split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
+}
+
+/**
  * Returns true when text consists entirely of punctuation, symbols, or emojis
  * (no letters, no numbers in any script). Empty string returns false.
  */

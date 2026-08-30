@@ -3345,6 +3345,94 @@ reopened only with real human-echo timing data, which does not exist yet (0 huma
    silence. Neither alone is enough: the guard cannot stop the customer receiving two greetings,
    and the guidance cannot be verified (no API reads the app's settings).
 
+## D-111 · A content-free comment is a request for details ONLY when the post's text invited that symbol — never inferred from the symbol itself (2026-08-29)
+
+**Context.** Since April 2026 the comment pipeline has rewritten every comment with no letter
+in any script — «.», «....», «٠٠٠», «❤️», «😡» — into the synthetic question «أريد التفاصيل»
+before the model runs, whenever the post has *any* caption (`rewriteContentFreeCta`). The
+function is named for CTA posts and its docstring says it fires when a post's CTA asked for a
+dot, but the code never checked for a CTA; a July change (#391) made it fire in `public` mode
+too. Every such reply is billed against the merchant's quota.
+
+**Measured (prod, 30–60 days).** ≈780 billed AI replies/month to content-free comments (≈650
+dots/digits, ≈127 emoji). On a resort's event video captioned only «P O O L», 108 of 259
+comments were dots — bookmark-dots, no invitation anywhere — each answered with a ~460-char
+brochure, posted publicly once the merchant switched to `public` mode. Emoji-only comments are
+praise (116/month on non-campaign posts vs 8 on campaign posts). Negative emoji-only comments:
+1 in 733. What the commenter did afterwards (DM modes, real-text write-back): institute with a
+literal «علّق بنقطة» 33–40%; resort bookmark-dots 11%; news page 8%; emoji 3–6%; a public reply
+opens nothing by construction.
+
+**Ruling — the product boundary.** Jawab24 responds to intent that is either explicit in the
+customer's message or explicitly established by the merchant's post — not intent inferred from
+an ambiguous symbol. Concretely, in order:
+1. A matching **Post Reply rule** handles the comment (free, no AI) — unchanged precedence.
+   Rule type «الكل» stops the AI on that post entirely; a keyword rule that does not match
+   falls through, as today.
+2. A comment with letters takes the normal AI path, unchanged («تم», «السعر؟ ❤️», «غالي 😡»)
+   — it never enters the gate: no lookup, no classification. The literal word of a word
+   CTA reaches the model verbatim, as it always has.
+3. A content-free comment reads the post's **stored CTA classification** —
+   `none | dot | digits | word | heart | any | uncertain`, produced ONCE per post by a pinned
+   `gpt-4.1-mini` call on the caption text, lazily on the first content-free comment that
+   no rule handled (concurrent first comments share one in-flight call), persisted in
+   `content_cta_classifications` keyed by caption hash (`confidence` is `double precision`
+   — `real` stores 0.7 as 0.6999… and fails its own threshold on re-read), metered in
+   `ai_usage_log` as `post_cta_classification`, never against the reply quota. Only a
+   verdict the model actually authored is persisted; a timeout, a truncated or unparseable
+   response is reported and retried on the next comment. `uncertain`, a verdict under the
+   confidence threshold (0.7, validated to [0,1]), a missing caption, or a failed call all
+   read as `none`.
+4. The comment's **shape must match the invited symbol by concept**: `dot`/`digits` accept a
+   dot run OR a digit run (one class — customers type «٠٠٠» on «نقطة» posts; eval #324);
+   `heart` accepts hearts only; `any` accepts any content-free shape; `word` and `none`
+   accept nothing. Matched → the existing «أريد التفاصيل» rewrite and a Smart Reply in the
+   merchant's configured mode, billed as today. Not matched → **skip before the AI-enabled
+   and quota branches and any model call**: no reply in any mode, no DM, no fallback
+   template, no Needs-Attention row, no quota; resolved under its own reason
+   `uninvited_symbol` (pipeline outcome `skipped_uninvited_symbol` + a per-post tally on the
+   verdict row, which the nudge reads).
+5. Reply mode never decides eligibility; it is honoured after it.
+
+**Owner rulings recorded with it.** (a) `word` is strict: a dot on «علق باسم الدورة» is skipped
+— a merchant who wants every comment answered on such a post configures a Post Reply («الكل»
+or a keyword); the AI does not fill the gap (62 dots/60 d on rule-less word-CTA posts). (b)
+With the workspace «الإعجاب بالتعليقات» toggle on, a skipped **emoji-only** comment gets a like
+and no reply (Facebook only); a skipped dot gets nothing. Accepts that a lone 😡 (1 in 733) is
+liked — today it gets a brochure and a like. Ships with the nudge, not in the first PR.
+
+**Rejected.** A CTA phrase regex (hand-maintained linguistic list); a merchant setting as the
+mechanism (offloads a decision the merchant cannot make informedly); reply-mode as the
+eligibility gate (silences public dot campaigns, reverses #324/#391); a shape rule «dots always,
+emoji never» (the resort proved dots are not always a request); letting the model see the raw
+emoji (a `PROMPT_VERSION` bump to serve 1-in-733); an emoji-sentiment table; geo-defaulted
+unsolicited DMs.
+
+**Measured before writing (classifier, temperature 0, structured output).** Institute, 118
+posts: 90/90 captions literally asking for a dot → `dot` (recall 100%, incl. «بنطقة»,
+«#بنقطة», verb-less «نقطة لباقي التفاصيل»); 5 `word` correct («تم», «اسم الدورة»); 22 `none`,
+all genuinely no-CTA; zero `uncertain`, zero confidence < 0.9. Resort, 18 posts: 18/18 `none`
+at 1.0, every dot-wave post included. ≈670 tokens ≈ $0.0003 per post.
+
+**Rollout.** `COMMENT_CTA_GATE_MODE=shadow` (default) classifies and decides but never skips —
+it records `cta_gate_shadow_skip` per would-be skip for a week of live traffic, page by page,
+and sets the threshold. `enforce` switches the skip on; flipping back is the instant rollback.
+The Post Reply nudge (a post drawing symbol comments with no rule → one-tap rule creation)
+ships in the same release as `enforce`, never after: it is the safety net for both classifier
+misses and image-only CTAs, which caption-only classification cannot see by design.
+
+**Eval re-rulings, deliberate.** #817/#818 (praise on a no-CTA post) leave XGAP and expect the
+skip; #813–816 (emoji on the resort's captions, added for D-107 to pin the reply *language*)
+now expect the skip — the language ruling stands for the replies that remain; #819's control
+comment becomes «.» (a ❤️ on a «علّق بنقطة» post is now an expected skip, pinned separately);
+#324/#325 unchanged and green.
+
+**Declared price.** ≈25 unsolicited-but-converting conversations/month (the resort's 11%, the
+news page's 8%, emoji) stop being opened automatically; a merchant recovers them by writing the
+invitation into the post or by a Post Reply rule, and a DM-only opt-in (`unsolicited_symbol_dm`,
+off everywhere) is the future escape hatch. Cached replies keep counting against quota — a
+separate decision; «a cached bad reply is still a bad reply», the defect here is eligibility.
+
 **Accepted trade-offs.** (a) The app's **Away message** inside an active thread reads as
 `manual` and pauses once — the verbatim-repeat rule (same text to ≥ 2 other customers ⇒
 `app_auto`) was designed and measured but **deferred** until the `whatsapp_echo_classified` log

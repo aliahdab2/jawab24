@@ -273,6 +273,7 @@
     "aiCostPipeline_ecommerce_tools": "Store tools",
     "aiCostPipeline_post_generation": "Post suggestions (text)",
     "aiCostPipeline_post_image_generation": "Post suggestions (image)",
+    "aiCostPipeline_post_cta_classification": "Post invitation check (comments)",
     "aiCostPipeline_playground": "Playground",
     "aiCostPipeline_eval": "Evaluation",
     "aiCostPipeline_failover": "Failover model",

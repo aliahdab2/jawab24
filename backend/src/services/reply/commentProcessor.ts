@@ -8,6 +8,8 @@ import { isUrgentNotification, buildNotificationReason, detectBusinessActionFlag
 import { resolvePostReplyRule, matchPostReplyRule, evaluateAnyCommentGuard } from './postReplyRule';
 import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
+import { UNINVITED_SYMBOL_SKIP, type UninvitedSymbolSkip } from './commentCta';
+import { contentCtaClassifier } from '../contentCtaClassifier';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn } from '@jawab24/shared';
@@ -79,6 +81,25 @@ export class CommentProcessor {
         commentDebounce.setLogger(logger);
         postReplyCap.setLogger(logger);
         replyGenerator.setLogger(logger);
+        contentCtaClassifier.setLogger(logger);
+    }
+
+    constructor() {
+        // D-111: every gate decision on a content-free comment lands here — the
+        // pipeline counter and the per-post tally — because this file owns
+        // pipelineMetrics and the generator must not import it (see CtaGateObserver).
+        // Recorded at decision time, so a later AI failure cannot lose a shadow count.
+        // Guarded because several suites automock the generator module (no setter).
+        if (typeof replyGenerator.setCtaGateObserver !== 'function') return;
+        replyGenerator.setCtaGateObserver((platform, contentId, decision) => {
+            if (decision.action === 'skip') {
+                pipelineMetrics.record(`${platform}_comment`, 'skipped_uninvited_symbol');
+                contentCtaClassifier.recordGateOutcome(contentId, 'skip');
+            } else if (decision.action === 'shadow_skip') {
+                pipelineMetrics.record(`${platform}_comment`, 'cta_gate_shadow_skip');
+                contentCtaClassifier.recordGateOutcome(contentId, 'shadow_skip');
+            }
+        });
     }
 
     /**
@@ -91,7 +112,7 @@ export class CommentProcessor {
         pageId: string,
         userId: string,
         workspaceId: string,
-        reason: 'friend_tag' | 'spam' | 'offensive' | 'debounced',
+        reason: 'friend_tag' | 'spam' | 'offensive' | 'debounced' | UninvitedSymbolSkip,
         flagReason?: string,
     ): Promise<void> {
         await commentsService.resolveComment(comment.id);
@@ -659,10 +680,32 @@ export class CommentProcessor {
             // passes a different id shape, revisit this assignment.
             generatorContext.messageTags = messageTags;
             generatorContext.ourFacebookPageId = platform === 'facebook' ? platformPageId : undefined;
+            // D-111: the content row, so the generator's content-free gate can read the
+            // post's stored CTA classification (and write it, once, on the first symbol
+            // comment). Comment adapters are Facebook/Instagram only by construction.
+            if (platform === 'facebook' || platform === 'instagram') {
+                generatorContext.contentRef = { contentId: content.id, platform };
+            }
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             const generated =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
+
+            // 8a. D-111 gate skip — a content-free comment («.», «٠٠٠», «❤️») on a post
+            // whose text did not invite it. No model ran, nothing was billed, nothing is
+            // sent in any reply mode. Resolved silently under its OWN reason (not `spam`);
+            // the pipeline counter and the per-post tally were recorded by the gate
+            // observer at decision time. Must run before 8b/8c: the `solicitedCta`
+            // backstop below deliberately revives SPAM verdicts on content-free comments,
+            // and this is not one of those (the result carries no intent at all).
+            if (generated.skipReason === UNINVITED_SYMBOL_SKIP) {
+                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, UNINVITED_SYMBOL_SKIP);
+                this.logger.info(`[${platform}] Uninvited symbol comment skipped (D-111)`, {
+                    commentId: comment.id, platformCommentId, postId: content.id, commentMessage,
+                });
+                return { success: true, commentId: comment.id };
+            }
+
             // Only generatedText is reassigned below (fallback/truncation); the rest are const.
             let generatedText = generated.replyText;
             const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence } = generated;
@@ -691,6 +734,9 @@ export class CommentProcessor {
             // is the deterministic backstop so a model quirk can't silently drop a
             // solicited lead (eval #324, لامار الشام regression). OFFENSIVE is NOT
             // bypassed — shouldSilentlySkip is true only for SPAM_OR_IRRELEVANT.
+            // Since D-111 a content-free comment reaching this line is one the gate
+            // let through: invited (enforce mode) or shadow-mode traffic. Uninvited
+            // symbols never get here — they returned at 8a.
             const solicitedCta = !!content.message && isContentFree(commentMessage.trim());
             if (shouldSkipReply(flagReason, aiIntent) && !(solicitedCta && shouldSilentlySkip(aiIntent))) {
                 if (shouldSilentlySkip(aiIntent)) {

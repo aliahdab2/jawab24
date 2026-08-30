@@ -34,7 +34,19 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   makes this effectively once-per-comment without a dedicated cache layer.
 - ✅ Nudge language derives from stripped text — no more English nudge on Arabic
   pages with tagged commenters
-- ✅ CTA-boost scoping documented correctly (dual/private only, not public)
+- ✅ **Content-free CTA rewrite is channel-agnostic (since #391, 2026-07-02):**
+  `rewriteContentFreeCta` fires in **every** reply mode — public, private, and dual —
+  not dual/private only. (It was DM-gated until #391; the old gate silently dropped
+  solicited `.`/`٠٠٠` engagement on public-mode CTA campaigns — the لامار الشام
+  regression, eval #324.)
+- ✅ **The rewrite is gated on the post's INVITATION (D-111, 2026-08-29):** a
+  content-free comment reaches the rewrite only when the post's text explicitly asked
+  for that symbol (`services/reply/commentCta.ts` + the once-per-post classifier
+  `services/contentCtaClassifier.ts`). Uninvited symbols («❤️» under an event video,
+  a bookmark «.» on a caption that asked nothing) are skipped BEFORE the model — no
+  reply in any mode, no quota — under `uninvited_symbol`. Ships in shadow mode
+  (`COMMENT_CTA_GATE_MODE=shadow`: decide + log only) and is switched to `enforce`
+  after a week of live shadow data.
 - ✅ Shared preprocess module `backend/src/services/reply/commentPreprocess.ts`
   is the single source of truth for skip rules + language resolution, used by
   both `generateForComment` (production) and `generateForPlayground` (admin/eval).
@@ -281,7 +293,7 @@ polling fallback.
 | File | Responsibility |
 |------|----------------|
 | `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)`, `stripTagsByOffsets`, `hasUserTag`, `hasOwnPageTag`, `FacebookMessageTag` type |
-| `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewritePunctuationForDualDm`. Used by generator and playground — do not duplicate these rules. |
+| `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewriteContentFreeCta`. Used by generator and playground — do not duplicate these rules. |
 | `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, capture `message_tags`, enqueue job with tags, normalise attachment types |
 | `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Hosts the **early user-tag guard** (step 3a) that short-circuits before the trigger-keyword branch. Threads `messageTags` + `ourFacebookPageId` into the generator context. Emits `comment:skipped` SSE event on silent-skip so the frontend can patch the comment to `resolved` in real time. |
 | `frontend/src/hooks/useSSE.ts` | Listens for `comment:received`, `comment:reply_sent`, `comment:reply_failed`, `comment:skipped`. On `comment:skipped`, patches the cache to flip the card from "Pending" to "Resolved" without a round-trip and refreshes stats. |
@@ -393,21 +405,62 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
                       │
                       ▼
     ┌─────────────────┴─────────────────────────────────────────────┐
-    │ CTA BOOST (dual & private modes only — not public)            │
+    │ CONTENT-FREE GATE  (D-111 — applyContentFreeGate)             │
+    │ Runs BEFORE the AI-enabled / quota branches and any model     │
+    │ call, on CONTENT-FREE comments only. Text («تم», «كم السعر؟»)  │
+    │ never enters it — no lookup, no classification.               │
     │                                                               │
-    │ replyMode in {dual, private}  (effectiveChannel == 'dm')      │
-    │   && postMessage                                              │
-    │   && isPunctuationOnly → replace the comment with a synthetic │
+    │ 1. What did the post's TEXT ask for? Read the stored verdict  │
+    │    (content_cta_classifications: none|dot|digits|word|heart|  │
+    │    any|uncertain) — classified ONCE per post by gpt-4.1-mini  │
+    │    on the first content-free comment no Post Reply rule       │
+    │    handled (concurrent first comments share one call); the    │
+    │    playground/eval classifies the caption per request.        │
+    │    uncertain / confidence < 0.7 / no caption / call failed    │
+    │    all read as NONE. Only model-authored verdicts persist.    │
+    │ 2. Does the comment's SHAPE match it? (commentCta)            │
+    │    dot|digits ← a dot run OR a digit run (one class; #324)    │
+    │    heart      ← hearts only          any ← any symbol         │
+    │    word|none  ← nothing (a dot on «اكتب تم» is skipped —      │
+    │                 owner ruling; that merchant uses Post Reply)  │
+    │ MATCH   → continue to the rewrite below.                      │
+    │ NO MATCH→ enforce: SKIP (reason `uninvited_symbol`, metric    │
+    │           skipped_uninvited_symbol + per-post tally).         │
+    │           shadow: log + metric cta_gate_shadow_skip + tally,  │
+    │           then continue exactly as before.                    │
+    └─────────────────┬─────────────────────────────────────────────┘
+                      ▼
+    ┌─────────────────┴─────────────────────────────────────────────┐
+    │ CONTENT-FREE CTA REWRITE  (rewriteContentFreeCta)             │
+    │ ALL reply modes — public, private, AND dual (since #391)      │
+    │                                                               │
+    │ postMessage present                                           │
+    │   && isContentFree → replace the comment with a synthetic     │
     │   question ("أريد التفاصيل" / "I want the details") so the AI │
-    │   answers the DM with the post's details instead of a "." .   │
+    │   answers with the post's details instead of a bare token.    │
     │                                                               │
-    │ Public mode: no replacement. The AI sees the raw "." + post   │
-    │ context and generates a public comment reply directly.        │
+    │ isContentFree = no letter in ANY script → covers "." "..."    │
+    │   emoji "❤️", ASCII "000", Arabic-Indic "٠٠٠" (NOT just       │
+    │   punctuation — widened from isPunctuationOnly in #86).       │
+    │                                                               │
+    │ Was DM-only (effectiveChannel=='dm') until #391 (2026-07);    │
+    │ the old gate silently dropped solicited engagement on         │
+    │ public-mode CTA campaigns (لامار الشام, eval #324). Now the   │
+    │ rewrite runs in public too and the reply is posted publicly.  │
+    │                                                               │
+    │ Synthetic-question LANGUAGE = resolveAuthoredCtaLanguage:     │
+    │   merchant default first, then post → KB (NOT the post's      │
+    │   detected language). See D-107 / #967 in Language selection. │
+    │                                                               │
+    │ Reached only through the CONTENT-FREE GATE above (D-111): in  │
+    │   enforce mode an uninvited symbol never gets here; in shadow │
+    │   mode it still does (and is counted as a would-be skip).     │
     └───────────────────────────────────────────────────────────────┘
                       │
                       ▼
               Language: detectCommentLanguage(strippedText, postMessage)
-                (script-less → fall back to post language)
+                (script-less → fall back to post language;
+                 content-free CTA path → resolveAuthoredCtaLanguage)
                       │
                       ▼
               AI generateReply()
@@ -585,7 +638,8 @@ Arabic page, post in Arabic, dual mode unless noted.
 | `@Ali كيف أسجل في الدورة القادمة؟`        | none                 | `كيف أسجل في الدورة القادمة؟` (5) | NO | AR nudge               | full AR reply |
 | `شو السعر؟`                              | none                 | `شو السعر؟`           | NO    | AR nudge                   | full AR reply |
 | `.` (no post context)                    | none                 | `.`                   | YES   | —                          | —         |
-| `.` (on CTA post "Comment . for price")  | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `.` (post text invites a dot)‡           | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `.` (post text invites nothing)‡         | none                 | `.`                   | YES (enforce) | —                  | — (`uninvited_symbol`; shadow: answered as the row above + `cta_gate_shadow_skip`) |
 | `🎉` (no post context)                   | none                 | `🎉`                  | YES   | —                          | —         |
 | `https://spam.com`                       | none                 | `""` + no post → YES | YES   | —                          | —         |
 | `مرحبا` (public mode)                    | none                 | `مرحبا`               | NO    | full AR reply              | —         |
@@ -596,6 +650,11 @@ Arabic page, post in Arabic, dual mode unless noted.
 † Current word count is whitespace-based; `شو سعر الدورة؟` is 3 tokens (≤ 3).
  * Known limitation — short Arabic real questions collide with the friend-tag
    threshold. See [Known limitations](#known-limitations).
+ ‡ Since D-111 the `.`→synthetic rewrite is gated on the post's stored CTA verdict
+   (`content_cta_classifications`, classified once per post from the caption text —
+   see the CONTENT-FREE GATE box). Rows show dual mode; in **public** mode an invited
+   input produces a **full public reply** (channel-agnostic since #391), in private
+   mode a DM only, and an uninvited one is skipped in every mode (enforce).
 
 ---
 
@@ -677,8 +736,8 @@ Post:         "اكتب تم للحصول على السعر"
 Input:        "تم"
 hasMention    false
 stripped      "تم"
-isPunctuationOnly  false (has letters)
-→ continue to AI
+isContentFree false (has letters)
+→ continue to AI (a real content-full comment — no rewrite)
 
 Language:     ar
 Public:       AR nudge
@@ -692,25 +751,30 @@ Post:         "Comment . to get the price"
 Input:        "."
 hasMention    false
 stripped      "."
-isPunctuationOnly  true, but postMessage exists
+isContentFree true, and postMessage exists
 → SPAM FILTER does NOT fire (has post context)
-→ CTA BOOST replaces "." with "أريد التفاصيل" before AI (DM channel)
+→ CONTENT-FREE CTA REWRITE replaces "." with "أريد التفاصيل" before AI
+  (fires in every mode; here the reply is delivered as a dual-mode DM)
 
 Public:       AR nudge
 DM:           full AR answer with price (AI answered the synthetic question)
 ```
 
-### Example 6b — Same dot, public mode
+### Example 6b — Same dot, public mode (post-#391)
 ```
 Mode:         public
 Post:         "Comment . to get the price"
 Input:        "."
 → SPAM FILTER does NOT fire (has post context)
-→ CTA BOOST skipped (only applies to dual/private)
-→ AI sees raw "." + post context
+→ CONTENT-FREE CTA REWRITE fires (channel-agnostic since #391):
+  "." → "أريد التفاصيل" before the AI
+→ AI answers the synthetic question from post context
 
-Public:       AR reply generated directly from post context
+Public:       full AR reply (with the price), posted publicly
 DM:           —
+
+Note: before #391 this path was DM-only, so public mode saw the raw "." and
+often spam-classified it → silence on solicited CTA comments (eval #324).
 ```
 
 ### Example 7 — Same dot, no post context (rare — orphan comment)
@@ -730,8 +794,11 @@ Result:       no reply. We won't guess intent from a dot in a vacuum.
 Input:        "🎉🔥"
 hasMention    false
 stripped      "🎉🔥"
-isPunctuationOnly  true
-→ same as Example 6/7 depending on postMessage
+isContentFree true  (no letter in any script)
+→ same as Example 6b/7 depending on postMessage
+  (with post context → CONTENT-FREE GATE: the rewrite fires in every mode only
+   if the post's text invited a symbol that a 🎉🔥 satisfies — `any`. On a «علّق
+   بنقطة» post or a post with no invitation it is skipped in enforce mode.)
 ```
 
 ### Example 8b — Comment-originated DM follow-up inherits post context
@@ -838,6 +905,17 @@ mismatched nudge/reply.
 1. **Generator AI call** — `detectCommentLanguage(strippedText, postMessage)`
    with ambiguous-Latin-on-Arabic-KB override (`isAmbiguousLatin` → `ar`).
 
+   **Exception — the content-free CTA rewrite** (`rewriteContentFreeCta`): when the
+   comment carries no language signal at all (`.`/emoji/`٠٠٠`), the synthetic
+   question's language comes from `resolveAuthoredCtaLanguage` — **merchant default
+   first**, then post → KB — NOT the post's detected language. This is text *we*
+   author on the customer's behalf, so the merchant's configured default is the
+   authority, and this synthetic language then becomes the reply's language (fed back
+   as the explicit hint). Fixed in #967 (D-107): the old `detectLanguageCode(postMessage)`
+   sent an English brochure to every emoji comment on a page with decoratively
+   Latin-styled captions (`P O O L`, `M L U E`) — 238 replies on one page in 30 days.
+   See `backend/src/utils/replyLanguage.ts`.
+
 2. **Comment-adapter nudge** (`facebookCommentAdapter` / `instagramCommentAdapter`)
    — same function, same args: `detectCommentLanguage(stripped, postMessage)`.
    This is the fix that prevents English nudges on Arabic pages after a tagged
@@ -878,6 +956,24 @@ with `@name` Latin characters.
 5. **Comment word count is whitespace-only**, Unicode-naïve. A single compound
    Arabic word with a ZWJ or tatweel may miscount; rare in practice.
 
+6. ~~**The content-free CTA rewrite has no CTA check.**~~ **Resolved by D-111
+   (2026-08-29)** — see the CONTENT-FREE GATE box in the decision tree. What remains
+   open, by design:
+   - **A CTA that lives only in the image/video** is invisible to the caption-only
+     classifier, so a dot wave on such a post is skipped (once `enforce` is on). The
+     Post Reply nudge (a post drawing symbol comments with no rule → one-tap rule
+     creation) is the intended path for those merchants and ships with `enforce`, not
+     after it. Image classification is a later phase; the stored verdict is designed
+     to accept extra sources without a shape change.
+   - **`word` CTAs are strict** (owner ruling): a dot on «علق باسم الدورة» is skipped —
+     a merchant who wants every comment answered there configures a Post Reply
+     («الكل» or a keyword). 62 such dots in 60 days on rule-less posts.
+   - **A lone 😡** is content-free with no invitation → skipped, no alert (1 in 733
+     emoji-only comments; 0 answered in 30 days). Emoji + words («غالي 😡») take the
+     normal path and still raise `angry_customer`.
+   - **The like-without-reply for skipped emoji** (workspace «الإعجاب بالتعليقات»
+     on) is decided but not built — it ships with the nudge.
+
 ---
 
 ## Testing
@@ -891,7 +987,7 @@ Keep these tests green. Add new ones here when behavior changes.
 - `backend/test/services/reply/commentPreprocess.test.ts` — the shared module's
   behavior matrix: user-tag skip (with and without trailing text), page-tag
   exception, regex fallback, punctuation skip, language resolution edge cases,
-  dual-DM synthetic rewrite.
+  content-free CTA rewrite (channel-agnostic; `resolveAuthoredCtaLanguage`).
 - `backend/test/services/generator.test.ts` — `ReplyGenerator - Mention/tag skip
   behavior` describe block (regex fallback path).
 - `backend/test/services/reply/facebookCommentAdapter.test.ts` — stripped input
