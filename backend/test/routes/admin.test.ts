@@ -931,11 +931,14 @@ describe('Admin Routes', () => {
             expect(calledUserId).toBe(TEST_USER_ID);
             expect(calledStart).toBeInstanceOf(Date);
             expect(calledEnd).toBeInstanceOf(Date);
-            // periodEnd must be roughly 3 months after periodStart
-            const monthsDiff =
-                (calledEnd.getFullYear() - calledStart.getFullYear()) * 12 +
-                (calledEnd.getMonth() - calledStart.getMonth());
-            expect(monthsDiff).toBe(3);
+            // periodEnd must be roughly 3 months after periodStart. Asserted in
+            // DAYS, not calendar months: run on a month-end, setMonth(+3) rolls
+            // over (Aug 31 + 3mo → Dec 1) and a month arithmetic assertion reads
+            // 4 — this test failed every 31st (first caught 2026-08-31). A day
+            // window still catches a wrong periodMonths (2mo ≈ 61d, 4mo ≈ 122d).
+            const dayDiff = (calledEnd.getTime() - calledStart.getTime()) / (24 * 60 * 60 * 1000);
+            expect(dayDiff).toBeGreaterThanOrEqual(85);
+            expect(dayDiff).toBeLessThanOrEqual(95);
         });
     });
 
