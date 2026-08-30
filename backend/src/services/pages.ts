@@ -4,7 +4,7 @@ import { eq, and, or, ne, desc, sql, count, isNotNull, isNull, inArray } from 'd
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours, NoPagesDiagnosis } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, TRACKED_FIELDS, SHORT_DAY_KEYS, DAY_LABELS_AR, SELLABLE_STATUSES, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
-import { storeAnswersPolicies, type EcommercePlatform } from './ecommerce';
+import { storeAnswersPolicies, autoLinkSolePageToSoleStore, type EcommercePlatform } from './ecommerce';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { pageLinkedInstagramCredential } from './instagramCredential';
@@ -1680,6 +1680,21 @@ export class PagesService {
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
+
+        // D-119: a marketplace-provisioned merchant's first page links to their
+        // store automatically — the embedded wizard that used to carry this as a
+        // manual step is retired. Strictly the sole-page/sole-store case; see
+        // autoLinkSolePageToSoleStore. Best-effort: a failure here must not
+        // undo a sync that has already committed.
+        if (syncedPages.length > 0) {
+            try {
+                const linkedPageId = await autoLinkSolePageToSoleStore(workspaceId);
+                if (linkedPageId) logger.info(`[Pages] Auto-linked sole page ${linkedPageId} to the workspace's sole active store (D-119)`);
+            } catch (error) {
+                logger.error(`[Pages] Auto-link of sole page to sole store failed for workspace ${workspaceId}`, { error });
+            }
+        }
+
         return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 

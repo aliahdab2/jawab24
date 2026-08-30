@@ -104,6 +104,15 @@ export function setEmbeddedToken(token: string): void {
     writeKey(TOKEN_KEY, token);
 }
 
+/**
+ * The stored platform credential (Zid's iframe UUID). The launchpad reads it to
+ * re-establish the session when the frame remounts WITHOUT a `?token` in the
+ * URL — a locale switch, or the platform re-rendering its iframe mid-visit.
+ */
+export function getEmbeddedCredential(): string | null {
+    return readKey(CREDENTIAL_KEY);
+}
+
 export function clearEmbeddedSession(): void {
     removeKey(PLATFORM_KEY);
     removeKey(CREDENTIAL_KEY);

@@ -1014,6 +1014,38 @@ export async function linkStoreToPage(storeId: string, pageId: string, workspace
 }
 
 /**
+ * D-119: auto-link the workspace's ONLY page to its ONLY active store.
+ *
+ * The embedded Zid wizard used to end with a manual «ربط الصفحة» step; the
+ * launchpad model retires that wizard, so the canonical first-run flow — a
+ * marketplace-provisioned workspace connecting its first Facebook page — must
+ * not silently lose the link that lets replies read store data. The rule is
+ * deliberately strict, so nothing ambiguous is ever guessed: exactly one page
+ * in the workspace, still unlinked, and exactly one active store. A merchant
+ * with several pages or stores keeps full manual control (link/unlink UI).
+ *
+ * Returns the linked page id, or null when the rule did not apply. Callers
+ * treat it as best-effort: it runs AFTER a page sync has committed, and a
+ * failure must never surface into the sync result.
+ */
+export async function autoLinkSolePageToSoleStore(workspaceId: string): Promise<string | null> {
+    const workspacePages = await db
+        .select({ id: pages.id, ecommerceStoreId: pages.ecommerceStoreId })
+        .from(pages)
+        .where(eq(pages.workspaceId, workspaceId));
+    if (workspacePages.length !== 1 || workspacePages[0].ecommerceStoreId) return null;
+
+    const activeStores = await db
+        .select({ id: ecommerceStores.id })
+        .from(ecommerceStores)
+        .where(and(eq(ecommerceStores.workspaceId, workspaceId), eq(ecommerceStores.isActive, true)));
+    if (activeStores.length !== 1) return null;
+
+    await linkStoreToPage(activeStores[0].id, workspacePages[0].id, workspaceId);
+    return workspacePages[0].id;
+}
+
+/**
  * Unlink a single page from its e-commerce store (with ownership validation)
  */
 export async function unlinkStoreFromPage(pageId: string, workspaceId: string) {

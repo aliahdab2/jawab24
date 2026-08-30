@@ -125,7 +125,7 @@ ROUTES="
 /salla/onboarding|FRONTEND_/salla/onboarding
 /salla/connected|FRONTEND_/salla/connected
 /shopify/onboarding|FRONTEND_/shopify/onboarding
-/zid/onboarding|FRONTEND_/zid/onboarding
+/zid/onboarding|BACKEND_/zid/onboarding
 /zid/embedded|FRONTEND_/zid/embedded
 /zid/embedded/session|BACKEND_/zid/embedded/session
 /salla/auth|BACKEND_/salla/auth

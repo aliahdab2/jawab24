@@ -3912,3 +3912,46 @@ excluded; the four higher plans entitled) and the flipped `whatsapp-connect` tri
 converting upsell, and the $15 competitor set (Letsbot, Radad) is WhatsApp-first. (b) Giving Basic
 WhatsApp too — Starter needs a differentiator above Basic. (c) A 7- or 10-day trial — 14 matches the
 marketplaces and industry and removes the split; 10 was already rejected in D-103.
+
+## D-119 · The Zid embedded surface is a LAUNCHPAD, not the app — status card + authenticated top-level open; the in-frame wizard is retired (2026-08-31, owner ruling)
+
+**Decision.** The page Zid frames at `/zid/embedded` renders a read-only status card (store synced,
+linked page, reply state) and ONE action: open jawab24.com as an authenticated top-level tab via the
+existing browser-handoff. The full dashboard no longer runs inside the iframe, and the embedded
+onboarding wizard (`/zid/onboarding`) is deleted. A freshly provisioned Zid merchant is routed to
+`/pages?connectFacebook=true` in the full app instead.
+
+**Why.** Every framed-session bug class we shipped and fixed — SameSite cookies never entering the
+frame (SSE 401 loop, #958), 15-minute token re-minting, the wizard forgetting its step on iframe
+re-renders, the session swap that kicks the browser's other jawab24.com session — is a cost of
+running the product inside a third-party iframe. Meanwhile the flow that matters most (Facebook
+OAuth) must leave the frame anyway. This is also the industry-standard shape where the platform does
+not mandate embedding (Zid doesn't): a thin in-dashboard companion, the product in its own tab —
+the Klaviyo/Gorgias model. Owner chose to make the change BEFORE resubmission so the app is reviewed
+once, in its final shape.
+
+**Mechanics.**
+- `frontend/src/pages/zid/embedded.tsx` is the launchpad; it re-establishes from the stored
+  credential on token-less remounts (`getEmbeddedCredential`) and refreshes the card on tab focus.
+- `openTopLevelAuthenticated` now targets a NAMED window (`jawab24`) so repeat opens reuse one tab.
+- **Auto-link (safety condition of retiring the wizard):** after a Facebook page sync, the
+  workspace's ONLY page links to its ONLY active store automatically
+  (`autoLinkSolePageToSoleStore`, called from `syncFromFacebook`). Strictly the unambiguous case;
+  several pages or stores keep manual link/unlink control. Without this, the wizard's manual
+  «ربط الصفحة» step would have been dropped with no replacement and replies would silently never
+  read store data.
+- No change to the app's registration in the Zid Partner Dashboard (URL, scopes, Embedded flag).
+
+**Follow-ups accepted as part of the same direction (separate PRs):** «تسجيل الدخول عبر زد» on the
+login screen (reuses `/zid/auth` — install and login are the same OAuth); a phone-capture step in
+the dashboard checklist with OTP delivered over WhatsApp (SMS rail is dead, D-owner ruling); showing
+`/integrations` beyond admins.
+
+**Rejected.** (a) Keeping the full embedded app — the bug tax recurs with every feature, and it
+duplicates every surface. (b) A pure redirect app (unchecking Embedded) — changes the registration
+Zid reviews, and an empty frame reads as a shell app to a reviewer. (c) Auto-linking on any
+heuristic beyond sole-page/sole-store — a wrong guess feeds one page another store's catalog.
+
+**Pinned by** `frontend/src/__tests__/pages/zid-embedded.test.tsx` (launchpad renders in place,
+no in-frame app routing, CTA destinations, stored-credential remount, error-not-login) and
+`backend/test/integration/autoLinkSolePage.test.ts` (the strict auto-link rule, 6 cases).

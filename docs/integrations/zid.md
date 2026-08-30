@@ -362,6 +362,24 @@ it to DELETE tolerances.** The three questions worth the most:
 
 Full detail in "`[provisional]` parsers" below and `ZID_TEST_PLAN.md` §H (H-1…H-11).
 
+## Embedded surface — the LAUNCHPAD (2026-08-31, D-119)
+
+**The frame is no longer the app.** `/zid/embedded` renders a status card (store synced,
+linked page + reply state, «إدارة الباقة في زد» when `marketplaceBilling.manageUrl` exists) and one
+CTA that opens jawab24.com as an authenticated top-level tab via `openTopLevelAuthenticated`
+(now a NAMED window — repeat opens reuse one tab). No linked page → the CTA lands on
+`/pages?connectFacebook=true`; linked → `/dashboard`. The card refreshes on tab focus, and a
+token-less remount (locale switch, Zid re-rendering its iframe) re-establishes the session from the
+stored credential (`getEmbeddedCredential`).
+
+**The in-frame onboarding wizard is DELETED** (`/zid/onboarding` page, its nginx carve-out, its
+`zid.onboarding.*` i18n keys). Its manual «ربط الصفحة» step is replaced by
+`autoLinkSolePageToSoleStore` (services/ecommerce.ts), called after `syncFromFacebook`: the
+workspace's ONLY page auto-links to its ONLY active store — strictly the unambiguous case.
+`auth/callback.tsx` routes a `zidOnboarding` login straight to `/pages?connectFacebook=true`.
+Rationale, rejected alternatives and pinning tests: DECISIONS.md **D-119**. The D-114/D-115
+section below describes the retired in-frame app and stands as history.
+
 ## Embedded surface — the meeting slice (2026-08-30, D-114/D-115)
 
 A full uninstall → reinstall → onboarding → Facebook connect → pricing cycle was driven
@@ -731,7 +749,7 @@ null and a trialing merchant reads as a full payer. Capture this at step 5.
 | Config | `backend/src/config/index.ts` (`config.zid`; enabled when `ZID_CLIENT_ID` set) |
 | Migration (dual-token columns) | `backend/migrations/0146_left_prodigy.sql` |
 | Migration (billing mirror key) | `backend/migrations/0161_tense_garia.sql` (`subscriptions.zid_store_id`) |
-| **Edge routing** | `nginx/nginx.conf` — `location /zid/` → backend, `location = /zid/onboarding` → frontend |
+| **Edge routing** | `nginx/nginx.conf` — `location /zid/` → backend, `location = /zid/embedded` → frontend (the `/zid/onboarding` carve-out was removed with the wizard, D-119) |
 | Tests | `backend/test/{services,controllers,routes,integrations}/zid.test.ts`, `backend/test/utils/basicAuthVerify.test.ts` |
 | Routing gate | `scripts/check-nginx-routing.sh` (`npm run check:nginx-routing`, pre-deploy step 0.98) |
 
