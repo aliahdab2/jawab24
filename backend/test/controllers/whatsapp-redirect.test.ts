@@ -70,6 +70,18 @@ vi.mock('../../src/services/whatsapp', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: { getUserSubscription: vi.fn(), canEnablePage: vi.fn() },
 }));
+
+// Channel-availability gate (Zid block, D-117). Default "available" so the
+// existing gate-ladder tests are unchanged; the marketplace tests flip it.
+const mockGetWaUnavailable = vi.fn().mockResolvedValue(null);
+vi.mock('../../src/services/whatsappAvailability', () => ({
+    getWhatsAppUnavailableReason: (...args: unknown[]) => mockGetWaUnavailable(...args),
+    WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE: {
+        error: 'WhatsApp isn\'t available for stores connected through Zid.',
+        code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE',
+        marketplace: 'zid',
+    },
+}));
 vi.mock('../../src/services/channelTrial', () => ({
     channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn() },
 }));
@@ -257,6 +269,18 @@ describe('WhatsAppRedirectController.start', () => {
         expect(reply.setCookie).not.toHaveBeenCalled();
     });
 
+    it('marketplace block fires (entitled Zid account) → 403 JSON, no URL, no cookie', async () => {
+        // Entitled by default — the block is independent of the plan gate (D-117).
+        // Mutation: delete the getWhatsAppUnavailableReason branch in
+        // prepareStartUrls and a URL is minted — this fails.
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({}), reply);
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect((reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE' });
+        expect(reply.setCookie).not.toHaveBeenCalled();
+    });
+
     it('404s when the rollout flag is off', async () => {
         const { config } = await import('../../src/config');
         (config as { whatsappConnectRedirect: boolean }).whatsappConnectRedirect = false;
@@ -377,6 +401,19 @@ describe('WhatsAppRedirectController.appStart', () => {
         expect(target).toContain('whatsappError=WHATSAPP_PLAN_REQUIRED');
         // The failure page renders AUTHENTICATED — cookies were set first.
         expect(refreshTokenService.createRefreshToken).toHaveBeenCalled();
+    });
+
+    it('marketplace block → signed-in redirect to /pages?whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE', async () => {
+        primeAppStartHappy();
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), workspaceId: 'ws-1' }),
+            reply,
+        );
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('/pages?');
+        expect(target).toContain('whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE');
     });
 
     it('non-owner member → error redirect BEFORE any state is minted (owner scope, like POST /start)', async () => {
@@ -584,6 +621,20 @@ describe('WhatsAppRedirectController.callback', () => {
         expect(target).toBe('https://jawab24.com/en/pages?whatsappConnected=1&waPageId=page-1');
         // The business token must never ride in a URL.
         expect(target).not.toContain('wa-business-token');
+    });
+
+    it('reverify refuses an entitled Zid account mid-connect → whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE, no exchange', async () => {
+        // The ~10-min window between start and callback: a Zid store connected
+        // in between must still block. Mutation: delete the
+        // getWhatsAppUnavailableReason branch in reverifyGates and the code is
+        // exchanged — this fails.
+        primeHappyMeta();
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const { state, nonce } = mintState();
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'the-code', state }, nonce), reply);
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect((reply.redirect as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE');
     });
 
     it('pageId null → creates a WhatsApp-only card', async () => {

@@ -1069,6 +1069,15 @@ export interface UsageSummary {
        * never "do not suppress". */
       manageUrl?: string;
     };
+    /** Why the WhatsApp channel cannot be connected on this account, INDEPENDENT
+     * of plan and billing. Today the only reason is `zid_marketplace`: a store
+     * connected through Zid, whose App Market paused WhatsApp-integrated apps
+     * (D-117). The frontend gates every WhatsApp connect surface on the absence
+     * of this so it never offers a connect the API will 403. Omitted when
+     * WhatsApp connect is available. */
+    whatsappUnavailable?: {
+      reason: 'zid_marketplace';
+    };
   };
 }
 
@@ -1710,6 +1719,12 @@ export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected' | 'miss
 export interface WhatsAppNotificationStatus {
   /** False when no WhatsApp-connected page is linked to the store. */
   available: boolean;
+  /** Set when WhatsApp can never be connected for this store's account, so the
+   * card must not nudge the merchant to connect it. Today only `zid_marketplace`:
+   * a store connected through Zid, whose App Market paused WhatsApp apps (D-117).
+   * Distinct from `available: false` with no reason, which means "connectable,
+   * just not connected yet". */
+  unavailableReason?: 'zid_marketplace';
   templates: Partial<Record<OrderNotificationType, WhatsAppTemplateStatus>>;
 }
 

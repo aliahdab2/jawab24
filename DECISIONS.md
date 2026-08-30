@@ -3726,3 +3726,53 @@ not stated (the storefront shows them — a `payload_type=full` capture may add 
 `status` vocabulary on delivery options is uncaptured: unknown values are listed, only explicit
 off-states are dropped.
 
+
+## D-117 · WhatsApp connect is switched off for Zid-connected stores while Zid's WhatsApp app category is closed — server-enforced, workspace-scoped, and reversible by one env flag (2026-08-30)
+
+**Decided:** 2026-08-30 · **Status:** Active — TEMPORARY, to be lifted when Zid reopens the category
+
+**Context.** Zid rejected App Market app 7367 on 2026-08-30 as a *category hold*: Zid has
+temporarily paused every WhatsApp-integrated app, with no finding against our app. apps-support
+(Mohammed Alhumaidan) then confirmed in writing that the app *can be reviewed and approved for the
+Facebook and Instagram channels while keeping the WhatsApp channel disabled* — "submit the version
+with WhatsApp switched off." The reviewer opens the full Jawab24 dashboard inside the Zid iframe, so
+hiding the buttons in the frame is not enough: the dashboard the frame shows must not offer WhatsApp
+at all, and it must be true server-side, not a UI dodge.
+
+**Decision.**
+1. WhatsApp connect (and enabling WhatsApp auto-reply) is refused for any workspace whose **billing
+   subject** (the workspace owner) has an **active Zid store**. One predicate,
+   `getWhatsAppUnavailableReason(ownerId)` in `backend/src/services/whatsappAvailability.ts`,
+   returns `'zid_marketplace' | null` and is consulted at every connect gate: `whatsapp.ts`
+   (`connect`, `connectNew`, `toggleAutoReply` enable) and `whatsappRedirect.ts`
+   (`prepareStartUrls`, shared by `start`/`appStart`, and `reverifyGates` at callback — closing the
+   ~10-min window where a Zid store is connected mid-flow). The 403 code is
+   `WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE`; the redirect legs carry it as
+   `?whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE`.
+2. The predicate is keyed on `hasActiveStoreForBillingSubject('zid', ownerId)` — **not**
+   `resolveMarketplaceBilling`. The billing resolver has a Stripe exemption (a Zid-store owner who
+   pays through Stripe resolves to `null`), which would let exactly that merchant connect WhatsApp.
+   Channel availability is a store-presence question, not a billing question.
+3. The usage summary carries `subscription.whatsappUnavailable = { reason: 'zid_marketplace' }`, and
+   the frontend derives one boolean, `isWhatsAppConnectable(whatsappVisible, usage)`, that gates
+   every connect entry (card CTAs, channel picker, pre-mint, path modal, the `?connectWhatsApp=true`
+   deep link), the dashboard launch nudge, the pricing cards' WhatsApp copy, and the order-
+   notifications card's WhatsApp channel. The server refuses regardless; the UI hiding only avoids
+   offering what the API will reject.
+4. **This is temporary and reversible without a code change.** `config.whatsappZidBlock`
+   (env `WHATSAPP_ZID_BLOCK`) defaults **ON** — the block must not depend on a server `.env` being
+   edited to take effect for the review. When Zid reopens the WhatsApp category, set
+   `WHATSAPP_ZID_BLOCK=false` to re-enable WhatsApp for Zid merchants instantly; the guard, the
+   usage-summary field, and every UI gate collapse to today's behaviour. Removing the block
+   permanently is a later, deliberate change once Zid confirms the reopening.
+
+**Rejected.** (a) Hiding WhatsApp only in the listing copy — the reviewer opens the framed app, so
+the framed dashboard offering WhatsApp connect would be detectable and dishonest. (b) Gating on
+`isFramed()` — the block must hold for the same account on web and mobile too, or the "switched off"
+claim is false the moment the merchant leaves the frame. (c) Reusing the marketplace-billing verdict
+— its Stripe exemption misses Stripe-paying Zid stores.
+
+**Guardrail.** Every gate is independent of the plan gate (an entitled Business account with a Zid
+store is still refused) and byte-identical for non-Zid accounts (pinned by the "NO ZID (unchanged)"
+tests). 0 workspaces have WhatsApp connected on a Zid store today, so this blocks new connects only;
+no existing connection is torn down.

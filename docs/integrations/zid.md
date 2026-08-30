@@ -382,6 +382,41 @@ Still owed after the meeting (plan §Phase B): the `/connect/*` corridor with a 
 page, 409 for a Facebook account linked elsewhere + D-C reconnect refresh, the 15-min
 break-out cookie, WhatsApp from the break-out (D-B), the SAR plan view, "Sign in with Zid".
 
+## WhatsApp is switched off for Zid stores (2026-08-30, D-117) — TEMPORARY
+
+**Category hold, not a defect.** Zid rejected app 7367 on 2026-08-30 04:33Z with a portal
+notice — «Apps that have integration with WhatsApp are temporarily under review» — and an email
+from apps-support@zid.sa (Mohammed Alhumaidan): *"This specific app type is temporarily
+unavailable on our platform… we'll reach out as soon as this app type becomes available again."*
+No finding against the app; the 08-25→08-30 review had passed install and opened the embedded app.
+Owner asked whether Facebook + Instagram could be reviewed with WhatsApp off; Zid confirmed 11:46Z:
+*"Yes, the app can be reviewed and approved for the Facebook and Instagram channels while keeping
+the WhatsApp channel disabled. Please go ahead and submit the version with WhatsApp switched off.
+Once the updated version is submitted, make sure to update all app details, such as app images and
+description."*
+
+**What "switched off" means in code (D-117).** WhatsApp connect is refused **server-side** for any
+workspace whose owner has an active Zid store — the reviewer opens the full dashboard inside the
+frame, so hiding buttons is not enough.
+
+- One predicate: `getWhatsAppUnavailableReason(ownerId)` in `backend/src/services/whatsappAvailability.ts`
+  → `'zid_marketplace' | null`, keyed on `hasActiveStoreForBillingSubject('zid', ownerId)` (NOT the
+  marketplace-billing verdict, whose Stripe exemption would miss a Stripe-paying Zid store).
+- Enforced at every connect gate: `controllers/whatsapp.ts` (`connect`, `connectNew`,
+  `toggleAutoReply` enable) and `controllers/whatsappRedirect.ts` (`prepareStartUrls` → `start`/
+  `appStart`, and `reverifyGates` at callback). 403 `WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE`;
+  redirect legs carry `?whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE`.
+- The usage summary carries `subscription.whatsappUnavailable = { reason: 'zid_marketplace' }`; the
+  frontend gates every WhatsApp entry (card CTAs, channel picker, pre-mint, path modal, the
+  `?connectWhatsApp=true` deep link, the dashboard launch nudge, the pricing cards' WhatsApp copy,
+  the order-notifications card's WhatsApp channel) on `isWhatsAppConnectable(whatsappVisible, usage)`.
+
+**Reversible by one flag — this is temporary.** `WHATSAPP_ZID_BLOCK` (default ON) is the switch.
+When Zid reopens the WhatsApp category, set `WHATSAPP_ZID_BLOCK=false` to re-enable WhatsApp for Zid
+merchants with no code change; remove the block permanently later, deliberately. The listing (app
+images + description) must also show no WhatsApp until then, and Zid's WhatsApp-provider vetting
+form (Google Form, submitted 2026-08-30 ~10:30Z) keeps our details on file for the reopening.
+
 ## Verified API contract (docs.zid.sa, fetched 2026-08-01)
 
 ### OAuth

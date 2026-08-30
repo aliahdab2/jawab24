@@ -469,6 +469,13 @@ export const config = {
     // the only path (instant rollback is flipping this off).
     whatsappConfigId: process.env.WHATSAPP_CONFIG_ID || '',
     whatsappConnectRedirect: process.env.WHATSAPP_CONNECT_REDIRECT === 'true',
+    // whatsappZidBlock: WhatsApp connect is refused for any workspace with an
+    // active Zid store. Zid's App Market paused WhatsApp-integrated apps
+    // (2026-08-30) and will only review app 7367 for Facebook + Instagram with
+    // WhatsApp switched off (D-117). DEFAULT ON — the block must not depend on a
+    // server .env being edited; set WHATSAPP_ZID_BLOCK=false to lift it when Zid
+    // reopens the category.
+    whatsappZidBlock: process.env.WHATSAPP_ZID_BLOCK !== 'false',
 
     // Cleanup endpoint secret token
     cleanupSecretToken: process.env.CLEANUP_SECRET_TOKEN || '',

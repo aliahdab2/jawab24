@@ -50,6 +50,12 @@ describe('WhatsAppNudgeBanner', () => {
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
+    it('hidden for a Zid account that can never connect WhatsApp (D-117)', () => {
+        // Mutation: drop `unavailable` from the early-return guard and this shows.
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} unavailable={true} />);
+        expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
+    });
+
     it('hidden when there is no connected page', () => {
         render(<WhatsAppNudgeBanner pages={[disconnectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();

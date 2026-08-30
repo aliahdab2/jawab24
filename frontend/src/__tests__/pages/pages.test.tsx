@@ -208,9 +208,9 @@ const mockedApi = vi.mocked(api, true);
 const mockedSubscriptionApi = vi.mocked(subscriptionApi);
 
 // Plan entitlement served by useSubscriptionUsage (WhatsApp is Business+ only).
-const mockUsagePlan = (whatsappEnabled: boolean) =>
+const mockUsagePlan = (whatsappEnabled: boolean, whatsappUnavailable?: { reason: 'zid_marketplace' }) =>
     mockedSubscriptionApi.getUsage.mockResolvedValue({
-        data: { data: { subscription: { plan: { whatsappEnabled } } } },
+        data: { data: { subscription: { plan: { whatsappEnabled }, whatsappUnavailable } } },
     } as unknown as Awaited<ReturnType<typeof mockedSubscriptionApi.getUsage>>);
 
 const MOCK_PAGES = [
@@ -1288,6 +1288,109 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         });
         // Optimistic update rolled back
         expect(screen.getAllByRole('switch')[1].getAttribute('aria-checked')).toBe('false');
+    });
+});
+
+describe('PagesPage - WhatsApp connect is unavailable with an active Zid store (D-117)', () => {
+    // Zid paused WhatsApp-integrated apps; WhatsApp connect is refused for a
+    // Zid-connected workspace even on an entitled plan, and every UI entry is
+    // hidden. The ZID cases pin that; the NO ZID (unchanged) case proves a
+    // normal entitled account is byte-identical.
+    //
+    // Mutation-checked:
+    //  - delete `whatsappConnectable` from the row-visibility guard → the ZID
+    //    "no Connect button" case fails (the row + Connect return).
+    //  - delete the requestConnectWhatsApp/hasWhatsAppOption guard → the ZID
+    //    "picker collapses to Facebook" case fails.
+    //  - revert the resume guard → the ZID deep-link case fails.
+    const UNCONNECTED_WA_PAGE = {
+        id: 'page_wa',
+        facebookPageId: 'fb_789',
+        name: 'WA Page',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: 'We sell things.',
+        isConnected: true,
+        whatsappConnected: false,
+        whatsappPhoneNumberId: null,
+        whatsappDisplayPhoneNumber: null,
+        whatsappAutoReplyEnabled: false,
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [UNCONNECTED_WA_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('ZID: an entitled account with a Zid store shows no WhatsApp Connect button and no upgrade CTA', async () => {
+        mockUsagePlan(true, { reason: 'zid_marketplace' });
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        // Let the usage query settle so the connectable decision is data-aware.
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
+        // Unavailable is NOT the same as unentitled — no upgrade path is offered.
+        expect(screen.queryByTestId('upgrade-cta')).not.toBeInTheDocument();
+    });
+
+    it('ZID: header "Connect channel" collapses to the Facebook dialog, never the WhatsApp picker', async () => {
+        mockUsagePlan(true, { reason: 'zid_marketplace' });
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        await new Promise((r) => setTimeout(r, 0));
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+    });
+
+    it('ZID: a ?connectWhatsApp=true deep link opens no path modal', async () => {
+        mockRouterQuery = { connectWhatsApp: 'true', waPage: 'page_wa' };
+        mockUsagePlan(true, { reason: 'zid_marketplace' });
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        await new Promise((r) => setTimeout(r, 0));
+
+        // The resume guard returns early; no path-question modal is shown and no
+        // WhatsApp signup is launched.
+        expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+    });
+
+    it('NO ZID (unchanged): an entitled account with no Zid store renders the Connect button as before', async () => {
+        mockUsagePlan(true);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Connect', { selector: 'button' })).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('upgrade-cta')).not.toBeInTheDocument();
     });
 });
 

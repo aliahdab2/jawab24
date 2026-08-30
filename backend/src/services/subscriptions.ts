@@ -10,6 +10,7 @@ import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { isShopifyBilled, buildShopifyManageUrl } from '../config/shopifyBilling';
 import { resolveMarketplaceBilling } from './marketplaceBilling';
+import { getWhatsAppUnavailableReason } from './whatsappAvailability';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
@@ -722,6 +723,16 @@ export const subscriptionsService = {
         // payment controller's guard uses, so the UI and the API cannot disagree.
         const marketplaceVerdict = await resolveMarketplaceBilling(subscriptionOwnerId, subscription);
 
+        // WhatsApp connect availability, INDEPENDENT of plan and marketplace
+        // billing — a store connected through Zid blocks the channel entirely
+        // (D-117), even for a fully-paid Business account and even when Stripe
+        // (not Zid) is the billing rail. Resolved separately from
+        // marketplaceVerdict for exactly that reason: the billing resolver's
+        // Stripe exemption would miss a Stripe-paying Zid merchant. Same subject
+        // (the subscription owner), so the UI hides the connect entry the API
+        // will refuse.
+        const whatsappUnavailableReason = await getWhatsAppUnavailableReason(subscriptionOwnerId);
+
         // THE gate verdict — the very predicate enforceAutoReplyGate blocks on,
         // not a second opinion assembled from `status` or percent-of-quota.
         //
@@ -808,6 +819,13 @@ export const subscriptionsService = {
                 // Zid rails, and widening it now would change what an old app
                 // does with it.
                 sallaBilled: marketplaceVerdict?.marketplace === 'salla' || undefined,
+                // Why the WhatsApp channel is unavailable to connect, regardless
+                // of plan — today only a Zid store (D-117). The frontend gates
+                // every WhatsApp connect surface on this so it can never offer
+                // what the connect API will 403.
+                whatsappUnavailable: whatsappUnavailableReason
+                    ? { reason: whatsappUnavailableReason }
+                    : undefined,
             },
         };
     },
