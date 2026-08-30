@@ -83,7 +83,6 @@ const EXCLUDED_ROUTES = new Map([
   ['shopify/onboarding', 'merchant onboarding (auth-gated)'],
   ['team', 'app workspace (auth-gated)'],
   ['unsubscribe', 'email utility (noindex)'],
-  ['zid/onboarding', 'merchant onboarding (auth-gated)'],
   ['zid/embedded', 'Zid Embedded Apps entry (noindex — the iframe Application URL; only reachable with a one-per-store token from Zid)'],
 ]);
 
