@@ -83,15 +83,27 @@ Each service is independently deployable but shares:
    - Public pages: landing, pricing, login, what-is-jawab24, blog, contact, terms, privacy
    - Protected pages: dashboard, comments, messages, rules, templates, settings, integrations
    - Auth pages: login, complete-profile, checkout
-   - **`/business` («نشاطك التجاري», B1 2026-07-24)** — the unified business surface:
-     readiness chips → catalog (`CatalogManager`) → structured fact rows →
-     inline Business Info editor. The KB editor logic lives in
-     `KnowledgeBasePanel` (extracted from `KnowledgeBaseModal`, which is now a
-     thin portal wrapper used by conversation deep-links `?openKb`). `/catalog`
-     is a CLIENT-side redirect to `/business` preserving `?page&import=1`
-     (`next.config` redirects don't run under `output:'export'`). Canary-gated
-     by `isCatalogVisible` — for that reason `KB_DEEP_LINK` deliberately still
-     targets `/pages?openKb=true` (moving it would bounce non-admin merchants).
+   - **`/business` («نشاطك التجاري», B1 2026-07-24; GA to every workspace
+     2026-08-15)** — the unified business surface: readiness card → products &
+     services (`CatalogManager`, hidden when the lists carry the products) →
+     structured fact rows → business lists (`BusinessListsSection`) → the
+     collapsed free-text overflow «أسئلة شائعة ومعلومات أخرى» / "FAQs & other
+     details" (`business.info.title`; renamed from «معلومات إضافية» 2026-08-29 —
+     the panel inside used to repeat its own «معلومات نشاطك التجاري» title and a
+     three-part introduction, so `/business` now mounts `KnowledgeBasePanel`
+     with `intro="none"` and decides the thin-KB tip from the whole page). The
+     KB editor logic lives in `KnowledgeBasePanel` (extracted from
+     `KnowledgeBaseModal`, which survives only behind the inline comment/message
+     detail flows via `InlineKbEditorModal`; the `?openKb` / `?openKbActive`
+     deep links on `/pages` route to `/business?page=<id>`). `/catalog` is a
+     CLIENT-side redirect to `/business` preserving `?page&import=1`
+     (`next.config` redirects don't run under `output:'export'`). The former
+     `isCatalogVisible` canary gate was deleted at GA (#759); every write stays
+     workspace-admin-gated server-side. ⚠️ The free-text sections are a stored
+     FILE FORMAT: `SECTION_CONFIGS[].emoji` (💰/📝) is the header byte the
+     serializer writes and the backend chunker splits on — the card renders
+     `SectionConfig.icon` instead, and the marker must never change
+     (`knowledgeBaseParser.test.ts`).
 
 2. **Layout System**:
    - **PublicLayout** — for landing, pricing, blog pages (no sidebar)

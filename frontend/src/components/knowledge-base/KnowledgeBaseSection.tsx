@@ -47,7 +47,9 @@ function KnowledgeBaseSectionImpl({
       onToggle={handleToggle}
       header={
         <>
-          <span className="text-xl flex-shrink-0">{config.emoji}</span>
+          <span className="w-9 h-9 rounded-xl icon-bg-brand flex items-center justify-center flex-shrink-0">
+            <config.icon className="w-4 h-4" aria-hidden="true" />
+          </span>
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-bold ${hasContent || isExpanded ? 'text-foreground' : 'text-muted-foreground'}`}>
               {tKb(config.titleKey)}

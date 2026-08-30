@@ -143,7 +143,8 @@ test.describe('/business — the Business Surface', () => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
     await page.addInitScript((pageId) => {
       localStorage.setItem('auth-storage', JSON.stringify({
-        // isAdmin unlocks the surface ahead of GA (featureFlags.isCatalogVisible).
+        // Platform admin — the surface itself is GA (#759); isAdmin only widens
+        // what some fixtures show.
         state: {
           user: { id: 'user_1', email: 'test@test.com', name: 'Test User', isAdmin: true },
           token: 'mock-jwt-token', fbToken: 'mock-fb-token', isAuthenticated: true,

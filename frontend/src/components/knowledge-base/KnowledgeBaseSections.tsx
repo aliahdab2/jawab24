@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionId, CustomSectionId } from './types';
 import { SECTION_CONFIGS, MAX_CUSTOM_SECTIONS, isCustomSection } from './types';
-import { calculateProgress } from './knowledgeBaseParser';
 import { KnowledgeBaseSection } from './KnowledgeBaseSection';
 import { KnowledgeBaseCustomSection } from './KnowledgeBaseCustomSection';
 
@@ -32,7 +31,6 @@ export function KnowledgeBaseSections({
   readOnly = false,
 }: KnowledgeBaseSectionsProps) {
   const tKb = useTranslations('kb');
-  const { filled, total } = calculateProgress(sections);
 
   // Click-to-focus is event-driven: when the user explicitly toggles a
   // section open, focus its textarea to skip the extra tap. We do NOT focus
@@ -58,24 +56,10 @@ export function KnowledgeBaseSections({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Progress indicator */}
-      <div className="flex items-center gap-3 px-1 mb-1">
-        <div className="flex-1 flex gap-1">
-          {sections.map((s) => (
-            <div
-              key={s.id}
-              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
-                s.content.trim() ? 'bg-brand-500' : 'bg-surface-200'
-              }`}
-            />
-          ))}
-        </div>
-        <span className="text-xs font-medium text-surface-500 flex-shrink-0">
-          {filled === total
-            ? tKb('progressComplete')
-            : tKb('progress', { filled, total })}
-        </span>
-      </div>
+      {/* No progress bar here. The page's readiness ring is the one score;
+          «N of M sections filled» was a second scoreboard for the overflow box,
+          and filling every free-text section is not a goal (Business Info
+          clarity, 2026-08-29). */}
 
       {/* Section cards. The data-section-id wrapper is what handleToggle's
           focus query looks up — keep it in sync with the SectionId used in

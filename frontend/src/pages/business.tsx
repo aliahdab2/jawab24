@@ -27,7 +27,7 @@ import {
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
-import { computeFactCoverage, isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
+import { computeFactCoverage, computeReadiness, isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { useWorkspaceRole } from '@/hooks';
@@ -212,6 +212,18 @@ function BusinessPageInner() {
     productsCount,
     factRowsCount,
   });
+
+  // «Add more detail» belongs only on a page that is thin EVERYWHERE — under
+  // two readiness areas covered and not one structured row. The panel's own
+  // rule (free text < 100 chars) would nag a merchant whose 245 list rows make
+  // prose unnecessary, against «structured fields are the destination, free
+  // text is the overflow». Same `computeReadiness` the card scores from, so the
+  // tip can never contradict the ring; false until both counts land.
+  const pageIsThin = useMemo(() => {
+    if (!pageDetail) return false;
+    const { score } = computeReadiness(pageDetail, productsCount, factRowsCount);
+    return score !== null && score.covered < 2 && (productsCount ?? 0) === 0 && (factRowsCount ?? 0) === 0;
+  }, [pageDetail, productsCount, factRowsCount]);
 
   /**
    * Refresh BOTH page queries after an edit on this screen.
@@ -646,6 +658,10 @@ function BusinessPageInner() {
                     saved={saved}
                     bodyClassName="p-3 sm:p-5"
                     footerClassName="flex items-center justify-between gap-3 px-4 py-3 lg:px-5 border-t border-theme-border bg-card"
+                    // The section header above already says what this box is
+                    // for; the panel's own introduction repeated it.
+                    intro="none"
+                    showThinTip={pageIsThin}
                   />
                 ) : (
                   <div className="p-3 sm:p-5" aria-busy="true">

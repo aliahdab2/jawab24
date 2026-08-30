@@ -20,28 +20,34 @@ const renderSections = (sections: KnowledgeSection[]) =>
     />
   );
 
-describe('KnowledgeBaseSections progress label', () => {
-  // Regression: tKb('progress') was called WITHOUT its ICU values and then
-  // hand-interpolated with .replace('{filled}', …). next-intl fails to format
-  // an ICU message with missing arguments and falls back to the raw key, so
-  // merchants saw the literal text "kb.progress" above the section list.
-  it('interpolates the filled/total counts (never the raw kb.progress key)', () => {
+describe('KnowledgeBaseSections', () => {
+  it('renders one card per preset section, titled by its label', () => {
     renderSections([
       { id: 'products', content: 'Abayas from 30k SYP.' },
       { id: 'notes', content: '' },
     ]);
 
-    expect(screen.getByText('1 of 2 filled')).toBeInTheDocument();
-    expect(screen.queryByText(/kb\.progress/)).not.toBeInTheDocument();
+    expect(screen.getByText('About your business')).toBeInTheDocument();
+    expect(screen.getByText('Other Notes')).toBeInTheDocument();
   });
 
-  it('shows the complete label when every section is filled', () => {
-    renderSections([
+  // The «N of M filled» bar was a second scoreboard under the readiness ring
+  // (Business Info clarity, 2026-08-29). It is gone for good: neither the
+  // interpolated label nor the raw key it once leaked (the original regression
+  // this file pinned) may come back, whether sections are half or fully filled.
+  it.each([
+    ['half filled', [
+      { id: 'products', content: 'Abayas from 30k SYP.' },
+      { id: 'notes', content: '' },
+    ] as KnowledgeSection[]],
+    ['fully filled', [
       { id: 'products', content: 'Abayas from 30k SYP.' },
       { id: 'notes', content: 'We ship across Syria.' },
-    ]);
+    ] as KnowledgeSection[]],
+  ])('shows no section-progress label (%s)', (_label, sections) => {
+    renderSections(sections);
 
-    expect(screen.queryByText(/of .* filled/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/filled/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/kb\.progress/)).not.toBeInTheDocument();
   });
 });

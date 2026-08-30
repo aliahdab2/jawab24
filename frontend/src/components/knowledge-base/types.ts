@@ -1,3 +1,5 @@
+import { Store, StickyNote, type LucideIcon } from 'lucide-react';
+
 export type PresetSectionId =
   | 'products'
   | 'notes';
@@ -63,7 +65,16 @@ export type KbPlaceholderKey = 'section.productsPlaceholder' | 'section.notesPla
 
 export interface SectionConfig {
   id: PresetSectionId;
+  /**
+   * The STORED header marker — `serializeSections` writes it into every saved
+   * KB and `EMOJI_TO_SECTION` reads it back. It is a file-format byte, not a
+   * picture: changing it rewrites every merchant's text on their next save and
+   * strands the texts already saved. The card shows `icon` instead.
+   */
   emoji: string;
+  /** What the card renders in place of the marker (the 💰 read as "prices" on a
+   *  card titled «تعريف بنشاطك»). Display only — never serialised. */
+  icon: LucideIcon;
   titleKey: KbTitleKey;
   descKey: KbDescKey;
   placeholderKey: KbPlaceholderKey;
@@ -71,8 +82,8 @@ export interface SectionConfig {
 
 /** Ordered list of preset section configs (2 core sections) */
 export const SECTION_CONFIGS: SectionConfig[] = [
-  { id: 'products', emoji: '💰', titleKey: 'section.productsLabel', descKey: 'section.productsDesc', placeholderKey: 'section.productsPlaceholder' },
-  { id: 'notes',    emoji: '📝', titleKey: 'section.notesLabel',    descKey: 'section.notesDesc',    placeholderKey: 'section.notesPlaceholder' },
+  { id: 'products', emoji: '💰', icon: Store,      titleKey: 'section.productsLabel', descKey: 'section.productsDesc', placeholderKey: 'section.productsPlaceholder' },
+  { id: 'notes',    emoji: '📝', icon: StickyNote, titleKey: 'section.notesLabel',    descKey: 'section.notesDesc',    placeholderKey: 'section.notesPlaceholder' },
 ];
 
 /** Map emoji → presetSectionId */

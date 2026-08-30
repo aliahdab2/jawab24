@@ -27,8 +27,6 @@
     "addedHint": "تمت الإضافة — اضغط حفظ لتحديث معلوماتك.",
     "fromPost": "بوست"
   },
-  "progress": "{filled} من {total} مكتمل",
-  "progressComplete": "كل الأقسام مكتملة!",
   "importedFromFacebook": "جلبنا بعض المعلومات من صفحتك على فيسبوك — عدّلها براحتك قبل الحفظ.",
   "showRawText": "عرض النص الخام",
   "hideRawText": "العودة للأقسام",
