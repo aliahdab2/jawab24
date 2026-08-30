@@ -10,7 +10,7 @@ const MOCK_PLANS = [
     price: 1500,
     currency: 'USD',
     interval: 'month',
-    trialDays: 30,
+    trialDays: 14,
     isActive: true,
     isDefault: true,
     maxAiRepliesPerMonth: 100,
@@ -87,7 +87,7 @@ test.describe('Payment Flow', () => {
     await page.goto('/en/pricing');
     
     // Find a subscribe button for a paid plan.
-    // Based on en.json: "Subscribe", "Start Free for 30 Days", "Get Started"
+    // Based on en.json: "Subscribe", "Start Free for 14 Days", "Get Started"
     const subscribeButtons = page.locator('button:has-text("Subscribe"), button:has-text("Start Free"), button:has-text("Get Started")');
     
     // Wait for at least one button (scroll into view for mobile)

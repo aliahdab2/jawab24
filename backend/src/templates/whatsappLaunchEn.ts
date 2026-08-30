@@ -64,7 +64,7 @@ export const WHATSAPP_LAUNCH_EN_HTML = `<!DOCTYPE html>
       <p style="margin:0 0 6px">&bull; This is a <strong>Beta</strong>, which is why it carries the Beta label. Tell us about anything that breaks.</p>
       <p style="margin:0 0 6px">&bull; If you use the Jawab24 <strong>Android</strong> app, update it to the latest version from <a href="https://play.google.com/store/apps/details?id=com.jawab24.android" style="color:#0f766e;font-weight:700;text-decoration:underline">Google Play</a> — WhatsApp is not present in older versions.</p>
       <p style="margin:0 0 6px">&bull; The recommended option requires your number to be on the <strong>WhatsApp Business</strong> app.</p>
-      <p style="margin:0 0 6px">&bull; Smart Replies on WhatsApp are available on the <strong>Business plan and above</strong>.</p>
+      <p style="margin:0 0 6px">&bull; Smart Replies on WhatsApp are available on the <strong>Starter plan and above</strong>.</p>
       <p style="margin:0">&bull; If you hit any snag while connecting, reply to this email and we'll walk through it with you.</p>
     </td></tr>
   </table>

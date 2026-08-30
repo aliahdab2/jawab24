@@ -24,7 +24,7 @@ vi.mock('../../src/services/plans', () => ({
             price: 0,
             maxPages: 1,
             maxAiRepliesPerMonth: 60,
-            trialDays: 30,
+            trialDays: 14,
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,
@@ -379,7 +379,7 @@ describe('Subscriptions Service', () => {
                 price: 0,
                 maxPages: 1,
                 maxAiRepliesPerMonth: 60,
-                trialDays: 30,
+                trialDays: 14,
                 facebookEnabled: true,
                 instagramEnabled: true,
                 whatsappEnabled: false,
@@ -586,7 +586,7 @@ describe('Subscriptions Service', () => {
         it('should set trialing status when plan has trial days', async () => {
             const { db } = await import('../../src/db');
 
-            // Default plan mock has trialDays: 30, so the insert should be called
+            // Default plan mock has trialDays: 14, so the insert should be called
             await subscriptionsService.createSubscription('user_123');
 
             expect(db.insert).toHaveBeenCalled();
@@ -610,7 +610,7 @@ describe('Subscriptions Service', () => {
                     plan: {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                         maxPages: 1, maxAiRepliesPerMonth: 60,
-                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        trialDays: 14, facebookEnabled: true, instagramEnabled: true,
                         whatsappEnabled: false, prioritySupport: false,
                     },
                 }]),
@@ -702,7 +702,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 14, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 prioritySupport: false,
                                             },
@@ -764,7 +764,7 @@ describe('Subscriptions Service', () => {
                     plan: {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
                         maxPages: 1, maxAiRepliesPerMonth: 60,
-                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        trialDays: 14, facebookEnabled: true, instagramEnabled: true,
                         whatsappEnabled: false, prioritySupport: false,
                     },
                 }]),
@@ -843,7 +843,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 14, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 prioritySupport: false,
                                             },
@@ -972,7 +972,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 14, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 prioritySupport: false,
                                             },
@@ -1051,7 +1051,7 @@ describe('checkSubscriptionStatus', () => {
             price: 0,
             maxPages: 1,
             maxAiRepliesPerMonth: 60,
-            trialDays: 30,
+            trialDays: 14,
             facebookEnabled: true,
             instagramEnabled: true,
             whatsappEnabled: false,

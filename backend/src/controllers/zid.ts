@@ -616,7 +616,7 @@ export const {
         // Adopt the Zid subscription NOW. An App Market merchant subscribed to a
         // plan BEFORE OAuth (EC3), so the plan and its 14-day trial already exist
         // at Zid when the install lands — but until this call the local row kept
-        // the jawab24.com signup trial («المبتدئ · 30 يوم») until a webhook (once
+        // the jawab24.com signup trial («المبتدئ · 14 يوم») until a webhook (once
         // 401'd, now throttled) or the 6h reconciler caught up. Fire-and-forget:
         // the redirect must not wait on a Merchant API round-trip; a known
         // non-entitling plan (the dev store's «اختبار») writes nothing.

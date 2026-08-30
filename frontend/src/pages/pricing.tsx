@@ -245,8 +245,8 @@ function PlanCard({
           subtext={t('pricing.aiPowered')}
         />
 
-        {/* WhatsApp is a Business+ entitlement — crossed out on Starter as an
-            upsell. Hidden entirely until public launch (isWhatsAppMarketable). */}
+        {/* WhatsApp is included from Starter up (D-118) — crossed out on Basic
+            only. Hidden entirely until public launch (isWhatsAppMarketable). */}
         {whatsappMarketable && (
           <FeatureRow
             included={plan.whatsappEnabled}

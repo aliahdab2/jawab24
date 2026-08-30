@@ -207,7 +207,7 @@ const mockedPagesApi = vi.mocked(pagesApi);
 const mockedApi = vi.mocked(api, true);
 const mockedSubscriptionApi = vi.mocked(subscriptionApi);
 
-// Plan entitlement served by useSubscriptionUsage (WhatsApp is Business+ only).
+// Plan entitlement served by useSubscriptionUsage (WhatsApp is Starter+; Basic excluded).
 const mockUsagePlan = (whatsappEnabled: boolean, whatsappUnavailable?: { reason: 'zid_marketplace' }) =>
     mockedSubscriptionApi.getUsage.mockResolvedValue({
         data: { data: { subscription: { plan: { whatsappEnabled }, whatsappUnavailable } } },
@@ -1163,7 +1163,7 @@ describe('PagesPage - WhatsApp-only cards', () => {
     });
 });
 
-describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
+describe('PagesPage - WhatsApp plan gate (Starter+ entitlement, Basic excluded)', () => {
     const UNCONNECTED_WA_PAGE = {
         id: 'page_wa',
         facebookPageId: 'fb_789',
@@ -1263,7 +1263,7 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         mockedApi.patch.mockRejectedValue({
             response: {
                 status: 403,
-                data: { code: 'WHATSAPP_PLAN_REQUIRED', error: 'WhatsApp requires the Business plan or higher.' },
+                data: { code: 'WHATSAPP_PLAN_REQUIRED', error: 'WhatsApp requires the Starter plan or higher.' },
             },
         });
 

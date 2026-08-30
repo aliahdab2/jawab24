@@ -49,21 +49,26 @@ const NOT_ALLOWLISTED_RESPONSE = {
     code: 'WHATSAPP_NOT_ALLOWLISTED',
 } as const;
 
-const PLAN_REQUIRED_RESPONSE = {
-    error: 'WhatsApp requires the Business plan or higher.',
+/**
+ * Shared 403 body for the WhatsApp plan gate. Exported so the redirect-flow
+ * callback (`whatsappRedirect.ts`) reuses the exact same contract instead of
+ * carrying its own copy (Rule 10.8).
+ */
+export const PLAN_REQUIRED_RESPONSE = {
+    error: 'WhatsApp requires the Starter plan or higher.',
     code: 'WHATSAPP_PLAN_REQUIRED',
-    requiredPlan: 'business',
+    requiredPlan: 'starter',
 } as const;
 
 /**
- * Plan entitlement gate: WhatsApp is included on Business+ plans only
- * (`plans.whatsapp_enabled`). Keyed on the WORKSPACE OWNER's subscription —
- * team admins have no subscription row of their own (same subject as
- * `canEnablePage`). No subscription = blocked (fail closed). Trial rides on
- * Starter, so trialing users are blocked by Starter's flag, not by status.
- * Enforced on connect + enable only — disconnect/disable always work, and an
- * already-enabled number keeps working after a downgrade (matches the
- * maxPages model: enforcement-on-enable, no retroactive disable).
+ * Plan entitlement gate: WhatsApp is included from the Starter plan up
+ * (`plans.whatsapp_enabled`; Basic is the only paid plan without it — D-118).
+ * Keyed on the WORKSPACE OWNER's subscription — team admins have no
+ * subscription row of their own (same subject as `canEnablePage`). No
+ * subscription = blocked (fail closed). The trial rides on Starter, so trialing
+ * accounts are entitled. Enforced on connect + enable only — disconnect/disable
+ * always work, and an already-enabled number keeps working after a downgrade
+ * (matches the maxPages model: enforcement-on-enable, no retroactive disable).
  */
 export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);

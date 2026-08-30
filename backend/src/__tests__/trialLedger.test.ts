@@ -1,7 +1,7 @@
 /**
  * Tests for the per-account free-trial anti-abuse ledger.
  *
- * Rule under test: the one-time 30-day trial is bound to the signup IDENTITY
+ * Rule under test: the one-time 14-day trial is bound to the signup IDENTITY
  * (phone / Facebook id), not the account row. A returnee whose identity already
  * consumed its trial must not get a fresh one, even after a hard account delete.
  * trialLedgerService is the detection half; subscriptions.createSubscription

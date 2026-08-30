@@ -109,10 +109,10 @@ Notes:
 **Marketing lands here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
 
 > **Packaging is already on main — do NOT repeat the old "ordering is load-bearing" warning.**
-> Re-verified against the production database 2026-07-29: `plans.whatsapp_enabled` is `true` for
-> business/pro/scale-20k/scale-30k and `false` for starter and the trial, and the
-> `WHATSAPP_PLAN_REQUIRED` connect gate is live in `controllers/whatsapp.ts`. Clearing the allowlist
-> therefore CANNOT expose WhatsApp to Starter. The old `feat/whatsapp-ga-marketing` (#428) branch is
+> Re-verified against the production database 2026-07-29: the `WHATSAPP_PLAN_REQUIRED` connect gate
+> is live in `controllers/whatsapp.ts`. **Since D-118 (2026-08-30) `plans.whatsapp_enabled` is `true`
+> for starter/business/pro/scale-20k/scale-30k and `false` for basic only** — the trial rides on
+> Starter, so trialing accounts are now entitled. The old `feat/whatsapp-ga-marketing` (#428) branch is
 > superseded and 136 commits behind — do NOT rebase it.
 
 - [ ] **Marketing branch:** `feat/whatsapp-ga-launch` (#504) — landing WhatsApp presence (chip, orbit
@@ -135,12 +135,12 @@ exit
 
 - [ ] Verify with a non-admin account: WhatsApp UI now visible; connect works.
 - [ ] **Marketing verification** (/ar AND /en): landing shows WhatsApp chip + features card +
-      FAQ; `/pricing` shows the WhatsApp row included on Business+ and NOT included on Starter;
+      FAQ; `/pricing` shows the WhatsApp row included from Starter up and NOT included on Basic;
       blog teaser reads "now live"; meta/OG descriptions mention WhatsApp (view-source).
-- [ ] **Plan-gate verification:** Starter account connect attempt → 403 `WHATSAPP_PLAN_REQUIRED`
-      toast; Business account → Embedded Signup opens and connects.
+- [ ] **Plan-gate verification:** Basic account connect attempt → 403 `WHATSAPP_PLAN_REQUIRED`
+      toast; Starter/Business account → Embedded Signup opens and connects.
 - [ ] Plans flip is seed-driven — confirm `plans` table shows `whatsapp_enabled=true` for
-      business/pro/scale-20k/scale-30k after deploy (seed runs post-migrate).
+      starter/business/pro/scale-20k/scale-30k after deploy (seed runs post-migrate).
 - [x] ~~Revisit the **coexistence copy**~~ — done: `pages.whatsappTooltip` and `pages.channelWhatsAppDesc` now state both paths instead of "use a number not already on the WhatsApp app", and the blog's "no QR-code hacks" line (which pre-contradicted Coexistence, since it uses a QR step) was rewritten in both locales.
 - [ ] **Verify the path question live in BOTH locales** (`/en/pages`, `/ar/pages`): picking "WhatsApp only" asks the question before the Meta popup, both options render translated (no raw `pages.whatsappPath*` keys), and the RTL layout is correct.
 - [ ] Update `SYSTEM_ANALYSIS.md` + `.planning/codebase/INTEGRATIONS.md` (WhatsApp status → live) in the same commit as any code change.

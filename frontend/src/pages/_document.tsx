@@ -203,7 +203,7 @@ export default function MyDocument({ locale }: DocProps) {
                 "highPrice": "79",
                 "priceCurrency": "USD",
                 "offerCount": "3",
-                "description": "30-day free trial — plans from $15 to $79/month"
+                "description": "14-day free trial — plans from $15 to $79/month"
               },
               // NOTE: no aggregateRating here, deliberately. It previously mirrored
               // /pricing's "4.8/5 · 50+ businesses", but socialProofReviews is a

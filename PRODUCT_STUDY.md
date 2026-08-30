@@ -355,7 +355,7 @@ Merchant writes business info
 | Platforms | Facebook | FB + IG | FB + IG + Shopify |
 | Branding | Shown | Hidden | Hidden |
 | Support | Standard | Priority | Priority |
-| Trial | 30 days | 30 days | 30 days |
+| Trial | 14 days | — | — |
 
 ### Usage Tracking
 

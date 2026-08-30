@@ -91,10 +91,16 @@ export const PLANS: PlanSeed[] = [
         maxAiRepliesPerMonth: 1500,
         facebookEnabled: true,
         instagramEnabled: true,
-        whatsappEnabled: false,
+        // WhatsApp is included from Starter up (D-118, 2026-08-30). The trial
+        // rides on Starter, so gating WhatsApp to Business+ meant no trial
+        // account could ever try the channel we position as primary. Basic
+        // stays WhatsApp-free as the reason to upgrade to Starter.
+        whatsappEnabled: true,
         ecommerceEnabled: false,
         prioritySupport: false,
-        trialDays: 30,
+        // 14-day free trial (D-118) — matches the Salla/Zid marketplace listings
+        // (D-103) and industry (ManyChat), so all copy carries one number.
+        trialDays: 14,
         isActive: true,
         isPublic: true,
         isDefault: true,

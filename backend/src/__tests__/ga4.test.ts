@@ -244,9 +244,9 @@ describe('sendPurchaseConversion', () => {
     /**
      * ⛔ THE ORDERING TEST. This is the one that matters most in the file.
      *
-     * Starter carries a 30-day trial and is the default plan, so the FIRST thing
+     * Starter carries a 14-day trial and is the default plan, so the FIRST thing
      * that reaches this function for a typical merchant is their $0 checkout.
-     * If that zero-amount call claimed the stamp, the real charge 30 days later
+     * If that zero-amount call claimed the stamp, the real charge 14 days later
      * would find it taken, resolve `already_reported`, and the merchant's only
      * purchase conversion would be lost forever — reintroducing the exact bug
      * the invoice hook was added to fix, in a form no other test would see.
@@ -256,7 +256,7 @@ describe('sendPurchaseConversion', () => {
         await sendPurchaseConversion({ ...paid, amountMinorUnits: 0 });
         expect(updateSpy).not.toHaveBeenCalled();
 
-        // 30 days later, the first real invoice — the stamp is still unclaimed,
+        // 14 days later, the first real invoice — the stamp is still unclaimed,
         // so this one reports.
         claimWon();
         const result = await sendPurchaseConversion({

@@ -423,7 +423,7 @@ export const channelTrials = pgTable('channel_trials', {
 // 2c. Trial Grants Table — anti-abuse ledger for the per-ACCOUNT free trial
 //
 // Sibling to `channel_trials`, but guarding a different benefit: the one-time
-// 30-day free trial (default Starter plan) that every brand-new account gets.
+// 14-day free trial (default Starter plan) that every brand-new account gets.
 // Account deletion is a GDPR-honoring HARD delete (services/auth.ts deleteUser)
 // that also removes the user's subscription + usage rows — so without this ledger
 // a person could delete their account and re-sign-up with the same phone /
@@ -977,7 +977,7 @@ export const plans = pgTable('plans', {
     prioritySupport: boolean('priority_support').default(false),
 
     // Trial
-    trialDays: integer('trial_days').default(0), // 0 = no trial, 30 = 30-day trial
+    trialDays: integer('trial_days').default(0), // 0 = no trial, 14 = 14-day trial
 
     // Regional pricing (optional JSON for different regions)
     regionalPricing: jsonb('regional_pricing').default({}), // { "SY": 350000, "SA": 50 }
@@ -1022,14 +1022,14 @@ export const subscriptions = pgTable('subscriptions', {
     // to GA4 (services/ga4.ts). It exists to make that report exactly-once
     // ACROSS TWO webhook paths that both see money: `checkout.session.completed`
     // (a plan with no trial, charged at checkout) and `invoice.payment_succeeded`
-    // (a trialed plan's first real charge, ~30 days later — and every renewal
+    // (a trialed plan's first real charge, ~14 days later — and every renewal
     // after it). Whichever arrives first claims the stamp; the others find it set
     // and send nothing, so a renewal can never be reported as an acquisition.
     // NULL = never reported. Claimed with `WHERE … IS NULL`, the same first-touch
     // shape as users.ga_client_id, which is what makes the claim atomic under
     // concurrent webhook delivery. ⛔ The amount guard must run BEFORE the claim:
     // a trial checkout completes at $0 and must NOT consume the stamp, or the
-    // real payment 30 days later is suppressed forever.
+    // real payment 14 days later is suppressed forever.
     ga4PurchaseReportedAt: timestamp('ga4_purchase_reported_at'),
 
     // Billing period

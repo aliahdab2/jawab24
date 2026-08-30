@@ -166,7 +166,7 @@ const PagesPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
 
-  // Plan entitlement: WhatsApp is Business+ only (plans.whatsapp_enabled).
+  // Plan entitlement: WhatsApp is included from Starter up (plans.whatsapp_enabled; Basic excluded — D-118).
   // useSSE invalidates the hook's query key on subscription-change events, so
   // the surface flips live after an upgrade. `undefined` = still loading
   // (render neither Connect nor the upgrade CTA yet).

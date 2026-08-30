@@ -79,12 +79,12 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
               <!--[if mso]>
               <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="https://jawab24.com/login" style="height:56px;v-text-anchor:middle;width:280px;" arcsize="16%" stroke="f" fillcolor="#0d9488">
                 <w:anchorlock/>
-                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">ابدأ الآن — 30 يوم مجاناً</center>
+                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">ابدأ الآن — 14 يوماً مجاناً</center>
               </v:roundrect>
               <![endif]-->
               <!--[if !mso]><!-- -->
               <a href="https://jawab24.com/login" class="cta-btn" style="display:inline-block;background-color:#0d9488;color:#ffffff;padding:17px 44px;border-radius:12px;text-decoration:none;font-weight:700;font-size:17px;line-height:1;box-shadow:0 4px 12px rgba(13,148,136,0.3);">
-                ابدأ الآن — 30 يوم مجاناً ←
+                ابدأ الآن — 14 يوماً مجاناً ←
               </a>
               <!--<![endif]-->
             </td>

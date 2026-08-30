@@ -74,7 +74,7 @@ Jawab24 then asks one question before handing you to Meta: is this number alread
 - **Already on the WhatsApp Business app** — keep using it on your phone exactly as before. Jawab24 answers alongside you, and your existing chats stay where they are.
 - **A dedicated number** — Jawab24 answers on it by itself, and it stops working in the WhatsApp app.
 
-Pick the first option if the number is your everyday business line. WhatsApp is available on the Business plan and above.
+Pick the first option if the number is your everyday business line. WhatsApp is available on the Starter plan and above.
 
 ## Setting Up Your Business Info
 

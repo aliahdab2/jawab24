@@ -313,7 +313,7 @@ Also configure on **every** plan:
 
 | Decision | Options | Recommendation |
 |----------|---------|----------------|
-| Trial length | Old listing copy said 7d; Stripe config gives Starter 30d (Business/Pro 0) | **14 days on all three Shopify plans** — marketplace norm; one number everywhere |
+| Trial length | Old listing copy said 7d; Stripe config gives Starter 14d (Business/Pro 0, D-118) | **14 days on all three Shopify plans** — marketplace norm; one number everywhere |
 | Scale tiers (`scale-20k`/`scale-30k`) on Shopify? | Add as private plans / cap Shopify merchants at Pro | Cap at Pro for launch. If added later: add the slugs to `SHOPIFY_BILLABLE_PLAN_SLUGS` in `config/shopifyBilling.ts` FIRST, else activation fails loud by design |
 | Free plan | None exists in config | Trial-only for launch (no free plan) |
 

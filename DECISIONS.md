@@ -3864,3 +3864,51 @@ claim is false the moment the merchant leaves the frame. (c) Reusing the marketp
 store is still refused) and byte-identical for non-Zid accounts (pinned by the "NO ZID (unchanged)"
 tests). 0 workspaces have WhatsApp connected on a Zid store today, so this blocks new connects only;
 no existing connection is torn down.
+
+---
+
+## D-118 · WhatsApp is included from the Starter plan up, and the direct-signup free trial is 14 days, not 30 (2026-08-30, owner ruling)
+
+**Context.** WhatsApp shipped Business+ only (`plans.whatsapp_enabled` false on starter/basic).
+But the free trial rides on **Starter** (`trialDays`, the only plan with a trial), and Starter had
+WhatsApp off — so **no trial account could ever try the channel we position as primary**. The
+Business+ gate had produced no measurable pull: prod on 2026-08-30 held exactly **one** WhatsApp
+number connected fleet-wide (a manual `business-1500` merchant), and 0 `WHATSAPP_PLAN_REQUIRED`
+backend hits in 30 days (the UI routes non-entitled users to /pricing without an API call, so demand
+was *unmeasured*, not zero). Separately, the 30-day trial was letting free usage run long past the
+decision point: across the last-120-day Starter-trial cohort (74 trials), **0 connected their first
+page after day 15** (1 after day 10), while **21** were still consuming free replies in days 15–30
+with near-zero conversion. PR #705's 7-day proposal (2026-08-11) never landed and its D-067 number
+was reused elsewhere; D-103 had recorded "marketplace 14d vs direct 7d" as a deliberate asymmetry.
+
+**Ruling.**
+1. **WhatsApp is entitled from Starter up.** `plans.whatsapp_enabled` is now true on
+   starter/business/pro/scale-20k/scale-30k and false on **basic only**. Basic ($8) stays
+   WhatsApp-free as the reason to upgrade to Starter. The plan gate (`hasWhatsAppPlanAccess`,
+   `controllers/whatsapp.ts`) is unchanged in shape — it still reads `plan.whatsappEnabled` on the
+   workspace owner and fires on connect/connectNew/toggle-enable only, no retroactive disable. The
+   403 body is now `requiredPlan: 'starter'`.
+2. **The direct-signup free trial is 14 days** (`starter.trialDays: 30 → 14`), the same length as
+   the Salla/Zid marketplace listings (D-103) and ManyChat — so all copy carries one number. The
+   marketplace-vs-direct asymmetry D-103 recorded is retired: **14 everywhere.**
+
+**Scope / safety.**
+- **Existing trials are untouched.** `trialEndsAt` is stamped once at subscription creation
+  (`services/subscriptions.ts`, `now + plan.trialDays`) and persisted; the deploy seed reconciles
+  only the `plans` table, never a `subscriptions` row. The ~31 live trials keep their 30-day end
+  date; only signups after deploy get 14. Existing trialing Starter accounts *gain* WhatsApp
+  (entitlement is read live from the plan), which is the intended benefit.
+- **Starter keeps 1 page slot.** A number attached to the Facebook card shares that slot; a
+  standalone WhatsApp-only card consumes it (`canEnablePage`) — so "FB page + separate WhatsApp
+  number" is still a Business upsell. Unchanged.
+- Independent gates untouched: D-117 (Zid stores blocked), D-045 (Syria barred), `WHATSAPP_ALLOWLIST`.
+- Marketplace plan matrices (Salla/Zid = Business/Pro only, D-071/D-103) untouched — Basic/Starter
+  still cannot open a store, so they are never listed there.
+
+**Pinned by** `backend/test/config/plans.test.ts` (Starter entitled + only trial + 14 days; Basic
+excluded; the four higher plans entitled) and the flipped `whatsapp-connect` trialing case.
+
+**Rejected.** (a) Keeping the Business+ gate — one connected number in the whole fleet is not a
+converting upsell, and the $15 competitor set (Letsbot, Radad) is WhatsApp-first. (b) Giving Basic
+WhatsApp too — Starter needs a differentiator above Basic. (c) A 7- or 10-day trial — 14 matches the
+marketplaces and industry and removes the split; 10 was already rejected in D-103.

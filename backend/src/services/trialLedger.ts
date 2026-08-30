@@ -6,7 +6,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 
 /**
- * Anti free-trial-abuse for the per-ACCOUNT benefit: the one-time 30-day Starter
+ * Anti free-trial-abuse for the per-ACCOUNT benefit: the one-time 14-day Starter
  * trial every brand-new account receives. Sibling to channelTrialService, which
  * guards the per-CHANNEL trial.
  *

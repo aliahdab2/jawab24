@@ -17,6 +17,7 @@ import {
     completeWhatsAppSignup,
     hasWhatsAppPlanAccess,
     isWhatsAppConnectAllowed,
+    PLAN_REQUIRED_RESPONSE,
 } from './whatsapp';
 import { getWhatsAppUnavailableReason, WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } from '../services/whatsappAvailability';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -275,7 +276,7 @@ export class WhatsAppRedirectController {
             return { ok: false, status: 403, code: 'WHATSAPP_NOT_ALLOWLISTED', payload: { error: 'WhatsApp isn\'t available on your account yet.', code: 'WHATSAPP_NOT_ALLOWLISTED' } };
         }
         if (!(await hasWhatsAppPlanAccess(args.workspaceOwnerId))) {
-            return { ok: false, status: 403, code: 'WHATSAPP_PLAN_REQUIRED', payload: { error: 'WhatsApp requires the Business plan or higher.', code: 'WHATSAPP_PLAN_REQUIRED', requiredPlan: 'business' } };
+            return { ok: false, status: 403, code: PLAN_REQUIRED_RESPONSE.code, payload: { ...PLAN_REQUIRED_RESPONSE } };
         }
         if (await getWhatsAppUnavailableReason(args.workspaceOwnerId)) {
             return { ok: false, status: 403, code: WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code, payload: { ...WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } };
