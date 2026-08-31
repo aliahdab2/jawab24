@@ -222,7 +222,7 @@ Blog index: https://jawab24.com/blog
 
 ### Guides
 - Is Your Data Safe with Jawab24? Security & Privacy, Explained: https://jawab24.com/blog/jawab24-data-security
-- How to Set Up Facebook Auto Reply for Your Business Page in 2026: https://jawab24.com/blog/auto-reply-facebook-setup-guide
+- How to Set Up Auto Reply on Facebook, Instagram & WhatsApp in 2026: https://jawab24.com/blog/auto-reply-facebook-setup-guide
 - How to Set Up Instagram Auto Reply for Business in 2026: https://jawab24.com/blog/instagram-auto-reply-guide
 - Jawab24 Setup Tutorial — Complete Guide: https://jawab24.com/blog/jawab24-setup-tutorial
 - AI Sales Agent for Facebook & Instagram — How It Actually Works: https://jawab24.com/blog/turn-comments-into-sales
@@ -235,12 +235,12 @@ Blog index: https://jawab24.com/blog
 - Salla vs Shopify — Which Is Better for Arabic Sellers?: https://jawab24.com/blog/salla-vs-shopify-arabic-sellers
 
 ### Integrations
-- Connect Your Salla Store to Facebook Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
-- Connect Your Zid Store to Facebook Auto Reply: https://jawab24.com/blog/zid-store-facebook-auto-reply
-- Shopify Facebook Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
+- Connect Your Salla Store to Facebook & WhatsApp Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
+- Connect Your Zid Store to Facebook & WhatsApp Auto Reply: https://jawab24.com/blog/zid-store-facebook-auto-reply
+- Shopify with Facebook & WhatsApp Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
 
 ### Case Studies
-- 90 Days That Changed How Al-Fariq Al-Dimashqi Answers Its Customers: https://jawab24.com/blog/case-study-damascus-training-institute
+- Case Study: A Training Institute with No Online Store — 90 Days at Al-Fariq Al-Dimashqi: https://jawab24.com/blog/case-study-damascus-training-institute
 
 ### Statistics & Data
 - 40+ Social Commerce & AI Customer Service Statistics for 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
