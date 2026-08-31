@@ -69,6 +69,36 @@ describe('isolateNumericTokens', () => {
         );
     });
 
+    it('leaves a SCHEMELESS domain byte-identical — merchants write the bare form', () => {
+        // Measured 2026-09-01 in Chrome: «jawab24.com/promo-50» renders as written,
+        // and isolating the `-50` inside it displays it as `-50jawab24.com/promo`.
+        const reply = 'اطلب من jawab24.com/promo-50 قبل الجمعة بسعر 75$';
+        expect(isolateNumericTokens(reply)).toBe(
+            `اطلب من jawab24.com/promo-50 قبل الجمعة بسعر ${LRI}75$${PDI}`,
+        );
+    });
+
+    it.each([
+        ['shahinresort.com', 'a bare domain with no path'],
+        ['nourva.io/offers/5-10', 'a short TLD with a fragile path segment'],
+        ['shop.example.co.uk/a-1', 'a multi-label domain'],
+    ])('leaves %s byte-identical — %s', (domain) => {
+        expect(isolateNumericTokens(`زورونا على ${domain} اليوم`)).toBe(`زورونا على ${domain} اليوم`);
+    });
+
+    it.each([
+        ['ABC-123', 'a product code — measured to render as written, and to BREAK if isolated'],
+        ['iPhone-15', 'a model name with a hyphen'],
+    ])('leaves %s alone — %s', (code) => {
+        expect(isolateNumericTokens(`كود المنتج ${code} متوفر`)).toBe(`كود المنتج ${code} متوفر`);
+    });
+
+    it('still isolates a signed number after an Arabic letter — the guard is Latin-only', () => {
+        expect(isolateNumericTokens('اتصل على+963989811511')).toBe(
+            `اتصل على${LRI}+963989811511${PDI}`,
+        );
+    });
+
     it('leaves email addresses byte-identical', () => {
         const reply = 'راسلنا على sales-24@shop.example أو اتصل على +963989811511';
         expect(isolateNumericTokens(reply)).toBe(

@@ -32,6 +32,13 @@
  * and a plain `2024` were measured to render correctly on their own, and every
  * inserted mark is a character the platform must carry and the length cap must
  * count — so we insert none where there is nothing to repair.
+ *
+ * KNOWN UNHANDLED. A TRAILING plus — «لدينا 100+ طلب» — flips the same way and is
+ * not repaired: the token grammar below carries a leading sign only. It predates
+ * this module rather than being caused by it, and widening the grammar for a rare
+ * token would cost more blast radius than it buys. Away and greeting messages are
+ * out of scope for the same reason — they are merchant-authored and sent directly,
+ * never through `renderReplyForChannel`.
  */
 
 /** Unicode bidi control marks: LRM/RLM/ALM, the embeddings/overrides, and the isolates. */
@@ -84,14 +91,42 @@ const RTL_LETTER =
  * they travel with a copy-paste and break the URL, which costs the merchant the
  * order the link was for. Replies carry store links constantly, so this is not
  * a theoretical case.
+ *
+ * The last alternative is a SCHEMELESS domain (`jawab24.com/promo-50`), which
+ * merchants write far more often than the `https://` form — 122 of the Arabic
+ * replies in production carry one, against zero for `www.`. Measured 2026-09-01:
+ * «jawab24.com/promo-50» renders correctly on its own, and isolating the `-50`
+ * inside it displays it as `-50jawab24.com/promo` — so leaving this out does not
+ * merely risk an invisible mark in a copy-paste, it visibly breaks the link.
+ * Shape-based on purpose: a dotted label chain ending in a pure-alphabetic TLD,
+ * never a hand-maintained TLD list. `3.5` and `1,200` cannot match (no letters),
+ * and the label alphabet is ASCII, so ordinary Arabic prose cannot either.
  */
-const PROTECTED_RUN = /(?:https?:\/\/|www\.)\S+|\S+@\S+\.\S+/gu;
+const BARE_DOMAIN = '[a-zA-Z0-9][a-zA-Z0-9-]*(?:\\.[a-zA-Z0-9-]+)*\\.[a-zA-Z]{2,24}(?:/\\S*)?';
+// Email stays ahead of the bare domain so an address is taken whole rather than as its
+// `shop.example` tail. Defensive ordering only — I could not build an input where the
+// reverse order changes the OUTPUT, because either way every run holding a fragile token
+// ends up protected; keep it this way because it is the correct reading, not because a
+// test pins it.
+const PROTECTED_RUN = new RegExp(`(?:https?://|www\\.)\\S+|\\S+@\\S+\\.\\S+|${BARE_DOMAIN}`, 'gu');
+
+/**
+ * A `+`/`-` glued to the end of a Latin alphanumeric run is part of a product
+ * code (`ABC-123`, `iPhone-15`), not a signed number. Measured 2026-09-01: the
+ * digits after a Latin LETTER are EN, not AN, so W4/W5 already bind the sign and
+ * `ABC-123` renders as written — while isolating just the `-123` splits the run
+ * in two and displays it as `-123ABC`. This guard is the difference between
+ * repairing text and breaking text that was already right.
+ */
+const LATIN_GLUED = /[A-Za-z0-9]/;
 
 function isolateSegment(segment: string): string {
     return segment.replace(NUMERIC_TOKEN, (token, offset: number, whole: string) => {
         if (!FRAGILE.test(token)) return token;
         // Already isolated — a second render must not nest a second pair.
         if (whole[offset - 1] === LRI || whole[offset + token.length] === PDI) return token;
+        // A leading sign carried over from a product code — see LATIN_GLUED.
+        if (/^[+-]/.test(token) && LATIN_GLUED.test(whole[offset - 1] ?? '')) return token;
         return LRI + token + PDI;
     });
 }
