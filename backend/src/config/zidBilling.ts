@@ -31,17 +31,18 @@ import { config } from './index';
  */
 
 /**
- * Plan slugs sellable through the Zid App Market (D-071).
+ * Plan slugs sellable through the Zid App Market (D-071, extended by D-120).
  *
- * Starter is deliberately absent: Starter has `ecommerceEnabled=false`, so an
- * app whose entire value on Zid is the store integration would be sold as a
- * plan that cannot use it. A merchant who wants Starter buys it on jawab24.com.
+ * Starter joined the shelf on 2026-08-31 (D-120): it now carries
+ * `ecommerceEnabled=true`, and a ~56 SAR entry rung is how we stop being the
+ * most expensive newcomer on a shelf where Radad sells at ~99 SAR. The upgrade
+ * ladder to Business lives in Starter's limits (1 page / 1,500 replies).
  *
  * Unlike Shopify's list, this is a bare union rather than a runtime array: the
  * two lookup tables below ARE the sellable set, so a separate array would be a
  * second place to forget when a tier is added.
  */
-export type ZidBillablePlanSlug = 'business' | 'pro';
+export type ZidBillablePlanSlug = 'starter' | 'business' | 'pro';
 
 /** Wire code returned to clients when a Stripe path is refused for a Zid merchant.
  *  Typed from the shared code set — see `marketplaceBilledCodes.ts`. */
@@ -56,6 +57,12 @@ export const ZID_BILLED_CODE: MarketplaceBilledCode = 'ZID_BILLED';
  * system plan 3956 «اختبار» cannot be deleted (Zid `cannot_delete_system_plan`);
  * it is absent here ON PURPOSE — an unmapped id fails loud rather than
  * activating someone on a guessed tier.
+ *
+ * ⚠️ D-120: «المبتدئ» (starter, 56 SAR ex-VAT) is sold on Zid but its Partner-
+ * Dashboard plan id does not exist yet — the owner creates the plan in the
+ * portal, and its id MUST be added here in the same breath. Until then the
+ * Arabic-name fallback below carries the mapping, exactly the drift-tolerance
+ * it exists for.
  */
 const ZID_PLAN_ID_TO_SLUG: Record<string, ZidBillablePlanSlug> = {
     '3740': 'business',
@@ -69,10 +76,12 @@ const ZID_PLAN_ID_TO_SLUG: Record<string, ZidBillablePlanSlug> = {
  */
 const ZID_PLAN_NAME_TO_SLUG: Record<string, ZidBillablePlanSlug> = Object.fromEntries(
     ([
+        ['المبتدئ', 'starter'],
         ['الأعمال', 'business'],
         ['الاحترافي', 'pro'],
         // The English names the dashboard shows beside the Arabic ones. Cheap to
         // accept, and the payload's language is not contractually pinned.
+        ['starter', 'starter'],
         ['business', 'business'],
         ['pro', 'pro'],
     ] as Array<[string, ZidBillablePlanSlug]>).map(
