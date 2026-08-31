@@ -1,0 +1,74 @@
+{
+  "seoTitle": "AI Auto Reply for Facebook, Instagram & WhatsApp — No Online Store Needed",
+  "seoDescription": "Smarter than an auto-reply bot: an AI employee that answers \"How much?\", \"Is it available?\", and \"When are you open?\" right on your page — no online store, no website. For restaurants, clinics, training centres, salons, and anyone selling through social media.",
+  "backToHome": "Back to Home",
+  "heroTitle": "Smart Auto Reply — No Online Store Needed",
+  "heroSubtitle": "You don't need an online store, a website, or a bot you build yourself. You need an employee that answers your customers' messages and comments on Facebook, Instagram, and WhatsApp — instantly, in their language, from your own information. That is what Jawab24 does: it connects to your page directly and starts working in minutes.",
+  "badge": "Your page is enough — store integration is optional",
+  "questions": {
+    "title": "The same questions, 50 to 100 times a day",
+    "intro": "If you sell or offer services through social media, you answer the same messages every day:",
+    "q1": "\"How much is it?\"",
+    "q2": "\"Is it available?\" and \"What sizes do you have?\"",
+    "q3": "\"When are you open?\" and \"Where are you located?\"",
+    "outro": "Jawab24 answers all of them within seconds, around the clock, from the business info you write once — so it never invents a price or an appointment."
+  },
+  "audience": {
+    "title": "Who is this for?",
+    "intro": "Every business that lives on a Facebook Page, an Instagram account, or a WhatsApp number, with no e-commerce platform at all:",
+    "a1": "Social media shops — clothing, accessories, and goods sold through DMs",
+    "a2": "Restaurants and sweet shops — prices, delivery, and opening hours",
+    "a3": "Clinics and beauty centres — appointments, prices, and locations",
+    "a4": "Training institutes and tutors — courses, fees, and schedules",
+    "a5": "Salons and service providers — bookings and inquiries"
+  },
+  "howItWorks": {
+    "title": "How it works",
+    "step1Title": "Connect your page or number",
+    "step1Desc": "Log in with Facebook and pick your page, or connect an Instagram account or WhatsApp Business number. No store or website is asked for.",
+    "step2Title": "Write your business info",
+    "step2Desc": "Your prices, services, hours, locations, and the answers to your common questions — once, the way you would write them to a customer.",
+    "step3Title": "Let the AI employee work",
+    "step3Desc": "It answers every message and comment instantly in the customer's language, and turns serious conversations into a lead list in your dashboard."
+  },
+  "modes": {
+    "title": "Two employees in one",
+    "salesTitle": "A sales employee — for product sellers",
+    "salesText": "It recommends the right product, answers price, availability, and size questions, and asks a serious buyer for their name and number so they reach you ready to close.",
+    "infoTitle": "An info-desk employee — for clinics, institutes, and services",
+    "infoText": "It answers appointments, fees, locations, and service details without asking the customer for anything — the \"info\" mode is built for this, and it still saves every number a customer leaves on their own to your lead list."
+  },
+  "proof": {
+    "title": "The proof: an institute with no store",
+    "text": "Al-Fariq Al-Dimashqi is a training institute — no Salla, no Zid, no Shopify. In 90 days, Jawab24 answered 44,636 messages and comments and collected 472 leads with names and phone numbers.",
+    "link": "Read the full case study"
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "q1": "Do I need an online store or a website to use Jawab24?",
+    "a1": "No. Jawab24 connects directly to your Facebook Page, Instagram account, or WhatsApp Business number. Salla, Zid, and Shopify integration is available for merchants who have a store — and it is entirely optional.",
+    "q2": "How does the AI know my prices and information?",
+    "a2": "From the Business Info you write once: products, prices, hours, policies, and common questions. The AI sticks to it and never answers from outside it, and low-confidence replies are held for your review instead of being sent.",
+    "q3": "Does it understand Arabic dialects?",
+    "a3": "Yes — it detects 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA) plus Franco-Arabic, and replies in the customer's language and dialect.",
+    "q4": "What about voice messages and photos?",
+    "a4": "It transcribes voice messages and answers them, and it reads photos (a product screenshot, for example) and answers from your info — in Messenger, Instagram, and WhatsApp DMs.",
+    "q5": "How do leads reach me?",
+    "a5": "Every conversation that includes a phone number becomes a lead card in your dashboard, with the name, the request, and the number. In sales mode, the AI also asks serious buyers for their details itself.",
+    "q6": "Can I pause it or review its replies?",
+    "a6": "Yes. You set business hours and away messages, turn auto-reply off whenever you want, and review held replies from the dashboard or the mobile app."
+  },
+  "cta": {
+    "title": "Try it on your page — in minutes",
+    "text": "14-day free trial, no credit card, no online store required.",
+    "button": "Start Your Free Trial"
+  },
+  "related": {
+    "title": "Also read",
+    "whatsapp": "WhatsApp Business auto reply",
+    "instagram": "Instagram auto reply",
+    "caseStudy": "Case study: 90 days at Al-Fariq Al-Dimashqi",
+    "whatIs": "What is Jawab24?"
+  },
+  "disclaimer": "Case-study numbers are a real 90-day measurement of one page; every business's results vary with its content and audience."
+}

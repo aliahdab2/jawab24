@@ -24,6 +24,8 @@ const PUBLIC_PAGES = [
   { path: '/en/login', arPath: '/login' },
   { path: '/en/what-is-jawab24', arPath: '/what-is-jawab24' },
   { path: '/en/instagram', arPath: '/instagram' },
+  { path: '/en/no-store', arPath: '/no-store' },
+  { path: '/en/whatsapp', arPath: '/whatsapp' },
   { path: '/en/trust', arPath: '/trust' },
   // TODO: add /en/contact and /en/blog when those pages are built
 ];
@@ -42,6 +44,8 @@ const PAGES_WITH_JSON_LD = [
   '/en/pricing',
   '/en/what-is-jawab24',
   '/en/instagram',
+  '/en/no-store',
+  '/en/whatsapp',
   '/en/trust',
   // TODO: add /en/blog when the blog is built
 ];
@@ -109,6 +113,10 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     { path: '/blog', expected: `${SITE_URL}/blog` },
     { path: '/en/trust', expected: `${SITE_URL}/en/trust` },
     { path: '/trust', expected: `${SITE_URL}/trust` },
+    { path: '/en/no-store', expected: `${SITE_URL}/en/no-store` },
+    { path: '/no-store', expected: `${SITE_URL}/no-store` },
+    { path: '/en/whatsapp', expected: `${SITE_URL}/en/whatsapp` },
+    { path: '/whatsapp', expected: `${SITE_URL}/whatsapp` },
   ];
 
   for (const { path, expected } of CANONICAL_TEST_PAGES) {
@@ -148,6 +156,18 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
       ar: `${SITE_URL}/pricing`,
       en: `${SITE_URL}/en/pricing`,
       xDefault: `${SITE_URL}/pricing`,
+    },
+    {
+      path: '/no-store',
+      ar: `${SITE_URL}/no-store`,
+      en: `${SITE_URL}/en/no-store`,
+      xDefault: `${SITE_URL}/no-store`,
+    },
+    {
+      path: '/whatsapp',
+      ar: `${SITE_URL}/whatsapp`,
+      en: `${SITE_URL}/en/whatsapp`,
+      xDefault: `${SITE_URL}/whatsapp`,
     },
   ];
 
