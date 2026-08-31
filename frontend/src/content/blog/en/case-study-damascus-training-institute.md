@@ -1,7 +1,7 @@
 ---
 seoTitle: "Case Study: An Institute with No Online Store — 44,000 Replies, 472 Leads"
-seoDescription: "Real numbers from the first 90 days of Jawab24 at Al-Fariq Al-Dimashqi, a Damascus training institute: 14,552 customers answered, a 97.41% response rate, and 472 leads with names and phone numbers — with an honest breakdown of what automation caused directly and what it only contributed to."
-seoKeywords: "auto reply case study, Jawab24 results, Facebook auto reply Arabic, AI customer service case study, Facebook page response rate, Facebook leads capture, auto reply without online store, no website chatbot, دراسة حالة رد تلقائي"
+seoDescription: "Real numbers from the first 90 days of Jawab24 at Al-Fariq Al-Dimashqi, a Damascus training institute: 14,552 customers answered, a 97.41% response rate, and 472 leads with names and phone numbers — measured on Facebook; the same setup now runs on Instagram and WhatsApp."
+seoKeywords: "auto reply case study, Jawab24 results, Facebook auto reply Arabic, AI customer service case study, Facebook page response rate, Facebook leads capture, auto reply without online store, no website chatbot, whatsapp instagram auto reply, دراسة حالة رد تلقائي"
 title: "Case Study: A Training Institute with No Online Store — 90 Days at Al-Fariq Al-Dimashqi"
 excerpt: "A training institute with no online store and no website — just a Facebook Page with 55,000+ followers and a small team that couldn't keep up. After 90 days with Jawab24: 44,636 DM replies, 18,788 comments answered, and 472 leads with names and phone numbers — every number attributed to its source."
 ---
@@ -15,6 +15,8 @@ The problem is familiar to anyone running an active page: every new course annou
 ## What did they do?
 
 On April 4, 2026, the institute activated Jawab24 on its page: it entered its [Business Info](/en/what-is-jawab24) — courses, fees, schedules, and registration details — and enabled [Smart Replies](/en/blog/auto-reply-facebook-setup-guide) on both comments and direct messages. From that moment, customer questions were answered automatically from the institute's actual information, around the clock.
+
+(The enabled channel — and every number below — was Facebook; the same setup now runs on [WhatsApp Business](/en/whatsapp) and Instagram from the same dashboard, voice-note transcription included.)
 
 ## The numbers after 90 days — from two separate sources
 
@@ -52,4 +54,4 @@ A good conversation alone doesn't build a business — it has to turn into somet
 
 ## Does this apply to your business?
 
-You don't need to be a training institute. The same equation applies to any page that receives repetitive questions: a clothing store asked about sizes, a restaurant asked about prices and delivery, a clinic asked about appointments. If your audience is asking and your time can't keep up, automation isn't a luxury — it's the difference between a question that got answered and became a customer, and a question that sat unanswered while its owner went to a competitor.
+You don't need to be a training institute. The same equation applies to any page that receives repetitive questions: a clothing store asked about sizes, a restaurant asked about prices and delivery, a clinic asked about appointments. If your audience is asking and your time can't keep up, automation isn't a luxury — it's the difference between a question that got answered and became a customer, and a question that sat unanswered while its owner went to a competitor. And what this institute measured on Facebook works the same way on Instagram and WhatsApp — all three channels from the same Business Info, [with no online store](/en/no-store).
