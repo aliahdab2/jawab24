@@ -1,9 +1,20 @@
 # Play Store listing assets (Gradle Play Publisher)
 
-Everything under `listings/` is published to Google Play by GPP on each release
-(`play { track = 'internal'; defaultToAppBundles = true }` in `app/build.gradle`).
-Anything NOT in this tree has to be uploaded by hand in Play Console, which means
-nobody can review it, diff it, or notice when it goes stale.
+> ⚠️ **These files do NOT reach Play automatically today.** `scripts/release-android.sh`
+> runs `./gradlew publishReleaseBundle`, which in GPP 3.13 uploads the **App Bundle only**.
+> Listing text and graphics are published by `publishReleaseListing` (or `publishRelease`,
+> which does both) — and nothing in the release path calls either.
+>
+> That cuts both ways:
+> - **Safe:** committing or changing anything here cannot alter the live listing, so a
+>   partial screenshot set can never silently replace the images already on Play.
+> - **Not wired:** until someone runs `./gradlew publishReleaseListing --track <track>` or
+>   uploads by hand in Play Console, this tree is version control and review only. Keep it
+>   matching what is actually published, or it becomes a second source of drift rather than
+>   a cure for the first.
+
+This tree is where Play listing assets belong. Anything NOT in it exists only inside Play
+Console, where nobody can review it, diff it, or notice when it goes stale.
 
 ```
 listings/
