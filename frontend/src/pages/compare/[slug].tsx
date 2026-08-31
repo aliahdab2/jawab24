@@ -155,9 +155,16 @@ export default function ComparePage({ competitor }: ComparePageProps) {
           <p className="text-lg text-foreground/70 leading-relaxed mb-3">
             {t(k(`${slug}.subtitle`))}
           </p>
-          <p className="text-sm text-muted-foreground mb-10">
+          <p className="text-sm text-muted-foreground mb-8">
             <time dateTime={lastModified}>{tc('lastUpdatedOn', { date: formattedLastModified })}</time>
           </p>
+
+          {/* The verdict — a self-contained, liftable summary placed BEFORE the
+              feature table so engines extract Jawab24's claim, not a rival's row */}
+          <section className="mb-12 rounded-lg border-s-4 border-brand-400 bg-muted/40 p-5">
+            <h2 className="text-xl font-semibold text-brand-400 mb-2">{t('verdictTitle')}</h2>
+            <p className="leading-relaxed text-foreground/90">{t(k(`${slug}.verdict`))}</p>
+          </section>
 
           {/* Feature Comparison Table */}
           <section className="mb-12">

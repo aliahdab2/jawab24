@@ -45,7 +45,7 @@ const STATIC_PAGES = [
   { path: '/trust', label: 'Trust & Reliability', lastmod: '2026-08-19' },
   { path: '/instagram', label: 'Instagram integration', lastmod: '2026-08-16' },
   { path: '/data-deletion', label: 'Data Deletion', lastmod: '2026-05-08' },
-  { path: '/compare', label: 'Compare hub', lastmod: '2026-05-31' },
+  { path: '/compare', label: 'Compare hub', lastmod: '2026-08-31' },
 ];
 
 // Sections whose URLs and dates come from a `src/data/*.ts` module. Order is

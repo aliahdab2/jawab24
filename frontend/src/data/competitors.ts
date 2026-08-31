@@ -98,7 +98,7 @@ export const COMPETITORS: Record<string, Competitor> = {
   manychat: {
     slug: 'manychat',
     date: '2026-03-08',
-    updated: '2026-08-14',
+    updated: '2026-08-31',
     name: 'ManyChat',
     website: 'https://manychat.com',
     features: {
@@ -119,7 +119,7 @@ export const COMPETITORS: Record<string, Competitor> = {
   chatfuel: {
     slug: 'chatfuel',
     date: '2026-03-08',
-    updated: '2026-08-14',
+    updated: '2026-08-31',
     name: 'Chatfuel',
     website: 'https://chatfuel.com',
     features: {
@@ -140,7 +140,7 @@ export const COMPETITORS: Record<string, Competitor> = {
   tidio: {
     slug: 'tidio',
     date: '2026-03-17',
-    updated: '2026-08-14',
+    updated: '2026-08-31',
     name: 'Tidio',
     website: 'https://www.tidio.com',
     features: {
@@ -161,7 +161,7 @@ export const COMPETITORS: Record<string, Competitor> = {
   botpress: {
     slug: 'botpress',
     date: '2026-03-17',
-    updated: '2026-08-14',
+    updated: '2026-08-31',
     name: 'Botpress',
     website: 'https://botpress.com',
     features: {
@@ -182,7 +182,7 @@ export const COMPETITORS: Record<string, Competitor> = {
   speedly: {
     slug: 'speedly',
     date: '2026-05-13',
-    updated: '2026-08-14',
+    updated: '2026-08-31',
     name: 'Speedly',
     website: 'https://speedly.ly',
     features: {
