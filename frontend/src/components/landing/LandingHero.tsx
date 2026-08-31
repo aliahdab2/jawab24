@@ -210,7 +210,9 @@ function HeroTypingDots() {
       initial="enter"
       animate="visible"
       exit="exit"
-      className="flex items-end gap-0.5 sm:gap-1 justify-end"
+      /* Same `ps-[14%]` gutter as BotBubble — the dots must sit exactly where the
+         reply that replaces them will, or the bubble jumps on every loop. */
+      className="flex items-end gap-0.5 sm:gap-1 justify-end ps-[14%]"
     >
       <div className="bg-brand-500/80 rounded-lg sm:rounded-xl rounded-be-none px-1.5 py-1 sm:px-2 sm:py-1.5 shadow-lg shadow-brand-500/20 flex items-center gap-0.5 sm:gap-1">
         {[0, 1, 2].map(i => (
@@ -229,13 +231,23 @@ function HeroTypingDots() {
   );
 }
 
+/*
+ * ── Who-said-what gutter ──
+ * The opposite-side padding, NOT a max-width on the bubble, is what makes the
+ * two speakers readable. On a 390px phone the chat row is only 110px wide, so
+ * bubbles capped at 80–85% filled it end to end: measured there, the customer
+ * and bot bubbles started within 9px of each other and `justify-end` bought
+ * nothing — both read as full-width blocks. A percentage gutter on the ROW
+ * guarantees the offset at every phone size instead of leaving it to how long
+ * the string happens to be. Logical (`pe`/`ps`), so it mirrors in Arabic.
+ */
 function CustomerBubble({ text }: { text: string }) {
   return (
-    <div className="flex items-end gap-0.5 sm:gap-1">
+    <div className="flex items-end gap-0.5 sm:gap-1 pe-[14%]">
       <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 dark:bg-surface-400/25 flex items-center justify-center flex-shrink-0">
         <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600 dark:text-surface-300" aria-hidden="true" />
       </div>
-      <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm max-w-[80%]">
+      <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm">
         <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-[#E5E7EB] font-medium leading-tight">{text}</p>
       </div>
     </div>
@@ -244,8 +256,8 @@ function CustomerBubble({ text }: { text: string }) {
 
 function BotBubble({ text }: { text: string }) {
   return (
-    <div className="flex items-end gap-0.5 sm:gap-1 justify-end">
-      <div className="bg-brand-500 dark:bg-brand-500/90 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 dark:shadow-brand-400/15 max-w-[85%]">
+    <div className="flex items-end gap-0.5 sm:gap-1 justify-end ps-[14%]">
+      <div className="bg-brand-500 dark:bg-brand-500/90 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 dark:shadow-brand-400/15">
         <p className="text-[7px] sm:text-[10px] lg:text-sm text-white font-bold leading-tight">{text}</p>
       </div>
       <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 dark:bg-brand-400/20 flex items-center justify-center flex-shrink-0">
