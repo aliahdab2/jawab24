@@ -122,6 +122,18 @@ export default function AuthCallback() {
           return;
         }
 
+        // This Facebook identity already belongs to a DIFFERENT Jawab24 account
+        // (e.g. a direct-Facebook signup colliding with an embedded auto-provisioned
+        // account). The link cannot proceed — show a clear reason instead of a raw
+        // 500 message, and return the merchant to their own channels page. The
+        // backend already alerted us; do not double-report from here.
+        if (linkResponse.status === 409 && errData.code === 'FACEBOOK_ALREADY_LINKED') {
+          authAttemptedRef.current = true;
+          setError(t('facebookAlreadyLinked'));
+          setTimeout(() => routerRef.current.replace('/pages', '/pages', { locale: preferredLocale }), 4000);
+          return;
+        }
+
         const err = new Error(errData.message || t('loginError')) as Error & { backendCode?: string };
         err.backendCode = errData.code;
         throw err;

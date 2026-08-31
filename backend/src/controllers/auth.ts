@@ -13,6 +13,7 @@ import { users, ecommerceStores } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
+import { isUniqueViolation } from '../utils/dbErrors';
 import { storeGaClientIdFirstTouch } from '../services/ga4';
 import { replayPendingActivationEventsToGa4 } from '../services/activation';
 import { auditLog } from '../services/auditLog';
@@ -924,6 +925,43 @@ export class AuthController {
             // 3. Get Facebook profile
             const fbProfile = await facebookService.getUserProfile(longLivedToken);
 
+            // 3b. Guard against a Facebook-identity collision.
+            //
+            // `users.facebook_id` is UNIQUE (`users_facebook_id_key`). A merchant can
+            // reach this link flow already owning a DIFFERENT Jawab24 account under the
+            // same Facebook identity — e.g. they signed up directly with Facebook (or
+            // via another store platform) and later installed through an embedded
+            // break-out that auto-provisioned a fresh account. linkFacebookToUser's
+            // blind UPDATE would then hit the unique index and throw a 23505, which
+            // used to fall through to a generic 500 with no `code`: the page sync never
+            // ran, the connect ended with 0 pages, and NOTHING signalled the real cause
+            // to the merchant or to us. Detect it first, return an actionable code, and
+            // alert. (Prod: Zid dev-store walkthrough, 2026-08-31.)
+            const fbOwner = await authService.getUserByFacebookId(fbProfile.id);
+            if (fbOwner && fbOwner.id !== userId) {
+                captureError(
+                    new Error('Facebook identity already linked to another Jawab24 account'),
+                    'Facebook connect blocked: identity collision',
+                    {
+                        level: 'warning',
+                        tags: {
+                            reason: 'fb_identity_collision',
+                            source: callerScope(request)?.embeddedPlatform ?? 'web',
+                        },
+                        extra: {
+                            attemptedUserId: userId,
+                            existingOwnerUserId: fbOwner.id,
+                            facebookId: fbProfile.id,
+                        },
+                    },
+                );
+                return reply.status(409).send({
+                    error: 'facebook_already_linked',
+                    code: 'FACEBOOK_ALREADY_LINKED',
+                    message: 'This Facebook account is already connected to another Jawab24 account.',
+                });
+            }
+
             // 4. Update existing user with Facebook data (don't create a new user)
             // Uses authService so the token is encrypted at rest (same as facebookLogin).
             await authService.linkFacebookToUser(userId, fbProfile.id, longLivedToken, tokenExpiresAt, fbProfile.picture);
@@ -950,7 +988,32 @@ export class AuthController {
                 : workspaces[0]?.id;
             if (workspaceId) {
                 try {
-                    await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken, undefined, createRequestLogger(request.log));
+                    const syncResult = await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken, undefined, createRequestLogger(request.log));
+                    if (syncResult.syncedPages.length === 0) {
+                        // The link succeeded but no page was connected. Legitimate causes
+                        // exist (page limit, trial already used on the channel, a page held
+                        // by another workspace), yet the merchant is redirected to /pages as
+                        // if it worked — so a 0-page connect is invisible on both sides.
+                        // Alert so a silent connect failure is at least seen by us.
+                        captureError(
+                            new Error('Facebook connect completed with 0 pages'),
+                            'Facebook connect: zero pages connected',
+                            {
+                                level: 'warning',
+                                tags: {
+                                    reason: 'fb_connect_zero_pages',
+                                    source: scope?.embeddedPlatform ?? 'web',
+                                },
+                                extra: {
+                                    userId,
+                                    workspaceId,
+                                    takenCount: syncResult.takenCount,
+                                    trialBlockedCount: syncResult.trialBlockedCount,
+                                    skippedCount: syncResult.skippedCount,
+                                },
+                            },
+                        );
+                    }
                 } catch (err) {
                     request.log.error({ err }, 'Page sync after Facebook link failed (non-fatal)');
                 }
@@ -997,6 +1060,17 @@ export class AuthController {
             if (message.startsWith('Facebook API error:') || message === 'Invalid access token' || message === 'Token issued to a different app') {
                 request.log.warn({ err: error }, 'Facebook link failed (OAuth)');
                 return reply.status(400).send({ error: 'oauth_failed', code: 'FACEBOOK_OAUTH_FAILED', message });
+            }
+            if (isUniqueViolation(error)) {
+                // Belt-and-braces for a race between the collision pre-check above and
+                // the UNIQUE write: the Facebook identity was claimed by another account
+                // in between. Same actionable signal as the pre-check, never a 500.
+                request.log.warn({ err: error }, 'Facebook link failed: identity already linked to another account');
+                return reply.status(409).send({
+                    error: 'facebook_already_linked',
+                    code: 'FACEBOOK_ALREADY_LINKED',
+                    message: 'This Facebook account is already connected to another Jawab24 account.',
+                });
             }
             request.log.error({ err: error }, 'Facebook link failed');
             return reply.status(500).send({ error: 'server_error', message: 'Failed to link Facebook account' });
