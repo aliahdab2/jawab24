@@ -2,8 +2,6 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { aiService } from '../services/ai';
 import { AiGenerateRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { config } from '../config';
-import { authService } from '../services/auth';
 
 export class AiController {
     /**
@@ -38,9 +36,9 @@ export class AiController {
             return reply.status(400).send({ error: 'Comment is required' });
         }
 
-        const dbUser = user && config.demo.enabled ? await authService.getUserById(user.userId) : null;
-        if (user && dbUser?.facebookId !== config.demo.userFacebookId) {
-            // Check subscription limits (skip for demo users)
+        if (user) {
+            // canUseAiReplies self-exempts demo accounts (shared fixtures with
+            // no real billing) at the single choke point — no local demo check.
             const { subscriptionsService } = await import('../services/subscriptions');
             const limitCheck = await subscriptionsService.canUseAiReplies(user.userId);
 

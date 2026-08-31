@@ -9,6 +9,8 @@ import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { isShopifyBilled, buildShopifyManageUrl } from '../config/shopifyBilling';
+import { config } from '../config';
+import { isDemoFacebookId } from '../utils/demo';
 import { resolveMarketplaceBilling } from './marketplaceBilling';
 import { getWhatsAppUnavailableReason } from './whatsappAvailability';
 import type { NotificationType } from './notifications';
@@ -1046,7 +1048,8 @@ export const subscriptionsService = {
      *      covers past_due, canceled, and quota-exhausted users — they paid for
      *      these credits and the "never expires" promise must hold.
      *   3. Else → deny, surfacing the more specific reason (status block over
-     *      quota exhaustion when both apply).
+     *      quota exhaustion when both apply) — UNLESS the caller is the shared
+     *      demo fixture, which is exempted on this deny path (see isDemoUser).
      */
     async canUseAiReplies(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
@@ -1058,6 +1061,7 @@ export const subscriptionsService = {
             if (topupBalance > 0) {
                 return { allowed: true, usingTopup: true, topupBalance };
             }
+            if (await this.isDemoUser(userId)) return { allowed: true };
             return { allowed: false, reason: 'No active subscription' };
         }
 
@@ -1089,6 +1093,15 @@ export const subscriptionsService = {
             return { allowed: true, usingTopup: true, topupBalance };
         }
 
+        // Demo accounts are shared, permanently-seeded fixtures with no real
+        // billing — their seeded trial expires like any signup's and nothing
+        // renews it, which silently AI-killed every live demo from 2026-08-17.
+        // Exempt them HERE, at the single choke point, so every caller agrees
+        // (test-reply, the reply generator, /limits/ai) instead of each carrying
+        // its own copy of the check. Placed on the would-deny path only, so a
+        // real reply within quota never pays the extra user read (Rule 17).
+        if (await this.isDemoUser(userId)) return { allowed: true };
+
         // Nothing left. Return the specific denial:
         // status block (canceled/paused/past_due past grace) takes priority
         // over quota exhaustion since status is the more fundamental block.
@@ -1111,6 +1124,26 @@ export const subscriptionsService = {
                 ? new Date(resetsAtSource).toISOString()
                 : undefined,
         };
+    },
+
+    /**
+     * Is this the shared demo fixture? Demo entities carry a `demo_` platform-id
+     * prefix (`isDemoFacebookId`); real Meta ids are numeric, so no collision.
+     * The seeded demo signs up on the ordinary path with a normal trial that
+     * expires and never renews, so the billing gate would refuse it like any
+     * expired trial — which is exactly the bug this exempts (canUseAiReplies
+     * calls it on the would-deny path only). Queries the users row directly (not
+     * via authService) to avoid the auth → subscriptions import cycle, reads one
+     * column, and only when demo mode is enabled at all.
+     */
+    async isDemoUser(userId: string): Promise<boolean> {
+        if (!config.demo.enabled) return false;
+        const [row] = await db
+            .select({ facebookId: users.facebookId })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+        return isDemoFacebookId(row?.facebookId);
     },
 
     /**

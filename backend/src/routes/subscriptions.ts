@@ -5,7 +5,6 @@ import { resolveWorkspace } from '../middleware/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
-import { authService } from '../services/auth';
 
 /**
  * Subscriptions Routes - User subscription read endpoints.
@@ -131,13 +130,9 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             }
             const { userId } = user;
 
-            // Demo users always have unlimited AI access
-            const dbUser = config.demo.enabled ? await authService.getUserById(userId) : null;
-            if (dbUser?.facebookId === config.demo.userFacebookId) {
-                return reply.send({ success: true, data: { allowed: true } });
-            }
-
             try {
+                // Demo accounts are exempted inside canUseAiReplies (the single
+                // choke point), so this UI-facing check agrees with enforcement.
                 // Workspace-scoped: quota belongs to the workspace, not to
                 // whoever is logged in. The resolution lives in the service so
                 // this and /usage cannot drift apart (see

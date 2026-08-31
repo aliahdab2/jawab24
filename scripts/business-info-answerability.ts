@@ -20,6 +20,15 @@
  *       days ending yesterday). DMs are the primary channel; comments are
  *       reported separately and never pooled (the D-111 content-free gate
  *       changes which comments get replies at all).
+ *   npx tsx scripts/business-info-answerability.ts --cohort [--from --to] [--traffic-to YYYY-MM-DD]
+ *       Splits the pages CONNECTED inside the window by whether the merchant
+ *       ever wrote any business information, then crosses that with the traffic
+ *       each page actually received. This is what separates "the page defeated
+ *       the merchant" from "no customer ever wrote to this page" — the two are
+ *       indistinguishable in the comprehension share alone, and they call for
+ *       opposite work. Traffic is measured from --from to --traffic-to (default
+ *       yesterday), so `days_observed` is printed per page: a page connected on
+ *       the last day of the window had no chance to receive anything.
  *   npx tsx scripts/business-info-answerability.ts --snapshot <dir>
  *       Dump every page's knowledge_base / business_profile / catalog rows /
  *       fact collections to <dir>/pages-<date>.json. `pages.knowledge_base` is
@@ -72,9 +81,14 @@ import { EMOJI_TO_SECTION, SECTION_LABELS } from '../frontend/src/components/kno
 interface Args {
     census: boolean;
     baseline: boolean;
+    cohort: boolean;
     snapshot: string | null;
     from: string;
     to: string;
+    /** Traffic end for --cohort. The creation window (--from/--to) and the
+     *  observation span are different spans: a page created on --to has zero
+     *  days of exposure inside it. */
+    trafficTo: string;
     exclude: Set<string>;
     markdown: boolean;
 }
@@ -91,9 +105,11 @@ function parseArgs(argv: string[]): Args {
     const args: Args = {
         census: false,
         baseline: false,
+        cohort: false,
         snapshot: null,
         from: isoDate(thirtyDaysBack),
         to: isoDate(yesterday),
+        trafficTo: isoDate(yesterday),
         exclude: new Set(),
         markdown: false,
     };
@@ -106,22 +122,25 @@ function parseArgs(argv: string[]): Args {
         };
         if (a === '--census') args.census = true;
         else if (a === '--baseline') args.baseline = true;
+        else if (a === '--cohort') args.cohort = true;
+        else if (a === '--traffic-to') args.trafficTo = next();
         else if (a === '--snapshot') args.snapshot = next();
         else if (a === '--from') args.from = next();
         else if (a === '--to') args.to = next();
         else if (a === '--exclude') next().split(',').map((s) => s.trim()).filter(Boolean).forEach((id) => args.exclude.add(id));
         else if (a === '--markdown') args.markdown = true;
         else if (a === '--help' || a === '-h') {
-            console.log('usage: npx tsx scripts/business-info-answerability.ts [--census] [--baseline] [--snapshot <dir>] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--exclude id,id] [--markdown]');
+            console.log('usage: npx tsx scripts/business-info-answerability.ts [--census] [--baseline] [--cohort] [--snapshot <dir>] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--traffic-to YYYY-MM-DD] [--exclude id,id] [--markdown]');
             process.exit(0);
         } else throw new Error(`unknown argument ${a}`);
     }
-    if (!args.census && !args.baseline && !args.snapshot) {
-        throw new Error('nothing to do — pass --census, --baseline and/or --snapshot <dir>');
+    if (!args.census && !args.baseline && !args.cohort && !args.snapshot) {
+        throw new Error('nothing to do — pass --census, --baseline, --cohort and/or --snapshot <dir>');
     }
-    for (const d of [args.from, args.to]) {
+    for (const d of [args.from, args.to, args.trafficTo]) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`bad date ${d} (YYYY-MM-DD)`);
     }
+    if (args.trafficTo < args.to) throw new Error(`--traffic-to ${args.trafficTo} is before --to ${args.to}: the observation span cannot end before the creation window does`);
     return args;
 }
 
@@ -465,6 +484,49 @@ function census(pages: PageDerived[], md: boolean): void {
     console.log(`\nStored header measured: «${Object.entries(EMOJI_TO_SECTION).find(([, id]) => id === 'products')?.[0]} ${SECTION_LABELS.products.ar}:»`);
 }
 
+/** Pages CONNECTED inside the window. `created_at` is the only available proxy
+ *  (there is no page-view tracking and none is added). ONE definition, shared by
+ *  the comprehension line and --cohort — two copies of this filter would drift. */
+function newPagesInWindow(pages: PageDerived[], from: string, to: string): PageDerived[] {
+    return pages.filter((p) => p.created_at >= from && p.created_at < to && !p.archived);
+}
+
+interface ChannelTotals { sent: number; generated: number; cached: number; unanswerable: number }
+
+/** Per-page totals over the whole observation span (not per week). Reply rows
+ *  carry the flags; `ai_usage_log` carries the generated/cached denominator (see
+ *  THE DENOMINATOR in the header). fb_comment and ig_comment are pooled into
+ *  `comment`, which is still reported apart from `dm` and never added to it. */
+function totalsByPage(replies: ReplyWeekRow[], usage: UsageWeekRow[]): Map<string, Record<'dm' | 'comment', ChannelTotals>> {
+    const out = new Map<string, Record<'dm' | 'comment', ChannelTotals>>();
+    const slot = (pageId: string) => {
+        let e = out.get(pageId);
+        if (!e) {
+            e = { dm: { sent: 0, generated: 0, cached: 0, unanswerable: 0 }, comment: { sent: 0, generated: 0, cached: 0, unanswerable: 0 } };
+            out.set(pageId, e);
+        }
+        return e;
+    };
+    for (const r of replies) {
+        const t = slot(r.page_id)[r.channel === 'dm' ? 'dm' : 'comment'];
+        t.sent += Number(r.ai_sent);
+        t.unanswerable += Number(r.unanswerable);
+    }
+    for (const u of usage) {
+        if (!u.page_id) continue;
+        const t = slot(u.page_id)[u.pipeline === 'dm_reply' ? 'dm' : 'comment'];
+        t.generated += Number(u.generated);
+        t.cached += Number(u.cached);
+    }
+    return out;
+}
+
+/** Same convention as the baseline table: prefer the generated denominator, fall
+ *  back to sent when the page has no usage rows in the span. */
+function denomOf(t: ChannelTotals): number {
+    return t.generated > 0 ? t.generated : t.sent;
+}
+
 interface WeekKey { page_id: string; week: string }
 
 function key(k: WeekKey): string {
@@ -542,12 +604,95 @@ function baseline(
     console.log('Grounding flags are a RAW count on allow-listed pages only — adjudicate ≥30 per page before quoting any rate.');
 
     // Comprehension: pages connected inside the window.
-    const newPages = pages.filter((p) => p.created_at >= args.from && p.created_at < args.to && !p.archived);
+    const newPages = newPagesInWindow(pages, args.from, args.to);
     const wrote = newPages.filter((p) => p.first_info_write !== null);
     const within7 = newPages.filter((p) => p.days_to_first_info !== null && p.days_to_first_info <= 7);
     const twoOfThree = newPages.filter((p) => [p.confirmed_fields > 0, p.live_rows > 0 || p.catalog_items > 0, p.kb_provided].filter(Boolean).length >= 2);
     console.log(`\nCOMPREHENSION (pages created in window: ${newPages.length}): wrote any info ${pct(wrote.length, newPages.length)} · first write within 7 days ${pct(within7.length, newPages.length)} · ≥2 of {confirmed fact, live row/catalog item, KB provided} ${pct(twoOfThree.length, newPages.length)} · median days to first write ${median(newPages.map((p) => p.days_to_first_info).filter((d): d is number => d !== null)) ?? '—'}`);
     console.log('Note: "connected" is approximated by pages.created_at (no page-view tracking exists or is added); "days to first write" is an UPPER bound — editor confirmations and kb_updated_at record the latest write, only row creation is a true first.');
+}
+
+/**
+ * The cohort read: does a page that never received any business information
+ * differ from one that did — and did anyone ever write to it in the first place?
+ *
+ * The comprehension share ("11 of 33 wrote something") cannot answer the only
+ * question that picks the next piece of work, because it pools two populations
+ * that need opposite fixes: a merchant who opened /business, could not work out
+ * what to type and left, versus a page nobody ever messaged, where nothing about
+ * /business is implicated at all. This report splits them and prints the traffic
+ * next to the emptiness so the reader can see which one dominates.
+ *
+ * ⛔ Not a control. A merchant who fills the page is a merchant who engages, so
+ * every difference between the two groups is confounded by self-selection. The
+ * groups are labelled "wrote" / "never wrote", never "treated" / "control", and
+ * no causal claim may be read off them.
+ *
+ * ⛔ No classification by page name. Whether a page is a shop or a news outlet is
+ * never inferred from its title or any word list; the only thing reported is the
+ * traffic it observably received on each channel.
+ */
+function cohort(pages: PageDerived[], replies: ReplyWeekRow[], usage: UsageWeekRow[], args: Args): void {
+    const excludedInCohort = newPagesInWindow(pages, args.from, args.to).filter((p) => args.exclude.has(p.page_id));
+    const newPages = newPagesInWindow(pages, args.from, args.to).filter((p) => !args.exclude.has(p.page_id));
+    const totals = totalsByPage(replies, usage);
+    const trafficEndMs = Date.parse(`${args.trafficTo}T23:59:59Z`);
+    const zero: ChannelTotals = { sent: 0, generated: 0, cached: 0, unanswerable: 0 };
+
+    const rows = newPages
+        .map((p) => {
+            const t = totals.get(p.page_id) ?? { dm: zero, comment: zero };
+            const observed = Math.max(0, Math.round((trafficEndMs - Date.parse(p.created_at)) / 86_400_000));
+            return { p, dm: t.dm, comment: t.comment, observed };
+        })
+        .sort((a, b) => Number(a.p.first_info_write !== null) - Number(b.p.first_info_write !== null)
+            || denomOf(b.dm) - denomOf(a.dm)
+            || denomOf(b.comment) - denomOf(a.comment));
+
+    const header = ['page', 'created', 'days_observed', 'wrote', 'days_to_write', 'homes', 'kb_chars', 'confirmed', 'live_rows', 'dm_sent', 'dm_generated', 'dm_unanswerable', 'dm_share', 'cmt_sent', 'cmt_generated', 'cmt_unanswerable'];
+    const out = rows.map(({ p, dm, comment, observed }) => [
+        p.name, p.created_at.slice(0, 10), String(observed),
+        p.first_info_write !== null ? 'yes' : 'NO',
+        p.days_to_first_info === null ? '—' : String(p.days_to_first_info),
+        String(p.homes), String(p.kb_chars), String(p.confirmed_fields), String(p.live_rows),
+        String(dm.sent), String(dm.generated), String(dm.unanswerable),
+        denomOf(dm) === 0 ? '—' : pct(dm.unanswerable, denomOf(dm)),
+        String(comment.sent), String(comment.generated), String(comment.unanswerable),
+    ]);
+
+    console.log(args.markdown ? `\n## Cohort — pages connected ${args.from} → ${args.to}, traffic observed to ${args.trafficTo}\n`
+        : `\nCOHORT — connected ${args.from} → ${args.to}, traffic to ${args.trafficTo}`);
+    console.log(`cohort size: ${newPages.length}${excludedInCohort.length ? ` (${excludedInCohort.length} hand-migrated page(s) excluded: ${excludedInCohort.map((p) => p.name).join(', ')})` : ''}`);
+    if (args.markdown) {
+        console.log(`\n| ${header.join(' | ')} |\n|${header.map(() => '---').join('|')}|`);
+        for (const row of out) console.log(`| ${row.join(' | ')} |`);
+    } else {
+        console.log(header.join('\t'));
+        for (const row of out) console.log(row.join('\t'));
+    }
+
+    const groups: Array<[string, typeof rows]> = [
+        ['never wrote any info', rows.filter((r) => r.p.first_info_write === null)],
+        ['wrote something', rows.filter((r) => r.p.first_info_write !== null)],
+    ];
+    console.log(args.markdown ? '\n### Split\n\n| group | pages | got ≥1 AI DM | ≥30 generated DMs | no traffic at all | pooled DM generated | pooled DM unanswerable | pooled comment generated | pooled comment unanswerable |\n|---|---|---|---|---|---|---|---|---|' : '\nSPLIT');
+    for (const [label, g] of groups) {
+        const dmGen = g.reduce((n, r) => n + denomOf(r.dm), 0);
+        const dmUn = g.reduce((n, r) => n + r.dm.unanswerable, 0);
+        const cGen = g.reduce((n, r) => n + denomOf(r.comment), 0);
+        const cUn = g.reduce((n, r) => n + r.comment.unanswerable, 0);
+        const anyDm = g.filter((r) => r.dm.sent > 0).length;
+        const floor = g.filter((r) => r.dm.generated >= 30).length;
+        const silent = g.filter((r) => r.dm.sent === 0 && r.comment.sent === 0).length;
+        if (args.markdown) {
+            console.log(`| ${label} | ${g.length} | ${anyDm} | ${floor} | ${silent} | ${dmGen} | ${dmGen ? pct(dmUn, dmGen) : '—'} | ${cGen} | ${cGen ? pct(cUn, cGen) : '—'} |`);
+        } else {
+            console.log(`  ${label.padEnd(22)} pages ${g.length} · got ≥1 AI DM ${anyDm} · ≥30 generated DMs ${floor} · NO traffic at all ${silent} · DM ${dmGen ? pct(dmUn, dmGen) : '—'} · comments ${cGen ? pct(cUn, cGen) : '—'}`);
+        }
+    }
+    console.log('\nRead this as two populations, not as a treatment and a control: merchants who fill the page are merchants who engage, so every difference is confounded by self-selection. "NO traffic at all" is the bucket that decides scope — a page nobody messaged says nothing about whether /business is understandable.');
+    console.log('`days_observed` counts from page creation to the traffic end, so a page connected near --to had little or no chance to receive anything; `days_to_write` is an UPPER bound (only row creation is a true first write).');
+    console.log('Comments stay separate from DMs (D-111 changed which comments get replied to at all).');
 }
 
 // ---------------------------------------------------------------------------
@@ -575,6 +720,13 @@ function main(): void {
         const usage = queryJson<UsageWeekRow>(usageWeeksSql(args.from, args.to));
         const gaps = queryJson<GapWeekRow>(gapWeeksSql(args.from, args.to));
         baseline(pages, replies, usage, gaps, args);
+    }
+    if (args.cohort) {
+        // Its own span: traffic runs to --traffic-to, past the creation window.
+        console.error(`reading replies / usage for ${args.from} → ${args.trafficTo}…`);
+        const replies = queryJson<ReplyWeekRow>(replyWeeksSql(args.from, args.trafficTo));
+        const usage = queryJson<UsageWeekRow>(usageWeeksSql(args.from, args.trafficTo));
+        cohort(pages, replies, usage, args);
     }
 }
 
