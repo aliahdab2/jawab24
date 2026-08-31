@@ -66,9 +66,11 @@ describe('visiblePlansFor', () => {
         expect(visiblePlansFor(grid, null).map((p) => p.slug)).toEqual(['basic', 'starter', 'business', 'pro']);
     });
 
-    // D-103: a marketplace lists only the plans that can open the store.
+    // D-103/D-120: a marketplace lists only the plans its own shelf sells —
+    // Zid sells Starter since D-120, Salla still does not. The fuller per-shelf
+    // matrix lives in marketplaceBilling.test.ts; this stays as the smoke pin.
     it('shows a marketplace-billed merchant only the plans the marketplace sells', () => {
-        expect(visiblePlansFor(grid, { marketplace: 'zid' }).map((p) => p.slug)).toEqual(['business', 'pro']);
+        expect(visiblePlansFor(grid, { marketplace: 'zid' }).map((p) => p.slug)).toEqual(['starter', 'business', 'pro']);
         expect(visiblePlansFor(grid, { marketplace: 'salla' }).map((p) => p.slug)).toEqual(['business', 'pro']);
     });
 });
