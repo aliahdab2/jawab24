@@ -43,6 +43,24 @@ Qatar, Egypt and Jordan.
 | Format | PNG or JPEG, ≤ 8 MB each |
 | Ordering | GPP publishes in filename order — `1.png`, `2.png`, … |
 
+## Current sets come from DIFFERENT sources — do not mistake one for the other
+
+| set | source | numbers |
+|---|---|---|
+| `en-US/` | **production, the owner's live account** | real (3,179 smart replies, 664 today, 97.0% reply rate) |
+| `ar/` | **local demo seed** | fixture data, fictional names |
+
+That split is not ideal and should be closed. It exists because the dashboard locale is
+pinned to `settings.dashboard_language` on the account, and on production it would not hold:
+the switch needs an explicit Save (a first click silently did not persist), it rendered
+Arabic once and then reverted on its own, and `/ar/comments` served a cached English page
+regardless. So a full Arabic set could not be captured live.
+
+**Customer names are blurred at capture time, as a REGION not per name.** Blurring
+individual name nodes loses a race against the live inbox: an early attempt blurred 11
+names and the very next capture still showed one that had arrived in between. Blur the
+whole list container instead — it cannot be outrun by new rows.
+
 ## ⛔ Never capture a real merchant's data
 
 These images go on a public store page. Real conversations carry real customer names.
