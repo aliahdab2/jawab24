@@ -68,7 +68,9 @@ vi.mock('../../src/services/whatsapp', () => ({
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({
-    subscriptionsService: { getUserSubscription: vi.fn(), canEnablePage: vi.fn() },
+    // checkSubscriptionStatus backs the connect status gate (checkWhatsAppSubscriptionStatus);
+    // defaulted to allowed in beforeEach, flipped by the expired-trial tests.
+    subscriptionsService: { getUserSubscription: vi.fn(), canEnablePage: vi.fn(), checkSubscriptionStatus: vi.fn() },
 }));
 
 // Channel-availability gate (Zid block, D-117). Default "available" so the
@@ -140,6 +142,9 @@ import { workspaceService } from '../../src/services/workspace';
 const entitled = { status: 'active', plan: { slug: 'business', whatsappEnabled: true } };
 // Basic is the only paid plan without WhatsApp (D-118) — the non-entitled fixture.
 const basic = { status: 'active', plan: { slug: 'basic', whatsappEnabled: false } };
+// Plan includes WhatsApp but the trial lapsed — passes the plan gate, must be
+// stopped by the status gate BEFORE a Meta redirect URL is minted (D-118 gap).
+const pastDueStarter = { status: 'past_due', plan: { slug: 'starter', whatsappEnabled: true } };
 
 function buildReply() {
     const reply = {
@@ -197,6 +202,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     membershipResult.rows = [{ role: 'owner', ownerId: 'owner-1' }];
     vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(entitled as never);
+    vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({ allowed: true } as never);
     vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', whatsappPhoneNumberId: null, whatsappCoexistence: null } as never);
     vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
     vi.mocked(pagesService.connectWhatsApp).mockResolvedValue({ id: 'page-1' } as never);
@@ -267,6 +273,18 @@ describe('WhatsAppRedirectController.start', () => {
         await whatsappRedirectController.start(buildStartRequest({}), reply);
         expect(reply.status).toHaveBeenCalledWith(403);
         expect((reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ code: 'WHATSAPP_PLAN_REQUIRED' });
+        expect(reply.setCookie).not.toHaveBeenCalled();
+    });
+
+    it('status gate fires before any URL is minted — expired-trial Starter → 402, no cookie (D-118 gap)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarter as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired',
+        } as never);
+        const reply = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({}), reply);
+        expect(reply.status).toHaveBeenCalledWith(402);
+        expect((reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' });
         expect(reply.setCookie).not.toHaveBeenCalled();
     });
 
@@ -402,6 +420,22 @@ describe('WhatsAppRedirectController.appStart', () => {
         expect(target).toContain('whatsappError=WHATSAPP_PLAN_REQUIRED');
         // The failure page renders AUTHENTICATED — cookies were set first.
         expect(refreshTokenService.createRefreshToken).toHaveBeenCalled();
+    });
+
+    it('status gate → signed-in redirect to /pages?whatsappError=WHATSAPP_SUBSCRIPTION_INACTIVE (expired-trial Starter)', async () => {
+        primeAppStartHappy();
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarter as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired',
+        } as never);
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), workspaceId: 'ws-1' }),
+            reply,
+        );
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('/pages?');
+        expect(target).toContain('whatsappError=WHATSAPP_SUBSCRIPTION_INACTIVE');
     });
 
     it('marketplace block → signed-in redirect to /pages?whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE', async () => {
@@ -636,6 +670,22 @@ describe('WhatsAppRedirectController.callback', () => {
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'the-code', state }, nonce), reply);
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
         expect((reply.redirect as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('whatsappError=WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE');
+    });
+
+    it('reverify refuses an expired-trial account mid-connect → whatsappError=WHATSAPP_SUBSCRIPTION_INACTIVE, no exchange', async () => {
+        // The trial can lapse in the ~10-min window between start and callback.
+        // Mutation: delete the status check in reverifyGates and the code is
+        // exchanged — this fails.
+        primeHappyMeta();
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarter as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired',
+        } as never);
+        const { state, nonce } = mintState();
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'the-code', state }, nonce), reply);
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect((reply.redirect as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('whatsappError=WHATSAPP_SUBSCRIPTION_INACTIVE');
     });
 
     it('pageId null → creates a WhatsApp-only card', async () => {

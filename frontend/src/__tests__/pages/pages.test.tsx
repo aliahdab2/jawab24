@@ -208,9 +208,19 @@ const mockedApi = vi.mocked(api, true);
 const mockedSubscriptionApi = vi.mocked(subscriptionApi);
 
 // Plan entitlement served by useSubscriptionUsage (WhatsApp is Starter+; Basic excluded).
-const mockUsagePlan = (whatsappEnabled: boolean, whatsappUnavailable?: { reason: 'zid_marketplace' }) =>
+// `autoReplyAllowed` sets subscription.autoReply.allowed — omitted means "not present"
+// (an active account), false is an expired trial on a WhatsApp-included plan (D-118 gap).
+const mockUsagePlan = (
+    whatsappEnabled: boolean,
+    whatsappUnavailable?: { reason: 'zid_marketplace' },
+    autoReplyAllowed?: boolean,
+) =>
     mockedSubscriptionApi.getUsage.mockResolvedValue({
-        data: { data: { subscription: { plan: { whatsappEnabled }, whatsappUnavailable } } },
+        data: { data: { subscription: {
+            plan: { whatsappEnabled },
+            whatsappUnavailable,
+            ...(autoReplyAllowed === undefined ? {} : { autoReply: { allowed: autoReplyAllowed } }),
+        } } },
     } as unknown as Awaited<ReturnType<typeof mockedSubscriptionApi.getUsage>>);
 
 const MOCK_PAGES = [
@@ -1211,6 +1221,22 @@ describe('PagesPage - WhatsApp plan gate (Starter+ entitlement, Basic excluded)'
             expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
         });
         expect(screen.getByText('Upgrade to connect')).toBeInTheDocument();
+        expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
+    });
+
+    it('entitled plan but INACTIVE subscription (expired trial): upgrade CTA replaces Connect — connect runs Meta ES (D-118 gap)', async () => {
+        // Plan includes WhatsApp, but the trial lapsed. Connecting would launch
+        // Meta Embedded Signup and migrate the number off the merchant's phone,
+        // so the button must be gone — mirrors the backend connect status gate.
+        mockUsagePlan(true, undefined, false);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
+        });
         expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
     });
 

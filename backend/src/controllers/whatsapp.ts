@@ -12,6 +12,7 @@ import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
+import type { LimitCheckResult } from '@jawab24/shared';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { pgErrorCode } from '../utils/dbErrors';
 
@@ -73,6 +74,26 @@ export const PLAN_REQUIRED_RESPONSE = {
 export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
     return !!sub?.plan.whatsappEnabled;
+}
+
+/**
+ * Active-subscription gate for CONNECTING a WhatsApp number. Connect must
+ * status-gate — unlike a page slot, enforced at ENABLE (`canEnablePage`) —
+ * because Meta Embedded Signup migrates the number OFF the merchant's phone at
+ * connect, before enable is ever reached: refusing at enable would be too late.
+ * Before D-118 the Starter-only plan flag doubled as this gate; making WhatsApp
+ * a Starter feature removed that side effect, so an expired-trial Starter
+ * account could reach Meta ES. Keyed on the workspace OWNER (same subject as
+ * `hasWhatsAppPlanAccess`). Returns a `LimitCheckResult` so the popup sites can
+ * render it through `pageGateError` (the same 402 SUBSCRIPTION_INACTIVE the
+ * toggle path already returns); the redirect flow maps the code to its own
+ * `?whatsappError=` contract. Fails closed on a missing subscription — the plan
+ * gate already blocks that, but this must not silently pass it either.
+ */
+export async function checkWhatsAppSubscriptionStatus(workspaceOwnerId: string): Promise<LimitCheckResult> {
+    const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
+    if (!sub) return { allowed: false, reason: 'No active subscription', code: 'subscription_inactive' };
+    return subscriptionsService.checkSubscriptionStatus(sub);
 }
 
 /** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
@@ -190,6 +211,11 @@ export class WhatsAppController {
         if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
             return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
         }
+        const subStatus = await checkWhatsAppSubscriptionStatus(req.workspaceOwnerId);
+        if (!subStatus.allowed) {
+            const { status, body } = pageGateError(subStatus);
+            return reply.status(status).send(body);
+        }
         if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
             return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
         }
@@ -280,6 +306,11 @@ export class WhatsAppController {
         }
         if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
             return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
+        }
+        const subStatus = await checkWhatsAppSubscriptionStatus(req.workspaceOwnerId);
+        if (!subStatus.allowed) {
+            const { status, body } = pageGateError(subStatus);
+            return reply.status(status).send(body);
         }
         if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
             return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);

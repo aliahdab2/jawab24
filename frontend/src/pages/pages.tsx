@@ -171,9 +171,15 @@ const PagesPage: NextPageWithLayout = () => {
   // the surface flips live after an upgrade. `undefined` = still loading
   // (render neither Connect nor the upgrade CTA yet).
   const { data: usage } = useSubscriptionUsage(isAuthenticated && whatsappVisible);
+  // Plan inclusion is necessary but NOT sufficient: connecting runs Meta Embedded
+  // Signup, which migrates the number off the merchant's phone, so an inactive
+  // subscription (an expired trial on a WhatsApp-included plan — the largest
+  // blocked cohort since D-118) must not see Connect. Mirror the backend connect
+  // gate. `!== false` (not `=== true`) so a still-loading autoReply never blocks
+  // an entitled account. The backend enforces the same on `start`/`connect`.
   const whatsappEntitled = usage === undefined
     ? undefined
-    : Boolean(usage?.subscription?.plan?.whatsappEnabled);
+    : Boolean(usage?.subscription?.plan?.whatsappEnabled) && usage?.subscription?.autoReply?.allowed !== false;
   // Layered on top of `whatsappVisible`: an account with a store connected
   // through Zid can never connect WhatsApp (D-117, backend-enforced). `undefined`
   // while usage loads — actionable surfaces require `=== true`. See
@@ -574,6 +580,7 @@ const PagesPage: NextPageWithLayout = () => {
         WHATSAPP_NO_NUMBER: 'whatsappNoNumberSelected',
         WHATSAPP_AMBIGUOUS: 'whatsappAmbiguousNumber',
         WHATSAPP_PLAN_REQUIRED: iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired'),
+        WHATSAPP_SUBSCRIPTION_INACTIVE: 'subscriptionInactive',
         WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE: 'whatsappUnavailableForMarketplace',
       };
       toast.error(t(keyByCode[errorCode] ?? 'whatsappConnectFailed'));
@@ -852,6 +859,11 @@ const PagesPage: NextPageWithLayout = () => {
       const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
       if (code === 'WHATSAPP_PLAN_REQUIRED') {
         toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      } else if (code === 'WHATSAPP_SUBSCRIPTION_INACTIVE') {
+        // Defense in depth — the UI hides connect for an inactive subscription,
+        // but a stale tab can still reach the backend status gate. Expected
+        // refusal, not a Sentry event.
+        toast.error(t('subscriptionInactive'));
       } else {
         captureError(error, 'Failed to start WhatsApp redirect connect', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));
@@ -1052,6 +1064,11 @@ const PagesPage: NextPageWithLayout = () => {
         // Defense in depth — the UI hides connect for non-entitled plans, but
         // the backend gate can still fire (e.g. stale tab after a downgrade).
         toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      } else if (err.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+        // Same defense-in-depth as the plan gate: the UI hides connect for an
+        // inactive subscription, but a stale tab (trial expired after load) can
+        // still reach the backend status gate. Expected refusal, not a Sentry event.
+        toast.error(t('subscriptionInactive'));
       } else {
         captureError(error, 'Failed to connect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));

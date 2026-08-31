@@ -14,6 +14,7 @@ import {
 } from '../utils/whatsappConnectState';
 import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 import {
+    checkWhatsAppSubscriptionStatus,
     completeWhatsAppSignup,
     hasWhatsAppPlanAccess,
     isWhatsAppConnectAllowed,
@@ -277,6 +278,15 @@ export class WhatsAppRedirectController {
         }
         if (!(await hasWhatsAppPlanAccess(args.workspaceOwnerId))) {
             return { ok: false, status: 403, code: PLAN_REQUIRED_RESPONSE.code, payload: { ...PLAN_REQUIRED_RESPONSE } };
+        }
+        // Status gate BEFORE the Meta redirect URL is minted — this is the leg
+        // that actually prevents an expired-trial account from reaching Embedded
+        // Signup (where the number migrates off the phone). 402 so the client
+        // can tell it apart from the plan block; the code drives both the /start
+        // JSON body and the /app-start `?whatsappError=` redirect.
+        const subStatus = await checkWhatsAppSubscriptionStatus(args.workspaceOwnerId);
+        if (!subStatus.allowed) {
+            return { ok: false, status: 402, code: 'WHATSAPP_SUBSCRIPTION_INACTIVE', payload: { error: subStatus.reason ?? 'Subscription is not active', code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' } };
         }
         if (await getWhatsAppUnavailableReason(args.workspaceOwnerId)) {
             return { ok: false, status: 403, code: WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code, payload: { ...WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } };
@@ -631,6 +641,9 @@ export class WhatsAppRedirectController {
         }
         if (!(await hasWhatsAppPlanAccess(membership[0].ownerId))) {
             return 'WHATSAPP_PLAN_REQUIRED';
+        }
+        if (!(await checkWhatsAppSubscriptionStatus(membership[0].ownerId)).allowed) {
+            return 'WHATSAPP_SUBSCRIPTION_INACTIVE';
         }
         if (await getWhatsAppUnavailableReason(membership[0].ownerId)) {
             return WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code;

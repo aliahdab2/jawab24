@@ -39,7 +39,7 @@ vi.mock('../../src/services/whatsapp', () => ({
     },
     WhatsAppApiError: class extends Error {},
 }));
-vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn(), getUserSubscription: vi.fn() } }));
+vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn(), getUserSubscription: vi.fn(), checkSubscriptionStatus: vi.fn() } }));
 vi.mock('../../src/services/channelTrial', () => ({ channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn().mockReturnValue([]) } }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn() } }));
@@ -76,6 +76,8 @@ describe('WhatsApp connect — canary allowlist gate', () => {
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(
             { status: 'active', plan: { slug: 'business', whatsappEnabled: true } } as never,
         );
+        // Status gate runs after the plan gate — default active so allowlist behavior is isolated.
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({ allowed: true } as never);
     });
 
     it('403 WHATSAPP_NOT_ALLOWLISTED when the acting user is not on the allowlist', async () => {
