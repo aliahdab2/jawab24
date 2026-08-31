@@ -31,6 +31,7 @@ import {
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
+import { whatsappConnectErrorKey } from '@/lib/whatsappConnectErrors';
 import type { Page, NoPagesReason } from '@jawab24/shared';
 import dynamic from 'next/dynamic';
 
@@ -171,9 +172,26 @@ const PagesPage: NextPageWithLayout = () => {
   // the surface flips live after an upgrade. `undefined` = still loading
   // (render neither Connect nor the upgrade CTA yet).
   const { data: usage } = useSubscriptionUsage(isAuthenticated && whatsappVisible);
-  const whatsappEntitled = usage === undefined
+  // Plan inclusion is necessary but NOT sufficient: completing a connect ends in
+  // `completeWhatsAppSignup`, whose registerPhoneNumber call takes the number OFF
+  // the merchant's phone, so an inactive subscription (an expired trial on a
+  // WhatsApp-included plan — the largest blocked cohort since D-118) must not see
+  // Connect. Mirrors the backend `checkWhatsAppConnectEntitlement` chain; the
+  // server still owns the verdict, this only decides what to render.
+  //
+  // Kept as TWO booleans, not one: the refusals are different actions ("upgrade
+  // your plan" vs "renew your subscription") and collapsing them is how a lapsed
+  // Starter gets told to upgrade to the plan it is already on. `!== false` (not
+  // `=== true`) so a still-loading autoReply never blocks an entitled account.
+  const whatsappPlanIncluded = usage === undefined
     ? undefined
     : Boolean(usage?.subscription?.plan?.whatsappEnabled);
+  const whatsappSubscriptionActive = usage === undefined
+    ? undefined
+    : usage?.subscription?.autoReply?.allowed !== false;
+  const whatsappEntitled = usage === undefined
+    ? undefined
+    : whatsappPlanIncluded === true && whatsappSubscriptionActive === true;
   // Layered on top of `whatsappVisible`: an account with a store connected
   // through Zid can never connect WhatsApp (D-117, backend-enforced). `undefined`
   // while usage loads — actionable surfaces require `=== true`. See
@@ -538,10 +556,16 @@ const PagesPage: NextPageWithLayout = () => {
     // `?connectWhatsApp=true` must not reopen the path modal; the backend would
     // 403 the connect anyway.
     if (whatsappConnectable === false) return;
+    // Same for an account that cannot connect right now (plan, or a lapsed
+    // subscription): `?connectWhatsApp=true` is minted by the app and outlives
+    // the session in history and bookmarks, so it must not walk a refused
+    // merchant into Meta's wizard. The render-level hiding does not cover this
+    // entry — it sets whatsAppPathPageId directly.
+    if (whatsappEntitled === false) return;
     const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
     addErrorBreadcrumb('whatsapp-connect', 'resuming from handoff param', { target });
     setWhatsAppPathPageId(target);
-  }, [router.query.waPage, whatsappConnectable]);
+  }, [router.query.waPage, whatsappConnectable, whatsappEntitled]);
   useOpenOnQueryParam('connectWhatsApp', pagesReady, resumeWhatsAppConnect);
 
   /*
@@ -566,17 +590,9 @@ const PagesPage: NextPageWithLayout = () => {
       const waPageId = typeof router.query.waPageId === 'string' ? router.query.waPageId : null;
       if (waPageId) setPendingKbNudgePageId(waPageId);
     } else if (errorCode) {
-      // Same error surface as the popup flow's catch block — one merchant-facing
-      // contract regardless of transport.
-      const keyByCode: Record<string, string> = {
-        WHATSAPP_NUMBER_TAKEN: 'whatsappNumberTaken',
-        WHATSAPP_PIN_MISMATCH: 'whatsappPinMismatch',
-        WHATSAPP_NO_NUMBER: 'whatsappNoNumberSelected',
-        WHATSAPP_AMBIGUOUS: 'whatsappAmbiguousNumber',
-        WHATSAPP_PLAN_REQUIRED: iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired'),
-        WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE: 'whatsappUnavailableForMarketplace',
-      };
-      toast.error(t(keyByCode[errorCode] ?? 'whatsappConnectFailed'));
+      // Same error surface as every other connect transport — one merchant-facing
+      // contract, one map (whatsappConnectErrorKey).
+      toast.error(t(whatsappConnectErrorKey(errorCode) ?? 'whatsappConnectFailed'));
     }
     const remaining = { ...router.query };
     delete remaining.whatsappConnected;
@@ -700,7 +716,7 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('businessInfoRequiredToEnable'));
         openKbEditorFor(pages.find(p => p.id === pageId));
       } else if (status === 402 && code === 'SUBSCRIPTION_INACTIVE') {
-        toast.error(t('subscriptionInactive'));
+        toast.error(t(iosOr('subscriptionInactiveIOS', 'subscriptionInactive')));
       } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
       } else if (status === 403 && code === 'WHATSAPP_PLAN_REQUIRED') {
@@ -849,9 +865,14 @@ const PagesPage: NextPageWithLayout = () => {
       // navigation is slow, and is reset by the failure path below otherwise.
     } catch (error) {
       setConnectingWhatsApp(null);
-      const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
-      if (code === 'WHATSAPP_PLAN_REQUIRED') {
-        toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      // Defense in depth — the UI hides connect for a refused account, but a
+      // stale tab (a downgrade, or a trial that lapsed after load) can still
+      // reach the backend gate. Expected refusals are shown, never captured.
+      const gateKey = whatsappConnectErrorKey(
+        (error as { response?: { data?: { code?: string } } }).response?.data?.code,
+      );
+      if (gateKey) {
+        toast.error(t(gateKey));
       } else {
         captureError(error, 'Failed to start WhatsApp redirect connect', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));
@@ -889,6 +910,17 @@ const PagesPage: NextPageWithLayout = () => {
       const { Browser } = await import('@capacitor/browser');
       await Browser.open({ url: data.url });
     } catch (error) {
+      // /auth/whatsapp/start runs the same gate chain as every other transport,
+      // so this leg sees the same refusals — show them, don't report them. This
+      // was the one connect surface that filed an ordinary billing refusal to
+      // Sentry and told the merchant "connect failed".
+      const gateKey = whatsappConnectErrorKey(
+        (error as { response?: { data?: { code?: string } } }).response?.data?.code,
+      );
+      if (gateKey) {
+        toast.error(t(gateKey));
+        return;
+      }
       captureError(error, 'Native WhatsApp connect failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
       toast.error(t('whatsappConnectFailed'));
     }
@@ -903,6 +935,20 @@ const PagesPage: NextPageWithLayout = () => {
       // 403s WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE regardless; this just avoids a
       // pointless round trip.
       toast.error(t('whatsappUnavailableForMarketplace'));
+      return;
+    }
+    // Same belt for the entitlement gates. Render-level hiding covers the card
+    // CTAs and the channel picker, but NOT the reconnect banner (which renders
+    // off whatsappNeedsReconnect alone) — and this is the funnel every entry
+    // reaches, so it is the one place that cannot be forgotten. Without it a
+    // refused merchant is walked through Meta's entire wizard and only then told
+    // no, by a backend that correctly refuses to finish the connect.
+    if (whatsappPlanIncluded === false) {
+      toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      return;
+    }
+    if (whatsappSubscriptionActive === false) {
+      toast.error(t(iosOr('subscriptionInactiveIOS', 'subscriptionInactive')));
       return;
     }
     addErrorBreadcrumb('whatsapp-connect', 'connect requested', {
@@ -1032,6 +1078,7 @@ const PagesPage: NextPageWithLayout = () => {
       }
     } catch (error) {
       const err = error as { message?: string; response?: { data?: { code?: string } } };
+      const gateKey = whatsappConnectErrorKey(err.response?.data?.code);
       if (err.message === 'WHATSAPP_SIGNUP_CANCELLED' || err.message === 'WHATSAPP_SIGNUP_ABANDONED') {
         // Merchant closed or walked away from the signup popup — not an error,
         // and never a Sentry event: at GA scale this would be constant noise.
@@ -1044,14 +1091,11 @@ const PagesPage: NextPageWithLayout = () => {
         // WABA created but no phone number attached (commonly: the number is
         // still pending Meta's display-name review).
         toast.error(t('whatsappNoNumberSelected'));
-      } else if (err.response?.data?.code === 'WHATSAPP_NUMBER_TAKEN') {
-        toast.error(t('whatsappNumberTaken'));
-      } else if (err.response?.data?.code === 'WHATSAPP_PIN_MISMATCH') {
-        toast.error(t('whatsappPinMismatch'));
-      } else if (err.response?.data?.code === 'WHATSAPP_PLAN_REQUIRED') {
-        // Defense in depth — the UI hides connect for non-entitled plans, but
-        // the backend gate can still fire (e.g. stale tab after a downgrade).
-        toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      } else if (gateKey) {
+        // Defense in depth — the UI hides connect for a refused account, but the
+        // backend gate can still fire (a stale tab after a downgrade, or a trial
+        // that lapsed after load). Expected refusal, not a Sentry event.
+        toast.error(t(gateKey));
       } else {
         captureError(error, 'Failed to connect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));
@@ -1588,11 +1632,14 @@ const PagesPage: NextPageWithLayout = () => {
                           {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
                         </Button>
                       ) : whatsappEntitled === false ? (
-                        // Plan without WhatsApp: route to pricing instead of the
-                        // Meta signup. UpgradeCTA renders nothing on iOS native.
+                        // Refused: route to pricing instead of the Meta signup.
+                        // UpgradeCTA renders nothing on iOS native. The label
+                        // names the action that actually unblocks them — a lapsed
+                        // account is already ON a WhatsApp plan, so "upgrade"
+                        // would be advice it cannot act on.
                         <UpgradeCTA className="flex-shrink-0">
                           <Button size="sm" variant="secondary">
-                            {t('whatsappUpgradeButton')}
+                            {t(whatsappPlanIncluded === true ? 'whatsappRenewButton' : 'whatsappUpgradeButton')}
                           </Button>
                         </UpgradeCTA>
                       ) : null // entitlement still loading

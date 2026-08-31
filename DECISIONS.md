@@ -3998,3 +3998,60 @@ see above.
 
 **Pinned by** `frontend/src/lib/__tests__/marketplaceBilling.test.ts` (per-shelf visibility:
 zid/shopify list Starter, salla does not, no-marketplace grid unchanged).
+
+## D-121 · Connecting a WhatsApp number is gated by ONE chain — plan, then marketplace, then subscription status — because `registerPhoneNumber` takes the number off the merchant's phone (2026-08-31)
+
+**Ruling.** Every WhatsApp connect entry point calls
+`checkWhatsAppConnectEntitlement(workspaceOwnerId)` and nothing else. It runs three checks in a
+fixed order — **plan inclusion → marketplace availability → subscription status** — off ONE
+`getUserSubscription` read, and returns the refusal or null. Enable is unchanged: `canEnablePage`
+already gates status + slots there.
+
+**Why connect must status-gate separately from enable.** A page slot can be enforced at enable
+because nothing irreversible happens before it. WhatsApp is different: finishing a connect runs
+`completeWhatsAppSignup`, whose `registerPhoneNumber` call moves the number to the Cloud API and
+**takes it off the merchant's WhatsApp Business app**. Refusing at enable would be after that.
+Until D-118 this was gated by accident — WhatsApp was Business+, and no expired-trial account
+holds a Business plan, so the plan flag doubled as a status gate. Making WhatsApp a Starter feature
+removed that side effect and left the status check missing. Measured on prod 2026-08-31: **62 owners
+on a WhatsApp-included plan whose subscription is not entitled, 60 of them lapsed organic trials**
+(`past_due`, no payment method, `trial_ends_at` in the past — `getUserSubscription` flips
+`trialing → past_due` lazily, so the live cohort is `past_due`). None of the 62 had a number
+connected, so nothing in production was mid-flight.
+
+**Order is load-bearing: permanent blocks before transient ones.** A Zid-connected account can
+*never* connect WhatsApp (D-117). Refusing it with "renew your subscription" would steer the
+merchant to pay for something renewal cannot unlock. Plan and marketplace are properties of what
+the account *is*; status is a property of what it currently *owes*.
+
+**One code per condition, on both transports.** The popup/`connect` leg and the redirect
+`start`/`callback` leg return the same `WHATSAPP_SUBSCRIPTION_INACTIVE` (402), the way the plan and
+marketplace gates already did — the redirect leg used to invent its own. Bodies are static
+constants: the service's `reason` is an internal English string (`getUsageSummary` refuses to
+forward it for the same reason) and the client renders a translated message keyed off `code`.
+
+**The client mirrors it as TWO booleans, at the funnel.** `whatsappPlanIncluded` and
+`whatsappSubscriptionActive` are kept apart because the refusals are different actions — a lapsed
+Starter told to "upgrade" is being pointed at the plan it is already on. The guard lives in
+`requestConnectWhatsApp`, the funnel every entry reaches, not only in the render conditions: the
+reconnect banner renders off `whatsappNeedsReconnect` alone, and the `?connectWhatsApp=true` handoff
+(minted by the native app, and outliving the session in history and bookmarks) sets the path-modal
+state directly. Neither is covered by hiding a button. Without the funnel guard a refused merchant
+is walked through Meta's entire wizard and only then told no.
+
+**Consciously accepted.** (a) The gate also blocks *reconnect* — refreshing an expired 60-day token
+on an already-migrated number — which its harm rationale does not itself justify. Accepted: a lapsed
+account gets no service either way, and 0 of the 62 have a number connected. Revisit if that count
+stops being 0. (b) A `past_due` row with a payment method and no `current_period_end` stays allowed
+(the shared predicate's fallback). 0 such rows in production. (c) Refusing at `reverifyGates` turns
+a merchant away after they completed Meta's wizard. Nothing is orphaned — the code is not exchanged,
+so `registerPhoneNumber` never runs and the number stays on their phone — but the wasted wizard is
+real, which is why the callback refusal is logged.
+
+**Pinned by** `backend/test/controllers/whatsapp-connect.test.ts` (all four refusals, gate ORDER,
+single subscription read, the predicate wiring), `whatsapp-redirect.test.ts` (`start` 402 with no
+cookie and no leaked `reason`, `app-start` redirect, `reverifyGates` mid-connect),
+`backend/test/services/subscriptions.test.ts` (the live cohort's row shape against the real
+predicate), `frontend/src/__tests__/pages/pages.test.tsx` (renew vs upgrade CTA, the stale handoff)
+and `frontend/src/lib/__tests__/whatsappConnectErrors.test.ts` (every gate code mapped, iOS-neutral
+billing copy).

@@ -28,6 +28,11 @@ vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canEnablePage: vi.fn(),
         getUserSubscription: vi.fn(),
+        // Consulted by checkWhatsAppConnectEntitlement (the status leg of the gate).
+        // Defaulted to allowed in each connect beforeEach; the expired-trial tests
+        // flip it. A pure predicate in prod — mocked here to decouple the
+        // controller test from the status maths (unit-tested in subscriptions.test).
+        checkSubscriptionStatus: vi.fn(),
     },
 }));
 
@@ -97,6 +102,9 @@ const basicSubscription = { status: 'active', plan: { slug: 'basic', whatsappEna
 // The trial rides on Starter, and Starter now includes WhatsApp — so a trialing
 // account is ENTITLED. Used to prove the gate lets a fresh trial through.
 const trialingStarterSubscription = { status: 'trialing', plan: { slug: 'starter', whatsappEnabled: true } };
+// Plan includes WhatsApp (Starter, D-118) but the trial has lapsed — the largest
+// blocked cohort. Plan gate passes; the status gate must stop it before Meta ES.
+const pastDueStarterSubscription = { status: 'past_due', plan: { slug: 'starter', whatsappEnabled: true } };
 
 const connectedPage = {
     ...basePage,
@@ -141,6 +149,7 @@ describe('WhatsAppController.connect', () => {
         });
         vi.mocked(pagesService.connectWhatsApp).mockResolvedValue(connectedPage as never);
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(entitledSubscription as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({ allowed: true } as never);
     });
 
     // ── Coexistence ────────────────────────────────────────────────────────
@@ -363,6 +372,58 @@ describe('WhatsAppController.connect', () => {
         expect(reply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
     });
 
+    it('402s WHATSAPP_SUBSCRIPTION_INACTIVE for an expired-trial Starter — plan includes WhatsApp but the subscription lapsed (D-118 gap)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarterSubscription as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired',
+        } as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(402);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' }));
+        // Without the status check this connect reaches completeWhatsAppSignup,
+        // whose registerPhoneNumber takes the number off the merchant's phone.
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
+    });
+
+    // The test above mocks `checkSubscriptionStatus`, so it proves the controller
+    // honours the predicate's verdict — not that the gate ASKS it about the right
+    // row. That wiring is what a mocked predicate cannot see: the gate loads the
+    // owner's subscription once and must hand THAT row to the predicate. The
+    // predicate's own branches (including the live cohort shape: past_due, no
+    // payment method, trial_ends_at in the past) are pinned in
+    // test/services/subscriptions.test.ts.
+    it('asks checkSubscriptionStatus about the subscription row it loaded, not a re-read', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarterSubscription as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(subscriptionsService.checkSubscriptionStatus).toHaveBeenCalledWith(pastDueStarterSubscription);
+        // ONE read serves both the plan check and the status check.
+        expect(subscriptionsService.getUserSubscription).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses the PERMANENT marketplace block before the transient status block — a Zid account must not be told to renew', async () => {
+        // Both gates would fire. Order matters: renewing cannot unlock WhatsApp
+        // for a Zid-connected account (D-117), so "renew your subscription" would
+        // steer the merchant to pay for something they still cannot have.
+        // Mutation: move the status check above the marketplace check — this fails.
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarterSubscription as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, code: 'subscription_inactive',
+        } as never);
+        mockGetWaUnavailable.mockResolvedValueOnce('zid_marketplace');
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(
+            expect.objectContaining({ code: 'WHATSAPP_UNAVAILABLE_FOR_MARKETPLACE' }),
+        );
+    });
+
     it('keys the plan gate on the workspace OWNER, not the acting user', async () => {
         const reply = buildReply();
         await whatsappController.connect(buildRequest({
@@ -570,6 +631,7 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
         });
         vi.mocked(pagesService.createWhatsAppOnlyPage).mockResolvedValue(waOnlyPage as never);
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(entitledSubscription as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({ allowed: true } as never);
     });
 
     function newRequest(overrides: Record<string, unknown> = {}) {
@@ -675,6 +737,20 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
 
         expect(reply.status).toHaveBeenCalledWith(201);
         expect(pagesService.createWhatsAppOnlyPage).toHaveBeenCalled();
+    });
+
+    it('402s WHATSAPP_SUBSCRIPTION_INACTIVE for an expired-trial Starter, before creating the page (D-118 gap)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(pastDueStarterSubscription as never);
+        vi.mocked(subscriptionsService.checkSubscriptionStatus).mockReturnValue({
+            allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive', cause: 'trial_expired',
+        } as never);
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(402);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' }));
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
     });
 });
 

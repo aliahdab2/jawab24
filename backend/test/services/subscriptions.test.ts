@@ -1227,6 +1227,27 @@ describe('checkSubscriptionStatus', () => {
         expect(result.code).toBe('subscription_inactive');
     });
 
+    // The shape of the live blocked cohort (62 owners, 60 of them this row, prod
+    // 2026-08-31): an organic trial that lapsed. getUserSubscription lazily flips
+    // trialing → past_due, so the row the WhatsApp connect gate actually sees is
+    // past_due — NOT trialing — and it must not inherit the past_due grace below
+    // (a trial has no payment to retry). Mutation: drop `|| status === 'past_due'`
+    // from the trial-origin branch and this passes as `allowed: true`.
+    it('should reject a lapsed organic trial that has already flipped to past_due', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({
+                status: 'past_due',
+                paymentMethod: null,
+                trialEndsAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+                // Well inside the 3-day grace — only the trial clock refuses this row.
+                currentPeriodEnd: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+            }) as any
+        );
+        expect(result.allowed).toBe(false);
+        expect(result.code).toBe('subscription_inactive');
+        expect(result.cause).toBe('trial_expired');
+    });
+
     it('should allow past_due within grace period', () => {
         // Period ended 1 day ago (within 3-day grace)
         const periodEnd = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
