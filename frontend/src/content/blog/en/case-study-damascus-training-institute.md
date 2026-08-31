@@ -1,14 +1,14 @@
 ---
-seoTitle: "Case Study: 90 Days of Smart Replies — 44,000 Replies and 472 Leads"
+seoTitle: "Case Study: An Institute with No Online Store — 44,000 Replies, 472 Leads"
 seoDescription: "Real numbers from the first 90 days of Jawab24 at Al-Fariq Al-Dimashqi, a Damascus training institute: 14,552 customers answered, a 97.41% response rate, and 472 leads with names and phone numbers — with an honest breakdown of what automation caused directly and what it only contributed to."
-seoKeywords: "auto reply case study, Jawab24 results, Facebook auto reply Arabic, AI customer service case study, Facebook page response rate, Facebook leads capture, دراسة حالة رد تلقائي"
-title: "Case Study: 90 Days That Changed How Al-Fariq Al-Dimashqi Answers Its Customers"
-excerpt: "A training institute with 55,000+ followers and a small team that couldn't keep up. After 90 days with Jawab24: 44,636 DM replies, 18,788 comments answered, and 472 leads with names and phone numbers — every number attributed to its source."
+seoKeywords: "auto reply case study, Jawab24 results, Facebook auto reply Arabic, AI customer service case study, Facebook page response rate, Facebook leads capture, auto reply without online store, no website chatbot, دراسة حالة رد تلقائي"
+title: "Case Study: A Training Institute with No Online Store — 90 Days at Al-Fariq Al-Dimashqi"
+excerpt: "A training institute with no online store and no website — just a Facebook Page with 55,000+ followers and a small team that couldn't keep up. After 90 days with Jawab24: 44,636 DM replies, 18,788 comments answered, and 472 leads with names and phone numbers — every number attributed to its source."
 ---
 
 ## Who are they?
 
-Al-Fariq Al-Dimashqi ("The Damascus Team") is a training and qualification institute in Damascus with more than 55,000 Facebook followers — an audience concentrated in Syria (93.6%) and specifically in Damascus (90.4%).
+Al-Fariq Al-Dimashqi ("The Damascus Team") is a training and qualification institute in Damascus with more than 55,000 Facebook followers — an audience concentrated in Syria (93.6%) and specifically in Damascus (90.4%). No online store, no website, no Salla or Zid catalog — the whole business lives on a Facebook Page, which makes this case the reference for anyone working [with no online store](/en/no-store).
 
 The problem is familiar to anyone running an active page: every new course announcement brings a flood of comments and messages, most of them circling the same questions — how much is the fee? When does the course start? Is registration still open? Where are you located? The questions arrive at every hour of every day, the team's time is limited, and a customer who doesn't get a quick answer rarely comes back to ask twice.
 

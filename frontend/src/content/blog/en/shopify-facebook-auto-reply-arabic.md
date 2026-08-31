@@ -1,8 +1,8 @@
 ---
-seoTitle: "How to Use Shopify with Facebook Auto Reply — Including Arabic Support"
-seoDescription: "Connect your Shopify store to a Facebook auto-reply bot that understands your customers' language. Sync products, verify prices, and reply automatically in English, Arabic, and more."
-seoKeywords: "Shopify auto reply, Shopify Facebook bot, Shopify chatbot, Shopify auto reply comments, Shopify Arabic support"
-title: "How to Use Shopify with Facebook Auto Reply — Including Arabic Support"
+seoTitle: "Shopify with Facebook & WhatsApp Auto Reply — Including Arabic Support"
+seoDescription: "Connect your Shopify store to an auto-reply bot on Facebook, Instagram, and WhatsApp that understands your customers' language. Sync products, verify prices, and reply automatically in English, Arabic, and more."
+seoKeywords: "Shopify auto reply, Shopify Facebook bot, Shopify chatbot, Shopify WhatsApp auto reply, Shopify auto reply comments, Shopify Arabic support"
+title: "How to Use Shopify with Facebook & WhatsApp Auto Reply — Including Arabic Support"
 excerpt: "Shopify is growing fast globally — but most auto-reply tools can't handle multilingual customers. Here's how to connect your Shopify store to a bot that actually understands your buyers."
 ---
 
@@ -15,6 +15,10 @@ Most Shopify sellers market through Facebook and Instagram — running ads, post
 The problem: Shopify's own tools don't auto-reply to Facebook comments. And most chatbot tools (ManyChat, Chatfuel, Tidio) are built for English-only workflows. If you have Arabic-speaking customers, they either don't support Arabic at all, or treat it as a single language — sending the same Modern Standard Arabic reply to everyone, which feels unnatural and robotic.
 
 For Shopify sellers who want to automate their Facebook and Instagram customer support across languages, there's a gap between available tools and actual needs.
+
+## The Same Catalog Answers on WhatsApp Too
+
+Your customers' questions don't stop at Messenger and comments: many prefer WhatsApp. Jawab24 connects your WhatsApp Business number to the same Shopify catalog — a customer asks "how much?" on WhatsApp and gets the real, verified price from your store, and a voice note is transcribed and answered with a text message. Connecting the number takes minutes through Meta's embedded signup, and it keeps working on your phone as usual. Details on the [WhatsApp auto reply page](/en/whatsapp).
 
 ## Connecting Shopify Product Data to Facebook Auto Replies
 

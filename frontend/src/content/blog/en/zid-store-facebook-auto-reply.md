@@ -1,8 +1,8 @@
 ---
-seoTitle: "How to Connect Your Zid Store to a Facebook Auto Reply Bot"
-seoDescription: "Step-by-step guide to connecting your Zid e-commerce store with a Facebook auto-reply bot. Sync products, prices, and availability for AI-powered customer replies."
-seoKeywords: "Zid chatbot, Zid Facebook bot, Zid auto reply, Zid store customer support automation, زد بوت, ربط زد فيسبوك"
-title: "How to Connect Your Zid Store to a Facebook Auto Reply Bot"
+seoTitle: "Connect Your Zid Store to Facebook & WhatsApp Auto Reply"
+seoDescription: "Step-by-step guide to connecting your Zid e-commerce store with an auto-reply bot on Facebook, Instagram, and WhatsApp. Sync products, prices, and availability for AI-powered customer replies."
+seoKeywords: "Zid chatbot, Zid Facebook bot, Zid auto reply, Zid WhatsApp auto reply, Zid WhatsApp bot, Zid store customer support automation, زد بوت, ربط زد فيسبوك"
+title: "How to Connect Your Zid Store to Facebook & WhatsApp Auto Reply"
 excerpt: "Most Zid merchants drive traffic from Facebook and Instagram — but lose sales when customers' questions go unanswered. Here's how to connect your Zid catalog to an auto-reply bot."
 ---
 
@@ -15,6 +15,10 @@ This creates a gap: when a customer comments "How much is the blue one?" on your
 Worse, if you don't reply fast enough, the customer moves on. Studies show that businesses that respond within **5 minutes** are **21x more likely** to convert a lead than those who respond after 30 minutes.
 
 The solution: connect your Zid product catalog directly to your Facebook auto-reply system. When a customer asks about a product, the AI checks your real Zid data and replies instantly with accurate information.
+
+## The Same Catalog Answers on WhatsApp Too
+
+Your customers' questions don't stop at Messenger and comments: many prefer WhatsApp. Jawab24 connects your WhatsApp Business number to the same Zid catalog — a customer asks "how much?" on WhatsApp and gets the real, verified price from your store, and a voice note is transcribed and answered with a text message. Connecting the number takes minutes through Meta's embedded signup, and it keeps working on your phone as usual. Details on the [WhatsApp auto reply page](/en/whatsapp).
 
 ## What Product Sync Actually Does
 

@@ -1,8 +1,8 @@
 ---
-seoTitle: "How to Connect Your Salla Store to a Facebook Auto Reply Bot"
-seoDescription: "Step-by-step guide to connecting your Salla e-commerce store with a Facebook auto-reply bot. Sync products, prices, and availability for AI-powered customer replies."
-seoKeywords: "Salla chatbot, Salla Facebook bot, Salla auto reply, Salla store customer support automation"
-title: "How to Connect Your Salla Store to a Facebook Auto Reply Bot"
+seoTitle: "Connect Your Salla Store to Facebook & WhatsApp Auto Reply"
+seoDescription: "Step-by-step guide to connecting your Salla e-commerce store with an auto-reply bot on Facebook, Instagram, and WhatsApp. Sync products, prices, and availability for AI-powered customer replies."
+seoKeywords: "Salla chatbot, Salla Facebook bot, Salla auto reply, Salla WhatsApp auto reply, Salla WhatsApp bot, Salla store customer support automation"
+title: "How to Connect Your Salla Store to Facebook & WhatsApp Auto Reply"
 excerpt: "Most Salla merchants drive traffic from Facebook — but lose sales when customers' questions go unanswered. Here's how to connect your Salla catalog to an auto-reply bot."
 ---
 
@@ -15,6 +15,10 @@ This creates a gap: when a customer comments "How much is the blue one?" on your
 Worse, if you don't reply fast enough, the customer moves on. Studies show that businesses that respond within **5 minutes** are **21x more likely** to convert a lead than those who respond after 30 minutes.
 
 The solution: connect your Salla product catalog directly to your Facebook auto-reply system. When a customer asks about a product, the AI checks your real Salla data and replies instantly with accurate information.
+
+## The Same Catalog Answers on WhatsApp Too
+
+Your customers' questions don't stop at Messenger and comments: many prefer WhatsApp. Jawab24 connects your WhatsApp Business number to the same Salla catalog — a customer asks "how much?" on WhatsApp and gets the real, verified price from your store, and a voice note is transcribed and answered with a text message. Connecting the number takes minutes through Meta's embedded signup, and it keeps working on your phone as usual. Details on the [WhatsApp auto reply page](/en/whatsapp).
 
 ## What Product Sync Actually Does
 
