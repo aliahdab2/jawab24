@@ -1,9 +1,9 @@
 ---
-seoTitle: "How to Set Up Instagram Auto Reply in 5 Minutes (2026 Guide)"
+seoTitle: "Instagram & WhatsApp Auto Reply with No Online Store — 5-Minute Guide (2026)"
 seoDescription: "Step-by-step guide to auto-replying to Instagram comments & DMs — no coding needed, with the same tool answering on Facebook and WhatsApp. Covers free tools, AI bots, and Arabic language support."
-seoKeywords: "Instagram auto reply, Instagram DM auto reply, Instagram comment auto reply, Instagram auto reply for business, how to set up Instagram auto reply, Instagram auto reply bot free, instagram and whatsapp auto reply"
-title: "Instagram Auto Reply: The Complete Guide for Small Businesses"
-excerpt: "Step-by-step guide to setting up auto-replies on Instagram in minutes — no coding needed. Covers free tools, AI bots, and multilingual support."
+seoKeywords: "Instagram auto reply, Instagram DM auto reply, Instagram comment auto reply, Instagram auto reply for business, how to set up Instagram auto reply, Instagram auto reply bot free, instagram and whatsapp auto reply, instagram auto reply no online store"
+title: "Instagram Auto Reply: The Complete Guide — No Online Store Needed"
+excerpt: "Step-by-step guide to setting up auto-replies on Instagram in minutes — no coding and no online store needed. Covers free tools, AI bots, and multilingual support."
 ---
 
 ## Why Instagram Auto Reply Is Different from Facebook
@@ -23,6 +23,10 @@ But Instagram auto-reply works differently from Facebook:
 ## Instagram Alone Isn't Enough: All Three Channels from One Dashboard
 
 The customer who comments on your Instagram post is the same one who messages your Facebook Page and asks on WhatsApp. Smart tools — Jawab24 among them — answer on all three channels from the same Business Info and one dashboard, so you never rewrite your prices and hours per channel. WhatsApp connects through Meta's embedded signup in minutes, and voice notes are transcribed and answered. Details on the [WhatsApp auto reply page](/en/whatsapp).
+
+### And you don't need an online store
+
+Everything above works on an Instagram account alone — no online store and no website. If your whole business lives on Instagram and you're asked "How much?", "Is it available?", and "When are you open?" every day, Jawab24 connects to your account directly and answers from your info; Salla, Zid, and Shopify integration remains an option for merchants who have a store. Details on the [no online store page](/en/no-store).
 
 ## Types of Auto Reply: Comments vs DMs
 
