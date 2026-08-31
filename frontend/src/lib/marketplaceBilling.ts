@@ -64,21 +64,39 @@ export function getMarketplaceBilling(
 }
 
 /**
+ * What each marketplace actually sells, by plan slug — the UI mirror of the
+ * backend rails' `*BillablePlanSlug` unions (`config/zidBilling.ts`,
+ * `config/shopifyBilling.ts`, `config/sallaBilling.ts`). Kept as an explicit
+ * per-rail map rather than a flag filter because the rails genuinely differ:
+ * Zid and Shopify sell Starter (D-120); Salla's portal sells only Business/Pro
+ * (D-103), and showing a card its portal cannot bill is the dead end this
+ * module exists to prevent. `Record<MarketplaceSlug, …>` makes a new rail a
+ * compile error until it has an entry — same pattern as MARKETPLACE_COPY.
+ */
+export const MARKETPLACE_SELLABLE_SLUGS: Record<MarketplaceSlug, ReadonlySet<string>> = {
+    shopify: new Set(['starter', 'business', 'pro']),
+    salla: new Set(['business', 'pro']),
+    zid: new Set(['starter', 'business', 'pro']),
+};
+
+/**
  * The plans a merchant can actually buy where they are billed.
  *
- * A marketplace lists ONLY the plans whose `ecommerceEnabled` is true (D-103:
- * Basic/Starter cannot open the store, so listing them would sell a plan the
- * buyer cannot use). Showing the full Stripe grid to a marketplace-billed
- * merchant offered two plans they could not buy and, read from inside the Zid
- * dashboard, made the account's own trial card say «فيسبوك وإنستغرام» only —
- * "my plan does not support Zid" (owner, 2026-08-30). Everyone else sees the
- * grid exactly as before.
+ * A marketplace lists ONLY the plans its own shelf sells (see
+ * MARKETPLACE_SELLABLE_SLUGS). Showing the full Stripe grid to a
+ * marketplace-billed merchant offered plans they could not buy and, read from
+ * inside the Zid dashboard, made the account's own trial card say «فيسبوك
+ * وإنستغرام» only — "my plan does not support Zid" (owner, 2026-08-30).
+ * Everyone else sees the grid exactly as before.
  */
 export function visiblePlansFor(
     plans: Plan[],
     marketplaceBilling: { marketplace: MarketplaceSlug } | null,
 ): Plan[] {
-    return plans.filter((p) => p.isActive !== false && (!marketplaceBilling || p.ecommerceEnabled));
+    return plans.filter((p) =>
+        p.isActive !== false
+        && (!marketplaceBilling || MARKETPLACE_SELLABLE_SLUGS[marketplaceBilling.marketplace].has(p.slug)),
+    );
 }
 
 /**

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETPLACE_COPY, getMarketplaceBilling, type MarketplaceSlug } from '../marketplaceBilling';
+import { MARKETPLACE_COPY, getMarketplaceBilling, visiblePlansFor, type MarketplaceSlug } from '../marketplaceBilling';
 import enPricing from '@/i18n/en/pricing.json';
 import arPricing from '@/i18n/ar/pricing.json';
-import type { UsageSummary } from '@jawab24/shared';
+import type { Plan, UsageSummary } from '@jawab24/shared';
 
 /**
  * `MARKETPLACE_COPY` maps each billing rail to i18n keys held as plain strings.
@@ -101,5 +101,41 @@ describe('getMarketplaceBilling', () => {
     /** The legacy Salla-only flag must NOT be read — it is wire-compat only. */
     it('ignores the legacy sallaBilled boolean', () => {
         expect(getMarketplaceBilling(usage({ sallaBilled: true }))).toBeNull();
+    });
+});
+
+describe('visiblePlansFor — each marketplace lists only what its shelf sells', () => {
+    /**
+     * The grid must mirror the backend rails' billable sets
+     * (`ZidBillablePlanSlug` / `ShopifyBillablePlanSlug` / `SallaBillablePlanSlug`)
+     * — a card the portal cannot bill is a dead end, and a missing card is a
+     * sale the shelf silently refuses. D-120 put Starter on the Zid shelf; the
+     * Salla portal still sells only Business/Pro (D-103).
+     */
+    const plan = (slug: string, isActive = true) =>
+        ({ slug, isActive, ecommerceEnabled: slug === 'business' || slug === 'pro' || slug === 'starter' }) as unknown as Plan;
+    const grid = [plan('basic'), plan('starter'), plan('business'), plan('pro')];
+    const slugs = (plans: Plan[]) => plans.map((p) => p.slug);
+
+    it('zid sells Starter, Business and Pro (D-120)', () => {
+        expect(slugs(visiblePlansFor(grid, { marketplace: 'zid' }))).toEqual(['starter', 'business', 'pro']);
+    });
+
+    it('shopify sells Starter, Business and Pro (mirrors SHOPIFY_BILLABLE_PLAN_SLUGS)', () => {
+        expect(slugs(visiblePlansFor(grid, { marketplace: 'shopify' }))).toEqual(['starter', 'business', 'pro']);
+    });
+
+    it('salla does NOT list Starter — its portal sells only Business/Pro (D-103)', () => {
+        expect(slugs(visiblePlansFor(grid, { marketplace: 'salla' }))).toEqual(['business', 'pro']);
+    });
+
+    it('no marketplace → the full active grid, exactly as before', () => {
+        expect(slugs(visiblePlansFor(grid, null))).toEqual(['basic', 'starter', 'business', 'pro']);
+    });
+
+    it('inactive plans never show, marketplace or not', () => {
+        const withInactive = [...grid, plan('scale-20k', false)];
+        expect(slugs(visiblePlansFor(withInactive, { marketplace: 'zid' }))).toEqual(['starter', 'business', 'pro']);
+        expect(slugs(visiblePlansFor(withInactive, null))).toEqual(['basic', 'starter', 'business', 'pro']);
     });
 });

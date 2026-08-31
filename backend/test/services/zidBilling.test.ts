@@ -744,3 +744,30 @@ describe('reconcileZidBilling', () => {
         );
     });
 });
+
+describe('mapZidPlanToSlug — D-120 Starter joins the shelf', () => {
+    /**
+     * The 56-SAR «المبتدئ» plan is sold on Zid but its Partner-Dashboard id does
+     * not exist until the owner creates the portal plan, so the Arabic-name
+     * fallback is the ONLY thing standing between a paying Starter merchant and
+     * fail-loud `unknown_plan`. Pin it — and pin that unknown identifiers still
+     * resolve to null (fail-loud), never to a guessed tier.
+     */
+    it('resolves «المبتدئ» (and the English name) to starter by name fallback', async () => {
+        const { mapZidPlanToSlug } = await import('../../src/config/zidBilling');
+        expect(mapZidPlanToSlug({ name: 'المبتدئ' })).toBe('starter');
+        expect(mapZidPlanToSlug({ name: 'Starter' })).toBe('starter');
+    });
+
+    it('still resolves the existing ids and names', async () => {
+        const { mapZidPlanToSlug } = await import('../../src/config/zidBilling');
+        expect(mapZidPlanToSlug({ id: '3740' })).toBe('business');
+        expect(mapZidPlanToSlug({ id: 3741 })).toBe('pro');
+        expect(mapZidPlanToSlug({ name: 'الأعمال' })).toBe('business');
+    });
+
+    it('unknown identifiers stay fail-loud (null), never a guessed tier', async () => {
+        const { mapZidPlanToSlug } = await import('../../src/config/zidBilling');
+        expect(mapZidPlanToSlug({ id: '9999', name: 'خطة غامضة' })).toBeNull();
+    });
+});

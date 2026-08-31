@@ -96,7 +96,15 @@ export const PLANS: PlanSeed[] = [
         // account could ever try the channel we position as primary. Basic
         // stays WhatsApp-free as the reason to upgrade to Starter.
         whatsappEnabled: true,
-        ecommerceEnabled: false,
+        // E-commerce is included from Starter up (D-120, 2026-08-31). Starter is
+        // the entry rung on the Zid/Shopify shelves (Radad undercut our old
+        // 146-SAR entry ~2x; the trial also rides Starter, so the trial plan and
+        // the cheapest purchasable store plan now agree). The upgrade ladder to
+        // Business lives in the LIMITS (1 page / 1,500 replies), not this flag.
+        // Note the flag also gates vision/image extraction (routes/kb-upload.ts)
+        // — Starter gains it too, bounded by the per-plan daily cap. Basic stays
+        // store-free as the reason to upgrade.
+        ecommerceEnabled: true,
         prioritySupport: false,
         // 14-day free trial (D-118) — matches the Salla/Zid marketplace listings
         // (D-103) and industry (ManyChat), so all copy carries one number.

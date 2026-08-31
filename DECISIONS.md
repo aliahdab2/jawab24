@@ -3955,3 +3955,43 @@ heuristic beyond sole-page/sole-store — a wrong guess feeds one page another s
 **Pinned by** `frontend/src/__tests__/pages/zid-embedded.test.tsx` (launchpad renders in place,
 no in-frame app routing, CTA destinations, stored-credential remount, error-not-login) and
 `backend/test/integration/autoLinkSolePage.test.ts` (the strict auto-link rule, 6 cases).
+
+## D-120 · Starter ($15 / 56 SAR) is sold on the Zid and Shopify shelves; e-commerce is included from Starter up (2026-08-31, owner ruling)
+
+**Ruling.** Starter carries `ecommerceEnabled: true` and joins the Zid App Market (and, on the UI
+side, the already-declared Shopify shelf: `SHOPIFY_BILLABLE_PLAN_SLUGS` has listed `starter` since
+launch). Salla keeps its two-plan shelf (D-103) — untouched deliberately: its billing reconcile is
+live and armed, and mixing a Salla pricing change into the Zid resubmission stacks two risks.
+
+**Why.** (a) Shelf position: at a 146-SAR entry we were the most expensive newcomer on a shelf
+where Radad — the only live AI-reply competitor on Zid — sells at ~99 SAR base (113.85 displayed).
+A ~56 SAR ex-VAT entry (≈$15, D-095 parity rate) makes Jawab24 the cheapest AI-reply app on the
+shelf, WITH the Facebook/Instagram + public-comments surface no Zid competitor carries. We still
+never fight Radad on price-per-reply (0.037 vs 0.011 SAR — we lose); we fight on absolute entry
+cost, where we win. (b) Trial coherence: every Zid install trials Starter («المبتدئ تجريبي»), the
+store syncs during the trial (the entitlement gate was already unenforced by owner ruling), and the
+pricing page then offered no way to BUY Starter — the trial demoed a plan that did not exist for
+the merchant, with a 146-SAR cliff behind it. Trial, entitlement and purchase path now tell one
+story. (c) The upgrade ladder to Business lives in Starter's limits (1 page / 1,500 replies /
+50 products), not in withholding the store.
+
+**Consciously accepted.** `ecommerceEnabled` also gates vision/image extraction
+(`routes/kb-upload.ts`) — Starter gains it, bounded by the per-plan daily cap. The National Day
+1+1-year offer, if joined, should EXCLUDE Starter (a 560-SAR two-year commitment must not become
+the flagship deal); owner decides with the campaign reply.
+
+**Mechanics.** Seed flag in `config/plans.ts` (reconciled into the DB on every deploy);
+`ZidBillablePlanSlug` + «المبتدئ»/starter name mapping in `config/zidBilling.ts` — ⚠️ the Zid
+Partner-Dashboard plan id does not exist until the owner creates the 56-SAR plan on app 7367; add
+that id to `ZID_PLAN_ID_TO_SLUG` the moment it exists (the Arabic-name fallback carries the mapping
+until then). The pricing grid now filters marketplace plans by an explicit per-rail sellable-slug
+map (`MARKETPLACE_SELLABLE_SLUGS`, `frontend/src/lib/marketplaceBilling.ts`) mirroring the backend
+unions — the old `ecommerceEnabled` filter could not say "Zid sells Starter, Salla does not".
+
+**Rejected.** (a) A Zid-only hidden plan variant — a second $15 Starter is a fork of the ladder and
+a second place to drift. (b) Chasing Radad's per-reply quota economics — different buyer; a small
+merchant buys a monthly price, not a 10,000-reply block. (c) Flipping Salla in the same breath —
+see above.
+
+**Pinned by** `frontend/src/lib/__tests__/marketplaceBilling.test.ts` (per-shelf visibility:
+zid/shopify list Starter, salla does not, no-marketplace grid unchanged).
