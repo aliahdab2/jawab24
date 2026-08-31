@@ -1,5 +1,19 @@
 # Play Store listing assets (Gradle Play Publisher)
 
+> 📍 This file lives at `frontend/android/PLAY_LISTING_ASSETS.md`, deliberately OUTSIDE
+> `app/src/main/play/`. It was briefly placed at `play/listings/README.md` and that broke
+> the release build outright:
+>
+> ```
+> > Task :app:generateReleasePlayResources FAILED
+> java.lang.IllegalStateException: Files are not allowed under the listings directory: README.md
+> ```
+>
+> GPP's `GenerateResources$Validator` treats every entry under `listings/` as a listing
+> asset and throws on anything it does not recognise. **Do not put documentation — or any
+> other stray file — anywhere inside `app/src/main/play/`.** Only the locale directories
+> and the asset files GPP expects belong there.
+
 > ⚠️ **These files do NOT reach Play automatically today.** `scripts/release-android.sh`
 > runs `./gradlew publishReleaseBundle`, which in GPP 3.13 uploads the **App Bundle only**.
 > Listing text and graphics are published by `publishReleaseListing` (or `publishRelease`,
