@@ -11,6 +11,18 @@ export interface BlogPost extends ContentDates {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: 'clinic-auto-reply-guide',
+    date: '2026-08-31',
+    category: 'guides',
+    readingTime: 6,
+  },
+  {
+    slug: 'training-center-auto-reply-guide',
+    date: '2026-08-31',
+    category: 'guides',
+    readingTime: 6,
+  },
+  {
     slug: 'jawab24-data-security',
     date: '2026-08-08',
     category: 'guides',
