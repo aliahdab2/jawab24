@@ -78,7 +78,13 @@ export default function CompareHubPage({ competitors }: CompareHubProps) {
 
           {/* Hero */}
           <h1 className="text-4xl font-bold mb-3">{t('hubTitle')}</h1>
-          <p className="text-lg text-foreground/70 leading-relaxed mb-10">{t('hubSubtitle')}</p>
+          <p className="text-lg text-foreground/70 leading-relaxed mb-6">{t('hubSubtitle')}</p>
+
+          {/* Self-contained Jawab24 summary — the extractable block AI engines lift,
+              so the publisher reads as a candidate and not only as the author (C2/GEO) */}
+          <p className="mb-10 rounded-lg border-s-4 border-brand-400 bg-muted/40 p-5 leading-relaxed text-foreground/90">
+            {t('hubJawabSummary')}
+          </p>
 
           {/* Comparison cards */}
           <section className="mb-12" aria-labelledby="compare-cards-heading">

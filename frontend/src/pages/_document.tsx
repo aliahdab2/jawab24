@@ -1,4 +1,5 @@
 import Document, { Html, Head, Main, NextScript, type DocumentContext } from 'next/document';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 interface DocProps {
   locale: string;
@@ -138,7 +139,10 @@ export default function MyDocument({ locale }: DocProps) {
               "sameAs": [
                 "https://www.facebook.com/jawab24app",
                 "https://www.instagram.com/jawab24app",
-                "https://x.com/jawab24"
+                "https://x.com/jawab24",
+                // The Play listing (4.8★) is our strongest external trust asset —
+                // Google already attaches it to blog results in the SERP; claim it.
+                BRAND_ASSETS.stores.googlePlay
               ],
               "foundingDate": "2024",
               "numberOfEmployees": {
@@ -212,7 +216,8 @@ export default function MyDocument({ locale }: DocProps) {
               // the markup was unsupported and liable to be dropped or penalised.
               // Re-add only when sourced from a genuine review corpus (Play Store / G2 /
               // Capterra) that is also displayed on the page.
-              "description": "AI-powered auto-reply platform for WhatsApp Business numbers and Facebook and Instagram business pages. Integrates with Shopify, Salla, and Zid e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
+              "description": "AI-powered auto-reply platform for WhatsApp Business numbers and Facebook and Instagram business pages. No online store or website required — connects to the page itself; optional integrations with Shopify, Salla, and Zid e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7, and turn conversations into leads.",
+              "installUrl": BRAND_ASSETS.stores.googlePlay,
               "featureList": [
                 "AI-powered automatic replies — رد تلقائي ذكي بالذكاء الاصطناعي",
                 "WhatsApp Business integration — تكامل مع واتساب للأعمال",
@@ -225,7 +230,9 @@ export default function MyDocument({ locale }: DocProps) {
                 "24/7 automated responses — رد تلقائي على مدار الساعة",
                 "Per-post keyword replies (Post Replies) — رد فوري على البوست بكلمات مفتاحية",
                 "Voice note and photo understanding — فهم الرسائل الصوتية والصور",
-                "Business Info knowledge with RAG retrieval — معلومات نشاطك التجاري مع استرجاع ذكي"
+                "Business Info knowledge with RAG retrieval — معلومات نشاطك التجاري مع استرجاع ذكي",
+                "No online store required — يعمل بدون متجر إلكتروني، صفحة فيسبوك تكفي",
+                "Lead capture from conversations — استخراج العملاء المحتملين من المحادثات"
               ],
               "screenshot": "https://jawab24.com/brand/og-social.png",
               "softwareVersion": "1.0",

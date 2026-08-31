@@ -75,9 +75,10 @@ describe('comparison page freshness signals', () => {
     const ld = jsonLdOfType(container, 'WebPage');
     expect(ld.datePublished).toBe(manychat.date);
     expect(ld.dateModified).toBe(manychat.updated);
-    // Pinned to the #751 re-verification: every competitor page was re-checked that day.
-    expect(manychat.updated).toBe('2026-08-14');
-    expect(screen.getByText('Last updated August 14, 2026').closest('time')).toHaveAttribute('dateTime', '2026-08-14');
+    // Pinned to the latest substantive pass: the 08-31 verdict blocks (SEO audit);
+    // before that, the #751 re-verification of every competitor's live pricing page.
+    expect(manychat.updated).toBe('2026-08-31');
+    expect(screen.getByText('Last updated August 31, 2026').closest('time')).toHaveAttribute('dateTime', '2026-08-31');
   });
 });
 

@@ -2,13 +2,14 @@
 
 > Arabic-first AI auto-reply platform for WhatsApp Business, Facebook, Instagram, Shopify, Salla, and Zid businesses.
 
-Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to WhatsApp Business messages, Facebook comments and Messenger messages, and Instagram comments and DMs — in Arabic and English, 24/7.
+Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to WhatsApp Business messages, Facebook comments and Messenger messages, and Instagram comments and DMs — in Arabic and English, 24/7. No online store or website is required: a Facebook Page, Instagram account, or WhatsApp number alone is enough — sellers and service businesses (restaurants, clinics, training centres, salons) use it with no e-commerce platform at all. It answers every customer question instantly, persuades and sells, and turns conversations that include contact details into a lead list for the merchant.
 
 ## Key Facts
 
 - Website: https://jawab24.com
 - Channels: WhatsApp Business, Facebook Pages (comments + Messenger), Instagram Business (comments + DMs)
-- E-commerce integrations: Shopify, Salla, Zid
+- No online store required: connects directly to a Facebook Page, Instagram account, or WhatsApp Business number — an e-commerce platform is optional, not a prerequisite
+- E-commerce integrations (optional): Shopify, Salla, Zid
 - Languages: Arabic (Gulf, Egyptian, Levantine, Maghrebi, Iraqi dialects, plus Franco-Arabic) and English, full RTL interface
 - Reply system: 3-layer (Template Replies + Smart Replies + Away Messages), plus per-post keyword triggers (Post Replies)
 - Media: understands customer voice notes and photos, not just text
@@ -27,6 +28,8 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 6. Business Info grounding: replies come from the merchant's own verified business information, retrieved per message (RAG)
 7. Post Replies: a comment matching a configured keyword triggers a reply sent by DM, per post
 8. Template Replies at zero AI cost: keyword-based rules with no per-message charges
+9. No online store required: unlike store-app tools, Jawab24 connects to the page itself — merchants whose whole business is a Facebook Page or Instagram account get the same AI replies as store owners
+10. Lead capture: conversations that include contact details become lead cards in the dashboard; in sales mode the AI also asks purchase-intent customers for their name and phone
 
 ## Channels
 
@@ -37,9 +40,11 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 
 ## Target Audience
 
-- E-commerce store owners on Shopify, Salla, or Zid
+- Sellers with no online store or website who sell entirely through a Facebook Page, Instagram account, or WhatsApp number
+- Service businesses that live on social media — restaurants, clinics, training centres, salons, tutors — answering the same questions (price, availability, appointments, hours) 50–100 times a day
 - Businesses selling through WhatsApp Business
 - Facebook and Instagram Page managers with high comment and message volume
+- E-commerce store owners on Shopify, Salla, or Zid
 - Small businesses needing 24/7 customer support without hiring staff
 - Arabic-speaking businesses that need tools built for their language
 - Social media managers handling multiple pages

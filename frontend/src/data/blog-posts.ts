@@ -67,8 +67,9 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'best-auto-reply-tools-2026',
     date: '2026-03-18',
-    // Every competitor re-verified against its live pricing page (#751).
-    updated: '2026-08-14',
+    // 08-14: every competitor re-verified against its live pricing page (#751).
+    // 08-31: verdict-first block + WhatsApp in title/description (SEO audit).
+    updated: '2026-08-31',
     category: 'comparisons',
     readingTime: 10,
   },
