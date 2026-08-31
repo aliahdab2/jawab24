@@ -129,6 +129,10 @@ export { stripMarkdownLinks } from './markdownLinks';
 export { renderReplyForChannel } from './replyFormatting';
 export type { ReplyRenderTarget } from './replyFormatting';
 
+// --- Bidi repair for numbers written inside RTL text (see bidi.ts) ---
+// Callers that MATCH against a delivered reply must normalise with stripBidiMarks first.
+export { stripBidiMarks } from './bidi';
+
 // --- SSE Event Types ---
 export * from './sse-events';
 

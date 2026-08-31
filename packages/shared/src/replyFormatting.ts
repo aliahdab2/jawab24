@@ -21,6 +21,7 @@
  * only the paired double forms are treated as markup.
  */
 import { stripMarkdownLinks } from './markdownLinks';
+import { isolateNumericTokens } from './bidi';
 
 export type ReplyRenderTarget = 'plain' | 'whatsapp';
 
@@ -46,5 +47,9 @@ export function renderReplyForChannel(text: string, target: ReplyRenderTarget): 
             .replace(ITALIC_RE, '$1')
             .replace(STRIKE_RE, '$1');
     }
-    return out;
+    // Last, so it measures the text as sent: no channel renders markdown, but
+    // every one of them hands the result to a bidi layout engine, and an Arabic
+    // reply quoting `+963…`, `75$` or `20%` is displayed with the sign on the
+    // wrong side unless the token is isolated. See `bidi.ts` for the measurement.
+    return isolateNumericTokens(out);
 }
