@@ -93,9 +93,14 @@ export function visiblePlansFor(
     plans: Plan[],
     marketplaceBilling: { marketplace: MarketplaceSlug } | null,
 ): Plan[] {
+    // `MarketplaceSlug` is a compile-time union over RUNTIME API data: a rail
+    // this bundle does not know yet (backend deployed ahead, stale SSG page)
+    // must degrade to the old flag filter, not throw and take the pricing page
+    // down with it.
     return plans.filter((p) =>
         p.isActive !== false
-        && (!marketplaceBilling || MARKETPLACE_SELLABLE_SLUGS[marketplaceBilling.marketplace].has(p.slug)),
+        && (!marketplaceBilling
+            || (MARKETPLACE_SELLABLE_SLUGS[marketplaceBilling.marketplace]?.has(p.slug) ?? p.ecommerceEnabled)),
     );
 }
 

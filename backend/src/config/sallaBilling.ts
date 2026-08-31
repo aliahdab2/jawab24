@@ -14,9 +14,10 @@ import { config } from './index';
  * a delisting risk, and unpublishing a live Salla app is not self-serve (it
  * needs a booked meeting with Salla), so the downside is not recoverable by us.
  *
- * D-103 (2026-08-26): the listing carries exactly the two `ecommerceEnabled`
- * plans — «الأعمال» (business) 146 SAR and «الاحترافي» (pro) 296 SAR ex-VAT,
- * monthly, 14-day trial — identical to Zid (D-095 numbers).
+ * D-103 (2026-08-26): the listing carries exactly two plans — «الأعمال»
+ * (business) 146 SAR and «الاحترافي» (pro) 296 SAR ex-VAT, monthly, 14-day
+ * trial — matching Zid's original shelf (D-095 numbers). D-120 (2026-08-31)
+ * later put Starter on the Zid/Shopify shelves and left this one alone.
  *
  * Ruling: like Shopify's D-I and Zid's D-070, an identifier that resolves to
  * nothing must FAIL LOUD — no activation, Sentry. Activating a paying merchant
@@ -39,10 +40,12 @@ import { config } from './index';
  */
 
 /**
- * Plan slugs sellable through the Salla App Store (D-103, same set as Zid's
- * D-071). Starter/basic are deliberately absent: `ecommerceEnabled=false`, so
- * an app whose entire value on Salla is the store integration would be sold as
- * a plan that cannot use it.
+ * Plan slugs sellable through the Salla App Store (D-103). Starter/basic are
+ * deliberately absent — and stayed absent when D-120 put Starter on the Zid and
+ * Shopify shelves: Salla's billing reconcile is live and armed, and reshaping
+ * its portal listing is a separate decision (see D-120's «Rejected» section),
+ * not a flag consequence. Widening this shelf means a new portal plan, a new
+ * price key below, and an owner ruling.
  */
 export type SallaBillablePlanSlug = 'business' | 'pro';
 

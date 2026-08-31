@@ -3978,7 +3978,10 @@ story. (c) The upgrade ladder to Business lives in Starter's limits (1 page / 1,
 **Consciously accepted.** `ecommerceEnabled` also gates vision/image extraction
 (`routes/kb-upload.ts`) — Starter gains it, bounded by the per-plan daily cap. The National Day
 1+1-year offer, if joined, should EXCLUDE Starter (a 560-SAR two-year commitment must not become
-the flagship deal); owner decides with the campaign reply.
+the flagship deal); owner decides with the campaign reply. Of the three ladder rungs, «50 products»
+is display-only today: `plans.maxProducts` is deliberately not enforced at sync
+(`replaceProductsAndRebuildSummary` applies only the abuse-level `PRODUCT_SAFETY_CAP`) — the
+enforced ladder is 1 page / 1,500 replies.
 
 **Mechanics.** Seed flag in `config/plans.ts` (reconciled into the DB on every deploy);
 `ZidBillablePlanSlug` + «المبتدئ»/starter name mapping in `config/zidBilling.ts` — ⚠️ the Zid

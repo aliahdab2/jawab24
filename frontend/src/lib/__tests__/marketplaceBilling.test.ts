@@ -138,4 +138,12 @@ describe('visiblePlansFor — each marketplace lists only what its shelf sells',
         expect(slugs(visiblePlansFor(withInactive, { marketplace: 'zid' }))).toEqual(['starter', 'business', 'pro']);
         expect(slugs(visiblePlansFor(withInactive, null))).toEqual(['basic', 'starter', 'business', 'pro']);
     });
+
+    it('a rail this bundle does not know degrades to the ecommerce flag — never throws', () => {
+        // `MarketplaceSlug` is a compile-time union over runtime API data: a
+        // backend deployed ahead of a stale SSG page can hand the bundle a rail
+        // it has no entry for. That must not crash the pricing page.
+        const unknownRail = { marketplace: 'noon' as MarketplaceSlug };
+        expect(slugs(visiblePlansFor(grid, unknownRail))).toEqual(['starter', 'business', 'pro']);
+    });
 });

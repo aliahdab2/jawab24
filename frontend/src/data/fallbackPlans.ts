@@ -54,10 +54,11 @@ export const FALLBACK_PLANS: Plan[] = [
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
-        // WhatsApp included from Starter up, 14-day trial (D-118). Kept in sync
-        // with backend/src/config/plans.ts — this file is display-only.
+        // WhatsApp included from Starter up, 14-day trial (D-118). E-commerce
+        // included from Starter up too (D-120). Kept in sync with
+        // backend/src/config/plans.ts — this file is display-only.
         whatsappEnabled: true,
-        ecommerceEnabled: false,
+        ecommerceEnabled: true,
         prioritySupport: false,
         trialDays: 14,
         regionalPricing: {},
