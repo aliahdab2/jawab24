@@ -22,6 +22,8 @@ import enFeedback      from './en/feedback.json';
 import { flagReasonEn as enFlagReason } from '@jawab24/shared';
 import enHelp          from './en/help.json';
 import enInstagram     from './en/instagram.json';
+import enNoStore       from './en/noStore.json';
+import enWhatsapp      from './en/whatsapp.json';
 import enIntegrations  from './en/integrations.json';
 import enKb            from './en/kb.json';
 import enLeads         from './en/leads.json';
@@ -80,6 +82,8 @@ import arFeedback      from './ar/feedback.json';
 import { flagReasonAr as arFlagReason } from '@jawab24/shared';
 import arHelp          from './ar/help.json';
 import arInstagram     from './ar/instagram.json';
+import arNoStore       from './ar/noStore.json';
+import arWhatsapp      from './ar/whatsapp.json';
 import arIntegrations  from './ar/integrations.json';
 import arKb            from './ar/kb.json';
 import arLeads         from './ar/leads.json';
@@ -141,6 +145,8 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/flagReason': enFlagReason, 'ar/flagReason': arFlagReason,
   'en/help': enHelp,             'ar/help': arHelp,
   'en/instagram': enInstagram,   'ar/instagram': arInstagram,
+  'en/noStore': enNoStore,       'ar/noStore': arNoStore,
+  'en/whatsapp': enWhatsapp,     'ar/whatsapp': arWhatsapp,
   'en/integrations': enIntegrations, 'ar/integrations': arIntegrations,
   'en/kb': enKb,                 'ar/kb': arKb,
   'en/leads': enLeads,           'ar/leads': arLeads,

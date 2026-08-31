@@ -1,8 +1,8 @@
 ---
-seoTitle: "How to Set Up Facebook Auto Reply for Your Business Page in 2026"
-seoDescription: "Step-by-step guide to setting up automatic replies on your Facebook business page. Compare Facebook's built-in tools with AI-powered alternatives like Jawab24."
-seoKeywords: "auto reply facebook, facebook auto reply setup, facebook page auto reply, how to auto reply on facebook"
-title: "How to Set Up Facebook Auto Reply for Your Business Page in 2026"
+seoTitle: "Set Up Auto Reply on Facebook, Instagram & WhatsApp in 2026"
+seoDescription: "Step-by-step guide to setting up automatic replies on your Facebook business page — then on Instagram and WhatsApp from the same dashboard. Compares Facebook's built-in tools with AI-powered alternatives like Jawab24."
+seoKeywords: "auto reply facebook, facebook auto reply setup, facebook page auto reply, how to auto reply on facebook, whatsapp auto reply setup, instagram auto reply setup"
+title: "How to Set Up Auto Reply on Facebook, Instagram & WhatsApp in 2026"
 excerpt: "Customers expect replies within minutes. Learn how to set up auto-replies on Facebook — from the built-in tools to AI-powered solutions that understand your customers' language."
 ---
 
@@ -13,6 +13,10 @@ Studies show that **79% of customers** expect a response within 15 minutes on so
 Consider this scenario: a customer sees your product post at 11 PM and comments "How much?" If you reply the next morning, they've likely already bought from a competitor who responded instantly.
 
 Auto-reply solves this by responding immediately, 24/7, whether you're asleep, on vacation, or simply busy with other tasks. But not all auto-reply solutions are created equal.
+
+## The Extra Step: Turn On WhatsApp and Instagram Auto Reply Too
+
+The same setup extends to the other two channels from the same dashboard: your Instagram Business account links through your Facebook Page in one step, and your WhatsApp Business number connects through Meta's embedded signup in minutes with no technical setup — and the same Business Info answers on all three channels, including WhatsApp voice notes, which are transcribed and answered. Your number keeps working on your phone as usual. Details on the [WhatsApp auto reply page](/en/whatsapp).
 
 ## Facebook's Built-in Auto Reply vs Third-Party Tools
 

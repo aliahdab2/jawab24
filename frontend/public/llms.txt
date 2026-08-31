@@ -2,13 +2,14 @@
 
 > Arabic-first AI auto-reply platform for WhatsApp Business, Facebook, Instagram, Shopify, Salla, and Zid businesses.
 
-Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to WhatsApp Business messages, Facebook comments and Messenger messages, and Instagram comments and DMs — in Arabic and English, 24/7.
+Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to WhatsApp Business messages, Facebook comments and Messenger messages, and Instagram comments and DMs — in Arabic and English, 24/7. No online store or website is required: a Facebook Page, Instagram account, or WhatsApp number alone is enough — sellers and service businesses (restaurants, clinics, training centres, salons) use it with no e-commerce platform at all. It answers every customer question instantly, persuades and sells, and turns conversations that include contact details into a lead list for the merchant.
 
 ## Key Facts
 
 - Website: https://jawab24.com
 - Channels: WhatsApp Business, Facebook Pages (comments + Messenger), Instagram Business (comments + DMs)
-- E-commerce integrations: Shopify, Salla, Zid
+- No online store required: connects directly to a Facebook Page, Instagram account, or WhatsApp Business number — an e-commerce platform is optional, not a prerequisite
+- E-commerce integrations (optional): Shopify, Salla, Zid
 - Languages: Arabic (Gulf, Egyptian, Levantine, Maghrebi, Iraqi dialects, plus Franco-Arabic) and English, full RTL interface
 - Reply system: 3-layer (Template Replies + Smart Replies + Away Messages), plus per-post keyword triggers (Post Replies)
 - Media: understands customer voice notes and photos, not just text
@@ -27,6 +28,8 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 6. Business Info grounding: replies come from the merchant's own verified business information, retrieved per message (RAG)
 7. Post Replies: a comment matching a configured keyword triggers a reply sent by DM, per post
 8. Template Replies at zero AI cost: keyword-based rules with no per-message charges
+9. No online store required: unlike store-app tools, Jawab24 connects to the page itself — merchants whose whole business is a Facebook Page or Instagram account get the same AI replies as store owners
+10. Lead capture: conversations that include contact details become lead cards in the dashboard; in sales mode the AI also asks purchase-intent customers for their name and phone
 
 ## Channels
 
@@ -37,9 +40,11 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 
 ## Target Audience
 
-- E-commerce store owners on Shopify, Salla, or Zid
+- Sellers with no online store or website who sell entirely through a Facebook Page, Instagram account, or WhatsApp number
+- Service businesses that live on social media — restaurants, clinics, training centres, salons, tutors — answering the same questions (price, availability, appointments, hours) 50–100 times a day
 - Businesses selling through WhatsApp Business
 - Facebook and Instagram Page managers with high comment and message volume
+- E-commerce store owners on Shopify, Salla, or Zid
 - Small businesses needing 24/7 customer support without hiring staff
 - Arabic-speaking businesses that need tools built for their language
 - Social media managers handling multiple pages
@@ -51,22 +56,22 @@ Jawab24 publishes guides, comparisons, case studies, and data-driven articles ab
 - Blog index: https://jawab24.com/blog
 - Is Your Data Safe with Jawab24? Security & Privacy, Explained: https://jawab24.com/blog/jawab24-data-security
 - WhatsApp Is Now Live on Jawab24: https://jawab24.com/blog/whatsapp-auto-reply-jawab24
-- How to Set Up Facebook Auto Reply: https://jawab24.com/blog/auto-reply-facebook-setup-guide
+- How to Set Up Auto Reply on Facebook, Instagram & WhatsApp: https://jawab24.com/blog/auto-reply-facebook-setup-guide
 - Auto Reply for Clinics & Beauty Centers (no online store needed): https://jawab24.com/blog/clinic-auto-reply-guide
 - Auto Reply for Training Centers (with real institute numbers): https://jawab24.com/blog/training-center-auto-reply-guide
 - Instagram Auto Reply Guide: https://jawab24.com/blog/instagram-auto-reply-guide
 - Best Auto Reply Tools 2026: https://jawab24.com/blog/best-auto-reply-tools-2026
 - Jawab24 Setup Tutorial: https://jawab24.com/blog/jawab24-setup-tutorial
 - AI Sales Agent for Facebook & Instagram: https://jawab24.com/blog/turn-comments-into-sales
-- Connect Salla Store to Facebook Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
-- Connect Zid Store to Facebook Auto Reply: https://jawab24.com/blog/zid-store-facebook-auto-reply
-- Shopify Facebook Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
+- Connect Salla Store to Facebook & WhatsApp Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
+- Connect Zid Store to Facebook & WhatsApp Auto Reply: https://jawab24.com/blog/zid-store-facebook-auto-reply
+- Shopify with Facebook & WhatsApp Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
 - When a Customer Sends a Photo Instead of Typing: https://jawab24.com/blog/ai-auto-reply-customer-photos
 - Reduce Facebook Response Time: https://jawab24.com/blog/reduce-facebook-response-time
 - Salla vs Shopify for Arabic Sellers: https://jawab24.com/blog/salla-vs-shopify-arabic-sellers
 - AI Auto Reply for Angry Customers: https://jawab24.com/blog/ai-auto-reply-angry-customers
 - Common Facebook Auto Reply Mistakes: https://jawab24.com/blog/common-facebook-auto-reply-mistakes
-- Case Study — 90 Days at Al-Fariq Al-Dimashqi: https://jawab24.com/blog/case-study-damascus-training-institute
+- Case Study: A Training Institute with No Online Store — 44,000 Replies, 472 Leads: https://jawab24.com/blog/case-study-damascus-training-institute
 - 40+ Social Commerce & AI Customer Service Statistics 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
 - 30+ Instagram & Facebook DM Selling Statistics 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
 
@@ -93,6 +98,8 @@ Native e-commerce integrations that sync product catalogs and verify prices so r
 
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
+- Auto-reply with no online store (restaurants, clinics, institutes, salons): https://jawab24.com/no-store
+- WhatsApp Business auto-reply: https://jawab24.com/whatsapp
 - Instagram auto-reply: https://jawab24.com/instagram
 - Pricing: https://jawab24.com/pricing
 - Blog: https://jawab24.com/blog

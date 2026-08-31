@@ -31,6 +31,8 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'case-study-damascus-training-institute',
     date: '2026-07-10',
+    // Reframed as the flagship no-store proof (2026-08-31 SEO audit, Track A3).
+    updated: '2026-08-31',
     category: 'caseStudies',
     readingTime: 6,
   },
@@ -63,42 +65,49 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     slug: 'auto-reply-facebook-setup-guide',
     date: '2026-03-18',
-    // Comment modes clarified (#417).
-    updated: '2026-07-08',
+    // 07-08: comment modes clarified (#417). 08-31: WhatsApp+Instagram retrofit (SEO audit).
+    updated: '2026-08-31',
     category: 'guides',
     readingTime: 8,
   },
   {
     slug: 'instagram-auto-reply-guide',
     date: '2026-03-18',
-    // Voice-transcription and Instagram content added.
-    updated: '2026-04-03',
+    // 04-03: voice-transcription content. 08-31: three-channel retrofit (SEO audit).
+    updated: '2026-08-31',
     category: 'guides',
     readingTime: 8,
   },
   {
     slug: 'best-auto-reply-tools-2026',
     date: '2026-03-18',
-    // Every competitor re-verified against its live pricing page (#751).
-    updated: '2026-08-14',
+    // 08-14: every competitor re-verified against its live pricing page (#751).
+    // 08-31: verdict-first block + WhatsApp in title/description (SEO audit).
+    updated: '2026-08-31',
     category: 'comparisons',
     readingTime: 10,
   },
   {
     slug: 'salla-store-facebook-auto-reply',
     date: '2026-03-18',
+    // WhatsApp retrofit — title/description/body name all three channels (2026-08-31 SEO audit).
+    updated: '2026-08-31',
     category: 'integrations',
     readingTime: 7,
   },
   {
     slug: 'zid-store-facebook-auto-reply',
     date: '2026-03-18',
+    // WhatsApp retrofit — title/description/body name all three channels (2026-08-31 SEO audit).
+    updated: '2026-08-31',
     category: 'integrations',
     readingTime: 7,
   },
   {
     slug: 'shopify-facebook-auto-reply-arabic',
     date: '2026-03-18',
+    // WhatsApp retrofit — title/description/body name all three channels (2026-08-31 SEO audit).
+    updated: '2026-08-31',
     category: 'integrations',
     readingTime: 7,
   },

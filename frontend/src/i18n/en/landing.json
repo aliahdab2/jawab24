@@ -6,12 +6,12 @@
     "start": "Start"
   },
   "seoTitle": "Jawab24 — Answers Customers on WhatsApp, Facebook & Instagram",
-  "seoDescription": "Smarter than a chatbot: an AI agent answering WhatsApp, Facebook & Instagram messages and comments instantly, in your customers’ language. Free trial, no code.",
+  "seoDescription": "Smarter than a chatbot: an AI agent answering WhatsApp, Facebook & Instagram messages and comments instantly, in your customers’ language — no online store needed. Free trial, no code.",
   "hero": {
     "badge": "Answers From Your Own Data",
     "title1": "Jawab24 — Turn Your Facebook Page Into a",
-    "title2": "24/7 AI Sales Machine",
-    "description": "Jawab24 answers your customers’ questions on WhatsApp, Facebook and Instagram — about your products, prices and policies, from your own data and in their language. Built for Shopify, Salla and Zid sellers.",
+    "title2": "24/7 AI Employee That Answers & Sells",
+    "description": "Jawab24 answers your customers’ questions on WhatsApp, Facebook and Instagram — about your products, prices and policies, from your own data and in their language — and turns conversations into leads. No online store needed: your page is enough, with optional Shopify, Salla and Zid integration.",
     "cta1": "Start Your Free Trial",
     "cta2": "View Plans & Pricing",
     "chatQuery": "What is the product price? 🤔",
@@ -132,7 +132,9 @@
     "q4": "Can I upgrade or change my plan later?",
     "a4": "Absolutely! You can upgrade or change your plan anytime from the dashboard. Changes apply immediately.",
     "q5": "Does Jawab24 integrate with Shopify, Salla, and Zid?",
-    "a5": "Yes! Connect your Shopify, Salla, or Zid store and Jawab24 will understand your products so it can answer customer questions accurately based on what you actually sell."
+    "a5": "Yes! Connect your Shopify, Salla, or Zid store and Jawab24 will understand your products so it can answer customer questions accurately based on what you actually sell.",
+    "q6": "Do I need an online store to use Jawab24?",
+    "a6": "No. Jawab24 connects directly to your Facebook Page, Instagram account, or WhatsApp Business number — no online store or website required. Restaurants, clinics, training centres, and salons use it to answer questions like “How much is it?”, “Is it available?”, and “When are you open?” around the clock. If you do have a Salla, Zid, or Shopify store, the integration is optional."
   },
   "latestFromBlog": {
     "title": "Latest from the Blog",
@@ -159,6 +161,8 @@
     "trust": "Trust & Reliability",
     "whatIsJawab24": "What is Jawab24?",
     "instagramPage": "Instagram auto-reply",
+    "whatsappPage": "WhatsApp Business auto-reply",
+    "noStorePage": "Auto-reply with no online store",
     "blog": "Blog",
     "compareAll": "Compare all tools",
     "compareManyChat": "Jawab24 vs ManyChat",

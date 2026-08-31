@@ -44,8 +44,10 @@ const STATIC_PAGES = [
   { path: '/what-is-jawab24', label: 'What is Jawab24', lastmod: '2026-03-08' },
   { path: '/trust', label: 'Trust & Reliability', lastmod: '2026-08-19' },
   { path: '/instagram', label: 'Instagram integration', lastmod: '2026-08-16' },
+  { path: '/no-store', label: 'No-store segment page', lastmod: '2026-08-31' },
+  { path: '/whatsapp', label: 'WhatsApp channel page', lastmod: '2026-08-31' },
   { path: '/data-deletion', label: 'Data Deletion', lastmod: '2026-05-08' },
-  { path: '/compare', label: 'Compare hub', lastmod: '2026-05-31' },
+  { path: '/compare', label: 'Compare hub', lastmod: '2026-08-31' },
 ];
 
 // Sections whose URLs and dates come from a `src/data/*.ts` module. Order is

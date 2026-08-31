@@ -20,6 +20,8 @@ export const PAGE_NAMESPACES = {
   index:              ['landing'],
   whatIsJawab24:      ['about'],
   instagram:          ['instagram'],
+  noStore:            ['noStore'],
+  whatsapp:           ['whatsapp'],
   compare:            ['compare'],
   blog:               ['blog', 'landing'],
   ecommerce:          ['ecommerce'],
