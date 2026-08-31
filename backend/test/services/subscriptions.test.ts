@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { subscriptionsService, startOfUtcDay } from '../../src/services/subscriptions';
+import { config } from '../../src/config';
 
 // Mock plansService
 vi.mock('../../src/services/plans', () => ({
@@ -1009,6 +1010,135 @@ describe('Subscriptions Service', () => {
             expect(result.allowed).toBe(true);
             expect(result.used).toBe(30);
             expect(result.remaining).toBe(30);
+        });
+    });
+
+    // Regression: the shared demo account went AI-dead in prod from 2026-08-17
+    // because its seeded trial expired and the demo exemption lived only in the
+    // /limits/ai ROUTE, not in canUseAiReplies (which test-reply + the generator
+    // call). The fix moved the exemption INTO the choke point. These pin both
+    // the exemption placement and the predicate.
+    describe('canUseAiReplies - demo exemption', () => {
+        beforeEach(() => {
+            vi.spyOn(subscriptionsService, 'getTopupBalance').mockResolvedValue(0);
+        });
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        function mockPastDueSubscription(db: any): void {
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{
+                                    subscription: {
+                                        id: 'sub_demo', userId: 'demo_user', planId: 'plan_1',
+                                        status: 'past_due',
+                                        trialEndsAt: new Date(Date.now() - 86_400_000),
+                                        currentPeriodStart: new Date(Date.now() - 30 * 86_400_000),
+                                        currentPeriodEnd: new Date(Date.now() - 86_400_000),
+                                        canceledAt: null, cancelReason: null, paymentMethod: null,
+                                        createdAt: new Date(), updatedAt: new Date(),
+                                    },
+                                    plan: {
+                                        id: 'plan_1', name: 'Starter', slug: 'starter', price: 0,
+                                        maxPages: 1, maxAiRepliesPerMonth: 1000, trialDays: 30,
+                                        facebookEnabled: true, instagramEnabled: true,
+                                        whatsappEnabled: false, prioritySupport: false,
+                                    },
+                                }]),
+                            }),
+                        }),
+                    }),
+                }),
+            } as any);
+        }
+
+        it('exempts a demo user whose trial has expired (past_due)', async () => {
+            const { db } = await import('../../src/db');
+            mockPastDueSubscription(db);
+            vi.spyOn(subscriptionsService, 'isDemoUser').mockResolvedValue(true);
+
+            const result = await subscriptionsService.canUseAiReplies('demo_user');
+            expect(result.allowed).toBe(true);
+        });
+
+        it('exempts a demo user with no subscription row', async () => {
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }),
+                        }),
+                    }),
+                }),
+            } as any);
+            vi.spyOn(subscriptionsService, 'isDemoUser').mockResolvedValue(true);
+
+            const result = await subscriptionsService.canUseAiReplies('demo_user');
+            expect(result.allowed).toBe(true);
+        });
+
+        it('still DENIES a non-demo user whose trial has expired', async () => {
+            const { db } = await import('../../src/db');
+            mockPastDueSubscription(db);
+            vi.spyOn(subscriptionsService, 'isDemoUser').mockResolvedValue(false);
+
+            const result = await subscriptionsService.canUseAiReplies('real_user');
+            expect(result.allowed).toBe(false);
+        });
+
+        it('isDemoUser is true for a demo_ facebook id when demo mode is on', async () => {
+            const { db } = await import('../../src/db');
+            const original = config.demo.enabled;
+            config.demo.enabled = true;
+            try {
+                vi.mocked(db.select).mockReturnValue({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{ facebookId: 'demo_user_jawab24' }]),
+                        }),
+                    }),
+                } as any);
+                await expect(subscriptionsService.isDemoUser('demo_user')).resolves.toBe(true);
+            } finally {
+                config.demo.enabled = original;
+            }
+        });
+
+        it('isDemoUser is false for a real (numeric) facebook id', async () => {
+            const { db } = await import('../../src/db');
+            const original = config.demo.enabled;
+            config.demo.enabled = true;
+            try {
+                vi.mocked(db.select).mockReturnValue({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{ facebookId: '10223344556677' }]),
+                        }),
+                    }),
+                } as any);
+                await expect(subscriptionsService.isDemoUser('real_user')).resolves.toBe(false);
+            } finally {
+                config.demo.enabled = original;
+            }
+        });
+
+        it('isDemoUser reads no DB row when demo mode is off', async () => {
+            const { db } = await import('../../src/db');
+            const original = config.demo.enabled;
+            config.demo.enabled = false;
+            try {
+                const selectSpy = vi.mocked(db.select);
+                selectSpy.mockClear();
+                await expect(subscriptionsService.isDemoUser('anyone')).resolves.toBe(false);
+                expect(selectSpy).not.toHaveBeenCalled();
+            } finally {
+                config.demo.enabled = original;
+            }
         });
     });
 
