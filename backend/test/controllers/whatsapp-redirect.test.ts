@@ -68,7 +68,7 @@ vi.mock('../../src/services/whatsapp', () => ({
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({
-    // checkSubscriptionStatus backs the connect status gate (checkWhatsAppSubscriptionStatus);
+    // checkSubscriptionStatus backs the status leg of checkWhatsAppConnectEntitlement;
     // defaulted to allowed in beforeEach, flipped by the expired-trial tests.
     subscriptionsService: { getUserSubscription: vi.fn(), canEnablePage: vi.fn(), checkSubscriptionStatus: vi.fn() },
 }));
@@ -286,6 +286,10 @@ describe('WhatsAppRedirectController.start', () => {
         expect(reply.status).toHaveBeenCalledWith(402);
         expect((reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' });
         expect(reply.setCookie).not.toHaveBeenCalled();
+        // The refusal body must NOT leak the service's internal English `reason`
+        // (getUsageSummary refuses to forward it for the same reason) — the client
+        // renders a translated message keyed off `code`.
+        expect((reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0].error).not.toContain('Trial has expired');
     });
 
     it('marketplace block fires (entitled Zid account) → 403 JSON, no URL, no cookie', async () => {

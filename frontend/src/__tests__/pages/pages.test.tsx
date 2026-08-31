@@ -1224,10 +1224,13 @@ describe('PagesPage - WhatsApp plan gate (Starter+ entitlement, Basic excluded)'
         expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
     });
 
-    it('entitled plan but INACTIVE subscription (expired trial): upgrade CTA replaces Connect — connect runs Meta ES (D-118 gap)', async () => {
-        // Plan includes WhatsApp, but the trial lapsed. Connecting would launch
-        // Meta Embedded Signup and migrate the number off the merchant's phone,
+    it('entitled plan but INACTIVE subscription (expired trial): a RENEW CTA replaces Connect (D-118 gap)', async () => {
+        // Plan includes WhatsApp, but the trial lapsed. Completing a connect ends
+        // in registerPhoneNumber, which takes the number off the merchant's phone,
         // so the button must be gone — mirrors the backend connect status gate.
+        // The label must say RENEW, not UPGRADE: this account is already on a
+        // WhatsApp plan, so "upgrade" is advice it cannot act on.
+        // Mutation: make the CTA label unconditional and this fails.
         mockUsagePlan(true, undefined, false);
         renderPage(<PagesPage />);
 
@@ -1238,6 +1241,41 @@ describe('PagesPage - WhatsApp plan gate (Starter+ entitlement, Basic excluded)'
             expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
         });
         expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
+        expect(screen.getByText(enPages.whatsappRenewButton)).toBeInTheDocument();
+        expect(screen.queryByText(enPages.whatsappUpgradeButton)).not.toBeInTheDocument();
+    });
+
+    it('plan WITHOUT WhatsApp keeps the UPGRADE label — the two refusals are different actions', async () => {
+        mockUsagePlan(false);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
+        });
+        expect(screen.getByText(enPages.whatsappUpgradeButton)).toBeInTheDocument();
+    });
+
+    it('a stale ?connectWhatsApp=true handoff must NOT reopen the path question for a lapsed subscription', async () => {
+        // The app mints this URL and it outlives the session in history and
+        // bookmarks. It sets whatsAppPathPageId DIRECTLY, so the render-level
+        // hiding never sees it — answering the modal would walk a refused
+        // merchant into Meta's wizard, only to be refused by the backend after.
+        // Mutation: drop the whatsappEntitled guard in resumeWhatsAppConnect and
+        // the path question renders — this fails.
+        mockUsagePlan(true, undefined, false);
+        mockRouterQuery = { connectWhatsApp: 'true', waPage: 'page_x' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
+        }, { timeout: 3000 });
+        expect(screen.queryByText(enPages.whatsappPathTitle)).not.toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+
+        mockRouterQuery = {};
     });
 
     it('non-entitled plan: header connect skips the picker and opens the FB dialog', async () => {

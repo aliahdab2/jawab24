@@ -14,13 +14,10 @@ import {
 } from '../utils/whatsappConnectState';
 import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 import {
-    checkWhatsAppSubscriptionStatus,
+    checkWhatsAppConnectEntitlement,
     completeWhatsAppSignup,
-    hasWhatsAppPlanAccess,
     isWhatsAppConnectAllowed,
-    PLAN_REQUIRED_RESPONSE,
 } from './whatsapp';
-import { getWhatsAppUnavailableReason, WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } from '../services/whatsappAvailability';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { authService } from '../services/auth';
 import { refreshTokenService } from '../services/refreshToken';
@@ -276,20 +273,14 @@ export class WhatsAppRedirectController {
         if (!(await isWhatsAppConnectAllowed(args.userId))) {
             return { ok: false, status: 403, code: 'WHATSAPP_NOT_ALLOWLISTED', payload: { error: 'WhatsApp isn\'t available on your account yet.', code: 'WHATSAPP_NOT_ALLOWLISTED' } };
         }
-        if (!(await hasWhatsAppPlanAccess(args.workspaceOwnerId))) {
-            return { ok: false, status: 403, code: PLAN_REQUIRED_RESPONSE.code, payload: { ...PLAN_REQUIRED_RESPONSE } };
-        }
-        // Status gate BEFORE the Meta redirect URL is minted — this is the leg
-        // that actually prevents an expired-trial account from reaching Embedded
-        // Signup (where the number migrates off the phone). 402 so the client
-        // can tell it apart from the plan block; the code drives both the /start
-        // JSON body and the /app-start `?whatsappError=` redirect.
-        const subStatus = await checkWhatsAppSubscriptionStatus(args.workspaceOwnerId);
-        if (!subStatus.allowed) {
-            return { ok: false, status: 402, code: 'WHATSAPP_SUBSCRIPTION_INACTIVE', payload: { error: subStatus.reason ?? 'Subscription is not active', code: 'WHATSAPP_SUBSCRIPTION_INACTIVE' } };
-        }
-        if (await getWhatsAppUnavailableReason(args.workspaceOwnerId)) {
-            return { ok: false, status: 403, code: WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code, payload: { ...WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE } };
+        // Plan + marketplace + subscription status, in one place with one
+        // subscription read (see checkWhatsAppConnectEntitlement). This is the
+        // leg that stops a refused account BEFORE a Meta dialog URL is ever
+        // minted — the other legs refuse later, after the merchant has already
+        // walked Meta's wizard.
+        const refusal = await checkWhatsAppConnectEntitlement(args.workspaceOwnerId);
+        if (refusal) {
+            return { ok: false, status: refusal.status, code: refusal.code, payload: refusal.body };
         }
 
         const { pageId, locale } = args;
@@ -533,7 +524,13 @@ export class WhatsAppRedirectController {
 
         try {
             const gate = await this.reverifyGates(state);
-            if (gate) return fail(gate);
+            if (gate) {
+                // The merchant completed Meta's wizard and we are turning them
+                // away — rare, and invisible to them beyond a toast. Log it so
+                // the refusal is countable after deploy.
+                request.log.info({ userId: state.userId, code: gate }, '[WhatsApp redirect] callback refused by gate');
+                return fail(gate);
+            }
 
             // 30-second code TTL: the exchange happens right here in the callback,
             // before any other I/O that isn't strictly required.
@@ -639,15 +636,13 @@ export class WhatsAppRedirectController {
         if (!(await isWhatsAppConnectAllowed(state.userId))) {
             return 'WHATSAPP_NOT_ALLOWLISTED';
         }
-        if (!(await hasWhatsAppPlanAccess(membership[0].ownerId))) {
-            return 'WHATSAPP_PLAN_REQUIRED';
-        }
-        if (!(await checkWhatsAppSubscriptionStatus(membership[0].ownerId)).allowed) {
-            return 'WHATSAPP_SUBSCRIPTION_INACTIVE';
-        }
-        if (await getWhatsAppUnavailableReason(membership[0].ownerId)) {
-            return WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code;
-        }
+        // Same chain, same order as `start` — one definition, so the two legs
+        // can never drift. Refusing HERE is late but not harmful: the code is
+        // not exchanged, so `completeWhatsAppSignup` (whose registerPhoneNumber
+        // takes the number off the merchant's phone) never runs. The merchant
+        // keeps the number; what they lose is the wizard they just completed.
+        const refusal = await checkWhatsAppConnectEntitlement(membership[0].ownerId);
+        if (refusal) return refusal.code;
         if (state.pageId) {
             const page = await pagesService.getPage(state.workspaceId, state.pageId);
             if (!page) return 'WHATSAPP_CONNECT_FAILED';

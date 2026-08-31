@@ -12,7 +12,6 @@ import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
-import type { LimitCheckResult } from '@jawab24/shared';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { pgErrorCode } from '../utils/dbErrors';
 
@@ -62,6 +61,27 @@ export const PLAN_REQUIRED_RESPONSE = {
 } as const;
 
 /**
+ * Shared 402 body for the WhatsApp connect STATUS gate. A sibling of
+ * `PLAN_REQUIRED_RESPONSE` and `WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE`: one
+ * definition, so both connect transports send the SAME code and the client's
+ * `whatsappConnectErrorKey` has one entry to map. Deliberately static — the service's
+ * `reason` is an internal English string (`getUsageSummary` refuses to forward
+ * it for exactly that reason), and the client renders a translated message
+ * keyed off `code`.
+ */
+export const WHATSAPP_SUBSCRIPTION_INACTIVE_RESPONSE = {
+    error: 'WhatsApp connect requires an active subscription.',
+    code: 'WHATSAPP_SUBSCRIPTION_INACTIVE',
+} as const;
+
+/** A connect gate refusal, in the shape every transport can render. */
+export interface WhatsAppConnectRefusal {
+    status: 402 | 403;
+    code: string;
+    body: Record<string, unknown>;
+}
+
+/**
  * Plan entitlement gate: WhatsApp is included from the Starter plan up
  * (`plans.whatsapp_enabled`; Basic is the only paid plan without it — D-118).
  * Keyed on the WORKSPACE OWNER's subscription — team admins have no
@@ -70,6 +90,11 @@ export const PLAN_REQUIRED_RESPONSE = {
  * accounts are entitled. Enforced on connect + enable only — disconnect/disable
  * always work, and an already-enabled number keeps working after a downgrade
  * (matches the maxPages model: enforcement-on-enable, no retroactive disable).
+ *
+ * CONNECT does not call this directly — it goes through
+ * `checkWhatsAppConnectEntitlement`, which adds the status gate and shares this
+ * one subscription read. The ENABLE/toggle path still calls it alone, because
+ * status there is `canEnablePage`'s job.
  */
 export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
@@ -77,23 +102,51 @@ export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<b
 }
 
 /**
- * Active-subscription gate for CONNECTING a WhatsApp number. Connect must
- * status-gate — unlike a page slot, enforced at ENABLE (`canEnablePage`) —
- * because Meta Embedded Signup migrates the number OFF the merchant's phone at
- * connect, before enable is ever reached: refusing at enable would be too late.
- * Before D-118 the Starter-only plan flag doubled as this gate; making WhatsApp
- * a Starter feature removed that side effect, so an expired-trial Starter
- * account could reach Meta ES. Keyed on the workspace OWNER (same subject as
- * `hasWhatsAppPlanAccess`). Returns a `LimitCheckResult` so the popup sites can
- * render it through `pageGateError` (the same 402 SUBSCRIPTION_INACTIVE the
- * toggle path already returns); the redirect flow maps the code to its own
- * `?whatsappError=` contract. Fails closed on a missing subscription — the plan
- * gate already blocks that, but this must not silently pass it either.
+ * THE gate chain for CONNECTING a WhatsApp number. Returns the refusal, or null
+ * when the account may proceed. Every connect entry point — `connect`,
+ * `connectNew`, the redirect `prepareStartUrls`, the callback `reverifyGates` —
+ * calls this and nothing else, so the checks and their ORDER are defined once.
+ *
+ * Order is deliberate: PERMANENT blocks before transient ones. A Zid-connected
+ * account can never connect WhatsApp (D-117), so telling it "renew your
+ * subscription" would steer the merchant to pay for something renewal cannot
+ * unlock. Plan → marketplace → status.
+ *
+ * Why connect status-gates at all, when a page slot is enforced at ENABLE
+ * (`canEnablePage`): completing connect ends in `completeWhatsAppSignup`, whose
+ * `registerPhoneNumber` call takes the number OFF the merchant's phone. Refusing
+ * at enable would be after that. Before D-118 the Starter-only plan flag doubled
+ * as this gate; making WhatsApp a Starter feature removed that side effect, so
+ * an expired-trial Starter reached signup. See D-121.
+ *
+ * ONE `getUserSubscription` read serves both the plan check and the status
+ * check — it is a join plus a possible lazy-expiry UPDATE, and the two gates
+ * ask different questions of the SAME row. Fails closed on a missing
+ * subscription: the plan check already refuses that, and the status check must
+ * not silently pass what the plan check would refuse.
  */
-export async function checkWhatsAppSubscriptionStatus(workspaceOwnerId: string): Promise<LimitCheckResult> {
+export async function checkWhatsAppConnectEntitlement(
+    workspaceOwnerId: string,
+): Promise<WhatsAppConnectRefusal | null> {
     const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
-    if (!sub) return { allowed: false, reason: 'No active subscription', code: 'subscription_inactive' };
-    return subscriptionsService.checkSubscriptionStatus(sub);
+    if (!sub?.plan.whatsappEnabled) {
+        return { status: 403, code: PLAN_REQUIRED_RESPONSE.code, body: { ...PLAN_REQUIRED_RESPONSE } };
+    }
+    if (await getWhatsAppUnavailableReason(workspaceOwnerId)) {
+        return {
+            status: 403,
+            code: WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE.code,
+            body: { ...WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE },
+        };
+    }
+    if (!subscriptionsService.checkSubscriptionStatus(sub).allowed) {
+        return {
+            status: 402,
+            code: WHATSAPP_SUBSCRIPTION_INACTIVE_RESPONSE.code,
+            body: { ...WHATSAPP_SUBSCRIPTION_INACTIVE_RESPONSE },
+        };
+    }
+    return null;
 }
 
 /** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
@@ -208,16 +261,13 @@ export class WhatsAppController {
         if (!(await isWhatsAppConnectAllowed(userId))) {
             return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
         }
-        if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
-            return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
-        }
-        const subStatus = await checkWhatsAppSubscriptionStatus(req.workspaceOwnerId);
-        if (!subStatus.allowed) {
-            const { status, body } = pageGateError(subStatus);
-            return reply.status(status).send(body);
-        }
-        if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
-            return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
+        const refusal = await checkWhatsAppConnectEntitlement(req.workspaceOwnerId);
+        if (refusal) {
+            request.log.info(
+                { workspaceOwnerId: req.workspaceOwnerId, code: refusal.code },
+                '[WhatsApp] connect refused by entitlement gate',
+            );
+            return reply.status(refusal.status).send(refusal.body);
         }
 
         try {
@@ -304,16 +354,13 @@ export class WhatsAppController {
         if (!(await isWhatsAppConnectAllowed(userId))) {
             return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
         }
-        if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
-            return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
-        }
-        const subStatus = await checkWhatsAppSubscriptionStatus(req.workspaceOwnerId);
-        if (!subStatus.allowed) {
-            const { status, body } = pageGateError(subStatus);
-            return reply.status(status).send(body);
-        }
-        if (await getWhatsAppUnavailableReason(req.workspaceOwnerId)) {
-            return reply.status(403).send(WHATSAPP_MARKETPLACE_BLOCKED_RESPONSE);
+        const refusal = await checkWhatsAppConnectEntitlement(req.workspaceOwnerId);
+        if (refusal) {
+            request.log.info(
+                { workspaceOwnerId: req.workspaceOwnerId, code: refusal.code },
+                '[WhatsApp] connect refused by entitlement gate',
+            );
+            return reply.status(refusal.status).send(refusal.body);
         }
 
         try {
