@@ -41,7 +41,7 @@
 // The INFO-DESK block's placeholder phone (E-1 guard): it must never surface
 // in any reply — a fixture page never uses it as its own number, so its
 // presence can only be a prompt-example leak.
-import { INFO_DEMO_LEAK_TOKENS } from '@jawab24/shared';
+import { INFO_DEMO_LEAK_TOKENS, stripBidiMarks } from '@jawab24/shared';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -6181,6 +6181,14 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     const checks: { field: string; pass: boolean; detail: string }[] = [];
     const e = test.expected;
 
+    // Substring assertions match against the reply with bidi marks removed.
+    // renderReplyForChannel isolates direction-fragile numbers (75$, +963...) in
+    // LRI...PDI, so an expectation that SPANS a token boundary — «خصم 10%» — stops
+    // matching against the raw text. For replyNotContains that failure is silent AND
+    // inverted: the assertion would pass because the marks broke it, not because the
+    // reply is clean. Normalising the delivered side is the only safe comparison.
+    const replyText = stripBidiMarks(d.reply || '');
+
     // Invariant: no JSON envelope in the delivered text (see ENVELOPE_MARKERS).
     {
         const reply = d.reply || '';
@@ -6235,15 +6243,14 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     // a test whose only assertion is replyContains).
     if (e.replyContains) {
         for (const s of e.replyContains) {
-            const pass = !!d.reply && d.reply.includes(s);
+            const pass = !!d.reply && replyText.includes(s);
             checks.push({ field: `contains:${s}`, pass, detail: pass ? 'found' : (d.reply ? 'NOT found in reply' : 'reply was empty') });
         }
     }
 
     // replyContainsAny (OR — at least one must be present)
     if (e.replyContainsAny) {
-        const reply = d.reply || '';
-        const found = e.replyContainsAny.filter(s => reply.includes(s));
+        const found = e.replyContainsAny.filter(s => replyText.includes(s));
         const pass = found.length > 0;
         const label = e.replyContainsAny.join('|');
         checks.push({ field: `containsAny:${label}`, pass, detail: pass ? `found: ${found.join(', ')}` : (d.reply ? 'NONE found in reply' : 'reply was empty') });
@@ -6252,7 +6259,7 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     // replyNotContains
     if (e.replyNotContains && d.reply) {
         for (const s of e.replyNotContains) {
-            const pass = !d.reply.includes(s);
+            const pass = !replyText.includes(s);
             checks.push({ field: `!contains:${s}`, pass, detail: pass ? 'absent' : 'FOUND in reply (should not be)' });
         }
     }

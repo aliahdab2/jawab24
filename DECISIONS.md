@@ -4055,3 +4055,91 @@ cookie and no leaked `reason`, `app-start` redirect, `reverifyGates` mid-connect
 predicate), `frontend/src/__tests__/pages/pages.test.tsx` (renew vs upgrade CTA, the stale handoff)
 and `frontend/src/lib/__tests__/whatsappConnectErrors.test.ts` (every gate code mapped, iOS-neutral
 billing copy).
+
+---
+
+## D-122 · Numbers carrying a sign are wrapped in a bidi isolate before delivery, because Arabic layout puts the sign on the wrong side (2026-08-31)
+
+**Ruling.** `renderReplyForChannel` — the one place every channel's reply passes through before it
+is sent and persisted — wraps every *direction-fragile* numeric token in `U+2066 LRI … U+2069 PDI`.
+Fragile means the token carries a `+`, `-`, `%` or a currency sign. Plain numbers and numbers whose
+only punctuation is `.` `,` `:` `/` are left alone, and URLs and email addresses are left
+byte-identical. `packages/shared/src/bidi.ts` owns it; nothing else may re-implement it.
+
+**The defect.** A live reply from عالم شاهين ended «… تتواصل معنا على +963989811511.» and was
+DISPLAYED as `963989811511+` — the plus on the wrong end of the merchant's phone number. The same
+reply showed its two prices as `$75` and `$100` instead of `75$` and `100$`.
+
+**Why it happens, and why the obvious fix is a no-op.** UAX#9 rule W2 retypes European digits as
+ARABIC numbers (AN) when the last strong character before them is an Arabic letter. Rule W5 — "a
+European Terminator adjacent to an EN becomes EN" — therefore never fires, the sign stays a
+neutral, N1/N2 resolve it to the paragraph direction (RTL), and it is laid out on the far side of
+the digits. Measured in Chrome on 2026-08-31 by reading back per-character x-positions inside
+`dir="auto"` Arabic text:
+
+| written | displayed | LRM after | LRM both sides | LRI…PDI |
+|---|---|---|---|---|
+| `+963989811511` | `963989811511+` ✗ | ✗ | ✓ | ✓ |
+| `75$` | `$75` ✗ | ✗ | ✓ | ✓ |
+| `20%` | `%20` ✗ | ✗ | ✓ | ✓ |
+| `5-10` | `10-5` ✗ (a different range!) | ✗ | ✓ | ✓ |
+| `100 $` | `$ 100` ✗ | ✗ | ✗ | ✓ |
+| `٧٥$` | `$٧٥` ✗ | ✗ | ✗ | ✓ |
+| `3.5` `1,200` `9:30` `12/5` `00963…` | unchanged ✓ | — | — | — |
+
+An LRM *after* the number does nothing, because the misplaced character sits *before* it. Isolates
+are chosen over an LRM pair because they are the only form that also fixes Arabic-Indic digits and a
+spaced currency, and because they are `Default_Ignorable_Code_Point`s — a renderer too old to
+support them draws nothing rather than a tofu box.
+
+**Why only fragile tokens.** Every inserted mark is a real character the platform carries and the
+per-channel length cap counts. `3.5` and `1,200` were measured to render correctly on their own
+(CS between two ANs keeps its place), so isolating them would add cost for no repair.
+
+**Why URLs are excluded — and why "URL" has to include the SCHEMELESS form.** The marks are
+invisible on screen but they travel with a copy-paste. Inside a product link that breaks the URL —
+and the reply that carries a store link is the reply that was going to become an order. The first
+cut of this rule protected only `https://` and `www.` runs, which is not how merchants write their
+own domain: production carries **122** Arabic replies with a bare `jawab24.com` / `shahinresort.com`
+/ `nourva.io` form and **zero** with `www.`. Worse than the copy-paste risk, measured 2026-09-01:
+isolating the `-50` inside «jawab24.com/promo-50» displays it as `-50jawab24.com/promo` — the link
+is mangled *on screen*, not merely on paste. The protected-run pattern therefore matches a dotted
+label chain ending in a pure-alphabetic TLD. Shape-based on purpose (owner's standing rule): no
+hand-maintained TLD list. `3.5` and `1,200` cannot match it (no letters) and the label alphabet is
+ASCII, so Arabic prose cannot either.
+
+**A sign glued to a Latin word is a product code, not a number.** Measured 2026-09-01: «ABC-123» and
+«iPhone-15» render *as written* inside Arabic text, because the digits after a Latin LETTER are EN
+rather than AN, so W4/W5 already bind the sign. Isolating just the `-123` splits the run and displays
+it as `-123ABC` — this rule breaking text that was already correct. A token whose leading `+`/`-` is
+glued to an ASCII alphanumeric is therefore left alone. The guard is Latin-only: after an *Arabic*
+letter the original defect is real and the isolate still goes in.
+
+> Both exclusions above were found in review by re-running the measurement, not by reasoning about
+> the diff. The lesson worth keeping: for a bidi change, "it renders correctly today" is a claim only
+> a renderer can settle — a unit test can pin *which* tokens are wrapped and nothing more.
+
+**Consequence for anything that MATCHES delivered text.** A substring that spans a token boundary
+(«خصم 10%») no longer matches the raw reply. `stripBidiMarks` (same module, and now the single
+implementation — `preNormalizeForPhones` was carrying its own copy) must be applied to the
+delivered side first. `scripts/playground-eval.ts` does this for `replyContains` /
+`replyContainsAny` / `replyNotContains`; without it a `replyNotContains` would pass *because the
+marks broke it*, which is a silently inverted assertion, not a visible failure.
+
+**Not covered by this ruling.** Merchant-authored away and greeting messages are sent directly, not
+through `renderReplyForChannel`, so a `+`-prefixed number typed into those still displays with the
+sign transposed. Left out deliberately to keep the blast radius on the AI reply path; fixing it
+means calling `isolateNumericTokens` at those send sites too. A **trailing** plus («100+») flips the
+same way and is also not repaired — the token grammar carries a leading sign only. Both predate this
+ruling rather than being caused by it.
+
+**Evidence.** `packages/shared/src/__tests__/bidi.test.ts` pins every row of the table above
+(measurement-derived, mutation-checked against 11 mutations: isolation removed, fragile guard
+removed, URL protection removed, bare-domain protection removed, Latin-glued guard removed, that
+guard widened to any non-space, idempotence guard removed, LRI/PDI swapped, `stripBidiMarks`
+no-op'd, newline-straddling separators, RTL guard removed — each caught. One further mutation,
+reordering the protected-run alternation to put the bare domain ahead of the email, is NOT caught:
+no input could be built where the order changes the output, so that ordering is defensive rather
+than load-bearing, and the code says so). jsdom does no bidi
+layout, so the unit tests can only pin *which* tokens get isolated; the visual outcome was verified
+by rendering the real `renderReplyForChannel` output in Chrome.

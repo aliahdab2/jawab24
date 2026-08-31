@@ -1,4 +1,5 @@
 import { findPhoneNumbersInText, type CountryCode } from 'libphonenumber-js';
+import { stripBidiMarks } from '../bidi';
 
 /** E.164 international phone format: +[1-9] followed by 1–14 digits */
 export const PHONE_REGEX = /^\+[1-9]\d{1,14}$/;
@@ -154,14 +155,11 @@ export function digitCount(s: string): number {
   return (s.match(/\d/g) ?? []).length;
 }
 
-/** Unicode bidi control marks Facebook/Instagram wrap RTL numbers in. */
-const BIDI_MARKS_REGEX = /[‎‏‪-‮⁦-⁩]/g;
-
 /** Normalise text before phone matching: drop bidi marks, Arabic-Indic→ASCII,
  *  and rewrite a leading `00<cc>` international prefix to `+<cc>` (libphonenumber's
  *  findNumbers ignores a bare `00`). */
 export function preNormalizeForPhones(text: string): string {
-  let t = text.replace(BIDI_MARKS_REGEX, '');
+  let t = stripBidiMarks(text);
   t = normalizeArabicIndic(t);
   t = t.replace(/(?<![\d+])00(\d{7,})/g, '+$1');
   return t;
