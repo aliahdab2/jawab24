@@ -16,7 +16,7 @@ And the prospect who asks and gets no answer within hours rarely comes back to a
 
 Al-Fariq Al-Dimashqi ("The Damascus Team") is a training institute whose Facebook Page has more than 55,000 followers — with no online store, no website, and no other platform. In its first 90 days with Jawab24:
 
-- **44,636 replies** to customer messages, with a median reply time of 6 seconds.
+- **44,636 replies** to customer messages, with a median reply time of 8 seconds.
 - **18,788 comments** answered on posts.
 - **472 leads** with names and phone numbers, collected in the dashboard.
 
