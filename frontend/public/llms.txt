@@ -91,6 +91,8 @@ Native e-commerce integrations that sync product catalogs and verify prices so r
 
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
+- Auto-reply with no online store (restaurants, clinics, institutes, salons): https://jawab24.com/no-store
+- WhatsApp Business auto-reply: https://jawab24.com/whatsapp
 - Instagram auto-reply: https://jawab24.com/instagram
 - Pricing: https://jawab24.com/pricing
 - Blog: https://jawab24.com/blog

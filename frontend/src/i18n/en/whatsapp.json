@@ -1,0 +1,60 @@
+{
+  "seoTitle": "AI Auto Reply for WhatsApp Business — Jawab24",
+  "seoDescription": "Smart auto reply for WhatsApp Business messages: answers prices, availability, and appointments in your customer's dialect, understands voice notes, and your number keeps working on your phone as usual. No online store needed. Free trial.",
+  "backToHome": "Back to Home",
+  "heroTitle": "AI Auto Reply for WhatsApp Business",
+  "heroSubtitle": "Your customers ask on WhatsApp at all hours — about prices, availability, and appointments. Jawab24 answers them instantly, in their dialect, from your business info, and understands voice notes too — while your number keeps working on your phone the way you're used to.",
+  "badge": "Available on the Starter plan and up — with Facebook and Instagram in one inbox",
+  "howItWorks": {
+    "title": "How it works",
+    "step1Title": "Connect your WhatsApp Business number",
+    "step1Desc": "From the dashboard, through Meta's embedded signup — you pick the number and approve the permissions, in minutes, with no technical setup.",
+    "step2Title": "Your number stays on your phone",
+    "step2Desc": "You keep receiving and replying yourself from the WhatsApp Business app whenever you want — Jawab24 works alongside you, not instead of your phone.",
+    "step3Title": "The AI answers",
+    "step3Desc": "It replies to questions from your business info in the customer's dialect, and transcribes voice notes and answers them.",
+    "step4Title": "Leads land in your dashboard",
+    "step4Desc": "Conversations that include contact details become lead cards, with an instant push notification on your phone."
+  },
+  "features": {
+    "title": "What does it do on WhatsApp?",
+    "f1": "Understands voice notes — transcribes them and replies with a text message",
+    "f2": "Detects 6 Arabic dialect families and replies in the customer's dialect — or in English",
+    "f3": "Verifies every price against your info before sending — no invented prices",
+    "f4": "Answers only from your Business Info, and holds low-confidence replies for your review",
+    "f5": "Customizable business hours and away messages",
+    "f6": "Reads photos customers send (a product screenshot, for example) and answers from your info"
+  },
+  "coexist": {
+    "title": "Your phone stays in your hands",
+    "text": "Connecting Jawab24 does not take your number away: the WhatsApp Business app on your phone keeps working as it is — you receive and reply yourself whenever you want. Jawab24 answers the repetitive questions and leaves you what needs your judgment, so your customers get an instant reply without you losing control of your number."
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "q1": "Does it work with my existing number?",
+    "a1": "Yes. You connect your current WhatsApp Business number through Meta's embedded signup, and the number keeps working on your phone and app as before.",
+    "q2": "Do I need an online store?",
+    "a2": "No. A WhatsApp Business number is enough — or a Facebook Page or Instagram account. Salla, Zid, and Shopify integration is optional for merchants who have a store.",
+    "q3": "Does it understand voice messages?",
+    "a3": "Yes — it automatically transcribes the voice note, understands the question, and replies with a text message.",
+    "q4": "Which plans include WhatsApp?",
+    "a4": "The Starter plan and up. Plan details are on the pricing page.",
+    "q5": "Which languages does it reply in?",
+    "a5": "The customer's own language: Arabic in its dialects (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA), English, or Franco-Arabic.",
+    "q6": "Is my conversation data safe?",
+    "a6": "Yes — access is limited to what replying requires, and you can disconnect the number and delete your data at any time. See the privacy policy and the data deletion page."
+  },
+  "cta": {
+    "title": "Turn on WhatsApp auto reply today",
+    "text": "14-day free trial, no credit card.",
+    "button": "Start Your Free Trial"
+  },
+  "related": {
+    "title": "Also read",
+    "noStore": "Auto reply with no online store",
+    "instagram": "Instagram auto reply",
+    "launchPost": "WhatsApp is now live on Jawab24 — the full details",
+    "security": "Is your data safe with Jawab24?"
+  },
+  "disclaimer": "WhatsApp Business is a Meta service; connecting requires your approval through Meta's embedded signup and is subject to the WhatsApp Business terms."
+}

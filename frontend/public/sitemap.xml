@@ -167,6 +167,42 @@
     <lastmod>2026-08-16</lastmod>
   </url>
 
+  <!-- No-store segment page - Arabic -->
+  <url>
+    <loc>https://jawab24.com/no-store</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/no-store"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/no-store"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/no-store"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- No-store segment page - English -->
+  <url>
+    <loc>https://jawab24.com/en/no-store</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/no-store"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/no-store"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/no-store"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- WhatsApp channel page - Arabic -->
+  <url>
+    <loc>https://jawab24.com/whatsapp</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/whatsapp"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/whatsapp"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/whatsapp"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- WhatsApp channel page - English -->
+  <url>
+    <loc>https://jawab24.com/en/whatsapp</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/whatsapp"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/whatsapp"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/whatsapp"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
   <!-- Data Deletion - Arabic -->
   <url>
     <loc>https://jawab24.com/data-deletion</loc>
