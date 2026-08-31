@@ -353,7 +353,7 @@
     <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
-    <lastmod>2026-08-14</lastmod>
+    <lastmod>2026-08-31</lastmod>
   </url>
 
   <!-- Blog Index - English -->
@@ -362,7 +362,43 @@
     <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
-    <lastmod>2026-08-14</lastmod>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- Blog: clinic-auto-reply-guide - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/clinic-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/clinic-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/clinic-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/clinic-auto-reply-guide"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- Blog: clinic-auto-reply-guide - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/clinic-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/clinic-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/clinic-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/clinic-auto-reply-guide"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- Blog: training-center-auto-reply-guide - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/training-center-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/training-center-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/training-center-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/training-center-auto-reply-guide"/>
+    <lastmod>2026-08-31</lastmod>
+  </url>
+
+  <!-- Blog: training-center-auto-reply-guide - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/training-center-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/training-center-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/training-center-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/training-center-auto-reply-guide"/>
+    <lastmod>2026-08-31</lastmod>
   </url>
 
   <!-- Blog: jawab24-data-security - Arabic -->
