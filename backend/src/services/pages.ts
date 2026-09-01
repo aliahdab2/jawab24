@@ -43,10 +43,6 @@ export function getIngestionService(): KbIngestionService | null {
     return _ingestionService;
 }
 
-/**
- * Format Facebook hours object into readable text
- * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
- */
 type DayHourSlots = Record<string, { open: string; close: string }[]>;
 
 /**
@@ -74,6 +70,10 @@ function parseFbHourSlots(hours: FacebookPageHours | undefined): DayHourSlots | 
     return daySlots;
 }
 
+/**
+ * Format Facebook hours object into readable text
+ * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
+ */
 export function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
     const dayHours = parseFbHourSlots(hours);
     if (!dayHours) return null;
@@ -1723,14 +1723,13 @@ export class PagesService {
         return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
-    /**
-     * Toggle Instagram auto-reply for a page
-     */
     /** Flip one channel's auto-reply column for a page, scoped to its workspace. */
     private async setChannelAutoReply(
         workspaceId: string,
         pageId: string,
-        column: 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled',
+        // keyof Pick ties the literals to the schema: a renamed/dropped column
+        // fails tsc here, instead of a computed-key .set() that silently skips it
+        column: keyof Pick<typeof pages.$inferInsert, 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled'>,
         enabled: boolean,
     ) {
         const [updatedPage] = await db
@@ -1742,6 +1741,9 @@ export class PagesService {
         return updatedPage;
     }
 
+    /**
+     * Toggle Instagram auto-reply for a page
+     */
     async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
         return this.setChannelAutoReply(workspaceId, pageId, 'instagramAutoReplyEnabled', enabled);
     }
