@@ -291,6 +291,116 @@ type PageEnrichments = {
     storePlatformById: Map<string, EcommercePlatform>;
 };
 
+/** A page row as returned by an insert/update `.returning()` in the sync loop. */
+type SyncedPageRow = typeof pages.$inferSelect;
+
+/**
+ * Accumulates the per-page results of syncFromFacebook. Extracting the ten
+ * counters/lists the sync loop used to thread as separate locals into one object
+ * is what lets the four per-page branches (existing / claim / taken / create)
+ * move out of the method without passing ten out-parameters each. Also owns the
+ * remaining-slot budget: `slotAvailable` gates a connection and `consumeSlot()`
+ * spends one, so the plan-limit accounting lives in exactly one place.
+ */
+class SyncOutcome {
+    /** Pages written this sync (existing refreshed, claimed, or created). */
+    readonly syncedPages: SyncedPageRow[] = [];
+    /** Pages that ARRIVED this sync (created or claimed) — the only auto-link triggers. */
+    readonly createdPageIds: string[] = [];
+    // Each list's count is just its length — the counter and the list were always
+    // incremented together in the original loop — so there is no separate count
+    // field to drift out of sync.
+    private readonly skippedPages: { pageName: string }[] = [];
+    private readonly takenPages: { pageName: string }[] = [];
+    private readonly trialBlockedPages: { pageName: string }[] = [];
+    private readonly alreadyMemberOf: AlreadyMemberOfEntry[] = [];
+    /** null = unlimited plan. */
+    private remainingSlots: number | null;
+
+    constructor(remainingSlots: number | null) {
+        this.remainingSlots = remainingSlots;
+    }
+
+    /** True while the plan still has room to auto-enable another page. */
+    get slotAvailable(): boolean {
+        return this.remainingSlots === null || this.remainingSlots > 0;
+    }
+
+    get skippedCount(): number {
+        return this.skippedPages.length;
+    }
+
+    get trialBlockedCount(): number {
+        return this.trialBlockedPages.length;
+    }
+
+    /** An existing page was refreshed in place (not an arrival — no auto-link). */
+    recordSynced(page: SyncedPageRow): void {
+        this.syncedPages.push(page);
+    }
+
+    /** A page arrived this sync (created or claimed) — synced AND an auto-link trigger. */
+    recordArrived(page: SyncedPageRow): void {
+        this.syncedPages.push(page);
+        this.createdPageIds.push(page.id);
+    }
+
+    /** A page the plan had no slot for — refused, name surfaced to the client. */
+    recordSkipped(pageName: string): void {
+        this.skippedPages.push({ pageName });
+    }
+
+    /** A page withheld because another workspace holds it (D-039: name it, not the holder). */
+    recordTaken(pageName: string): void {
+        this.takenPages.push({ pageName });
+    }
+
+    /** The syncing user is a member of the workspace that holds a taken page. */
+    recordAlreadyMember(entry: AlreadyMemberOfEntry): void {
+        this.alreadyMemberOf.push(entry);
+    }
+
+    /** A page connected but kept OFF because its channel already used its free trial. */
+    recordTrialBlocked(pageName: string): void {
+        this.trialBlockedPages.push({ pageName });
+    }
+
+    /** Spend one plan slot (no-op on an unlimited plan). */
+    consumeSlot(): void {
+        if (this.remainingSlots !== null) {
+            this.remainingSlots--;
+        }
+    }
+
+    /**
+     * Assemble the wire response, folding in the once-computed sync-level fields.
+     * `noPagesDiagnosis` is carried so BOTH exits of syncFromFacebook (the empty
+     * Facebook-account early return and the normal path) share one response shape
+     * — callers destructure every field, so the two shapes must match.
+     */
+    toResponse(extra: {
+        skipReason: 'subscription_inactive' | 'page_limit';
+        pageLimit: number | null;
+        revokedCount: number;
+        noPagesDiagnosis: NoPagesDiagnosis | null;
+    }) {
+        return {
+            syncedPages: this.syncedPages,
+            skippedCount: this.skippedPages.length,
+            skippedPages: this.skippedPages,
+            skipReason: extra.skipReason,
+            pageLimit: extra.pageLimit,
+            takenCount: this.takenPages.length,
+            takenPages: this.takenPages,
+            trialBlockedCount: this.trialBlockedPages.length,
+            trialBlockedPages: this.trialBlockedPages,
+            revokedCount: extra.revokedCount,
+            alreadyMemberOf: this.alreadyMemberOf,
+            noPagesDiagnosis: extra.noPagesDiagnosis,
+        };
+    }
+}
+
 export class PagesService {
     private logger: Logger = noopLogger;
     /**
@@ -1233,10 +1343,6 @@ export class PagesService {
         facebookService.setLogger(logger);
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
-        const syncedPages = [];
-        // Pages CREATED by this sync (as opposed to re-synced existing ones) —
-        // the only auto-link triggers, see the D-119 block before the return.
-        const createdPageIds: string[] = [];
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
@@ -1259,7 +1365,9 @@ export class PagesService {
                     grantedScopes: noPagesDiagnosis.grantedScopes,
                 });
             }
-            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, takenPages: [] as { pageName: string }[], trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[], noPagesDiagnosis };
+            // Same response shape as the normal path (callers destructure every
+            // field); an empty outcome yields the zeroed counters/lists.
+            return new SyncOutcome(0).toResponse({ skipReason: 'page_limit', pageLimit: null, revokedCount: 0, noPagesDiagnosis });
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -1302,23 +1410,10 @@ export class PagesService {
             (!enableCheck.allowed && enableCheck.code === 'subscription_inactive')
                 ? 'subscription_inactive'
                 : 'page_limit';
-        let skippedCount = 0;
-        // Pages NOT connected because the plan's page limit was reached —
-        // names surfaced to the client so the merchant knows exactly what
-        // was refused and why (instead of a silently disabled shadow page).
-        const skippedPages: { pageName: string }[] = [];
-        let takenCount = 0;
-        // Pages withheld because another workspace holds them — named so the client
-        // can say WHICH page was not connected (D-039: the page, never the holder).
-        const takenPages: { pageName: string }[] = [];
-        // Pages connected but kept OFF because the channel already used its free
-        // trial under another account and this account isn't paying (abuse guard).
-        let trialBlockedCount = 0;
-        const trialBlockedPages: { pageName: string }[] = [];
-        // Pages we couldn't attach because they already belong to another workspace
-        // AND the current user is a member of that workspace. Surfaced to the client
-        // so the UI can offer "Switch to ‹X›" instead of the generic "ask the owner".
-        const alreadyMemberOf: AlreadyMemberOfEntry[] = [];
+        // All per-page results (synced/created/skipped/taken/trial-blocked/
+        // already-member) plus the remaining-slot budget accumulate here. See the
+        // SyncOutcome class for what each record* call means (D-039, trial guard…).
+        const outcome = new SyncOutcome(remainingSlots);
 
         // 5. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
@@ -1404,7 +1499,7 @@ export class PagesService {
                     })
                     .where(eq(pages.id, existingPage.id))
                     .returning();
-                syncedPages.push(updated);
+                outcome.recordSynced(updated);
                 // The token was just restored — the reconnect-alert dedup claims
                 // must not outlive the incident they collapsed, or a re-revocation
                 // inside 24h alerts on no channel at all.
@@ -1444,7 +1539,7 @@ export class PagesService {
                     whatsappPhoneNumberId: globalExisting?.whatsappPhoneNumberId ?? null,
                 });
                 const { blocked: trialBlocked } = await channelTrialService.evaluate(billing, pageChannels);
-                const slotAvailable = remainingSlots === null || remainingSlots > 0;
+                const slotAvailable = outcome.slotAvailable;
                 // Plan page-limit reached: refuse the connection outright instead
                 // of persisting a disabled shadow page (pre-06/2026 behavior).
                 // Shadow pages kept receiving webhooks whose traffic was dropped
@@ -1456,8 +1551,7 @@ export class PagesService {
                 const ownedByActiveWorkspace = !!globalExisting && !isPageDisconnected(globalExisting);
                 if (!slotAvailable && !ownedByActiveWorkspace) {
                     logger.info(`[Pages] Plan page limit reached — not connecting "${fbPage.name}" (${fbPage.id})`);
-                    skippedCount++;
-                    skippedPages.push({ pageName: fbPage.name });
+                    outcome.recordSkipped(fbPage.name);
                     continue;
                 }
                 const shouldAutoEnable = !trialBlocked;
@@ -1522,12 +1616,11 @@ export class PagesService {
                         }
                         return row;
                     });
-                    syncedPages.push(claimed);
                     // A claimed page just ARRIVED in this workspace — same intent
                     // as a created one, so it is an eligible auto-link trigger
                     // (a deliberate unlink can only have happened in the previous
                     // workspace, and the link was cleared above).
-                    createdPageIds.push(claimed.id);
+                    outcome.recordArrived(claimed);
                     // Fresh token written in the transaction above — release the
                     // reconnect-alert dedup claims (see the sync branch above).
                     if (claimed) clearReconnectAlertClaims(claimed.id, userId);
@@ -1562,8 +1655,7 @@ export class PagesService {
                     // taken, never who holds it). Counting only members (the state
                     // before 2026-08-23) dropped the stranger case into the "No pages
                     // found" reply, which told an admin of one page that they had none.
-                    takenCount++;
-                    takenPages.push({ pageName: fbPage.name });
+                    outcome.recordTaken(fbPage.name);
                     if (globalExisting.workspaceId) {
                         const holdingWorkspaceId = globalExisting.workspaceId;
                         const [memberOfHolding] = await db
@@ -1583,7 +1675,7 @@ export class PagesService {
                         if (memberOfHolding) {
                             // Syncing user is already a member of the holding workspace —
                             // surface a one-tap "switch workspace" CTA on the client.
-                            alreadyMemberOf.push({
+                            outcome.recordAlreadyMember({
                                 workspaceId: holdingWorkspaceId,
                                 workspaceName: memberOfHolding.workspaceName,
                                 role: memberOfHolding.role,
@@ -1628,8 +1720,7 @@ export class PagesService {
                             businessProfileUpdatedAt: new Date(),
                         })
                         .returning();
-                    syncedPages.push(created);
-                    createdPageIds.push(created.id);
+                    outcome.recordArrived(created);
                     // Record the auto-reply state a page is born with at connect
                     // (previous = null), so its full on/off history starts here.
                     logAutoReplyToggle({
@@ -1657,19 +1748,16 @@ export class PagesService {
                     // Claim the channels for the billing account so this trial can't
                     // be re-used by a different account later (first writer wins).
                     await channelTrialService.record(pageChannels, billing, workspaceId);
-                    if (remainingSlots !== null) {
-                        remainingSlots--;
-                    }
+                    outcome.consumeSlot();
                 } else {
                     // Connected, but auto-reply stays OFF — channel already used its
                     // free trial. Surfaced so the UI can prompt the user to subscribe.
-                    trialBlockedCount++;
-                    trialBlockedPages.push({ pageName: fbPage.name });
+                    outcome.recordTrialBlocked(fbPage.name);
                 }
             }
         }
 
-        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
+        logger.info(`[Pages] Sync complete. ${outcome.syncedPages.length} pages synced, ${outcome.skippedCount} not connected (plan limit), ${outcome.trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
 
         // D-119: a marketplace-provisioned merchant's first page links to their
         // store automatically — the embedded wizard that used to carry this as a
@@ -1678,16 +1766,16 @@ export class PagesService {
         // (persona review of #998). Strictness of the rule itself (sole page,
         // sole store, no manual catalog) lives in autoLinkSolePageToSoleStore.
         // Best-effort: a failure here must not undo a sync that has committed.
-        if (createdPageIds.length > 0) {
+        if (outcome.createdPageIds.length > 0) {
             try {
-                const linkedPageId = await autoLinkSolePageToSoleStore(workspaceId, createdPageIds);
+                const linkedPageId = await autoLinkSolePageToSoleStore(workspaceId, outcome.createdPageIds);
                 if (linkedPageId) logger.info(`[Pages] Auto-linked sole page ${linkedPageId} to the workspace's sole active store (D-119)`);
             } catch (error) {
                 logger.error(`[Pages] Auto-link of sole page to sole store failed for workspace ${workspaceId}`, { error });
             }
         }
 
-        return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+        return outcome.toResponse({ skipReason, pageLimit: enableCheck.limit ?? null, revokedCount: revokedPages.length, noPagesDiagnosis: null });
     }
 
     /**

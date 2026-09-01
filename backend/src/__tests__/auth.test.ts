@@ -142,7 +142,7 @@ describe('AuthController - Native Login', () => {
             workspaces: [],
             defaultWorkspaceId: null,
         });
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0, skippedPages: [], skipReason: 'page_limit', pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [], revokedCount: 0, alreadyMemberOf: [] });
+        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0, skippedPages: [], skipReason: 'page_limit', pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [], revokedCount: 0, alreadyMemberOf: [], noPagesDiagnosis: null });
 
         // Execute
         await authController.nativeLogin(mockRequest, mockReply);
