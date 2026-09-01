@@ -539,6 +539,48 @@ export const config = {
         replyToEmail: process.env.RESEND_REPLY_TO || '',
     },
 
+    // Invoicing — the seller block printed on every manually-issued invoice.
+    //
+    // These are legally required on a Swedish invoice (name, address,
+    // registration number), and they are NOT secrets: the identical values are
+    // published on /terms §13, which is where these defaults come from. They
+    // are config rather than constants so a change of address or a move to a
+    // limited company is an env edit and a restart, not a release — and so the
+    // test suite never prints a real registered address.
+    //
+    // `displayName` is what the customer sees as the issuer. It is deliberately
+    // the trade name: the registered person is carried in `legalName` /
+    // `registrationNumber` and printed as footer small print, which is both
+    // what the owner asked for and what keeps the document valid.
+    invoicing: {
+        displayName: process.env.INVOICE_DISPLAY_NAME || 'Jawab24',
+        legalName: process.env.INVOICE_LEGAL_NAME || 'Mohammad Ali Ahdab',
+        legalForm: process.env.INVOICE_LEGAL_FORM || 'Enskild Näringsverksamhet',
+        registrationNumber: process.env.INVOICE_REGISTRATION_NUMBER || '19810312-5335',
+        addressLines: (process.env.INVOICE_ADDRESS_LINES
+            || 'Bergavägen 15 A lgh 1002|241 39 Eslöv|Sweden').split('|').map((l) => l.trim()).filter(Boolean),
+        contactEmail: process.env.INVOICE_CONTACT_EMAIL || 'support@jawab24.com',
+        website: process.env.INVOICE_WEBSITE || 'jawab24.com',
+        // The number series. Changing it starts a NEW sequence from 1 — which
+        // is a bookkeeping decision, not a formatting one, so it lives here
+        // where it is visible rather than being hardcoded in the allocator.
+        series: process.env.INVOICE_SERIES || 'JW24',
+        // Headless browser used to render the PDF. Deliberately EMPTY by
+        // default: an unset value makes invoicePdf.ts probe the known Alpine
+        // locations, which is safer than baking in a path that has moved
+        // between Alpine releases. Set it to override (a developer on macOS
+        // points it at their own Chrome). Not bundled with puppeteer-core on
+        // purpose — see services/invoicePdf.ts.
+        chromiumPath: process.env.CHROMIUM_PATH || '',
+        // Printed verbatim under the totals. Our customers are outside the EU,
+        // where Swedish VAT does not apply; the REASON is a required part of a
+        // zero-rated invoice, so it is content, not a comment.
+        vatNoteAr: process.env.INVOICE_VAT_NOTE_AR
+            || 'خدمات مقدَّمة إلى عميل مقيم خارج الاتحاد الأوروبي، وهي خارج نطاق ضريبة القيمة المضافة السويدية.',
+        vatNoteEn: process.env.INVOICE_VAT_NOTE_EN
+            || 'Services supplied to a customer established outside the European Union; outside the scope of Swedish VAT.',
+    },
+
     // Object storage (S3-compatible) — merchant-uploaded images (Post Reply trigger
     // images today; reply-type-agnostic for future reuse). Provider-agnostic: point
     // the same code at Backblaze B2 / Cloudflare R2 / AWS S3 / self-hosted MinIO via

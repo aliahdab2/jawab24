@@ -3,9 +3,11 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { auth } from '../utils/swagger';
 import { adminController } from '../controllers/admin';
 import { offlinePaymentsController } from '../controllers/offlinePayments';
-import { OFFLINE_PAYMENT_METHODS, OFFLINE_PAYMENT_STATUSES } from '@jawab24/shared';
+import { adminInvoicesController } from '../controllers/adminInvoices';
+import { OFFLINE_PAYMENT_METHODS, OFFLINE_PAYMENT_STATUSES, MAX_EMAIL_CC } from '@jawab24/shared';
 import { AI_COST_PERIODS } from '../services/admin';
 import { sendMerchantEmailBodySchema } from './schemas/sendMerchantEmail';
+import { invoiceBodySchema } from './schemas/invoice';
 
 /**
  * Admin Routes — Protected endpoints for manual subscription management,
@@ -196,6 +198,125 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 },
             },
             adminController.manualUpgrade,
+        );
+
+        // ============================================
+        // Invoices — the manual (non-Stripe) invoice register
+        // ============================================
+        //
+        // Stripe emails its own VAT invoice for card subscriptions; these
+        // endpoints cover the rail it never touches (bank transfer, Sham Cash,
+        // reseller-collected cash). Route-layer schemas here are the early
+        // rejection + OpenAPI surface only — CreateInvoiceSchema / SendInvoiceSchema
+        // (Zod, in the controller) remain the authority on every field.
+
+        adminProtected.get(
+            '/users/:userId/invoices',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'List the invoices issued to a merchant',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                },
+            },
+            adminInvoicesController.list,
+        );
+
+        adminProtected.get(
+            '/users/:userId/invoices/prefill',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Suggested invoice fields for a merchant (plan, period, partner to CC)',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                },
+            },
+            adminInvoicesController.prefill,
+        );
+
+        adminProtected.post(
+            '/users/:userId/invoices/preview',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Render an invoice PDF from unsaved input WITHOUT allocating a number',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: invoiceBodySchema,
+                },
+            },
+            adminInvoicesController.preview,
+        );
+
+        adminProtected.post(
+            '/users/:userId/invoices',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Issue an invoice: allocate the next number, render and archive the PDF',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: invoiceBodySchema,
+                },
+            },
+            adminInvoicesController.create,
+        );
+
+        adminProtected.get(
+            '/invoices/:invoiceId/pdf',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Download the archived invoice PDF exactly as it was issued',
+                    security: auth,
+                    params: { type: 'object', properties: { invoiceId: { type: 'string', format: 'uuid' } }, required: ['invoiceId'] },
+                },
+            },
+            adminInvoicesController.download,
+        );
+
+        adminProtected.post(
+            '/invoices/:invoiceId/send',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Email an issued invoice to the merchant with the archived PDF attached',
+                    security: auth,
+                    params: { type: 'object', properties: { invoiceId: { type: 'string', format: 'uuid' } }, required: ['invoiceId'] },
+                    body: {
+                        type: 'object',
+                        required: ['subject', 'body'],
+                        properties: {
+                            subject: { type: 'string', minLength: 1, maxLength: 500 },
+                            body: { type: 'string', minLength: 1, maxLength: 20_000 },
+                            cc: { type: 'array', maxItems: MAX_EMAIL_CC, items: { type: 'string', format: 'email' } },
+                            bcc: { type: 'array', maxItems: MAX_EMAIL_CC, items: { type: 'string', format: 'email' } },
+                            idempotencyKey: { type: 'string', minLength: 8, maxLength: 256 },
+                        },
+                    },
+                },
+            },
+            adminInvoicesController.send,
+        );
+
+        adminProtected.post(
+            '/invoices/:invoiceId/void',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Void an invoice — the row and its number are kept, never deleted',
+                    security: auth,
+                    params: { type: 'object', properties: { invoiceId: { type: 'string', format: 'uuid' } }, required: ['invoiceId'] },
+                    body: {
+                        type: 'object',
+                        required: ['reason'],
+                        properties: { reason: { type: 'string', minLength: 3, maxLength: 500 } },
+                    },
+                },
+            },
+            adminInvoicesController.void,
         );
 
         // ============================================

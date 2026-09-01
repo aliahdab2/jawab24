@@ -2,6 +2,7 @@ import { config } from '../config';
 import { t, tPlural } from './i18n';
 import { escapeHtml } from './htmlUtils';
 import { formatDateTimeShort, formatCount } from './formatDate';
+import { RTL_FONT_STACK as BRAND_RTL_FONT_STACK, LTR_FONT_STACK as BRAND_LTR_FONT_STACK } from './brand';
 
 /**
  * Detect if text is primarily Arabic/RTL script.
@@ -17,8 +18,10 @@ function getBrandName(): string {
     return config.resend.fromName || 'Jawab24';
 }
 
-const RTL_FONT_STACK = "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
-const LTR_FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+// Shared with the invoice renderer — see utils/brand.ts. Kept as local aliases
+// so the many call sites below read unchanged.
+const RTL_FONT_STACK = BRAND_RTL_FONT_STACK;
+const LTR_FONT_STACK = BRAND_LTR_FONT_STACK;
 
 /**
  * Content-driven presentation for a piece of text: direction, lang, alignment

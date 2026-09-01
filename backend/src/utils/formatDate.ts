@@ -27,9 +27,14 @@ function formatWith(
     lang: string,
     options: Intl.DateTimeFormatOptions,
     isoFallbackChars: number,
+    // Opt OUT of the locale's own numeral system, keeping its month names.
+    // Exactly one caller does this (`formatInvoiceDate`); see the reasoning
+    // there. Defaulting to false keeps every existing formatter unchanged.
+    latinDigits = false,
 ): string {
     try {
-        return new Intl.DateTimeFormat(numeralLocale(lang), options).format(d);
+        const locale = latinDigits ? lang : numeralLocale(lang);
+        return new Intl.DateTimeFormat(locale, options).format(d);
     } catch {
         return d.toISOString().slice(0, isoFallbackChars).replace('T', ' ');
     }
@@ -63,4 +68,29 @@ export function formatDateTimeShort(d: Date, lang: string): string {
  */
 export function formatDateLong(d: Date, lang: string): string {
     return formatWith(d, lang, { day: 'numeric', month: 'long' }, 10);
+}
+
+/**
+ * "1 September 2026" / "1 سبتمبر 2026" — full date, with LATIN digits in both
+ * languages.
+ *
+ * The deliberate exception to `numeralLocale` above, and the only one. Every
+ * merchant-facing surface renders Arabic in Arabic-Indic numerals because that
+ * is what reads naturally in an app; an invoice is a financial document that
+ * gets forwarded to an accountant, keyed into bookkeeping software, and matched
+ * against a bank statement — all of which are Latin-digit contexts. Arabic
+ * commercial invoices are conventionally issued this way for the same reason.
+ * The `latinDigits` flag on `formatWith` is what buys this: it skips
+ * `numeralLocale`, so `ar` keeps its month names while the digits stay Latin.
+ *
+ * Note the year is included, unlike `formatDateLong`: a document that outlives
+ * the conversation that produced it cannot rely on "this year" being obvious.
+ */
+export function formatInvoiceDate(d: Date, lang: string): string {
+    // `en` resolves to US order ("September 1, 2026"). The issuer is a Swedish
+    // business invoicing customers in the Middle East and Europe, where
+    // day-first is the norm and month-first is read as an error; `en-GB` also
+    // matches the Arabic side's "1 سبتمبر 2026" so the two language versions of
+    // one invoice agree on shape.
+    return formatWith(d, lang === 'en' ? 'en-GB' : lang, { day: 'numeric', month: 'long', year: 'numeric' }, 10, true);
 }

@@ -2372,3 +2372,171 @@ export const offlinePaymentReceipts = pgTable('offline_payment_receipts', {
     bytes: bytea('bytes').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// 41. Invoices — the manual (non-Stripe) invoice register.
+//
+// Stripe issues its own VAT invoice for card subscriptions and always has; this
+// table covers the rail Stripe never touches. Every manual activation until now
+// went out through `adminSubscriptionsService.manualUpgrade`, which sends no
+// email at all, so a merchant who paid by bank transfer or through a reseller
+// received nothing — the InMedia invoice of 2026-08-15 was built by hand
+// outside the product and attached to a merchant email. This table makes that
+// process repeatable and auditable.
+//
+// EVERYTHING HERE IS A SNAPSHOT. An invoice records what was claimed on a date;
+// it must not change when a plan is repriced, a merchant renames their
+// workspace, or our own address changes. `userId` and `planId` exist to answer
+// "which invoices does this customer have" and to report on, never to
+// re-derive the printed content.
+//
+// Numbering: `series`-`year`-`seq`, printed as e.g. JW24-2026-007. Swedish
+// bookkeeping requires the series to be sequential and unbroken, which drives
+// two decisions elsewhere: the number is allocated INSIDE the creating
+// transaction (a rollback takes the number back with it, so no gap), and an
+// unwanted invoice is VOIDED, never deleted — a hole in the series is a
+// finding at audit, a voided row is not.
+export const invoices = pgTable('invoices', {
+    id: uuid('id').defaultRandom().primaryKey(),
+
+    // --- identity -------------------------------------------------------
+    // The printed number, denormalized from (series, year, seq) so the value a
+    // human quotes in an email is stored once, as text, and can be looked up
+    // without reassembling it.
+    number: varchar('number', { length: 32 }).notNull(),
+    series: varchar('series', { length: 8 }).notNull().default('JW24'),
+    year: integer('year').notNull(),
+    seq: integer('seq').notNull(),
+
+    // --- who it is for --------------------------------------------------
+    // `restrict`, NOT cascade: deleting a user must not silently destroy a
+    // financial record we are required to keep. GDPR erasure for a paying
+    // customer is a deliberate, supervised operation — it should hit this
+    // constraint and make a human decide, not quietly succeed.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }).notNull(),
+    // The buyer block exactly as printed. `customerName` is what the admin
+    // typed ("MES"), deliberately NOT users.name — the legal buyer is usually
+    // the business, while the account is a person.
+    customerName: varchar('customer_name', { length: 255 }).notNull(),
+    customerEmail: varchar('customer_email', { length: 255 }),
+    customerContact: varchar('customer_contact', { length: 255 }),
+    customerAddress: text('customer_address'),
+
+    // --- what it says ---------------------------------------------------
+    lang: varchar('lang', { length: 2 }).notNull().default('ar'),
+    currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+    planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
+    lineDescription: text('line_description').notNull(),
+    lineDetail: text('line_detail'),
+    // The service period this invoice covers. Nullable because not every
+    // invoice is a subscription — a top-up grant has no period.
+    periodStart: timestamp('period_start'),
+    periodEnd: timestamp('period_end'),
+
+    // --- money ----------------------------------------------------------
+    // Cents, like every other price we hold. Supplied by the admin rather than
+    // derived from the plan: real deals are not list price (InMedia's annual
+    // Pro was 790 USD, which no `plans` row has ever contained).
+    subtotalCents: integer('subtotal_cents').notNull(),
+    vatCents: integer('vat_cents').notNull().default(0),
+    totalCents: integer('total_cents').notNull(),
+    // Why the VAT is what it is, printed verbatim on the document. For our
+    // customers today this is always the outside-the-EU exemption, but the
+    // reason belongs ON the invoice, not in a developer's head.
+    vatNote: text('vat_note'),
+
+    // --- lifecycle ------------------------------------------------------
+    issueDate: timestamp('issue_date').defaultNow().notNull(),
+    // 'issued' → 'sent' → (from either) 'void'. There is no 'draft': a draft
+    // would have to hold a number to be previewable, and abandoning it would
+    // tear a hole in the series. Previews render from unsaved input instead and
+    // never touch this table.
+    status: varchar('status', { length: 16 }).notNull().default('issued'),
+    // Set when the document actually left the building. Joins to the delivery
+    // record so "was it sent, and to whom" is answerable from one row —
+    // `email_sends` holds the `to` address, and the matching `admin_audit_logs`
+    // row (action 'merchant_email_sent') holds cc/bcc and the attachment hash.
+    emailSendId: uuid('email_send_id').references(() => emailSends.id, { onDelete: 'set null' }),
+    sentAt: timestamp('sent_at'),
+    voidedAt: timestamp('voided_at'),
+    voidReason: varchar('void_reason', { length: 500 }),
+
+    createdByAdminUserId: uuid('created_by_admin_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    // The series guarantee, enforced by the database rather than by whichever
+    // code path happens to allocate today.
+    numberUnique: uniqueIndex('uq_invoices_number').on(table.number),
+    seqUnique: uniqueIndex('uq_invoices_series_year_seq').on(table.series, table.year, table.seq),
+    userIdx: index('idx_invoices_user').on(table.userId, table.issueDate.desc()),
+    statusIdx: index('idx_invoices_status').on(table.status, table.issueDate.desc()),
+
+    statusCheck: check(
+        'invoices_status_check',
+        sql`${table.status} IN ('issued', 'sent', 'void')`
+    ),
+    langCheck: check(
+        'invoices_lang_check',
+        sql`${table.lang} IN ('ar', 'en')`
+    ),
+    // The arithmetic on the document must hold in the store that keeps it. A
+    // rounding slip in the composer surfaces here as a failed insert rather
+    // than as an invoice whose total disagrees with its own lines.
+    totalCheck: check(
+        'invoices_total_check',
+        sql`${table.totalCents} = ${table.subtotalCents} + ${table.vatCents}`
+    ),
+    // Zero is legitimate (a courtesy period, a fully-discounted line); negative
+    // is not — a refund is a credit note, which is a different document.
+    amountsNonNegativeCheck: check(
+        'invoices_amounts_non_negative',
+        sql`${table.subtotalCents} >= 0 AND ${table.vatCents} >= 0`
+    ),
+    seqPositiveCheck: check(
+        'invoices_seq_positive',
+        sql`${table.seq} > 0`
+    ),
+    // Both directions, like offline_payments' review/grant checks: a voided
+    // invoice always says when, and only a voided invoice does.
+    voidConsistencyCheck: check(
+        'invoices_void_consistency',
+        sql`(${table.status} = 'void') = (${table.voidedAt} IS NOT NULL)`
+    ),
+    // 'sent' ⇒ stamped. Deliberately NOT an equivalence: an invoice that was
+    // sent and later voided keeps its `sent_at`, because it really was sent and
+    // the customer really does hold a copy.
+    sentConsistencyCheck: check(
+        'invoices_sent_consistency',
+        sql`${table.status} <> 'sent' OR ${table.sentAt} IS NOT NULL`
+    ),
+    // A period is either absent or a real interval; a one-sided or inverted
+    // period prints as nonsense on the document.
+    periodCheck: check(
+        'invoices_period_check',
+        sql`(${table.periodStart} IS NULL) = (${table.periodEnd} IS NULL) AND (${table.periodEnd} IS NULL OR ${table.periodEnd} > ${table.periodStart})`
+    ),
+}));
+
+// 41b. Invoice Documents — the rendered PDF, in its OWN table.
+//
+// Same split, and the same two reasons, as offline_payment_receipts: an invoice
+// is a financial document that must not sit one guessable URL away from the
+// public (`imageStorage` returns public URLs by design), and the admin invoice
+// LIST must never be able to drag megabytes of PDF into memory by accident.
+//
+// The bytes are stored rather than re-rendered on demand because the archive
+// obligation is to reproduce the document AS SENT. A re-render is at the mercy
+// of the Chromium and font versions in whatever image is deployed that year;
+// the bytes are not. `sha256` is the same hash the merchant-email audit row
+// records for the attachment, so a copy found in a mailbox can be proven
+// identical to the copy we keep.
+export const invoiceDocuments = pgTable('invoice_documents', {
+    invoiceId: uuid('invoice_id')
+        .references(() => invoices.id, { onDelete: 'cascade' })
+        .primaryKey(),
+    mimeType: varchar('mime_type', { length: 32 }).notNull().default('application/pdf'),
+    byteLength: integer('byte_length').notNull(),
+    bytes: bytea('bytes').notNull(),
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
