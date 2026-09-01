@@ -1726,17 +1726,24 @@ export class PagesService {
     /**
      * Toggle Instagram auto-reply for a page
      */
-    async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+    /** Flip one channel's auto-reply column for a page, scoped to its workspace. */
+    private async setChannelAutoReply(
+        workspaceId: string,
+        pageId: string,
+        column: 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled',
+        enabled: boolean,
+    ) {
         const [updatedPage] = await db
             .update(pages)
-            .set({
-                instagramAutoReplyEnabled: enabled,
-                updatedAt: new Date(),
-            })
+            .set({ [column]: enabled, updatedAt: new Date() })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
         return updatedPage;
+    }
+
+    async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+        return this.setChannelAutoReply(workspaceId, pageId, 'instagramAutoReplyEnabled', enabled);
     }
 
     /**
@@ -1923,16 +1930,7 @@ export class PagesService {
      * Toggle WhatsApp auto-reply for a page
      */
     async toggleWhatsAppAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
-        const [updatedPage] = await db
-            .update(pages)
-            .set({
-                whatsappAutoReplyEnabled: enabled,
-                updatedAt: new Date(),
-            })
-            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
-            .returning();
-
-        return updatedPage;
+        return this.setChannelAutoReply(workspaceId, pageId, 'whatsappAutoReplyEnabled', enabled);
     }
 }
 
