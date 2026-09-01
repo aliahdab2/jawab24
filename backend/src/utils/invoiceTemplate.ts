@@ -35,6 +35,7 @@
 import { escapeHtml } from './htmlUtils';
 import { formatInvoiceDate } from './formatDate';
 import { BRAND, PDF_RTL_FONT_STACK, PDF_LTR_FONT_STACK } from './brand';
+import { invoiceFontFaceCss } from './invoiceFonts';
 
 export type InvoiceLang = 'ar' | 'en';
 
@@ -284,6 +285,8 @@ export function invoiceHtml(view: InvoiceView): string {
 <meta charset="utf-8">
 <title>${escapeHtml(s.invoice)} ${escapeHtml(view.number)}</title>
 <style>
+  ${invoiceFontFaceCss()}
+
   @page { size: A4; margin: 16mm; }
   * { box-sizing: border-box; }
   body {
@@ -317,7 +320,10 @@ export function invoiceHtml(view: InvoiceView): string {
   }
   h2 { font-size: 12px; color: ${BRAND.accent}; margin: 0 0 8px; font-weight: 700; }
   .pname { font-weight: 700; color: ${BRAND.ink}; font-size: 16px; margin-bottom: 4px; }
-  address { font-style: normal; white-space: pre-line; font-size: 13px; color: ${BRAND.muted}; }
+  /* 500, not 400: the house invoice's font table carries Tajawal-Medium, and
+     these party-card lines are where it shows. It also keeps the embedded
+     500 weight in use rather than shipping a face nothing references. */
+  address { font-style: normal; white-space: pre-line; font-size: 13px; font-weight: 500; color: ${BRAND.muted}; }
   .ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
 
   .meta { display: flex; gap: 16px; margin-top: 16px; }
@@ -343,7 +349,10 @@ export function invoiceHtml(view: InvoiceView): string {
   .sub { color: ${BRAND.muted}; font-size: 12.5px; margin-top: 5px; line-height: 1.75; }
   .money { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 
-  table.sums { width: 100%; margin-top: 14px; border-collapse: collapse; }
+  /* Half width, pushed to the far side — as on the house invoice. A
+     full-width totals ladder leaves the label stranded far from its figure. */
+  .totals { width: 52%; margin-${start}: auto; margin-top: 14px; }
+  table.sums { width: 100%; border-collapse: collapse; }
   table.sums td { padding: 8px 14px; }
   table.sums .lbl { color: ${BRAND.muted}; text-align: ${start}; }
   table.sums .val { text-align: ${end}; color: ${BRAND.ink}; }
@@ -359,8 +368,10 @@ export function invoiceHtml(view: InvoiceView): string {
     padding: 13px 14px; margin-top: 6px; font-size: 16px; font-weight: 700;
   }
 
+  /* Tinted with the brand teal, not neutral grey: on the house invoice the
+     paid panel reads as a positive confirmation, not as a note. */
   .paid {
-    margin-top: 24px; background: ${BRAND.panel}; border: 1px solid ${BRAND.border};
+    margin-top: 24px; background: #eefaf7; border: 1px solid #bfe8e0;
     border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px;
     color: ${BRAND.bodyMuted}; font-size: 13px;
   }
@@ -433,14 +444,16 @@ ${ltr(view.seller.contactEmail)}</address>
   </table>
   </div>
 
-  <table class="sums">
-    <tr><td class="lbl">${escapeHtml(s.subtotal)}</td><td class="val money">${escapeHtml(money(view.subtotalCents))}</td></tr>
-    ${vatRow}
-  </table>
+  <div class="totals">
+    <table class="sums">
+      <tr><td class="lbl">${escapeHtml(s.subtotal)}</td><td class="val money">${escapeHtml(money(view.subtotalCents))}</td></tr>
+      ${vatRow}
+    </table>
 
-  <div class="grandtotal">
-    <span>${escapeHtml(s.totalDue)}</span>
-    <span class="money">${escapeHtml(money(view.totalCents))}</span>
+    <div class="grandtotal">
+      <span>${escapeHtml(s.totalDue)}</span>
+      <span class="money">${escapeHtml(money(view.totalCents))}</span>
+    </div>
   </div>
 
   ${paidPanel}

@@ -29,12 +29,19 @@ export const LTR_FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Robot
  * first only so a developer previewing the same HTML in a browser sees the
  * brand faces.
  *
- * `Noto Sans` is not decoration: merchant copy routinely mixes brand names and
- * SKUs into Arabic, and an Arabic-only stack renders those as tofu. That
+ * `Tajawal` leads because it is the face on the house invoice — proven, not
+ * assumed: the PDF's font table lists Tajawal-Regular/Medium/Bold. It is
+ * EMBEDDED as a data URI by utils/invoiceFonts.ts rather than resolved from the
+ * host, so an archived document reproduces identically years later. The Noto
+ * entries behind it are the safety net for a glyph Tajawal's subset lacks.
+ *
+ * `Noto Sans` last is not decoration: merchant copy routinely mixes brand names
+ * and SKUs into Arabic, and an Arabic-only stack renders those as tofu. That
  * failure shipped once already on post cards (2026-08-10) and the Dockerfile
- * comment records it.
+ * comment records it. The Tajawal subsets carry no Latin glyphs at all, which
+ * reproduces the house invoice's own Arabic-Tajawal / Latin-Helvetica split.
  */
-export const PDF_RTL_FONT_STACK = "'Cairo','Tajawal','Noto Naskh Arabic','Noto Sans Arabic','Noto Sans',sans-serif";
+export const PDF_RTL_FONT_STACK = "'Tajawal','Noto Sans Arabic','Noto Naskh Arabic','Noto Sans',sans-serif";
 
 /** Latin stack for server-rendered PDFs. */
 export const PDF_LTR_FONT_STACK = "'Noto Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";

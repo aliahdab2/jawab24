@@ -54,6 +54,13 @@ WORKDIR /app
 # and for the deploy gate. CHROMIUM_PATH points at it; a developer on macOS
 # overrides that to their own Chrome.
 #
+# Note the invoice's own Arabic face (Tajawal) is NOT installed here: it is
+# embedded into the rendered HTML as a data URI from backend/assets/fonts,
+# which arrives via the wholesale `COPY backend ./backend` below. That is
+# deliberate — an archived financial document must reproduce identically years
+# later, and a font resolved from the host depends on what the host has that
+# year. The Noto faces remain the fallback for a glyph the subset lacks.
+#
 # nss/freetype/harfbuzz are pulled in by the chromium package but are named
 # explicitly because they are the ones whose absence produces a SILENT failure
 # (blank glyphs, not a crash) — the same class of bug the font note below
