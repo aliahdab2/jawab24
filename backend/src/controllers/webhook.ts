@@ -977,15 +977,7 @@ export class WebhookController {
                 disconnectionReason: value.disconnection_info?.reason,
                 initiatedBy: value.disconnection_info?.initiated_by,
             });
-            await markWhatsAppNeedsReconnect(
-                {
-                    id: page.id,
-                    name: page.name,
-                    userId: page.userId,
-                    whatsappDisplayPhoneNumber: page.whatsappDisplayPhoneNumber,
-                },
-                'app_uninstalled',
-            );
+            await markWhatsAppNeedsReconnect(page, 'app_uninstalled');
         }
     }
 
