@@ -760,43 +760,51 @@ const PagesPage: NextPageWithLayout = () => {
       action: 'whatsapp-toggle',
     });
 
-  const handleRemoveWhatsAppOnlyPage = async (pageId: string) => {
-    setRemoveWhatsAppOnlyPage(null);
+  // Shared shape for the "drop this page from the list" actions (WhatsApp-only
+  // remove, Instagram-only remove, archive): clear the confirm state, call the
+  // API, optimistically remove the row, then toast — routing failures through
+  // captureError with a per-action tag. Only the confirm-state setter, the API
+  // call, the success key, and the error label/tag differ.
+  const removePageFromList = async (
+    pageId: string,
+    opts: { clearConfirm: () => void; call: (id: string) => Promise<unknown>; successKey: string; errorMessage: string; errorAction: string },
+  ) => {
+    opts.clearConfirm();
     try {
-      await api.delete(`/pages/${pageId}`);
+      await opts.call(pageId);
       setPages(prev => prev.filter(p => p.id !== pageId));
-      toast.success(t('whatsappDisconnected'));
+      toast.success(t(opts.successKey));
     } catch (error) {
-      captureError(error, 'Failed to remove WhatsApp-only page', { tags: { page: 'pages', action: 'whatsapp-remove-page' } });
+      captureError(error, opts.errorMessage, { tags: { page: 'pages', action: opts.errorAction } });
       toast.error(tc('error'));
     }
   };
 
-  const handleRemoveInstagramOnlyPage = async (pageId: string) => {
-    setRemoveInstagramOnlyPage(null);
-    try {
-      // Same delete as the WhatsApp-only card: the row (and with it the stored
-      // Instagram credential) is removed; the account is re-connectable anytime.
-      await api.delete(`/pages/${pageId}`);
-      setPages(prev => prev.filter(p => p.id !== pageId));
-      toast.success(t('instagramRemoved'));
-    } catch (error) {
-      captureError(error, 'Failed to remove Instagram-only page', { tags: { page: 'pages', action: 'instagram-remove-page' } });
-      toast.error(tc('error'));
-    }
-  };
+  const handleRemoveWhatsAppOnlyPage = (pageId: string) => removePageFromList(pageId, {
+    clearConfirm: () => setRemoveWhatsAppOnlyPage(null),
+    call: (id) => api.delete(`/pages/${id}`),
+    successKey: 'whatsappDisconnected',
+    errorMessage: 'Failed to remove WhatsApp-only page',
+    errorAction: 'whatsapp-remove-page',
+  });
 
-  const handleArchivePage = async (pageId: string) => {
-    setArchiveCandidate(null);
-    try {
-      await pagesApi.archive(pageId);
-      setPages(prev => prev.filter(p => p.id !== pageId));
-      toast.success(t('archiveSuccess'));
-    } catch (error) {
-      captureError(error, 'Failed to archive page', { tags: { page: 'pages', action: 'archive-page' } });
-      toast.error(tc('error'));
-    }
-  };
+  const handleRemoveInstagramOnlyPage = (pageId: string) => removePageFromList(pageId, {
+    // Same delete as the WhatsApp-only card: the row (and with it the stored
+    // Instagram credential) is removed; the account is re-connectable anytime.
+    clearConfirm: () => setRemoveInstagramOnlyPage(null),
+    call: (id) => api.delete(`/pages/${id}`),
+    successKey: 'instagramRemoved',
+    errorMessage: 'Failed to remove Instagram-only page',
+    errorAction: 'instagram-remove-page',
+  });
+
+  const handleArchivePage = (pageId: string) => removePageFromList(pageId, {
+    clearConfirm: () => setArchiveCandidate(null),
+    call: (id) => pagesApi.archive(id),
+    successKey: 'archiveSuccess',
+    errorMessage: 'Failed to archive page',
+    errorAction: 'archive-page',
+  });
 
   const handleDisconnectWhatsApp = async (pageId: string) => {
     setDisconnectWhatsAppPage(null);
