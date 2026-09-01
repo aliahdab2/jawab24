@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { pages } from '../db/schema';
-import { and, eq, isNotNull, lt, isNull, or, ne } from 'drizzle-orm';
+import { and, eq, isNotNull, lt, isNull, or, ne, sql } from 'drizzle-orm';
 import { whatsappService, WhatsAppApiError, META_TOKEN_EXPIRED } from './whatsapp';
 import { maybeDecryptToken } from './facebookCrypto';
 import { notificationService } from './notifications';
@@ -55,10 +55,59 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Retry posture for every Graph call in this sweep: a WhatsAppApiError
+ * self-declares `transient` (network / 429 / 5xx) and only those are retried
+ * in-sweep — a definitive 4xx cannot be fixed by retrying. Anything still
+ * failing after the attempts is thrown to the per-page catch and retried on
+ * the next sweep instead.
+ */
+const GRAPH_RETRY_OPTIONS = {
+    maxAttempts: 3,
+    baseDelayMs: 1000,
+    maxDelayMs: 8000,
+    retryableErrors: (err: unknown) => err instanceof WhatsAppApiError && err.transient,
+} as const;
+
+/**
  * Why WhatsApp was disconnected. Persisted on `pages.whatsapp_disconnect_reason`
  * so support can answer "why did this number stop replying?" with one query.
  */
 export type WhatsAppDisconnectReason = 'token_expired' | 'app_uninstalled';
+
+/**
+ * Graph error codes that specifically mean "this asset is not (or no longer)
+ * yours": invalid/revoked token, missing permission, or an unreachable node.
+ * Only these may raise the merchant-visible reconnect banner.
+ *
+ * 10 = permission denied · 33 / 100 = object unsupported/missing (what a node
+ * answers once the app lost access to it) · 190 = invalid OAuth token (the
+ * probe authenticates with the MERCHANT token, so — unlike debug_token, where
+ * 190 blames OUR app token — it is the merchant's credential being rejected).
+ * The 200-series is Graph's permission-error block.
+ */
+const ACCESS_LOSS_META_CODES = new Set([10, 33, 100, 190]);
+const isPermissionSeriesCode = (code: number) => code >= 200 && code <= 299;
+
+/**
+ * A number-node probe failure that PROVES the number is no longer reachable
+ * with the merchant's (still valid) token — i.e. the WABA↔app link was severed
+ * at Meta's side (coexistence unlink, partner removal).
+ *
+ * ALLOWLIST, not "any 4xx": `sanitizeWhatsAppError` marks every HTTP 4xx
+ * non-transient, but Meta also delivers rate limiting as HTTP 400 (app-level
+ * code 4, WABA BUC 80007, Cloud API 130429) and will one day answer these
+ * probes with a version-deprecation 4xx. Treating any of those as access loss
+ * would banner + push-notify every number in a single sweep — the estate-wide
+ * false-positive class the 190 `checkerFaults` note below exists to prevent.
+ * An unlisted code therefore degrades to "retry next sweep + Sentry", never to
+ * a merchant-visible flag.
+ */
+export function isDefinitiveAccessLoss(error: unknown): error is WhatsAppApiError {
+    return error instanceof WhatsAppApiError
+        && !error.transient
+        && typeof error.metaCode === 'number'
+        && (ACCESS_LOSS_META_CODES.has(error.metaCode) || isPermissionSeriesCode(error.metaCode));
+}
 
 /**
  * True when the token is dead or dying and the merchant must act.
@@ -113,11 +162,13 @@ export function assessToken(
 /**
  * Check every connected WhatsApp number whose token hasn't been verified recently.
  */
-export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number; checkerFaults: number }> {
+export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number; accessLost: number; checkerFaults: number }> {
     const staleThreshold = new Date(Date.now() - VERIFY_INTERVAL_MS);
     let checked = 0;
     let expiringSoon = 0;
     let dead = 0;
+    /** Token valid but the WABA/number no longer reachable — link severed at Meta. */
+    let accessLost = 0;
     /** 190s caused by OUR app token, not the merchant's — see the catch below. */
     let checkerFaults = 0;
 
@@ -130,6 +181,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             whatsappAccessToken: pages.whatsappAccessToken,
             whatsappDisplayPhoneNumber: pages.whatsappDisplayPhoneNumber,
             whatsappTokenExpiresAt: pages.whatsappTokenExpiresAt,
+            whatsappPhoneNumberId: pages.whatsappPhoneNumberId,
         })
         .from(pages)
         .where(
@@ -146,7 +198,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
 
     if (stalePages.length === 0) {
         logger.info('[WhatsAppTokenHealth] All tokens recently verified');
-        return { checked: 0, expiringSoon: 0, dead: 0, checkerFaults: 0 };
+        return { checked: 0, expiringSoon: 0, dead: 0, accessLost: 0, checkerFaults: 0 };
     }
 
     logger.info(`[WhatsAppTokenHealth] ${stalePages.length} number(s) need verification`);
@@ -176,15 +228,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             // Retry transient Graph blips so a network hiccup never masquerades as an
             // expired token. A WhatsAppApiError self-declares `transient` (network /
             // 429 / 5xx); a 4xx — including 190 — is definitive and must not be retried.
-            const info = await withRetry(
-                () => whatsappService.debugToken(token),
-                {
-                    maxAttempts: 3,
-                    baseDelayMs: 1000,
-                    maxDelayMs: 8000,
-                    retryableErrors: (err) => err instanceof WhatsAppApiError && err.transient,
-                },
-            );
+            const info = await withRetry(() => whatsappService.debugToken(token), GRAPH_RETRY_OPTIONS);
 
             checked++;
             const verdict = assessToken(info, new Date(), page.whatsappTokenExpiresAt);
@@ -199,6 +243,41 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
                 continue;
             }
 
+            // debug_token proves the TOKEN is alive; it says nothing about whether
+            // the WABA still grants our app access. A coexistence merchant
+            // unlinking from their phone (or Meta removing us as partner) leaves
+            // the token valid while every webhook stops — Z net went dark for 27
+            // hours this way on 2026-08-31 with the sweep reporting all-healthy.
+            // Probe the number node itself with the merchant's token: a definitive
+            // (non-transient) 4xx here is Meta saying the number is no longer ours.
+            //
+            // Same false-positive posture as everything in this file: transient
+            // errors (network / 429 / 5xx) are retried, then thrown to the outer
+            // catch — never flagged, and neither is any 4xx outside the
+            // access-loss allowlist (see isDefinitiveAccessLoss). The bar is
+            // deliberately high because an 'app_uninstalled' flag does NOT
+            // self-clear on the next sweep (see the CASE below) — a wrong flag
+            // here is a banner that stays until the merchant reconnects.
+            const phoneNumberId = page.whatsappPhoneNumberId;
+            if (phoneNumberId) {
+                try {
+                    await withRetry(() => whatsappService.getPhoneNumberInfo(phoneNumberId, token), GRAPH_RETRY_OPTIONS);
+                } catch (probeError) {
+                    if (isDefinitiveAccessLoss(probeError)) {
+                        accessLost++;
+                        logger.warn(`[WhatsAppTokenHealth] WABA access lost for "${page.name}" (${page.whatsappDisplayPhoneNumber}) — token valid but number no longer reachable`, {
+                            metaCode: probeError.metaCode,
+                            error: probeError.message,
+                        });
+                        await markWhatsAppNeedsReconnect(page, 'app_uninstalled');
+                        continue;
+                    }
+                    // Transient after retries — book it with the outer catch so the
+                    // sweep's error accounting stays in one place.
+                    throw probeError;
+                }
+            }
+
             // Still alive: record the freshly-learned deadline so the warning fires on
             // the real date even for numbers connected before this column existed.
             await db
@@ -211,7 +290,20 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
                     // day 60 in silence, the exact failure this service prevents.
                     whatsappTokenExpiresAt: info.expiresAt ?? page.whatsappTokenExpiresAt ?? null,
                     whatsappTokenLastVerifiedAt: new Date(),
-                    whatsappDisconnectReason: null,
+                    // Self-clear ONLY the verdicts this sweep is the oracle for.
+                    // debug_token can refute its own past 'token_expired', so that
+                    // clears. 'app_uninstalled' must survive a healthy-looking
+                    // sweep: it is set by the PARTNER_REMOVED webhook (Meta's
+                    // definitive push signal) or by support, and whether the
+                    // number-node probe reliably 4xxes on a severed link is not
+                    // yet proven at Meta's side — a probe that answers 200 there
+                    // must not un-flag a genuinely dark number (Z net went dark
+                    // 27h with every poll signal reading healthy, 2026-08-31).
+                    // Only an actual reconnect (connectWhatsApp) clears it.
+                    // SQL CASE, not read-then-write: a webhook flag landing
+                    // between this sweep's SELECT and this UPDATE must not be
+                    // overwritten either.
+                    whatsappDisconnectReason: sql`CASE WHEN ${pages.whatsappDisconnectReason} = 'app_uninstalled' THEN ${pages.whatsappDisconnectReason} ELSE NULL END`,
                     updatedAt: new Date(),
                 })
                 .where(eq(pages.id, page.id));
@@ -249,8 +341,8 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
         }
     }
 
-    logger.info(`[WhatsAppTokenHealth] Complete: ${checked} checked, ${expiringSoon} expiring soon, ${dead} dead`);
-    return { checked, expiringSoon, dead, checkerFaults };
+    logger.info(`[WhatsAppTokenHealth] Complete: ${checked} checked, ${expiringSoon} expiring soon, ${dead} dead, ${accessLost} access lost`);
+    return { checked, expiringSoon, dead, accessLost, checkerFaults };
 }
 
 /**
@@ -281,8 +373,10 @@ export async function markWhatsAppNeedsReconnect(
         // 60-day clock on the way through.
         //
         // Keeping the credential turns every false positive from "catastrophic and
-        // permanent" into "a banner that clears itself on the next healthy sweep".
-        // The reason column — not the absence of a token — is the gate.
+        // permanent" into "a banner": a false 'token_expired' clears itself on the
+        // next healthy sweep, and a false 'app_uninstalled' clears on reconnect —
+        // which restores nothing destructively (connectWhatsApp updates the same
+        // row). The reason column — not the absence of a token — is the gate.
         //
         // whatsappAutoReplyEnabled is deliberately NOT touched either: it is the
         // merchant's own setting, and flipping it produced a broken promise (the

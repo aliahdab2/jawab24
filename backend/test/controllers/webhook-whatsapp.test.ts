@@ -27,6 +27,8 @@ const {
     mockGetUnrepliedFromSender,
     mockMarkOlderMessagesAsReplied,
     mockGetInboundRecency,
+    mockGetPagesByWaba,
+    mockMarkWhatsAppNeedsReconnect,
     TX_SENTINEL,
 } = vi.hoisted(() => ({
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
@@ -48,6 +50,8 @@ const {
     // Default = a HUMAN-looking echo (a minute after the inbound, inside an active
     // thread) so the pre-existing echo cases keep exercising the manual path.
     mockGetInboundRecency: vi.fn().mockResolvedValue({ lastAt: new Date(Date.now() - 60_000), priorInboundBeforeWindow: true }),
+    mockGetPagesByWaba: vi.fn().mockResolvedValue([]),
+    mockMarkWhatsAppNeedsReconnect: vi.fn().mockResolvedValue(undefined),
     TX_SENTINEL: { __tx: true },
 }));
 
@@ -80,9 +84,17 @@ vi.mock('../../src/services/pages', () => ({
         getPageByFacebookId: mockGetPageByFacebookId,
         getPageByInstagramId: mockGetPageByInstagramId,
         getPageByWhatsAppPhoneNumberId: mockGetPageByWhatsAppPhoneNumberId,
+        getPagesByWhatsAppBusinessAccountId: mockGetPagesByWaba,
     },
     isPageDisconnected: vi.fn().mockReturnValue(false),
     invalidateWorkspaceStatsCache: vi.fn(),
+}));
+
+// account_update (PARTNER_REMOVED) flags through the same path the token sweep
+// uses. Mocked so these stay webhook-ROUTING tests: the flag/notify mechanics
+// are whatsappTokenHealth's own concern.
+vi.mock('../../src/services/whatsappTokenHealth', () => ({
+    markWhatsAppNeedsReconnect: mockMarkWhatsAppNeedsReconnect,
 }));
 
 // The echo path writes the manual row and clears the backlog inside ONE
@@ -924,5 +936,119 @@ describe('WhatsApp Webhook — Coexistence echoes', () => {
 
             expect(mockGetInboundRecency).toHaveBeenCalledTimes(1);
         });
+    });
+});
+
+describe('WhatsApp Webhook — account_update (severed WABA link)', () => {
+    let app: Awaited<ReturnType<typeof buildApp>>;
+
+    beforeEach(async () => {
+        app = await buildApp();
+        vi.clearAllMocks();
+    });
+
+    const accountUpdatePayload = (event: string, wabaId = 'waba-123') => ({
+        object: 'whatsapp_business_account',
+        entry: [{
+            id: wabaId,
+            changes: [{
+                field: 'account_update',
+                value: {
+                    event,
+                    phone_number: '+967 785 575 899',
+                    disconnection_info: { reason: 'ACCOUNT_DISCONNECTED', initiated_by: 'USER' },
+                },
+            }],
+        }],
+    });
+
+    const post = async (payload: object) => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/webhook',
+            headers: { 'x-hub-signature-256': generateSignature(payload) },
+            payload,
+        });
+        // Processing is fire-and-forget after the 200 — give the async loop a tick.
+        await new Promise(r => setTimeout(r, 50));
+        return response;
+    };
+
+    it('PARTNER_REMOVED flags every page under the WABA for reconnect', async () => {
+        // Meta stops delivering message webhooks from the instant the merchant
+        // unlinks, while the stored token stays valid — this event is the ONLY
+        // push signal we get (Z net went dark for 27h without it, 2026-08-31).
+        mockGetPagesByWaba.mockResolvedValueOnce([
+            { id: 'page-1', name: 'Z net', userId: 'user-1', whatsappDisplayPhoneNumber: '+967 785 575 899' },
+            { id: 'page-2', name: 'Second number', userId: 'user-1', whatsappDisplayPhoneNumber: '+967 700 000 000' },
+        ]);
+
+        const response = await post(accountUpdatePayload('PARTNER_REMOVED'));
+
+        expect(response.statusCode).toBe(200);
+        expect(mockGetPagesByWaba).toHaveBeenCalledWith('waba-123');
+        expect(mockMarkWhatsAppNeedsReconnect).toHaveBeenCalledTimes(2);
+        expect(mockMarkWhatsAppNeedsReconnect).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'page-1', whatsappDisplayPhoneNumber: '+967 785 575 899' }),
+            'app_uninstalled',
+        );
+        expect(mockMarkWhatsAppNeedsReconnect).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'page-2' }),
+            'app_uninstalled',
+        );
+    });
+
+    it('any other account_update event is logged but never flags', async () => {
+        // Flagging is merchant-visible (banner + push); only the documented
+        // disconnect event may trigger it.
+        mockGetPagesByWaba.mockResolvedValue([
+            { id: 'page-1', name: 'Z net', userId: 'user-1', whatsappDisplayPhoneNumber: '+967 785 575 899' },
+        ]);
+
+        for (const event of ['VERIFIED_ACCOUNT', 'DISABLED_UPDATE', 'ACCOUNT_RESTRICTION', 'PARTNER_ADDED']) {
+            await post(accountUpdatePayload(event));
+        }
+
+        expect(mockMarkWhatsAppNeedsReconnect).not.toHaveBeenCalled();
+    });
+
+    it('PARTNER_REMOVED for a WABA we do not know stays a no-op 200', async () => {
+        mockGetPagesByWaba.mockResolvedValueOnce([]);
+
+        const response = await post(accountUpdatePayload('PARTNER_REMOVED', 'waba-unknown'));
+
+        expect(response.statusCode).toBe(200);
+        expect(mockMarkWhatsAppNeedsReconnect).not.toHaveBeenCalled();
+    });
+
+    it('a flagging failure never aborts the rest of the delivery', async () => {
+        // Same containment contract as echoes: a later change in the same
+        // delivery can be a real customer message and must still be enqueued.
+        mockGetPagesByWaba.mockRejectedValueOnce(new Error('db down'));
+
+        const payload = {
+            object: 'whatsapp_business_account',
+            entry: [{
+                id: 'waba-123',
+                changes: [
+                    { field: 'account_update', value: { event: 'PARTNER_REMOVED' } },
+                    {
+                        field: 'messages',
+                        value: {
+                            messaging_product: 'whatsapp',
+                            metadata: { display_phone_number: '+967 785 575 899', phone_number_id: 'phone-number-id-123' },
+                            messages: [{ from: '+967700000001', id: 'wamid.after-failure', type: 'text', text: { body: 'مرحبا' }, timestamp: '1700000000' }],
+                        },
+                    },
+                ],
+            }],
+        };
+
+        const response = await post(payload);
+
+        expect(response.statusCode).toBe(200);
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ jobType: 'whatsapp_message', messageId: 'wamid.after-failure' }),
+        );
     });
 });

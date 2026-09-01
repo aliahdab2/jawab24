@@ -27,7 +27,13 @@ const SUBSCRIPTIONS: WebhookSubscription[] = [
     // manual row so the AI stands down); `history` and `smb_app_state_sync` are
     // accepted and discarded — see webhook.ts. Numbers onboarded the migration
     // way simply never emit the extra three, so this is inert for them.
-    { object: 'whatsapp_business_account', fields: 'messages,smb_message_echoes,history,smb_app_state_sync', label: 'WhatsApp' },
+    //
+    // `account_update` is Meta's ONLY signal that a merchant severed the link
+    // (PARTNER_REMOVED — e.g. a coexistence merchant unlinking from their phone).
+    // Without it the failure is silent: token stays valid, webhooks just stop
+    // (Z net went dark for 27h on 2026-08-31 exactly this way). Handled in
+    // webhook.ts → markWhatsAppNeedsReconnect.
+    { object: 'whatsapp_business_account', fields: 'messages,smb_message_echoes,history,smb_app_state_sync,account_update', label: 'WhatsApp' },
 ];
 
 /**

@@ -19,6 +19,7 @@ const {
     mockDbSelect,
     mockDbUpdate,
     mockDebugToken,
+    mockGetPhoneNumberInfo,
     mockSendTemplateNotification,
     mockCaptureError,
     mockDecrypt,
@@ -26,6 +27,7 @@ const {
     mockDbSelect: vi.fn(),
     mockDbUpdate: vi.fn(),
     mockDebugToken: vi.fn(),
+    mockGetPhoneNumberInfo: vi.fn(),
     mockSendTemplateNotification: vi.fn().mockResolvedValue('notif-id'),
     mockCaptureError: vi.fn(),
     mockDecrypt: vi.fn((t: string | null | undefined) =>
@@ -43,6 +45,7 @@ vi.mock('../../src/db/schema', () => ({
     pages: {
         id: 'id', name: 'name', userId: 'user_id', workspaceId: 'workspace_id',
         whatsappAccessToken: 'whatsapp_access_token',
+        whatsappPhoneNumberId: 'whatsapp_phone_number_id',
         whatsappDisplayPhoneNumber: 'whatsapp_display_phone_number',
         whatsappTokenExpiresAt: 'whatsapp_token_expires_at',
         whatsappTokenLastVerifiedAt: 'whatsapp_token_last_verified_at',
@@ -53,6 +56,10 @@ vi.mock('../../src/db/schema', () => ({
 }));
 
 vi.mock('drizzle-orm', () => ({
+    // Template tag: keep the raw SQL text so tests can assert on the CASE that
+    // preserves 'app_uninstalled' (the anti-flag-wipe rule).
+    sql: vi.fn((strings: TemplateStringsArray, ...vals: unknown[]) =>
+        ({ op: 'sql', text: strings.join('«param»'), vals })),
     eq: vi.fn((f, v) => ({ f, v, op: 'eq' })),
     ne: vi.fn((f, v) => ({ f, v, op: 'ne' })),
     and: vi.fn((...a: unknown[]) => ({ a, op: 'and' })),
@@ -77,7 +84,10 @@ vi.mock('../../src/services/whatsapp', () => {
     return {
         WhatsAppApiError,
         META_TOKEN_EXPIRED: 190,
-        whatsappService: { debugToken: (...a: unknown[]) => mockDebugToken(...a) },
+        whatsappService: {
+            debugToken: (...a: unknown[]) => mockDebugToken(...a),
+            getPhoneNumberInfo: (...a: unknown[]) => mockGetPhoneNumberInfo(...a),
+        },
     };
 });
 
@@ -152,6 +162,10 @@ function waPage(over: Partial<Record<string, unknown>> = {}) {
         userId: 'user-1',
         workspaceId: 'ws-1',
         whatsappAccessToken: 'enc:v1:wa-token',
+        // Present by default because every production row has one — with it, the
+        // healthy path exercises the WABA access probe exactly like production.
+        // Legacy-shaped rows override it to null explicitly.
+        whatsappPhoneNumberId: 'pn-1',
         whatsappDisplayPhoneNumber: '+966 55 000 0000',
         ...over,
     };
@@ -170,13 +184,32 @@ const inDays = (d: number) => new Date(Date.now() + d * 86_400_000);
 const destroysCredential = (s: Record<string, unknown>) =>
     s.whatsappAccessToken === null || s.whatsappAccessToken === '';
 
-/** True when a `.set()` payload flags the number as needing a reconnect. */
-const flagsReconnect = (s: Record<string, unknown>) => !!s.whatsappDisconnectReason;
+/**
+ * True when a `.set()` payload flags the number as needing a reconnect.
+ * The healthy path's reason payload is a CASE *fragment* (see
+ * preservesAppUninstalled), not a reason string — exclude it here.
+ */
+const flagsReconnect = (s: Record<string, unknown>) =>
+    typeof s.whatsappDisconnectReason === 'string' && s.whatsappDisconnectReason.length > 0;
+
+/**
+ * True when the healthy-path update PRESERVES an 'app_uninstalled' flag instead
+ * of NULLing it. That reason is set by the PARTNER_REMOVED webhook (or support)
+ * and only a real reconnect may clear it — a sweep whose probes look healthy
+ * must never un-flag a genuinely severed number (Z net read healthy on every
+ * poll signal for 27 dark hours, 2026-08-31).
+ */
+const preservesAppUninstalled = (s: Record<string, unknown>) => {
+    const reason = s.whatsappDisconnectReason as { op?: string; text?: string } | null;
+    return !!reason && reason.op === 'sql' && /CASE WHEN .* = 'app_uninstalled' THEN/.test(reason.text ?? '');
+};
 
 beforeEach(() => {
     vi.clearAllMocks();
     mockDecrypt.mockImplementation((t: string | null | undefined) =>
         t && t.startsWith('enc:v1:') ? t.slice('enc:v1:'.length) : (t ?? ''));
+    // Default: the WABA access probe passes (the number is still ours).
+    mockGetPhoneNumberInfo.mockResolvedValue({ displayPhoneNumber: '+966 55 000 0000', verifiedName: 'Falafel House' });
 });
 
 describe('verifyWhatsAppTokens — healthy numbers are never disconnected', () => {
@@ -187,10 +220,14 @@ describe('verifyWhatsAppTokens — healthy numbers are never disconnected', () =
 
         const result = await verifyWhatsAppTokens();
 
-        expect(result).toMatchObject({ checked: 1, expiringSoon: 0, dead: 0 });
+        expect(result).toMatchObject({ checked: 1, expiringSoon: 0, dead: 0, accessLost: 0 });
         expect(sets).toHaveLength(1);
         expect(sets[0].whatsappTokenLastVerifiedAt).toBeInstanceOf(Date);
-        expect(sets[0].whatsappDisconnectReason).toBeNull();
+        // The healthy update self-clears ONLY 'token_expired' (its own past
+        // verdict). An unconditional `whatsappDisconnectReason: null` here is the
+        // flag-wipe bug: it would erase a webhook-set 'app_uninstalled' within
+        // 24h of Meta pushing it.
+        expect(preservesAppUninstalled(sets[0])).toBe(true);
         expect(sets.some(destroysCredential)).toBe(false);
         expect(mockSendTemplateNotification).not.toHaveBeenCalled();
     });
@@ -437,5 +474,113 @@ describe('verifyWhatsAppTokens — one bad number does not strand the rest', () 
 
         expect(attempts).toBe(1);
         expect(result.checkerFaults).toBe(1);
+    });
+});
+
+describe('verifyWhatsAppTokens — WABA access probe (severed link)', () => {
+    // debug_token proves the TOKEN; only the number-node probe can see a severed
+    // WABA↔app link (Z net: 27 dark hours with debug_token passing, 2026-08-31).
+    const healthyToken = () =>
+        mockDebugToken.mockResolvedValue({ isValid: true, expiresAt: inDays(50), scopes: [], wabaIds: [] });
+
+    it('flags app_uninstalled when the probe answers an access-loss 4xx', async () => {
+        mockDbSelect.mockReturnValue(stalePages([waPage()]));
+        const sets = captureUpdates();
+        healthyToken();
+        mockGetPhoneNumberInfo.mockRejectedValue(new WhatsAppApiError('Unsupported get request', 100, false));
+
+        const result = await verifyWhatsAppTokens();
+
+        expect(result).toMatchObject({ checked: 1, dead: 0, accessLost: 1, checkerFaults: 0 });
+        const set = sets.find(flagsReconnect)!;
+        expect(set.whatsappDisconnectReason).toBe('app_uninstalled');
+        expect(set).not.toHaveProperty('whatsappAccessToken');
+        // The flag replaces the healthy update — flagging and then "clearing" in
+        // the same sweep would be a self-defeating write.
+        expect(sets.some(s => 'whatsappTokenExpiresAt' in s)).toBe(false);
+        expect(mockSendTemplateNotification).toHaveBeenCalledWith(
+            'user-1', 'whatsapp_reconnect_needed', expect.anything(), expect.anything(),
+        );
+    });
+
+    it('a probe 190 is the MERCHANT token being rejected — flags, not a checker fault', async () => {
+        // Unlike debug_token (authenticated with OUR app token), the probe sends
+        // the merchant's bearer — a 190 here is Meta rejecting their credential.
+        mockDbSelect.mockReturnValue(stalePages([waPage()]));
+        const sets = captureUpdates();
+        healthyToken();
+        mockGetPhoneNumberInfo.mockRejectedValue(new WhatsAppApiError('Invalid OAuth access token', 190, false));
+
+        const result = await verifyWhatsAppTokens();
+
+        expect(result).toMatchObject({ accessLost: 1, checkerFaults: 0 });
+        expect(sets.some(flagsReconnect)).toBe(true);
+    });
+
+    it('never flags a 4xx outside the allowlist — a throttled sweep must not banner the estate', async () => {
+        // Meta ships rate limiting as HTTP 400 (code 4 / 80007 / 130429), which
+        // sanitizeWhatsAppError marks non-transient. One throttled sweep flagging
+        // (and push-notifying) every number at once is the same estate-wide class
+        // as the 190 checker fault above.
+        mockDbSelect.mockReturnValue(stalePages([waPage()]));
+        const sets = captureUpdates();
+        healthyToken();
+        mockGetPhoneNumberInfo.mockRejectedValue(new WhatsAppApiError('Too many calls to this WABA', 80007, false));
+
+        const result = await verifyWhatsAppTokens();
+
+        expect(result.accessLost).toBe(0);
+        expect(sets.some(flagsReconnect)).toBe(false);
+        // No healthy update either — the number is simply retried next sweep.
+        expect(sets).toHaveLength(0);
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
+        expect(mockCaptureError).toHaveBeenCalled();
+    });
+
+    it('retries a transient probe failure and never flags on it', async () => {
+        mockDbSelect.mockReturnValue(stalePages([waPage()]));
+        const sets = captureUpdates();
+        healthyToken();
+        let attempts = 0;
+        mockGetPhoneNumberInfo.mockImplementation(async () => {
+            attempts++;
+            throw new WhatsAppApiError('Service unavailable', undefined, true);
+        });
+
+        const result = await verifyWhatsAppTokens();
+
+        expect(attempts).toBe(3);
+        expect(result.accessLost).toBe(0);
+        expect(sets.some(flagsReconnect)).toBe(false);
+        expect(sets).toHaveLength(0);
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips the probe for a legacy row with no phone number id', async () => {
+        mockDbSelect.mockReturnValue(stalePages([waPage({ whatsappPhoneNumberId: null })]));
+        const sets = captureUpdates();
+        healthyToken();
+
+        const result = await verifyWhatsAppTokens();
+
+        expect(mockGetPhoneNumberInfo).not.toHaveBeenCalled();
+        expect(result).toMatchObject({ checked: 1, accessLost: 0 });
+        expect(sets).toHaveLength(1); // the healthy update still runs
+    });
+
+    it('a healthy sweep never wipes an existing app_uninstalled flag', async () => {
+        // The PARTNER_REMOVED webhook (or support) sets 'app_uninstalled' while
+        // both poll signals can still read healthy. The healthy update must
+        // preserve that reason — only a real reconnect clears it. This is the
+        // regression that left Z net's flag one sweep away from erasure.
+        mockDbSelect.mockReturnValue(stalePages([waPage()]));
+        const sets = captureUpdates();
+        healthyToken(); // token valid AND probe passing — everything looks fine
+
+        await verifyWhatsAppTokens();
+
+        expect(sets).toHaveLength(1);
+        expect(preservesAppUninstalled(sets[0])).toBe(true);
+        expect(sets[0].whatsappDisconnectReason).not.toBeNull();
     });
 });

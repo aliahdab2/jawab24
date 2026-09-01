@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { assessToken } from '../services/whatsappTokenHealth';
+import { assessToken, isDefinitiveAccessLoss } from '../services/whatsappTokenHealth';
+import { WhatsAppApiError } from '../services/whatsapp';
 
 /**
  * Regression coverage for the WhatsApp token expiry arithmetic.
@@ -104,5 +105,53 @@ describe('assessToken', () => {
         expect(assessToken({ isValid: true, expiresAt: inDays(7) }, now).expiringSoon).toBe(true);
         // Just outside the window stays quiet.
         expect(assessToken({ isValid: true, expiresAt: inDays(7.5) }, now).expiringSoon).toBe(false);
+    });
+});
+
+/**
+ * The sweep's WABA access probe: debug_token proves the TOKEN, not the LINK.
+ * A coexistence merchant unlinking leaves the token valid while every webhook
+ * stops (Z net, 27 hours dark, 2026-08-31) — so the sweep also probes the
+ * number node, and this predicate decides whether a probe failure may flag the
+ * merchant-visible reconnect banner. Only a definitive Graph 4xx qualifies.
+ */
+describe('isDefinitiveAccessLoss', () => {
+    it('flags the access-loss codes — object gone / permission lost / token rejected', () => {
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Unsupported get request', 100, false))).toBe(true);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Object does not exist', 33, false))).toBe(true);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Permission denied', 10, false))).toBe(true);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Requires whatsapp_business_management', 200, false))).toBe(true);
+        // 190 on the PROBE authenticates with the merchant token (not our app
+        // token like debug_token), so it too is definitive here.
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Invalid OAuth access token', 190, false))).toBe(true);
+    });
+
+    it('never flags a 4xx outside the allowlist — Meta ships rate limits and deprecations as HTTP 400', () => {
+        // sanitizeWhatsAppError marks every HTTP 4xx non-transient, but these are
+        // NOT "this asset is no longer yours". Flagging them would banner + push
+        // every number in a throttled sweep at once (the estate-wide class the
+        // sweep's 190 checker-fault note documents).
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Application request limit reached', 4, false))).toBe(false);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Too many calls to this WABA', 80007, false))).toBe(false);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Rate limit hit', 130429, false))).toBe(false);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Version deprecated', 2635, false))).toBe(false);
+        // A 4xx whose body Meta did not fill in is weak evidence — never a banner.
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('Bad request', undefined, false))).toBe(false);
+    });
+
+    it('never flags transient failures — network / 429 / 5xx must retry, not banner', () => {
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('timeout', undefined, true))).toBe(false);
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('rate limited', 4, true))).toBe(false);
+        // Even an allowlisted code cannot flag while self-declared transient.
+        expect(isDefinitiveAccessLoss(new WhatsAppApiError('flaky permission read', 10, true))).toBe(false);
+    });
+
+    it('never flags errors that are not Graph verdicts at all', () => {
+        // A decrypt bug, a coding error, a thrown string — none of these are
+        // Meta saying "not yours"; flagging on them re-creates the false-positive
+        // class markWhatsAppNeedsReconnect exists to prevent.
+        expect(isDefinitiveAccessLoss(new Error('boom'))).toBe(false);
+        expect(isDefinitiveAccessLoss('boom')).toBe(false);
+        expect(isDefinitiveAccessLoss(undefined)).toBe(false);
     });
 });

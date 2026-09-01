@@ -1820,6 +1820,27 @@ export class PagesService {
     }
 
     /**
+     * All pages under one WhatsApp Business Account. WABA-level webhooks
+     * (`account_update` / PARTNER_REMOVED) affect every number in the account,
+     * so this returns the full set — usually a single row.
+     *
+     * Projection is exactly what markWhatsAppNeedsReconnect needs — no tokens
+     * are selected or decrypted, so the webhook path never handles plaintext
+     * credentials it has no use for.
+     */
+    async getPagesByWhatsAppBusinessAccountId(businessAccountId: string) {
+        return db
+            .select({
+                id: pages.id,
+                name: pages.name,
+                userId: pages.userId,
+                whatsappDisplayPhoneNumber: pages.whatsappDisplayPhoneNumber,
+            })
+            .from(pages)
+            .where(eq(pages.whatsappBusinessAccountId, businessAccountId));
+    }
+
+    /**
      * Get page by WhatsApp Phone Number ID
      */
     async getPageByWhatsAppPhoneNumberId(phoneNumberId: string) {
