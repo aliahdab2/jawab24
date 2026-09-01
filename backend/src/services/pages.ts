@@ -294,6 +294,9 @@ type PageEnrichments = {
 /** A page row as returned by an insert/update `.returning()` in the sync loop. */
 type SyncedPageRow = typeof pages.$inferSelect;
 
+/** The Instagram identity to attach to a page during sync (all null when unlinked). */
+type InstagramLink = { instagramAccountId: string | null; instagramUsername: string | null; instagramProfilePicUrl: string | null };
+
 /**
  * Accumulates the per-page results of syncFromFacebook. Extracting the ten
  * counters/lists the sync loop used to thread as separate locals into one object
@@ -1419,341 +1422,13 @@ export class PagesService {
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
         // or potential race conditions if multiple syncs happen simultaneously.
         for (const result of results) {
-            let { instagramAccountId, instagramUsername, instagramProfilePicUrl } = result;
             const { fbPage } = result;
+            const ig = await this.resolveInstagramLink(fbPage, result, logger);
             const existingPage = existingPagesMap.get(fbPage.id);
-
-            // The linked IG account may already live on ANOTHER row — an
-            // Instagram-direct card (connectInstagramDirect refuses the reverse
-            // direction for the same reason), or a stale link on a different page.
-            // instagram_account_id is UNIQUE, so writing it here would abort the
-            // whole sync; and even before the index, the duplicate split webhook
-            // routing arbitrarily. The claimed row stays authoritative: this FB
-            // page syncs without the IG link, loudly, and support merges the two
-            // rows deliberately when the merchant asks — never as a silent side
-            // effect of a page sync.
-            if (instagramAccountId) {
-                const [claimedElsewhere] = await db
-                    .select({ id: pages.id, facebookPageId: pages.facebookPageId })
-                    .from(pages)
-                    .where(and(
-                        eq(pages.instagramAccountId, instagramAccountId),
-                        or(isNull(pages.facebookPageId), ne(pages.facebookPageId, fbPage.id)),
-                    ))
-                    .limit(1);
-                if (claimedElsewhere) {
-                    logger.warn(`[Pages] IG account ${instagramAccountId} already owned by page ${claimedElsewhere.id} — syncing ${fbPage.id} without the IG link`);
-                    captureError(
-                        new Error('Instagram account already claimed by another page row'),
-                        'FB sync skipped Instagram link — account owned by another row',
-                        {
-                            tags: { service: 'pages-sync' },
-                            extra: { fbPageId: fbPage.id, instagramAccountId, claimedByPageId: claimedElsewhere.id, claimedRowIsDirect: !claimedElsewhere.facebookPageId },
-                        },
-                    );
-                    instagramAccountId = null;
-                    instagramUsername = null;
-                    instagramProfilePicUrl = null;
-                }
-            }
-
             if (existingPage) {
-                // Industry standard (ManyChat / Chatfuel model): the access token belongs to
-                // whoever originally connected the page. Only that user's sync may refresh it.
-                // Team members who share Facebook page admin access must not overwrite the
-                // stored token — if they did, the page would break when they lose access.
-                const isOriginalConnector = existingPage.userId === userId;
-                logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
-                // Stage 2.6: FB sync writes to the `suggestions` half of the
-                // container. The `merchant` half is editor-write-only and is
-                // preserved verbatim from the existing row.
-                const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
-                // NOTE: this set clause is an explicit allow-list. Do NOT add
-                // lead_stages / lead_fields here — they are per-page lead config
-                // and MUST survive a Facebook disconnect→reconnect (the row is the
-                // same; sync only refreshes FB-sourced fields). Adding them would
-                // silently wipe a merchant's customization on every re-sync.
-                const [updated] = await db
-                    .update(pages)
-                    .set({
-                        name: fbPage.name,
-                        // Only refresh the token if this is the user who connected the page.
-                        // Re-auth restores connectivity → clear disconnectReason for clean
-                        // support state (otherwise stale "token_revoked" lingers forever).
-                        ...(isOriginalConnector && {
-                            accessToken: maybeEncryptToken(fbPage.access_token),
-                            tokenLastVerifiedAt: new Date(),
-                            disconnectReason: null,
-                        }),
-                        instagramAccountId,
-                        instagramUsername,
-                        instagramProfilePicUrl,
-                        businessProfile,
-                        businessProfileUpdatedAt: new Date(),
-                        // Un-archive: the page is back in the merchant's Meta grant, so
-                        // they want it again. Applied unconditionally (NOT inside the
-                        // isOriginalConnector spread) — a team member's sync proves the
-                        // same intent even though it may not refresh the token.
-                        archivedAt: null,
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(pages.id, existingPage.id))
-                    .returning();
-                outcome.recordSynced(updated);
-                // The token was just restored — the reconnect-alert dedup claims
-                // must not outlive the incident they collapsed, or a re-revocation
-                // inside 24h alerts on no channel at all.
-                if (isOriginalConnector) {
-                    clearReconnectAlertClaims(existingPage.id, updated?.userId ?? userId);
-                }
-                if (existingPage.archivedAt) {
-                    void auditLog({
-                        userId,
-                        workspaceId,
-                        pageId: existingPage.id,
-                        action: 'page.unarchived',
-                        entityType: 'page',
-                        entityId: existingPage.id,
-                        metadata: { reason: 'fb_sync' },
-                    });
-                }
-
-                // Subscribe page to webhook events (idempotent — safe to re-subscribe)
-                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+                await this.syncExistingPage(fbPage, existingPage, ig, workspaceId, userId, outcome, logger);
             } else {
-                // Check if this page exists in another workspace (transferred admin access)
-                const globalResults = await db
-                    .select()
-                    .from(pages)
-                    .where(eq(pages.facebookPageId, fbPage.id));
-                const globalExisting = globalResults[0];
-
-                // Anti free-trial-abuse: a channel gets one free trial across the
-                // platform, bound to the first account that enabled it. Check the
-                // page's full channel identity (FB page + linked IG + any prior
-                // WhatsApp) so reconnecting under a fresh account — or swapping the
-                // FB page but keeping the same IG — can't farm another free trial.
-                const pageChannels = channelTrialService.channelsForPage({
-                    facebookPageId: fbPage.id,
-                    instagramAccountId,
-                    whatsappPhoneNumberId: globalExisting?.whatsappPhoneNumberId ?? null,
-                });
-                const { blocked: trialBlocked } = await channelTrialService.evaluate(billing, pageChannels);
-                const slotAvailable = outcome.slotAvailable;
-                // Plan page-limit reached: refuse the connection outright instead
-                // of persisting a disabled shadow page (pre-06/2026 behavior).
-                // Shadow pages kept receiving webhooks whose traffic was dropped
-                // with no inbox trace — merchants read that as "product broken".
-                // The merchant picks which page(s) to connect in Facebook's grant
-                // dialog, or upgrades for more slots. Pages actively owned by
-                // another workspace fall through to the taken/alreadyMemberOf
-                // handling below instead.
-                const ownedByActiveWorkspace = !!globalExisting && !isPageDisconnected(globalExisting);
-                if (!slotAvailable && !ownedByActiveWorkspace) {
-                    logger.info(`[Pages] Plan page limit reached — not connecting "${fbPage.name}" (${fbPage.id})`);
-                    outcome.recordSkipped(fbPage.name);
-                    continue;
-                }
-                const shouldAutoEnable = !trialBlocked;
-                // Record WHY the system kept auto-reply off. Trial-blocked pages
-                // ARE persisted (connected-but-off) so the UI can prompt the
-                // merchant to subscribe; the comment pipeline ingests (but never
-                // answers) their comments, and the admin UI surfaces the reason.
-                const autoReplyDisabledReason = shouldAutoEnable ? null : 'trial_block';
-                // Pass globalExisting's profile so a reclaim/disconnect-recover
-                // preserves the merchant half if any (otherwise undefined → fresh).
-                const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
-
-                if (globalExisting && isPageDisconnected(globalExisting)) {
-                    // Page exists but previous owner disconnected — safe to claim
-                    logger.info(`[Pages] Claiming disconnected page "${fbPage.name}" (${fbPage.id}) from workspace ${globalExisting.workspaceId} to ${workspaceId}`);
-                    // ATOMIC: the page row and the denormalized workspace_id on its
-                    // inbox rows must move together or not at all. If the re-scope
-                    // could fail after the page row committed, the next sync would
-                    // take the `existingPage` branch (the page now lives here) and
-                    // never re-scope again — permanent silent drift, which is the
-                    // exact bug this whole change exists to kill. Prod carried 145
-                    // such stranded messages from before the re-scope existed.
-                    const claimed = await db.transaction(async (tx) => {
-                        const [row] = await tx
-                            .update(pages)
-                            .set({
-                                workspaceId,
-                                userId,
-                                name: fbPage.name,
-                                accessToken: maybeEncryptToken(fbPage.access_token),
-                                tokenLastVerifiedAt: new Date(),
-                                disconnectReason: null,
-                                autoReplyEnabled: shouldAutoEnable,
-                                autoReplyDisabledReason,
-                                instagramAccountId,
-                                instagramUsername,
-                                instagramProfilePicUrl,
-                                businessProfile,
-                                businessProfileUpdatedAt: new Date(),
-                                // Reclaim moves the page from ANOTHER workspace into this one
-                                // — clear the previous owner's per-page lead config so it can't
-                                // leak across workspaces. The page inherits THIS workspace's
-                                // default until re-customized. (A same-workspace reconnect goes
-                                // through the existingPage branch above, which KEEPS the override.)
-                                leadStages: null,
-                                leadFields: null,
-                                // Same cross-workspace rule for the store link: a page
-                                // reclaimed into a new workspace must not keep answering
-                                // from the PREVIOUS workspace's store catalog.
-                                ecommerceStoreId: null,
-                                // A claimed page is live again in its new workspace — an
-                                // archive flag set by the PREVIOUS owner must not keep it
-                                // hidden here.
-                                archivedAt: null,
-                                updatedAt: new Date(),
-                            })
-                            .where(eq(pages.id, globalExisting.id))
-                            .returning();
-
-                        if (globalExisting.workspaceId !== workspaceId) {
-                            await rescopePageWorkspace(globalExisting.id, workspaceId, logger, tx);
-                        }
-                        return row;
-                    });
-                    // A claimed page just ARRIVED in this workspace — same intent
-                    // as a created one, so it is an eligible auto-link trigger
-                    // (a deliberate unlink can only have happened in the previous
-                    // workspace, and the link was cleared above).
-                    outcome.recordArrived(claimed);
-                    // Fresh token written in the transaction above — release the
-                    // reconnect-alert dedup claims (see the sync branch above).
-                    if (claimed) clearReconnectAlertClaims(claimed.id, userId);
-                    if (globalExisting.archivedAt) {
-                        void auditLog({
-                            userId,
-                            workspaceId,
-                            pageId: claimed.id,
-                            action: 'page.unarchived',
-                            entityType: 'page',
-                            entityId: claimed.id,
-                            metadata: { reason: 'fb_sync', fromWorkspaceId: globalExisting.workspaceId },
-                        });
-                    }
-                    // Reclaiming a disconnected page (re)establishes its auto-reply
-                    // state via Facebook — audit it as an fb_sync transition.
-                    logAutoReplyToggle({
-                        pageId: claimed.id,
-                        workspaceId,
-                        userId,
-                        enabled: shouldAutoEnable,
-                        reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
-                    });
-
-                    await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
-                } else if (globalExisting) {
-                    // Page is active under another workspace — skip to avoid stealing it.
-                    logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
-                    // Every withheld page counts as taken, member of the holding
-                    // workspace or not — the merchant just granted it in the Facebook
-                    // dialog and must learn it was NOT connected (D-039: say a page is
-                    // taken, never who holds it). Counting only members (the state
-                    // before 2026-08-23) dropped the stranger case into the "No pages
-                    // found" reply, which told an admin of one page that they had none.
-                    outcome.recordTaken(fbPage.name);
-                    if (globalExisting.workspaceId) {
-                        const holdingWorkspaceId = globalExisting.workspaceId;
-                        const [memberOfHolding] = await db
-                            .select({
-                                role: workspaceMembers.role,
-                                workspaceName: workspacesTable.name,
-                            })
-                            .from(workspaceMembers)
-                            .innerJoin(workspacesTable, eq(workspaceMembers.workspaceId, workspacesTable.id))
-                            .where(
-                                and(
-                                    eq(workspaceMembers.workspaceId, holdingWorkspaceId),
-                                    eq(workspaceMembers.userId, userId),
-                                )
-                            )
-                            .limit(1);
-                        if (memberOfHolding) {
-                            // Syncing user is already a member of the holding workspace —
-                            // surface a one-tap "switch workspace" CTA on the client.
-                            outcome.recordAlreadyMember({
-                                workspaceId: holdingWorkspaceId,
-                                workspaceName: memberOfHolding.workspaceName,
-                                role: memberOfHolding.role,
-                                pageName: fbPage.name,
-                            });
-                        }
-                        // Else: silent skip — user can't act on this page from their own
-                        // account, so don't surface noise (e.g. ex-team-member case).
-                    }
-                    continue;
-                } else {
-                    // Brand new page — insert
-                    logger.debug(`[Pages] Creating new page: ${fbPage.name} (autoReply: ${shouldAutoEnable})`);
-                    const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
-                    if (suggestedKnowledgeBase) {
-                        logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
-                            hasAbout: !!fbPage.about,
-                            hasPhone: !!fbPage.phone,
-                            hasAddress: !!fbPage.single_line_address,
-                            hasHours: !!fbPage.hours,
-                            hasWebsite: !!fbPage.website,
-                        });
-                    }
-                    const [created] = await db
-                        .insert(pages)
-                        .values({
-                            workspaceId,
-                            userId,
-                            facebookPageId: fbPage.id,
-                            name: fbPage.name,
-                            accessToken: maybeEncryptToken(fbPage.access_token),
-                            tokenLastVerifiedAt: new Date(),
-                            autoReplyEnabled: shouldAutoEnable,
-                            autoReplyDisabledReason,
-                            instagramAccountId,
-                            instagramUsername,
-                            instagramProfilePicUrl,
-                            instagramAutoReplyEnabled: false,
-                            knowledgeBase: suggestedKnowledgeBase || null,
-                            suggestedKnowledgeBase: suggestedKnowledgeBase || null,
-                            businessProfile,
-                            businessProfileUpdatedAt: new Date(),
-                        })
-                        .returning();
-                    outcome.recordArrived(created);
-                    // Record the auto-reply state a page is born with at connect
-                    // (previous = null), so its full on/off history starts here.
-                    logAutoReplyToggle({
-                        pageId: created.id,
-                        workspaceId,
-                        userId,
-                        enabled: shouldAutoEnable,
-                        reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
-                    });
-
-                    // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
-                    if (suggestedKnowledgeBase && created?.kbVersion) {
-                        const ingestion = getIngestionService();
-                        if (ingestion) {
-                            ingestion.ingestKnowledgeBase(created.id, suggestedKnowledgeBase, created.kbVersion)
-                                .catch(err => captureError(err, 'KB ingestion failed during syncPages', { tags: { service: 'kb-ingestion', action: 'syncPages' }, extra: { pageId: created.id } }));
-                        }
-                    }
-
-                    // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
-                    await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
-                }
-
-                if (shouldAutoEnable) {
-                    // Claim the channels for the billing account so this trial can't
-                    // be re-used by a different account later (first writer wins).
-                    await channelTrialService.record(pageChannels, billing, workspaceId);
-                    outcome.consumeSlot();
-                } else {
-                    // Connected, but auto-reply stays OFF — channel already used its
-                    // free trial. Surfaced so the UI can prompt the user to subscribe.
-                    outcome.recordTrialBlocked(fbPage.name);
-                }
+                await this.connectUnmatchedPage(fbPage, ig, billing, workspaceId, userId, outcome, logger);
             }
         }
 
@@ -1777,6 +1452,377 @@ export class PagesService {
 
         return outcome.toResponse({ skipReason, pageLimit: enableCheck.limit ?? null, revokedCount: revokedPages.length, noPagesDiagnosis: null });
     }
+
+    /**
+     * Resolve the Instagram link to attach to this page. The account may already
+     * live on ANOTHER row (an Instagram-direct card, or a stale link) — and
+     * instagram_account_id is UNIQUE, so writing a duplicate would abort the whole
+     * sync. When claimed elsewhere, drop the link (the page syncs without it,
+     * loudly) rather than fail; support merges the rows deliberately on request.
+     */
+    private async resolveInstagramLink(
+        fbPage: FacebookPage,
+        result: { instagramAccountId: string | null; instagramUsername: string | null; instagramProfilePicUrl: string | null },
+        logger: Logger,
+    ): Promise<InstagramLink> {
+        let { instagramAccountId, instagramUsername, instagramProfilePicUrl } = result;
+        if (instagramAccountId) {
+            const [claimedElsewhere] = await db
+                .select({ id: pages.id, facebookPageId: pages.facebookPageId })
+                .from(pages)
+                .where(and(
+                    eq(pages.instagramAccountId, instagramAccountId),
+                    or(isNull(pages.facebookPageId), ne(pages.facebookPageId, fbPage.id)),
+                ))
+                .limit(1);
+            if (claimedElsewhere) {
+                logger.warn(`[Pages] IG account ${instagramAccountId} already owned by page ${claimedElsewhere.id} — syncing ${fbPage.id} without the IG link`);
+                captureError(
+                    new Error('Instagram account already claimed by another page row'),
+                    'FB sync skipped Instagram link — account owned by another row',
+                    {
+                        tags: { service: 'pages-sync' },
+                        extra: { fbPageId: fbPage.id, instagramAccountId, claimedByPageId: claimedElsewhere.id, claimedRowIsDirect: !claimedElsewhere.facebookPageId },
+                    },
+                );
+                instagramAccountId = null;
+                instagramUsername = null;
+                instagramProfilePicUrl = null;
+            }
+        }
+        return { instagramAccountId, instagramUsername, instagramProfilePicUrl };
+    }
+
+    /**
+     * Refresh a page that already exists in THIS workspace: update FB-sourced
+     * fields, refresh the token only for the original connector (ManyChat model),
+     * un-archive, re-subscribe webhooks. Records it as synced (not an arrival).
+     */
+    private async syncExistingPage(
+        fbPage: FacebookPage,
+        existingPage: SyncedPageRow,
+        ig: InstagramLink,
+        workspaceId: string,
+        userId: string,
+        outcome: SyncOutcome,
+        logger: Logger,
+    ): Promise<void> {
+        const { instagramAccountId, instagramUsername, instagramProfilePicUrl } = ig;
+            // Industry standard (ManyChat / Chatfuel model): the access token belongs to
+            // whoever originally connected the page. Only that user's sync may refresh it.
+            // Team members who share Facebook page admin access must not overwrite the
+            // stored token — if they did, the page would break when they lose access.
+            const isOriginalConnector = existingPage.userId === userId;
+            logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
+            // Stage 2.6: FB sync writes to the `suggestions` half of the
+            // container. The `merchant` half is editor-write-only and is
+            // preserved verbatim from the existing row.
+            const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
+            // NOTE: this set clause is an explicit allow-list. Do NOT add
+            // lead_stages / lead_fields here — they are per-page lead config
+            // and MUST survive a Facebook disconnect→reconnect (the row is the
+            // same; sync only refreshes FB-sourced fields). Adding them would
+            // silently wipe a merchant's customization on every re-sync.
+            const [updated] = await db
+                .update(pages)
+                .set({
+                    name: fbPage.name,
+                    // Only refresh the token if this is the user who connected the page.
+                    // Re-auth restores connectivity → clear disconnectReason for clean
+                    // support state (otherwise stale "token_revoked" lingers forever).
+                    ...(isOriginalConnector && {
+                        accessToken: maybeEncryptToken(fbPage.access_token),
+                        tokenLastVerifiedAt: new Date(),
+                        disconnectReason: null,
+                    }),
+                    instagramAccountId,
+                    instagramUsername,
+                    instagramProfilePicUrl,
+                    businessProfile,
+                    businessProfileUpdatedAt: new Date(),
+                    // Un-archive: the page is back in the merchant's Meta grant, so
+                    // they want it again. Applied unconditionally (NOT inside the
+                    // isOriginalConnector spread) — a team member's sync proves the
+                    // same intent even though it may not refresh the token.
+                    archivedAt: null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(pages.id, existingPage.id))
+                .returning();
+            outcome.recordSynced(updated);
+            // The token was just restored — the reconnect-alert dedup claims
+            // must not outlive the incident they collapsed, or a re-revocation
+            // inside 24h alerts on no channel at all.
+            if (isOriginalConnector) {
+                clearReconnectAlertClaims(existingPage.id, updated?.userId ?? userId);
+            }
+            if (existingPage.archivedAt) {
+                void auditLog({
+                    userId,
+                    workspaceId,
+                    pageId: existingPage.id,
+                    action: 'page.unarchived',
+                    entityType: 'page',
+                    entityId: existingPage.id,
+                    metadata: { reason: 'fb_sync' },
+                });
+            }
+
+            // Subscribe page to webhook events (idempotent — safe to re-subscribe)
+            await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+    }
+
+    /**
+     * Handle a Facebook page not already in this workspace: claim it if a previous
+     * owner disconnected (atomic re-scope), skip it if another workspace holds it
+     * live (D-039), or create it fresh — then apply the free-trial / plan-slot
+     * accounting. Mutates `outcome` with the per-page result.
+     */
+    private async connectUnmatchedPage(
+        fbPage: FacebookPage,
+        ig: InstagramLink,
+        billing: string,
+        workspaceId: string,
+        userId: string,
+        outcome: SyncOutcome,
+        logger: Logger,
+    ): Promise<void> {
+        const { instagramAccountId, instagramUsername, instagramProfilePicUrl } = ig;
+            // Check if this page exists in another workspace (transferred admin access)
+            const globalResults = await db
+                .select()
+                .from(pages)
+                .where(eq(pages.facebookPageId, fbPage.id));
+            const globalExisting = globalResults[0];
+
+            // Anti free-trial-abuse: a channel gets one free trial across the
+            // platform, bound to the first account that enabled it. Check the
+            // page's full channel identity (FB page + linked IG + any prior
+            // WhatsApp) so reconnecting under a fresh account — or swapping the
+            // FB page but keeping the same IG — can't farm another free trial.
+            const pageChannels = channelTrialService.channelsForPage({
+                facebookPageId: fbPage.id,
+                instagramAccountId,
+                whatsappPhoneNumberId: globalExisting?.whatsappPhoneNumberId ?? null,
+            });
+            const { blocked: trialBlocked } = await channelTrialService.evaluate(billing, pageChannels);
+            const slotAvailable = outcome.slotAvailable;
+            // Plan page-limit reached: refuse the connection outright instead
+            // of persisting a disabled shadow page (pre-06/2026 behavior).
+            // Shadow pages kept receiving webhooks whose traffic was dropped
+            // with no inbox trace — merchants read that as "product broken".
+            // The merchant picks which page(s) to connect in Facebook's grant
+            // dialog, or upgrades for more slots. Pages actively owned by
+            // another workspace fall through to the taken/alreadyMemberOf
+            // handling below instead.
+            const ownedByActiveWorkspace = !!globalExisting && !isPageDisconnected(globalExisting);
+            if (!slotAvailable && !ownedByActiveWorkspace) {
+                logger.info(`[Pages] Plan page limit reached — not connecting "${fbPage.name}" (${fbPage.id})`);
+                outcome.recordSkipped(fbPage.name);
+                return;
+            }
+            const shouldAutoEnable = !trialBlocked;
+            // Record WHY the system kept auto-reply off. Trial-blocked pages
+            // ARE persisted (connected-but-off) so the UI can prompt the
+            // merchant to subscribe; the comment pipeline ingests (but never
+            // answers) their comments, and the admin UI surfaces the reason.
+            const autoReplyDisabledReason = shouldAutoEnable ? null : 'trial_block';
+            // Pass globalExisting's profile so a reclaim/disconnect-recover
+            // preserves the merchant half if any (otherwise undefined → fresh).
+            const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
+
+            if (globalExisting && isPageDisconnected(globalExisting)) {
+                // Page exists but previous owner disconnected — safe to claim
+                logger.info(`[Pages] Claiming disconnected page "${fbPage.name}" (${fbPage.id}) from workspace ${globalExisting.workspaceId} to ${workspaceId}`);
+                // ATOMIC: the page row and the denormalized workspace_id on its
+                // inbox rows must move together or not at all. If the re-scope
+                // could fail after the page row committed, the next sync would
+                // take the `existingPage` branch (the page now lives here) and
+                // never re-scope again — permanent silent drift, which is the
+                // exact bug this whole change exists to kill. Prod carried 145
+                // such stranded messages from before the re-scope existed.
+                const claimed = await db.transaction(async (tx) => {
+                    const [row] = await tx
+                        .update(pages)
+                        .set({
+                            workspaceId,
+                            userId,
+                            name: fbPage.name,
+                            accessToken: maybeEncryptToken(fbPage.access_token),
+                            tokenLastVerifiedAt: new Date(),
+                            disconnectReason: null,
+                            autoReplyEnabled: shouldAutoEnable,
+                            autoReplyDisabledReason,
+                            instagramAccountId,
+                            instagramUsername,
+                            instagramProfilePicUrl,
+                            businessProfile,
+                            businessProfileUpdatedAt: new Date(),
+                            // Reclaim moves the page from ANOTHER workspace into this one
+                            // — clear the previous owner's per-page lead config so it can't
+                            // leak across workspaces. The page inherits THIS workspace's
+                            // default until re-customized. (A same-workspace reconnect goes
+                            // through the existingPage branch above, which KEEPS the override.)
+                            leadStages: null,
+                            leadFields: null,
+                            // Same cross-workspace rule for the store link: a page
+                            // reclaimed into a new workspace must not keep answering
+                            // from the PREVIOUS workspace's store catalog.
+                            ecommerceStoreId: null,
+                            // A claimed page is live again in its new workspace — an
+                            // archive flag set by the PREVIOUS owner must not keep it
+                            // hidden here.
+                            archivedAt: null,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(pages.id, globalExisting.id))
+                        .returning();
+
+                    if (globalExisting.workspaceId !== workspaceId) {
+                        await rescopePageWorkspace(globalExisting.id, workspaceId, logger, tx);
+                    }
+                    return row;
+                });
+                // A claimed page just ARRIVED in this workspace — same intent
+                // as a created one, so it is an eligible auto-link trigger
+                // (a deliberate unlink can only have happened in the previous
+                // workspace, and the link was cleared above).
+                outcome.recordArrived(claimed);
+                // Fresh token written in the transaction above — release the
+                // reconnect-alert dedup claims (see the sync branch above).
+                if (claimed) clearReconnectAlertClaims(claimed.id, userId);
+                if (globalExisting.archivedAt) {
+                    void auditLog({
+                        userId,
+                        workspaceId,
+                        pageId: claimed.id,
+                        action: 'page.unarchived',
+                        entityType: 'page',
+                        entityId: claimed.id,
+                        metadata: { reason: 'fb_sync', fromWorkspaceId: globalExisting.workspaceId },
+                    });
+                }
+                // Reclaiming a disconnected page (re)establishes its auto-reply
+                // state via Facebook — audit it as an fb_sync transition.
+                logAutoReplyToggle({
+                    pageId: claimed.id,
+                    workspaceId,
+                    userId,
+                    enabled: shouldAutoEnable,
+                    reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
+                });
+
+                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+            } else if (globalExisting) {
+                // Page is active under another workspace — skip to avoid stealing it.
+                logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
+                // Every withheld page counts as taken, member of the holding
+                // workspace or not — the merchant just granted it in the Facebook
+                // dialog and must learn it was NOT connected (D-039: say a page is
+                // taken, never who holds it). Counting only members (the state
+                // before 2026-08-23) dropped the stranger case into the "No pages
+                // found" reply, which told an admin of one page that they had none.
+                outcome.recordTaken(fbPage.name);
+                if (globalExisting.workspaceId) {
+                    const holdingWorkspaceId = globalExisting.workspaceId;
+                    const [memberOfHolding] = await db
+                        .select({
+                            role: workspaceMembers.role,
+                            workspaceName: workspacesTable.name,
+                        })
+                        .from(workspaceMembers)
+                        .innerJoin(workspacesTable, eq(workspaceMembers.workspaceId, workspacesTable.id))
+                        .where(
+                            and(
+                                eq(workspaceMembers.workspaceId, holdingWorkspaceId),
+                                eq(workspaceMembers.userId, userId),
+                            )
+                        )
+                        .limit(1);
+                    if (memberOfHolding) {
+                        // Syncing user is already a member of the holding workspace —
+                        // surface a one-tap "switch workspace" CTA on the client.
+                        outcome.recordAlreadyMember({
+                            workspaceId: holdingWorkspaceId,
+                            workspaceName: memberOfHolding.workspaceName,
+                            role: memberOfHolding.role,
+                            pageName: fbPage.name,
+                        });
+                    }
+                    // Else: silent skip — user can't act on this page from their own
+                    // account, so don't surface noise (e.g. ex-team-member case).
+                }
+                return;
+            } else {
+                // Brand new page — insert
+                logger.debug(`[Pages] Creating new page: ${fbPage.name} (autoReply: ${shouldAutoEnable})`);
+                const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
+                if (suggestedKnowledgeBase) {
+                    logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
+                        hasAbout: !!fbPage.about,
+                        hasPhone: !!fbPage.phone,
+                        hasAddress: !!fbPage.single_line_address,
+                        hasHours: !!fbPage.hours,
+                        hasWebsite: !!fbPage.website,
+                    });
+                }
+                const [created] = await db
+                    .insert(pages)
+                    .values({
+                        workspaceId,
+                        userId,
+                        facebookPageId: fbPage.id,
+                        name: fbPage.name,
+                        accessToken: maybeEncryptToken(fbPage.access_token),
+                        tokenLastVerifiedAt: new Date(),
+                        autoReplyEnabled: shouldAutoEnable,
+                        autoReplyDisabledReason,
+                        instagramAccountId,
+                        instagramUsername,
+                        instagramProfilePicUrl,
+                        instagramAutoReplyEnabled: false,
+                        knowledgeBase: suggestedKnowledgeBase || null,
+                        suggestedKnowledgeBase: suggestedKnowledgeBase || null,
+                        businessProfile,
+                        businessProfileUpdatedAt: new Date(),
+                    })
+                    .returning();
+                outcome.recordArrived(created);
+                // Record the auto-reply state a page is born with at connect
+                // (previous = null), so its full on/off history starts here.
+                logAutoReplyToggle({
+                    pageId: created.id,
+                    workspaceId,
+                    userId,
+                    enabled: shouldAutoEnable,
+                    reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
+                });
+
+                // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
+                if (suggestedKnowledgeBase && created?.kbVersion) {
+                    const ingestion = getIngestionService();
+                    if (ingestion) {
+                        ingestion.ingestKnowledgeBase(created.id, suggestedKnowledgeBase, created.kbVersion)
+                            .catch(err => captureError(err, 'KB ingestion failed during syncPages', { tags: { service: 'kb-ingestion', action: 'syncPages' }, extra: { pageId: created.id } }));
+                    }
+                }
+
+                // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
+                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+            }
+
+            if (shouldAutoEnable) {
+                // Claim the channels for the billing account so this trial can't
+                // be re-used by a different account later (first writer wins).
+                await channelTrialService.record(pageChannels, billing, workspaceId);
+                outcome.consumeSlot();
+            } else {
+                // Connected, but auto-reply stays OFF — channel already used its
+                // free trial. Surfaced so the UI can prompt the user to subscribe.
+                outcome.recordTrialBlocked(fbPage.name);
+            }
+    }
+
 
     /**
      * Look up each Facebook page's linked Instagram account in parallel (one
