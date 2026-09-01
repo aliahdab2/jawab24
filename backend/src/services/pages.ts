@@ -43,27 +43,40 @@ export function getIngestionService(): KbIngestionService | null {
     return _ingestionService;
 }
 
+type DayHourSlots = Record<string, { open: string; close: string }[]>;
+
+/**
+ * Parse Facebook's flat hours map (`{ mon_1_open: "09:00", mon_1_close: "18:00", … }`)
+ * into per-day, per-slot { open, close } pairs. The single source shared by
+ * formatBusinessHours (human string) and parseBusinessHours (structured output).
+ * Returns null when there are no hours to parse; otherwise a (possibly empty)
+ * map — an empty map means non-empty input with no keys matching the day regex.
+ */
+function parseFbHourSlots(hours: FacebookPageHours | undefined): DayHourSlots | null {
+    if (!hours || Object.keys(hours).length === 0) return null;
+
+    const daySlots: DayHourSlots = {};
+    for (const [key, value] of Object.entries(hours)) {
+        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
+        if (match) {
+            const [, day, slot, type] = match;
+            if (!daySlots[day]) daySlots[day] = [];
+            if (!daySlots[day][parseInt(slot) - 1]) {
+                daySlots[day][parseInt(slot) - 1] = { open: '', close: '' };
+            }
+            daySlots[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
+        }
+    }
+    return daySlots;
+}
+
 /**
  * Format Facebook hours object into readable text
  * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
  */
 export function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
-    if (!hours || Object.keys(hours).length === 0) return null;
-
-    const dayHours: Record<string, { open: string; close: string }[]> = {};
-
-    // Parse the hours object
-    for (const [key, value] of Object.entries(hours)) {
-        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
-        if (match) {
-            const [, day, slot, type] = match;
-            if (!dayHours[day]) dayHours[day] = [];
-            if (!dayHours[day][parseInt(slot) - 1]) {
-                dayHours[day][parseInt(slot) - 1] = { open: '', close: '' };
-            }
-            dayHours[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
-        }
-    }
+    const dayHours = parseFbHourSlots(hours);
+    if (!dayHours) return null;
 
     // Format into readable string, Saturday-first (CLDR week order for our
     // markets — see SHORT_DAY_KEYS in @jawab24/shared), not FB insertion order.
@@ -122,21 +135,8 @@ function generateKnowledgeBase(fbPage: FacebookPage): string {
  * Parse Facebook hours into structured format: { "mon": ["09:00-18:00"], ... }
  */
 export function parseBusinessHours(hours: FacebookPageHours | undefined): Record<string, string[]> | undefined {
-    if (!hours || Object.keys(hours).length === 0) return undefined;
-
-    const daySlots: Record<string, { open: string; close: string }[]> = {};
-
-    for (const [key, value] of Object.entries(hours)) {
-        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
-        if (match) {
-            const [, day, slot, type] = match;
-            if (!daySlots[day]) daySlots[day] = [];
-            if (!daySlots[day][parseInt(slot) - 1]) {
-                daySlots[day][parseInt(slot) - 1] = { open: '', close: '' };
-            }
-            daySlots[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
-        }
-    }
+    const daySlots = parseFbHourSlots(hours);
+    if (!daySlots) return undefined;
 
     const result: Record<string, string[]> = {};
     for (const [day, slots] of Object.entries(daySlots)) {
@@ -254,6 +254,19 @@ export interface AlreadyMemberOfEntry {
     workspaceName: string;
     role: string; // owner | admin | member
     pageName: string;
+}
+
+/**
+ * Decrypt a page row's token fields in place and return the same object.
+ * Single source for the "fetch a page, hand its caller usable tokens" pattern
+ * shared by getPage / getPageByWhatsAppPhoneNumberId. Callers that only need
+ * the Facebook token (getPageByFacebookId / getPageByInstagramId) decrypt just
+ * `accessToken` inline — that narrower decrypt is deliberate, not this helper.
+ */
+function decryptPageTokens<T extends { id: string; accessToken: string; whatsappAccessToken: string | null }>(page: T): T {
+    page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+    page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
+    return page;
 }
 
 export class PagesService {
@@ -606,10 +619,7 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         const page = result[0] || null;
-        if (page) {
-            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
-            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
-        }
+        if (page) decryptPageTokens(page);
         return page;
     }
 
@@ -1713,20 +1723,29 @@ export class PagesService {
         return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
-    /**
-     * Toggle Instagram auto-reply for a page
-     */
-    async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+    /** Flip one channel's auto-reply column for a page, scoped to its workspace. */
+    private async setChannelAutoReply(
+        workspaceId: string,
+        pageId: string,
+        // keyof Pick ties the literals to the schema: a renamed/dropped column
+        // fails tsc here, instead of a computed-key .set() that silently skips it
+        column: keyof Pick<typeof pages.$inferInsert, 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled'>,
+        enabled: boolean,
+    ) {
         const [updatedPage] = await db
             .update(pages)
-            .set({
-                instagramAutoReplyEnabled: enabled,
-                updatedAt: new Date(),
-            })
+            .set({ [column]: enabled, updatedAt: new Date() })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
         return updatedPage;
+    }
+
+    /**
+     * Toggle Instagram auto-reply for a page
+     */
+    async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+        return this.setChannelAutoReply(workspaceId, pageId, 'instagramAutoReplyEnabled', enabled);
     }
 
     /**
@@ -1753,10 +1772,7 @@ export class PagesService {
             .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
 
         const page = result[0] || null;
-        if (page) {
-            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
-            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
-        }
+        if (page) decryptPageTokens(page);
         return page;
     }
 
@@ -1916,16 +1932,7 @@ export class PagesService {
      * Toggle WhatsApp auto-reply for a page
      */
     async toggleWhatsAppAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
-        const [updatedPage] = await db
-            .update(pages)
-            .set({
-                whatsappAutoReplyEnabled: enabled,
-                updatedAt: new Date(),
-            })
-            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
-            .returning();
-
-        return updatedPage;
+        return this.setChannelAutoReply(workspaceId, pageId, 'whatsappAutoReplyEnabled', enabled);
     }
 }
 
