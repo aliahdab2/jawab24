@@ -1,15 +1,18 @@
 # Dependencies
-node_modules
+# (.dockerignore patterns are root-anchored: a bare `node_modules` only matches the
+# top-level dir — `**/` is required to also exclude backend/, frontend/, ai-worker/,
+# packages/*/ copies. A bare `coverage` let 17 MB of lcov HTML into every build context.)
+**/node_modules
 .pnp
 .pnp.js
 
 # Testing
-coverage
+**/coverage
 
 # Next.js
-.next
-out
-build
+**/.next
+**/out
+**/build
 
 # Capacitor native projects — not needed for the Next.js server image
 # (these carry multi-GB native build intermediates that otherwise bloat the build context)
@@ -17,7 +20,7 @@ frontend/ios
 frontend/android
 
 # Production
-dist
+**/dist
 
 # Misc
 .DS_Store
