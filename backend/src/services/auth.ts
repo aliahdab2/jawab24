@@ -579,20 +579,20 @@ export class AuthService {
     }
 
     /**
-     * Look up a user by their Facebook id. `users.facebook_id` carries a UNIQUE
-     * index (`users_facebook_id_key`), so this returns at most one row. The
-     * connect/link flow uses it to detect when a Facebook identity already belongs
-     * to a DIFFERENT Jawab24 account before attempting the unique-constrained link
-     * write (which would otherwise throw a 23505 and surface as an opaque 500).
+     * Return the id of the user who owns a Facebook id, or null. `users.facebook_id`
+     * carries a UNIQUE index (`users_facebook_id_key`), so this matches at most one
+     * row. The connect/link flow uses it to detect when a Facebook identity already
+     * belongs to a DIFFERENT Jawab24 account before attempting the unique-constrained
+     * link write (which would otherwise throw a 23505 and surface as an opaque 500).
+     *
+     * Selects ONLY the id on purpose: the caller needs ownership, not the row, and
+     * this user is not the session — pulling the full row would decrypt another
+     * user's Facebook token into memory (and mis-attribute a decryption failure to
+     * this request if that row is under a rotated key).
      */
-    async getUserByFacebookId(facebookId: string): Promise<User | null> {
-        const result = await db.select().from(users).where(eq(users.facebookId, facebookId));
-        if (result.length === 0) return null;
-        const user = result[0];
-        return {
-            ...user,
-            facebookAccessToken: this.maybeDecrypt(user.facebookAccessToken),
-        };
+    async getUserByFacebookId(facebookId: string): Promise<{ id: string } | null> {
+        const result = await db.select({ id: users.id }).from(users).where(eq(users.facebookId, facebookId));
+        return result[0] ?? null;
     }
 
     /**

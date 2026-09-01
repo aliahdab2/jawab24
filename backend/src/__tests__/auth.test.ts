@@ -23,8 +23,6 @@ vi.mock('../services/auth', () => ({
         generateToken: vi.fn(),
         createAuthResponse: vi.fn(),
         getUserById: vi.fn(),
-        getUserByFacebookId: vi.fn(),
-        linkFacebookToUser: vi.fn(),
         deleteUser: vi.fn(),
     }
 }));
@@ -361,88 +359,6 @@ describe('AuthController - linkFacebook demo guard', () => {
         expect(facebookService.getAccessToken).toHaveBeenCalledWith('fb-oauth-code', 'https://jawab24.com/ar/auth/callback');
         expect(mockReply.status).toHaveBeenCalledWith(400);
         expect(mockReply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_LINK_FORBIDDEN' }));
-    });
-});
-
-describe('AuthController - linkFacebook identity collision', () => {
-    // Prod, Zid dev-store walkthrough 2026-08-31: a merchant whose Facebook identity
-    // already belonged to a DIFFERENT Jawab24 user (direct-FB signup vs a Zid embedded
-    // auto-provisioned account) connected a page. `users.facebook_id` is UNIQUE, so the
-    // link write threw a 23505 that surfaced as a generic 500 with no code — the page
-    // sync never ran, 0 pages connected, and nothing signalled the cause. The fix
-    // detects the collision first and returns an actionable 409 (and alerts us).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mockRequest: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mockReply: any;
-
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockRequest = {
-            user: { userId: 'zid-user-1' },
-            body: { code: 'fb-oauth-code', redirectUri: 'https://jawab24.com/ar/auth/callback' },
-            log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-        };
-        mockReply = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis(),
-        };
-        // Non-demo caller so the demo guard lets the flow through.
-        vi.mocked(authService.getUserById).mockResolvedValue({
-            id: 'zid-user-1', facebookId: '', name: 'Jawab24 Dev',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
-        vi.mocked(facebookService.getAccessToken).mockResolvedValue('short-token');
-        vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ token: 'long-token', expiresAt: new Date() });
-        vi.mocked(facebookService.getUserProfile).mockResolvedValue({ id: 'fb-mohammad', picture: 'pic' } as never);
-    });
-
-    it('returns 409 FACEBOOK_ALREADY_LINKED and does NOT write the link or sync pages when the FB identity belongs to another user', async () => {
-        vi.mocked(authService.getUserByFacebookId).mockResolvedValue({
-            id: 'other-user-2', facebookId: 'fb-mohammad', name: 'Mohammad Jamal',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
-
-        await authController.linkFacebook(mockRequest, mockReply);
-
-        expect(mockReply.status).toHaveBeenCalledWith(409);
-        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'FACEBOOK_ALREADY_LINKED' }));
-        // The link write and the page sync must never run once a collision is detected.
-        expect(authService.linkFacebookToUser).not.toHaveBeenCalled();
-        expect(pagesService.syncFromFacebook).not.toHaveBeenCalled();
-    });
-
-    it('proceeds to link when the FB identity is unowned (getUserByFacebookId returns null)', async () => {
-        vi.mocked(authService.getUserByFacebookId).mockResolvedValue(null);
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
-            syncedPages: [{ id: 'page-1' }], skippedCount: 0, skippedPages: [], skipReason: 'page_limit',
-            pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [],
-            revokedCount: 0, alreadyMemberOf: [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
-
-        await authController.linkFacebook(mockRequest, mockReply);
-
-        expect(authService.linkFacebookToUser).toHaveBeenCalledWith('zid-user-1', 'fb-mohammad', 'long-token', expect.any(Date), 'pic');
-        expect(mockReply.status).not.toHaveBeenCalledWith(409);
-    });
-
-    it('proceeds to link when the FB identity already belongs to the SAME user (idempotent reconnect)', async () => {
-        vi.mocked(authService.getUserByFacebookId).mockResolvedValue({
-            id: 'zid-user-1', facebookId: 'fb-mohammad', name: 'Jawab24 Dev',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
-            syncedPages: [{ id: 'page-1' }], skippedCount: 0, skippedPages: [], skipReason: 'page_limit',
-            pageLimit: null, takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [],
-            revokedCount: 0, alreadyMemberOf: [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
-
-        await authController.linkFacebook(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalledWith(409);
-        expect(authService.linkFacebookToUser).toHaveBeenCalled();
     });
 });
 

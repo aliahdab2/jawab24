@@ -24,6 +24,17 @@ import { SmsCountryUnsupportedError } from '../services/sms';
 import { isValidPhone, isValidEmail, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
 import { isDemoFacebookId } from '../utils/demo';
 
+/**
+ * Returned when a Facebook page connect targets an identity that already belongs to
+ * a DIFFERENT Jawab24 account (`users.facebook_id` is UNIQUE). The frontend maps the
+ * `code` to a translated message; the English `message` is only a log/API fallback.
+ */
+const FACEBOOK_ALREADY_LINKED_RESPONSE = {
+    error: 'facebook_already_linked',
+    code: 'FACEBOOK_ALREADY_LINKED',
+    message: 'This Facebook account is already connected to another Jawab24 account.',
+} as const;
+
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
     if (result === 'expired') {
         return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
@@ -925,6 +936,10 @@ export class AuthController {
             // 3. Get Facebook profile
             const fbProfile = await facebookService.getUserProfile(longLivedToken);
 
+            // Resolved once and reused: the break-out source tag, the workspace
+            // resolution (step 5), and the re-mint (step 6) all read the same scope.
+            const scope = callerScope(request);
+
             // 3b. Guard against a Facebook-identity collision.
             //
             // `users.facebook_id` is UNIQUE (`users_facebook_id_key`). A merchant can
@@ -939,31 +954,35 @@ export class AuthController {
             // alert. (Prod: Zid dev-store walkthrough, 2026-08-31.)
             const fbOwner = await authService.getUserByFacebookId(fbProfile.id);
             if (fbOwner && fbOwner.id !== userId) {
+                // NOTE: never put the raw fbProfile.id in the alert — the raw Facebook
+                // id is PII the platform stores only as a keyed HMAC hash (schema.ts
+                // trial_grants), and a Sentry event outlives a GDPR hard delete. The two
+                // internal user ids are enough to reconcile.
                 captureError(
                     new Error('Facebook identity already linked to another Jawab24 account'),
                     'Facebook connect blocked: identity collision',
                     {
                         level: 'warning',
+                        fingerprint: ['fb-identity-collision'],
                         tags: {
                             reason: 'fb_identity_collision',
-                            source: callerScope(request)?.embeddedPlatform ?? 'web',
+                            source: scope?.embeddedPlatform ?? 'web',
                         },
                         extra: {
                             attemptedUserId: userId,
                             existingOwnerUserId: fbOwner.id,
-                            facebookId: fbProfile.id,
                         },
                     },
                 );
-                return reply.status(409).send({
-                    error: 'facebook_already_linked',
-                    code: 'FACEBOOK_ALREADY_LINKED',
-                    message: 'This Facebook account is already connected to another Jawab24 account.',
-                });
+                return reply.status(409).send(FACEBOOK_ALREADY_LINKED_RESPONSE);
             }
 
-            // 4. Update existing user with Facebook data (don't create a new user)
+            // 4. Update existing user with Facebook data (don't create a new user).
             // Uses authService so the token is encrypted at rest (same as facebookLogin).
+            // This UPDATE writes only facebook_id / token / picture, so `facebook_id` is
+            // the ONLY unique column it can violate — which is what lets the catch below
+            // map a 23505 to the collision case. Adding another unique column here would
+            // break that assumption; classify by constraint name if that ever happens.
             await authService.linkFacebookToUser(userId, fbProfile.id, longLivedToken, tokenExpiresAt, fbProfile.picture);
 
             // 5. Sync pages to the user's existing workspace.
@@ -981,7 +1000,6 @@ export class AuthController {
             // `authenticate` alone — no resolveWorkspace — so taking the pinned id
             // on trust would be the one place a workspace id reaches a write
             // without a membership check. Fail closed: not a member, no sync.
-            const scope = callerScope(request);
             const workspaces = await workspaceService.getUserWorkspaces(userId);
             const workspaceId = scope
                 ? workspaces.find((w) => w.id === scope.workspaceId)?.id
@@ -994,12 +1012,17 @@ export class AuthController {
                         // exist (page limit, trial already used on the channel, a page held
                         // by another workspace), yet the merchant is redirected to /pages as
                         // if it worked — so a 0-page connect is invisible on both sides.
-                        // Alert so a silent connect failure is at least seen by us.
+                        // Alert so a silent connect failure is at least seen by us. The
+                        // no-FB-pages path (the majority outcome) carries the diagnosis that
+                        // actually explains it, so surface it; the return shape is a union,
+                        // hence the `in` guard.
+                        const noPagesDiagnosis = 'noPagesDiagnosis' in syncResult ? syncResult.noPagesDiagnosis : undefined;
                         captureError(
                             new Error('Facebook connect completed with 0 pages'),
                             'Facebook connect: zero pages connected',
                             {
                                 level: 'warning',
+                                fingerprint: ['fb-connect-zero-pages'],
                                 tags: {
                                     reason: 'fb_connect_zero_pages',
                                     source: scope?.embeddedPlatform ?? 'web',
@@ -1010,6 +1033,7 @@ export class AuthController {
                                     takenCount: syncResult.takenCount,
                                     trialBlockedCount: syncResult.trialBlockedCount,
                                     skippedCount: syncResult.skippedCount,
+                                    noPagesDiagnosis,
                                 },
                             },
                         );
@@ -1064,13 +1088,11 @@ export class AuthController {
             if (isUniqueViolation(error)) {
                 // Belt-and-braces for a race between the collision pre-check above and
                 // the UNIQUE write: the Facebook identity was claimed by another account
-                // in between. Same actionable signal as the pre-check, never a 500.
+                // in between. Safe because linkFacebookToUser's UPDATE writes only
+                // facebook_id / token / picture, so facebook_id is the only unique column
+                // it can violate. Same actionable signal as the pre-check, never a 500.
                 request.log.warn({ err: error }, 'Facebook link failed: identity already linked to another account');
-                return reply.status(409).send({
-                    error: 'facebook_already_linked',
-                    code: 'FACEBOOK_ALREADY_LINKED',
-                    message: 'This Facebook account is already connected to another Jawab24 account.',
-                });
+                return reply.status(409).send(FACEBOOK_ALREADY_LINKED_RESPONSE);
             }
             request.log.error({ err: error }, 'Facebook link failed');
             return reply.status(500).send({ error: 'server_error', message: 'Failed to link Facebook account' });
