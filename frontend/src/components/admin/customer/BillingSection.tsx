@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, FileText, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { Card, Button } from '@/components/ui';
 import { adminApi } from '@/lib/api';
@@ -8,10 +8,13 @@ import { captureError } from '@/lib/sentryHelpers';
 import { UpgradeModal } from './UpgradeModal';
 import { TopUpModal } from './TopUpModal';
 import { PaymentRequestModal } from './PaymentRequestModal';
+import { InvoiceModal } from './InvoiceModal';
+import { SendInvoiceModal } from './SendInvoiceModal';
 import {
     type CustomerDetail,
     type Plan,
     type PaymentRequest,
+    type InvoiceSummary,
     type FormatDate,
     type IntlLocale,
     STATUS_COLORS,
@@ -42,6 +45,12 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
 
     const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
 
+    const [showInvoice, setShowInvoice] = useState(false);
+    const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
+    const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
+    /** The invoice the send modal is composing for; null when it is closed. */
+    const [sendTarget, setSendTarget] = useState<InvoiceSummary | null>(null);
+
     // Explicit `=== false`: an older API response without the field must fall back
     // to the raw status badge rather than accuse a healthy account of being blocked.
     const repliesBlocked = customer.subscription?.autoReply?.allowed === false;
@@ -63,8 +72,35 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
         }
     };
 
+    const loadInvoices = async () => {
+        try {
+            const res = await adminApi.listInvoices(userId);
+            if (res.success && res.data) setInvoices(res.data);
+        } catch (err) {
+            captureError(err, 'Failed to load invoices', { tags: { page: 'admin-customer-detail' } });
+        }
+    };
+
+    /** Fetches the ARCHIVED bytes and hands them to the browser as a download.
+     *  Not a link: the endpoint needs the admin's auth header, which a bare
+     *  `<a href>` would not carry. */
+    const handleDownload = async (invoiceId: string, number: string) => {
+        try {
+            const blob = await adminApi.downloadInvoice(invoiceId);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${number}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            captureError(err, 'Failed to download invoice', { tags: { page: 'admin-customer-detail' } });
+        }
+    };
+
     useEffect(() => {
         loadPaymentRequests();
+        loadInvoices();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId]);
 
@@ -78,6 +114,11 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
             {topupSuccess && (
                 <div role="status" aria-live="polite" className="alert-success border px-4 py-3 rounded-lg">
                     {topupSuccess}
+                </div>
+            )}
+            {invoiceSuccess && (
+                <div role="status" aria-live="polite" className="alert-success border px-4 py-3 rounded-lg">
+                    {invoiceSuccess}
                 </div>
             )}
 
@@ -256,6 +297,93 @@ export function BillingSection({ customer, plans, userId, formatDate, intlLocale
                     </div>
                 )}
             </Card>
+
+            {/* Invoices Card — the non-Stripe rail. Stripe emails its own VAT
+                invoice for card subscriptions; a manual activation used to send
+                the merchant nothing at all. */}
+            <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-foreground">
+                        {t('customer.invoicesTitle')}
+                    </h3>
+                    <FileText className="w-5 h-5 text-brand-500" aria-hidden="true" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    {t('customer.invoicesSubtitle')}
+                </p>
+                <div className="mt-4 pt-4 border-t border-theme-border">
+                    <Button onClick={() => setShowInvoice(true)} className="w-full" variant="secondary">
+                        {t('customer.invoiceCreateButton')}
+                    </Button>
+                </div>
+
+                {invoices.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-theme-border space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">
+                            {t('customer.invoicesHistoryTitle')}
+                        </div>
+                        {invoices.map((inv) => (
+                            <div key={inv.id} className="flex items-center justify-between gap-2 text-sm">
+                                <div className="min-w-0">
+                                    <span className="font-medium text-foreground" dir="ltr">{inv.number}</span>
+                                    <span className="text-muted-foreground ms-2" dir="ltr">
+                                        {(inv.totalCents / 100).toLocaleString(intlLocale, { style: 'currency', currency: inv.currency.toUpperCase() })}
+                                    </span>
+                                    <div className="text-xs text-muted-foreground">{formatDate(inv.issueDate)}</div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className={clsx(
+                                        'text-xs px-2 py-0.5 rounded-full',
+                                        inv.status === 'sent' && 'status-success',
+                                        inv.status === 'issued' && 'status-warning',
+                                        inv.status === 'void' && 'text-muted-foreground',
+                                    )}>
+                                        {t(`customer.invoiceStatus_${inv.status}`)}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDownload(inv.id, inv.number)}
+                                        className="text-xs text-brand-500 underline"
+                                    >
+                                        {t('customer.invoiceDownload')}
+                                    </button>
+                                    {inv.status !== 'void' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSendTarget(inv)}
+                                            className="text-xs text-brand-500 underline"
+                                        >
+                                            {/* A resend is legitimate — merchants lose emails —
+                                                so this stays available after the first send. */}
+                                            {inv.status === 'sent' ? t('customer.invoiceResend') : t('customer.invoiceSend')}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Card>
+
+            <InvoiceModal
+                isOpen={showInvoice}
+                onClose={() => setShowInvoice(false)}
+                userId={userId}
+                onIssued={(message) => {
+                    setInvoiceSuccess(message);
+                    loadInvoices();
+                }}
+            />
+            <SendInvoiceModal
+                isOpen={sendTarget !== null}
+                onClose={() => setSendTarget(null)}
+                userId={userId}
+                invoice={sendTarget}
+                onSent={(message) => {
+                    setInvoiceSuccess(message);
+                    loadInvoices();
+                }}
+            />
 
             <UpgradeModal
                 isOpen={showUpgrade}

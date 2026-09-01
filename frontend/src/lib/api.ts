@@ -283,6 +283,32 @@ export const postSuggestionsApi = {
 
 /** One row of a fact collection, as the API serves it. `price` is the numeric
  *  column's string form ("35000.00"); dates are YYYY-MM-DD. */
+/**
+ * The body for issuing or previewing a manual invoice. Identical for both — the
+ * only difference between them is that one allocates a number.
+ *
+ * Money is in CENTS, integer, like every other price in the product. There is
+ * deliberately no `attachments` field on the send call: the server attaches the
+ * archived PDF by id, so "what we sent" and "what we stored" cannot diverge.
+ */
+export interface AdminInvoiceDraft {
+    lang: 'ar' | 'en';
+    customerName: string;
+    customerContact?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    lineDescription: string;
+    lineDetail?: string;
+    quantityLabel: string;
+    periodStart?: string;
+    periodEnd?: string;
+    currency: string;
+    subtotalCents: number;
+    vatCents: number;
+    planId?: string;
+    paymentNote?: string;
+}
+
 export interface FactRowDto {
   id: string;
   name: string;
@@ -1567,6 +1593,96 @@ export const adminApi = {
       }>;
       error?: string;
     };
+  },
+
+  // ---- Manual invoices -------------------------------------------------
+  // The non-Stripe rail. Stripe emails its own VAT invoice for card
+  // subscriptions; these cover bank transfer, Sham Cash and reseller-collected
+  // cash, where activation previously sent the merchant nothing at all.
+
+  listInvoices: async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}/invoices`);
+    return response.data as {
+      success: boolean;
+      data?: Array<{
+        id: string;
+        number: string;
+        lang: 'ar' | 'en';
+        currency: string;
+        totalCents: number;
+        status: 'issued' | 'sent' | 'void';
+        issueDate: string;
+        sentAt: string | null;
+        customerName: string;
+      }>;
+      error?: string;
+    };
+  },
+
+  /** Suggested fields for a new invoice — plan, period, and the partner to CC.
+   *  A suggestion only: the admin edits everything before issuing, because the
+   *  amount actually collected is routinely not the plan's list price. */
+  getInvoicePrefill: async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}/invoices/prefill`);
+    return response.data as {
+      success: boolean;
+      data?: {
+        userName: string | null;
+        userEmail: string | null;
+        planId: string | null;
+        planName: string | null;
+        planPrice: number | null;
+        planReplies: number | null;
+        periodStart: string | null;
+        periodEnd: string | null;
+        paymentMethod: string | null;
+        partnerEmail: string | null;
+        partnerName: string | null;
+      };
+      error?: string;
+    };
+  },
+
+  /** Renders a PDF from unsaved input and allocates NO number, so an admin can
+   *  look as many times as they like without tearing a hole in the series.
+   *  Returns a Blob — the caller is responsible for revoking any object URL. */
+  previewInvoice: async (userId: string, body: AdminInvoiceDraft): Promise<Blob> => {
+    const response = await api.post(`/admin/users/${userId}/invoices/preview`, body, {
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
+  createInvoice: async (userId: string, body: AdminInvoiceDraft) => {
+    const response = await api.post(`/admin/users/${userId}/invoices`, body);
+    return response.data as {
+      success: boolean;
+      data?: { id: string; number: string; sha256: string; byteLength: number };
+      error?: string;
+    };
+  },
+
+  /** The ARCHIVED bytes, exactly as issued — never a re-render. */
+  downloadInvoice: async (invoiceId: string): Promise<Blob> => {
+    const response = await api.get(`/admin/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
+    return response.data as Blob;
+  },
+
+  sendInvoice: async (
+    invoiceId: string,
+    body: { subject: string; body: string; cc?: string[]; bcc?: string[]; idempotencyKey?: string },
+  ) => {
+    const response = await api.post(`/admin/invoices/${invoiceId}/send`, body);
+    return response.data as {
+      success: boolean;
+      data?: { emailSendId?: string; number: string };
+      error?: string;
+    };
+  },
+
+  voidInvoice: async (invoiceId: string, reason: string) => {
+    const response = await api.post(`/admin/invoices/${invoiceId}/void`, { reason });
+    return response.data as { success: boolean; data?: { number: string }; error?: string };
   },
 
   // Get all plans (for admin dropdown)
