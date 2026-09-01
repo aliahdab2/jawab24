@@ -21,6 +21,7 @@ import {
     classifyEcho, APP_AUTO_WINDOW_MS, APP_AUTO_INACTIVITY_DAYS, ECHO_RECENCY_RETRY_MS,
     type EchoAuthorship,
 } from '../services/whatsappEchoClassifier';
+import { markWhatsAppNeedsReconnect } from '../services/whatsappTokenHealth';
 import { isSharedPostType } from '../utils/instagram';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
@@ -128,6 +129,17 @@ interface WhatsAppWebhookEntry {
                 video?: { caption?: string };
                 document?: { caption?: string; filename?: string };
             }>;
+            // `account_update` payloads only (no messaging_product/metadata there).
+            // PARTNER_REMOVED is Meta's one and only signal that the merchant (or
+            // Meta itself) severed the WABA↔app link — for a coexistence number the
+            // token stays valid and message webhooks simply stop, so missing this
+            // event means going dark silently (Z net, 2026-08-31).
+            event?: string;
+            phone_number?: string;
+            disconnection_info?: {
+                reason?: string;
+                initiated_by?: string;
+            };
         };
     }>;
 }
@@ -818,6 +830,16 @@ export class WebhookController {
                     });
                     continue;
                 }
+                if (change.field === 'account_update') {
+                    await this.processWhatsAppAccountUpdate(entry.id, change.value).catch(error => {
+                        // Same containment as echoes: a later change in this delivery
+                        // may be a real customer message — never abort the loop.
+                        this.log().error('[WhatsApp] Failed to process account_update', {
+                            wabaId: entry.id, error: String(error),
+                        });
+                    });
+                    continue;
+                }
                 if (change.field !== 'messages') continue;
 
                 const { metadata, messages: waMessages, contacts, statuses } = change.value;
@@ -911,6 +933,59 @@ export class WebhookController {
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * `account_update` on the WABA object — Meta's only push signal that the
+     * WABA↔app link changed. PARTNER_REMOVED means the merchant (or Meta) severed
+     * the connection: message webhooks stop from that instant while the stored
+     * token can stay valid for weeks, so without this handler the number goes
+     * dark silently and the dashboard keeps saying "connected" (Z net, 27 hours,
+     * 2026-08-31). Flag → reconnect banner + merchant notification, via the same
+     * markWhatsAppNeedsReconnect the token sweep uses.
+     *
+     * Every other event (VERIFIED_ACCOUNT, DISABLED_UPDATE, ACCOUNT_RESTRICTION…)
+     * is logged and deliberately NOT acted on: flagging is merchant-visible, and
+     * the false-positive cost is a banner telling a healthy merchant to reconnect
+     * (see the FLAG-never-destroy history in whatsappTokenHealth).
+     */
+    private async processWhatsAppAccountUpdate(
+        wabaId: string,
+        value: WhatsAppWebhookEntry['changes'][number]['value'],
+    ): Promise<void> {
+        const event = value.event;
+        this.log().info('[WhatsApp] account_update received', {
+            wabaId,
+            event,
+            phoneNumber: value.phone_number,
+            disconnectionReason: value.disconnection_info?.reason,
+            initiatedBy: value.disconnection_info?.initiated_by,
+        });
+        if (event !== 'PARTNER_REMOVED') return;
+
+        // WABA-level event: flag every number under that WABA (usually one row).
+        const affected = await pagesService.getPagesByWhatsAppBusinessAccountId(wabaId);
+        if (affected.length === 0) {
+            this.log().warn('[WhatsApp] PARTNER_REMOVED for unknown WABA', { wabaId });
+            return;
+        }
+        for (const page of affected) {
+            this.log().warn('[WhatsApp] Partner link removed — flagging number for reconnect', {
+                pageId: page.id,
+                wabaId,
+                disconnectionReason: value.disconnection_info?.reason,
+                initiatedBy: value.disconnection_info?.initiated_by,
+            });
+            await markWhatsAppNeedsReconnect(
+                {
+                    id: page.id,
+                    name: page.name,
+                    userId: page.userId,
+                    whatsappDisplayPhoneNumber: page.whatsappDisplayPhoneNumber,
+                },
+                'app_uninstalled',
+            );
         }
     }
 

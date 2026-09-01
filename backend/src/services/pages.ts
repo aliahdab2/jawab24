@@ -1820,6 +1820,21 @@ export class PagesService {
     }
 
     /**
+     * All pages under one WhatsApp Business Account. WABA-level webhooks
+     * (`account_update` / PARTNER_REMOVED) affect every number in the account,
+     * so this returns the full set — usually a single row.
+     */
+    async getPagesByWhatsAppBusinessAccountId(businessAccountId: string) {
+        const result = await db
+            .select()
+            .from(pages)
+            .where(eq(pages.whatsappBusinessAccountId, businessAccountId));
+
+        for (const page of result) decryptPageTokens(page);
+        return result;
+    }
+
+    /**
      * Get page by WhatsApp Phone Number ID
      */
     async getPageByWhatsAppPhoneNumberId(phoneNumberId: string) {

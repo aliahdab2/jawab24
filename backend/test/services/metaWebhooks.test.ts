@@ -70,10 +70,12 @@ describe('Meta Webhook Subscriptions', () => {
             }
         );
 
-        // WhatsApp subscription. The three extra fields are required by Meta for
-        // Coexistence (WhatsApp-Business-app) onboarding to be valid — dropping any
-        // of them silently breaks that flow, so they are asserted explicitly rather
-        // than loosely matched. Numbers onboarded the migration way never emit them.
+        // WhatsApp subscription. The three coexistence fields are required by Meta
+        // for WhatsApp-Business-app onboarding to be valid — dropping any of them
+        // silently breaks that flow. `account_update` is Meta's only signal that a
+        // merchant severed the WABA↔app link (PARTNER_REMOVED) — dropping it means
+        // a coexistence unlink goes dark silently (Z net, 27h, 2026-08-31). All are
+        // asserted explicitly rather than loosely matched.
         expect(axios.post).toHaveBeenCalledWith(
             'https://graph.facebook.com/v18.0/test_app_id/subscriptions',
             null,
@@ -82,7 +84,7 @@ describe('Meta Webhook Subscriptions', () => {
                     object: 'whatsapp_business_account',
                     callback_url: CALLBACK_URL,
                     verify_token: 'test_verify_token',
-                    fields: 'messages,smb_message_echoes,history,smb_app_state_sync',
+                    fields: 'messages,smb_message_echoes,history,smb_app_state_sync,account_update',
                     access_token: APP_TOKEN,
                 },
             }

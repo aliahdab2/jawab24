@@ -61,6 +61,17 @@ function sleep(ms: number): Promise<void> {
 export type WhatsAppDisconnectReason = 'token_expired' | 'app_uninstalled';
 
 /**
+ * A number-node probe failure that PROVES the number is no longer reachable
+ * with the merchant's (still valid) token — i.e. the WABA↔app link was severed
+ * at Meta's side (coexistence unlink, partner removal). Only a definitive
+ * Graph 4xx qualifies; anything transient (network, 429, 5xx) must be retried
+ * and never flagged — flagging is merchant-visible (reconnect banner + push).
+ */
+export function isDefinitiveAccessLoss(error: unknown): error is WhatsAppApiError {
+    return error instanceof WhatsAppApiError && !error.transient;
+}
+
+/**
  * True when the token is dead or dying and the merchant must act.
  * Exported for unit tests — the expiry arithmetic is the part most likely to
  * regress, and `expiresAt: undefined` (Meta's "never expires") must never be
@@ -113,11 +124,13 @@ export function assessToken(
 /**
  * Check every connected WhatsApp number whose token hasn't been verified recently.
  */
-export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number; checkerFaults: number }> {
+export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number; accessLost: number; checkerFaults: number }> {
     const staleThreshold = new Date(Date.now() - VERIFY_INTERVAL_MS);
     let checked = 0;
     let expiringSoon = 0;
     let dead = 0;
+    /** Token valid but the WABA/number no longer reachable — link severed at Meta. */
+    let accessLost = 0;
     /** 190s caused by OUR app token, not the merchant's — see the catch below. */
     let checkerFaults = 0;
 
@@ -130,6 +143,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             whatsappAccessToken: pages.whatsappAccessToken,
             whatsappDisplayPhoneNumber: pages.whatsappDisplayPhoneNumber,
             whatsappTokenExpiresAt: pages.whatsappTokenExpiresAt,
+            whatsappPhoneNumberId: pages.whatsappPhoneNumberId,
         })
         .from(pages)
         .where(
@@ -146,7 +160,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
 
     if (stalePages.length === 0) {
         logger.info('[WhatsAppTokenHealth] All tokens recently verified');
-        return { checked: 0, expiringSoon: 0, dead: 0, checkerFaults: 0 };
+        return { checked: 0, expiringSoon: 0, dead: 0, accessLost: 0, checkerFaults: 0 };
     }
 
     logger.info(`[WhatsAppTokenHealth] ${stalePages.length} number(s) need verification`);
@@ -199,6 +213,46 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
                 continue;
             }
 
+            // debug_token proves the TOKEN is alive; it says nothing about whether
+            // the WABA still grants our app access. A coexistence merchant
+            // unlinking from their phone (or Meta removing us as partner) leaves
+            // the token valid while every webhook stops — Z net went dark for 27
+            // hours this way on 2026-08-31 with the sweep reporting all-healthy.
+            // Probe the number node itself with the merchant's token: a definitive
+            // (non-transient) 4xx here is Meta saying the number is no longer ours.
+            //
+            // Same false-positive posture as everything in this file: transient
+            // errors (network / 429 / 5xx) are retried, then thrown to the outer
+            // catch — never flagged. And a wrong flag is only a banner: the next
+            // healthy sweep reaches the clearing update below and removes it.
+            const phoneNumberId = page.whatsappPhoneNumberId;
+            if (phoneNumberId) {
+                try {
+                    await withRetry(
+                        () => whatsappService.getPhoneNumberInfo(phoneNumberId, token),
+                        {
+                            maxAttempts: 3,
+                            baseDelayMs: 1000,
+                            maxDelayMs: 8000,
+                            retryableErrors: (err) => err instanceof WhatsAppApiError && err.transient,
+                        },
+                    );
+                } catch (probeError) {
+                    if (isDefinitiveAccessLoss(probeError)) {
+                        accessLost++;
+                        logger.warn(`[WhatsAppTokenHealth] WABA access lost for "${page.name}" (${page.whatsappDisplayPhoneNumber}) — token valid but number no longer reachable`, {
+                            metaCode: probeError.metaCode,
+                            error: probeError.message,
+                        });
+                        await markWhatsAppNeedsReconnect(page, 'app_uninstalled');
+                        continue;
+                    }
+                    // Transient after retries — book it with the outer catch so the
+                    // sweep's error accounting stays in one place.
+                    throw probeError;
+                }
+            }
+
             // Still alive: record the freshly-learned deadline so the warning fires on
             // the real date even for numbers connected before this column existed.
             await db
@@ -249,8 +303,8 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
         }
     }
 
-    logger.info(`[WhatsAppTokenHealth] Complete: ${checked} checked, ${expiringSoon} expiring soon, ${dead} dead`);
-    return { checked, expiringSoon, dead, checkerFaults };
+    logger.info(`[WhatsAppTokenHealth] Complete: ${checked} checked, ${expiringSoon} expiring soon, ${dead} dead, ${accessLost} access lost`);
+    return { checked, expiringSoon, dead, accessLost, checkerFaults };
 }
 
 /**
