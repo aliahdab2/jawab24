@@ -47,23 +47,36 @@ export function getIngestionService(): KbIngestionService | null {
  * Format Facebook hours object into readable text
  * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
  */
-export function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
+type DayHourSlots = Record<string, { open: string; close: string }[]>;
+
+/**
+ * Parse Facebook's flat hours map (`{ mon_1_open: "09:00", mon_1_close: "18:00", … }`)
+ * into per-day, per-slot { open, close } pairs. The single source shared by
+ * formatBusinessHours (human string) and parseBusinessHours (structured output).
+ * Returns null when there are no hours to parse; otherwise a (possibly empty)
+ * map — an empty map means non-empty input with no keys matching the day regex.
+ */
+function parseFbHourSlots(hours: FacebookPageHours | undefined): DayHourSlots | null {
     if (!hours || Object.keys(hours).length === 0) return null;
 
-    const dayHours: Record<string, { open: string; close: string }[]> = {};
-
-    // Parse the hours object
+    const daySlots: DayHourSlots = {};
     for (const [key, value] of Object.entries(hours)) {
         const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
         if (match) {
             const [, day, slot, type] = match;
-            if (!dayHours[day]) dayHours[day] = [];
-            if (!dayHours[day][parseInt(slot) - 1]) {
-                dayHours[day][parseInt(slot) - 1] = { open: '', close: '' };
+            if (!daySlots[day]) daySlots[day] = [];
+            if (!daySlots[day][parseInt(slot) - 1]) {
+                daySlots[day][parseInt(slot) - 1] = { open: '', close: '' };
             }
-            dayHours[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
+            daySlots[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
         }
     }
+    return daySlots;
+}
+
+export function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
+    const dayHours = parseFbHourSlots(hours);
+    if (!dayHours) return null;
 
     // Format into readable string, Saturday-first (CLDR week order for our
     // markets — see SHORT_DAY_KEYS in @jawab24/shared), not FB insertion order.
@@ -122,21 +135,8 @@ function generateKnowledgeBase(fbPage: FacebookPage): string {
  * Parse Facebook hours into structured format: { "mon": ["09:00-18:00"], ... }
  */
 export function parseBusinessHours(hours: FacebookPageHours | undefined): Record<string, string[]> | undefined {
-    if (!hours || Object.keys(hours).length === 0) return undefined;
-
-    const daySlots: Record<string, { open: string; close: string }[]> = {};
-
-    for (const [key, value] of Object.entries(hours)) {
-        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
-        if (match) {
-            const [, day, slot, type] = match;
-            if (!daySlots[day]) daySlots[day] = [];
-            if (!daySlots[day][parseInt(slot) - 1]) {
-                daySlots[day][parseInt(slot) - 1] = { open: '', close: '' };
-            }
-            daySlots[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
-        }
-    }
+    const daySlots = parseFbHourSlots(hours);
+    if (!daySlots) return undefined;
 
     const result: Record<string, string[]> = {};
     for (const [day, slots] of Object.entries(daySlots)) {
